@@ -330,12 +330,17 @@ export default function LandingPage() {
               Frequently asked questions
             </h2>
           </div>
-          <div className="space-y-8">
+          <div className="space-y-3">
             {faqs.map((faq) => (
-              <div key={faq.question} className="border-b border-gray-100 pb-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
-                <p className="text-gray-600 leading-relaxed">{faq.answer}</p>
-              </div>
+              <details key={faq.question} className="group border border-gray-100 rounded-xl overflow-hidden">
+                <summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-lg font-semibold text-gray-900 hover:bg-gray-50 transition-colors list-none">
+                  {faq.question}
+                  <svg className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </summary>
+                <p className="px-6 pb-5 text-gray-600 leading-relaxed">{faq.answer}</p>
+              </details>
             ))}
           </div>
         </div>

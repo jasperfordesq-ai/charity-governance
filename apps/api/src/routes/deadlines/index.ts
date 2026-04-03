@@ -14,7 +14,12 @@ export async function deadlineRoutes(app: FastifyInstance) {
 
   app.get('/', async (request, reply) => {
     try {
-      return await service.list(request.user.organisationId);
+      const { page, pageSize } = request.query as { page?: string; pageSize?: string };
+      return await service.list(
+        request.user.organisationId,
+        Math.max(1, parseInt(page ?? '1', 10) || 1),
+        Math.min(100, Math.max(1, parseInt(pageSize ?? '50', 10) || 50)),
+      );
     } catch (err) {
       handleError(reply, err);
     }

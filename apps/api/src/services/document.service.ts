@@ -4,17 +4,24 @@ import { AppError } from '../utils/errors.js';
 export class DocumentService {
   constructor(private prisma: PrismaClient) {}
 
-  async list(organisationId: string) {
-    return this.prisma.document.findMany({
-      where: { organisationId },
-      include: {
-        standardLinks: {
-          include: { standard: { select: { id: true, code: true } } },
+  async list(organisationId: string, page = 1, pageSize = 50) {
+    const skip = (page - 1) * pageSize;
+    const [data, total] = await Promise.all([
+      this.prisma.document.findMany({
+        where: { organisationId },
+        include: {
+          standardLinks: {
+            include: { standard: { select: { id: true, code: true } } },
+          },
+          uploadedBy: { select: { id: true, name: true } },
         },
-        uploadedBy: { select: { id: true, name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.document.count({ where: { organisationId } }),
+    ]);
+    return { data, total, page, pageSize, hasMore: skip + data.length < total };
   }
 
   async getById(organisationId: string, id: string) {

@@ -124,10 +124,10 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </ul>
             </div>
 
-            {/* Legal links */}
+            {/* Legal + contact */}
             <div>
               <p className="text-xs font-semibold text-white uppercase tracking-wider mb-4">
-                Legal
+                Legal & Contact
               </p>
               <ul className="space-y-2 text-sm">
                 <li>
@@ -139,6 +139,11 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                   <Link href="/terms" className="hover:text-white transition-colors">
                     Terms of Service
                   </Link>
+                </li>
+                <li>
+                  <a href="mailto:hello@charitypilot.ie" className="hover:text-white transition-colors">
+                    hello@charitypilot.ie
+                  </a>
                 </li>
               </ul>
             </div>

@@ -5,11 +5,18 @@ import { AppError } from '../utils/errors.js';
 export class DeadlineService {
   constructor(private prisma: PrismaClient) {}
 
-  async list(organisationId: string) {
-    return this.prisma.deadline.findMany({
-      where: { organisationId },
-      orderBy: { dueDate: 'asc' },
-    });
+  async list(organisationId: string, page = 1, pageSize = 50) {
+    const skip = (page - 1) * pageSize;
+    const [data, total] = await Promise.all([
+      this.prisma.deadline.findMany({
+        where: { organisationId },
+        orderBy: { dueDate: 'asc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.deadline.count({ where: { organisationId } }),
+    ]);
+    return { data, total, page, pageSize, hasMore: skip + data.length < total };
   }
 
   async create(organisationId: string, data: CreateDeadlineRequest) {

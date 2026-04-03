@@ -243,45 +243,23 @@ export default function PricingPage() {
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900 text-center mb-12">
             Pricing questions
           </h2>
-          <div className="space-y-8">
-            <div className="border-b border-gray-100 pb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                How do I know if my charity is &ldquo;complex&rdquo;?
-              </h3>
-              <p className="text-gray-600 leading-relaxed">
-                The CRA defines a complex charity as one with annual income over EUR 100,000, paid
-                employees, or operations in more than one jurisdiction. If any of these apply, you
-                should choose the Complete plan.
-              </p>
-            </div>
-            <div className="border-b border-gray-100 pb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Can I switch plans later?
-              </h3>
-              <p className="text-gray-600 leading-relaxed">
-                Absolutely. You can upgrade from Essentials to Complete at any time. If you upgrade
-                mid-billing cycle, we will pro-rate the difference.
-              </p>
-            </div>
-            <div className="border-b border-gray-100 pb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                What happens when my trial ends?
-              </h3>
-              <p className="text-gray-600 leading-relaxed">
-                At the end of your 14-day free trial, you will be prompted to choose a plan and add
-                payment details. Your data is safe -- nothing is deleted if you need a few extra
-                days to decide.
-              </p>
-            </div>
-            <div className="pb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Can I cancel any time?
-              </h3>
-              <p className="text-gray-600 leading-relaxed">
-                Yes. You can cancel from your account settings at any time. If you cancel an annual
-                plan, you will retain access until the end of your billing period.
-              </p>
-            </div>
+          <div className="space-y-3">
+            {[
+              { q: 'How do I know if my charity is \u201ccomplex\u201d?', a: 'The CRA defines a complex charity as one with annual income over \u20ac100,000, paid employees, or operations in more than one jurisdiction. If any of these apply, you should choose the Complete plan.' },
+              { q: 'Can I switch plans later?', a: 'Absolutely. You can upgrade from Essentials to Complete at any time. If you upgrade mid-billing cycle, we will pro-rate the difference.' },
+              { q: 'What happens when my trial ends?', a: 'At the end of your 14-day free trial, you will be prompted to choose a plan and add payment details. Your data is safe \u2014 nothing is deleted if you need a few extra days to decide.' },
+              { q: 'Can I cancel any time?', a: 'Yes. You can cancel from your account settings at any time. If you cancel an annual plan, you will retain access until the end of your billing period.' },
+            ].map(({ q, a }) => (
+              <details key={q} className="group border border-gray-100 rounded-xl overflow-hidden">
+                <summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-lg font-semibold text-gray-900 hover:bg-gray-50 transition-colors list-none">
+                  {q}
+                  <svg className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </summary>
+                <p className="px-6 pb-5 text-gray-600 leading-relaxed">{a}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>

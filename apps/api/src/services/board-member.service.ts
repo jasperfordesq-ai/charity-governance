@@ -5,11 +5,18 @@ import { AppError } from '../utils/errors.js';
 export class BoardMemberService {
   constructor(private prisma: PrismaClient) {}
 
-  async list(organisationId: string) {
-    return this.prisma.boardMember.findMany({
-      where: { organisationId },
-      orderBy: [{ isActive: 'desc' }, { appointedDate: 'desc' }],
-    });
+  async list(organisationId: string, page = 1, pageSize = 50) {
+    const skip = (page - 1) * pageSize;
+    const [data, total] = await Promise.all([
+      this.prisma.boardMember.findMany({
+        where: { organisationId },
+        orderBy: [{ isActive: 'desc' }, { appointedDate: 'desc' }],
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.boardMember.count({ where: { organisationId } }),
+    ]);
+    return { data, total, page, pageSize, hasMore: skip + data.length < total };
   }
 
   async create(organisationId: string, data: CreateBoardMemberRequest) {
