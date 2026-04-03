@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { ReactNode } from 'react';
 import { AuthProvider } from '@/lib/auth-context';
+import { ToastProvider } from '@/components/toast';
 
 const CookieConsent = dynamic(
   () => import('@/components/cookie-consent').then((m) => m.CookieConsent),
@@ -16,7 +17,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <HeroUIProvider navigate={router.push}>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <ToastProvider>{children}</ToastProvider>
+      </AuthProvider>
       <CookieConsent />
     </HeroUIProvider>
   );

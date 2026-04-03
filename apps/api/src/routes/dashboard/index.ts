@@ -4,6 +4,7 @@ import { subscriptionGuard } from '../../middleware/subscription.js';
 import { ComplianceService } from '../../services/compliance.service.js';
 import { ActivityService } from '../../services/activity.service.js';
 import { handleError } from '../../utils/errors.js';
+import { sendSuccess } from '../../utils/response.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authGuard);
@@ -80,12 +81,12 @@ export async function dashboardRoutes(app: FastifyInstance) {
         return alerts;
       });
 
-      return {
+      return sendSuccess(reply, {
         compliance,
         upcomingDeadlines,
         boardAlerts,
         recentActivity,
-      };
+      });
     } catch (err) {
       handleError(reply, err);
     }

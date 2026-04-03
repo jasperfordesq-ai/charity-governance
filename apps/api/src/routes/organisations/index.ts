@@ -4,6 +4,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { updateOrganisationSchema, type UpdateOrganisationRequest } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
+import { sendSuccess } from '../../utils/response.js';
 import { ZodError } from 'zod';
 
 export async function organisationRoutes(app: FastifyInstance) {
@@ -15,7 +16,7 @@ export async function organisationRoutes(app: FastifyInstance) {
   app.get('/', async (request, reply) => {
     try {
       const org = await service.getOrganisation(request.user.organisationId);
-      return org;
+      return sendSuccess(reply, org);
     } catch (err) {
       handleError(reply, err);
     }
@@ -25,7 +26,7 @@ export async function organisationRoutes(app: FastifyInstance) {
     try {
       const data = updateOrganisationSchema.parse(request.body) as UpdateOrganisationRequest;
       const org = await service.updateOrganisation(request.user.organisationId, data);
-      return org;
+      return sendSuccess(reply, org);
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });

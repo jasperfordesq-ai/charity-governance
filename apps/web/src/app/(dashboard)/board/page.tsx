@@ -20,6 +20,7 @@ import {
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/toast';
 import type {
   BoardMemberResponse,
   CreateBoardMemberRequest,
@@ -30,6 +31,7 @@ export default function BoardPage() {
   const [members, setMembers] = useState<BoardMemberResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
+  const { toast } = useToast();
 
   // Add / Edit modal
   const memberModal = useDisclosure();
@@ -136,8 +138,10 @@ export default function BoardPage() {
       resetForm();
       memberModal.onClose();
       fetchMembers();
+      toast(editing ? 'Board member updated' : 'Board member added');
     } catch (err) {
       console.error('Save failed', err);
+      toast('Failed to save board member', 'error');
     } finally {
       setSaving(false);
     }

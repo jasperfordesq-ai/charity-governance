@@ -15,6 +15,7 @@ import {
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/toast';
 import type { DeadlineResponse, CreateDeadlineRequest } from '@charitypilot/shared';
 
 export default function DeadlinesPage() {
@@ -27,6 +28,7 @@ export default function DeadlinesPage() {
   const [formDescription, setFormDescription] = useState('');
   const [formDueDate, setFormDueDate] = useState('');
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   const fetchDeadlines = useCallback(async () => {
     try {
@@ -61,8 +63,10 @@ export default function DeadlinesPage() {
       setFormDueDate('');
       addModal.onClose();
       fetchDeadlines();
+      toast('Deadline added');
     } catch (err) {
       console.error('Failed to add deadline', err);
+      toast('Failed to add deadline', 'error');
     } finally {
       setSaving(false);
     }

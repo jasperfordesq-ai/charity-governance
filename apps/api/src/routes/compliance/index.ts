@@ -4,6 +4,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { upsertComplianceRecordSchema, complianceQuerySchema, type UpsertComplianceRecordRequest } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
+import { sendSuccess } from '../../utils/response.js';
 import { ZodError } from 'zod';
 
 export async function complianceRoutes(app: FastifyInstance) {
@@ -18,7 +19,7 @@ export async function complianceRoutes(app: FastifyInstance) {
       const org = await app.prisma.organisation.findUniqueOrThrow({
         where: { id: request.user.organisationId },
       });
-      return await service.getPrinciples(org.complexity);
+      return sendSuccess(reply, await service.getPrinciples(org.complexity));
     } catch (err) {
       handleError(reply, err);
     }
@@ -28,7 +29,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   app.get('/records', async (request, reply) => {
     try {
       const { year } = complianceQuerySchema.parse(request.query);
-      return await service.getRecords(request.user.organisationId, year);
+      return sendSuccess(reply, await service.getRecords(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -42,7 +43,7 @@ export async function complianceRoutes(app: FastifyInstance) {
     try {
       const { year } = complianceQuerySchema.parse(request.query);
       const record = await service.getRecord(request.user.organisationId, request.params.standardId, year);
-      return record ?? { status: 'NOT_STARTED' };
+      return sendSuccess(reply, record ?? { status: 'NOT_STARTED' });
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -61,7 +62,7 @@ export async function complianceRoutes(app: FastifyInstance) {
         request.user.userId,
         data,
       );
-      return record;
+      return sendSuccess(reply, record);
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -74,7 +75,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   app.get('/summary', async (request, reply) => {
     try {
       const { year } = complianceQuerySchema.parse(request.query);
-      return await service.getSummary(request.user.organisationId, year);
+      return sendSuccess(reply, await service.getSummary(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });

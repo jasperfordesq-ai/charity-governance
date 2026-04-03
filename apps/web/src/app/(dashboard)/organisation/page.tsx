@@ -16,6 +16,7 @@ import {
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/toast';
 import { useAuth } from '@/lib/auth-context';
 import type { UpdateOrganisationRequest } from '@charitypilot/shared';
 import {
@@ -30,6 +31,7 @@ export default function OrganisationPage() {
   const { user, refreshUser } = useAuth();
   const org = user?.organisation;
 
+  const { toast } = useToast();
   const complexityModal = useDisclosure();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -119,9 +121,11 @@ export default function OrganisationPage() {
       await refreshUser();
       setIsDirty(false);
       setSaved(true);
+      toast('Organisation profile saved');
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       console.error('Save failed', err);
+      toast('Failed to save changes', 'error');
     } finally {
       setSaving(false);
     }

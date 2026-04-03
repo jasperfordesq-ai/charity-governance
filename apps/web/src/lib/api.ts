@@ -18,9 +18,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto-refresh on 401
+// Unwrap { data: ... } envelope from API responses so callers get res.data directly
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // If the response is a wrapped object with a `data` key from our sendSuccess wrapper,
+    // unwrap it so callers get res.data = the actual payload.
+    // Paginated responses ({ data, total, page, ... }) are passed through as-is.
+    if (
+      response.data &&
+      typeof response.data === 'object' &&
+      'data' in response.data &&
+      !('total' in response.data) &&
+      !('page' in response.data)
+    ) {
+      response.data = response.data.data;
+    }
+    return response;
+  },
   async (error) => {
     const original = error.config;
 

@@ -5,6 +5,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
+import { sendCreated, sendNoContent } from '../../utils/response.js';
 import { ZodError } from 'zod';
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -109,7 +110,7 @@ export async function documentRoutes(app: FastifyInstance) {
         mimeType: data.mimetype,
       });
 
-      return reply.status(201).send(doc);
+      return sendCreated(reply, doc);
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -122,7 +123,7 @@ export async function documentRoutes(app: FastifyInstance) {
     try {
       const storagePath = await service.remove(request.user.organisationId, request.params.id);
       await storageService.deleteFile(storagePath);
-      return reply.status(204).send();
+      return sendNoContent(reply);
     } catch (err) {
       handleError(reply, err);
     }
@@ -133,7 +134,7 @@ export async function documentRoutes(app: FastifyInstance) {
     try {
       const { standardId } = linkStandardSchema.parse(request.body);
       await service.linkStandard(request.user.organisationId, request.params.id, standardId);
-      return reply.status(201).send({ success: true });
+      return sendCreated(reply, { success: true });
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -147,7 +148,7 @@ export async function documentRoutes(app: FastifyInstance) {
     try {
       const { standardId } = linkStandardSchema.parse(request.body);
       await service.unlinkStandard(request.user.organisationId, request.params.id, standardId);
-      return reply.status(204).send();
+      return sendNoContent(reply);
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });

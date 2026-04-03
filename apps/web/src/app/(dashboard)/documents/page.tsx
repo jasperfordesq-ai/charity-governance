@@ -23,6 +23,7 @@ import {
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/toast';
 import type {
   DocumentResponse,
   GovernanceStandardResponse,
@@ -33,6 +34,7 @@ export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [standards, setStandards] = useState<GovernanceStandardResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   // Upload modal
   const uploadModal = useDisclosure();
@@ -118,9 +120,11 @@ export default function DocumentsPage() {
       setUploadFile(null);
       uploadModal.onClose();
       fetchDocuments();
+      toast('Document uploaded successfully');
     } catch (err) {
       console.error('Upload failed', err);
       setUploadError('Upload failed. Please try again.');
+      toast('Upload failed', 'error');
     } finally {
       setUploading(false);
     }
@@ -140,6 +144,7 @@ export default function DocumentsPage() {
       setDocuments((prev) => prev.filter((d) => d.id !== deleteDocId));
       deleteModal.onClose();
       setDeleteDocId(null);
+      toast('Document deleted');
     } catch (err) {
       console.error('Delete failed', err);
     } finally {
