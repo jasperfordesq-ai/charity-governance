@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getPost, getRelatedPosts, ALL_POSTS, formatDate } from '@/lib/blog';
+import { ReadingProgress } from '@/components/reading-progress';
 
 /* ------------------------------------------------------------------ */
 /*  Static params — pre-render every known slug                        */
@@ -55,6 +56,7 @@ export default async function BlogPostPage({
 
   return (
     <div className="bg-white">
+      <ReadingProgress />
       {/* ── Hero ── */}
       <div className="bg-gradient-to-br from-teal-700 to-teal-900 text-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">

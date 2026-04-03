@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 
 /* ------------------------------------------------------------------ */
 /*  Navigation items                                                  */
@@ -126,6 +127,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
+      {/* Skip to content — a11y */}
+      <a href="#dashboard-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-teal-primary focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold">
+        Skip to content
+      </a>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -228,7 +233,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+        <main id="dashboard-content" className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+          <Breadcrumbs />
           {children}
         </main>
       </div>

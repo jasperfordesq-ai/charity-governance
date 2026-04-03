@@ -9,3 +9,28 @@
 
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Smooth scroll for anchor navigation */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus ring utility for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--color-teal-primary);
+  outline-offset: 2px;
+}
+
+/* Hide native details marker across browsers */
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Smooth transitions for details/summary FAQ */
+details[open] > summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}

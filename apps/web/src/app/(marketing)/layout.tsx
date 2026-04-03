@@ -1,9 +1,15 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { MobileNav } from './MobileNav';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Skip to content — a11y */}
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-teal-primary focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold">
+        Skip to content
+      </a>
+
       {/* Navigation */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -65,7 +71,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </Link>
             </nav>
 
-            {/* CTA */}
+            {/* Desktop CTA */}
             <Link
               href="/register"
               className="hidden md:inline-flex items-center bg-teal-primary text-white font-semibold text-sm px-5 py-2.5 rounded-full hover:bg-teal-dark transition-colors"
@@ -73,19 +79,14 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               Start free trial
             </Link>
 
-            {/* Mobile menu button — minimal, just shows the CTA on mobile */}
-            <Link
-              href="/register"
-              className="md:hidden inline-flex items-center bg-teal-primary text-white font-semibold text-xs px-4 py-2 rounded-full hover:bg-teal-dark transition-colors"
-            >
-              Free trial
-            </Link>
+            {/* Mobile hamburger */}
+            <MobileNav />
           </div>
         </div>
       </header>
 
       {/* Page content */}
-      <main className="flex-1">{children}</main>
+      <main id="main-content" className="flex-1">{children}</main>
 
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-400 py-14">
