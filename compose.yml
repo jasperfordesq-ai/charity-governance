@@ -1,0 +1,42 @@
+# =============================================================================
+# CharityPilot — Docker Compose (Local Development)
+# =============================================================================
+# Port assignments (no conflicts with other Nexus projects):
+#   API  → http://localhost:3002  (run with: npm run dev from apps/api)
+#   Web  → http://localhost:3003  (run with: npm run dev from apps/web)
+#   DB   → localhost:5434          (this file)
+#
+# Other projects use:
+#   3000 accounts-frontend  |  3001 nexus-sales-site  |  5173 nexus-react-dev
+#   5433 accounts-db        |  8090 nexus-php-app     |  7700 nexus-meilisearch
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16.4-alpine
+    container_name: charitypilot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: charitypilot
+      POSTGRES_USER: charitypilot
+      POSTGRES_PASSWORD: charitypilot_dev
+    ports:
+      - "5434:5432"
+    volumes:
+      - charitypilot-data:/var/lib/postgresql/data
+    networks:
+      - charitypilot-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U charitypilot -d charitypilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  charitypilot-data:
+    name: charitypilot-data
+
+networks:
+  charitypilot-internal:
+    name: charitypilot-internal
+    driver: bridge

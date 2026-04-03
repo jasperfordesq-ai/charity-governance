@@ -1,0 +1,44 @@
+{
+  "name": "@charitypilot/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env --import tsx/esm --watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "clean": "rm -rf dist",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@charitypilot/shared": "*",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/multipart": "^9.0.0",
+    "@fastify/rate-limit": "^10.2.0",
+    "@prisma/client": "^6.5.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "bcryptjs": "^3.0.2",
+    "resend": "^4.5.0",
+    "fastify": "^5.2.0",
+    "fastify-plugin": "^5.0.0",
+    "pino-pretty": "^13.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "stripe": "^17.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.15.0",
+    "prisma": "^6.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

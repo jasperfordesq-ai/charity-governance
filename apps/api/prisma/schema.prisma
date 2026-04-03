@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganisationComplexity {
+  SIMPLE
+  COMPLEX
+}
+
+enum LegalForm {
+  CLG
+  TRUST
+  UNINCORPORATED_ASSOCIATION
+  OTHER
+}
+
+enum CharitablePurpose {
+  POVERTY_RELIEF
+  EDUCATION
+  RELIGION
+  COMMUNITY_BENEFIT
+}
+
+enum ComplianceStatus {
+  COMPLIANT
+  WORKING_TOWARDS
+  NOT_STARTED
+  NOT_APPLICABLE
+  EXPLAIN
+}
+
+enum SubscriptionPlan {
+  ESSENTIALS
+  COMPLETE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum DocumentCategory {
+  CONSTITUTION
+  POLICY
+  BOARD_MINUTES
+  FINANCIAL_STATEMENT
+  INSURANCE
+  ANNUAL_REPORT
+  RISK_REGISTER
+  CODE_OF_CONDUCT
+  STRATEGIC_PLAN
+  OTHER
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Organisation {
+  id                String                 @id @default(cuid())
+  name              String
+  rcnNumber         String?
+  croNumber         String?
+  legalForm         LegalForm              @default(CLG)
+  complexity        OrganisationComplexity @default(SIMPLE)
+  charitablePurpose CharitablePurpose[]
+  financialYearEnd  DateTime?
+  registeredAddress String?
+  contactEmail      String?
+  contactPhone      String?
+  website           String?
+  dateRegistered    DateTime?
+  lastAgmDate       DateTime?
+
+  stripeCustomerId String? @unique
+
+  users             User[]
+  boardMembers      BoardMember[]
+  complianceRecords ComplianceRecord[]
+  documents         Document[]
+  deadlines         Deadline[]
+  subscription      Subscription?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  name           String
+  passwordHash   String
+  role           UserRole     @default(MEMBER)
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  emailVerified  Boolean      @default(false)
+
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  verifyToken      String?   @unique
+  verifyTokenExpiry DateTime?
+
+  complianceUpdates ComplianceRecord[] @relation("UpdatedBy")
+  documentUploads   Document[]         @relation("UploadedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model GovernancePrinciple {
+  id          String @id @default(cuid())
+  number      Int    @unique
+  title       String
+  description String
+  sortOrder   Int
+
+  standards GovernanceStandard[]
+}
+
+model GovernanceStandard {
+  id           String              @id @default(cuid())
+  principleId  String
+  principle    GovernancePrinciple @relation(fields: [principleId], references: [id])
+  code         String              @unique
+  title        String
+  isCore       Boolean
+  isAdditional Boolean
+  sortOrder    Int
+
+  complianceRecords ComplianceRecord[]
+  documentLinks     DocumentStandardLink[]
+
+  @@index([principleId])
+}
+
+model ComplianceRecord {
+  id             String           @id @default(cuid())
+  organisationId String
+  organisation   Organisation     @relation(fields: [organisationId], references: [id])
+  standardId     String
+  standard       GovernanceStandard @relation(fields: [standardId], references: [id])
+  reportingYear  Int
+
+  status          ComplianceStatus @default(NOT_STARTED)
+  actionTaken     String?
+  evidence        String?
+  notes           String?
+  explanationIfNA String?
+
+  updatedById String?
+  updatedBy   User?  @relation("UpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organisationId, standardId, reportingYear])
+  @@index([organisationId, reportingYear])
+}
+
+model BoardMember {
+  id                 String       @id @default(cuid())
+  organisationId     String
+  organisation       Organisation @relation(fields: [organisationId], references: [id])
+  name               String
+  role               String
+  email              String?
+  appointedDate      DateTime
+  termEndDate        DateTime?
+  isActive           Boolean      @default(true)
+  conductSigned      Boolean      @default(false)
+  conductSignedDate  DateTime?
+  inductionCompleted Boolean      @default(false)
+  inductionDate      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model Document {
+  id             String           @id @default(cuid())
+  organisationId String
+  organisation   Organisation     @relation(fields: [organisationId], references: [id])
+  name           String
+  description    String?
+  category       DocumentCategory
+  fileUrl        String
+  fileSize       Int
+  mimeType       String
+  version        Int              @default(1)
+
+  uploadedById String?
+  uploadedBy   User?  @relation("UploadedBy", fields: [uploadedById], references: [id])
+
+  standardLinks DocumentStandardLink[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model DocumentStandardLink {
+  id         String             @id @default(cuid())
+  documentId String
+  document   Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  standardId String
+  standard   GovernanceStandard @relation(fields: [standardId], references: [id])
+
+  @@unique([documentId, standardId])
+}
+
+model Deadline {
+  id              String       @id @default(cuid())
+  organisationId  String
+  organisation    Organisation @relation(fields: [organisationId], references: [id])
+  title           String
+  description     String?
+  dueDate         DateTime
+  isAutoGenerated Boolean      @default(false)
+  isComplete      Boolean      @default(false)
+  completedDate   DateTime?
+  reminderDays    Int[]        @default([30, 14, 7])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  organisationId       String             @unique
+  organisation         Organisation       @relation(fields: [organisationId], references: [id])
+  stripeSubscriptionId String?            @unique
+  plan                 SubscriptionPlan
+  status               SubscriptionStatus @default(TRIALING)
+  trialEndsAt          DateTime?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelledAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

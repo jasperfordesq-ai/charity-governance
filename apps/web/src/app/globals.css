@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --color-teal-primary: #0D7377;
+  --color-teal-dark: #095456;
+  --color-teal-light: #10998E;
+  --color-amber-accent: #D4A843;
+  --color-amber-light: #F5D78E;
+
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+}
