@@ -271,19 +271,23 @@ export default function BillingPage() {
       {/* FAQ / info */}
       <Card className="border border-gray-200 shadow-sm p-6">
         <h3 className="text-sm font-semibold text-gray-800 mb-3">Frequently Asked Questions</h3>
-        <div className="space-y-3 text-sm text-gray-600">
-          <div>
-            <p className="font-medium text-gray-700">Can I cancel at any time?</p>
-            <p>Yes. You can cancel your subscription at any time from the Manage Subscription page. You will retain access until the end of your current billing period.</p>
-          </div>
-          <div>
-            <p className="font-medium text-gray-700">What payment methods do you accept?</p>
-            <p>We accept all major credit and debit cards through our secure payment partner, Stripe.</p>
-          </div>
-          <div>
-            <p className="font-medium text-gray-700">Is there a free trial?</p>
-            <p>Yes! Every new account gets a 14-day free trial with full access to all features.</p>
-          </div>
+        <div className="space-y-1 text-sm text-gray-600">
+          {[
+            { q: 'Can I cancel at any time?', a: 'Yes. You can cancel your subscription at any time from the Manage Subscription page. You will retain access until the end of your current billing period.' },
+            { q: 'What payment methods do you accept?', a: 'We accept all major credit and debit cards through our secure payment partner, Stripe.' },
+            { q: 'Is there a free trial?', a: 'Yes! Every new account gets a 14-day free trial with full access to all features.' },
+            { q: 'Can I switch plans?', a: 'Yes. You can upgrade or downgrade at any time. Changes take effect at the start of your next billing period.' },
+          ].map(({ q, a }) => (
+            <details key={q} className="group rounded-lg border border-gray-100 overflow-hidden">
+              <summary className="flex items-center justify-between cursor-pointer px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 transition-colors list-none">
+                {q}
+                <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </summary>
+              <p className="px-4 pb-3 text-gray-600">{a}</p>
+            </details>
+          ))}
         </div>
       </Card>
     </div>

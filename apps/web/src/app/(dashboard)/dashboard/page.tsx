@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [deadlines, setDeadlines] = useState<DeadlineResponse[] | null>(null);
   const [boardAlerts, setBoardAlerts] = useState<BoardAlert[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const currentYear = new Date().getFullYear();
 
@@ -104,6 +105,7 @@ export default function DashboardPage() {
         setBoardAlerts(alerts);
       } catch (err) {
         console.error('Failed to load dashboard data', err);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -129,6 +131,21 @@ export default function DashboardPage() {
           Here is your governance compliance overview for {currentYear}.
         </p>
       </div>
+
+      {/* ── Error state ── */}
+      {error && !loading && (
+        <Card className="p-6 border border-red-200 bg-red-50/50" role="alert">
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-red-800">Failed to load dashboard data</p>
+              <p className="text-xs text-red-600">Please check your connection and try refreshing the page.</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ── Overall compliance score ── */}
       {loading ? (

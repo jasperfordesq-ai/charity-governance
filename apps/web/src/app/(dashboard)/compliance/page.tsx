@@ -122,6 +122,9 @@ export default function CompliancePage() {
       <div className="flex items-center gap-3">
         <button
           type="button"
+          role="switch"
+          aria-checked={showAdditional}
+          aria-label="Show additional standards for complex organisations"
           onClick={() => setShowAdditional(!showAdditional)}
           className={`
             relative inline-flex h-6 w-11 items-center rounded-full transition-colors
@@ -189,11 +192,18 @@ export default function CompliancePage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className={`text-lg font-bold ${
-                          pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-gray-400'
-                        }`}>
-                          {Math.round(pct)}%
-                        </span>
+                        <div className="text-right">
+                          <span className={`text-lg font-bold ${
+                            pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-gray-400'
+                          }`}>
+                            {Math.round(pct)}%
+                          </span>
+                          <span className={`block text-[10px] font-medium ${
+                            pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-gray-400'
+                          }`}>
+                            {pct >= 80 ? 'Compliant' : pct >= 50 ? 'Working Towards' : pct > 0 ? 'In Progress' : 'Not Started'}
+                          </span>
+                        </div>
                         <svg
                           className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                           fill="none"

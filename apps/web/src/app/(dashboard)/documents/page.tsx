@@ -43,6 +43,11 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
+  // Delete confirmation modal
+  const deleteModal = useDisclosure();
+  const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Link standards modal
   const linkModal = useDisclosure();
   const [linkDocId, setLinkDocId] = useState<string | null>(null);
@@ -122,14 +127,23 @@ export default function DocumentsPage() {
   };
 
   /* ── Delete handler ── */
-  const handleDelete = async (docId: string) => {
-    if (!confirm('Are you sure you want to delete this document?')) return;
+  const confirmDelete = (docId: string) => {
+    setDeleteDocId(docId);
+    deleteModal.onOpen();
+  };
 
+  const handleDelete = async () => {
+    if (!deleteDocId) return;
+    setDeleting(true);
     try {
-      await api.delete(`/documents/${docId}`);
-      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      await api.delete(`/documents/${deleteDocId}`);
+      setDocuments((prev) => prev.filter((d) => d.id !== deleteDocId));
+      deleteModal.onClose();
+      setDeleteDocId(null);
     } catch (err) {
       console.error('Delete failed', err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -280,7 +294,7 @@ export default function DocumentsPage() {
                       size="sm"
                       variant="flat"
                       color="danger"
-                      onPress={() => handleDelete(doc.id)}
+                      onPress={() => confirmDelete(doc.id)}
                     >
                       Delete
                     </Button>
@@ -359,6 +373,34 @@ export default function DocumentsPage() {
                   isDisabled={!uploadFile || !uploadName.trim()}
                 >
                   Upload
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      {/* ── Delete Confirmation Modal ── */}
+      <Modal isOpen={deleteModal.isOpen} onOpenChange={deleteModal.onOpenChange} size="sm">
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>Delete Document</ModalHeader>
+              <ModalBody>
+                <p className="text-sm text-gray-600">
+                  Are you sure you want to delete this document? This action cannot be undone.
+                </p>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="flat" onPress={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  color="danger"
+                  onPress={handleDelete}
+                  isLoading={deleting}
+                >
+                  Delete
                 </Button>
               </ModalFooter>
             </>
