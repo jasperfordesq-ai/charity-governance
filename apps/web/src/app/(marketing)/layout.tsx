@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { MobileNav } from './MobileNav';
+import { BackToTop } from '@/components/back-to-top';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
@@ -87,6 +88,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
 
       {/* Page content */}
       <main id="main-content" className="flex-1">{children}</main>
+      <BackToTop />
 
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-400 py-14">

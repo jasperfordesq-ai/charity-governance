@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import {
   Card,
   Button,
@@ -28,6 +29,7 @@ import {
 } from '@charitypilot/shared';
 
 export default function OrganisationPage() {
+  useDocumentTitle('Organisation');
   const { user, refreshUser } = useAuth();
   const org = user?.organisation;
 

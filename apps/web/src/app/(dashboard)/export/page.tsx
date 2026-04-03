@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import type { ComplianceSummary } from '@charitypilot/shared';
 import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 
 export default function ExportPage() {
+  useDocumentTitle('Export Report');
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);

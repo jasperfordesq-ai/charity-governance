@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Progress, Select, SelectItem, Chip, Button } from '@heroui/react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
@@ -11,6 +12,7 @@ import type {
 import { COMPLIANCE_STATUS_META } from '@charitypilot/shared';
 
 export default function CompliancePage() {
+  useDocumentTitle('Compliance');
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [principles, setPrinciples] = useState<GovernancePrincipleResponse[]>([]);

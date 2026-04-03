@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Progress, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -44,6 +45,7 @@ function SkeletonList({ rows = 3 }: { rows?: number }) {
 /* ------------------------------------------------------------------ */
 
 export default function DashboardPage() {
+  useDocumentTitle('Dashboard');
   const { user } = useAuth();
   const [compliance, setCompliance] = useState<ComplianceSummary | null>(null);
   const [deadlines, setDeadlines] = useState<DeadlineResponse[] | null>(null);

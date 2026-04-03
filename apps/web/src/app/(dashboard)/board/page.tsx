@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import {
   Card,
   Button,
@@ -28,6 +29,7 @@ import type {
 } from '@charitypilot/shared';
 
 export default function BoardPage() {
+  useDocumentTitle('Board Members');
   const [members, setMembers] = useState<BoardMemberResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);

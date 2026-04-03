@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import {
   Card,
   Button,
@@ -31,6 +32,7 @@ import type {
 import { DocumentCategory, DOCUMENT_CATEGORY_LABELS } from '@charitypilot/shared';
 
 export default function DocumentsPage() {
+  useDocumentTitle('Documents');
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [standards, setStandards] = useState<GovernanceStandardResponse[]>([]);
   const [loading, setLoading] = useState(true);

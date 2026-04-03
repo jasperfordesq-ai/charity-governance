@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import type { BillingStatusResponse } from '@charitypilot/shared';
@@ -49,6 +50,7 @@ const PLANS = [
 /* ------------------------------------------------------------------ */
 
 export default function BillingPage() {
+  useDocumentTitle('Billing');
   const [billing, setBilling] = useState<BillingStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);

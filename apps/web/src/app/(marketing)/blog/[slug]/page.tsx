@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getPost, getRelatedPosts, ALL_POSTS, formatDate } from '@/lib/blog';
 import { ReadingProgress } from '@/components/reading-progress';
+import { CopyLinkButton } from '@/components/copy-link-button';
 
 /* ------------------------------------------------------------------ */
 /*  Static params — pre-render every known slug                        */
@@ -136,13 +137,7 @@ export default async function BlogPostPage({
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>
           </a>
-          <button
-            onClick={() => { navigator.clipboard.writeText(`https://charitypilot.ie/blog/${meta.slug}`); }}
-            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
-            aria-label="Copy link to clipboard"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-4.939a4.5 4.5 0 00-6.364-6.364L4.5 8.06a4.5 4.5 0 001.242 7.244" /></svg>
-          </button>
+          <CopyLinkButton url={`https://charitypilot.ie/blog/${meta.slug}`} />
         </div>
 
         {/* Tags */}

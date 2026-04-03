@@ -1,4 +1,16 @@
 import { Button, Card, CardBody, CardHeader, Link } from '@heroui/react';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'CharityPilot — Charity Governance Made Simple',
+  description:
+    'The affordable, Ireland-specific governance compliance tool for registered charities. Track your CRA Charities Governance Code compliance, manage documents, and file with confidence.',
+  openGraph: {
+    title: 'CharityPilot — Charity Governance Made Simple',
+    description: 'Over 11,000 Irish charities must comply with the CRA Governance Code. CharityPilot makes it simple.',
+    type: 'website',
+  },
+};
 
 const features = [
   {

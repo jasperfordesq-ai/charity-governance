@@ -22,21 +22,35 @@ export default function NotFound() {
           Let&apos;s get you back on course.
         </p>
 
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 bg-teal-primary text-white font-semibold px-6 py-3 rounded-full hover:bg-teal-dark transition-colors"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 bg-teal-primary text-white font-semibold px-6 py-3 rounded-full hover:bg-teal-dark transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          Back to home
-        </Link>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Back to home
+          </Link>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 border border-teal-primary text-teal-primary font-semibold px-6 py-3 rounded-full hover:bg-teal-primary hover:text-white transition-colors"
+          >
+            Go to dashboard
+          </Link>
+        </div>
+        <p className="mt-6 text-sm text-gray-400">
+          Need help?{' '}
+          <a href="mailto:support@charitypilot.ie" className="text-teal-primary hover:underline">
+            Contact support
+          </a>
+        </p>
       </div>
     </div>
   );

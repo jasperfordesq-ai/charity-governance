@@ -10,6 +10,17 @@
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Dark mode overrides for common patterns */
+.dark .border-gray-100 { border-color: rgb(31 41 55); }
+.dark .border-gray-200 { border-color: rgb(55 65 81); }
+.dark .bg-gray-50 { background-color: rgb(17 24 39); }
+.dark .bg-white { background-color: rgb(17 24 39); }
+.dark .text-gray-900 { color: rgb(243 244 246); }
+.dark .text-gray-800 { color: rgb(229 231 235); }
+.dark .text-gray-700 { color: rgb(209 213 219); }
+.dark .text-gray-600 { color: rgb(156 163 175); }
+.dark .text-gray-500 { color: rgb(156 163 175); }
+
 /* Smooth scroll for anchor navigation */
 html {
   scroll-behavior: smooth;

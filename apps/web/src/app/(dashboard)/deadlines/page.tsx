@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useDocumentTitle } from '@/lib/use-title';
 import {
   Card,
   Button,
@@ -19,6 +20,7 @@ import { useToast } from '@/components/toast';
 import type { DeadlineResponse, CreateDeadlineRequest } from '@charitypilot/shared';
 
 export default function DeadlinesPage() {
+  useDocumentTitle('Deadlines');
   const [deadlines, setDeadlines] = useState<DeadlineResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
