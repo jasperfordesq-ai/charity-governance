@@ -275,6 +275,7 @@ export default function DocumentsPage() {
                         size="sm"
                         variant="flat"
                         isIconOnly
+                        aria-label="Link a standard to this document"
                         className="h-6 w-6 min-w-6"
                         onPress={() => {
                           setLinkDocId(doc.id);

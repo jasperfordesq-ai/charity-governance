@@ -1,5 +1,6 @@
 import { Button, Card, CardBody, CardHeader, Link } from '@heroui/react';
 import type { Metadata } from 'next';
+import { OrganisationJsonLd, FaqJsonLd } from '@/components/json-ld';
 
 export const metadata: Metadata = {
   title: 'CharityPilot — Charity Governance Made Simple',
@@ -100,6 +101,8 @@ const faqs = [
 export default function LandingPage() {
   return (
     <div>
+      <OrganisationJsonLd />
+      <FaqJsonLd faqs={faqs} />
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-teal-primary via-teal-dark to-teal-primary">
         <div className="absolute inset-0 opacity-10">
