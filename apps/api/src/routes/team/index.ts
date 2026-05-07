@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { TeamService } from '../../services/team.service.js';
 import { authGuard } from '../../middleware/auth.js';
+import { subscriptionGuard } from '../../middleware/subscription.js';
+import { setAuthCookies } from '../../utils/auth-cookies.js';
 import {
   acceptTeamInviteSchema,
   inviteTeamMemberSchema,
@@ -28,6 +30,7 @@ export async function teamRoutes(app: FastifyInstance) {
       const body = acceptTeamInviteSchema.parse(request.body);
       const result = await service.acceptInvite(body);
 
+      setAuthCookies(reply, result);
       reply.status(201).send({
         user: {
           id: result.user.id,
@@ -36,10 +39,8 @@ export async function teamRoutes(app: FastifyInstance) {
           role: result.user.role,
           emailVerified: result.user.emailVerified,
           organisationId: result.user.organisationId,
-          organisation: result.user.organisation,
+            organisation: result.user.organisation,
         },
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
       });
     } catch (err) {
       if (err instanceof ZodError) {
@@ -52,6 +53,7 @@ export async function teamRoutes(app: FastifyInstance) {
 
   app.register(async (authedApp: FastifyInstance) => {
     authedApp.addHook('onRequest', authGuard);
+    authedApp.addHook('onRequest', subscriptionGuard);
 
     authedApp.get('/', async (request, reply) => {
       try {

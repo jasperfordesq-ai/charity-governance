@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { DeadlineService } from '../../services/deadline.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
+import { requireAdmin } from '../../middleware/roles.js';
 import { createDeadlineSchema, updateDeadlineSchema } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { sendSuccess, sendCreated, sendNoContent } from '../../utils/response.js';
@@ -26,7 +27,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/', async (request, reply) => {
+  app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createDeadlineSchema.parse(request.body);
       const deadline = await service.create(request.user.organisationId, data);
@@ -39,7 +40,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch<{ Params: { id: string } }>('/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateDeadlineSchema.parse(request.body);
       return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data));
@@ -51,7 +52,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       await service.remove(request.user.organisationId, request.params.id);
       return sendNoContent(reply);

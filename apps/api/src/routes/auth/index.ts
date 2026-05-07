@@ -10,7 +10,12 @@ import {
   resetPasswordSchema,
   verifyEmailSchema,
 } from '@charitypilot/shared';
-import { handleError } from '../../utils/errors.js';
+import { AppError, handleError } from '../../utils/errors.js';
+import {
+  clearAuthCookies,
+  getRefreshTokenFromRequest,
+  setAuthCookies,
+} from '../../utils/auth-cookies.js';
 
 function formatZodError(error: ZodError) {
   return {
@@ -23,10 +28,28 @@ function formatZodError(error: ZodError) {
   };
 }
 
+function publicUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  emailVerified: boolean;
+  organisationId: string;
+  organisation: unknown;
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    emailVerified: user.emailVerified,
+    organisationId: user.organisationId,
+    organisation: user.organisation,
+  };
+}
+
 export async function authRoutes(app: FastifyInstance) {
   const authService = new AuthService(app.prisma);
-
-  // ── POST /register ──
 
   app.post(
     '/register',
@@ -36,19 +59,8 @@ export async function authRoutes(app: FastifyInstance) {
         const body = registerSchema.parse(request.body);
         const result = await authService.register(body);
 
-        reply.status(201).send({
-          user: {
-            id: result.user.id,
-            email: result.user.email,
-            name: result.user.name,
-            role: result.user.role,
-            emailVerified: result.user.emailVerified,
-            organisationId: result.user.organisationId,
-            organisation: result.user.organisation,
-          },
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        });
+        setAuthCookies(reply, result);
+        reply.status(201).send({ user: publicUser(result.user) });
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));
@@ -58,8 +70,6 @@ export async function authRoutes(app: FastifyInstance) {
       }
     },
   );
-
-  // ── POST /login ──
 
   app.post(
     '/login',
@@ -69,19 +79,8 @@ export async function authRoutes(app: FastifyInstance) {
         const body = loginSchema.parse(request.body);
         const result = await authService.login(body);
 
-        reply.send({
-          user: {
-            id: result.user.id,
-            email: result.user.email,
-            name: result.user.name,
-            role: result.user.role,
-            emailVerified: result.user.emailVerified,
-            organisationId: result.user.organisationId,
-            organisation: result.user.organisation,
-          },
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        });
+        setAuthCookies(reply, result);
+        reply.send({ user: publicUser(result.user) });
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));
@@ -92,15 +91,21 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── POST /refresh ──
-
   app.post('/refresh', async (request, reply) => {
     try {
-      const body = refreshSchema.parse(request.body);
-      const result = await authService.refresh(body.refreshToken);
+      const body = refreshSchema.parse(request.body ?? {});
+      const refreshToken = body.refreshToken ?? getRefreshTokenFromRequest(request);
 
-      reply.send(result);
+      if (!refreshToken) {
+        throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Missing refresh token');
+      }
+
+      const result = await authService.refresh(refreshToken);
+      setAuthCookies(reply, result);
+
+      reply.send({ ok: true });
     } catch (err) {
+      clearAuthCookies(reply);
       if (err instanceof ZodError) {
         reply.status(400).send(formatZodError(err));
         return;
@@ -109,27 +114,35 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── GET /me ──
-
-  app.get('/me', { preHandler: [authGuard] }, async (request, reply) => {
+  app.post('/logout', async (request, reply) => {
     try {
-      const user = await authService.getMe(request.user.userId);
+      const body = refreshSchema.partial().parse(request.body ?? {});
+      const refreshToken = body.refreshToken ?? getRefreshTokenFromRequest(request);
 
-      reply.send({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        emailVerified: user.emailVerified,
-        organisationId: user.organisationId,
-        organisation: user.organisation,
-      });
+      if (refreshToken) {
+        await authService.logout(refreshToken);
+      }
+
+      clearAuthCookies(reply);
+      reply.send({ ok: true });
     } catch (err) {
+      clearAuthCookies(reply);
+      if (err instanceof ZodError) {
+        reply.status(400).send(formatZodError(err));
+        return;
+      }
       handleError(reply, err);
     }
   });
 
-  // ── POST /forgot-password ──
+  app.get('/me', { preHandler: [authGuard] }, async (request, reply) => {
+    try {
+      const user = await authService.getMe(request.user.userId);
+      reply.send(publicUser(user));
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
 
   app.post('/forgot-password', async (request, reply) => {
     try {
@@ -146,13 +159,12 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── POST /reset-password ──
-
   app.post('/reset-password', async (request, reply) => {
     try {
       const body = resetPasswordSchema.parse(request.body);
       const result = await authService.resetPassword(body.token, body.password);
 
+      clearAuthCookies(reply);
       reply.send(result);
     } catch (err) {
       if (err instanceof ZodError) {
@@ -162,8 +174,6 @@ export async function authRoutes(app: FastifyInstance) {
       handleError(reply, err);
     }
   });
-
-  // ── POST /verify-email ──
 
   app.post('/verify-email', async (request, reply) => {
     try {

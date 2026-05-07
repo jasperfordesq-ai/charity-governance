@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -19,27 +20,15 @@ export default function ForgotPasswordPage() {
       await api.post('/auth/forgot-password', { email });
       setIsSuccess(true);
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        'Something went wrong. Please try again.';
-      setError(message);
+      setError(apiErrorMessage(err, 'Something went wrong. Please try again.'));
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-white">
-      {/* Header */}
-      <div className="py-8 px-4 text-center">
-        <Link href="/" className="text-2xl font-bold text-teal-primary">
-          CharityPilot
-        </Link>
-      </div>
-
-      {/* Form */}
-      <div className="flex-1 flex items-start justify-center px-4 pt-4 pb-16">
-        <Card className="w-full max-w-md border border-gray-100 shadow-lg">
+    <div className="w-full max-w-md min-w-0">
+        <Card className="w-full border border-gray-100 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">
@@ -107,7 +96,6 @@ export default function ForgotPasswordPage() {
             )}
           </CardBody>
         </Card>
-      </div>
     </div>
   );
 }

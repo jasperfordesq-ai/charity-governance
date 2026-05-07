@@ -9,7 +9,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: { email: string; password: string; name: string; organisationName: string }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -21,11 +21,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        setUser(null);
-        return;
-      }
       const { data } = await api.get('/auth/me');
       setUser(data);
     } catch {
@@ -39,8 +34,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
   };
 
@@ -51,15 +44,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     organisationName: string;
   }) => {
     const { data } = await api.post('/auth/register', regData);
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
   };
 
-  const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout', {});
+    } finally {
+      setUser(null);
+    }
   };
 
   return (

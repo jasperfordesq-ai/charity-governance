@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Chip, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
 import { useDocumentTitle } from '@/lib/use-title';
 import type { TeamResponse, TeamInviteResponse, TeamMemberResponse } from '@charitypilot/shared';
@@ -92,8 +93,8 @@ export default function TeamPage() {
       setRole(UserRole.MEMBER);
       setMessage('Invite sent. CharityPilot will record whether the email was delivered when reminders are configured.');
       await fetchTeam();
-    } catch (err: any) {
-      setError(err.response?.data?.error ?? 'Invite could not be sent.');
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'Invite could not be sent.'));
     } finally {
       setSaving(false);
     }
@@ -106,8 +107,8 @@ export default function TeamPage() {
       await api.delete(`/team/invites/${inviteId}`);
       setMessage('Invite revoked.');
       await fetchTeam();
-    } catch (err: any) {
-      setError(err.response?.data?.error ?? 'Invite could not be revoked.');
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'Invite could not be revoked.'));
     }
   };
 
@@ -118,8 +119,8 @@ export default function TeamPage() {
       await api.patch(`/team/members/${member.id}/role`, { role: nextRole });
       setMessage(`${member.name}'s role was updated.`);
       await fetchTeam();
-    } catch (err: any) {
-      setError(err.response?.data?.error ?? 'Role could not be updated.');
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'Role could not be updated.'));
     }
   };
 

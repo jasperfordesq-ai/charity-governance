@@ -1,9 +1,11 @@
 import type { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
 
-// Simple setInterval-based scheduler for deadline reminders
-// In production, use a proper job queue (BullMQ, pg-boss, etc.)
 export function startCronJobs(deadlineService: DeadlineRemindersService): void {
-  // Run every 24 hours
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_IN_PROCESS_JOBS !== 'true') {
+    console.log('[CRON] In-process jobs disabled. Run deadline reminders through the dedicated job entrypoint.');
+    return;
+  }
+
   const INTERVAL_MS = 24 * 60 * 60 * 1000;
   setInterval(async () => {
     try {

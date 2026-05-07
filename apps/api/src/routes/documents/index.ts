@@ -3,6 +3,7 @@ import { DocumentService } from '../../services/document.service.js';
 import { StorageService } from '../../services/storage.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
+import { requireAdmin } from '../../middleware/roles.js';
 import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent } from '../../utils/response.js';
@@ -64,7 +65,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Upload document (multipart/form-data)
-  app.post('/', async (request, reply) => {
+  app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = await request.file();
       if (!data) {
@@ -127,7 +128,7 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const storagePath = await service.remove(request.user.organisationId, request.params.id);
       await storageService.deleteFile(storagePath);
@@ -138,7 +139,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Link document to governance standard
-  app.post<{ Params: { id: string } }>('/:id/link-standard', async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/link-standard', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { standardId } = linkStandardSchema.parse(request.body);
       await service.linkStandard(request.user.organisationId, request.params.id, standardId);
@@ -152,7 +153,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Alias used by the web app: POST /documents/:id/standards
-  app.post<{ Params: { id: string } }>('/:id/standards', async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/standards', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { standardId } = linkStandardSchema.parse(request.body);
       await service.linkStandard(request.user.organisationId, request.params.id, standardId);
@@ -166,7 +167,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Unlink document from governance standard
-  app.delete<{ Params: { id: string } }>('/:id/unlink-standard', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id/unlink-standard', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { standardId } = linkStandardSchema.parse(request.body);
       await service.unlinkStandard(request.user.organisationId, request.params.id, standardId);
@@ -180,7 +181,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Alias used by the web app: DELETE /documents/:id/standards/:standardId
-  app.delete<{ Params: { id: string; standardId: string } }>('/:id/standards/:standardId', async (request, reply) => {
+  app.delete<{ Params: { id: string; standardId: string } }>('/:id/standards/:standardId', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       await service.unlinkStandard(
         request.user.organisationId,

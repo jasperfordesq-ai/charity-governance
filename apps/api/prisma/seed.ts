@@ -5,8 +5,15 @@ import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 const prisma = new PrismaClient();
 
 const DEMO_EMAIL = 'demo@charitypilot.ie';
-const DEMO_PASSWORD = 'DemoPass123!';
 const DEMO_ORG_NAME = 'CharityPilot Demo Charity';
+
+function demoPassword(): string {
+  const password = process.env.DEMO_PASSWORD;
+  if (!password) {
+    throw new Error('DEMO_PASSWORD must be set when SEED_DEMO_WORKSPACE=true');
+  }
+  return password;
+}
 
 async function seedGovernanceCode() {
   let principleCount = 0;
@@ -174,7 +181,7 @@ async function seedDemoWorkspace() {
     });
   }
 
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+  const passwordHash = await bcrypt.hash(demoPassword(), 12);
   const user = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
     update: {
@@ -518,15 +525,19 @@ async function seedDemoWorkspace() {
     },
   });
 
-  return { email: DEMO_EMAIL, password: DEMO_PASSWORD, organisationName: organisation.name };
+  return { email: DEMO_EMAIL, organisationName: organisation.name };
 }
 
 async function main() {
   const governance = await seedGovernanceCode();
-  const demo = await seedDemoWorkspace();
 
   console.log(`Seeded ${governance.principleCount} governance principles and ${governance.standardCount} governance standards.`);
-  console.log(`Demo workspace ready: ${demo.organisationName} (${demo.email} / ${demo.password})`);
+
+  if (process.env.SEED_DEMO_WORKSPACE === 'true') {
+    const demo = await seedDemoWorkspace();
+    console.log(`Demo workspace ready: ${demo.organisationName} (${demo.email}).`);
+    console.log('Use the local demo password configured in prisma/seed.ts only outside production.');
+  }
 }
 
 main()

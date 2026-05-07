@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 
 export default function AcceptInvitePage() {
   const router = useRouter();
@@ -33,27 +34,18 @@ export default function AcceptInvitePage() {
     setIsLoading(true);
 
     try {
-      const { data } = await api.post('/team/accept-invite', { token, name, password });
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
+      await api.post('/team/accept-invite', { token, name, password });
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.error ?? 'This invite could not be accepted. It may have expired.');
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'This invite could not be accepted. It may have expired.'));
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <div className="py-8 px-4 text-center">
-        <Link href="/" className="text-2xl font-bold text-teal-primary">
-          CharityPilot
-        </Link>
-      </div>
-
-      <div className="flex-1 flex items-start justify-center px-4 pt-4 pb-16">
-        <Card className="w-full max-w-md border border-gray-100 shadow-lg">
+    <div className="w-full max-w-md min-w-0">
+        <Card className="w-full border border-gray-100 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900">Accept your invite</h1>
@@ -124,7 +116,6 @@ export default function AcceptInvitePage() {
             </p>
           </CardBody>
         </Card>
-      </div>
     </div>
   );
 }

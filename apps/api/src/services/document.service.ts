@@ -102,12 +102,21 @@ export class DocumentService {
   }
 
   async linkStandard(organisationId: string, documentId: string, standardId: string) {
-    const doc = await this.prisma.document.findFirst({
-      where: { id: documentId, organisationId },
-    });
+    const [doc, standard] = await Promise.all([
+      this.prisma.document.findFirst({
+        where: { id: documentId, organisationId },
+      }),
+      this.prisma.governanceStandard.findUnique({
+        where: { id: standardId },
+      }),
+    ]);
 
     if (!doc) {
       throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+    }
+
+    if (!standard) {
+      throw new AppError(404, 'STANDARD_NOT_FOUND', 'Governance standard not found');
     }
 
     return this.prisma.documentStandardLink.create({

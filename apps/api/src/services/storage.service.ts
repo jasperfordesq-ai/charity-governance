@@ -50,7 +50,7 @@ export class StorageService {
     filename: string,
     buffer: Buffer,
     mimeType: string,
-  ): Promise<{ fileUrl: string; storagePath: string }> {
+  ): Promise<{ storagePath: string }> {
     const sanitised = sanitiseFilename(filename);
     const storagePath = `${organisationId}/${Date.now()}-${sanitised}`;
     const supabase = getSupabaseClient();
@@ -63,10 +63,7 @@ export class StorageService {
       throw new AppError(500, 'STORAGE_UPLOAD_FAILED', `Failed to upload file: ${error.message}`);
     }
 
-    const { data: publicData } = supabase.storage.from(getBucketName()).getPublicUrl(storagePath);
-    const fileUrl = publicData.publicUrl;
-
-    return { fileUrl, storagePath };
+    return { storagePath };
   }
 
   async getSignedUrl(storagePath: string, expiresIn: number = 3600): Promise<string> {

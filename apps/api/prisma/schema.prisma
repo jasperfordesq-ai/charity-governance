@@ -167,11 +167,27 @@ model User {
   documentUploads   Document[]          @relation("UploadedBy")
   sentInvites       TeamInvite[]        @relation("InvitedBy")
   reminderLogs      DeadlineReminderLog[]
+  authSessions      AuthSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+}
+
+model AuthSession {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model GovernancePrinciple {

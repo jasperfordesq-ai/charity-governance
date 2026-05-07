@@ -56,7 +56,6 @@ export function validateProductionEnv(): void {
 
   requireConfiguredEnv('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
-  requireMinLength('JWT_REFRESH_SECRET', 32, issues);
   requireUrl('FRONTEND_URL', issues, { requireHttps: true });
 
   requireConfiguredEnv('STRIPE_SECRET_KEY', issues);

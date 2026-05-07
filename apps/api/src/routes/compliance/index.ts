@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ComplianceService } from '../../services/compliance.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
+import { requireAdmin } from '../../middleware/roles.js';
 import {
   complianceQuerySchema,
   upsertComplianceRecordSchema,
@@ -88,7 +89,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   });
 
   // PUT /records/:standardId — upsert compliance record (auto-save)
-  app.put<{ Params: { standardId: string } }>('/records/:standardId', async (request, reply) => {
+  app.put<{ Params: { standardId: string } }>('/records/:standardId', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = upsertComplianceRecordSchema.parse(request.body) as UpsertComplianceRecordRequest;
       const record = await service.upsertRecord(
@@ -133,7 +134,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   });
 
   // PUT /signoff - create/update the board approval record for the annual Compliance Record
-  app.put('/signoff', async (request, reply) => {
+  app.put('/signoff', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = upsertComplianceSignoffSchema.parse(request.body) as UpsertComplianceSignoffRequest;
       return sendSuccess(reply, await service.upsertSignoff(request.user.organisationId, request.user.userId, data));

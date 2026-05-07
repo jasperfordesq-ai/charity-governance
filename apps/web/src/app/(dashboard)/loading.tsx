@@ -1,4 +1,6 @@
-import { Card } from '@heroui/react';
+'use client';
+
+import { Card } from '@/components/heroui-client';
 
 export default function DashboardLoading() {
   return (

@@ -5,6 +5,7 @@ import {
   createCheckoutSchema,
   createRiskRecordSchema,
   inviteTeamMemberSchema,
+  refreshSchema,
   upsertAnnualReportReadinessSchema,
   upsertComplianceSignoffSchema,
 } from '@charitypilot/shared';
@@ -68,4 +69,9 @@ test('team invites restrict assignable roles and enforce invited account passwor
 test('billing checkout accepts only supported plan intervals', () => {
   assert.equal(createCheckoutSchema.safeParse({ plan: 'COMPLETE', interval: 'yearly' }).success, true);
   assert.equal(createCheckoutSchema.safeParse({ plan: 'COMPLETE', interval: 'weekly' }).success, false);
+});
+
+test('refresh requests can rely on the secure refresh cookie', () => {
+  assert.equal(refreshSchema.safeParse({}).success, true);
+  assert.equal(refreshSchema.safeParse({ refreshToken: '' }).success, false);
 });

@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyError } from 'fastify';
 export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
   app.setErrorHandler((error: FastifyError, _request, reply) => {
     app.log.error(error);
+    const isProduction = process.env.NODE_ENV === 'production';
 
     // Handle Fastify validation errors
     if (error.validation) {
@@ -22,9 +23,11 @@ export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
       });
     }
 
-    // Generic error
-    return reply.status(error.statusCode ?? 500).send({
-      error: error.message ?? 'Internal server error',
+    const statusCode = error.statusCode ?? 500;
+    const exposeMessage = statusCode < 500 || !isProduction;
+
+    return reply.status(statusCode).send({
+      error: exposeMessage ? error.message : 'Internal server error',
       code: 'INTERNAL_ERROR',
     });
   });

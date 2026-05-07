@@ -9,7 +9,6 @@ import type {
   GovernancePrincipleResponse,
   ComplianceSummary,
 } from '@charitypilot/shared';
-import { COMPLIANCE_STATUS_META } from '@charitypilot/shared';
 
 export default function CompliancePage() {
   useDocumentTitle('Compliance');

@@ -45,8 +45,8 @@ export interface LoginRequest {
 }
 
 export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 export interface AuthResponse extends AuthTokens {
@@ -54,7 +54,7 @@ export interface AuthResponse extends AuthTokens {
 }
 
 export interface RefreshRequest {
-  refreshToken: string;
+  refreshToken?: string;
 }
 
 export interface ForgotPasswordRequest {

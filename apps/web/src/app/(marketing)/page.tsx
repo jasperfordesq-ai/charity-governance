@@ -1,4 +1,4 @@
-import { Button, Card, CardBody, CardHeader, Link } from '@heroui/react';
+import { Button, Card, CardBody, CardHeader, Link } from '@/components/heroui-client';
 import type { Metadata } from 'next';
 import { OrganisationJsonLd, FaqJsonLd } from '@/components/json-ld';
 

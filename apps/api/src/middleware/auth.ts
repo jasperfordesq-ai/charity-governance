@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { verifyAccessToken, type TokenPayload } from '../utils/jwt.js';
+import { getAccessTokenFromRequest } from '../utils/auth-cookies.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -9,13 +10,13 @@ declare module 'fastify' {
 
 export async function authGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const authHeader = request.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+  const token = bearerToken ?? getAccessTokenFromRequest(request);
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    reply.status(401).send({ error: 'Missing or invalid authorization header', code: 'UNAUTHORIZED' });
+  if (!token) {
+    reply.status(401).send({ error: 'Missing or invalid authentication token', code: 'UNAUTHORIZED' });
     return;
   }
-
-  const token = authHeader.slice(7);
 
   try {
     const payload = verifyAccessToken(token);

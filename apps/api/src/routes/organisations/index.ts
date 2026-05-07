@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { OrganisationService } from '../../services/organisation.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
+import { requireAdmin } from '../../middleware/roles.js';
 import { updateOrganisationSchema, type UpdateOrganisationRequest } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
@@ -22,7 +23,7 @@ export async function organisationRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch('/', async (request, reply) => {
+  app.patch('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateOrganisationSchema.parse(request.body) as UpdateOrganisationRequest;
       const org = await service.updateOrganisation(request.user.organisationId, data);

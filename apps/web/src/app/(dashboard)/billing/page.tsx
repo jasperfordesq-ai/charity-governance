@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import type { BillingStatusResponse } from '@charitypilot/shared';
 import { SubscriptionPlan, SubscriptionStatus } from '@charitypilot/shared';
 
@@ -81,9 +82,9 @@ export default function BillingPage() {
     try {
       const res = await api.post('/billing/checkout', { plan, interval });
       window.location.href = res.data.url;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Checkout failed', err);
-      setBillingError(err.response?.data?.error ?? 'Checkout could not be started.');
+      setBillingError(apiErrorMessage(err, 'Checkout could not be started.'));
     } finally {
       setCheckoutLoading(null);
     }
@@ -96,9 +97,9 @@ export default function BillingPage() {
     try {
       const res = await api.post('/billing/portal');
       window.location.href = res.data.url;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Portal failed', err);
-      setBillingError(err.response?.data?.error ?? 'The Stripe customer portal could not be opened.');
+      setBillingError(apiErrorMessage(err, 'The Stripe customer portal could not be opened.'));
     } finally {
       setPortalLoading(false);
     }

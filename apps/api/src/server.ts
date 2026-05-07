@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import { prismaPlugin } from './plugins/prisma.js';
@@ -35,6 +36,12 @@ const envToLogger: Record<string, unknown> = {
 
 const environment = process.env.NODE_ENV ?? 'development';
 const isProduction = environment === 'production';
+const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
+const allowedOrigins = new Set(
+  (process.env.FRONTEND_URL?.split(',') ?? defaultFrontendOrigins)
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
 
 validateProductionEnv();
 
@@ -51,18 +58,42 @@ app.addHook('onSend', async (_request, reply, payload) => {
   reply.header('X-Frame-Options', 'DENY');
   reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   if (isProduction) {
     reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   return payload;
 });
 
+app.addHook('preHandler', async (request, reply) => {
+  if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
+    return;
+  }
+
+  const origin = request.headers.origin;
+  if (origin && !allowedOrigins.has(origin)) {
+    return reply.status(403).send({
+      error: 'Invalid request origin',
+      code: 'INVALID_ORIGIN',
+    });
+  }
+});
+
 await app.register(cors, {
-  origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('Origin not allowed by CORS'), false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 });
+
+await app.register(cookie);
 
 await app.register(rateLimit, {
   max: 100,

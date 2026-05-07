@@ -191,6 +191,20 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleDownload = async (doc: DocumentResponse) => {
+    try {
+      const { data } = await api.get(`/documents/${doc.id}/download`);
+      if (data?.url) {
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      toast('Could not prepare this document download', 'error');
+    } catch (err) {
+      console.error('Download failed', err);
+      toast('Could not prepare this document download', 'error');
+    }
+  };
+
   const categoryOptions = Object.entries(DOCUMENT_CATEGORY_LABELS);
   const documentCounts = useMemo(() => {
     return documents.reduce<Record<string, number>>((acc, doc) => {
@@ -342,14 +356,13 @@ export default function DocumentsPage() {
                 <TableRow key={doc.id}>
                   <TableCell>
                     <div>
-                      <a
-                        href={doc.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(doc)}
                         className="text-sm font-medium text-teal-primary hover:underline"
                       >
                         {doc.name}
-                      </a>
+                      </button>
                       {doc.description && (
                         <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{doc.description}</p>
                       )}

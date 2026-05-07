@@ -19,7 +19,6 @@ const PLACEHOLDERS = [
 const REQUIRED = [
   'DATABASE_URL',
   'JWT_SECRET',
-  'JWT_REFRESH_SECRET',
   'FRONTEND_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
@@ -89,7 +88,7 @@ for (const key of REQUIRED) {
   }
 }
 
-for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+for (const key of ['JWT_SECRET']) {
   const value = envValue(env, key);
   if (isConfigured(value) && value.length < 32) {
     issues.push(`${key} must be at least 32 characters`);

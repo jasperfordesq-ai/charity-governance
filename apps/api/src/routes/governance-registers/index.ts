@@ -25,6 +25,7 @@ import {
 } from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
+import { requireAdmin } from '../../middleware/roles.js';
 import { GovernanceRegisterService } from '../../services/governance-register.service.js';
 import { handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent, sendSuccess } from '../../utils/response.js';
@@ -57,7 +58,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/conflicts', async (request, reply) => {
+  app.post('/conflicts', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createConflictRecordSchema.parse(request.body) as CreateConflictRecordRequest;
       return sendCreated(reply, await service.createConflict(request.user.organisationId, data));
@@ -67,7 +68,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch<{ Params: { id: string } }>('/conflicts/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateConflictRecordSchema.parse(request.body) as UpdateConflictRecordRequest;
       return sendSuccess(reply, await service.updateConflict(request.user.organisationId, request.params.id, data));
@@ -77,7 +78,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/conflicts/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       await service.removeConflict(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -94,7 +95,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/risks', async (request, reply) => {
+  app.post('/risks', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createRiskRecordSchema.parse(request.body) as CreateRiskRecordRequest;
       return sendCreated(reply, await service.createRisk(request.user.organisationId, data));
@@ -104,7 +105,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch<{ Params: { id: string } }>('/risks/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateRiskRecordSchema.parse(request.body) as UpdateRiskRecordRequest;
       return sendSuccess(reply, await service.updateRisk(request.user.organisationId, request.params.id, data));
@@ -114,7 +115,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/risks/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       await service.removeRisk(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -131,7 +132,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/complaints', async (request, reply) => {
+  app.post('/complaints', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createComplaintRecordSchema.parse(request.body) as CreateComplaintRecordRequest;
       return sendCreated(reply, await service.createComplaint(request.user.organisationId, data));
@@ -141,7 +142,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch<{ Params: { id: string } }>('/complaints/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateComplaintRecordSchema.parse(request.body) as UpdateComplaintRecordRequest;
       return sendSuccess(reply, await service.updateComplaint(request.user.organisationId, request.params.id, data));
@@ -151,7 +152,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/complaints/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       await service.removeComplaint(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -168,7 +169,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/fundraising', async (request, reply) => {
+  app.post('/fundraising', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createFundraisingRecordSchema.parse(request.body) as CreateFundraisingRecordRequest;
       return sendCreated(reply, await service.createFundraising(request.user.organisationId, data));
@@ -178,7 +179,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch<{ Params: { id: string } }>('/fundraising/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateFundraisingRecordSchema.parse(request.body) as UpdateFundraisingRecordRequest;
       return sendSuccess(reply, await service.updateFundraising(request.user.organisationId, request.params.id, data));
@@ -188,7 +189,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/fundraising/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       await service.removeFundraising(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -207,7 +208,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.put('/annual-report', async (request, reply) => {
+  app.put('/annual-report', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = upsertAnnualReportReadinessSchema.parse(request.body) as UpsertAnnualReportReadinessRequest;
       return sendSuccess(reply, await service.upsertAnnualReportReadiness(request.user.organisationId, data));
@@ -227,7 +228,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.put('/financial-controls', async (request, reply) => {
+  app.put('/financial-controls', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = upsertFinancialControlReviewSchema.parse(request.body) as UpsertFinancialControlReviewRequest;
       return sendSuccess(reply, await service.upsertFinancialControlReview(request.user.organisationId, data));

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { BillingService } from '../../services/billing.service.js';
 import { authGuard } from '../../middleware/auth.js';
+import { requireOwner } from '../../middleware/roles.js';
 import { createCheckoutSchema, type SubscriptionPlan } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { ZodError } from 'zod';
@@ -66,10 +67,10 @@ export async function billingRoutes(app: FastifyInstance) {
       }
     };
 
-    authedApp.post('/checkout', createCheckout);
-    authedApp.post('/create-checkout', createCheckout);
-    authedApp.post('/portal', createPortal);
-    authedApp.post('/create-portal', createPortal);
+    authedApp.post('/checkout', { preHandler: [requireOwner] }, createCheckout);
+    authedApp.post('/create-checkout', { preHandler: [requireOwner] }, createCheckout);
+    authedApp.post('/portal', { preHandler: [requireOwner] }, createPortal);
+    authedApp.post('/create-portal', { preHandler: [requireOwner] }, createPortal);
 
     authedApp.get('/status', async (request, reply) => {
       try {

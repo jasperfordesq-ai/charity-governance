@@ -1,9 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { signAccessToken, signRefreshToken, type TokenPayload } from '../utils/jwt.js';
 import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
+import { hashOpaqueToken, issueSessionTokens } from './session-tokens.js';
 
 interface InviteTeamMemberData {
   email: string;
@@ -130,12 +130,13 @@ export class TeamService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
 
+    const inviteToken = crypto.randomBytes(32).toString('base64url');
     const invite = await this.prisma.teamInvite.create({
       data: {
         organisationId,
         email,
         role: data.role,
-        token: crypto.randomBytes(32).toString('hex'),
+        token: hashOpaqueToken(inviteToken),
         invitedById,
         expiresAt,
       },
@@ -146,7 +147,7 @@ export class TeamService {
       email,
       organisation.name,
       inviter?.name ?? 'A CharityPilot admin',
-      invite.token,
+      inviteToken,
       data.role,
     );
 
@@ -232,7 +233,7 @@ export class TeamService {
 
   async acceptInvite(data: AcceptTeamInviteData) {
     const invite = await this.prisma.teamInvite.findUnique({
-      where: { token: data.token },
+      where: { token: hashOpaqueToken(data.token) },
       include: { organisation: true },
     });
 
@@ -271,15 +272,8 @@ export class TeamService {
       return created;
     });
 
-    const tokenPayload: TokenPayload = {
-      userId: user.id,
-      organisationId: user.organisationId,
-      role: user.role,
-    };
+    const tokens = await issueSessionTokens(this.prisma, user);
 
-    const accessToken = signAccessToken(tokenPayload);
-    const refreshToken = signRefreshToken(tokenPayload);
-
-    return { user, accessToken, refreshToken };
+    return { user, ...tokens };
   }
 }

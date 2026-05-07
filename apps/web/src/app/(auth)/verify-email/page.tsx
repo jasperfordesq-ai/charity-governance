@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 
 type Status = 'loading' | 'success' | 'error';
 
@@ -41,10 +42,7 @@ export default function VerifyEmailPage() {
         if (!timedOut) {
           clearTimeout(timeout);
           setStatus('error');
-          const errorMessage =
-            (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-            'Verification failed. The link may have expired or already been used.';
-          setMessage(errorMessage);
+          setMessage(apiErrorMessage(err, 'Verification failed. The link may have expired or already been used.'));
         }
       }
     }
@@ -61,17 +59,8 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-white">
-      {/* Header */}
-      <div className="py-8 px-4 text-center">
-        <Link href="/" className="text-2xl font-bold text-teal-primary">
-          CharityPilot
-        </Link>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 flex items-start justify-center px-4 pt-4 pb-16">
-        <Card className="w-full max-w-md border border-gray-100 shadow-lg">
+    <div className="w-full max-w-md min-w-0">
+        <Card className="w-full border border-gray-100 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             {status === 'loading' && (
               <div className="text-center py-8" role="status" aria-live="polite">
@@ -127,7 +116,6 @@ export default function VerifyEmailPage() {
             )}
           </CardBody>
         </Card>
-      </div>
     </div>
   );
 }

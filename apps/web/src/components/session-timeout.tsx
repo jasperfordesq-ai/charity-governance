@@ -27,8 +27,7 @@ export function SessionTimeout() {
           if (prev <= 1) {
             if (countdownRef.current) clearInterval(countdownRef.current);
             // Session expired — redirect to login
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
+            void api.post('/auth/logout', {}).catch(() => undefined);
             window.location.href = '/login';
             return 0;
           }
@@ -56,12 +55,7 @@ export function SessionTimeout() {
 
   const handleExtend = async () => {
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        const { data } = await api.post('/auth/refresh', { refreshToken });
-        localStorage.setItem('accessToken', data.accessToken ?? data.data?.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken ?? data.data?.refreshToken);
-      }
+      await api.post('/auth/refresh', {});
     } catch {
       // If refresh fails, redirect
       window.location.href = '/login';

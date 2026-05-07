@@ -4,6 +4,7 @@ import { useState, useMemo, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { apiErrorMessage } from '@/lib/errors';
 
 function PasswordStrengthMeter({ password }: { password: string }) {
   const checks = useMemo(() => {
@@ -88,10 +89,7 @@ export default function RegisterPage() {
       await register({ name, email, password, organisationName });
       router.push('/dashboard');
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        'Something went wrong. Please try again.';
-      setError(message);
+      setError(apiErrorMessage(err, 'Something went wrong. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -115,17 +113,8 @@ export default function RegisterPage() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-white">
-      {/* Header */}
-      <div className="py-8 px-4 text-center">
-        <Link href="/" className="text-2xl font-bold text-teal-primary">
-          CharityPilot
-        </Link>
-      </div>
-
-      {/* Form */}
-      <div className="flex-1 flex items-start justify-center px-4 pt-4 pb-16">
-        <Card className="w-full max-w-md border border-gray-100 shadow-lg">
+    <div className="w-full max-w-md min-w-0">
+        <Card className="w-full border border-gray-100 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
@@ -273,7 +262,6 @@ export default function RegisterPage() {
             </p>
           </CardBody>
         </Card>
-      </div>
     </div>
   );
 }

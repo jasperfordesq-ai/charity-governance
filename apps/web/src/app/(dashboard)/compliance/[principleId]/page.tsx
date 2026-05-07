@@ -37,7 +37,6 @@ export default function PrincipleDetailPage() {
 
   const currentYear = new Date().getFullYear();
   const [principle, setPrinciple] = useState<GovernancePrincipleResponse | null>(null);
-  const [records, setRecords] = useState<Record<string, ComplianceRecordResponse>>({});
   const [formState, setFormState] = useState<Record<string, StandardFormState>>({});
   const [saveState, setSaveState] = useState<SaveState>({});
   const [loading, setLoading] = useState(true);
@@ -84,7 +83,6 @@ export default function PrincipleDetailPage() {
           }
         }
 
-        setRecords(recsMap);
         setFormState(initialForm);
       } catch (err) {
         console.error('Failed to load principle data', err);

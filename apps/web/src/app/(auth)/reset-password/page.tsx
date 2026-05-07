@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 
 export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
@@ -43,10 +44,7 @@ export default function ResetPasswordPage() {
       await api.post('/auth/reset-password', { token, password });
       setIsSuccess(true);
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        'Something went wrong. The link may have expired.';
-      setError(message);
+      setError(apiErrorMessage(err, 'Something went wrong. The link may have expired.'));
     } finally {
       setIsLoading(false);
     }
@@ -67,17 +65,8 @@ export default function ResetPasswordPage() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-white">
-      {/* Header */}
-      <div className="py-8 px-4 text-center">
-        <Link href="/" className="text-2xl font-bold text-teal-primary">
-          CharityPilot
-        </Link>
-      </div>
-
-      {/* Form */}
-      <div className="flex-1 flex items-start justify-center px-4 pt-4 pb-16">
-        <Card className="w-full max-w-md border border-gray-100 shadow-lg">
+    <div className="w-full max-w-md min-w-0">
+        <Card className="w-full border border-gray-100 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">
@@ -180,7 +169,6 @@ export default function ResetPasswordPage() {
             )}
           </CardBody>
         </Card>
-      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { apiErrorMessage } from '@/lib/errors';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,10 +26,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/dashboard');
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        'Invalid email or password. Please try again.';
-      setError(message);
+      setError(apiErrorMessage(err, 'Invalid email or password. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -45,14 +43,6 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
             <p className="mt-2 text-sm text-gray-500">
               Sign in to your CharityPilot account
-            </p>
-          </div>
-
-          <div className="mb-6 rounded-lg border border-teal-primary/20 bg-teal-primary/5 px-4 py-3 text-sm">
-            <p className="font-semibold text-teal-primary">Demo workspace</p>
-            <p className="mt-1 text-gray-600">
-              Use <span className="break-all font-mono text-gray-800">demo@charitypilot.ie</span> with password{' '}
-              <span className="font-mono text-gray-800">DemoPass123!</span>.
             </p>
           </div>
 
