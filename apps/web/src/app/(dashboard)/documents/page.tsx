@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
   Card,
@@ -25,6 +25,7 @@ import {
 } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
+import { evidencePackItems } from '@/lib/regulator-guidance';
 import type {
   DocumentResponse,
   GovernanceStandardResponse,
@@ -70,7 +71,7 @@ export default function DocumentsPage() {
 
   const fetchStandards = useCallback(async () => {
     try {
-      const res = await api.get('/governance/principles');
+      const res = await api.get('/compliance/principles');
       const principles = res.data?.data ?? res.data ?? [];
       const allStandards: GovernanceStandardResponse[] = [];
       for (const p of principles) {
@@ -179,6 +180,14 @@ export default function DocumentsPage() {
   };
 
   const categoryOptions = Object.entries(DOCUMENT_CATEGORY_LABELS);
+  const documentCounts = useMemo(() => {
+    return documents.reduce<Record<string, number>>((acc, doc) => {
+      acc[doc.category] = (acc[doc.category] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [documents]);
+
+  const missingEvidenceCount = evidencePackItems.filter((item) => !documentCounts[item.category]).length;
 
   return (
     <div className="space-y-8">
@@ -200,6 +209,40 @@ export default function DocumentsPage() {
           Upload Document
         </Button>
       </div>
+
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-primary">
+              Evidence pack
+            </Chip>
+            <h2 className="text-lg font-semibold text-gray-900">Board-ready governance evidence</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600">
+              Keep the core documents close to the standards they support: governing document,
+              board conduct, policies, minutes, accounts, annual report, risk, insurance, and planning.
+            </p>
+          </div>
+          <Chip size="sm" color={missingEvidenceCount === 0 ? 'success' : 'warning'} variant="flat">
+            {missingEvidenceCount === 0 ? 'Checklist covered' : `${missingEvidenceCount} evidence areas missing`}
+          </Chip>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
+          {evidencePackItems.map((item) => {
+            const count = documentCounts[item.category] ?? 0;
+            return (
+              <div key={item.title} className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                  <Chip size="sm" color={count > 0 ? 'success' : 'default'} variant="flat">
+                    {count > 0 ? `${count} file${count > 1 ? 's' : ''}` : 'Needed'}
+                  </Chip>
+                </div>
+                <p className="mt-1 text-xs text-teal-primary">Standards {item.standards}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Documents table */}
       {loading ? (

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ComplianceService } from '../../services/compliance.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
@@ -12,8 +12,7 @@ export async function exportRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
 
-  // GET /compliance-record?year=2026&format=pdf
-  app.get('/compliance-record', async (request, reply) => {
+  const sendComplianceReport = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { year } = complianceQuerySchema.parse(request.query);
       const org = await app.prisma.organisation.findUniqueOrThrow({
@@ -37,7 +36,13 @@ export async function exportRoutes(app: FastifyInstance) {
       }
       handleError(reply, err);
     }
-  });
+  };
+
+  // GET /compliance-record?year=2026&format=pdf
+  app.get('/compliance-record', sendComplianceReport);
+
+  // GET /compliance-report?year=2026 - alias used by the web app
+  app.get('/compliance-report', sendComplianceReport);
 }
 
 function buildComplianceReportHtml(

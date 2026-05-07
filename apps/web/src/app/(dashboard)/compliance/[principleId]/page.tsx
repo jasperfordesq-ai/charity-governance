@@ -51,7 +51,7 @@ export default function PrincipleDetailPage() {
       setLoading(true);
       try {
         const [principleRes, recordsRes] = await Promise.all([
-          api.get(`/governance/principles/${principleId}`),
+          api.get(`/compliance/principles/${principleId}`),
           api.get(`/compliance/records?principleId=${principleId}&year=${currentYear}`),
         ]);
 

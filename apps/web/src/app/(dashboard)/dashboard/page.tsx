@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { Card, Progress, Chip } from '@heroui/react';
+import { Button, Card, Progress, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -133,6 +133,34 @@ export default function DashboardPage() {
           Here is your governance compliance overview for {currentYear}.
         </p>
       </div>
+
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-primary">
+              Annual regulator cycle
+            </Chip>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Keep the board ready for Governance Code sign-off and Annual Report filing.
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600">
+              Update the Compliance Record Form, check trustee conduct and induction,
+              keep evidence linked to standards, and watch the 10-month Annual Report deadline.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button as={Link} href="/regulator" size="sm" variant="flat">
+              Regulator map
+            </Button>
+            <Button as={Link} href="/documents" size="sm" variant="flat">
+              Evidence pack
+            </Button>
+            <Button as={Link} href="/export" size="sm" className="bg-teal-primary text-white hover:bg-teal-dark">
+              Export report
+            </Button>
+          </div>
+        </div>
+      </section>
 
       {/* ── Error state ── */}
       {error && !loading && (

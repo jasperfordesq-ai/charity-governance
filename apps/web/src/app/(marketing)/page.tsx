@@ -84,7 +84,7 @@ const faqs = [
   {
     question: 'What is the Charities Governance Code?',
     answer:
-      'The Charities Governance Code is a framework introduced by the Charities Regulator Authority (CRA) in Ireland. It sets out minimum standards of governance that every registered charity must meet. There are 6 principles and either 32 core standards (for non-complex charities) or all 49 standards (for complex charities).',
+      'The Charities Governance Code is a framework from the Charities Regulator in Ireland. It sets out minimum standards of governance that every registered charity must meet. There are 6 principles and either 32 core standards for non-complex charities or all 49 standards for charities applying the additional standards.',
   },
   {
     question: 'How does billing work?',
@@ -94,7 +94,7 @@ const faqs = [
   {
     question: 'Do I need to be a "Complex" charity?',
     answer:
-      'The CRA defines a complex charity as one that has income over EUR 100,000, has paid employees, or operates in multiple jurisdictions. If any of those apply, you should use the Complete plan. If none apply, the Essentials plan covers the 32 core standards that non-complex charities must meet.',
+      'The Charities Regulator asks charities to consider their size, income, staffing, activities, structure, and risk profile when deciding whether the additional standards apply. If your governance is more complex, you should use the Complete plan; Essentials covers the 32 core standards that apply to all registered charities.',
   },
 ];
 

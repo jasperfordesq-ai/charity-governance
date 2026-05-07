@@ -143,6 +143,20 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
+  // Alias used by the web app: POST /documents/:id/standards
+  app.post<{ Params: { id: string } }>('/:id/standards', async (request, reply) => {
+    try {
+      const { standardId } = linkStandardSchema.parse(request.body);
+      await service.linkStandard(request.user.organisationId, request.params.id, standardId);
+      return sendCreated(reply, { success: true });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
+      }
+      handleError(reply, err);
+    }
+  });
+
   // Unlink document from governance standard
   app.delete<{ Params: { id: string } }>('/:id/unlink-standard', async (request, reply) => {
     try {
@@ -153,6 +167,20 @@ export async function documentRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
+      handleError(reply, err);
+    }
+  });
+
+  // Alias used by the web app: DELETE /documents/:id/standards/:standardId
+  app.delete<{ Params: { id: string; standardId: string } }>('/:id/standards/:standardId', async (request, reply) => {
+    try {
+      await service.unlinkStandard(
+        request.user.organisationId,
+        request.params.id,
+        request.params.standardId,
+      );
+      return sendNoContent(reply);
+    } catch (err) {
       handleError(reply, err);
     }
   });

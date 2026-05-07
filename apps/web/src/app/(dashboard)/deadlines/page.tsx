@@ -19,6 +19,29 @@ import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import type { DeadlineResponse, CreateDeadlineRequest } from '@charitypilot/shared';
 
+const regulatoryMilestones = [
+  {
+    title: 'Annual Report filing',
+    cadence: '10 months after financial year end',
+    detail: 'Use the organisation profile year-end date so the app can generate this deadline automatically.',
+  },
+  {
+    title: 'Compliance Record Form approval',
+    cadence: 'Before Annual Report submission',
+    detail: 'The board should approve the annual Governance Code position and keep the record as evidence.',
+  },
+  {
+    title: 'Financial controls review',
+    cadence: 'At least annually',
+    detail: 'Review budgets, reconciliations, reserves, approval limits, restricted funds, and management accounts.',
+  },
+  {
+    title: 'Risk and insurance review',
+    cadence: 'At least annually',
+    detail: 'Refresh the risk register and confirm insurance cover remains appropriate for activities.',
+  },
+];
+
 export default function DeadlinesPage() {
   useDocumentTitle('Deadlines');
   const [deadlines, setDeadlines] = useState<DeadlineResponse[]>([]);
@@ -152,6 +175,27 @@ export default function DeadlinesPage() {
           Add Deadline
         </Button>
       </div>
+
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-primary">
+              Regulatory cadence
+            </Chip>
+            <h2 className="text-lg font-semibold text-gray-900">Deadlines the board should see early</h2>
+          </div>
+          <span className="text-xs font-medium text-gray-500">Add custom dates for funders, CRO, audits, and AGMs.</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+          {regulatoryMilestones.map((item) => (
+            <div key={item.title} className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary">{item.cadence}</p>
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">{item.title}</h3>
+              <p className="mt-2 text-xs leading-5 text-gray-600">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Deadline list */}
       {loading ? (

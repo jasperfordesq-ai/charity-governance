@@ -27,7 +27,7 @@ export default function CompliancePage() {
     setLoading(true);
     try {
       const [principlesRes, summaryRes] = await Promise.all([
-        api.get('/governance/principles'),
+        api.get('/compliance/principles'),
         api.get(`/compliance/summary?year=${year}`),
       ]);
       setPrinciples(principlesRes.data?.data ?? principlesRes.data ?? []);

@@ -74,7 +74,7 @@ export default function OrganisationPage() {
     setLegalForm(org.legalForm ?? LegalForm.CLG);
     setComplexity(org.complexity ?? OrganisationComplexity.SIMPLE);
     setCharitablePurpose(new Set(org.charitablePurpose ?? []));
-    setFinancialYearEnd(org.financialYearEnd ?? '');
+    setFinancialYearEnd(org.financialYearEnd ? org.financialYearEnd.slice(0, 10) : '');
     setRegisteredAddress(org.registeredAddress ?? '');
     setContactEmail(org.contactEmail ?? '');
     setContactPhone(org.contactPhone ?? '');
@@ -262,8 +262,8 @@ export default function OrganisationPage() {
 
           {/* Financial year end */}
           <Input
-            label="Financial Year End"
-            placeholder="e.g. 31 December"
+            label="Financial Year End Date"
+            type="date"
             value={financialYearEnd}
             onValueChange={setFinancialYearEnd}
           />
@@ -355,8 +355,8 @@ export default function OrganisationPage() {
                     <h3 className="text-sm font-semibold text-gray-800 mb-1">Complex Organisations</h3>
                     <p className="text-sm text-gray-600">
                       Larger charities or those with complex activities should comply with both the core standards
-                      and the <strong>17 additional standards</strong> (49 total). You are considered complex if your
-                      charity has paid staff, significant income, multiple activities, or complex structures.
+                      and the <strong>17 additional standards</strong> (49 total). Consider this where your
+                      charity has paid staff, significant income, multiple activities, complex structures, or higher risk.
                     </p>
                   </div>
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">

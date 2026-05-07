@@ -34,6 +34,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/regulator',
+    label: 'Regulator Guide',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75l7.5 3v5.25c0 4.2-2.987 8.137-7.5 9.375-4.513-1.238-7.5-5.175-7.5-9.375V6.75l7.5-3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 12.75l1.5 1.5 3.75-4.5" />
+      </svg>
+    ),
+  },
+  {
     href: '/documents',
     label: 'Documents',
     icon: (

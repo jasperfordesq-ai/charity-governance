@@ -206,9 +206,8 @@ export default function UnderstandingTheCharitiesGovernanceCode() {
           17 Additional Standards — Apply to Complex Charities (49 Total)
         </h3>
         <p className="text-base leading-relaxed text-gray-700">
-          Charities that meet any one of three criteria — annual income over €100,000, having paid
-          employees, or operating in more than one jurisdiction — are classified as complex and must
-          meet 17 further standards on top of the core 32. These additional standards cover areas
+          Charities with greater scale, income, staffing, activity, structure, or risk may need to
+          apply 17 further standards on top of the core 32. These additional standards cover areas
           such as formal HR policies, more rigorous financial oversight, subcommittee structures, and
           enhanced reporting. The rationale is straightforward: organisations with greater resources
           and reach carry greater risks and are accountable to a wider range of stakeholders.

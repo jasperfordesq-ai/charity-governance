@@ -54,64 +54,52 @@ export default function SimpleVsComplexCharityClassification() {
 
       {/* Section 2 — Three Criteria */}
       <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-6">
-        The Three Criteria That Make a Charity "Complex"
+        Signals That Your Charity Should Apply the Additional Standards
       </h2>
 
       {/* Criterion 1 */}
       <div className="bg-teal-primary/10 rounded-xl p-6 mb-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          1. Annual Income Over €100,000
+          1. Scale, Income, and Financial Complexity
         </h3>
         <p className="text-base leading-relaxed text-gray-700">
-          If your charity's gross annual income in its most recently completed financial year
-          exceeded €100,000, you are complex. This threshold is measured against gross income —
-          that is, total receipts before any expenses — and includes all sources: donations,
-          grants, fundraising, trading income, and investment returns. The threshold applies to the
-          charity as a single entity; if your charity controls subsidiary companies or operates
-          programmes through a separate legal structure, each entity is assessed separately, though
-          aggregated group income may be relevant to how the CRA views you in practice.
+          A charity with substantial income, multiple funders, restricted funds, trading activity,
+          subsidiaries, or higher financial risk should consider whether the additional standards
+          are appropriate. Trustees should make and record that judgement in the context of the
+          charity's own size, resources, and operating model.
         </p>
       </div>
 
       {/* Criterion 2 */}
       <div className="bg-teal-primary/10 rounded-xl p-6 mb-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          2. Has Paid Employees
+          2. Paid Staff, Volunteers, and Delegated Work
         </h3>
         <p className="text-base leading-relaxed text-gray-700">
-          If your charity employs any paid staff — even one part-time employee — it is complex.
-          This criterion reflects the additional legal and governance obligations that come with
-          being an employer: employment law compliance, HR policies, payroll, PRSI obligations,
-          performance management, and workplace safety. The moment a charity has employees, there
-          are people whose livelihoods and wellbeing depend on the organisation being properly
-          governed. The Code's additional standards in this area are designed to ensure that
-          employment relationships are managed responsibly. Note that engaging contractors or
-          self-employed service providers is generally distinct from employment, but this should be
-          reviewed carefully to ensure correct classification under Revenue and employment law.
+          Paid staff, large volunteer teams, contractors, branches, or committees can increase the
+          governance load. The additional standards help trustees document roles, supervision,
+          delegation, training, and accountability where work is no longer carried out directly by
+          the board.
         </p>
       </div>
 
       {/* Criterion 3 */}
       <div className="bg-teal-primary/10 rounded-xl p-6 mb-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          3. Operates in More Than One Jurisdiction
+          3. Complex Activities, Structures, or Risk
         </h3>
         <p className="text-base leading-relaxed text-gray-700">
-          If your charity carries out activities in more than one country — whether that means
-          running programmes in Ireland and Northern Ireland, providing international development
-          aid abroad, or having a branch network that crosses jurisdictional boundaries — it is
-          complex. Cross-border operations introduce legal, regulatory, and reputational risks that
-          require more sophisticated governance oversight, particularly around anti-money laundering
-          obligations, foreign funding disclosures, and the due diligence required when partnering
-          with overseas organisations.
+          Cross-border work, regulated services, safeguarding exposure, fundraising at scale,
+          partnerships, mergers, restricted grants, or public-contract delivery can all increase the
+          level of oversight needed. The point is whether the board has enough structure to control
+          the risks it has actually taken on.
         </p>
       </div>
 
       <div className="border-l-4 border-amber-accent pl-5 mb-10">
         <p className="text-base leading-relaxed text-gray-700 font-medium">
-          Remember: any <span className="font-bold">one</span> of these three criteria is
-          sufficient. A tiny charity with only €30,000 income and no overseas activities is
-          still complex if it employs even one part-time administrator.
+          Record your reasoning. If the board decides that the additional standards apply, keep
+          that decision with the annual Compliance Record Form and review it each year.
         </p>
       </div>
 
@@ -264,8 +252,8 @@ export default function SimpleVsComplexCharityClassification() {
           <h3 className="text-base font-semibold text-gray-900 mb-2">Essentials Plan</h3>
           <p className="text-sm leading-relaxed text-gray-700">
             Covers all 32 core standards. Designed for non-complex charities: volunteer-run
-            organisations with income under €100k, no paid employees, and operating solely within
-            Ireland. Includes templates, document storage, and annual filing reminders.
+            organisations applying the core standards only. Includes templates, document storage,
+            and annual filing reminders.
           </p>
         </div>
         <div className="bg-teal-primary/10 border border-teal-primary/30 rounded-xl p-5">

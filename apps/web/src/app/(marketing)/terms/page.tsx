@@ -66,9 +66,9 @@ export default function TermsPage() {
               &euro;19/month or &euro;190/year.
             </li>
             <li>
-              <strong>Complete:</strong> Designed for complex charities (those with income over
-              &euro;100,000, paid employees, or multi-jurisdictional operations). Covers all 49
-              standards. Priced at &euro;39/month or &euro;390/year.
+              <strong>Complete:</strong> Designed for charities that need the additional Governance
+              Code standards because of their size, income, staffing, activities, structure, or risk
+              profile. Covers all 49 standards. Priced at &euro;39/month or &euro;390/year.
             </li>
           </ul>
 
