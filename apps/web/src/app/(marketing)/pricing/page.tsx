@@ -22,9 +22,9 @@ const plans = [
       'Document Vault (2 GB storage)',
       'Board Register',
       'Deadline Tracker with email reminders',
-      'PDF compliance reports',
+      'Printable compliance reports',
       'Single organisation',
-      'Up to 5 board member accounts',
+      'Up to 5 team members',
       'Email support',
     ],
   },
@@ -40,14 +40,13 @@ const plans = [
     features: [
       'Compliance Tracker (all 49 standards)',
       'Document Vault (10 GB storage)',
-      'Board Register with skill matrix',
-      'Deadline Tracker with SMS + email reminders',
-      'PDF compliance reports with evidence packs',
+      'Governance registers for risks, conflicts, complaints, and fundraising',
+      'Deadline Tracker with verified email reminders',
+      'Printable compliance reports with evidence summaries',
       'Single organisation',
-      'Unlimited board member accounts',
+      'Unlimited team members',
       'Priority email support',
-      'Annual compliance snapshot',
-      'Custom branding on exports',
+      'Annual Report readiness and financial controls tracking',
     ],
   },
 ];
@@ -55,18 +54,17 @@ const plans = [
 const comparisonRows = [
   { feature: 'Governance Code standards', essentials: '32 core', complete: 'All 49' },
   { feature: 'Document storage', essentials: '2 GB', complete: '10 GB' },
-  { feature: 'Board member accounts', essentials: 'Up to 5', complete: 'Unlimited' },
+  { feature: 'Team members', essentials: 'Up to 5', complete: 'Unlimited' },
   { feature: 'Compliance Tracker', essentials: true, complete: true },
   { feature: 'Document Vault', essentials: true, complete: true },
   { feature: 'Board Register', essentials: true, complete: true },
-  { feature: 'Skill matrix tracking', essentials: false, complete: true },
+  { feature: 'Governance registers', essentials: false, complete: true },
   { feature: 'Deadline Tracker', essentials: true, complete: true },
   { feature: 'Email reminders', essentials: true, complete: true },
-  { feature: 'SMS reminders', essentials: false, complete: true },
-  { feature: 'PDF export', essentials: true, complete: true },
-  { feature: 'Evidence packs in export', essentials: false, complete: true },
-  { feature: 'Custom branding on exports', essentials: false, complete: true },
-  { feature: 'Annual compliance snapshot', essentials: false, complete: true },
+  { feature: 'Reminder delivery log', essentials: true, complete: true },
+  { feature: 'Printable report export', essentials: true, complete: true },
+  { feature: 'Evidence summaries in report', essentials: true, complete: true },
+  { feature: 'Annual Report readiness', essentials: false, complete: true },
   { feature: 'Support', essentials: 'Email', complete: 'Priority email' },
 ];
 
@@ -96,31 +94,6 @@ function renderCell(value: boolean | string) {
 export default function PricingPage() {
   return (
     <div className="min-h-screen">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="text-2xl font-bold text-teal-primary">
-              CharityPilot
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link href="/features" className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium">
-                Features
-              </Link>
-              <Link href="/pricing" className="text-teal-primary text-sm font-semibold">
-                Pricing
-              </Link>
-              <Link href="/login" className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium">
-                Sign in
-              </Link>
-              <Button as={Link} href="/register" className="bg-teal-primary text-white font-semibold" radius="full" size="sm">
-                Start Free Trial
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       {/* Hero */}
       <section className="py-16 md:py-24 bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -285,19 +258,6 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm">&copy; {new Date().getFullYear()} Project Nexus Ltd. All rights reserved.</p>
-            <div className="flex gap-6 text-sm">
-              <Link href="/privacy" className="hover:text-white transition-colors text-gray-400">Privacy</Link>
-              <Link href="/terms" className="hover:text-white transition-colors text-gray-400">Terms</Link>
-              <Link href="/features" className="hover:text-white transition-colors text-gray-400">Features</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

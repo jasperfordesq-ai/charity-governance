@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "test": "turbo test",
     "lint": "turbo lint",
     "clean": "turbo clean",
     "db:generate": "turbo db:generate",

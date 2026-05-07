@@ -163,8 +163,8 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Right to data portability (Art. 20):</strong> to receive your data in a
-              structured, machine-readable format. You may export your compliance data as CSV or
-              PDF from within your account at any time.
+              structured, machine-readable format where technically feasible. You may export your
+              compliance position as a printable report from within your account at any time.
             </li>
             <li>
               <strong>Right to restrict processing (Art. 18):</strong> to request that we limit

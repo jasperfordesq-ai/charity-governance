@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --env-file=.env --import tsx/esm --watch src/server.ts",
     "build": "tsc",
+    "test": "node --import tsx --test src/tests/*.test.ts",
     "start": "node dist/server.js",
     "clean": "rm -rf dist",
     "db:generate": "prisma generate",

@@ -10,7 +10,10 @@ import type {
   ComplianceSummary,
   DeadlineResponse,
   BoardAlert,
+  ComplianceSignoffResponse,
+  GovernanceRegistersSummary,
 } from '@charitypilot/shared';
+import { ComplianceSignoffStatus } from '@charitypilot/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton components                                               */
@@ -50,6 +53,9 @@ export default function DashboardPage() {
   const [compliance, setCompliance] = useState<ComplianceSummary | null>(null);
   const [deadlines, setDeadlines] = useState<DeadlineResponse[] | null>(null);
   const [boardAlerts, setBoardAlerts] = useState<BoardAlert[] | null>(null);
+  const [signoff, setSignoff] = useState<ComplianceSignoffResponse | null>(null);
+  const [registerSummary, setRegisterSummary] = useState<GovernanceRegistersSummary | null>(null);
+  const [boardMemberCount, setBoardMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -58,17 +64,22 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDashboard() {
       try {
-        const [summaryRes, deadlinesRes, boardRes] = await Promise.all([
+        const [summaryRes, deadlinesRes, boardRes, signoffRes, registerRes] = await Promise.all([
           api.get(`/compliance/summary?year=${currentYear}`),
           api.get('/deadlines'),
           api.get('/board-members'),
+          api.get(`/compliance/signoff?year=${currentYear}`),
+          api.get(`/governance-registers/summary?year=${currentYear}`),
         ]);
 
         setCompliance(summaryRes.data);
         setDeadlines(deadlinesRes.data?.data ?? deadlinesRes.data);
+        setSignoff(signoffRes.data);
+        setRegisterSummary(registerRes.data);
 
         // Derive board alerts from board members
         const members = boardRes.data?.data ?? boardRes.data ?? [];
+        setBoardMemberCount(members.length);
         const alerts: BoardAlert[] = [];
         const now = new Date();
 
@@ -121,6 +132,27 @@ export default function DashboardPage() {
     if (pct >= 50) return 'warning';
     return 'danger';
   };
+
+  const signoffStatus = signoff?.status ?? ComplianceSignoffStatus.DRAFT;
+  const signoffMeta = {
+    [ComplianceSignoffStatus.APPROVED]: {
+      color: 'success' as const,
+      label: 'Approved',
+      text: signoff?.boardMeetingDate
+        ? `Approved at board meeting on ${new Date(signoff.boardMeetingDate).toLocaleDateString('en-IE')}.`
+        : 'The annual Compliance Record has been marked approved.',
+    },
+    [ComplianceSignoffStatus.BOARD_REVIEW]: {
+      color: 'warning' as const,
+      label: 'Board review',
+      text: 'The Compliance Record is ready for trustee review and board minute approval.',
+    },
+    [ComplianceSignoffStatus.DRAFT]: {
+      color: 'default' as const,
+      label: 'Draft',
+      text: 'Record board approval before reporting the annual compliance position.',
+    },
+  }[signoffStatus];
 
   return (
     <div className="space-y-8">
@@ -228,6 +260,53 @@ export default function DashboardPage() {
       )}
 
       {/* ── Principle progress cards ── */}
+      {!loading && (
+        <Card className="p-5 border border-gray-200 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-gray-900">Annual board sign-off</h2>
+                <Chip size="sm" color={signoffMeta.color} variant="flat">
+                  {signoffMeta.label}
+                </Chip>
+              </div>
+              <p className="mt-1 text-sm text-gray-600">{signoffMeta.text}</p>
+              {signoff?.minuteReference && (
+                <p className="mt-1 text-xs text-gray-400">Minute reference: {signoff.minuteReference}</p>
+              )}
+            </div>
+            <Button as={Link} href="/export" size="sm" variant="flat">
+              Manage sign-off
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!loading && registerSummary && (
+        <Card className="p-5 border border-gray-200 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-gray-900">Governance registers</h2>
+                <Chip
+                  size="sm"
+                  color={registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints > 0 ? 'warning' : 'success'}
+                  variant="flat"
+                >
+                  {registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints} open items
+                </Chip>
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                Annual Report readiness {registerSummary.annualReportReadinessPercent}% · Financial controls {registerSummary.financialControlsPercent}% · Active fundraising {registerSummary.activeFundraisingActivities}
+              </p>
+            </div>
+            <Button as={Link} href="/registers" size="sm" variant="flat">
+              Open registers
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <div>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Progress by Principle</h2>
         {loading ? (
@@ -375,6 +454,16 @@ export default function DashboardPage() {
                   View board register
                 </Link>
               </div>
+            </Card>
+          ) : boardMemberCount === 0 ? (
+            <Card className="p-6 border border-amber-200 bg-amber-50/50 text-sm text-amber-800">
+              <p className="font-medium">No charity trustees have been added yet.</p>
+              <p className="mt-1 text-xs leading-5">
+                Add the board register so conduct, induction, and term-limit evidence is visible before the annual review.
+              </p>
+              <Link href="/board" className="mt-3 inline-flex text-xs font-semibold text-teal-primary hover:underline">
+                Add board members
+              </Link>
             </Card>
           ) : (
             <Card className="p-6 border border-gray-200 text-center text-sm text-gray-400">

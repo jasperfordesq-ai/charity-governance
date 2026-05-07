@@ -38,31 +38,30 @@ export default function LoginPage() {
   const passwordInvalid = touched.password && !password;
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-white">
-      {/* Header */}
-      <div className="py-8 px-4 text-center">
-        <Link href="/" className="text-2xl font-bold text-teal-primary">
-          CharityPilot
-        </Link>
-      </div>
+    <div className="w-full max-w-md min-w-0">
+      <Card className="w-full border border-gray-100 shadow-lg">
+        <CardBody className="p-6 sm:p-10">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
+            <p className="mt-2 text-sm text-gray-500">
+              Sign in to your CharityPilot account
+            </p>
+          </div>
 
-      {/* Form */}
-      <div className="flex-1 flex items-start justify-center px-4 pt-4 pb-16">
-        <Card className="w-full max-w-md border border-gray-100 shadow-lg">
-          <CardBody className="p-8 sm:p-10">
-            <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-              <p className="mt-2 text-sm text-gray-500">
-                Sign in to your CharityPilot account
-              </p>
-            </div>
+          <div className="mb-6 rounded-lg border border-teal-primary/20 bg-teal-primary/5 px-4 py-3 text-sm">
+            <p className="font-semibold text-teal-primary">Demo workspace</p>
+            <p className="mt-1 text-gray-600">
+              Use <span className="break-all font-mono text-gray-800">demo@charitypilot.ie</span> with password{' '}
+              <span className="font-mono text-gray-800">DemoPass123!</span>.
+            </p>
+          </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-                  {error}
-                </div>
-              )}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                {error}
+              </div>
+            )}
 
               <Input
                 label="Email address"
@@ -120,17 +119,16 @@ export default function LoginPage() {
               >
                 Sign in
               </Button>
-            </form>
+          </form>
 
-            <p className="mt-8 text-center text-sm text-gray-500">
-              Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-teal-primary font-semibold hover:underline">
-                Start your free trial
-              </Link>
-            </p>
-          </CardBody>
-        </Card>
-      </div>
+          <p className="mt-8 text-center text-sm text-gray-500">
+            Don&apos;t have an account?{' '}
+            <Link href="/register" className="text-teal-primary font-semibold hover:underline">
+              Start your free trial
+            </Link>
+          </p>
+        </CardBody>
+      </Card>
     </div>
   );
 }

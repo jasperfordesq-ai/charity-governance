@@ -2,8 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
 import type { SubscriptionPlan } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '');
+import { isConfiguredSecret } from '../utils/env.js';
 
 const PRICE_MAP: Record<string, string | undefined> = {
   ESSENTIALS_monthly: process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID,
@@ -12,8 +11,62 @@ const PRICE_MAP: Record<string, string | undefined> = {
   COMPLETE_yearly: process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID,
 };
 
+function getFrontendUrl(): string {
+  return process.env.FRONTEND_URL ?? 'http://localhost:3000';
+}
+
 export class BillingService {
   constructor(private prisma: PrismaClient) {}
+
+  isConfigured(): boolean {
+    return (
+      isConfiguredSecret(process.env.STRIPE_SECRET_KEY) &&
+      isConfiguredSecret(process.env.STRIPE_WEBHOOK_SECRET) &&
+      Object.values(PRICE_MAP).every(isConfiguredSecret)
+    );
+  }
+
+  private getStripe(): Stripe {
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+
+    if (!isConfiguredSecret(secretKey)) {
+      throw new AppError(503, 'BILLING_NOT_CONFIGURED', 'Stripe secret key is not configured');
+    }
+
+    return new Stripe(secretKey);
+  }
+
+  private getPriceId(plan: SubscriptionPlan, interval: 'monthly' | 'yearly'): string {
+    const priceId = PRICE_MAP[`${plan}_${interval}`];
+
+    if (!isConfiguredSecret(priceId)) {
+      throw new AppError(
+        503,
+        'BILLING_NOT_CONFIGURED',
+        `Stripe price ID is not configured for ${plan.toLowerCase()} ${interval}`,
+      );
+    }
+
+    return priceId;
+  }
+
+  constructWebhookEvent(rawBody: Buffer, signature: string | undefined): Stripe.Event {
+    if (!signature) {
+      throw new AppError(400, 'MISSING_STRIPE_SIGNATURE', 'Missing Stripe signature header');
+    }
+
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!isConfiguredSecret(webhookSecret)) {
+      throw new AppError(503, 'BILLING_NOT_CONFIGURED', 'Stripe webhook secret is not configured');
+    }
+
+    return this.getStripe().webhooks.constructEvent(
+      rawBody,
+      signature,
+      webhookSecret,
+    );
+  }
 
   async createCheckoutSession(
     organisationId: string,
@@ -24,10 +77,8 @@ export class BillingService {
       where: { id: organisationId },
     });
 
-    const priceId = PRICE_MAP[`${plan}_${interval}`];
-    if (!priceId) {
-      throw new AppError(400, 'INVALID_PLAN', 'Invalid plan or interval');
-    }
+    const stripe = this.getStripe();
+    const priceId = this.getPriceId(plan, interval);
 
     let customerId = org.stripeCustomerId;
 
@@ -49,8 +100,8 @@ export class BillingService {
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${process.env.FRONTEND_URL}/billing?success=true`,
-      cancel_url: `${process.env.FRONTEND_URL}/billing?cancelled=true`,
+      success_url: `${getFrontendUrl()}/billing?success=true`,
+      cancel_url: `${getFrontendUrl()}/billing?cancelled=true`,
       metadata: { organisationId, plan },
     });
 
@@ -66,9 +117,9 @@ export class BillingService {
       throw new AppError(400, 'NO_STRIPE_CUSTOMER', 'No billing account found');
     }
 
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await this.getStripe().billingPortal.sessions.create({
       customer: org.stripeCustomerId,
-      return_url: `${process.env.FRONTEND_URL}/billing`,
+      return_url: `${getFrontendUrl()}/billing`,
     });
 
     return { url: session.url };
@@ -86,6 +137,7 @@ export class BillingService {
         trialEndsAt: null,
         currentPeriodEnd: null,
         hasAccess: false,
+        billingConfigured: this.isConfigured(),
       };
     }
 
@@ -104,10 +156,13 @@ export class BillingService {
       trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
       currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null,
       hasAccess,
+      billingConfigured: this.isConfigured(),
     };
   }
 
   async handleWebhook(event: Stripe.Event) {
+    const stripe = this.getStripe();
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;

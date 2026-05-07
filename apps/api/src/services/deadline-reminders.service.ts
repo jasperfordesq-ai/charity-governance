@@ -38,6 +38,7 @@ export class DeadlineRemindersService {
     });
 
     let sent = 0;
+    let failed = 0;
     let skipped = 0;
 
     for (const deadline of activeDeadlines) {
@@ -67,17 +68,61 @@ export class DeadlineRemindersService {
         continue;
       }
 
-      await this.emailService.sendDeadlineReminder(owner.email, deadline.organisation.name, {
+      const existingLog = await this.prisma.deadlineReminderLog.findUnique({
+        where: {
+          deadlineId_email_reminderDays: {
+            deadlineId: deadline.id,
+            email: owner.email,
+            reminderDays: daysUntilDue,
+          },
+        },
+      });
+
+      if (existingLog?.status === 'SENT') {
+        skipped++;
+        continue;
+      }
+
+      const delivered = await this.emailService.sendDeadlineReminder(owner.email, deadline.organisation.name, {
         title: deadline.title,
         dueDate: deadline.dueDate,
         daysUntilDue,
       });
 
-      sent++;
+      await this.prisma.deadlineReminderLog.upsert({
+        where: {
+          deadlineId_email_reminderDays: {
+            deadlineId: deadline.id,
+            email: owner.email,
+            reminderDays: daysUntilDue,
+          },
+        },
+        create: {
+          organisationId: deadline.organisationId,
+          deadlineId: deadline.id,
+          userId: owner.id,
+          email: owner.email,
+          reminderDays: daysUntilDue,
+          status: delivered ? 'SENT' : 'FAILED',
+          error: delivered ? null : 'Email provider was not configured or rejected the message',
+        },
+        update: {
+          userId: owner.id,
+          status: delivered ? 'SENT' : 'FAILED',
+          error: delivered ? null : 'Email provider was not configured or rejected the message',
+          sentAt: new Date(),
+        },
+      });
+
+      if (delivered) {
+        sent++;
+      } else {
+        failed++;
+      }
     }
 
     console.log(
-      `[DeadlineReminders] Run complete — ${sent} reminder(s) sent, ${skipped} deadline(s) skipped`,
+      `[DeadlineReminders] Run complete - ${sent} reminder(s) sent, ${failed} failed, ${skipped} deadline(s) skipped`,
     );
   }
 }

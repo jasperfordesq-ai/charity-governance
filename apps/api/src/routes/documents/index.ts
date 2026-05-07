@@ -83,6 +83,10 @@ export async function documentRoutes(app: FastifyInstance) {
         name: fields.name?.value,
         description: fields.description?.value,
         category: fields.category?.value,
+        owner: fields.owner?.value,
+        approvedDate: fields.approvedDate?.value,
+        nextReviewDate: fields.nextReviewDate?.value,
+        boardMinuteReference: fields.boardMinuteReference?.value,
       });
 
       const buffer = await data.toBuffer();
@@ -108,6 +112,10 @@ export async function documentRoutes(app: FastifyInstance) {
         fileUrl: storagePath,
         fileSize: buffer.length,
         mimeType: data.mimetype,
+        owner: meta.owner || null,
+        approvedDate: meta.approvedDate || null,
+        nextReviewDate: meta.nextReviewDate || null,
+        boardMinuteReference: meta.boardMinuteReference || null,
       });
 
       return sendCreated(reply, doc);

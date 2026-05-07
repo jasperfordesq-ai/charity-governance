@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { isConfiguredSecret } from '../utils/env.js';
 
 const BRAND_TEAL = '#0D7377';
 const BRAND_TEAL_LIGHT = '#e6f4f5';
@@ -73,7 +74,11 @@ export class EmailService {
     this.frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
   }
 
-  async sendWelcomeEmail(to: string, name: string, orgName: string): Promise<void> {
+  isConfigured(): boolean {
+    return isConfiguredSecret(process.env.RESEND_API_KEY) && this.from.includes('@');
+  }
+
+  async sendWelcomeEmail(to: string, name: string, orgName: string): Promise<boolean> {
     const subject = `Welcome to CharityPilot, ${name}!`;
 
     const body = `
@@ -98,10 +103,10 @@ export class EmailService {
       ${smallNote(`If you did not create this account, please ignore this email or contact us at support@charitypilot.ie.`)}
     `;
 
-    await this._send(to, subject, emailLayout(subject, body));
+    return this._send(to, subject, emailLayout(subject, body));
   }
 
-  async sendEmailVerification(to: string, name: string, token: string): Promise<void> {
+  async sendEmailVerification(to: string, name: string, token: string): Promise<boolean> {
     const verifyUrl = `${this.frontendUrl}/verify-email?token=${token}`;
     const subject = 'Verify your CharityPilot email address';
 
@@ -116,10 +121,10 @@ export class EmailService {
       ${smallNote(`This link expires in 24 hours. If you did not create a CharityPilot account, you can safely ignore this email.`)}
     `;
 
-    await this._send(to, subject, emailLayout(subject, body));
+    return this._send(to, subject, emailLayout(subject, body));
   }
 
-  async sendPasswordReset(to: string, name: string, token: string): Promise<void> {
+  async sendPasswordReset(to: string, name: string, token: string): Promise<boolean> {
     const resetUrl = `${this.frontendUrl}/reset-password?token=${token}`;
     const subject = 'Reset your CharityPilot password';
 
@@ -134,14 +139,39 @@ export class EmailService {
       ${smallNote(`This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email — your password will not change.`)}
     `;
 
-    await this._send(to, subject, emailLayout(subject, body));
+    return this._send(to, subject, emailLayout(subject, body));
+  }
+
+  async sendTeamInvite(
+    to: string,
+    orgName: string,
+    invitedByName: string,
+    token: string,
+    role: string,
+  ): Promise<boolean> {
+    const inviteUrl = `${this.frontendUrl}/accept-invite?token=${token}`;
+    const subject = `${invitedByName} invited you to CharityPilot`;
+
+    const body = `
+      ${h2(`Join ${orgName} on CharityPilot`)}
+      ${paragraph(`<strong>${invitedByName}</strong> has invited you to help manage ${orgName}'s governance workspace as a <strong>${role.toLowerCase()}</strong>.`)}
+      ${paragraph(`Use the secure invite link below to create your account and access the charity's compliance records, board evidence, deadlines, and governance registers.`)}
+      <div style="text-align:center;margin:32px 0;">
+        ${primaryButton(inviteUrl, 'Accept Invite')}
+      </div>
+      ${paragraph(`Or paste this link into your browser:`)}
+      <p style="word-break:break-all;background-color:${BRAND_TEAL_LIGHT};padding:12px 16px;border-radius:4px;font-size:13px;color:#0a5c60;margin:0 0 16px;">${inviteUrl}</p>
+      ${smallNote(`This invite expires in 7 days. If you were not expecting this invitation, you can safely ignore it.`)}
+    `;
+
+    return this._send(to, subject, emailLayout(subject, body));
   }
 
   async sendDeadlineReminder(
     to: string,
     orgName: string,
     deadline: { title: string; dueDate: Date; daysUntilDue: number },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { title, dueDate, daysUntilDue } = deadline;
 
     const urgencyColour = daysUntilDue <= 7 ? '#dc2626' : daysUntilDue <= 14 ? '#d97706' : BRAND_TEAL;
@@ -172,20 +202,27 @@ export class EmailService {
       </table>
       ${paragraph(`Log in to CharityPilot to review this deadline and mark it as complete once actioned.`)}
       <div style="margin-top:8px;">
-        ${primaryButton(`${this.frontendUrl}/dashboard/deadlines`, 'View Deadlines')}
+        ${primaryButton(`${this.frontendUrl}/deadlines`, 'View Deadlines')}
       </div>
       ${smallNote(`You are receiving this reminder because you are the account owner for ${orgName} on CharityPilot. To adjust reminder settings, visit your dashboard.`)}
     `;
 
-    await this._send(to, subject, emailLayout(subject, body));
+    return this._send(to, subject, emailLayout(subject, body));
   }
 
-  private async _send(to: string, subject: string, html: string): Promise<void> {
+  private async _send(to: string, subject: string, html: string): Promise<boolean> {
+    if (!this.isConfigured()) {
+      console.warn(`[EmailService] Email not sent because RESEND_API_KEY is not configured: "${subject}" to ${to}`);
+      return false;
+    }
+
     try {
       await this.resend.emails.send({ from: this.from, to, subject, html });
+      return true;
     } catch (err) {
       console.error(`[EmailService] Failed to send "${subject}" to ${to}:`, err);
       // Do not rethrow — email failure must not break the calling flow
+      return false;
     }
   }
 }

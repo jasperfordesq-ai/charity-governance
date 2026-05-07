@@ -2,7 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { ComplianceService } from '../../services/compliance.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
-import { upsertComplianceRecordSchema, complianceQuerySchema, type UpsertComplianceRecordRequest } from '@charitypilot/shared';
+import {
+  complianceQuerySchema,
+  upsertComplianceRecordSchema,
+  upsertComplianceSignoffSchema,
+  type UpsertComplianceRecordRequest,
+  type UpsertComplianceSignoffRequest,
+} from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
 import { ZodError } from 'zod';
@@ -105,6 +111,32 @@ export async function complianceRoutes(app: FastifyInstance) {
     try {
       const { year } = complianceQuerySchema.parse(request.query);
       return sendSuccess(reply, await service.getSummary(request.user.organisationId, year));
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
+      }
+      handleError(reply, err);
+    }
+  });
+
+  // GET /signoff?year=2026 - board approval status for the annual Compliance Record
+  app.get('/signoff', async (request, reply) => {
+    try {
+      const { year } = complianceQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.getSignoff(request.user.organisationId, year));
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
+      }
+      handleError(reply, err);
+    }
+  });
+
+  // PUT /signoff - create/update the board approval record for the annual Compliance Record
+  app.put('/signoff', async (request, reply) => {
+    try {
+      const data = upsertComplianceSignoffSchema.parse(request.body) as UpsertComplianceSignoffRequest;
+      return sendSuccess(reply, await service.upsertSignoff(request.user.organisationId, request.user.userId, data));
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });

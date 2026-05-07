@@ -2,25 +2,60 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { Card, Button, Select, SelectItem } from '@heroui/react';
+import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
-import type { ComplianceSummary } from '@charitypilot/shared';
-import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
+import { useToast } from '@/components/toast';
+import type { ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
+import { ComplianceSignoffStatus, GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
+
+const signoffStatusLabels = {
+  [ComplianceSignoffStatus.DRAFT]: 'Draft',
+  [ComplianceSignoffStatus.BOARD_REVIEW]: 'Ready for board review',
+  [ComplianceSignoffStatus.APPROVED]: 'Approved by board',
+};
+
+const toDateInput = (value: string | null | undefined) => value?.slice(0, 10) ?? '';
 
 export default function ExportPage() {
   useDocumentTitle('Export Report');
+  const { toast } = useToast();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
+  const [signoff, setSignoff] = useState<ComplianceSignoffResponse | null>(null);
+  const [signoffForm, setSignoffForm] = useState({
+    status: ComplianceSignoffStatus.DRAFT,
+    boardMeetingDate: '',
+    minuteReference: '',
+    approvedByName: '',
+    approvedByRole: '',
+    approvalNotes: '',
+  });
   const [loading, setLoading] = useState(true);
+  const [savingSignoff, setSavingSignoff] = useState(false);
+  const [signoffError, setSignoffError] = useState('');
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/compliance/summary?year=${year}`);
-      setSummary(res.data);
+      const [summaryRes, signoffRes] = await Promise.all([
+        api.get(`/compliance/summary?year=${year}`),
+        api.get(`/compliance/signoff?year=${year}`),
+      ]);
+      const nextSignoff = signoffRes.data as ComplianceSignoffResponse;
+      setSummary(summaryRes.data);
+      setSignoff(nextSignoff);
+      setSignoffForm({
+        status: nextSignoff.status,
+        boardMeetingDate: toDateInput(nextSignoff.boardMeetingDate),
+        minuteReference: nextSignoff.minuteReference ?? '',
+        approvedByName: nextSignoff.approvedByName ?? '',
+        approvedByRole: nextSignoff.approvedByRole ?? '',
+        approvalNotes: nextSignoff.approvalNotes ?? '',
+      });
+      setSignoffError('');
     } catch (err) {
       console.error('Failed to load compliance summary', err);
     } finally {
@@ -34,6 +69,38 @@ export default function ExportPage() {
 
   /* ── Fetch report HTML and open in new tab for print-to-PDF ── */
   const [exporting, setExporting] = useState(false);
+
+  const handleSaveSignoff = async () => {
+    setSignoffError('');
+
+    if (
+      signoffForm.status === ComplianceSignoffStatus.APPROVED &&
+      (!signoffForm.boardMeetingDate || !signoffForm.minuteReference.trim() || !signoffForm.approvedByName.trim())
+    ) {
+      setSignoffError('Board meeting date, minute reference, and approver name are required before marking the record as approved.');
+      return;
+    }
+
+    setSavingSignoff(true);
+    try {
+      const res = await api.put('/compliance/signoff', {
+        reportingYear: year,
+        status: signoffForm.status,
+        boardMeetingDate: signoffForm.boardMeetingDate || null,
+        minuteReference: signoffForm.minuteReference.trim() || null,
+        approvedByName: signoffForm.approvedByName.trim() || null,
+        approvedByRole: signoffForm.approvedByRole.trim() || null,
+        approvalNotes: signoffForm.approvalNotes.trim() || null,
+      });
+      setSignoff(res.data);
+      toast('Board sign-off saved');
+    } catch (err) {
+      console.error('Failed to save board sign-off', err);
+      setSignoffError('Could not save the board sign-off record. Please review the fields and try again.');
+    } finally {
+      setSavingSignoff(false);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -67,8 +134,15 @@ export default function ExportPage() {
     return 'Not Started';
   };
 
+  const signoffChipColor =
+    signoffForm.status === ComplianceSignoffStatus.APPROVED
+      ? 'success'
+      : signoffForm.status === ComplianceSignoffStatus.BOARD_REVIEW
+        ? 'warning'
+        : 'default';
+
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8 max-w-4xl">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Export Compliance Report</h1>
@@ -105,6 +179,93 @@ export default function ExportPage() {
             </svg>
             Generate Compliance Report
           </Button>
+        </div>
+      </Card>
+
+      <Card className="border border-gray-200 shadow-sm p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">Board approval</h2>
+              <Chip size="sm" color={signoffChipColor} variant="flat">
+                {signoffStatusLabels[signoffForm.status]}
+              </Chip>
+            </div>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600">
+              Record the board meeting where trustees approved the annual Compliance Record before reporting the position to the Charities Regulator.
+            </p>
+            {signoff?.updatedAt && (
+              <p className="mt-1 text-xs text-gray-400">
+                Last updated {new Date(signoff.updatedAt).toLocaleString('en-IE', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
+            )}
+          </div>
+          <Button
+            className="bg-teal-primary text-white hover:bg-teal-dark"
+            onPress={handleSaveSignoff}
+            isLoading={savingSignoff}
+          >
+            Save sign-off
+          </Button>
+        </div>
+
+        {signoffError && (
+          <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {signoffError}
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Select
+            label="Approval status"
+            selectedKeys={new Set([signoffForm.status])}
+            onSelectionChange={(keys) => {
+              const value = Array.from(keys)[0] as ComplianceSignoffStatus | undefined;
+              if (value) setSignoffForm((prev) => ({ ...prev, status: value }));
+            }}
+          >
+            {Object.entries(signoffStatusLabels).map(([value, label]) => (
+              <SelectItem key={value}>{label}</SelectItem>
+            ))}
+          </Select>
+          <Input
+            label="Board meeting date"
+            type="date"
+            value={signoffForm.boardMeetingDate}
+            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, boardMeetingDate: value }))}
+          />
+          <Input
+            label="Minute reference"
+            placeholder="e.g. Board minutes 24 Oct 2026, item 6"
+            value={signoffForm.minuteReference}
+            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, minuteReference: value }))}
+          />
+          <Input
+            label="Approved by"
+            placeholder="Chairperson or authorised trustee"
+            value={signoffForm.approvedByName}
+            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvedByName: value }))}
+          />
+          <Input
+            label="Role"
+            placeholder="e.g. Chairperson"
+            value={signoffForm.approvedByRole}
+            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvedByRole: value }))}
+          />
+          <Textarea
+            label="Approval notes"
+            placeholder="Actions agreed, exceptions noted, or follow-up owners."
+            value={signoffForm.approvalNotes}
+            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvalNotes: value }))}
+            minRows={2}
+            className="md:col-span-2"
+          />
         </div>
       </Card>
 
@@ -235,6 +396,25 @@ export default function ExportPage() {
               </p>
             </Card>
 
+            <Card className="border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-5 h-5 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75l2.25 2.25L15 9.75M12 3.75l7.5 3v5.25c0 4.2-2.987 8.137-7.5 9.375-4.513-1.238-7.5-5.175-7.5-9.375V6.75l7.5-3z" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-gray-800">Board Approval Record</h3>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Approval status, board meeting date, minute reference, approver, and any sign-off notes.
+                  </p>
+                </div>
+                <Chip size="sm" color={signoffChipColor} variant="flat">
+                  {signoffStatusLabels[signoffForm.status]}
+                </Chip>
+              </div>
+            </Card>
+
             {/* Document list */}
             <Card className="border border-gray-200 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-2">
@@ -261,6 +441,7 @@ export default function ExportPage() {
             <p className="text-sm font-medium text-amber-800">Before exporting</p>
             <p className="text-xs text-amber-700 mt-0.5">
               Make sure all your compliance records are up to date and your organisation profile is complete.
+              Record board approval once the trustees have reviewed the annual position.
               Internal notes (marked as such in the editor) will not be included in the exported report.
               The report is formatted for printing -- use your browser&apos;s &quot;Print to PDF&quot; option to save a copy.
             </p>

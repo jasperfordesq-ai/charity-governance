@@ -13,8 +13,14 @@ import { deadlineRoutes } from './routes/deadlines/index.js';
 import { billingRoutes } from './routes/billing/index.js';
 import { exportRoutes } from './routes/export/index.js';
 import { dashboardRoutes } from './routes/dashboard/index.js';
+import { governanceRegisterRoutes } from './routes/governance-registers/index.js';
+import { teamRoutes } from './routes/team/index.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
+import { BillingService } from './services/billing.service.js';
+import { EmailService } from './services/email.service.js';
+import { StorageService } from './services/storage.service.js';
 import { startCronJobs } from './utils/cron.js';
+import { validateProductionEnv } from './utils/env.js';
 
 const envToLogger: Record<string, unknown> = {
   development: {
@@ -28,6 +34,9 @@ const envToLogger: Record<string, unknown> = {
 };
 
 const environment = process.env.NODE_ENV ?? 'development';
+const isProduction = environment === 'production';
+
+validateProductionEnv();
 
 const app = Fastify({
   logger: envToLogger[environment] ?? true,
@@ -37,9 +46,22 @@ const app = Fastify({
 
 await app.register(errorHandlerPlugin);
 
+app.addHook('onSend', async (_request, reply, payload) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  if (isProduction) {
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  return payload;
+});
+
 await app.register(cors, {
   origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
 await app.register(rateLimit, {
@@ -66,10 +88,46 @@ await app.register(deadlineRoutes, { prefix: '/api/v1/deadlines' });
 await app.register(billingRoutes, { prefix: '/api/v1/billing' });
 await app.register(exportRoutes, { prefix: '/api/v1/export' });
 await app.register(dashboardRoutes, { prefix: '/api/v1/dashboard' });
+await app.register(governanceRegisterRoutes, { prefix: '/api/v1/governance-registers' });
+await app.register(teamRoutes, { prefix: '/api/v1/team' });
 
 // ── Health check ──
 
 app.get('/api/v1/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+app.get('/api/v1/health/readiness', async (request, reply) => {
+  const billing = new BillingService(app.prisma);
+  const email = new EmailService();
+  const storage = new StorageService();
+
+  let database = false;
+  try {
+    await app.prisma.$queryRaw`SELECT 1`;
+    database = true;
+  } catch (err) {
+    request.log.error(err, 'Readiness database check failed');
+  }
+
+  const checks = {
+    database,
+    billingConfigured: billing.isConfigured(),
+    emailConfigured: email.isConfigured(),
+    storageConfigured: storage.isConfigured(),
+    storageBucketReachable: await storage.verifyBucket(),
+  };
+
+  const ready =
+    database &&
+    checks.billingConfigured &&
+    checks.emailConfigured &&
+    checks.storageConfigured &&
+    checks.storageBucketReachable;
+  reply.status(ready ? 200 : 503).send({
+    status: ready ? 'ready' : 'not_ready',
+    checks,
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // ── Start ──
 

@@ -5,3 +5,5 @@ export * from './board-member.js';
 export * from './document.js';
 export * from './deadline.js';
 export * from './billing.js';
+export * from './governance-registers.js';
+export * from './team.js';

@@ -126,6 +126,51 @@ export const evidencePackItems = [
   },
 ];
 
+export const operationalEvidenceSignals = [
+  {
+    title: 'Conflicts register and declarations',
+    standards: '2.2, 5.7',
+    categories: ['POLICY', 'BOARD_MINUTES', 'OTHER'],
+    keywords: ['conflict', 'interest', 'declaration'],
+    why: 'Trustees need a clear record of declared interests and how conflicts were managed.',
+  },
+  {
+    title: 'Complaints procedure and review',
+    standards: '3.4, 6.8',
+    categories: ['POLICY', 'BOARD_MINUTES', 'OTHER'],
+    keywords: ['complaint', 'feedback', 'concern'],
+    why: 'The board should know how complaints are handled and what practice improvements followed.',
+  },
+  {
+    title: 'Financial controls checklist',
+    standards: '4.4, 4.7, 6.5',
+    categories: ['POLICY', 'FINANCIAL_STATEMENT', 'BOARD_MINUTES'],
+    keywords: ['financial control', 'bank', 'approval', 'budget', 'reserves'],
+    why: 'Trustees need evidence of controls over income, expenditure, banking, assets, and reporting.',
+  },
+  {
+    title: 'Fundraising controls',
+    standards: '3.2, 4.3, 6.4',
+    categories: ['POLICY', 'BOARD_MINUTES', 'OTHER'],
+    keywords: ['fundraising', 'donor', 'public collection', 'appeal'],
+    why: 'Fundraising should be open, transparent, honest, respectful, and accountable.',
+  },
+  {
+    title: 'Risk and insurance review',
+    standards: '4.5, 4.6, 4.8',
+    categories: ['RISK_REGISTER', 'INSURANCE', 'BOARD_MINUTES'],
+    keywords: ['risk', 'insurance', 'cover', 'mitigation'],
+    why: 'Risks and insurance cover should be reviewed and minuted by trustees.',
+  },
+  {
+    title: 'Annual Report and accounts pack',
+    standards: '6.5, 6.6',
+    categories: ['ANNUAL_REPORT', 'FINANCIAL_STATEMENT'],
+    keywords: ['annual report', 'accounts', 'financial statements'],
+    why: 'The annual filing needs activities, finance, documents, and declaration evidence.',
+  },
+];
+
 export const productAuditMap = [
   {
     area: 'Compliance Record Form',

@@ -53,6 +53,10 @@ export class DocumentService {
       fileUrl: string;
       fileSize: number;
       mimeType: string;
+      owner?: string | null;
+      approvedDate?: string | null;
+      nextReviewDate?: string | null;
+      boardMinuteReference?: string | null;
     },
   ) {
     return this.prisma.document.create({
@@ -65,6 +69,10 @@ export class DocumentService {
         fileUrl: data.fileUrl,
         fileSize: data.fileSize,
         mimeType: data.mimeType,
+        owner: data.owner,
+        approvedDate: data.approvedDate ? new Date(data.approvedDate) : null,
+        nextReviewDate: data.nextReviewDate ? new Date(data.nextReviewDate) : null,
+        boardMinuteReference: data.boardMinuteReference,
       },
       include: {
         standardLinks: {

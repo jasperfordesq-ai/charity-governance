@@ -42,6 +42,8 @@ export async function authRoutes(app: FastifyInstance) {
             email: result.user.email,
             name: result.user.name,
             role: result.user.role,
+            emailVerified: result.user.emailVerified,
+            organisationId: result.user.organisationId,
             organisation: result.user.organisation,
           },
           accessToken: result.accessToken,
@@ -73,6 +75,8 @@ export async function authRoutes(app: FastifyInstance) {
             email: result.user.email,
             name: result.user.name,
             role: result.user.role,
+            emailVerified: result.user.emailVerified,
+            organisationId: result.user.organisationId,
             organisation: result.user.organisation,
           },
           accessToken: result.accessToken,
@@ -116,6 +120,8 @@ export async function authRoutes(app: FastifyInstance) {
         email: user.email,
         name: user.name,
         role: user.role,
+        emailVerified: user.emailVerified,
+        organisationId: user.organisationId,
         organisation: user.organisation,
       });
     } catch (err) {

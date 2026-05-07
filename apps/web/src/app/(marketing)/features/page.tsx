@@ -17,9 +17,9 @@ const features = [
     details: [
       'Interactive dashboard showing compliance percentage across all 6 principles',
       'Drill down into each principle to view individual standards',
-      'Mark standards as Not Started, In Progress, or Compliant',
-      'Attach evidence documents directly to each standard',
-      'Add notes and action items for your board to review',
+      'Mark standards as Not Started, Working Towards, Compliant, Explain, or Not Applicable',
+      'Capture the action taken, evidence, status, and explanation fields needed for the annual Compliance Record Form',
+      'Add notes for your board to review before annual sign-off',
       'Automatic detection of whether your charity needs the 32 core or all 49 standards',
     ],
     colour: 'bg-teal-primary',
@@ -38,10 +38,10 @@ const features = [
     details: [
       'Upload and organise policies, minutes, constitutions, and evidence',
       'Tag documents to specific Governance Code standards',
-      'Version history so you always know which document is current',
-      'Search across all documents by name, tag, or content',
-      'Secure cloud storage with encryption at rest',
-      'Easy sharing links for board members and auditors',
+      'Record document owner, approval date, review date, and board minute reference',
+      'Track evidence pack readiness across the documents trustees normally need',
+      'Store common formats including PDF, Office files, images, text, and CSV',
+      'Keep evidence organised for board review, funder queries, and annual reporting',
     ],
     colour: 'bg-teal-dark',
     icon: (
@@ -59,10 +59,10 @@ const features = [
     details: [
       'Record all current and past board members in one place',
       'Track appointment and retirement dates, and term limits',
-      'Log skill categories and expertise for board composition analysis',
-      'Monitor declarations of interest and conflict of interest records',
+      'Track trustee induction and signed code of conduct status',
+      'Connect trustee names to conflict of interest records',
       'Automatic alerts when a term limit is approaching or exceeded',
-      'Export board register data for annual returns and reports',
+      'Feed trustee readiness signals into the dashboard and compliance report',
     ],
     colour: 'bg-teal-light',
     icon: (
@@ -81,8 +81,8 @@ const features = [
       'Pre-populated with standard Irish charity deadlines (CRA, CRO, Revenue)',
       'Add custom deadlines for board meetings, policy reviews, and more',
       'Email reminders sent 30, 14, and 7 days before each deadline',
-      'SMS reminders available on the Complete plan',
-      'Calendar view and list view for different working styles',
+      'Reminder delivery is logged so the team can verify whether an email was sent or failed',
+      'Annual Report deadlines are generated from the organisation financial year end',
       'Mark deadlines as complete and track your on-time filing history',
     ],
     colour: 'bg-amber-accent',
@@ -94,17 +94,17 @@ const features = [
   },
   {
     id: 'pdf-export',
-    title: 'PDF Export',
+    title: 'Compliance Report',
     tagline: 'Professional reports at the click of a button',
     description:
-      'When the board meets, the auditor calls, or a funder asks for proof of governance, you need a polished report fast. PDF Export generates print-ready compliance reports from your live data.',
+      'When the board meets, the auditor calls, or a funder asks for proof of governance, you need a polished report fast. CharityPilot generates a printable compliance report from your live data.',
     details: [
-      'One-click generation of full compliance reports',
+      'One-click generation of printable compliance reports',
       'Principle-by-principle breakdown with status indicators',
-      'Attach evidence summaries to each standard in the report',
-      'Customisable cover page with your charity name and logo',
+      'Evidence summaries for each standard in the report',
+      'Board approval/sign-off section with minute reference',
       'Date-stamped for audit trail purposes',
-      'Evidence pack export (Complete plan) bundles all linked documents into a single download',
+      'Includes governance registers, Annual Report readiness, and financial controls',
     ],
     colour: 'bg-teal-primary',
     icon: (
@@ -118,31 +118,6 @@ const features = [
 export default function FeaturesPage() {
   return (
     <div className="min-h-screen">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="text-2xl font-bold text-teal-primary">
-              CharityPilot
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link href="/features" className="text-teal-primary text-sm font-semibold">
-                Features
-              </Link>
-              <Link href="/pricing" className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium">
-                Pricing
-              </Link>
-              <Link href="/login" className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium">
-                Sign in
-              </Link>
-              <Button as={Link} href="/register" className="bg-teal-primary text-white font-semibold" radius="full" size="sm">
-                Start Free Trial
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       {/* Hero */}
       <section className="py-16 md:py-24 bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -196,7 +171,7 @@ export default function FeaturesPage() {
                 </ul>
               </div>
 
-              {/* Visual placeholder */}
+              {/* Feature preview */}
               <div className="flex-1 w-full">
                 <Card className="border border-gray-100 shadow-sm overflow-hidden">
                   <CardBody className="p-0">
@@ -226,21 +201,15 @@ export default function FeaturesPage() {
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              {
-                title: 'Role-based access',
-                text: 'Give board members read-only access while administrators manage compliance data.',
-              },
-              {
-                title: 'Audit trail',
-                text: 'Every change is logged with a timestamp and user, so you always know who did what.',
-              },
+              { title: 'Role-based access', text: 'Invite owners, admins, and members into one charity workspace.' },
+              { title: 'Board sign-off', text: 'Record the annual board review position, minute reference, approver, and approval notes.' },
               {
                 title: 'Secure by design',
-                text: 'TLS encryption in transit, AES-256 at rest, hosted on EU infrastructure.',
+                text: 'Production setup supports real Stripe billing, verified reminder emails, and structured evidence storage.',
               },
               {
                 title: 'Mobile-friendly',
-                text: 'Access your compliance dashboard from any device -- phone, tablet, or desktop.',
+                text: 'Access your governance dashboard from phone, tablet, or desktop.',
               },
               {
                 title: 'Irish-first',
@@ -296,19 +265,6 @@ export default function FeaturesPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm">&copy; {new Date().getFullYear()} Project Nexus Ltd. All rights reserved.</p>
-            <div className="flex gap-6 text-sm">
-              <Link href="/privacy" className="hover:text-white transition-colors text-gray-400">Privacy</Link>
-              <Link href="/terms" className="hover:text-white transition-colors text-gray-400">Terms</Link>
-              <Link href="/pricing" className="hover:text-white transition-colors text-gray-400">Pricing</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

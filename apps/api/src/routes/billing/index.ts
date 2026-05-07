@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import Stripe from 'stripe';
 import { BillingService } from '../../services/billing.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { createCheckoutSchema, type SubscriptionPlan } from '@charitypilot/shared';
@@ -24,21 +23,16 @@ export async function billingRoutes(app: FastifyInstance) {
 
     webhookScope.post('/webhooks', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '');
         const sig = request.headers['stripe-signature'] as string;
         const rawBody = request.body as Buffer;
 
-        const event = stripe.webhooks.constructEvent(
-          rawBody,
-          sig,
-          process.env.STRIPE_WEBHOOK_SECRET ?? '',
-        );
+        const event = service.constructWebhookEvent(rawBody, sig);
 
         await service.handleWebhook(event);
         return { received: true };
       } catch (err) {
         app.log.error(err);
-        return reply.status(400).send({ error: 'Webhook signature verification failed' });
+        handleError(reply, err);
       }
     });
   });
@@ -47,7 +41,7 @@ export async function billingRoutes(app: FastifyInstance) {
   app.register(async (authedApp: FastifyInstance) => {
     authedApp.addHook('onRequest', authGuard);
 
-    authedApp.post('/create-checkout', async (request, reply) => {
+    const createCheckout = async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const data = createCheckoutSchema.parse(request.body);
         const result = await service.createCheckoutSession(
@@ -62,15 +56,20 @@ export async function billingRoutes(app: FastifyInstance) {
         }
         handleError(reply, err);
       }
-    });
+    };
 
-    authedApp.post('/create-portal', async (request, reply) => {
+    const createPortal = async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         return await service.createPortalSession(request.user.organisationId);
       } catch (err) {
         handleError(reply, err);
       }
-    });
+    };
+
+    authedApp.post('/checkout', createCheckout);
+    authedApp.post('/create-checkout', createCheckout);
+    authedApp.post('/portal', createPortal);
+    authedApp.post('/create-portal', createPortal);
 
     authedApp.get('/status', async (request, reply) => {
       try {

@@ -15,32 +15,31 @@ const PLANS = [
   {
     plan: SubscriptionPlan.ESSENTIALS,
     name: 'Essentials',
-    monthlyPrice: 9,
-    yearlyPrice: 90,
+    monthlyPrice: 19,
+    yearlyPrice: 190,
     features: [
-      'Full Charities Governance Code tracker',
-      'Compliance status per standard',
-      'Document vault (up to 50 documents)',
-      'Board member register',
-      'Deadline tracker',
-      'Annual compliance report export',
+      '32 core standards for non-complex charities',
+      'Compliance Record Form fields and board sign-off',
+      'Evidence vault with governance document metadata',
+      'Board member and trustee readiness register',
+      'Annual Report deadline tracker and reminders',
+      'PDF compliance report export',
       'Email support',
     ],
   },
   {
     plan: SubscriptionPlan.COMPLETE,
     name: 'Complete',
-    monthlyPrice: 19,
-    yearlyPrice: 190,
+    monthlyPrice: 39,
+    yearlyPrice: 390,
     features: [
       'Everything in Essentials, plus:',
-      'Unlimited document storage',
-      'Additional standards tracking (complex orgs)',
-      'Multi-user access (up to 5 users)',
-      'Branded compliance reports',
-      'Deadline email reminders',
+      'All 49 standards for complex charities',
+      'Unlimited team members and role permissions',
+      'Conflict, risk, complaints, and fundraising registers',
+      'Financial controls and Annual Report readiness',
+      'Evidence pack reporting for board review',
       'Priority email support',
-      'Export to PDF and CSV',
     ],
   },
 ];
@@ -55,13 +54,16 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   const fetchBilling = useCallback(async () => {
     try {
       const res = await api.get('/billing/status');
       setBilling(res.data);
+      setBillingError(null);
     } catch (err) {
       console.error('Failed to load billing', err);
+      setBillingError('Billing status could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -75,11 +77,13 @@ export default function BillingPage() {
   const startCheckout = async (plan: SubscriptionPlan, interval: 'monthly' | 'yearly') => {
     const key = `${plan}-${interval}`;
     setCheckoutLoading(key);
+    setBillingError(null);
     try {
       const res = await api.post('/billing/checkout', { plan, interval });
       window.location.href = res.data.url;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Checkout failed', err);
+      setBillingError(err.response?.data?.error ?? 'Checkout could not be started.');
     } finally {
       setCheckoutLoading(null);
     }
@@ -88,11 +92,13 @@ export default function BillingPage() {
   /* ── Open Stripe portal ── */
   const openPortal = async () => {
     setPortalLoading(true);
+    setBillingError(null);
     try {
       const res = await api.post('/billing/portal');
       window.location.href = res.data.url;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Portal failed', err);
+      setBillingError(err.response?.data?.error ?? 'The Stripe customer portal could not be opened.');
     } finally {
       setPortalLoading(false);
     }
@@ -118,6 +124,7 @@ export default function BillingPage() {
 
   const isTrialing = billing?.status === SubscriptionStatus.TRIALING;
   const isActive = billing?.status === SubscriptionStatus.ACTIVE;
+  const billingConfigured = billing?.billingConfigured ?? false;
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -125,9 +132,25 @@ export default function BillingPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Billing & Subscription</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Manage your CharityPilot subscription.
+          Manage the plan that controls governance coverage, evidence storage, reminders, and team access.
         </p>
       </div>
+
+      {billingError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {billingError}
+        </div>
+      )}
+
+      {!loading && !billingConfigured && (
+        <Card className="border border-amber-200 bg-amber-50 shadow-sm p-5">
+          <h2 className="text-sm font-semibold text-amber-900">Stripe is not production-ready yet</h2>
+          <p className="text-sm text-amber-800 mt-1">
+            Checkout is disabled until the Stripe secret key, webhook secret, and all four price IDs are configured.
+            This protects live customers from broken payment sessions.
+          </p>
+        </Card>
+      )}
 
       {/* Current status */}
       {loading ? (
@@ -184,6 +207,7 @@ export default function BillingPage() {
                 variant="bordered"
                 onPress={openPortal}
                 isLoading={portalLoading}
+                isDisabled={!billingConfigured}
               >
                 Manage Subscription
               </Button>
@@ -251,6 +275,7 @@ export default function BillingPage() {
                       fullWidth
                       onPress={() => startCheckout(plan.plan, 'yearly')}
                       isLoading={checkoutLoading === `${plan.plan}-yearly`}
+                      isDisabled={!billingConfigured}
                     >
                       Get {plan.name} (Yearly)
                     </Button>
@@ -259,6 +284,7 @@ export default function BillingPage() {
                       fullWidth
                       onPress={() => startCheckout(plan.plan, 'monthly')}
                       isLoading={checkoutLoading === `${plan.plan}-monthly`}
+                      isDisabled={!billingConfigured}
                     >
                       Monthly (&euro;{plan.monthlyPrice}/mo)
                     </Button>

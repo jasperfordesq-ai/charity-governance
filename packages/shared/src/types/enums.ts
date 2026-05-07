@@ -25,6 +25,12 @@ export enum ComplianceStatus {
   EXPLAIN = 'EXPLAIN',
 }
 
+export enum ComplianceSignoffStatus {
+  DRAFT = 'DRAFT',
+  BOARD_REVIEW = 'BOARD_REVIEW',
+  APPROVED = 'APPROVED',
+}
+
 export enum SubscriptionPlan {
   ESSENTIALS = 'ESSENTIALS',
   COMPLETE = 'COMPLETE',
@@ -51,8 +57,45 @@ export enum DocumentCategory {
   OTHER = 'OTHER',
 }
 
+export enum RegisterStatus {
+  OPEN = 'OPEN',
+  MONITORING = 'MONITORING',
+  CLOSED = 'CLOSED',
+}
+
+export enum ConflictStatus {
+  DECLARED = 'DECLARED',
+  MANAGED = 'MANAGED',
+  CLOSED = 'CLOSED',
+}
+
+export enum RiskCategory {
+  GOVERNANCE = 'GOVERNANCE',
+  FINANCIAL = 'FINANCIAL',
+  OPERATIONAL = 'OPERATIONAL',
+  LEGAL = 'LEGAL',
+  SAFEGUARDING = 'SAFEGUARDING',
+  REPUTATIONAL = 'REPUTATIONAL',
+  FUNDRAISING = 'FUNDRAISING',
+  DATA_PROTECTION = 'DATA_PROTECTION',
+  OTHER = 'OTHER',
+}
+
+export enum AnnualReportFilingStatus {
+  NOT_STARTED = 'NOT_STARTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  BOARD_APPROVED = 'BOARD_APPROVED',
+  FILED = 'FILED',
+}
+
 export enum UserRole {
   OWNER = 'OWNER',
   ADMIN = 'ADMIN',
   MEMBER = 'MEMBER',
+}
+
+export enum DeadlineReminderStatus {
+  SENT = 'SENT',
+  SKIPPED = 'SKIPPED',
+  FAILED = 'FAILED',
 }

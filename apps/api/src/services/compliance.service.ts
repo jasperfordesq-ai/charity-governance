@@ -1,5 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
-import type { UpsertComplianceRecordRequest, ComplianceSummary, PrincipleComplianceSummary } from '@charitypilot/shared';
+import {
+  ComplianceSignoffStatus,
+  type ComplianceSignoffResponse,
+  type ComplianceSummary,
+  type PrincipleComplianceSummary,
+  type UpsertComplianceRecordRequest,
+  type UpsertComplianceSignoffRequest,
+} from '@charitypilot/shared';
 
 export class ComplianceService {
   constructor(private prisma: PrismaClient) {}
@@ -98,6 +105,102 @@ export class ComplianceService {
     });
 
     return record;
+  }
+
+  async getSignoff(organisationId: string, reportingYear: number): Promise<ComplianceSignoffResponse> {
+    const signoff = await this.prisma.complianceSignoff.findUnique({
+      where: {
+        organisationId_reportingYear: {
+          organisationId,
+          reportingYear,
+        },
+      },
+    });
+
+    if (!signoff) {
+      return {
+        id: null,
+        organisationId,
+        reportingYear,
+        status: ComplianceSignoffStatus.DRAFT,
+        boardMeetingDate: null,
+        minuteReference: null,
+        approvedByName: null,
+        approvedByRole: null,
+        approvalNotes: null,
+        approvedAt: null,
+        updatedById: null,
+        updatedAt: null,
+      };
+    }
+
+    return {
+      id: signoff.id,
+      organisationId: signoff.organisationId,
+      reportingYear: signoff.reportingYear,
+      status: signoff.status as ComplianceSignoffStatus,
+      boardMeetingDate: signoff.boardMeetingDate?.toISOString() ?? null,
+      minuteReference: signoff.minuteReference,
+      approvedByName: signoff.approvedByName,
+      approvedByRole: signoff.approvedByRole,
+      approvalNotes: signoff.approvalNotes,
+      approvedAt: signoff.approvedAt?.toISOString() ?? null,
+      updatedById: signoff.updatedById,
+      updatedAt: signoff.updatedAt.toISOString(),
+    };
+  }
+
+  async upsertSignoff(
+    organisationId: string,
+    userId: string,
+    data: UpsertComplianceSignoffRequest,
+  ): Promise<ComplianceSignoffResponse> {
+    const isApproved = data.status === 'APPROVED';
+    const saved = await this.prisma.complianceSignoff.upsert({
+      where: {
+        organisationId_reportingYear: {
+          organisationId,
+          reportingYear: data.reportingYear,
+        },
+      },
+      create: {
+        organisationId,
+        reportingYear: data.reportingYear,
+        status: data.status,
+        boardMeetingDate: data.boardMeetingDate ? new Date(data.boardMeetingDate) : null,
+        minuteReference: data.minuteReference,
+        approvedByName: data.approvedByName,
+        approvedByRole: data.approvedByRole,
+        approvalNotes: data.approvalNotes,
+        approvedAt: isApproved ? new Date() : null,
+        updatedById: userId,
+      },
+      update: {
+        status: data.status,
+        boardMeetingDate: data.boardMeetingDate ? new Date(data.boardMeetingDate) : null,
+        minuteReference: data.minuteReference,
+        approvedByName: data.approvedByName,
+        approvedByRole: data.approvedByRole,
+        approvalNotes: data.approvalNotes,
+        approvedAt: isApproved ? new Date() : null,
+        updatedById: userId,
+      },
+    });
+
+    return {
+      id: saved.id,
+      organisationId: saved.organisationId,
+      reportingYear: saved.reportingYear,
+      status: saved.status as ComplianceSignoffStatus,
+      boardMeetingDate: saved.boardMeetingDate?.toISOString() ?? null,
+      minuteReference: saved.minuteReference,
+      approvedByName: saved.approvedByName,
+      approvedByRole: saved.approvedByRole,
+      approvalNotes: saved.approvalNotes,
+      approvedAt: saved.approvedAt?.toISOString() ?? null,
+      updatedById: saved.updatedById,
+      updatedAt: saved.updatedAt.toISOString(),
+    };
   }
 
   async getSummary(organisationId: string, year: number): Promise<ComplianceSummary> {

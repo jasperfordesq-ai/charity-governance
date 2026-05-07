@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { cloneElement, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
@@ -62,6 +62,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/registers',
+    label: 'Registers',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.008v.008H3.75V6.75zm0 5.25h.008v.008H3.75V12zm0 5.25h.008v.008H3.75v-.008z" />
+      </svg>
+    ),
+  },
+  {
     href: '/deadlines',
     label: 'Deadlines',
     icon: (
@@ -76,6 +85,15 @@ const NAV_ITEMS = [
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/team',
+    label: 'Team',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm5.25 1.5a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-12 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
       </svg>
     ),
   },
@@ -187,7 +205,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   }
                 `}
               >
-                {item.icon}
+                <span className="flex-shrink-0" aria-hidden="true">
+                  {cloneElement(item.icon, { focusable: false })}
+                </span>
                 {item.label}
               </Link>
             );

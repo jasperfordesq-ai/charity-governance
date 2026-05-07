@@ -1,0 +1,112 @@
+import type { FastifyInstance } from 'fastify';
+import { ZodError } from 'zod';
+import { TeamService } from '../../services/team.service.js';
+import { authGuard } from '../../middleware/auth.js';
+import {
+  acceptTeamInviteSchema,
+  inviteTeamMemberSchema,
+  updateTeamMemberRoleSchema,
+} from '@charitypilot/shared';
+import { handleError } from '../../utils/errors.js';
+
+function formatZodError(error: ZodError) {
+  return {
+    error: 'Validation failed',
+    code: 'VALIDATION_ERROR',
+    details: error.errors.map((e) => ({
+      field: e.path.join('.'),
+      message: e.message,
+    })),
+  };
+}
+
+export async function teamRoutes(app: FastifyInstance) {
+  const service = new TeamService(app.prisma);
+
+  app.post('/accept-invite', async (request, reply) => {
+    try {
+      const body = acceptTeamInviteSchema.parse(request.body);
+      const result = await service.acceptInvite(body);
+
+      reply.status(201).send({
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          role: result.user.role,
+          emailVerified: result.user.emailVerified,
+          organisationId: result.user.organisationId,
+          organisation: result.user.organisation,
+        },
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        reply.status(400).send(formatZodError(err));
+        return;
+      }
+      handleError(reply, err);
+    }
+  });
+
+  app.register(async (authedApp: FastifyInstance) => {
+    authedApp.addHook('onRequest', authGuard);
+
+    authedApp.get('/', async (request, reply) => {
+      try {
+        return await service.list(request.user.organisationId);
+      } catch (err) {
+        handleError(reply, err);
+      }
+    });
+
+    authedApp.post('/invites', async (request, reply) => {
+      try {
+        const body = inviteTeamMemberSchema.parse(request.body);
+        const invite = await service.invite(
+          request.user.organisationId,
+          request.user.userId,
+          request.user.role,
+          body,
+        );
+        reply.status(201).send(invite);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
+      }
+    });
+
+    authedApp.delete('/invites/:id', async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        return await service.revoke(request.user.organisationId, id, request.user.role);
+      } catch (err) {
+        handleError(reply, err);
+      }
+    });
+
+    authedApp.patch('/members/:id/role', async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const body = updateTeamMemberRoleSchema.parse(request.body);
+        return await service.updateMemberRole(
+          request.user.organisationId,
+          request.user.userId,
+          request.user.role,
+          id,
+          body.role,
+        );
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
+      }
+    });
+  });
+}

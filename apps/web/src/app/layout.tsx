@@ -47,8 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
-        {/* Prevent FOUC for dark mode */}
-        <script dangerouslySetInnerHTML={{ __html: `try{if(localStorage.theme==='dark'||(!('theme' in localStorage)&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}` }} />
+        {/* Prevent FOUC for explicit dark mode without forcing public pages into OS dark mode */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var p=location.pathname;var app=/^\\/(dashboard|compliance|regulator|documents|board|registers|deadlines|organisation|team|billing|export)(\\/|$)/.test(p);if(app&&localStorage.theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}` }} />
       </head>
       <body className="font-sans antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors" suppressHydrationWarning>
         <Providers>{children}</Providers>

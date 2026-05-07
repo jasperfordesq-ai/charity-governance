@@ -5,7 +5,7 @@ import { BackToTop } from '@/components/back-to-top';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="light min-h-screen flex flex-col bg-white text-gray-900" style={{ colorScheme: 'light' }}>
       {/* Skip to content — a11y */}
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-teal-primary focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold">
         Skip to content

@@ -25,7 +25,7 @@ import {
 } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
-import { evidencePackItems } from '@/lib/regulator-guidance';
+import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-guidance';
 import type {
   DocumentResponse,
   GovernanceStandardResponse,
@@ -44,6 +44,10 @@ export default function DocumentsPage() {
   const [uploadName, setUploadName] = useState('');
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory>(DocumentCategory.OTHER);
   const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadOwner, setUploadOwner] = useState('');
+  const [uploadApprovedDate, setUploadApprovedDate] = useState('');
+  const [uploadNextReviewDate, setUploadNextReviewDate] = useState('');
+  const [uploadMinuteReference, setUploadMinuteReference] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -111,6 +115,10 @@ export default function DocumentsPage() {
       if (uploadDescription.trim()) {
         formData.append('description', uploadDescription.trim());
       }
+      if (uploadOwner.trim()) formData.append('owner', uploadOwner.trim());
+      if (uploadApprovedDate) formData.append('approvedDate', uploadApprovedDate);
+      if (uploadNextReviewDate) formData.append('nextReviewDate', uploadNextReviewDate);
+      if (uploadMinuteReference.trim()) formData.append('boardMinuteReference', uploadMinuteReference.trim());
 
       await api.post('/documents', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -120,6 +128,10 @@ export default function DocumentsPage() {
       setUploadName('');
       setUploadCategory(DocumentCategory.OTHER);
       setUploadDescription('');
+      setUploadOwner('');
+      setUploadApprovedDate('');
+      setUploadNextReviewDate('');
+      setUploadMinuteReference('');
       setUploadFile(null);
       uploadModal.onClose();
       fetchDocuments();
@@ -187,7 +199,25 @@ export default function DocumentsPage() {
     }, {});
   }, [documents]);
 
+  const documentSearchText = useMemo(() => {
+    return documents
+      .map((doc) => `${doc.name} ${doc.description ?? ''} ${doc.category}`.toLowerCase())
+      .join(' ');
+  }, [documents]);
+
+  const signalCoverage = useMemo(() => {
+    return operationalEvidenceSignals.map((signal) => {
+      const hasCategory = signal.categories.some((category) => (documentCounts[category] ?? 0) > 0);
+      const hasKeyword = signal.keywords.some((keyword) => documentSearchText.includes(keyword.toLowerCase()));
+      return {
+        ...signal,
+        covered: hasCategory && hasKeyword,
+      };
+    });
+  }, [documentCounts, documentSearchText]);
+
   const missingEvidenceCount = evidencePackItems.filter((item) => !documentCounts[item.category]).length;
+  const missingSignalCount = signalCoverage.filter((item) => !item.covered).length;
 
   return (
     <div className="space-y-8">
@@ -242,6 +272,35 @@ export default function DocumentsPage() {
             );
           })}
         </div>
+        <div className="mt-5 border-t border-gray-200 pt-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Operational register signals</h3>
+              <p className="mt-0.5 text-xs leading-5 text-gray-500">
+                These checks look for named registers and policies in document titles or descriptions, so name uploads plainly.
+              </p>
+            </div>
+            <Chip size="sm" color={missingSignalCount === 0 ? 'success' : 'warning'} variant="flat">
+              {missingSignalCount === 0 ? 'Signals covered' : `${missingSignalCount} signals missing`}
+            </Chip>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {signalCoverage.map((item) => (
+              <div key={item.title} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                    <p className="mt-1 text-xs text-gray-500">{item.why}</p>
+                    <p className="mt-1 text-xs text-teal-primary">Standards {item.standards}</p>
+                  </div>
+                  <Chip size="sm" color={item.covered ? 'success' : 'default'} variant="flat">
+                    {item.covered ? 'Found' : 'Needed'}
+                  </Chip>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Documents table */}
@@ -273,6 +332,7 @@ export default function DocumentsPage() {
             <TableHeader>
               <TableColumn>NAME</TableColumn>
               <TableColumn>CATEGORY</TableColumn>
+              <TableColumn className="hidden lg:table-cell">REVIEW</TableColumn>
               <TableColumn className="hidden md:table-cell">LINKED STANDARDS</TableColumn>
               <TableColumn className="hidden sm:table-cell">DATE</TableColumn>
               <TableColumn>ACTIONS</TableColumn>
@@ -299,6 +359,20 @@ export default function DocumentsPage() {
                     <Chip size="sm" variant="flat">
                       {DOCUMENT_CATEGORY_LABELS[doc.category] ?? doc.category}
                     </Chip>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <div className="text-xs text-gray-500">
+                      <p>{doc.owner ? `Owner: ${doc.owner}` : 'No owner'}</p>
+                      <p>
+                        {doc.nextReviewDate
+                          ? `Review: ${new Date(doc.nextReviewDate).toLocaleDateString('en-IE', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })}`
+                          : 'No review date'}
+                      </p>
+                    </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <div className="flex flex-wrap gap-1">
@@ -395,6 +469,32 @@ export default function DocumentsPage() {
                   onValueChange={setUploadDescription}
                   minRows={2}
                 />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Owner"
+                    placeholder="e.g. Secretary, Treasurer, Chair"
+                    value={uploadOwner}
+                    onValueChange={setUploadOwner}
+                  />
+                  <Input
+                    label="Board minute reference"
+                    placeholder="e.g. Board minutes 24 Oct, item 5"
+                    value={uploadMinuteReference}
+                    onValueChange={setUploadMinuteReference}
+                  />
+                  <Input
+                    label="Approved date"
+                    type="date"
+                    value={uploadApprovedDate}
+                    onValueChange={setUploadApprovedDate}
+                  />
+                  <Input
+                    label="Next review date"
+                    type="date"
+                    value={uploadNextReviewDate}
+                    onValueChange={setUploadNextReviewDate}
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     File

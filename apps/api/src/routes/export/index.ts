@@ -19,16 +19,34 @@ export async function exportRoutes(app: FastifyInstance) {
         where: { id: request.user.organisationId },
       });
 
-      const principles = await complianceService.getAllPrinciplesWithStandards();
+      const principles = await complianceService.getPrinciples(org.complexity);
       const records = await complianceService.getRecords(request.user.organisationId, year);
+      const signoff = await complianceService.getSignoff(request.user.organisationId, year);
+      const [conflicts, risks, complaints, fundraising, annualReport, financialControls] = await Promise.all([
+        app.prisma.conflictRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { dateDeclared: 'desc' } }),
+        app.prisma.riskRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { updatedAt: 'desc' } }),
+        app.prisma.complaintRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { receivedDate: 'desc' } }),
+        app.prisma.fundraisingRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { updatedAt: 'desc' } }),
+        app.prisma.annualReportReadiness.findUnique({ where: { organisationId_reportingYear: { organisationId: request.user.organisationId, reportingYear: year } } }),
+        app.prisma.financialControlReview.findUnique({ where: { organisationId_reportingYear: { organisationId: request.user.organisationId, reportingYear: year } } }),
+      ]);
       const recordMap = new Map(records.map((r) => [r.standardId, r]));
 
-      // Build HTML for PDF generation
-      const html = buildComplianceReportHtml(org, principles, recordMap, year);
+      // Build a printable HTML report that the browser can save as PDF.
+      const html = buildComplianceReportHtml(
+        org,
+        principles,
+        recordMap,
+        signoff,
+        { conflicts, risks, complaints, fundraising, annualReport, financialControls },
+        year,
+      );
 
-      // For MVP, return HTML that can be printed to PDF from browser
-      // TODO: Use puppeteer or @react-pdf/renderer for server-side PDF generation
       reply.header('Content-Type', 'text/html');
+      reply.header(
+        'Content-Disposition',
+        `inline; filename="charitypilot-compliance-report-${year}.html"`,
+      );
       return html;
     } catch (err) {
       if (err instanceof ZodError) {
@@ -53,6 +71,44 @@ function buildComplianceReportHtml(
     standards: Array<{ id: string; code: string; title: string; isCore: boolean }>;
   }>,
   recordMap: Map<string, { status: string; actionTaken: string | null; evidence: string | null; explanationIfNA: string | null }>,
+  signoff: {
+    status: string;
+    boardMeetingDate: string | null;
+    minuteReference: string | null;
+    approvedByName: string | null;
+    approvedByRole: string | null;
+    approvalNotes: string | null;
+    approvedAt: string | null;
+  },
+  registers: {
+    conflicts: Array<{ trusteeName: string; matter: string; status: string; dateDeclared: Date; actionTaken: string; minuteReference: string | null }>;
+    risks: Array<{ title: string; category: string; likelihood: number; impact: number; mitigation: string; status: string; owner: string | null; reviewDate: Date | null }>;
+    complaints: Array<{ receivedDate: Date; summary: string; status: string; reviewedByBoard: boolean; outcome: string | null }>;
+    fundraising: Array<{ name: string; activityType: string; status: string; controls: string | null; complaintsReceived: boolean }>;
+    annualReport: null | {
+      filingStatus: string;
+      financialStatementsApproved: boolean;
+      annualReportUploaded: boolean;
+      trusteeDetailsReviewed: boolean;
+      fundraisingReviewed: boolean;
+      complaintsReviewed: boolean;
+      boardApprovalDate: Date | null;
+      filedDate: Date | null;
+    };
+    financialControls: null | {
+      bankReconciliationsReviewed: boolean;
+      dualAuthorisation: boolean;
+      budgetApproved: boolean;
+      managementAccountsReviewed: boolean;
+      reservesReviewed: boolean;
+      restrictedFundsReviewed: boolean;
+      assetsInsuranceReviewed: boolean;
+      payrollControlsReviewed: boolean;
+      fundraisingControlsReviewed: boolean;
+      reviewDate: Date | null;
+      minuteReference: string | null;
+    };
+  },
   year: number,
 ): string {
   const standardRows = principles
@@ -88,6 +144,94 @@ function buildComplianceReportHtml(
     )
     .join('');
 
+  const governanceRegisterRows = `
+      <h2>Governance registers</h2>
+      <h3>Conflicts of interest</h3>
+      ${simpleTable(
+        ['Trustee', 'Matter', 'Status', 'Declared', 'Action taken', 'Minute'],
+        registers.conflicts.map((item) => [
+          item.trusteeName,
+          item.matter,
+          item.status,
+          formatDate(item.dateDeclared.toISOString()),
+          item.actionTaken,
+          item.minuteReference ?? '',
+        ]),
+      )}
+      <h3>Risk register</h3>
+      ${simpleTable(
+        ['Risk', 'Category', 'Score', 'Status', 'Owner', 'Mitigation'],
+        registers.risks.map((item) => [
+          item.title,
+          item.category,
+          String(item.likelihood * item.impact),
+          item.status,
+          item.owner ?? '',
+          item.mitigation,
+        ]),
+      )}
+      <h3>Complaints</h3>
+      ${simpleTable(
+        ['Received', 'Summary', 'Status', 'Board review', 'Outcome'],
+        registers.complaints.map((item) => [
+          formatDate(item.receivedDate.toISOString()),
+          item.summary,
+          item.status,
+          item.reviewedByBoard ? 'Yes' : 'No',
+          item.outcome ?? '',
+        ]),
+      )}
+      <h3>Fundraising</h3>
+      ${simpleTable(
+        ['Activity', 'Type', 'Status', 'Complaints', 'Controls'],
+        registers.fundraising.map((item) => [
+          item.name,
+          item.activityType,
+          item.status,
+          item.complaintsReceived ? 'Yes' : 'No',
+          item.controls ?? '',
+        ]),
+      )}
+      <h3>Annual Report and financial controls</h3>
+      ${simpleTable(
+        ['Area', 'Current position'],
+        [
+          ['Annual Report filing status', registers.annualReport?.filingStatus ?? 'Not started'],
+          ['Financial statements approved', yesNo(registers.annualReport?.financialStatementsApproved)],
+          ['Annual Report uploaded', yesNo(registers.annualReport?.annualReportUploaded)],
+          ['Trustee details reviewed', yesNo(registers.annualReport?.trusteeDetailsReviewed)],
+          ['Financial controls review date', registers.financialControls?.reviewDate ? formatDate(registers.financialControls.reviewDate.toISOString()) : 'Not recorded'],
+          ['Financial controls minute reference', registers.financialControls?.minuteReference ?? 'Not recorded'],
+          ['Bank reconciliations reviewed', yesNo(registers.financialControls?.bankReconciliationsReviewed)],
+          ['Dual authorisation in place', yesNo(registers.financialControls?.dualAuthorisation)],
+          ['Budget approved', yesNo(registers.financialControls?.budgetApproved)],
+          ['Management accounts reviewed', yesNo(registers.financialControls?.managementAccountsReviewed)],
+        ],
+      )}`;
+
+  const signoffLabel =
+    signoff.status === 'APPROVED'
+      ? 'Approved'
+      : signoff.status === 'BOARD_REVIEW'
+        ? 'Ready for board review'
+        : 'Draft';
+
+  const signoffHtml =
+    signoff.status === 'APPROVED'
+      ? `
+        <p><strong>Status:</strong> ${signoffLabel}</p>
+        <p><strong>Approved at Board Meeting on:</strong> ${formatDate(signoff.boardMeetingDate)}</p>
+        <p><strong>Board minute reference:</strong> ${escapeHtml(signoff.minuteReference ?? '')}</p>
+        <p><strong>Approved by:</strong> ${escapeHtml(signoff.approvedByName ?? '')}${signoff.approvedByRole ? ', ' + escapeHtml(signoff.approvedByRole) : ''}</p>
+        <p><strong>Recorded in CharityPilot on:</strong> ${formatDate(signoff.approvedAt)}</p>
+        ${signoff.approvalNotes ? `<p><strong>Approval notes:</strong> ${escapeHtml(signoff.approvalNotes)}</p>` : ''}`
+      : `
+        <p><strong>Status:</strong> ${signoffLabel}</p>
+        <p><strong>Approved at Board Meeting on:</strong> ____________________</p>
+        <p><strong>Board minute reference:</strong> ____________________</p>
+        <p><strong>Signed by Chairperson:</strong> ____________________</p>
+        <p><strong>Date:</strong> ____________________</p>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -114,10 +258,11 @@ function buildComplianceReportHtml(
     <p><strong>Date Generated:</strong> ${new Date().toLocaleDateString('en-IE')}</p>
   </div>
   ${standardRows}
+  ${governanceRegisterRows}
   <div style="margin-top: 48px; border-top: 2px solid #0D7377; padding-top: 16px;">
-    <p><strong>Approved at Board Meeting on:</strong> ____________________</p>
-    <p><strong>Signed by Chairperson:</strong> ____________________</p>
-    <p><strong>Date:</strong> ____________________</p>
+    <h2>Board approval</h2>
+    <p style="font-size: 13px; color: #4b5563;">The Charities Governance Code says the Compliance Record Form should be approved at a board meeting before reporting compliance to the Charities Regulator.</p>
+    ${signoffHtml}
   </div>
   <footer style="margin-top: 32px; font-size: 11px; color: #6b7280;">
     Generated by CharityPilot.ie — Charity governance made simple.
@@ -132,4 +277,30 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString('en-IE');
+}
+
+function yesNo(value: boolean | null | undefined): string {
+  return value ? 'Yes' : 'No';
+}
+
+function simpleTable(headers: string[], rows: string[][]): string {
+  if (!rows.length) {
+    return '<p style="font-size: 13px; color: #6b7280;">No records captured.</p>';
+  }
+
+  return `<table>
+    <thead>
+      <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+    </thead>
+    <tbody>
+      ${rows
+        .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`)
+        .join('')}
+    </tbody>
+  </table>`;
 }

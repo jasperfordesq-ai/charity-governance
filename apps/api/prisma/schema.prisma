@@ -34,6 +34,12 @@ enum ComplianceStatus {
   EXPLAIN
 }
 
+enum ComplianceSignoffStatus {
+  DRAFT
+  BOARD_REVIEW
+  APPROVED
+}
+
 enum SubscriptionPlan {
   ESSENTIALS
   COMPLETE
@@ -60,10 +66,47 @@ enum DocumentCategory {
   OTHER
 }
 
+enum RegisterStatus {
+  OPEN
+  MONITORING
+  CLOSED
+}
+
+enum ConflictStatus {
+  DECLARED
+  MANAGED
+  CLOSED
+}
+
+enum RiskCategory {
+  GOVERNANCE
+  FINANCIAL
+  OPERATIONAL
+  LEGAL
+  SAFEGUARDING
+  REPUTATIONAL
+  FUNDRAISING
+  DATA_PROTECTION
+  OTHER
+}
+
+enum AnnualReportFilingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BOARD_APPROVED
+  FILED
+}
+
 enum UserRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+enum DeadlineReminderStatus {
+  SENT
+  SKIPPED
+  FAILED
 }
 
 model Organisation {
@@ -84,12 +127,21 @@ model Organisation {
 
   stripeCustomerId String? @unique
 
-  users             User[]
-  boardMembers      BoardMember[]
-  complianceRecords ComplianceRecord[]
-  documents         Document[]
-  deadlines         Deadline[]
-  subscription      Subscription?
+  users                   User[]
+  boardMembers            BoardMember[]
+  complianceRecords       ComplianceRecord[]
+  complianceSignoffs      ComplianceSignoff[]
+  documents               Document[]
+  deadlines               Deadline[]
+  conflictRecords         ConflictRecord[]
+  riskRecords             RiskRecord[]
+  complaintRecords        ComplaintRecord[]
+  fundraisingRecords      FundraisingRecord[]
+  annualReportReadiness   AnnualReportReadiness[]
+  financialControlReviews FinancialControlReview[]
+  teamInvites             TeamInvite[]
+  deadlineReminderLogs    DeadlineReminderLog[]
+  subscription            Subscription?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -105,13 +157,16 @@ model User {
   organisation   Organisation @relation(fields: [organisationId], references: [id])
   emailVerified  Boolean      @default(false)
 
-  resetToken       String?   @unique
-  resetTokenExpiry DateTime?
-  verifyToken      String?   @unique
+  resetToken        String?   @unique
+  resetTokenExpiry  DateTime?
+  verifyToken       String?   @unique
   verifyTokenExpiry DateTime?
 
-  complianceUpdates ComplianceRecord[] @relation("UpdatedBy")
-  documentUploads   Document[]         @relation("UploadedBy")
+  complianceUpdates ComplianceRecord[]  @relation("UpdatedBy")
+  signoffUpdates    ComplianceSignoff[] @relation("SignoffUpdatedBy")
+  documentUploads   Document[]          @relation("UploadedBy")
+  sentInvites       TeamInvite[]        @relation("InvitedBy")
+  reminderLogs      DeadlineReminderLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -146,9 +201,9 @@ model GovernanceStandard {
 }
 
 model ComplianceRecord {
-  id             String           @id @default(cuid())
+  id             String             @id @default(cuid())
   organisationId String
-  organisation   Organisation     @relation(fields: [organisationId], references: [id])
+  organisation   Organisation       @relation(fields: [organisationId], references: [id])
   standardId     String
   standard       GovernanceStandard @relation(fields: [standardId], references: [id])
   reportingYear  Int
@@ -160,7 +215,7 @@ model ComplianceRecord {
   explanationIfNA String?
 
   updatedById String?
-  updatedBy   User?  @relation("UpdatedBy", fields: [updatedById], references: [id])
+  updatedBy   User?   @relation("UpdatedBy", fields: [updatedById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -169,20 +224,44 @@ model ComplianceRecord {
   @@index([organisationId, reportingYear])
 }
 
+model ComplianceSignoff {
+  id               String                  @id @default(cuid())
+  organisationId   String
+  organisation     Organisation            @relation(fields: [organisationId], references: [id])
+  reportingYear    Int
+  status           ComplianceSignoffStatus @default(DRAFT)
+  boardMeetingDate DateTime?
+  minuteReference  String?
+  approvedByName   String?
+  approvedByRole   String?
+  approvalNotes    String?
+  approvedAt       DateTime?
+
+  updatedById String?
+  updatedBy   User?   @relation("SignoffUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organisationId, reportingYear])
+  @@index([organisationId, reportingYear])
+}
+
 model BoardMember {
-  id                 String       @id @default(cuid())
+  id                 String           @id @default(cuid())
   organisationId     String
-  organisation       Organisation @relation(fields: [organisationId], references: [id])
+  organisation       Organisation     @relation(fields: [organisationId], references: [id])
   name               String
   role               String
   email              String?
   appointedDate      DateTime
   termEndDate        DateTime?
-  isActive           Boolean      @default(true)
-  conductSigned      Boolean      @default(false)
+  isActive           Boolean          @default(true)
+  conductSigned      Boolean          @default(false)
   conductSignedDate  DateTime?
-  inductionCompleted Boolean      @default(false)
+  inductionCompleted Boolean          @default(false)
   inductionDate      DateTime?
+  conflictRecords    ConflictRecord[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -191,19 +270,23 @@ model BoardMember {
 }
 
 model Document {
-  id             String           @id @default(cuid())
-  organisationId String
-  organisation   Organisation     @relation(fields: [organisationId], references: [id])
-  name           String
-  description    String?
-  category       DocumentCategory
-  fileUrl        String
-  fileSize       Int
-  mimeType       String
-  version        Int              @default(1)
+  id                   String           @id @default(cuid())
+  organisationId       String
+  organisation         Organisation     @relation(fields: [organisationId], references: [id])
+  name                 String
+  description          String?
+  category             DocumentCategory
+  fileUrl              String
+  fileSize             Int
+  mimeType             String
+  version              Int              @default(1)
+  owner                String?
+  approvedDate         DateTime?
+  nextReviewDate       DateTime?
+  boardMinuteReference String?
 
   uploadedById String?
-  uploadedBy   User?  @relation("UploadedBy", fields: [uploadedById], references: [id])
+  uploadedBy   User?   @relation("UploadedBy", fields: [uploadedById], references: [id])
 
   standardLinks DocumentStandardLink[]
 
@@ -223,6 +306,143 @@ model DocumentStandardLink {
   @@unique([documentId, standardId])
 }
 
+model ConflictRecord {
+  id              String         @id @default(cuid())
+  organisationId  String
+  organisation    Organisation   @relation(fields: [organisationId], references: [id])
+  boardMemberId   String?
+  boardMember     BoardMember?   @relation(fields: [boardMemberId], references: [id], onDelete: SetNull)
+  trusteeName     String
+  matter          String
+  nature          String
+  dateDeclared    DateTime
+  meetingDate     DateTime?
+  actionTaken     String
+  decision        String?
+  status          ConflictStatus @default(DECLARED)
+  minuteReference String?
+  nextReviewDate  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+  @@index([boardMemberId])
+}
+
+model RiskRecord {
+  id                   String         @id @default(cuid())
+  organisationId       String
+  organisation         Organisation   @relation(fields: [organisationId], references: [id])
+  title                String
+  category             RiskCategory
+  description          String
+  likelihood           Int
+  impact               Int
+  mitigation           String
+  owner                String?
+  reviewDate           DateTime?
+  status               RegisterStatus @default(OPEN)
+  boardMinuteReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model ComplaintRecord {
+  id                   String         @id @default(cuid())
+  organisationId       String
+  organisation         Organisation   @relation(fields: [organisationId], references: [id])
+  receivedDate         DateTime
+  source               String?
+  summary              String
+  actionTaken          String?
+  outcome              String?
+  status               RegisterStatus @default(OPEN)
+  reviewedByBoard      Boolean        @default(false)
+  boardMinuteReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model FundraisingRecord {
+  id                   String         @id @default(cuid())
+  organisationId       String
+  organisation         Organisation   @relation(fields: [organisationId], references: [id])
+  name                 String
+  activityType         String
+  startDate            DateTime?
+  endDate              DateTime?
+  publicFacing         Boolean        @default(true)
+  thirdPartyFundraiser String?
+  controls             String?
+  complaintsReceived   Boolean        @default(false)
+  reviewOutcome        String?
+  status               RegisterStatus @default(OPEN)
+  boardMinuteReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+}
+
+model AnnualReportReadiness {
+  id                          String                   @id @default(cuid())
+  organisationId              String
+  organisation                Organisation             @relation(fields: [organisationId], references: [id])
+  reportingYear               Int
+  activitiesNarrative         String?
+  publicBenefitStatement      String?
+  beneficiariesSummary        String?
+  financialStatementsApproved Boolean                  @default(false)
+  annualReportUploaded        Boolean                  @default(false)
+  trusteeDetailsReviewed      Boolean                  @default(false)
+  fundraisingReviewed         Boolean                  @default(false)
+  complaintsReviewed          Boolean                  @default(false)
+  boardApprovalDate           DateTime?
+  filingStatus                AnnualReportFilingStatus @default(NOT_STARTED)
+  filedDate                   DateTime?
+  notes                       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organisationId, reportingYear])
+  @@index([organisationId, reportingYear])
+}
+
+model FinancialControlReview {
+  id                          String       @id @default(cuid())
+  organisationId              String
+  organisation                Organisation @relation(fields: [organisationId], references: [id])
+  reportingYear               Int
+  bankReconciliationsReviewed Boolean      @default(false)
+  dualAuthorisation           Boolean      @default(false)
+  budgetApproved              Boolean      @default(false)
+  managementAccountsReviewed  Boolean      @default(false)
+  reservesReviewed            Boolean      @default(false)
+  restrictedFundsReviewed     Boolean      @default(false)
+  assetsInsuranceReviewed     Boolean      @default(false)
+  payrollControlsReviewed     Boolean      @default(false)
+  fundraisingControlsReviewed Boolean      @default(false)
+  reviewedBy                  String?
+  reviewDate                  DateTime?
+  minuteReference             String?
+  actions                     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organisationId, reportingYear])
+  @@index([organisationId, reportingYear])
+}
+
 model Deadline {
   id              String       @id @default(cuid())
   organisationId  String
@@ -234,11 +454,51 @@ model Deadline {
   isComplete      Boolean      @default(false)
   completedDate   DateTime?
   reminderDays    Int[]        @default([30, 14, 7])
+  reminderLogs    DeadlineReminderLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+}
+
+model TeamInvite {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  email          String
+  role           UserRole     @default(MEMBER)
+  token          String       @unique
+  invitedById    String?
+  invitedBy      User?        @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  expiresAt      DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+  @@index([email])
+}
+
+model DeadlineReminderLog {
+  id             String                 @id @default(cuid())
+  organisationId String
+  organisation   Organisation           @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  deadlineId     String
+  deadline       Deadline               @relation(fields: [deadlineId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email          String
+  reminderDays   Int
+  status         DeadlineReminderStatus
+  error          String?
+  sentAt         DateTime               @default(now())
+
+  @@unique([deadlineId, email, reminderDays])
+  @@index([organisationId])
+  @@index([userId])
 }
 
 model Subscription {

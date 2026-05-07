@@ -16,7 +16,7 @@ const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY ?? '7d';
 export interface TokenPayload {
   userId: string;
   organisationId: string;
-  role: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
 }
 
 export function signAccessToken(payload: TokenPayload): string {

@@ -1,12 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import { AppError } from '../utils/errors.js';
+import { isConfiguredSecret } from '../utils/env.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL ?? '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
-);
+function getBucketName(): string {
+  return process.env.SUPABASE_STORAGE_BUCKET ?? 'documents';
+}
 
-const BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? 'documents';
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!isConfiguredSecret(url) || !isConfiguredSecret(serviceRoleKey)) {
+    throw new AppError(503, 'STORAGE_NOT_CONFIGURED', 'Supabase storage is not configured');
+  }
+
+  return createClient(url, serviceRoleKey);
+}
 
 function sanitiseFilename(filename: string): string {
   return filename
@@ -17,6 +26,25 @@ function sanitiseFilename(filename: string): string {
 }
 
 export class StorageService {
+  isConfigured(): boolean {
+    return (
+      isConfiguredSecret(process.env.SUPABASE_URL) &&
+      isConfiguredSecret(process.env.SUPABASE_SERVICE_ROLE_KEY) &&
+      isConfiguredSecret(process.env.SUPABASE_STORAGE_BUCKET)
+    );
+  }
+
+  async verifyBucket(): Promise<boolean> {
+    if (!this.isConfigured()) return false;
+
+    try {
+      const { data, error } = await getSupabaseClient().storage.getBucket(getBucketName());
+      return !error && Boolean(data);
+    } catch {
+      return false;
+    }
+  }
+
   async uploadFile(
     organisationId: string,
     filename: string,
@@ -25,24 +53,25 @@ export class StorageService {
   ): Promise<{ fileUrl: string; storagePath: string }> {
     const sanitised = sanitiseFilename(filename);
     const storagePath = `${organisationId}/${Date.now()}-${sanitised}`;
+    const supabase = getSupabaseClient();
 
     const { error } = await supabase.storage
-      .from(BUCKET)
+      .from(getBucketName())
       .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
 
     if (error) {
       throw new AppError(500, 'STORAGE_UPLOAD_FAILED', `Failed to upload file: ${error.message}`);
     }
 
-    const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+    const { data: publicData } = supabase.storage.from(getBucketName()).getPublicUrl(storagePath);
     const fileUrl = publicData.publicUrl;
 
     return { fileUrl, storagePath };
   }
 
   async getSignedUrl(storagePath: string, expiresIn: number = 3600): Promise<string> {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
+    const { data, error } = await getSupabaseClient().storage
+      .from(getBucketName())
       .createSignedUrl(storagePath, expiresIn);
 
     if (error || !data?.signedUrl) {
@@ -53,7 +82,7 @@ export class StorageService {
   }
 
   async deleteFile(storagePath: string): Promise<void> {
-    const { error } = await supabase.storage.from(BUCKET).remove([storagePath]);
+    const { error } = await getSupabaseClient().storage.from(getBucketName()).remove([storagePath]);
 
     if (error) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', `Failed to delete file: ${error.message}`);

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { UpdateOrganisationRequest } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
+import { DeadlineService } from './deadline.service.js';
 
 export class OrganisationService {
   constructor(private prisma: PrismaClient) {}
@@ -27,6 +28,10 @@ export class OrganisationService {
         lastAgmDate: data.lastAgmDate ? new Date(data.lastAgmDate) : data.lastAgmDate,
       },
     });
+
+    if (data.financialYearEnd !== undefined || data.lastAgmDate !== undefined) {
+      await new DeadlineService(this.prisma).generateAutoDeadlines(organisationId);
+    }
 
     return org;
   }
