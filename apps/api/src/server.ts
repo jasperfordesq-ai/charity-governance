@@ -145,3 +145,23 @@ try {
   app.log.error(err);
   process.exit(1);
 }
+
+let isShuttingDown = false;
+
+async function shutdown(signal: NodeJS.Signals) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  app.log.info({ signal }, 'Shutting down CharityPilot API');
+
+  try {
+    await app.close();
+    process.exit(0);
+  } catch (err) {
+    app.log.error(err, 'Graceful shutdown failed');
+    process.exit(1);
+  }
+}
+
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);
