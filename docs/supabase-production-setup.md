@@ -69,6 +69,7 @@ Expected when storage is ready:
 ```json
 {
   "status": "ready",
+  "timestamp": "2026-06-06T12:00:00.000Z",
   "checks": {
     "database": true,
     "billingConfigured": true,
@@ -87,8 +88,23 @@ If the production API uses a different hostname, run the same path on that hostn
 - [ ] Upload a small non-sensitive test document.
 - [ ] Confirm the upload succeeds without exposing the raw bucket path publicly.
 - [ ] Download the document through the app.
-- [ ] Confirm the downloaded URL is a signed URL and expires.
+- [ ] Confirm the downloaded URL is a signed URL and expires after the storage service default of about 1 hour / 3600 seconds.
 - [ ] Delete the test document if the flow creates production data that should not remain.
+
+Executable expiry check:
+
+```bash
+SIGNED_URL="<redacted signed URL>"
+curl -I "$SIGNED_URL"
+sleep 3700
+curl -I "$SIGNED_URL"
+```
+
+Expected: the first request succeeds, and the second request fails because the signed URL has expired.
+
+Evidence safety:
+
+Do not store full signed URLs, signed query tokens, raw bucket object paths, or private document contents in evidence systems. Record only redacted evidence such as the route tested, timestamp, expiry result, cleanup status, and non-sensitive test document metadata.
 
 Evidence:
 
