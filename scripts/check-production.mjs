@@ -35,9 +35,9 @@ const REQUIRED = [
   'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
 ];
 
-function parseEnvFile(path) {
-  if (!existsSync(path)) return {};
+const ENV_FILE_FLAG = '--production-env-file=';
 
+function parseEnvFile(path) {
   return Object.fromEntries(
     readFileSync(path, 'utf8')
       .split(/\r?\n/)
@@ -77,8 +77,14 @@ function requireUrl(env, key, issues) {
   }
 }
 
-const envFileArg = process.argv.find((arg) => arg.startsWith('--env-file='));
-const envFile = envFileArg ? envFileArg.slice('--env-file='.length) : '.env.production';
+const envFileArg = process.argv.find((arg) => arg.startsWith(ENV_FILE_FLAG));
+const envFile = envFileArg ? envFileArg.slice(ENV_FILE_FLAG.length) : '.env.production';
+
+if (!existsSync(envFile)) {
+  console.error(`Production preflight failed: environment file not found: ${envFile}`);
+  process.exit(1);
+}
+
 const env = parseEnvFile(envFile);
 const issues = [];
 

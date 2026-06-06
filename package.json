@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "test": "turbo test",
+    "test": "turbo test && npm run test:production-check",
+    "test:production-check": "node --test scripts/check-production.test.mjs",
     "lint": "turbo lint",
     "check:production": "node scripts/check-production.mjs",
     "clean": "turbo clean",
