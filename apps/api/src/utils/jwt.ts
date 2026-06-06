@@ -15,6 +15,7 @@ export interface TokenPayload {
   userId: string;
   organisationId: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  sessionId: string;
 }
 
 export function signAccessToken(payload: TokenPayload): string {
@@ -22,5 +23,26 @@ export function signAccessToken(payload: TokenPayload): string {
 }
 
 export function verifyAccessToken(token: string): TokenPayload {
-  return jwt.verify(token, JWT_SECRET) as TokenPayload;
+  const decoded = jwt.verify(token, JWT_SECRET);
+
+  if (!decoded || typeof decoded !== 'object') {
+    throw new Error('Invalid token payload');
+  }
+
+  const payload = decoded as Partial<TokenPayload>;
+  if (
+    typeof payload.userId !== 'string' ||
+    typeof payload.organisationId !== 'string' ||
+    typeof payload.sessionId !== 'string' ||
+    !['OWNER', 'ADMIN', 'MEMBER'].includes(payload.role ?? '')
+  ) {
+    throw new Error('Invalid token payload');
+  }
+
+  return {
+    userId: payload.userId,
+    organisationId: payload.organisationId,
+    role: payload.role as TokenPayload['role'],
+    sessionId: payload.sessionId,
+  };
 }

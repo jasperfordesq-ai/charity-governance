@@ -4,13 +4,28 @@ import { isConfiguredSecret } from '../utils/env.js';
 const BRAND_TEAL = '#0D7377';
 const BRAND_TEAL_LIGHT = '#e6f4f5';
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildTokenUrl(frontendUrl: string, path: string, token: string): string {
+  const url = new URL(path, frontendUrl);
+  url.searchParams.set('token', token);
+  return url.toString();
+}
+
 function emailLayout(title: string, bodyHtml: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f6f8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f6f8;">
@@ -48,11 +63,11 @@ function emailLayout(title: string, bodyHtml: string): string {
 }
 
 function primaryButton(href: string, label: string): string {
-  return `<a href="${href}" style="display:inline-block;background-color:${BRAND_TEAL};color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:6px;margin-top:8px;">${label}</a>`;
+  return `<a href="${escapeHtml(href)}" style="display:inline-block;background-color:${BRAND_TEAL};color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:6px;margin-top:8px;">${escapeHtml(label)}</a>`;
 }
 
 function h2(text: string): string {
-  return `<h2 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">${text}</h2>`;
+  return `<h2 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">${escapeHtml(text)}</h2>`;
 }
 
 function paragraph(text: string): string {
@@ -60,7 +75,7 @@ function paragraph(text: string): string {
 }
 
 function smallNote(text: string): string {
-  return `<p style="margin:24px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">${text}</p>`;
+  return `<p style="margin:24px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">${escapeHtml(text)}</p>`;
 }
 
 export class EmailService {
@@ -80,10 +95,11 @@ export class EmailService {
 
   async sendWelcomeEmail(to: string, name: string, orgName: string): Promise<boolean> {
     const subject = `Welcome to CharityPilot, ${name}!`;
+    const safeOrgName = escapeHtml(orgName);
 
     const body = `
       ${h2(`Welcome aboard, ${name}!`)}
-      ${paragraph(`Thank you for registering <strong>${orgName}</strong> on CharityPilot. We're delighted to have you.`)}
+      ${paragraph(`Thank you for registering <strong>${safeOrgName}</strong> on CharityPilot. We're delighted to have you.`)}
       ${paragraph(`Your <strong>14-day free trial</strong> has started. During your trial you have full access to all features — compliance tracking, deadline management, document storage, and more.`)}
       <table role="presentation" style="background-color:${BRAND_TEAL_LIGHT};border-left:4px solid ${BRAND_TEAL};border-radius:4px;padding:16px 20px;margin:24px 0;width:100%;box-sizing:border-box;">
         <tr>
@@ -107,7 +123,7 @@ export class EmailService {
   }
 
   async sendEmailVerification(to: string, name: string, token: string): Promise<boolean> {
-    const verifyUrl = `${this.frontendUrl}/verify-email?token=${token}`;
+    const verifyUrl = buildTokenUrl(this.frontendUrl, '/verify-email', token);
     const subject = 'Verify your CharityPilot email address';
 
     const body = `
@@ -116,8 +132,6 @@ export class EmailService {
       <div style="text-align:center;margin:32px 0;">
         ${primaryButton(verifyUrl, 'Verify Email Address')}
       </div>
-      ${paragraph(`Or paste this link into your browser:`)}
-      <p style="word-break:break-all;background-color:${BRAND_TEAL_LIGHT};padding:12px 16px;border-radius:4px;font-size:13px;color:#0a5c60;margin:0 0 16px;">${verifyUrl}</p>
       ${smallNote(`This link expires in 24 hours. If you did not create a CharityPilot account, you can safely ignore this email.`)}
     `;
 
@@ -125,17 +139,15 @@ export class EmailService {
   }
 
   async sendPasswordReset(to: string, name: string, token: string): Promise<boolean> {
-    const resetUrl = `${this.frontendUrl}/reset-password?token=${token}`;
+    const resetUrl = buildTokenUrl(this.frontendUrl, '/reset-password', token);
     const subject = 'Reset your CharityPilot password';
 
     const body = `
       ${h2(`Password reset request`)}
-      ${paragraph(`Hi ${name}, we received a request to reset the password for your CharityPilot account.`)}
+      ${paragraph(`Hi ${escapeHtml(name)}, we received a request to reset the password for your CharityPilot account.`)}
       <div style="text-align:center;margin:32px 0;">
         ${primaryButton(resetUrl, 'Reset Password')}
       </div>
-      ${paragraph(`Or paste this link into your browser:`)}
-      <p style="word-break:break-all;background-color:${BRAND_TEAL_LIGHT};padding:12px 16px;border-radius:4px;font-size:13px;color:#0a5c60;margin:0 0 16px;">${resetUrl}</p>
       ${smallNote(`This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email — your password will not change.`)}
     `;
 
@@ -149,18 +161,19 @@ export class EmailService {
     token: string,
     role: string,
   ): Promise<boolean> {
-    const inviteUrl = `${this.frontendUrl}/accept-invite?token=${token}`;
+    const inviteUrl = buildTokenUrl(this.frontendUrl, '/accept-invite', token);
     const subject = `${invitedByName} invited you to CharityPilot`;
+    const safeInvitedByName = escapeHtml(invitedByName);
+    const safeOrgName = escapeHtml(orgName);
+    const safeRole = escapeHtml(role.toLowerCase());
 
     const body = `
       ${h2(`Join ${orgName} on CharityPilot`)}
-      ${paragraph(`<strong>${invitedByName}</strong> has invited you to help manage ${orgName}'s governance workspace as a <strong>${role.toLowerCase()}</strong>.`)}
+      ${paragraph(`<strong>${safeInvitedByName}</strong> has invited you to help manage ${safeOrgName}'s governance workspace as a <strong>${safeRole}</strong>.`)}
       ${paragraph(`Use the secure invite link below to create your account and access the charity's compliance records, board evidence, deadlines, and governance registers.`)}
       <div style="text-align:center;margin:32px 0;">
         ${primaryButton(inviteUrl, 'Accept Invite')}
       </div>
-      ${paragraph(`Or paste this link into your browser:`)}
-      <p style="word-break:break-all;background-color:${BRAND_TEAL_LIGHT};padding:12px 16px;border-radius:4px;font-size:13px;color:#0a5c60;margin:0 0 16px;">${inviteUrl}</p>
       ${smallNote(`This invite expires in 7 days. If you were not expecting this invitation, you can safely ignore it.`)}
     `;
 
@@ -187,16 +200,19 @@ export class EmailService {
 
     const dayWord = daysUntilDue === 1 ? 'day' : 'days';
     const subject = `[${urgencyLabel}] Deadline in ${daysUntilDue} ${dayWord}: ${title}`;
+    const safeOrgName = escapeHtml(orgName);
+    const safeTitle = escapeHtml(title);
+    const safeFormattedDate = escapeHtml(formattedDate);
 
     const body = `
       ${h2(`Governance deadline approaching`)}
-      ${paragraph(`This is a reminder for <strong>${orgName}</strong>. You have an upcoming deadline that requires your attention.`)}
+      ${paragraph(`This is a reminder for <strong>${safeOrgName}</strong>. You have an upcoming deadline that requires your attention.`)}
       <table role="presentation" style="width:100%;background-color:${BRAND_TEAL_LIGHT};border-left:4px solid ${urgencyColour};border-radius:4px;padding:20px 24px;margin:24px 0;box-sizing:border-box;">
         <tr>
           <td>
             <p style="margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:${urgencyColour};">${urgencyLabel}</p>
-            <p style="margin:0 0 4px;font-size:18px;font-weight:700;color:#111827;">${title}</p>
-            <p style="margin:0;font-size:14px;color:#6b7280;">Due: ${formattedDate} &mdash; <strong style="color:${urgencyColour};">${daysUntilDue} ${dayWord} remaining</strong></p>
+            <p style="margin:0 0 4px;font-size:18px;font-weight:700;color:#111827;">${safeTitle}</p>
+            <p style="margin:0;font-size:14px;color:#6b7280;">Due: ${safeFormattedDate} &mdash; <strong style="color:${urgencyColour};">${daysUntilDue} ${dayWord} remaining</strong></p>
           </td>
         </tr>
       </table>

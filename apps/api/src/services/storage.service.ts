@@ -25,6 +25,22 @@ function sanitiseFilename(filename: string): string {
     .replace(/^-|-$/g, '');
 }
 
+function assertOrganisationStoragePath(organisationId: string, storagePath: string): string {
+  const normalisedPath = storagePath.replace(/\\/g, '/');
+  const expectedPrefix = `${organisationId}/`;
+
+  if (
+    normalisedPath !== storagePath ||
+    normalisedPath.includes('..') ||
+    !normalisedPath.startsWith(expectedPrefix) ||
+    normalisedPath.length <= expectedPrefix.length
+  ) {
+    throw new AppError(403, 'STORAGE_PATH_FORBIDDEN', 'Storage path does not belong to this organisation');
+  }
+
+  return normalisedPath;
+}
+
 export class StorageService {
   isConfigured(): boolean {
     return (
@@ -66,10 +82,11 @@ export class StorageService {
     return { storagePath };
   }
 
-  async getSignedUrl(storagePath: string, expiresIn: number = 3600): Promise<string> {
+  async getSignedUrl(organisationId: string, storagePath: string, expiresIn: number = 3600): Promise<string> {
+    const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
     const { data, error } = await getSupabaseClient().storage
       .from(getBucketName())
-      .createSignedUrl(storagePath, expiresIn);
+      .createSignedUrl(guardedPath, expiresIn);
 
     if (error || !data?.signedUrl) {
       throw new AppError(500, 'STORAGE_SIGNED_URL_FAILED', `Failed to generate signed URL: ${error?.message ?? 'unknown error'}`);
@@ -78,8 +95,9 @@ export class StorageService {
     return data.signedUrl;
   }
 
-  async deleteFile(storagePath: string): Promise<void> {
-    const { error } = await getSupabaseClient().storage.from(getBucketName()).remove([storagePath]);
+  async deleteFile(organisationId: string, storagePath: string): Promise<void> {
+    const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
+    const { error } = await getSupabaseClient().storage.from(getBucketName()).remove([guardedPath]);
 
     if (error) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', `Failed to delete file: ${error.message}`);

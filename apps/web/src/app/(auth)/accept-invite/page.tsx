@@ -1,15 +1,15 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, Suspense, useState } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 
-export default function AcceptInvitePage() {
+function AcceptInviteForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token') ?? '';
+  const { token } = useSensitiveQueryToken();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -117,5 +117,26 @@ export default function AcceptInvitePage() {
           </CardBody>
         </Card>
     </div>
+  );
+}
+
+function AcceptInviteFallback() {
+  return (
+    <div className="w-full max-w-md min-w-0">
+      <Card className="w-full border border-gray-100 shadow-lg">
+        <CardBody className="p-8 sm:p-10">
+          <div className="h-7 w-44 rounded bg-gray-100 mx-auto mb-3" />
+          <div className="h-4 w-64 rounded bg-gray-100 mx-auto" />
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={<AcceptInviteFallback />}>
+      <AcceptInviteForm />
+    </Suspense>
   );
 }

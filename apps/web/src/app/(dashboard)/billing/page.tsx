@@ -5,6 +5,7 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { getTrustedStripeRedirectUrl } from '@/lib/url-security';
 import type { BillingStatusResponse } from '@charitypilot/shared';
 import { SubscriptionPlan, SubscriptionStatus } from '@charitypilot/shared';
 
@@ -81,7 +82,12 @@ export default function BillingPage() {
     setBillingError(null);
     try {
       const res = await api.post('/billing/checkout', { plan, interval });
-      window.location.href = res.data.url;
+      const redirectUrl = getTrustedStripeRedirectUrl(res.data?.url);
+      if (!redirectUrl) {
+        setBillingError('Checkout returned an unexpected redirect URL.');
+        return;
+      }
+      window.location.assign(redirectUrl);
     } catch (err: unknown) {
       console.error('Checkout failed', err);
       setBillingError(apiErrorMessage(err, 'Checkout could not be started.'));
@@ -96,7 +102,12 @@ export default function BillingPage() {
     setBillingError(null);
     try {
       const res = await api.post('/billing/portal');
-      window.location.href = res.data.url;
+      const redirectUrl = getTrustedStripeRedirectUrl(res.data?.url);
+      if (!redirectUrl) {
+        setBillingError('The Stripe customer portal returned an unexpected redirect URL.');
+        return;
+      }
+      window.location.assign(redirectUrl);
     } catch (err: unknown) {
       console.error('Portal failed', err);
       setBillingError(apiErrorMessage(err, 'The Stripe customer portal could not be opened.'));

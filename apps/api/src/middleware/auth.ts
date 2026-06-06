@@ -18,11 +18,43 @@ export async function authGuard(request: FastifyRequest, reply: FastifyReply): P
     return;
   }
 
+  let payload: TokenPayload;
   try {
-    const payload = verifyAccessToken(token);
-    request.user = payload;
+    payload = verifyAccessToken(token);
   } catch {
     reply.status(401).send({ error: 'Invalid or expired token', code: 'UNAUTHORIZED' });
     return;
   }
+
+  const [session, user] = await Promise.all([
+    request.server.prisma.authSession.findFirst({
+      where: {
+        id: payload.sessionId,
+        userId: payload.userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    }),
+    request.server.prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        organisationId: true,
+        role: true,
+      },
+    }),
+  ]);
+
+  if (!session || !user) {
+    reply.status(401).send({ error: 'Invalid or expired token', code: 'UNAUTHORIZED' });
+    return;
+  }
+
+  request.user = {
+    userId: user.id,
+    organisationId: user.organisationId,
+    role: user.role,
+    sessionId: session.id,
+  };
 }

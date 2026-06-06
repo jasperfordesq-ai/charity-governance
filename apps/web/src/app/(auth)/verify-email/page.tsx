@@ -1,21 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
-import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 
 type Status = 'loading' | 'success' | 'error';
 
-export default function VerifyEmailPage() {
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token');
-
+function VerifyEmailContent() {
+  const { token, isReady } = useSensitiveQueryToken();
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
     if (!token) {
       setStatus('error');
       setMessage('No verification token found. Please check the link in your email.');
@@ -50,12 +53,12 @@ export default function VerifyEmailPage() {
     verify();
 
     return () => clearTimeout(timeout);
-  }, [token]);
+  }, [attempt, isReady, token]);
 
   const handleRetry = () => {
     setStatus('loading');
     setMessage('');
-    window.location.reload();
+    setAttempt((current) => current + 1);
   };
 
   return (
@@ -117,5 +120,28 @@ export default function VerifyEmailPage() {
           </CardBody>
         </Card>
     </div>
+  );
+}
+
+function VerifyEmailFallback() {
+  return (
+    <div className="w-full max-w-md min-w-0">
+      <Card className="w-full border border-gray-100 shadow-lg">
+        <CardBody className="p-8 sm:p-10">
+          <div className="text-center py-8" role="status" aria-live="polite">
+            <Spinner size="lg" color="primary" classNames={{ circle1: 'border-b-teal-primary', circle2: 'border-b-teal-primary' }} />
+            <p className="mt-4 text-gray-600 font-medium">Verifying your email...</p>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerifyEmailFallback />}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

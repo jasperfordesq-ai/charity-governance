@@ -17,6 +17,8 @@ const PLACEHOLDERS = [
 ];
 
 const REQUIRED = [
+  'NODE_ENV',
+  'PORT',
   'DATABASE_URL',
   'JWT_SECRET',
   'FRONTEND_URL',
@@ -60,6 +62,35 @@ function isConfigured(value) {
   return Boolean(value.trim()) && !PLACEHOLDERS.some((placeholder) => value.includes(placeholder));
 }
 
+function isLocalHost(hostname) {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
+}
+
+function requireExactValue(env, key, expected, issues) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  if (value !== expected) {
+    issues.push(`${key} must be ${expected}`);
+  }
+}
+
+function requireIntegerPort(env, key, issues) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  if (!/^\d+$/.test(value)) {
+    issues.push(`${key} must be an integer from 1 to 65535`);
+    return;
+  }
+
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    issues.push(`${key} must be an integer from 1 to 65535`);
+  }
+}
+
 function requireUrl(env, key, issues) {
   const value = envValue(env, key);
   if (!isConfigured(value)) return;
@@ -69,11 +100,37 @@ function requireUrl(env, key, issues) {
     if (url.protocol !== 'https:') {
       issues.push(`${key} must use https:// for production`);
     }
-    if (['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)) {
+    if (isLocalHost(url.hostname)) {
       issues.push(`${key} must not point at localhost for production`);
     }
   } catch {
     issues.push(`${key} must be a valid URL`);
+  }
+}
+
+function requireDatabaseUrl(env, key, issues) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  try {
+    const url = new URL(value);
+    if (!['postgresql:', 'postgres:'].includes(url.protocol)) {
+      issues.push(`${key} must use a PostgreSQL connection URL`);
+    }
+    if (isLocalHost(url.hostname)) {
+      issues.push(`${key} must not point at localhost for production`);
+    }
+  } catch {
+    issues.push(`${key} must be a valid PostgreSQL connection URL`);
+  }
+}
+
+function requirePrefix(env, key, prefix, label, issues) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  if (!value.startsWith(prefix)) {
+    issues.push(`${key} must use a ${label}`);
   }
 }
 
@@ -93,6 +150,12 @@ for (const key of REQUIRED) {
     issues.push(`${key} is missing or still contains a placeholder value`);
   }
 }
+
+requireExactValue(env, 'NODE_ENV', 'production', issues);
+requireIntegerPort(env, 'PORT', issues);
+requireDatabaseUrl(env, 'DATABASE_URL', issues);
+requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
+requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
 
 for (const key of ['JWT_SECRET']) {
   const value = envValue(env, key);

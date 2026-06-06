@@ -1,4 +1,5 @@
 import { AppError } from './errors.js';
+import { parsePort } from './port.js';
 
 const PLACEHOLDER_PATTERNS = [
   'REPLACE_ME',
@@ -37,8 +38,40 @@ function requireUrl(name: string, issues: string[], options: { requireHttps?: bo
     if (options.requireHttps && url.protocol !== 'https:') {
       issues.push(`${name} must use https:// in production`);
     }
+    if (isLocalHost(url.hostname)) {
+      issues.push(`${name} must not point at localhost in production`);
+    }
   } catch {
     issues.push(`${name} must be a valid URL`);
+  }
+}
+
+function isLocalHost(hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
+}
+
+function requireDatabaseUrl(name: string, issues: string[]) {
+  const value = requireConfiguredEnv(name, issues);
+  if (!value) return;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') {
+      issues.push(`${name} must use a PostgreSQL connection URL`);
+    }
+    if (isLocalHost(url.hostname)) {
+      issues.push(`${name} must not point at localhost in production`);
+    }
+  } catch {
+    issues.push(`${name} must be a valid PostgreSQL connection URL`);
+  }
+}
+
+function requirePrefix(name: string, prefix: string, label: string, issues: string[]) {
+  const value = requireConfiguredEnv(name, issues);
+  if (value && !value.startsWith(prefix)) {
+    issues.push(`${name} must use a ${label} in production`);
   }
 }
 
@@ -54,11 +87,18 @@ export function validateProductionEnv(): void {
 
   const issues: string[] = [];
 
-  requireConfiguredEnv('DATABASE_URL', issues);
+  try {
+    requireConfiguredEnv('PORT', issues);
+    parsePort(process.env.PORT, 3002);
+  } catch (error) {
+    issues.push(error instanceof Error ? error.message : 'PORT must be an integer from 1 to 65535');
+  }
+
+  requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
   requireUrl('FRONTEND_URL', issues, { requireHttps: true });
 
-  requireConfiguredEnv('STRIPE_SECRET_KEY', issues);
+  requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requireConfiguredEnv('STRIPE_WEBHOOK_SECRET', issues);
   requireConfiguredEnv('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID', issues);
   requireConfiguredEnv('STRIPE_ESSENTIALS_YEARLY_PRICE_ID', issues);

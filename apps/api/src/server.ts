@@ -22,6 +22,7 @@ import { EmailService } from './services/email.service.js';
 import { StorageService } from './services/storage.service.js';
 import { startCronJobs } from './utils/cron.js';
 import { validateProductionEnv } from './utils/env.js';
+import { parsePort } from './utils/port.js';
 
 const envToLogger: Record<string, unknown> = {
   development: {
@@ -162,7 +163,7 @@ app.get('/api/v1/health/readiness', async (request, reply) => {
 
 // ── Start ──
 
-const port = parseInt(process.env.PORT ?? '3001', 10);
+const port = parsePort(process.env.PORT, isProduction ? 3002 : 3001);
 const host = process.env.HOST ?? '0.0.0.0';
 
 try {

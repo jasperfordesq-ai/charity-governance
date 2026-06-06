@@ -24,9 +24,13 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function ensureCanInvite(role: UserRole) {
+function ensureCanInvite(role: UserRole, invitedRole?: InviteTeamMemberData['role']) {
   if (role !== 'OWNER' && role !== 'ADMIN') {
     throw new AppError(403, 'FORBIDDEN', 'Only owners and admins can invite team members');
+  }
+
+  if (invitedRole === 'ADMIN' && role !== 'OWNER') {
+    throw new AppError(403, 'FORBIDDEN', 'Only the account owner can invite admins');
   }
 }
 
@@ -93,7 +97,7 @@ export class TeamService {
     invitedByRole: UserRole,
     data: InviteTeamMemberData,
   ) {
-    ensureCanInvite(invitedByRole);
+    ensureCanInvite(invitedByRole, data.role);
 
     const email = normalizeEmail(data.email);
     const [organisation, inviter, existingUser, existingInvite] = await Promise.all([

@@ -21,7 +21,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const { data } = await api.get('/auth/me');
+      const { data } = await api.get('/auth/me', {
+        skipAuthRefresh: true,
+        skipAuthRedirect: true,
+      });
       setUser(data);
     } catch {
       setUser(null);
@@ -33,7 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   const login = async (email: string, password: string) => {
-    const { data } = await api.post('/auth/login', { email, password });
+    const { data } = await api.post('/auth/login', { email, password }, {
+      skipAuthRefresh: true,
+      skipAuthRedirect: true,
+    });
     setUser(data.user);
   };
 
@@ -43,7 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name: string;
     organisationName: string;
   }) => {
-    const { data } = await api.post('/auth/register', regData);
+    const { data } = await api.post('/auth/register', regData, {
+      skipAuthRefresh: true,
+      skipAuthRedirect: true,
+    });
     setUser(data.user);
   };
 

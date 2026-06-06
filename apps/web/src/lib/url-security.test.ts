@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  getTrustedDocumentDownloadUrl,
+  getTrustedStripeRedirectUrl,
+  removeSensitiveSearchParams,
+} from './url-security';
+
+test('removes sensitive token query parameters while preserving safe URL parts', () => {
+  assert.equal(
+    removeSensitiveSearchParams(
+      'https://charitypilot.ie/reset-password?token=secret&utm_source=email#form',
+      ['token'],
+    ),
+    'https://charitypilot.ie/reset-password?utm_source=email#form',
+  );
+});
+
+test('removes the query marker when sensitive parameters were the only query parameters', () => {
+  assert.equal(
+    removeSensitiveSearchParams('https://charitypilot.ie/verify-email?token=secret', ['token']),
+    'https://charitypilot.ie/verify-email',
+  );
+});
+
+test('trusts only hosted Stripe https redirect origins', () => {
+  assert.equal(
+    getTrustedStripeRedirectUrl('https://checkout.stripe.com/c/session-id'),
+    'https://checkout.stripe.com/c/session-id',
+  );
+  assert.equal(
+    getTrustedStripeRedirectUrl('https://billing.stripe.com/session/account'),
+    'https://billing.stripe.com/session/account',
+  );
+  assert.equal(getTrustedStripeRedirectUrl('http://checkout.stripe.com/c/session-id'), null);
+  assert.equal(getTrustedStripeRedirectUrl('https://checkout.stripe.com.evil.test/c/session-id'), null);
+  assert.equal(getTrustedStripeRedirectUrl('javascript:alert(1)'), null);
+});
+
+test('trusts document downloads only from https expected origins or Supabase storage', () => {
+  assert.equal(
+    getTrustedDocumentDownloadUrl('https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf'),
+    'https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf',
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('https://files.charitypilot.ie/download/a.pdf', {
+      allowedOrigins: ['https://files.charitypilot.ie'],
+    }),
+    'https://files.charitypilot.ie/download/a.pdf',
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf'),
+    null,
+  );
+  assert.equal(getTrustedDocumentDownloadUrl('https://evil.test/download/a.pdf'), null);
+});

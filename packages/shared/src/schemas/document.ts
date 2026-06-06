@@ -13,13 +13,20 @@ const documentCategoryValues = [
   'OTHER',
 ] as const;
 
+const dateInputSchema = z.string().refine(
+  (value) =>
+    /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) &&
+    !Number.isNaN(Date.parse(value)),
+  'Date must be an ISO date or datetime',
+);
+
 export const uploadDocumentSchema = z.object({
   name: z.string().min(1, 'Document name is required').max(300),
   description: z.string().max(1000).optional(),
   category: z.enum(documentCategoryValues),
   owner: z.string().trim().max(200).optional(),
-  approvedDate: z.string().optional(),
-  nextReviewDate: z.string().optional(),
+  approvedDate: dateInputSchema.optional(),
+  nextReviewDate: dateInputSchema.optional(),
   boardMinuteReference: z.string().trim().max(200).optional(),
 });
 

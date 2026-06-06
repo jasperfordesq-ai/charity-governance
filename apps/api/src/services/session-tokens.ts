@@ -39,28 +39,34 @@ export function hashOpaqueToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function createAccessToken(user: SessionUser): string {
+function createAccessToken(user: SessionUser, sessionId: string): string {
   return signAccessToken({
     userId: user.id,
     organisationId: user.organisationId,
     role: user.role,
+    sessionId,
   });
 }
 
-async function createSession(prisma: PrismaClient, userId: string, refreshTokenHash: string): Promise<void> {
-  const now = new Date();
-  await prisma.$executeRaw`
-    INSERT INTO "AuthSession" ("id", "userId", "refreshTokenHash", "expiresAt", "createdAt", "updatedAt")
-    VALUES (${crypto.randomUUID()}, ${userId}, ${refreshTokenHash}, ${refreshTokenExpiresAt()}, ${now}, ${now})
-  `;
+async function createSession(prisma: PrismaClient, userId: string, refreshTokenHash: string): Promise<string> {
+  const session = await prisma.authSession.create({
+    data: {
+      userId,
+      refreshTokenHash,
+      expiresAt: refreshTokenExpiresAt(),
+    },
+    select: { id: true },
+  });
+
+  return session.id;
 }
 
 export async function issueSessionTokens(prisma: PrismaClient, user: SessionUser) {
   const refreshToken = crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
-  await createSession(prisma, user.id, hashOpaqueToken(refreshToken));
+  const sessionId = await createSession(prisma, user.id, hashOpaqueToken(refreshToken));
 
   return {
-    accessToken: createAccessToken(user),
+    accessToken: createAccessToken(user, sessionId),
     refreshToken,
   };
 }
@@ -90,21 +96,38 @@ export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: st
   const nextRefreshToken = crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
   const nextRefreshTokenHash = hashOpaqueToken(nextRefreshToken);
   const now = new Date();
+  let nextSessionId = '';
 
-  await prisma.$transaction([
-    prisma.$executeRaw`
-      UPDATE "AuthSession"
-      SET "revokedAt" = ${now}, "updatedAt" = ${now}
-      WHERE "id" = ${session.id}
-    `,
-    prisma.$executeRaw`
-      INSERT INTO "AuthSession" ("id", "userId", "refreshTokenHash", "expiresAt", "createdAt", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${user.id}, ${nextRefreshTokenHash}, ${refreshTokenExpiresAt()}, ${now}, ${now})
-    `,
-  ]);
+  await prisma.$transaction(async (tx) => {
+    const revoked = await tx.authSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
+    if (revoked.count !== 1) {
+      throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
+    }
+
+    const nextSession = await tx.authSession.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: nextRefreshTokenHash,
+        expiresAt: refreshTokenExpiresAt(),
+      },
+      select: { id: true },
+    });
+    nextSessionId = nextSession.id;
+  });
 
   return {
-    accessToken: createAccessToken(user),
+    accessToken: createAccessToken(user, nextSessionId),
     refreshToken: nextRefreshToken,
   };
 }

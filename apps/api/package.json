@@ -7,14 +7,14 @@
     "dev": "node --env-file=.env --import tsx/esm --watch src/server.ts",
     "build": "tsc",
     "test": "node --import tsx --test src/tests/*.test.ts",
-    "start": "node dist/server.js",
+    "start": "node dist/start.js",
     "clean": "rm -rf dist",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "jobs:deadline-reminders": "node --env-file=.env --import tsx/esm src/jobs/send-deadline-reminders.ts"
+    "jobs:deadline-reminders": "node dist/jobs/send-deadline-reminders.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

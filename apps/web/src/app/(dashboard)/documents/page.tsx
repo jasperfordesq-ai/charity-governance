@@ -26,6 +26,7 @@ import {
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-guidance';
+import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
 import type {
   DocumentResponse,
   GovernanceStandardResponse,
@@ -194,8 +195,9 @@ export default function DocumentsPage() {
   const handleDownload = async (doc: DocumentResponse) => {
     try {
       const { data } = await api.get(`/documents/${doc.id}/download`);
-      if (data?.url) {
-        window.open(data.url, '_blank', 'noopener,noreferrer');
+      const downloadUrl = getTrustedDocumentDownloadUrl(data?.url);
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
         return;
       }
       toast('Could not prepare this document download', 'error');

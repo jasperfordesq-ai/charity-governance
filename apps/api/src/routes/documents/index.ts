@@ -25,6 +25,68 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
+const MIME_EXTENSIONS: Record<string, string[]> = {
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/vnd.ms-powerpoint': ['.ppt'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+  'text/plain': ['.txt'],
+  'text/csv': ['.csv'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+};
+
+function hasOleSignature(buffer: Buffer): boolean {
+  return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+}
+
+function hasZipSignature(buffer: Buffer): boolean {
+  return buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+}
+
+function hasTextSignature(buffer: Buffer): boolean {
+  return !buffer.includes(0);
+}
+
+function hasValidSignature(mimeType: string, buffer: Buffer): boolean {
+  switch (mimeType) {
+    case 'application/pdf':
+      return buffer.subarray(0, 5).toString('utf8') === '%PDF-';
+    case 'application/msword':
+    case 'application/vnd.ms-excel':
+    case 'application/vnd.ms-powerpoint':
+      return hasOleSignature(buffer);
+    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+      return hasZipSignature(buffer);
+    case 'image/jpeg':
+      return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    case 'image/png':
+      return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    case 'text/plain':
+    case 'text/csv':
+      return hasTextSignature(buffer);
+    default:
+      return false;
+  }
+}
+
+function hasAllowedExtension(filename: string, mimeType: string): boolean {
+  const lowerFilename = filename.toLowerCase();
+  return (MIME_EXTENSIONS[mimeType] ?? []).some((extension) => lowerFilename.endsWith(extension));
+}
+
+function isFileTooLargeError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  const message = error instanceof Error ? error.message : '';
+  return code === 'FST_REQ_FILE_TOO_LARGE' || /file.*too large|request file too large/i.test(message);
+}
+
 export async function documentRoutes(app: FastifyInstance) {
   const service = new DocumentService(app.prisma);
   const storageService = new StorageService();
@@ -57,7 +119,7 @@ export async function documentRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/:id/download', async (request, reply) => {
     try {
       const doc = await service.getById(request.user.organisationId, request.params.id);
-      const url = await storageService.getSignedUrl(doc.fileUrl);
+      const url = await storageService.getSignedUrl(request.user.organisationId, doc.fileUrl);
       return reply.send({ url });
     } catch (err) {
       handleError(reply, err);
@@ -90,12 +152,30 @@ export async function documentRoutes(app: FastifyInstance) {
         boardMinuteReference: fields.boardMinuteReference?.value,
       });
 
-      const buffer = await data.toBuffer();
+      let buffer: Buffer;
+      try {
+        buffer = await data.toBuffer();
+      } catch (error) {
+        if (isFileTooLargeError(error)) {
+          return reply.status(413).send({
+            error: 'File size exceeds the 10 MB limit.',
+            code: 'FILE_TOO_LARGE',
+          });
+        }
+        throw error;
+      }
 
       if (buffer.length > MAX_FILE_SIZE) {
-        return reply.status(400).send({
+        return reply.status(413).send({
           error: 'File size exceeds the 10 MB limit.',
           code: 'FILE_TOO_LARGE',
+        });
+      }
+
+      if (!hasAllowedExtension(data.filename, data.mimetype) || !hasValidSignature(data.mimetype, buffer)) {
+        return reply.status(400).send({
+          error: 'File content does not match the declared document type.',
+          code: 'INVALID_FILE_SIGNATURE',
         });
       }
 
@@ -106,18 +186,28 @@ export async function documentRoutes(app: FastifyInstance) {
         data.mimetype,
       );
 
-      const doc = await service.create(request.user.organisationId, request.user.userId, {
-        name: meta.name,
-        description: meta.description,
-        category: meta.category,
-        fileUrl: storagePath,
-        fileSize: buffer.length,
-        mimeType: data.mimetype,
-        owner: meta.owner || null,
-        approvedDate: meta.approvedDate || null,
-        nextReviewDate: meta.nextReviewDate || null,
-        boardMinuteReference: meta.boardMinuteReference || null,
-      });
+      let doc;
+      try {
+        doc = await service.create(request.user.organisationId, request.user.userId, {
+          name: meta.name,
+          description: meta.description,
+          category: meta.category,
+          fileUrl: storagePath,
+          fileSize: buffer.length,
+          mimeType: data.mimetype,
+          owner: meta.owner || null,
+          approvedDate: meta.approvedDate || null,
+          nextReviewDate: meta.nextReviewDate || null,
+          boardMinuteReference: meta.boardMinuteReference || null,
+        });
+      } catch (error) {
+        try {
+          await storageService.deleteFile(request.user.organisationId, storagePath);
+        } catch (cleanupError) {
+          request.log.error(cleanupError, 'Failed to clean up uploaded document after database create failed');
+        }
+        throw error;
+      }
 
       return sendCreated(reply, doc);
     } catch (err) {
@@ -130,8 +220,9 @@ export async function documentRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const storagePath = await service.remove(request.user.organisationId, request.params.id);
-      await storageService.deleteFile(storagePath);
+      const doc = await service.getById(request.user.organisationId, request.params.id);
+      await storageService.deleteFile(request.user.organisationId, doc.fileUrl);
+      await service.remove(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
     } catch (err) {
       handleError(reply, err);

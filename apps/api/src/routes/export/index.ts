@@ -44,6 +44,10 @@ export async function exportRoutes(app: FastifyInstance) {
 
       reply.header('Content-Type', 'text/html');
       reply.header(
+        'Content-Security-Policy',
+        "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+      );
+      reply.header(
         'Content-Disposition',
         `inline; filename="charitypilot-compliance-report-${year}.html"`,
       );

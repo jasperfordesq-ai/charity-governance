@@ -18,8 +18,44 @@ const handle = app.getRequestHandler();
 
 await app.prepare();
 
-createServer((request, response) => {
-  void handle(request, response);
-}).listen(port, hostname, () => {
+const server = createServer(async (request, response) => {
+  try {
+    await handle(request, response);
+  } catch (error) {
+    console.error('Next request handler failed:', error);
+    if (!response.headersSent) {
+      response.statusCode = 500;
+      response.end('Internal Server Error');
+      return;
+    }
+    response.destroy(error);
+  }
+});
+
+server.listen(port, hostname, () => {
   console.log(`CharityPilot web running on http://${hostname}:${port}`);
 });
+
+let isShuttingDown = false;
+
+function shutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log(`Received ${signal}, shutting down CharityPilot web`);
+  server.close((error) => {
+    if (error) {
+      console.error('Graceful shutdown failed:', error);
+      process.exit(1);
+    }
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    console.error('Graceful shutdown timed out');
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);

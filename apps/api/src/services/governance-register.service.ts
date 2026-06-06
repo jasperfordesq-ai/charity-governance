@@ -47,7 +47,9 @@ export class GovernanceRegisterService {
     });
   }
 
-  createConflict(organisationId: string, data: CreateConflictRecordRequest) {
+  async createConflict(organisationId: string, data: CreateConflictRecordRequest) {
+    await this.ensureBoardMember(organisationId, data.boardMemberId);
+
     return this.prisma.conflictRecord.create({
       data: {
         organisationId,
@@ -68,6 +70,10 @@ export class GovernanceRegisterService {
 
   async updateConflict(organisationId: string, id: string, data: Partial<CreateConflictRecordRequest>) {
     await this.ensureRecord('conflictRecord', organisationId, id, 'CONFLICT_NOT_FOUND');
+    if (data.boardMemberId !== undefined) {
+      await this.ensureBoardMember(organisationId, data.boardMemberId);
+    }
+
     return this.prisma.conflictRecord.update({
       where: { id },
       data: {
@@ -430,6 +436,21 @@ export class GovernanceRegisterService {
             : await this.prisma.fundraisingRecord.findFirst({ where: { id, organisationId } });
     if (!record) {
       throw new AppError(404, code, 'Governance register record not found');
+    }
+  }
+
+  private async ensureBoardMember(organisationId: string, boardMemberId?: string | null) {
+    if (!boardMemberId) {
+      return;
+    }
+
+    const boardMember = await this.prisma.boardMember.findFirst({
+      where: { id: boardMemberId, organisationId },
+      select: { id: true },
+    });
+
+    if (!boardMember) {
+      throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
     }
   }
 }
