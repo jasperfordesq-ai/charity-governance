@@ -14,8 +14,10 @@ npm run build -w @charitypilot/shared
 npm run build -w @charitypilot/api
 npm run build -w @charitypilot/web
 npm audit --omit=dev --audit-level=moderate
-npm run check:production -- --env-file=.env.production
+npm run check:production -- --production-env-file=.env.production
 ```
+
+The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time; do not commit that file to the repository.
 
 ## Environment
 

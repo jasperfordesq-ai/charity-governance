@@ -41,8 +41,9 @@ Status marks reflect this implementation pass.
 
 - [x] `npm run lint`
 - [x] `npm run test`
+- [x] `npm run test:production-check`
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`
 - [x] `npm audit --omit=dev --audit-level=moderate`
-- [ ] `npm run check:production -- --env-file=.env.production`
+- [ ] `npm run check:production -- --production-env-file=.env.production`
