@@ -55,6 +55,8 @@ In production, the API does not run deadline reminders in-process unless `ENABLE
 npm run jobs:deadline-reminders -w @charitypilot/api
 ```
 
+The scheduled job must receive the same production secret source that passed preflight. If the platform invokes the npm script as written, materialize a non-committed env file for the API job runtime from the approved production secrets, or inject equivalent environment variables and invoke the built job entrypoint directly.
+
 Record scheduler ownership and test-run evidence in `docs/production-launch-checklist.md`.
 
 ## Storage

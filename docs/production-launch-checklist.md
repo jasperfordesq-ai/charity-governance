@@ -51,8 +51,9 @@ Evidence:
 
 - [ ] Real production values were created from `.env.production.example`.
 - [ ] `.env.production` or the platform-generated equivalent is excluded from git.
+- [ ] `NODE_ENV=production` is set for the API, web app, and scheduled job runtime.
 - [ ] `JWT_SECRET` is high entropy and at least 32 characters.
-- [ ] `FRONTEND_URL`, `API_URL`, and `NEXT_PUBLIC_API_URL` use HTTPS public origins.
+- [ ] `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` use HTTPS public origins.
 - [ ] `AUTH_COOKIE_DOMAIN` matches the deployed cookie scope or is intentionally unset for a single-host deployment.
 - [ ] Stripe keys are live-mode production keys.
 - [ ] Resend sender domain is verified for production sending.
@@ -121,6 +122,7 @@ Evidence:
 
 - [ ] Production reminder scheduling is owned by the platform scheduler or explicitly enabled with `ENABLE_IN_PROCESS_JOBS=true`.
 - [ ] If using the scheduler, it runs `npm run jobs:deadline-reminders -w @charitypilot/api`.
+- [ ] The scheduler receives the same production secret source that passed preflight, either as injected environment variables or as a non-committed env file materialized for the job runtime.
 - [ ] Scheduler logs and failure alerts are available.
 
 Evidence:
