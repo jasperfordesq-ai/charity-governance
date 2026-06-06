@@ -1,5 +1,15 @@
 # CharityPilot Production Runbook
 
+This runbook is the short operator guide for release promotion. The full launch evidence ledger is `docs/production-launch-checklist.md`.
+
+## Production Evidence Artifacts
+
+- `.env.production.example` - production env template for the secret manager or untracked `.env.production` file.
+- `docs/production-launch-checklist.md` - top-level launch evidence checklist and final signoff.
+- `docs/supabase-production-setup.md` - Supabase private storage, backup, restore, and retention evidence guide.
+- `docs/production-browser-qa.md` - deployed HTTPS desktop and mobile browser QA checklist.
+- `PRODUCTION_TODO.md` - concise project status tracker.
+
 ## Required Release Checks
 
 Run these before promoting a build:
@@ -17,13 +27,15 @@ npm audit --omit=dev --audit-level=moderate
 npm run check:production -- --production-env-file=.env.production
 ```
 
-The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time; do not commit that file to the repository.
+The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time. Do not commit that file to the repository. Use `.env.production.example` only as a template; it is expected to fail preflight until real values replace the placeholders.
 
 ## Environment
 
 The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
 
-The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API origin. Configure the API `FRONTEND_URL` to the exact HTTPS web origin, or a comma-separated list of approved origins.
+The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API origin. Configure the API `FRONTEND_URL` to the exact HTTPS web origin, or a comma-separated list of approved production origins.
+
+Set `AUTH_COOKIE_DOMAIN` only when the deployed web and API hosts need a shared parent cookie domain. Leave it unset for single-host deployments.
 
 ## Database
 
@@ -33,7 +45,7 @@ Apply migrations with:
 npm run db:migrate:deploy -w @charitypilot/api
 ```
 
-Use managed PostgreSQL backups with point-in-time recovery enabled. Confirm backup restore quarterly.
+Use managed PostgreSQL backups with point-in-time recovery enabled. Confirm backup restore quarterly and record the evidence in `docs/production-launch-checklist.md`.
 
 ## Jobs
 
@@ -43,9 +55,17 @@ In production, the API does not run deadline reminders in-process unless `ENABLE
 npm run jobs:deadline-reminders -w @charitypilot/api
 ```
 
+Record scheduler ownership and test-run evidence in `docs/production-launch-checklist.md`.
+
 ## Storage
 
 Use a private Supabase Storage bucket. Documents are saved as storage paths and are opened through short-lived signed URLs from `/api/v1/documents/:id/download`.
+
+Follow `docs/supabase-production-setup.md` before launch. Confirm `/api/v1/health/readiness` reports `storageConfigured: true` and `storageBucketReachable: true`.
+
+## Browser QA
+
+Run `docs/production-browser-qa.md` against the deployed HTTPS production URL and supported mobile devices. Localhost QA does not prove production DNS, TLS, cookies, CORS, security headers, storage downloads, or live provider integrations.
 
 ## Incident Basics
 
@@ -53,4 +73,4 @@ Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys
 
 ## Release Gate
 
-Code readiness is not the full production gate. Do not launch with real charity data until hosting, DNS/TLS, secrets, backups, monitoring alerts, legal documents, and external security review are complete.
+Code readiness is not the full production gate. Do not launch with real charity data until hosting, DNS/TLS, secrets, backups, monitoring alerts, legal documents, deployed browser QA, and external security review are complete and recorded in `docs/production-launch-checklist.md`.
