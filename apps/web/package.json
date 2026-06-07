@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3003",
+    "dev": "next dev --webpack --port 3003",
     "build": "next build --webpack",
     "start": "node server.mjs",
     "lint": "eslint src next.config.ts"

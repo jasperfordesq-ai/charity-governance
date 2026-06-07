@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -260,4 +260,63 @@ test('web server awaits request handling and closes cleanly on termination signa
   assert.match(server, /server\.close\(/);
   assert.match(server, /process\.once\('SIGTERM'/);
   assert.match(server, /process\.once\('SIGINT'/);
+});
+
+test('web config disables generated agent-rule files during local dev startup', () => {
+  const config = readRepoFile('apps/web/next.config.ts');
+  const webPackage = JSON.parse(readRepoFile('apps/web/package.json'));
+
+  assert.match(config, /agentRules:\s*false/);
+  assert.match(webPackage.scripts.dev, /--webpack/);
+  assert.equal(existsSync(join(repoRoot, 'apps/web/AGENTS.md')), false);
+  assert.equal(existsSync(join(repoRoot, 'apps/web/CLAUDE.md')), false);
+});
+
+test('web route protection uses the Next proxy convention instead of deprecated middleware', () => {
+  assert.equal(existsSync(join(repoRoot, 'apps/web/src/middleware.ts')), false);
+  assert.equal(existsSync(join(repoRoot, 'apps/web/src/proxy.ts')), true);
+
+  const proxy = readRepoFile('apps/web/src/proxy.ts');
+  assert.match(proxy, /export function proxy\(request: NextRequest\)/);
+  assert.match(proxy, /export const config\s*=/);
+  assert.doesNotMatch(proxy, /export function middleware/);
+});
+
+test('web proxy preserves protected-route redirect and no-cache behavior', () => {
+  const script = `
+    import assert from 'node:assert/strict';
+    import { NextRequest } from 'next/server';
+
+    const proxyModule = await import('./apps/web/src/proxy.ts');
+    const proxy = proxyModule.proxy ?? proxyModule.default?.proxy;
+
+    const unauthenticated = proxy(new NextRequest('https://app.charitypilot.ie/dashboard?tab=deadlines'));
+    assert.equal(unauthenticated.status, 307);
+    assert.equal(
+      unauthenticated.headers.get('location'),
+      'https://app.charitypilot.ie/login?next=%2Fdashboard%3Ftab%3Ddeadlines',
+    );
+    assert.equal(unauthenticated.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
+    assert.equal(unauthenticated.headers.get('pragma'), 'no-cache');
+
+    const authenticated = proxy(new NextRequest('https://app.charitypilot.ie/dashboard', {
+      headers: { cookie: 'charitypilot_access=token' },
+    }));
+    assert.equal(authenticated.status, 200);
+    assert.equal(authenticated.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
+    assert.equal(authenticated.headers.get('pragma'), 'no-cache');
+
+    const publicRoute = proxy(new NextRequest('https://app.charitypilot.ie/login'));
+    assert.equal(publicRoute.status, 200);
+    assert.equal(publicRoute.headers.get('cache-control'), null);
+    assert.equal(publicRoute.headers.get('pragma'), null);
+  `;
+
+  const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: process.env,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });

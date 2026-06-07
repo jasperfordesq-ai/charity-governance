@@ -30,6 +30,7 @@ if (process.env.NODE_ENV === 'production') {
 const contentSecurityPolicy = contentSecurityPolicyDirectives.join('; ');
 
 const nextConfig: NextConfig = {
+  agentRules: false,
   transpilePackages: ['@charitypilot/shared'],
   async headers() {
     const securityHeaders = [
