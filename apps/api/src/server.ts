@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import { prismaPlugin } from './plugins/prisma.js';
 import { errorHandlerPlugin } from './plugins/error-handler.js';
+import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { authRoutes } from './routes/auth/index.js';
 import { organisationRoutes } from './routes/organisations/index.js';
 import { complianceRoutes } from './routes/compliance/index.js';
@@ -35,7 +36,6 @@ const envToLogger: Record<string, unknown> = {
 };
 
 const environment = process.env.NODE_ENV ?? 'development';
-const isProduction = environment === 'production';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
 
 const allowedOrigins = new Set(
@@ -59,18 +59,7 @@ const app = Fastify({
 // ── Plugins ──
 
 await app.register(errorHandlerPlugin);
-
-app.addHook('onSend', async (_request, reply, payload) => {
-  reply.header('X-Content-Type-Options', 'nosniff');
-  reply.header('X-Frame-Options', 'DENY');
-  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
-  reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-  if (isProduction) {
-    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-  return payload;
-});
+await app.register(securityHeadersPlugin);
 
 app.addHook('preHandler', async (request, reply) => {
   const originValidation = validateUnsafeRequestOrigin(request, allowedOrigins);
