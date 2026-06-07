@@ -30,7 +30,8 @@ Do not use real charity records for launch QA. Use an approved non-sensitive tes
 - [ ] Web URL loads over HTTPS with a valid certificate.
 - [ ] API URL loads over HTTPS with a valid certificate.
 - [ ] Visiting `/api/v1/health` returns `status: ok`.
-- [ ] Visiting `/api/v1/health/readiness` returns `status: ready` before launch.
+- [ ] Visiting `/api/v1/health/readiness` without `x-charitypilot-readiness-key` returns `401` and does not expose dependency checks.
+- [ ] Calling `/api/v1/health/readiness` with the internal `x-charitypilot-readiness-key` returns `status: ready` before launch.
 - [ ] API responses include `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Content-Security-Policy`.
 - [ ] Production API responses include `Strict-Transport-Security`.
 - [ ] Cross-origin API requests succeed only from approved frontend origins.

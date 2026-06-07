@@ -583,6 +583,22 @@ test('document storage deletion has a durable retry outbox and production job', 
   assert.doesNotMatch(cleanupJob, /validateProductionEnv/);
 });
 
+test('production operations docs keep detailed readiness checks behind the internal header', () => {
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
+  const supabaseSetup = readRepoFile('docs/supabase-production-setup.md');
+
+  for (const doc of [runbook, launchChecklist, browserQa, supabaseSetup]) {
+    assert.match(doc, /x-charitypilot-readiness-key/);
+  }
+
+  assert.match(browserQa, /without `x-charitypilot-readiness-key` returns `401`/);
+  assert.match(supabaseSetup, /without `x-charitypilot-readiness-key` should return `401`/);
+  assert.match(runbook, /Public monitoring can check `\/api\/v1\/health`/);
+  assert.doesNotMatch(supabaseSetup, /curl -i https:\/\/api\.charitypilot\.ie\/api\/v1\/health\/readiness/);
+});
+
 test('web Docker build requires a production HTTPS API URL before Next build', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
 

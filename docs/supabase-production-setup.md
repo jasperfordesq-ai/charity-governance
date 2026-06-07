@@ -58,10 +58,12 @@ Evidence:
 
 ## Readiness Verification
 
-After production secrets are configured and the API is deployed, run this against the actual deployed API origin:
+After production secrets are configured and the API is deployed, run this against the actual deployed API origin from a trusted shell that can read `READINESS_API_KEY` without printing it:
 
 ```bash
-curl -i https://api.charitypilot.ie/api/v1/health/readiness
+curl -i \
+  -H "x-charitypilot-readiness-key: $READINESS_API_KEY" \
+  https://api.charitypilot.ie/api/v1/health/readiness
 ```
 
 Expected when storage is ready:
@@ -79,6 +81,8 @@ Expected when storage is ready:
   }
 }
 ```
+
+Calling the same readiness URL without `x-charitypilot-readiness-key` should return `401` and must not expose dependency checks. Public uptime monitors that cannot send the internal header should use `/api/v1/health`.
 
 If the production API uses a different hostname, run the same path on that hostname and record the actual URL in `docs/production-launch-checklist.md`.
 

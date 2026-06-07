@@ -63,7 +63,7 @@ Record scheduler ownership and test-run evidence in `docs/production-launch-chec
 
 Use a private Supabase Storage bucket. Documents are saved as storage paths and are opened through short-lived signed URLs from `/api/v1/documents/:id/download`.
 
-Follow `docs/supabase-production-setup.md` before launch. Confirm `/api/v1/health/readiness` reports `storageConfigured: true` and `storageBucketReachable: true`.
+Follow `docs/supabase-production-setup.md` before launch. Public monitoring can check `/api/v1/health`; detailed dependency readiness at `/api/v1/health/readiness` must include the internal `x-charitypilot-readiness-key` header. Confirm the keyed readiness response reports `storageConfigured: true` and `storageBucketReachable: true`.
 
 ## Browser QA
 

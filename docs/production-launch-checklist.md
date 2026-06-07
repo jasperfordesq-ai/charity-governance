@@ -106,8 +106,8 @@ Evidence:
 - [ ] Supabase production project is separate from local or staging projects.
 - [ ] `documents` bucket exists or `SUPABASE_STORAGE_BUCKET` points to the approved private bucket.
 - [ ] Bucket is private.
-- [ ] API readiness endpoint reports `storageConfigured: true`.
-- [ ] API readiness endpoint reports `storageBucketReachable: true`.
+- [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
+- [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and signed download are verified through the deployed app.
 
 Evidence:
@@ -154,7 +154,8 @@ Evidence:
 - [ ] API logs are captured by the production platform.
 - [ ] Web logs or platform events are captured.
 - [ ] Error alert destination is configured and tested.
-- [ ] Uptime or readiness monitoring checks `/api/v1/health/readiness`.
+- [ ] Public uptime monitoring checks `/api/v1/health`.
+- [ ] Internal readiness monitoring checks `/api/v1/health/readiness` with `x-charitypilot-readiness-key`.
 - [ ] Incident owner and escalation path are recorded outside git.
 
 Evidence:
