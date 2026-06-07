@@ -847,3 +847,10 @@ test('CI smoke-runs API and web Docker images after building them', () => {
     'web image must be built before the web smoke run',
   );
 });
+
+test('stale Vercel API project auto-deploys are disabled while Docker is the release gate', () => {
+  const apiVercelConfig = JSON.parse(readRepoFile('apps/api/vercel.json'));
+
+  assert.equal(apiVercelConfig.$schema, 'https://openapi.vercel.sh/vercel.json');
+  assert.equal(apiVercelConfig.git?.deploymentEnabled, false);
+});
