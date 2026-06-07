@@ -556,11 +556,15 @@ test('API Docker image documents the production runtime port and non-root user',
 
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ARG\s+DATABASE_URL=/);
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ENV\s+DATABASE_URL=\$DATABASE_URL[\s\S]*RUN\s+npm run db:generate -w @charitypilot\/api/);
+  assert.match(dockerfile, /FROM build AS runtime-deps[\s\S]*RUN\s+npm prune --omit=dev --omit=peer --workspaces/);
+  assert.match(dockerfile, /rm -rf[\s\S]*node_modules\/prisma[\s\S]*node_modules\/typescript/);
   assert.match(dockerfile, /ENV\s+NODE_ENV=production/);
   assert.match(dockerfile, /ENV\s+PORT=3002/);
   assert.match(dockerfile, /EXPOSE\s+3002/);
   assert.match(dockerfile, /USER\s+node/);
   assert.match(dockerfile, /CMD\s+\["node",\s*"dist\/start\.js"\]/);
+  assert.match(dockerfile, /COPY --chown=node:node --from=runtime-deps \/app\/node_modules \.\/node_modules/);
+  assert.doesNotMatch(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules \.\/node_modules/);
   assert.doesNotMatch(dockerfile, /CMD[\s\S]*migrate deploy/);
 
   const runnerStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-alpine AS runner'));
@@ -618,6 +622,10 @@ test('web Docker build requires a production HTTPS API URL before Next build', (
   assert.match(dockerfile, /api\.charitypilot\.ie/);
   assert.match(dockerfile, /origin-only CharityPilot production URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);
+  assert.match(dockerfile, /FROM build AS runtime-deps[\s\S]*RUN\s+npm prune --omit=dev --omit=peer --workspaces/);
+  assert.match(dockerfile, /rm -rf[\s\S]*node_modules\/typescript[\s\S]*node_modules\/eslint[\s\S]*node_modules\/turbo/);
+  assert.match(dockerfile, /COPY --chown=node:node --from=runtime-deps \/app\/node_modules \.\/node_modules/);
+  assert.doesNotMatch(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules \.\/node_modules/);
   assert.match(dockerfile, /USER\s+node/);
 });
 
@@ -839,12 +847,18 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /docker ps --filter name=charitypilot-api-smoke --filter status=running --quiet/);
   assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
+  assert.match(workflow, /name:\s+Verify API Docker runtime dependencies/);
+  assert.match(workflow, /docker run --rm --entrypoint node charitypilot-api-ci[\s\S]*@prisma\/client/);
+  assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo'\]/);
 
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
   assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /docker rm -f charitypilot-web-smoke/);
+  assert.match(workflow, /name:\s+Verify web Docker runtime dependencies/);
+  assert.match(workflow, /docker run --rm --entrypoint node charitypilot-web-ci[\s\S]*require\.resolve\('next'\)/);
+  assert.match(workflow, /for \(const pkg of \['typescript', 'eslint', 'turbo'\]/);
 
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker image'),
@@ -853,6 +867,14 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.ok(
     workflow.indexOf('name: Build web Docker image') < workflow.indexOf('name: Smoke web Docker image'),
     'web image must be built before the web smoke run',
+  );
+  assert.ok(
+    workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Verify API Docker runtime dependencies'),
+    'API image must be built before runtime dependency inspection',
+  );
+  assert.ok(
+    workflow.indexOf('name: Build web Docker image') < workflow.indexOf('name: Verify web Docker runtime dependencies'),
+    'web image must be built before runtime dependency inspection',
   );
 });
 

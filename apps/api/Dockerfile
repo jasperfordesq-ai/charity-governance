@@ -15,12 +15,21 @@ RUN npm run build -w @charitypilot/shared
 RUN npm run db:generate -w @charitypilot/api
 RUN npm run build -w @charitypilot/api
 
+FROM build AS runtime-deps
+WORKDIR /app
+RUN npm prune --omit=dev --omit=peer --workspaces && \
+    rm -rf node_modules/prisma \
+      node_modules/typescript \
+      node_modules/.bin/prisma \
+      node_modules/.bin/tsc \
+      node_modules/.bin/tsserver
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3002
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
-COPY --chown=node:node --from=build /app/node_modules ./node_modules
+COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
 COPY --chown=node:node --from=build /app/apps/api ./apps/api
 WORKDIR /app/apps/api

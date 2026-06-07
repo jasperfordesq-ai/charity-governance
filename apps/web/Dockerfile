@@ -15,12 +15,23 @@ RUN node -e "try{const url=new URL(process.env.NEXT_PUBLIC_API_URL);const host=u
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
 
+FROM build AS runtime-deps
+WORKDIR /app
+RUN npm prune --omit=dev --omit=peer --workspaces && \
+    rm -rf node_modules/typescript \
+      node_modules/eslint \
+      node_modules/turbo \
+      node_modules/.bin/tsc \
+      node_modules/.bin/tsserver \
+      node_modules/.bin/eslint \
+      node_modules/.bin/turbo
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3003
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
-COPY --chown=node:node --from=build /app/node_modules ./node_modules
+COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
 COPY --chown=node:node --from=build /app/apps/web ./apps/web
 WORKDIR /app/apps/web

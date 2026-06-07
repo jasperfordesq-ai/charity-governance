@@ -98,6 +98,10 @@ jobs:
             charitypilot-api-ci \
             -e "import('./dist/utils/env.js').then(({ validateProductionEnv }) => validateProductionEnv())"
 
+      - name: Verify API Docker runtime dependencies
+        run: |
+          docker run --rm --entrypoint node charitypilot-api-ci -e "require.resolve('@prisma/client'); for (const pkg of ['typescript', 'tsx', 'prisma', 'turbo']) { try { require.resolve(pkg); console.error(pkg + ' must not be present in the production API image'); process.exit(1); } catch {} }"
+
       - name: Smoke API Docker image
         run: |
           set -euo pipefail
@@ -125,6 +129,10 @@ jobs:
 
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
+
+      - name: Verify web Docker runtime dependencies
+        run: |
+          docker run --rm --entrypoint node charitypilot-web-ci -e "require.resolve('next'); for (const pkg of ['typescript', 'eslint', 'turbo']) { try { require.resolve(pkg); console.error(pkg + ' must not be present in the production web image'); process.exit(1); } catch {} }"
 
       - name: Smoke web Docker image
         run: |
