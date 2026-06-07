@@ -236,12 +236,14 @@ export class TeamService {
   }
 
   async acceptInvite(data: AcceptTeamInviteData) {
+    const token = hashOpaqueToken(data.token);
+    const now = new Date();
     const invite = await this.prisma.teamInvite.findUnique({
-      where: { token: hashOpaqueToken(data.token) },
+      where: { token },
       include: { organisation: true },
     });
 
-    if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= new Date()) {
+    if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) {
       throw new AppError(400, 'INVALID_INVITE', 'This invite is invalid or has expired');
     }
 
@@ -256,6 +258,21 @@ export class TeamService {
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
 
     const user = await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.teamInvite.updateMany({
+        where: {
+          id: invite.id,
+          token,
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { acceptedAt: now },
+      });
+
+      if (consumed.count !== 1) {
+        throw new AppError(400, 'INVALID_INVITE', 'This invite is invalid or has expired');
+      }
+
       const created = await tx.user.create({
         data: {
           email: invite.email,
@@ -266,11 +283,6 @@ export class TeamService {
           emailVerified: true,
         },
         include: { organisation: true },
-      });
-
-      await tx.teamInvite.update({
-        where: { id: invite.id },
-        data: { acceptedAt: new Date() },
       });
 
       return created;

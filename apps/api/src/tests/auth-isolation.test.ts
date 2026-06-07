@@ -350,6 +350,116 @@ test('owners may invite admins', async () => {
   assert.equal(invite.role, 'ADMIN');
 });
 
+test('acceptInvite consumes the invite atomically before issuing a session', async () => {
+  const { TeamService } = await import('../services/team.service.js');
+  const { hashOpaqueToken } = await import('../services/session-tokens.js');
+
+  const future = new Date(Date.now() + 60_000);
+  let inviteConsumed = false;
+  const prisma = {
+    teamInvite: {
+      findUnique: async () => ({
+        id: 'invite-1',
+        token: hashOpaqueToken('invite-token'),
+        email: 'invitee@example.org',
+        role: 'MEMBER',
+        organisationId: 'org-1',
+        organisation: { id: 'org-1', name: 'Org One' },
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: future,
+      }),
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string; token: string; acceptedAt: null; revokedAt: null; expiresAt: { gt: Date } };
+        data: { acceptedAt: Date };
+      }) => {
+        assert.equal(where.id, 'invite-1');
+        assert.equal(where.token, hashOpaqueToken('invite-token'));
+        assert.equal(where.acceptedAt, null);
+        assert.equal(where.revokedAt, null);
+        assert.ok(where.expiresAt.gt instanceof Date);
+        assert.ok(data.acceptedAt instanceof Date);
+        if (inviteConsumed) return { count: 0 };
+        inviteConsumed = true;
+        return { count: 1 };
+      },
+    },
+    user: {
+      findUnique: async () => null,
+      create: async () => ({
+        id: 'user-1',
+        email: 'invitee@example.org',
+        name: 'Invitee',
+        role: 'MEMBER',
+        organisationId: 'org-1',
+        organisation: { id: 'org-1', name: 'Org One' },
+      }),
+    },
+    authSession: {
+      create: async () => ({ id: 'session-1' }),
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new TeamService(prisma as never, {} as never);
+
+  const result = await service.acceptInvite({
+    token: 'invite-token',
+    name: 'Invitee',
+    password: 'NewPassword1',
+  });
+
+  assert.equal(result.user.id, 'user-1');
+  assert.equal(inviteConsumed, true);
+});
+
+test('acceptInvite rejects invite reuse when another request already consumed it', async () => {
+  const { TeamService } = await import('../services/team.service.js');
+  const { AppError } = await import('../utils/errors.js');
+  const { hashOpaqueToken } = await import('../services/session-tokens.js');
+
+  let userCreated = false;
+  const prisma = {
+    teamInvite: {
+      findUnique: async () => ({
+        id: 'invite-1',
+        token: hashOpaqueToken('invite-token'),
+        email: 'invitee@example.org',
+        role: 'MEMBER',
+        organisationId: 'org-1',
+        organisation: { id: 'org-1', name: 'Org One' },
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      updateMany: async () => ({ count: 0 }),
+    },
+    user: {
+      findUnique: async () => null,
+      create: async () => {
+        userCreated = true;
+        return {};
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new TeamService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () =>
+      service.acceptInvite({
+        token: 'invite-token',
+        name: 'Invitee',
+        password: 'NewPassword1',
+      }),
+    (error: unknown) => error instanceof AppError && error.statusCode === 400 && error.code === 'INVALID_INVITE',
+  );
+
+  assert.equal(userCreated, false);
+});
+
 test('conflict records reject board members from another organisation on create', async () => {
   const { GovernanceRegisterService } = await import('../services/governance-register.service.js');
   const { AppError } = await import('../utils/errors.js');
@@ -441,4 +551,77 @@ test('refresh token rotation fails without creating a replacement session when r
     (error: unknown) => error instanceof AppError && error.statusCode === 401 && error.code === 'INVALID_REFRESH_TOKEN',
   );
   assert.deepEqual(createdSessions, []);
+});
+
+test('resetPassword consumes the reset token atomically before revoking sessions', async () => {
+  const { AuthService } = await import('../services/auth.service.js');
+  const { hashOpaqueToken } = await import('../services/session-tokens.js');
+
+  let consumed = false;
+  const sessionUpdates: unknown[] = [];
+  const prisma = {
+    user: {
+      findFirst: async () => ({ id: 'user-1' }),
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string; resetToken: string; resetTokenExpiry: { gt: Date } };
+        data: { passwordHash: string; resetToken: null; resetTokenExpiry: null };
+      }) => {
+        assert.equal(where.id, 'user-1');
+        assert.equal(where.resetToken, hashOpaqueToken('reset-token'));
+        assert.ok(where.resetTokenExpiry.gt instanceof Date);
+        assert.equal(typeof data.passwordHash, 'string');
+        assert.notEqual(data.passwordHash, 'NewPassword1');
+        assert.equal(data.resetToken, null);
+        assert.equal(data.resetTokenExpiry, null);
+        if (consumed) return { count: 0 };
+        consumed = true;
+        return { count: 1 };
+      },
+    },
+    authSession: {
+      updateMany: async (args: unknown) => {
+        sessionUpdates.push(args);
+        return { count: 2 };
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new AuthService(prisma as never, {} as never);
+
+  const result = await service.resetPassword('reset-token', 'NewPassword1');
+
+  assert.deepEqual(result, { message: 'Password has been reset successfully.' });
+  assert.equal(consumed, true);
+  assert.equal(sessionUpdates.length, 1);
+});
+
+test('resetPassword rejects token reuse when another request already consumed it', async () => {
+  const { AuthService } = await import('../services/auth.service.js');
+  const { AppError } = await import('../utils/errors.js');
+
+  let sessionRevoked = false;
+  const prisma = {
+    user: {
+      findFirst: async () => ({ id: 'user-1' }),
+      updateMany: async () => ({ count: 0 }),
+    },
+    authSession: {
+      updateMany: async () => {
+        sessionRevoked = true;
+        return { count: 1 };
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new AuthService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () => service.resetPassword('reset-token', 'NewPassword1'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 400 && error.code === 'INVALID_RESET_TOKEN',
+  );
+
+  assert.equal(sessionRevoked, false);
 });

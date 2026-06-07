@@ -7,7 +7,6 @@ import {
   hashOpaqueToken,
   issueSessionTokens,
   revokeSessionToken,
-  revokeUserSessions,
   rotateSessionTokens,
 } from './session-tokens.js';
 
@@ -206,11 +205,14 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string) {
+    const resetToken = hashOpaqueToken(token);
+    const now = new Date();
     const user = await this.prisma.user.findFirst({
       where: {
-        resetToken: hashOpaqueToken(token),
-        resetTokenExpiry: { gt: new Date() },
+        resetToken,
+        resetTokenExpiry: { gt: now },
       },
+      select: { id: true },
     });
 
     if (!user) {
@@ -219,16 +221,38 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash,
-        resetToken: null,
-        resetTokenExpiry: null,
-      },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.user.updateMany({
+        where: {
+          id: user.id,
+          resetToken,
+          resetTokenExpiry: { gt: now },
+        },
+        data: {
+          passwordHash,
+          resetToken: null,
+          resetTokenExpiry: null,
+        },
+      });
 
-    await revokeUserSessions(this.prisma, user.id);
+      if (consumed.count !== 1) {
+        throw new AppError(
+          400,
+          'INVALID_RESET_TOKEN',
+          'This reset link is invalid or has expired. Please request a new one.',
+        );
+      }
+
+      await tx.authSession.updateMany({
+        where: {
+          userId: user.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: now,
+        },
+      });
+    });
 
     return { message: 'Password has been reset successfully.' };
   }

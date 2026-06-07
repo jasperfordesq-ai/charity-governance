@@ -71,6 +71,33 @@ jobs:
       - name: Build API Docker image
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
 
+      - name: Validate API Docker production configuration
+        run: |
+          docker run --rm \
+            -e NODE_ENV=production \
+            -e PORT=3002 \
+            -e TRUSTED_PROXY_ADDRESSES=10.0.0.10 \
+            -e READINESS_API_KEY=ci-readiness-key-with-enough-entropy \
+            -e DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=require \
+            -e JWT_SECRET=ci-production-jwt-secret-with-enough-entropy \
+            -e FRONTEND_URL=https://app.charitypilot.ie \
+            -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e STRIPE_SECRET_KEY=sk_live_ci_configured_secret \
+            -e STRIPE_WEBHOOK_SECRET=whsec_ci_configured_secret \
+            -e STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_ci_essentials_monthly \
+            -e STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_ci_essentials_yearly \
+            -e STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_ci_complete_monthly \
+            -e STRIPE_COMPLETE_YEARLY_PRICE_ID=price_ci_complete_yearly \
+            -e RESEND_API_KEY=re_ci_configured_secret \
+            -e EMAIL_FROM=noreply@charitypilot.ie \
+            -e SUPABASE_URL=https://ci-project.supabase.co \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
+            -e SUPABASE_STORAGE_BUCKET=documents \
+            --entrypoint node \
+            charitypilot-api-ci \
+            -e "import('./dist/utils/env.js').then(({ validateProductionEnv }) => validateProductionEnv())"
+
       - name: Smoke API Docker image
         run: |
           set -euo pipefail

@@ -21,6 +21,7 @@ import { DeadlineRemindersService } from './services/deadline-reminders.service.
 import { startCronJobs } from './utils/cron.js';
 import { validateProductionEnv } from './utils/env.js';
 import { parsePort } from './utils/port.js';
+import { normaliseOrigin, validateUnsafeRequestOrigin } from './utils/request-origin.js';
 
 const envToLogger: Record<string, unknown> = {
   development: {
@@ -36,13 +37,6 @@ const envToLogger: Record<string, unknown> = {
 const environment = process.env.NODE_ENV ?? 'development';
 const isProduction = environment === 'production';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
-function normaliseOrigin(origin: string): string {
-  try {
-    return new URL(origin).origin;
-  } catch {
-    return origin.replace(/\/+$/, '');
-  }
-}
 
 const allowedOrigins = new Set(
   (process.env.FRONTEND_URL?.split(',') ?? defaultFrontendOrigins)
@@ -79,22 +73,15 @@ app.addHook('onSend', async (_request, reply, payload) => {
 });
 
 app.addHook('preHandler', async (request, reply) => {
-  if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
-    return;
-  }
-
-  const origin = request.headers.origin;
-  if (origin && !allowedOrigins.has(origin)) {
-    return reply.status(403).send({
-      error: 'Invalid request origin',
-      code: 'INVALID_ORIGIN',
-    });
+  const originValidation = validateUnsafeRequestOrigin(request, allowedOrigins);
+  if (!originValidation.ok) {
+    return reply.status(originValidation.statusCode).send(originValidation.payload);
   }
 });
 
 await app.register(cors, {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.has(origin)) {
+    if (!origin || allowedOrigins.has(normaliseOrigin(origin))) {
       callback(null, true);
       return;
     }

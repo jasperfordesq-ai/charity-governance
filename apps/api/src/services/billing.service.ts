@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { SubscriptionPlan } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { isConfiguredSecret } from '../utils/env.js';
+import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 
 type BillingPrisma = Pick<PrismaClient, 'organisation' | 'stripeWebhookEvent' | 'subscription'>;
 
@@ -351,13 +352,7 @@ export class BillingService {
     }
 
     const now = new Date();
-    let hasAccess = false;
-
-    if (subscription.status === 'ACTIVE' || subscription.status === 'PAST_DUE') {
-      hasAccess = true;
-    } else if (subscription.status === 'TRIALING') {
-      hasAccess = !subscription.trialEndsAt || subscription.trialEndsAt > now;
-    }
+    const hasAccess = hasSubscriptionAccess(subscription, now);
 
     return {
       plan: subscription.plan,

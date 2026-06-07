@@ -543,6 +543,14 @@ test('production secret env files are ignored by git without hiding the template
   assert.equal(templateResult.status, 1, '.env.production.example must remain visible');
 });
 
+test('Docker build context excludes generated caches and build metadata', () => {
+  const dockerignore = readRepoFile('.dockerignore');
+
+  for (const pattern of ['.turbo', '**/.turbo', '**/*.tsbuildinfo']) {
+    assert.match(dockerignore, new RegExp(`(^|\\n)${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\n|$)`));
+  }
+});
+
 test('API Docker image documents the production runtime port and non-root user', () => {
   const dockerfile = readRepoFile('apps/api/Dockerfile');
 
@@ -845,6 +853,25 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.ok(
     workflow.indexOf('name: Build web Docker image') < workflow.indexOf('name: Smoke web Docker image'),
     'web image must be built before the web smoke run',
+  );
+});
+
+test('CI validates API production env inside the built Docker image', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /name:\s+Validate API Docker production configuration/);
+  assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-ci[\s\S]*validateProductionEnv/);
+  assert.match(workflow, /-e NODE_ENV=production/);
+  assert.match(workflow, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
+  assert.match(workflow, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
+  assert.match(workflow, /-e STRIPE_SECRET_KEY=sk_live_ci_configured_secret/);
+  assert.ok(
+    workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Validate API Docker production configuration'),
+    'API image must be built before validating production configuration inside it',
+  );
+  assert.ok(
+    workflow.indexOf('name: Validate API Docker production configuration') < workflow.indexOf('name: Smoke API Docker image'),
+    'production configuration must be validated before the API smoke run',
   );
 });
 

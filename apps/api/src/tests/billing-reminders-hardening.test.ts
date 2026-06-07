@@ -241,6 +241,75 @@ test('Stripe webhook unique errors outside the event ledger are rethrown', async
   );
 });
 
+test('billing status only allows past-due access inside the grace window', async () => {
+  const now = Date.now();
+  let subscription = {
+    plan: 'COMPLETE',
+    status: 'PAST_DUE',
+    trialEndsAt: null,
+    currentPeriodEnd: new Date(now - 8 * 24 * 60 * 60 * 1000),
+  };
+  const prisma = {
+    subscription: {
+      findUnique: async () => subscription,
+    },
+  };
+  const service = new BillingService(prisma as never);
+
+  const expired = await service.getStatus('org_1');
+
+  assert.equal(expired.hasAccess, false);
+
+  subscription = {
+    plan: 'COMPLETE',
+    status: 'PAST_DUE',
+    trialEndsAt: null,
+    currentPeriodEnd: new Date(now - 6 * 24 * 60 * 60 * 1000),
+  };
+
+  const inGrace = await service.getStatus('org_1');
+
+  assert.equal(inGrace.hasAccess, true);
+});
+
+test('subscriptionGuard denies past-due tenants after the grace window', async () => {
+  const { subscriptionGuard } = await import('../middleware/subscription.js');
+  const reply = {
+    statusCode: 200,
+    payload: undefined as unknown,
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    send(payload: unknown) {
+      this.payload = payload;
+      return this;
+    },
+  };
+  const request = {
+    user: { organisationId: 'org_1' },
+    server: {
+      prisma: {
+        subscription: {
+          findUnique: async () => ({
+            status: 'PAST_DUE',
+            trialEndsAt: null,
+            currentPeriodEnd: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+          }),
+        },
+      },
+    },
+  };
+
+  await subscriptionGuard(request as never, reply as never);
+
+  assert.equal(reply.statusCode, 403);
+  assert.deepEqual(reply.payload, {
+    error: 'Your payment is past due and the grace period has ended. Please update billing to continue.',
+    code: 'PAST_DUE_GRACE_EXPIRED',
+  });
+});
+
 function reminderDeadline(overrides: Record<string, unknown> = {}) {
   const dueDate = new Date();
   dueDate.setUTCHours(0, 0, 0, 0);
@@ -255,7 +324,7 @@ function reminderDeadline(overrides: Record<string, unknown> = {}) {
     organisation: {
       id: 'org_1',
       name: 'Governance Charity',
-      subscription: { status: 'ACTIVE', trialEndsAt: null },
+      subscription: { status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: null },
       users: [{ id: 'user_1', email: 'owner@example.org', emailVerified: true }],
     },
     ...overrides,
@@ -284,8 +353,10 @@ test('deadline reminder lookup is scoped to entitled subscriptions and verified 
     organisation?: { subscription?: { is: { OR: Array<Record<string, unknown>> } } };
   };
   assert.ok(where.organisation?.subscription, 'deadline lookup must filter by subscription entitlement');
-  assert.deepEqual(where.organisation.subscription.is.OR[0], { status: { in: ['ACTIVE', 'PAST_DUE'] } });
-  assert.equal(where.organisation.subscription.is.OR[1]?.status, 'TRIALING');
+  assert.deepEqual(where.organisation.subscription.is.OR[0], { status: 'ACTIVE' });
+  assert.equal(where.organisation.subscription.is.OR[1]?.status, 'PAST_DUE');
+  assert.ok(where.organisation.subscription.is.OR[1]?.currentPeriodEnd);
+  assert.equal(where.organisation.subscription.is.OR[2]?.status, 'TRIALING');
 
   const users = (findManyArgs.include as {
     organisation: { include: { users: { where: Record<string, unknown> } } };

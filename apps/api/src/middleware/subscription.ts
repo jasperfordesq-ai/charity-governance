@@ -1,4 +1,5 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 
 /**
  * Ensures the user's organisation has an active subscription or is within a trial period.
@@ -21,23 +22,26 @@ export async function subscriptionGuard(request: FastifyRequest, reply: FastifyR
 
   const now = new Date();
 
+  if (hasSubscriptionAccess(subscription, now)) {
+    return;
+  }
+
   if (subscription.status === 'TRIALING') {
-    if (subscription.trialEndsAt && subscription.trialEndsAt < now) {
+    if (subscription.trialEndsAt && subscription.trialEndsAt <= now) {
       reply.status(403).send({
         error: 'Your trial has expired. Please subscribe to continue.',
         code: 'TRIAL_EXPIRED',
       });
       return;
     }
-    return; // Trial still active
-  }
-
-  if (subscription.status === 'ACTIVE') {
-    return; // Paid and active
   }
 
   if (subscription.status === 'PAST_DUE') {
-    return; // Still has access during grace period
+    reply.status(403).send({
+      error: 'Your payment is past due and the grace period has ended. Please update billing to continue.',
+      code: 'PAST_DUE_GRACE_EXPIRED',
+    });
+    return;
   }
 
   reply.status(403).send({

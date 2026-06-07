@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { EmailService } from './email.service.js';
+import { hasSubscriptionAccess, pastDueGraceCutoff } from '../utils/subscription-access.js';
 
 const REMINDER_RESERVATION_ERROR = 'Reserved before delivery';
 const REMINDER_RESERVATION_STALE_MS = 15 * 60 * 1000;
@@ -9,13 +10,10 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 function hasReminderEntitlement(
-  subscription: { status: string; trialEndsAt: Date | null } | null | undefined,
+  subscription: { status: string; trialEndsAt: Date | null; currentPeriodEnd?: Date | null } | null | undefined,
   now: Date,
 ): boolean {
-  if (!subscription) return false;
-  if (subscription.status === 'ACTIVE' || subscription.status === 'PAST_DUE') return true;
-  if (subscription.status !== 'TRIALING') return false;
-  return !subscription.trialEndsAt || subscription.trialEndsAt > now;
+  return hasSubscriptionAccess(subscription, now);
 }
 
 export class DeadlineRemindersService {
@@ -131,7 +129,8 @@ export class DeadlineRemindersService {
           subscription: {
             is: {
               OR: [
-                { status: { in: ['ACTIVE', 'PAST_DUE'] } },
+                { status: 'ACTIVE' },
+                { status: 'PAST_DUE', currentPeriodEnd: { gt: pastDueGraceCutoff(now) } },
                 { status: 'TRIALING', OR: [{ trialEndsAt: null }, { trialEndsAt: { gt: now } }] },
               ],
             },

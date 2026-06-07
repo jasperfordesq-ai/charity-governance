@@ -1,8 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { refreshTokenMaxAgeSeconds } from '../services/session-tokens.js';
+import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth-cookie-names.js';
 
-export const ACCESS_TOKEN_COOKIE = 'charitypilot_access';
-export const REFRESH_TOKEN_COOKIE = 'charitypilot_refresh';
+export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE };
 
 type AuthTokens = {
   accessToken: string;
