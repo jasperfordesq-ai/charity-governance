@@ -71,8 +71,33 @@ jobs:
       - name: Build API Docker image
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
 
+      - name: Smoke API Docker image
+        run: |
+          set -euo pipefail
+          docker rm -f charitypilot-api-smoke 2>/dev/null || true
+          trap 'docker rm -f charitypilot-api-smoke 2>/dev/null || true' EXIT
+          docker run -d --name charitypilot-api-smoke --network host \
+            -e NODE_ENV=test \
+            -e PORT=3002 \
+            -e HOST=0.0.0.0 \
+            -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_ci \
+            charitypilot-api-ci
+          timeout 60 bash -c 'until curl --fail --silent http://127.0.0.1:3002/api/v1/health; do docker logs charitypilot-api-smoke --tail 50; sleep 2; done'
+
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
+
+      - name: Smoke web Docker image
+        run: |
+          set -euo pipefail
+          docker rm -f charitypilot-web-smoke 2>/dev/null || true
+          trap 'docker rm -f charitypilot-web-smoke 2>/dev/null || true' EXIT
+          docker run -d --name charitypilot-web-smoke --network host \
+            -e NODE_ENV=production \
+            -e PORT=3003 \
+            -e HOST=0.0.0.0 \
+            charitypilot-web-ci
+          timeout 60 bash -c 'until curl --fail --silent http://127.0.0.1:3003/; do docker logs charitypilot-web-smoke --tail 50; sleep 2; done'
 
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate

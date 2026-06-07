@@ -820,3 +820,26 @@ test('CI builds API and web production Docker images', () => {
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
   assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
 });
+
+test('CI smoke-runs API and web Docker images after building them', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /name:\s+Smoke API Docker image/);
+  assert.match(workflow, /docker run -d --name charitypilot-api-smoke[\s\S]*charitypilot-api-ci/);
+  assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
+
+  assert.match(workflow, /name:\s+Smoke web Docker image/);
+  assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
+  assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3003\//);
+  assert.match(workflow, /docker rm -f charitypilot-web-smoke/);
+
+  assert.ok(
+    workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker image'),
+    'API image must be built before the API smoke run',
+  );
+  assert.ok(
+    workflow.indexOf('name: Build web Docker image') < workflow.indexOf('name: Smoke web Docker image'),
+    'web image must be built before the web smoke run',
+  );
+});
