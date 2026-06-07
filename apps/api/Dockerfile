@@ -6,6 +6,15 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 
+FROM deps AS migration-runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --chown=node:node apps/api/prisma ./apps/api/prisma
+WORKDIR /app/apps/api
+USER node
+ENTRYPOINT ["npx", "prisma"]
+CMD ["migrate", "deploy", "--schema", "prisma/schema.prisma"]
+
 FROM deps AS build
 WORKDIR /app
 ARG DATABASE_URL=postgresql://charitypilot:charitypilot@localhost:5432/charitypilot
@@ -15,9 +24,12 @@ RUN npm run build -w @charitypilot/shared
 RUN npm run db:generate -w @charitypilot/api
 RUN npm run build -w @charitypilot/api
 
-FROM build AS runtime-deps
+FROM node:22-alpine AS runtime-deps
 WORKDIR /app
-RUN npm prune --omit=dev --omit=peer --workspaces && \
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --omit=dev --omit=peer --workspace @charitypilot/api --workspace @charitypilot/shared --include-workspace-root=false && \
     rm -rf node_modules/prisma \
       node_modules/typescript \
       node_modules/.bin/prisma \
@@ -30,6 +42,7 @@ ENV NODE_ENV=production
 ENV PORT=3002
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
 COPY --chown=node:node --from=build /app/apps/api ./apps/api
 WORKDIR /app/apps/api

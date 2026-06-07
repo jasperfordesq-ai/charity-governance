@@ -1,15 +1,29 @@
-name: CI
+name: Release Images
 
 on:
-  pull_request:
+  workflow_dispatch:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  DATABASE_URL: postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci
 
 jobs:
-  verify:
+  publish:
+    name: Build, smoke, and publish Docker images
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    environment: production
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16.4-alpine
@@ -24,49 +38,71 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    env:
-      DATABASE_URL: postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
+      - name: Validate release ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] &&
+            { [ "${GITHUB_REF_TYPE}" != "branch" ] || [ "${GITHUB_REF_NAME}" != "master" ]; }; then
+            echo "Manual image releases must run from master." >&2
+            exit 1
+          fi
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Resolve image tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          repo="${repo,,}"
 
-      - name: Generate Prisma client
-        run: npm run db:generate -w @charitypilot/api
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="sha-${GITHUB_SHA::12}"
+          fi
 
-      - name: Validate Prisma schema
-        run: npx prisma validate
-        working-directory: apps/api
+          tag="$(printf '%s' "${tag}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g' | cut -c1-128)"
+          if [ -z "${tag}" ]; then
+            echo "Resolved Docker tag is empty" >&2
+            exit 1
+          fi
+          if [[ ! "${tag}" =~ ^[a-z0-9_][a-z0-9_.-]{0,127}$ ]]; then
+            echo "Docker tag must match [a-z0-9_][a-z0-9_.-]{0,127}" >&2
+            exit 1
+          fi
 
-      - name: Deploy Prisma migrations
-        run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+          short_sha="sha-${GITHUB_SHA::12}"
+          echo "api_image=${REGISTRY}/${owner}/${repo}-api:${tag}" >> "${GITHUB_OUTPUT}"
+          echo "web_image=${REGISTRY}/${owner}/${repo}-web:${tag}" >> "${GITHUB_OUTPUT}"
+          echo "migration_image=${REGISTRY}/${owner}/${repo}-migrations:${tag}" >> "${GITHUB_OUTPUT}"
+          echo "api_sha_image=${REGISTRY}/${owner}/${repo}-api:${short_sha}" >> "${GITHUB_OUTPUT}"
+          echo "web_sha_image=${REGISTRY}/${owner}/${repo}-web:${short_sha}" >> "${GITHUB_OUTPUT}"
+          echo "migration_sha_image=${REGISTRY}/${owner}/${repo}-migrations:${short_sha}" >> "${GITHUB_OUTPUT}"
 
-      - name: Verify Prisma migration status
-        run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
+      - name: Login to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "${GITHUB_TOKEN}" | docker login "${REGISTRY}" -u "${GITHUB_ACTOR}" --password-stdin
 
-      - name: Lint
-        run: npm run lint
+      - name: Build migration runner image
+        run: docker build -f apps/api/Dockerfile --target migration-runner -t charitypilot-api-migrations-ci .
 
-      - name: Test
-        run: npm run test
-
-      - name: Build shared package
-        run: npm run build -w @charitypilot/shared
-
-      - name: Build API
-        run: npm run build -w @charitypilot/api
-
-      - name: Build web
-        run: npm run build -w @charitypilot/web
+      - name: Run migration runner against CI PostgreSQL
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -e DATABASE_URL="${DATABASE_URL}" \
+            charitypilot-api-migrations-ci
+          docker run --rm --network host \
+            -e DATABASE_URL="${DATABASE_URL}" \
+            charitypilot-api-migrations-ci migrate status --schema prisma/schema.prisma
 
       - name: Build API Docker image
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
@@ -156,5 +192,26 @@ jobs:
             sleep 2
           done
 
-      - name: Dependency audit
-        run: npm audit --omit=dev --audit-level=moderate
+      - name: Push image tags
+        run: |
+          set -euo pipefail
+          api_image="${{ steps.meta.outputs.api_image }}"
+          web_image="${{ steps.meta.outputs.web_image }}"
+          migration_image="${{ steps.meta.outputs.migration_image }}"
+          api_sha_image="${{ steps.meta.outputs.api_sha_image }}"
+          web_sha_image="${{ steps.meta.outputs.web_sha_image }}"
+          migration_sha_image="${{ steps.meta.outputs.migration_sha_image }}"
+
+          docker tag charitypilot-api-ci "${api_image}"
+          docker tag charitypilot-api-ci "${api_sha_image}"
+          docker tag charitypilot-web-ci "${web_image}"
+          docker tag charitypilot-web-ci "${web_sha_image}"
+          docker tag charitypilot-api-migrations-ci "${migration_image}"
+          docker tag charitypilot-api-migrations-ci "${migration_sha_image}"
+
+          docker push "${api_image}"
+          docker push "${api_sha_image}"
+          docker push "${web_image}"
+          docker push "${web_sha_image}"
+          docker push "${migration_image}"
+          docker push "${migration_sha_image}"

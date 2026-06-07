@@ -556,8 +556,13 @@ test('API Docker image documents the production runtime port and non-root user',
 
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ARG\s+DATABASE_URL=/);
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ENV\s+DATABASE_URL=\$DATABASE_URL[\s\S]*RUN\s+npm run db:generate -w @charitypilot\/api/);
-  assert.match(dockerfile, /FROM build AS runtime-deps[\s\S]*RUN\s+npm prune --omit=dev --omit=peer --workspaces/);
+  assert.match(dockerfile, /FROM node:22-alpine AS runtime-deps/);
+  assert.match(
+    dockerfile,
+    /npm ci --omit=dev --omit=peer --workspace @charitypilot\/api --workspace @charitypilot\/shared --include-workspace-root=false/,
+  );
   assert.match(dockerfile, /rm -rf[\s\S]*node_modules\/prisma[\s\S]*node_modules\/typescript/);
+  assert.match(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules\/\.prisma \.\/node_modules\/\.prisma/);
   assert.match(dockerfile, /ENV\s+NODE_ENV=production/);
   assert.match(dockerfile, /ENV\s+PORT=3002/);
   assert.match(dockerfile, /EXPOSE\s+3002/);
@@ -569,6 +574,22 @@ test('API Docker image documents the production runtime port and non-root user',
 
   const runnerStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-alpine AS runner'));
   assert.doesNotMatch(runnerStage, /DATABASE_URL/);
+});
+
+test('API Dockerfile includes a dedicated Prisma migration runner target', () => {
+  const dockerfile = readRepoFile('apps/api/Dockerfile');
+
+  assert.match(dockerfile, /FROM deps AS migration-runner/);
+  assert.match(dockerfile, /FROM deps AS migration-runner[\s\S]*COPY --chown=node:node apps\/api\/prisma \.\/apps\/api\/prisma/);
+  assert.match(dockerfile, /FROM deps AS migration-runner[\s\S]*WORKDIR \/app\/apps\/api/);
+  assert.match(dockerfile, /FROM deps AS migration-runner[\s\S]*USER node/);
+  assert.match(dockerfile, /ENTRYPOINT\s+\["npx",\s*"prisma"\]/);
+  assert.match(dockerfile, /CMD\s+\["migrate",\s*"deploy",\s*"--schema",\s*"prisma\/schema\.prisma"\]/);
+
+  const migrationRunnerStart = dockerfile.indexOf('FROM deps AS migration-runner');
+  const migrationRunnerEnd = dockerfile.indexOf('\nFROM ', migrationRunnerStart + 1);
+  const migrationRunnerStage = dockerfile.slice(migrationRunnerStart, migrationRunnerEnd);
+  assert.doesNotMatch(migrationRunnerStage, /dist\/start\.js/);
 });
 
 test('API server enables trusted proxy handling for production rate limits', () => {
@@ -849,7 +870,7 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
   assert.match(workflow, /name:\s+Verify API Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-api-ci[\s\S]*@prisma\/client/);
-  assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo'\]/);
+  assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui\/react'\]/);
 
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
@@ -894,6 +915,55 @@ test('CI validates API production env inside the built Docker image', () => {
   assert.ok(
     workflow.indexOf('name: Validate API Docker production configuration') < workflow.indexOf('name: Smoke API Docker image'),
     'production configuration must be validated before the API smoke run',
+  );
+});
+
+test('release workflow publishes runtime and migration Docker images to GHCR', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+
+  assert.match(workflow, /name:\s+Release Images/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /inputs:[\s\S]*image_tag/);
+  assert.match(workflow, /push:[\s\S]*tags:[\s\S]*- 'v\*'/);
+  assert.match(workflow, /permissions:[\s\S]*contents:\s+read[\s\S]*packages:\s+write/);
+  assert.match(workflow, /environment:\s+production/);
+  assert.match(workflow, /REGISTRY:\s+ghcr\.io/);
+  assert.match(workflow, /name:\s+Validate release ref/);
+  assert.match(workflow, /Manual image releases must run from master/);
+  assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);
+  assert.match(workflow, /docker login "\$\{REGISTRY\}"/);
+  assert.match(workflow, /docker build -f apps\/api\/Dockerfile --target migration-runner[\s\S]*-t charitypilot-api-migrations-ci \./);
+  assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-migrations-ci[\s\S]*migrate status --schema prisma\/schema\.prisma/);
+  assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
+  assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui\/react'\]/);
+  assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
+  assert.match(workflow, /docker tag charitypilot-api-ci "\$\{api_image\}"/);
+  assert.match(workflow, /docker tag charitypilot-web-ci "\$\{web_image\}"/);
+  assert.match(workflow, /docker tag charitypilot-api-migrations-ci "\$\{migration_image\}"/);
+  assert.match(workflow, /docker push "\$\{api_image\}"/);
+  assert.match(workflow, /docker push "\$\{web_image\}"/);
+  assert.match(workflow, /docker push "\$\{migration_image\}"/);
+
+  assert.ok(
+    workflow.indexOf('name: Build migration runner image') <
+      workflow.indexOf('name: Run migration runner against CI PostgreSQL'),
+    'migration runner image must be built before its smoke run',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke web Docker image') < workflow.indexOf('name: Push image tags'),
+    'images must be smoke-tested before publishing',
+  );
+  assert.ok(
+    workflow.indexOf('name: Run migration runner against CI PostgreSQL') < workflow.indexOf('name: Push image tags'),
+    'migration runner must be tested before publishing',
+  );
+  assert.ok(
+    workflow.indexOf('name: Validate API Docker production configuration') < workflow.indexOf('name: Push image tags'),
+    'API production config must be validated before publishing',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
+    'API image must be smoke-tested before publishing',
   );
 });
 
