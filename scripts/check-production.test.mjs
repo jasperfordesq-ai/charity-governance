@@ -236,10 +236,15 @@ test('production API scripts run built entrypoints without local env-file depend
 test('API Docker image documents the production runtime port and non-root user', () => {
   const dockerfile = readRepoFile('apps/api/Dockerfile');
 
+  assert.match(dockerfile, /FROM deps AS build[\s\S]*ARG\s+DATABASE_URL=/);
+  assert.match(dockerfile, /FROM deps AS build[\s\S]*ENV\s+DATABASE_URL=\$DATABASE_URL[\s\S]*RUN\s+npm run db:generate -w @charitypilot\/api/);
   assert.match(dockerfile, /ENV\s+NODE_ENV=production/);
   assert.match(dockerfile, /ENV\s+PORT=3002/);
   assert.match(dockerfile, /EXPOSE\s+3002/);
   assert.match(dockerfile, /USER\s+node/);
+
+  const runnerStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-alpine AS runner'));
+  assert.doesNotMatch(runnerStage, /DATABASE_URL/);
 });
 
 test('web Docker build requires a production HTTPS API URL before Next build', () => {
@@ -319,4 +324,39 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test('CI deploys Prisma migrations against PostgreSQL before release gates', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /services:\s*\n\s+postgres:/);
+  assert.match(workflow, /image:\s+postgres:/);
+  assert.match(workflow, /POSTGRES_DB:\s+charitypilot_ci/);
+  assert.match(workflow, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci/);
+  assert.match(workflow, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(workflow, /prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
+});
+
+test('CI keeps every production release gate wired', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /pull_request:/);
+  assert.match(workflow, /push:[\s\S]*branches:[\s\S]*- master/);
+  assert.match(workflow, /node-version:\s+22/);
+  assert.match(workflow, /run:\s+npm ci/);
+  assert.match(workflow, /run:\s+npm run db:generate -w @charitypilot\/api/);
+  assert.match(workflow, /run:\s+npx prisma validate/);
+  assert.match(workflow, /run:\s+npm run lint/);
+  assert.match(workflow, /run:\s+npm run test/);
+  assert.match(workflow, /run:\s+npm run build -w @charitypilot\/shared/);
+  assert.match(workflow, /run:\s+npm run build -w @charitypilot\/api/);
+  assert.match(workflow, /run:\s+npm run build -w @charitypilot\/web/);
+  assert.match(workflow, /run:\s+npm audit --omit=dev --audit-level=moderate/);
+});
+
+test('CI builds API and web production Docker images', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
+  assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.example -t charitypilot-web-ci \./);
 });

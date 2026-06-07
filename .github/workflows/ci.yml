@@ -10,6 +10,22 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_DB: charitypilot_ci
+          POSTGRES_USER: charitypilot
+          POSTGRES_PASSWORD: charitypilot_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U charitypilot -d charitypilot_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci
 
     steps:
       - name: Checkout
@@ -31,6 +47,12 @@ jobs:
         run: npx prisma validate
         working-directory: apps/api
 
+      - name: Deploy Prisma migrations
+        run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+
+      - name: Verify Prisma migration status
+        run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
+
       - name: Lint
         run: npm run lint
 
@@ -45,6 +67,12 @@ jobs:
 
       - name: Build web
         run: npm run build -w @charitypilot/web
+
+      - name: Build API Docker image
+        run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
+
+      - name: Build web Docker image
+        run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.example -t charitypilot-web-ci .
 
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate

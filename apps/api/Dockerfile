@@ -8,6 +8,8 @@ RUN npm ci
 
 FROM deps AS build
 WORKDIR /app
+ARG DATABASE_URL=postgresql://charitypilot:charitypilot@localhost:5432/charitypilot
+ENV DATABASE_URL=$DATABASE_URL
 COPY . .
 RUN npm run build -w @charitypilot/shared
 RUN npm run db:generate -w @charitypilot/api
