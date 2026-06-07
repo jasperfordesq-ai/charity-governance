@@ -81,6 +81,7 @@ jobs:
             -e PORT=3002 \
             -e HOST=0.0.0.0 \
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
+            -e RESEND_API_KEY=re_ci_smoke_key \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_ci \
             charitypilot-api-ci
           until curl --fail --silent http://127.0.0.1:3002/api/v1/health; do
