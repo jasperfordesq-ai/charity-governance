@@ -607,6 +607,8 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(compose, /\nservices:\s*\n\s+migrate:/);
   assert.match(compose, /\n\s+api:/);
   assert.match(compose, /\n\s+web:/);
+  assert.match(compose, /\n\s+deadline-reminders:/);
+  assert.match(compose, /\n\s+document-storage-cleanup:/);
   assert.doesNotMatch(compose, /\n\s+db:/);
   assert.doesNotMatch(compose, /\n\s+build:/);
   assert.doesNotMatch(compose, /node:22/);
@@ -616,6 +618,8 @@ test('production Docker compose runs migrations before API and keeps web away fr
   const migrate = composeServiceBlock(compose, 'migrate');
   const api = composeServiceBlock(compose, 'api');
   const web = composeServiceBlock(compose, 'web');
+  const deadlineReminders = composeServiceBlock(compose, 'deadline-reminders');
+  const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
 
   assert.match(migrate, /image:\s+\$\{CHARITYPILOT_MIGRATION_IMAGE:\?Set CHARITYPILOT_MIGRATION_IMAGE\}/);
   assert.match(migrate, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
@@ -650,10 +654,24 @@ test('production Docker compose runs migrations before API and keeps web away fr
     assert.doesNotMatch(web, new RegExp(`\\b${secret}:`));
   }
 
-  for (const service of [migrate, api, web]) {
+  for (const service of [migrate, api, web, deadlineReminders, documentStorageCleanup]) {
     assert.match(service, /security_opt:[\s\S]*no-new-privileges:true/);
     assert.match(service, /cap_drop:[\s\S]*- ALL/);
   }
+
+  for (const job of [deadlineReminders, documentStorageCleanup]) {
+    assert.match(job, /profiles:[\s\S]*- jobs/);
+    assert.match(job, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
+    assert.match(job, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
+    assert.match(job, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
+    assert.match(job, /NODE_ENV:\s+production/);
+    assert.match(job, /restart:\s+"no"/);
+    assert.doesNotMatch(job, /ports:/);
+    assert.doesNotMatch(job, /healthcheck:/);
+  }
+
+  assert.match(deadlineReminders, /command:\s+\["node",\s*"dist\/jobs\/send-deadline-reminders\.js"\]/);
+  assert.match(documentStorageCleanup, /command:\s+\["node",\s*"dist\/jobs\/cleanup-document-storage\.js"\]/);
 });
 
 test('production Docker compose renders with published image variables and an external env file', () => {

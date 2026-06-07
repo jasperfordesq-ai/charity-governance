@@ -83,6 +83,46 @@ services:
       retries: 12
       start_period: 30s
 
+  deadline-reminders:
+    image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
+    profiles:
+      - jobs
+    env_file:
+      - ${CHARITYPILOT_PRODUCTION_ENV_FILE:-.env.production}
+    command: ["node", "dist/jobs/send-deadline-reminders.js"]
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - charitypilot-production
+
+  document-storage-cleanup:
+    image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
+    profiles:
+      - jobs
+    env_file:
+      - ${CHARITYPILOT_PRODUCTION_ENV_FILE:-.env.production}
+    command: ["node", "dist/jobs/cleanup-document-storage.js"]
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - charitypilot-production
+
 networks:
   charitypilot-production:
     name: charitypilot-production
