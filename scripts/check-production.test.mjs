@@ -14,6 +14,12 @@ function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8');
 }
 
+function composeServiceBlock(compose, serviceName) {
+  const match = compose.match(new RegExp(`\\n  ${serviceName}:\\n[\\s\\S]*?(?=\\n  [A-Za-z0-9_-]+:\\n|\\nnetworks:\\n|$)`));
+  assert.ok(match, `compose service ${serviceName} must exist`);
+  return match[0];
+}
+
 function cleanEnv() {
   const env = {
     PATH: process.env.PATH ?? '',
@@ -590,6 +596,86 @@ test('API Dockerfile includes a dedicated Prisma migration runner target', () =>
   const migrationRunnerEnd = dockerfile.indexOf('\nFROM ', migrationRunnerStart + 1);
   const migrationRunnerStage = dockerfile.slice(migrationRunnerStart, migrationRunnerEnd);
   assert.doesNotMatch(migrationRunnerStage, /dist\/start\.js/);
+});
+
+test('production Docker compose runs migrations before API and keeps web away from secrets', () => {
+  const productionComposePath = join(repoRoot, 'compose.production.yml');
+  assert.equal(existsSync(productionComposePath), true, 'compose.production.yml must exist');
+
+  const compose = readRepoFile('compose.production.yml');
+
+  assert.match(compose, /\nservices:\s*\n\s+migrate:/);
+  assert.match(compose, /\n\s+api:/);
+  assert.match(compose, /\n\s+web:/);
+  assert.doesNotMatch(compose, /\n\s+db:/);
+  assert.doesNotMatch(compose, /\n\s+build:/);
+  assert.doesNotMatch(compose, /node:22/);
+  assert.doesNotMatch(compose, /\n\s+volumes:/);
+  assert.doesNotMatch(compose, /:\s*\/app\b/);
+
+  const migrate = composeServiceBlock(compose, 'migrate');
+  const api = composeServiceBlock(compose, 'api');
+  const web = composeServiceBlock(compose, 'web');
+
+  assert.match(migrate, /image:\s+\$\{CHARITYPILOT_MIGRATION_IMAGE:\?Set CHARITYPILOT_MIGRATION_IMAGE\}/);
+  assert.match(migrate, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
+  assert.match(migrate, /command:\s+\["migrate",\s*"deploy",\s*"--schema",\s*"prisma\/schema\.prisma"\]/);
+  assert.match(migrate, /restart:\s+"no"/);
+
+  assert.match(api, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
+  assert.match(api, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
+  assert.match(api, /NODE_ENV:\s+production/);
+  assert.match(api, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
+  assert.match(api, /fetch\('http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness'/);
+  assert.match(api, /'x-charitypilot-readiness-key':\s*process\.env\.READINESS_API_KEY/);
+  assert.match(api, /ports:[\s\S]*\$\{CHARITYPILOT_API_PORT:-3002\}:3002/);
+
+  assert.match(web, /image:\s+\$\{CHARITYPILOT_WEB_IMAGE:\?Set CHARITYPILOT_WEB_IMAGE\}/);
+  assert.doesNotMatch(web, /env_file:/);
+  assert.match(web, /NODE_ENV:\s+production/);
+  assert.match(web, /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/);
+  assert.match(web, /depends_on:[\s\S]*api:[\s\S]*condition:\s+service_healthy/);
+  assert.match(web, /fetch\('http:\/\/127\.0\.0\.1:3003\/'\)/);
+  assert.match(web, /ports:[\s\S]*\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003/);
+
+  for (const secret of [
+    'DATABASE_URL',
+    'JWT_SECRET',
+    'READINESS_API_KEY',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'RESEND_API_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+  ]) {
+    assert.doesNotMatch(web, new RegExp(`\\b${secret}:`));
+  }
+
+  for (const service of [migrate, api, web]) {
+    assert.match(service, /security_opt:[\s\S]*no-new-privileges:true/);
+    assert.match(service, /cap_drop:[\s\S]*- ALL/);
+  }
+});
+
+test('production Docker compose renders with published image variables and an external env file', () => {
+  const result = spawnSync('docker', ['compose', '-f', 'compose.production.yml', 'config', '--quiet'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      CHARITYPILOT_PRODUCTION_ENV_FILE: '.env.production.example',
+      CHARITYPILOT_API_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-api:sha-test',
+      CHARITYPILOT_WEB_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-web:sha-test',
+      CHARITYPILOT_MIGRATION_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-migrations:sha-test',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    },
+    timeout: 120_000,
+  });
+
+  assert.equal(
+    result.status,
+    0,
+    result.stderr || result.stdout || result.error?.message || 'docker compose production config failed',
+  );
 });
 
 test('API server enables trusted proxy handling for production rate limits', () => {
