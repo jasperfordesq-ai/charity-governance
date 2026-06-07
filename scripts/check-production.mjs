@@ -36,6 +36,7 @@ const REQUIRED = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_STORAGE_BUCKET',
+  'ERROR_ALERT_WEBHOOK_URL',
   'NEXT_PUBLIC_API_URL',
   'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
 ];
@@ -72,8 +73,43 @@ function isLocalHost(hostname) {
   return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
 }
 
+function normaliseHostname(hostname) {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+}
+
+function isDnsHostname(hostname) {
+  if (hostname.length > 253) return false;
+  const labels = hostname.split('.');
+  if (labels.length < 2) return false;
+
+  return labels.every((label) => (
+    label.length >= 1 &&
+    label.length <= 63 &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+  ));
+}
+
+function isPublicHost(hostname) {
+  const normalizedHostname = normaliseHostname(hostname);
+  if (
+    !normalizedHostname ||
+    normalizedHostname === 'localhost' ||
+    normalizedHostname.endsWith('.localhost') ||
+    normalizedHostname.endsWith('.local') ||
+    normalizedHostname.endsWith('.internal') ||
+    normalizedHostname.endsWith('.lan') ||
+    normalizedHostname.endsWith('.home')
+  ) {
+    return false;
+  }
+
+  if (isIP(normalizedHostname)) return false;
+
+  return isDnsHostname(normalizedHostname);
+}
+
 function isApprovedPublicHostname(hostname) {
-  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const normalizedHostname = normaliseHostname(hostname);
   return normalizedHostname === APPROVED_PUBLIC_HOST_ROOT || normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`);
 }
 
@@ -155,6 +191,9 @@ function validateUrlValue(key, value, issues, options = {}) {
     if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
       issues.push(`${key} must use an approved CharityPilot production hostname`);
     }
+    if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
+      issues.push(`${key} must use a public, non-local URL for production`);
+    }
   } catch {
     issues.push(`${key} must be a valid URL`);
   }
@@ -224,7 +263,7 @@ function requirePrefix(env, key, prefix, label, issues) {
 }
 
 function hostMatchesCookieDomain(hostname, cookieDomain) {
-  const normalizedHost = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
 
   return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
@@ -235,8 +274,8 @@ function requireAuthCookieDomainForSplitHosts(env, issues) {
   const apiUrls = configuredUrls(env, 'NEXT_PUBLIC_API_URL');
   if (!frontendUrls.length || !apiUrls.length) return;
 
-  const apiHostname = apiUrls[0].hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  const splitHostnames = frontendUrls.some((url) => url.hostname.toLowerCase().replace(/^\[|\]$/g, '') !== apiHostname);
+  const apiHostname = normaliseHostname(apiUrls[0].hostname);
+  const splitHostnames = frontendUrls.some((url) => normaliseHostname(url.hostname) !== apiHostname);
   if (!splitHostnames) return;
 
   const cookieDomain = envValue(env, 'AUTH_COOKIE_DOMAIN').trim();
@@ -300,6 +339,7 @@ requireUrl(env, 'FRONTEND_URL', issues, {
   requireApprovedPublicHost: true,
 });
 requireUrl(env, 'SUPABASE_URL', issues);
+requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
 requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
 requireAuthCookieDomainForSplitHosts(env, issues);
 

@@ -65,6 +65,7 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateProductionEnv());
 });
@@ -77,6 +78,149 @@ test('validateDocumentStorageCleanupEnv accepts storage-only production configur
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
 
   assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
+});
+
+test('validateProductionEnv rejects missing production error alert webhook', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateProductionEnv rejects local production error alert webhooks', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'http://localhost:3030/alerts';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL must use https:// in production') &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL must not point at localhost in production'),
+  );
+});
+
+test('validateProductionEnv rejects private production error alert webhooks', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  for (const webhookUrl of [
+    'https://10.0.0.5/alerts',
+    'https://[::ffff:10.0.0.5]/alerts',
+    'https://[fec0::1]/alerts',
+    'https://[64:ff9b::a00:5]/alerts',
+    'https://[100::]/alerts',
+    'https://[2001:2::1]/alerts',
+  ]) {
+    process.env.ERROR_ALERT_WEBHOOK_URL = webhookUrl;
+
+    assert.throws(
+      () => validateProductionEnv(),
+      (error: unknown) =>
+        error instanceof AppError &&
+        Array.isArray(error.details) &&
+        error.details.includes('ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL in production'),
+    );
+  }
+});
+
+test('validateProductionEnv rejects malformed production error alert webhook hostnames', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  for (const webhookUrl of [
+    'https://alerts..example.com/hooks',
+    'https://alert_webhook.example.com/hooks',
+    'https://-alerts.example.com/hooks',
+  ]) {
+    process.env.ERROR_ALERT_WEBHOOK_URL = webhookUrl;
+
+    assert.throws(
+      () => validateProductionEnv(),
+      (error: unknown) =>
+        error instanceof AppError &&
+        Array.isArray(error.details) &&
+        error.details.includes('ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL in production'),
+    );
+  }
 });
 
 test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configuration', () => {
@@ -208,6 +352,7 @@ test('validateProductionEnv accepts comma-separated production frontend origins'
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateProductionEnv());
 });

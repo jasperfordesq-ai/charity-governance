@@ -130,6 +130,7 @@ jobs:
             -e SUPABASE_URL=https://ci-project.supabase.co \
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
             --entrypoint node \
             charitypilot-api-ci \
             -e "import('./dist/utils/env.js').then(({ validateProductionEnv }) => validateProductionEnv())"

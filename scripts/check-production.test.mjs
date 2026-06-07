@@ -92,6 +92,7 @@ test('passes when the selected env file contains complete production values', ()
       'SUPABASE_URL=https://configured-project.supabase.co',
       'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
       'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
@@ -104,6 +105,264 @@ test('passes when the selected env file contains complete production values', ()
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production preflight passed using /);
     assert.ok(result.stdout.includes(envPath));
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook is missing', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook is not an HTTPS public URL', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-local-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=http://localhost:3030/alerts',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use https:\/\/ for production/);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must not point at localhost for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook points at a private network', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-private-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://10.0.0.5/alerts',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook points at an IPv4-mapped private network', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-mapped-private-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://[::ffff:10.0.0.5]/alerts',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook points at reserved IPv6 space', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-reserved-ipv6-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://[2001:2::1]/alerts',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook has a malformed DNS hostname', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-malformed-host-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://alert_webhook.example.com/hooks',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL for production/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -301,6 +560,7 @@ test('passes when production frontend origins include multiple approved HTTPS or
       'SUPABASE_URL=https://configured-project.supabase.co',
       'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
       'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
@@ -650,6 +910,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'STRIPE_WEBHOOK_SECRET',
     'RESEND_API_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
+    'ERROR_ALERT_WEBHOOK_URL',
   ]) {
     assert.doesNotMatch(web, new RegExp(`\\b${secret}:`));
   }
@@ -1012,6 +1273,7 @@ test('CI validates API production env inside the built Docker image', () => {
   assert.match(workflow, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(workflow, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
   assert.match(workflow, /-e STRIPE_SECRET_KEY=sk_live_ci_configured_secret/);
+  assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Validate API Docker production configuration'),
     'API image must be built before validating production configuration inside it',
@@ -1039,6 +1301,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --target migration-runner[\s\S]*-t charitypilot-api-migrations-ci \./);
   assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-migrations-ci[\s\S]*migrate status --schema prisma\/schema\.prisma/);
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
+  assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui\/react'\]/);
   assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
   assert.match(workflow, /docker tag charitypilot-api-ci "\$\{api_image\}"/);

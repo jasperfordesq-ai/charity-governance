@@ -44,7 +44,12 @@ function validateUrlValue(
   name: string,
   value: string,
   issues: string[],
-  options: { requireHttps?: boolean; requireOrigin?: boolean; requireApprovedPublicHost?: boolean },
+  options: {
+    requireHttps?: boolean;
+    requireOrigin?: boolean;
+    requireApprovedPublicHost?: boolean;
+    requirePublicHost?: boolean;
+  },
 ) {
   try {
     const url = new URL(value);
@@ -60,6 +65,9 @@ function validateUrlValue(
     if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
       issues.push(`${name} must use an approved CharityPilot production hostname`);
     }
+    if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
+      issues.push(`${name} must use a public, non-local URL in production`);
+    }
   } catch {
     issues.push(`${name} must be a valid URL`);
   }
@@ -73,6 +81,7 @@ function requireUrl(
     allowCommaSeparated?: boolean;
     requireOrigin?: boolean;
     requireApprovedPublicHost?: boolean;
+    requirePublicHost?: boolean;
   } = {},
 ) {
   const value = requireConfiguredEnv(name, issues);
@@ -95,7 +104,38 @@ function isLocalHost(hostname: string): boolean {
 }
 
 function normaliseHostname(hostname: string): string {
-  return hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+}
+
+function isDnsHostname(hostname: string): boolean {
+  if (hostname.length > 253) return false;
+  const labels = hostname.split('.');
+  if (labels.length < 2) return false;
+
+  return labels.every((label) => (
+    label.length >= 1 &&
+    label.length <= 63 &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
+  ));
+}
+
+function isPublicHost(hostname: string): boolean {
+  const normalizedHostname = normaliseHostname(hostname);
+  if (
+    !normalizedHostname ||
+    normalizedHostname === 'localhost' ||
+    normalizedHostname.endsWith('.localhost') ||
+    normalizedHostname.endsWith('.local') ||
+    normalizedHostname.endsWith('.internal') ||
+    normalizedHostname.endsWith('.lan') ||
+    normalizedHostname.endsWith('.home')
+  ) {
+    return false;
+  }
+
+  if (isIP(normalizedHostname)) return false;
+
+  return isDnsHostname(normalizedHostname);
 }
 
 function isApprovedPublicHostname(hostname: string): boolean {
@@ -305,6 +345,7 @@ export function validateProductionEnv(): void {
   requireUrl('SUPABASE_URL', issues, { requireHttps: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 
   throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);
 }
