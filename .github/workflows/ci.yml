@@ -80,9 +80,20 @@ jobs:
             -e NODE_ENV=test \
             -e PORT=3002 \
             -e HOST=0.0.0.0 \
+            -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_ci \
             charitypilot-api-ci
-          timeout 60 bash -c 'until curl --fail --silent http://127.0.0.1:3002/api/v1/health; do docker logs charitypilot-api-smoke --tail 50; sleep 2; done'
+          until curl --fail --silent http://127.0.0.1:3002/api/v1/health; do
+            if ! docker ps --filter name=charitypilot-api-smoke --filter status=running --quiet | grep -q .; then
+              docker logs charitypilot-api-smoke --tail 50
+              exit 1
+            fi
+            if [ "$SECONDS" -gt 60 ]; then
+              docker logs charitypilot-api-smoke --tail 50
+              exit 124
+            fi
+            sleep 2
+          done
 
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
@@ -97,7 +108,17 @@ jobs:
             -e PORT=3003 \
             -e HOST=0.0.0.0 \
             charitypilot-web-ci
-          timeout 60 bash -c 'until curl --fail --silent http://127.0.0.1:3003/; do docker logs charitypilot-web-smoke --tail 50; sleep 2; done'
+          until curl --fail --silent http://127.0.0.1:3003/; do
+            if ! docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet | grep -q .; then
+              docker logs charitypilot-web-smoke --tail 50
+              exit 1
+            fi
+            if [ "$SECONDS" -gt 60 ]; then
+              docker logs charitypilot-web-smoke --tail 50
+              exit 124
+            fi
+            sleep 2
+          done
 
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate

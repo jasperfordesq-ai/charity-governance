@@ -826,11 +826,14 @@ test('CI smoke-runs API and web Docker images after building them', () => {
 
   assert.match(workflow, /name:\s+Smoke API Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-api-smoke[\s\S]*charitypilot-api-ci/);
+  assert.match(workflow, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
+  assert.match(workflow, /docker ps --filter name=charitypilot-api-smoke --filter status=running --quiet/);
   assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
 
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
+  assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
   assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /docker rm -f charitypilot-web-smoke/);
 
