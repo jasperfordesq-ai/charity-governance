@@ -16,6 +16,7 @@ const PLACEHOLDER_PATTERNS = [
 ] as const;
 
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
+const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 
 export function isConfiguredSecret(value: string | undefined): value is string {
   if (!value?.trim()) return false;
@@ -42,7 +43,7 @@ function validateUrlValue(
   name: string,
   value: string,
   issues: string[],
-  options: { requireHttps?: boolean; requireOrigin?: boolean },
+  options: { requireHttps?: boolean; requireOrigin?: boolean; requireApprovedPublicHost?: boolean },
 ) {
   try {
     const url = new URL(value);
@@ -55,6 +56,9 @@ function validateUrlValue(
     if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
       issues.push(`${name} must be an origin-only URL in production`);
     }
+    if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
+      issues.push(`${name} must use an approved CharityPilot production hostname`);
+    }
   } catch {
     issues.push(`${name} must be a valid URL`);
   }
@@ -63,7 +67,12 @@ function validateUrlValue(
 function requireUrl(
   name: string,
   issues: string[],
-  options: { requireHttps?: boolean; allowCommaSeparated?: boolean; requireOrigin?: boolean } = {},
+  options: {
+    requireHttps?: boolean;
+    allowCommaSeparated?: boolean;
+    requireOrigin?: boolean;
+    requireApprovedPublicHost?: boolean;
+  } = {},
 ) {
   const value = requireConfiguredEnv(name, issues);
   if (!value) return;
@@ -82,6 +91,36 @@ function requireUrl(
 function isLocalHost(hostname: string): boolean {
   const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
+}
+
+function normaliseHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, '');
+}
+
+function isApprovedPublicHostname(hostname: string): boolean {
+  const normalizedHostname = normaliseHostname(hostname);
+  return (
+    normalizedHostname === APPROVED_PUBLIC_HOST_ROOT ||
+    normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`)
+  );
+}
+
+function configuredUrls(name: string, options: { allowCommaSeparated?: boolean } = {}): URL[] {
+  const value = process.env[name];
+  if (!isConfiguredSecret(value)) return [];
+
+  const values = options.allowCommaSeparated ? envList(value) : [value];
+  const urls: URL[] = [];
+
+  for (const urlValue of values) {
+    try {
+      urls.push(new URL(urlValue));
+    } catch {
+      // URL validity is reported by requireUrl.
+    }
+  }
+
+  return urls;
 }
 
 function requireDatabaseUrl(name: string, issues: string[]) {
@@ -119,6 +158,47 @@ function requireMinLength(name: string, minLength: number, issues: string[]) {
   }
 }
 
+function hostMatchesCookieDomain(hostname: string, cookieDomain: string): boolean {
+  const normalizedHost = normaliseHostname(hostname);
+  const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
+
+  return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
+}
+
+function requireAuthCookieDomainForSplitHosts(issues: string[]) {
+  const frontendUrls = configuredUrls('FRONTEND_URL', { allowCommaSeparated: true });
+  const apiUrls = configuredUrls('NEXT_PUBLIC_API_URL');
+  if (!frontendUrls.length || !apiUrls.length) return;
+
+  const apiHostname = normaliseHostname(apiUrls[0].hostname);
+  const splitHostnames = frontendUrls.some((url) => normaliseHostname(url.hostname) !== apiHostname);
+  if (!splitHostnames) return;
+
+  const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim() ?? '';
+  if (!isConfiguredSecret(cookieDomain)) {
+    issues.push('AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames');
+    return;
+  }
+
+  if (cookieDomain.includes('/') || cookieDomain.includes(':')) {
+    issues.push('AUTH_COOKIE_DOMAIN must be a cookie domain, not a URL');
+    return;
+  }
+
+  const normalizedCookieDomain = cookieDomain.toLowerCase().replace(/^\./, '');
+  if (!isApprovedPublicHostname(normalizedCookieDomain)) {
+    issues.push('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname');
+    return;
+  }
+
+  for (const url of [...frontendUrls, ...apiUrls]) {
+    if (!hostMatchesCookieDomain(url.hostname, cookieDomain)) {
+      issues.push('AUTH_COOKIE_DOMAIN must cover both FRONTEND_URL and NEXT_PUBLIC_API_URL hostnames');
+      return;
+    }
+  }
+}
+
 export function validateProductionEnv(): void {
   if (process.env.NODE_ENV !== 'production') return;
 
@@ -133,7 +213,18 @@ export function validateProductionEnv(): void {
 
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
-  requireUrl('FRONTEND_URL', issues, { requireHttps: true, allowCommaSeparated: true, requireOrigin: true });
+  requireUrl('FRONTEND_URL', issues, {
+    requireHttps: true,
+    allowCommaSeparated: true,
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+  });
+  requireUrl('NEXT_PUBLIC_API_URL', issues, {
+    requireHttps: true,
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+  });
+  requireAuthCookieDomainForSplitHosts(issues);
 
   requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requireConfiguredEnv('STRIPE_WEBHOOK_SECRET', issues);

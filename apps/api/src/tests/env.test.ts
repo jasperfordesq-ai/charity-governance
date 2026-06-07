@@ -50,6 +50,8 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
@@ -71,6 +73,8 @@ test('validateProductionEnv accepts comma-separated production frontend origins'
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie, https://admin.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
@@ -86,12 +90,128 @@ test('validateProductionEnv accepts comma-separated production frontend origins'
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
+test('validateProductionEnv rejects missing production API origin used for cookie-domain checks', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('NEXT_PUBLIC_API_URL is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateProductionEnv rejects split production web and API hosts without a shared auth cookie domain', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames'),
+  );
+});
+
+test('validateProductionEnv rejects auth cookie domains that do not cover production web and API hosts', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.admin.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_COOKIE_DOMAIN must cover both FRONTEND_URL and NEXT_PUBLIC_API_URL hostnames'),
+  );
+});
+
+test('validateProductionEnv rejects unapproved production public hostnames', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://attacker.example';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.attacker.example';
+  process.env.AUTH_COOKIE_DOMAIN = '.attacker.example';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('FRONTEND_URL must use an approved CharityPilot production hostname') &&
+      error.details.includes('NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname'),
+  );
+});
+
 test('validateProductionEnv rejects production database URLs without TLS', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
@@ -119,6 +239,8 @@ test('validateProductionEnv rejects production frontend URLs that are not origin
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie/login';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
@@ -146,6 +268,7 @@ test('validateProductionEnv rejects local URLs and Stripe test mode in productio
   process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/charitypilot';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://localhost:3003';
+  process.env.NEXT_PUBLIC_API_URL = 'https://127.0.0.1:3002';
   process.env.STRIPE_SECRET_KEY = 'sk_test_realisticConfiguredSecret';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
@@ -166,6 +289,7 @@ test('validateProductionEnv rejects local URLs and Stripe test mode in productio
       error.details.includes('PORT must be an integer from 1 to 65535') &&
       error.details.includes('DATABASE_URL must not point at localhost in production') &&
       error.details.includes('FRONTEND_URL must not point at localhost in production') &&
+      error.details.includes('NEXT_PUBLIC_API_URL must not point at localhost in production') &&
       error.details.includes('STRIPE_SECRET_KEY must use a live Stripe secret key in production'),
   );
 });
@@ -176,6 +300,7 @@ test('validateProductionEnv rejects bracketed IPv6 localhost URLs in production'
   process.env.DATABASE_URL = 'postgresql://user:pass@[::1]:5432/charitypilot';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://[::1]:3003';
+  process.env.NEXT_PUBLIC_API_URL = 'https://[::1]:3002';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
@@ -194,6 +319,7 @@ test('validateProductionEnv rejects bracketed IPv6 localhost URLs in production'
       error instanceof AppError &&
       Array.isArray(error.details) &&
       error.details.includes('DATABASE_URL must not point at localhost in production') &&
-      error.details.includes('FRONTEND_URL must not point at localhost in production'),
+      error.details.includes('FRONTEND_URL must not point at localhost in production') &&
+      error.details.includes('NEXT_PUBLIC_API_URL must not point at localhost in production'),
   );
 });

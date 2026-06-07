@@ -71,7 +71,7 @@ test('local Docker overlay does not weaken production image gates', () => {
   assert.match(localCompose, /image:\s+node:22-alpine/);
   assert.match(apiDockerfile, /ENV\s+NODE_ENV=production/);
   assert.match(apiDockerfile, /CMD\s+\["node",\s*"dist\/start\.js"\]/);
-  assert.match(webDockerfile, /NEXT_PUBLIC_API_URL must be set to a production https:\/\/ URL/);
+  assert.match(webDockerfile, /NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL/);
   assert.match(webDockerfile, /CMD\s+\["node",\s*"server\.mjs"\]/);
 });
 

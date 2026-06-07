@@ -11,7 +11,7 @@ WORKDIR /app
 COPY . .
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN case "$NEXT_PUBLIC_API_URL" in https://*) ;; *) echo "NEXT_PUBLIC_API_URL must be set to a production https:// URL"; exit 1 ;; esac
+RUN node -e "try{const url=new URL(process.env.NEXT_PUBLIC_API_URL);const host=url.hostname.toLowerCase();if(url.protocol!=='https:'||url.origin!==process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/,'')||!(host==='charitypilot.ie'||host.endsWith('.charitypilot.ie')))throw new Error();}catch{console.error('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL such as https://api.charitypilot.ie');process.exit(1)}"
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
 

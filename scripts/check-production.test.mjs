@@ -53,7 +53,7 @@ test('fails with configuration issues when the selected env file contains placeh
   const result = runPreflight(['--production-env-file=.env.example']);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Production preflight failed \(18 issues\):/);
+  assert.match(result.stderr, /Production preflight failed \(20 issues\):/);
   assert.match(result.stderr, /JWT_SECRET is missing or still contains a placeholder value/);
   assert.match(result.stderr, /STRIPE_SECRET_KEY is missing or still contains a placeholder value/);
   assert.match(result.stderr, /FRONTEND_URL must use https:\/\/ for production/);
@@ -220,6 +220,47 @@ test('passes when production frontend origins include multiple approved HTTPS or
     const result = runPreflight([`--production-env-file=${envPath}`]);
 
     assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when public production URLs use unapproved hostnames', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-public-hosts-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://attacker.example',
+      'AUTH_COOKIE_DOMAIN=.attacker.example',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.attacker.example',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FRONTEND_URL must use an approved CharityPilot production hostname/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -435,7 +476,9 @@ test('web Docker build requires a production HTTPS API URL before Next build', (
 
   assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_API_URL/);
   assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_API_URL=\$NEXT_PUBLIC_API_URL/);
-  assert.match(dockerfile, /RUN\s+case\s+"\$NEXT_PUBLIC_API_URL"\s+in[\s\S]*https:\/\/\*/);
+  assert.match(dockerfile, /new URL\(process\.env\.NEXT_PUBLIC_API_URL/);
+  assert.match(dockerfile, /api\.charitypilot\.ie/);
+  assert.match(dockerfile, /origin-only CharityPilot production URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);
   assert.match(dockerfile, /USER\s+node/);
 });
@@ -626,5 +669,5 @@ test('CI builds API and web production Docker images', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
-  assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.example -t charitypilot-web-ci \./);
+  assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
 });

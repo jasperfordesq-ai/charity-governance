@@ -72,7 +72,7 @@ jobs:
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
 
       - name: Build web Docker image
-        run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.example -t charitypilot-web-ci .
+        run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
 
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate

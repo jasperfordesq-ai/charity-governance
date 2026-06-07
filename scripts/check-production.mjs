@@ -39,6 +39,7 @@ const REQUIRED = [
 
 const ENV_FILE_FLAG = '--production-env-file=';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
+const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 
 function parseEnvFile(path) {
   return Object.fromEntries(
@@ -66,6 +67,11 @@ function isConfigured(value) {
 function isLocalHost(hostname) {
   const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
+}
+
+function isApprovedPublicHostname(hostname) {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalizedHostname === APPROVED_PUBLIC_HOST_ROOT || normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`);
 }
 
 function requireExactValue(env, key, expected, issues) {
@@ -110,6 +116,9 @@ function validateUrlValue(key, value, issues, options = {}) {
     }
     if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
       issues.push(`${key} must be an origin-only URL for production`);
+    }
+    if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
+      issues.push(`${key} must use an approved CharityPilot production hostname`);
     }
   } catch {
     issues.push(`${key} must be a valid URL`);
@@ -206,6 +215,11 @@ function requireAuthCookieDomainForSplitHosts(env, issues) {
     return;
   }
 
+  if (!isApprovedPublicHostname(cookieDomain.toLowerCase().replace(/^\./, ''))) {
+    issues.push('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname');
+    return;
+  }
+
   for (const url of [...frontendUrls, ...apiUrls]) {
     if (!hostMatchesCookieDomain(url.hostname, cookieDomain)) {
       issues.push('AUTH_COOKIE_DOMAIN must cover both FRONTEND_URL and NEXT_PUBLIC_API_URL hostnames');
@@ -244,9 +258,13 @@ for (const key of ['JWT_SECRET']) {
   }
 }
 
-requireUrl(env, 'FRONTEND_URL', issues, { allowCommaSeparated: true, requireOrigin: true });
+requireUrl(env, 'FRONTEND_URL', issues, {
+  allowCommaSeparated: true,
+  requireOrigin: true,
+  requireApprovedPublicHost: true,
+});
 requireUrl(env, 'SUPABASE_URL', issues);
-requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true });
+requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
 requireAuthCookieDomainForSplitHosts(env, issues);
 
 if (issues.length) {
