@@ -574,8 +574,10 @@ test('document storage deletion has a durable retry outbox and production job', 
   const cleanupJob = readRepoFile('apps/api/src/jobs/cleanup-document-storage.ts');
 
   assert.match(schema, /model DocumentStorageDeletion/);
+  assert.match(schema, /claimedAt\s+DateTime\?/);
   assert.match(schema, /processedAt\s+DateTime\?/);
   assert.match(schema, /@@index\(\[processedAt, createdAt\]\)/);
+  assert.match(schema, /@@index\(\[processedAt, claimedAt, createdAt\]\)/);
   assert.equal(apiPackage.scripts['jobs:document-storage-cleanup'], 'node dist/jobs/cleanup-document-storage.js');
   assert.match(cleanupJob, /retryPendingStorageDeletions/);
   assert.match(cleanupJob, /validateDocumentStorageCleanupEnv/);

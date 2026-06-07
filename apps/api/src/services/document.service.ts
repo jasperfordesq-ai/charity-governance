@@ -7,6 +7,8 @@ type DocumentStorageDeletionRecord = {
   storagePath: string;
 };
 
+const STORAGE_DELETION_CLAIM_STALE_AFTER_MS = 10 * 60 * 1000;
+
 type QueryRaw = <T = unknown>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
 
 type DocumentStorageDeletionDelegate = {
@@ -21,6 +23,7 @@ type DocumentStorageDeletionDelegate = {
     data: {
       attempts?: { increment: number };
       lastError?: string | null;
+      claimedAt?: Date | null;
       processedAt?: Date;
     };
   }): Promise<unknown>;
@@ -60,12 +63,22 @@ export class DocumentService {
         }
 
         return queryRaw<DocumentStorageDeletionRecord[]>`
-          SELECT "id", "organisationId", "storagePath"
-          FROM "DocumentStorageDeletion"
-          WHERE "processedAt" IS NULL
-          ORDER BY "createdAt" ASC
-          LIMIT ${limit}
-          FOR UPDATE SKIP LOCKED
+          UPDATE "DocumentStorageDeletion"
+          SET "claimedAt" = CURRENT_TIMESTAMP,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "id" IN (
+            SELECT "id"
+            FROM "DocumentStorageDeletion"
+            WHERE "processedAt" IS NULL
+              AND (
+                "claimedAt" IS NULL OR
+                "claimedAt" < CURRENT_TIMESTAMP - (${STORAGE_DELETION_CLAIM_STALE_AFTER_MS} * INTERVAL '1 millisecond')
+              )
+            ORDER BY "createdAt" ASC
+            LIMIT ${limit}
+            FOR UPDATE SKIP LOCKED
+          )
+          RETURNING "id", "organisationId", "storagePath"
         `;
       });
     }
@@ -184,6 +197,7 @@ export class DocumentService {
       data: {
         processedAt: new Date(),
         lastError: null,
+        claimedAt: null,
       },
     });
   }
@@ -194,6 +208,7 @@ export class DocumentService {
       data: {
         attempts: { increment: 1 },
         lastError: errorMessage(error),
+        claimedAt: null,
       },
     });
   }

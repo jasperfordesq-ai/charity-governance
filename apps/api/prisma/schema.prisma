@@ -328,12 +328,14 @@ model DocumentStorageDeletion {
   storagePath    String
   attempts       Int       @default(0)
   lastError      String?
+  claimedAt      DateTime?
   processedAt    DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   @@index([organisationId])
   @@index([processedAt, createdAt])
+  @@index([processedAt, claimedAt, createdAt])
 }
 
 model ConflictRecord {

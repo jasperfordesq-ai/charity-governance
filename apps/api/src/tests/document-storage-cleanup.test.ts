@@ -34,22 +34,23 @@ test('retryPendingStorageDeletions processes pending cleanup records', async () 
   assert.deepEqual(deleted, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
   assert.equal((updates[0] as { where: { id: string } }).where.id, 'deletion-1');
   assert.deepEqual((updates[0] as { data: { lastError: string | null } }).data.lastError, null);
+  assert.deepEqual((updates[0] as { data: { claimedAt: Date | null } }).data.claimedAt, null);
   assert.ok((updates[0] as { data: { processedAt: Date } }).data.processedAt instanceof Date);
 });
 
-test('retryPendingStorageDeletions claims pending cleanup rows with Postgres row locks', async () => {
+test('retryPendingStorageDeletions atomically claims pending cleanup rows with Postgres row locks', async () => {
   const updates: unknown[] = [];
   let transactionCalled = false;
   let query = '';
-  let queryLimit: unknown;
+  let queryValues: unknown[] = [];
   const prisma = {
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
       transactionCalled = true;
       return callback(prisma);
     },
-    $queryRaw: async (strings: TemplateStringsArray, limit: unknown) => {
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       query = strings.join('?');
-      queryLimit = limit;
+      queryValues = values;
       return [
         { id: 'deletion-1', organisationId: 'org-1', storagePath: 'org-1/policy.pdf' },
       ];
@@ -66,8 +67,11 @@ test('retryPendingStorageDeletions claims pending cleanup rows with Postgres row
   const result = await service.retryPendingStorageDeletions(async () => undefined, 10);
 
   assert.equal(transactionCalled, true);
+  assert.match(query, /UPDATE "DocumentStorageDeletion"/);
+  assert.match(query, /SET "claimedAt" = CURRENT_TIMESTAMP/);
   assert.match(query, /FOR UPDATE SKIP LOCKED/);
-  assert.equal(queryLimit, 10);
+  assert.match(query, /RETURNING "id", "organisationId", "storagePath"/);
+  assert.deepEqual(queryValues, [600000, 10]);
   assert.deepEqual(result, { processed: 1, failed: 0 });
   assert.equal((updates[0] as { where: { id: string } }).where.id, 'deletion-1');
 });
@@ -97,6 +101,7 @@ test('retryPendingStorageDeletions leaves failed cleanup records pending with at
     data: {
       attempts: { increment: 1 },
       lastError: 'storage unavailable',
+      claimedAt: null,
     },
   }]);
 });

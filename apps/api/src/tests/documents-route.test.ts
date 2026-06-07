@@ -426,6 +426,7 @@ test('document delete reports success when post-delete storage cleanup fails', {
       data: {
         attempts: { increment: 1 },
         lastError: 'storage unavailable',
+        claimedAt: null,
       },
     }]);
   } finally {
