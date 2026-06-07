@@ -9,14 +9,16 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "test": "turbo test && npm run test:production-check && npm run test:local-docker",
-    "test:production-check": "node --test scripts/check-production.test.mjs",
+    "test:production-check": "node --test scripts/check-production.test.mjs scripts/postgres-backup.test.mjs",
     "test:local-docker": "node --test scripts/check-local-docker.test.mjs",
     "lint": "turbo lint",
     "check:production": "node scripts/check-production.mjs",
     "clean": "turbo clean",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
-    "db:seed": "turbo db:seed"
+    "db:seed": "turbo db:seed",
+    "db:backup": "node scripts/postgres-backup.mjs backup",
+    "db:restore:verify": "node scripts/postgres-backup.mjs verify-restore"
   },
   "devDependencies": {
     "turbo": "^2.5.0",
