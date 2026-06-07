@@ -613,6 +613,15 @@ test('CI keeps every production release gate wired', () => {
   assert.match(workflow, /run:\s+npm audit --omit=dev --audit-level=moderate/);
 });
 
+test('CI uses GitHub Actions releases that run on the Node 24 action runtime', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /uses:\s+actions\/checkout@v5/);
+  assert.match(workflow, /uses:\s+actions\/setup-node@v6/);
+  assert.doesNotMatch(workflow, /uses:\s+actions\/checkout@v4/);
+  assert.doesNotMatch(workflow, /uses:\s+actions\/setup-node@v4/);
+});
+
 test('CI builds API and web production Docker images', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
