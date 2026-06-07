@@ -1,0 +1,110 @@
+# =============================================================================
+# CharityPilot - Local Docker App Stack
+# =============================================================================
+# Usage:
+#   docker compose -f compose.yml -f compose.local.yml up
+#
+# This file is intentionally local-development only. Production images remain
+# strict in apps/api/Dockerfile and apps/web/Dockerfile.
+# =============================================================================
+
+x-app-volumes: &app-volumes
+  - .:/app
+  - charitypilot-node-modules:/app/node_modules
+  - charitypilot-shared-dist:/app/packages/shared/dist
+
+services:
+  deps:
+    image: node:22-alpine
+    container_name: charitypilot-deps-local
+    working_dir: /app
+    command: >
+      sh -lc "npm ci &&
+      npm run build -w @charitypilot/shared &&
+      npm run db:generate -w @charitypilot/api"
+    volumes: *app-volumes
+    networks:
+      - charitypilot-internal
+
+  api:
+    image: node:22-alpine
+    container_name: charitypilot-api-local
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
+    command: >
+      sh -lc "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma &&
+      cd apps/api &&
+      node --import tsx/esm --watch src/server.ts"
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://charitypilot:charitypilot_dev@db:5432/charitypilot
+      JWT_SECRET: local-dev-jwt-secret-at-least-32-characters
+      JWT_EXPIRY: 15m
+      REFRESH_TOKEN_TTL_DAYS: 7
+      FRONTEND_URL: http://localhost:3003
+      API_URL: http://localhost:3002
+      STRIPE_SECRET_KEY: sk_test_...
+      STRIPE_WEBHOOK_SECRET: whsec_...
+      STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: price_...
+      STRIPE_ESSENTIALS_YEARLY_PRICE_ID: price_...
+      STRIPE_COMPLETE_MONTHLY_PRICE_ID: price_...
+      STRIPE_COMPLETE_YEARLY_PRICE_ID: price_...
+      RESEND_API_KEY: re_...
+      EMAIL_FROM: noreply@charitypilot.ie
+      SUPABASE_URL: https://your-project.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: eyJ...
+      SUPABASE_STORAGE_BUCKET: documents
+      SEED_DEMO_WORKSPACE: "false"
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "3002:3002"
+    volumes: *app-volumes
+    networks:
+      - charitypilot-internal
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3002/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    image: node:22-alpine
+    container_name: charitypilot-web-local
+    working_dir: /app
+    depends_on:
+      api:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
+    command: npm run dev -w @charitypilot/web
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      NEXT_PUBLIC_API_URL: http://localhost:3002
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_...
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3003:3003"
+    volumes:
+      - .:/app
+      - charitypilot-node-modules:/app/node_modules
+      - charitypilot-shared-dist:/app/packages/shared/dist
+      - charitypilot-web-next:/app/apps/web/.next
+    networks:
+      - charitypilot-internal
+
+volumes:
+  charitypilot-node-modules:
+    name: charitypilot-node-modules
+  charitypilot-shared-dist:
+    name: charitypilot-shared-dist
+  charitypilot-web-next:
+    name: charitypilot-web-next
