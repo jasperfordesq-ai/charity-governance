@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  getSensitiveUrlToken,
   getTrustedDocumentDownloadUrl,
   getTrustedStripeRedirectUrl,
   removeSensitiveSearchParams,
@@ -20,6 +21,20 @@ test('removes the query marker when sensitive parameters were the only query par
   assert.equal(
     removeSensitiveSearchParams('https://charitypilot.ie/verify-email?token=secret', ['token']),
     'https://charitypilot.ie/verify-email',
+  );
+});
+
+test('extracts sensitive tokens from URL fragments before query strings are logged', () => {
+  assert.equal(
+    getSensitiveUrlToken('https://charitypilot.ie/reset-password#token=secret%26encoded', 'token'),
+    'secret&encoded',
+  );
+});
+
+test('scrubs sensitive token parameters from URL fragments', () => {
+  assert.equal(
+    removeSensitiveSearchParams('https://charitypilot.ie/reset-password#token=secret&step=confirm', ['token']),
+    'https://charitypilot.ie/reset-password#step=confirm',
   );
 });
 

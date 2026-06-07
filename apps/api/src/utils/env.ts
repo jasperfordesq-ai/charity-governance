@@ -15,6 +15,8 @@ const PLACEHOLDER_PATTERNS = [
   'https://your-project.supabase.co',
 ] as const;
 
+const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
+
 export function isConfiguredSecret(value: string | undefined): value is string {
   if (!value?.trim()) return false;
   return !PLACEHOLDER_PATTERNS.some((placeholder) => value.includes(placeholder));
@@ -29,10 +31,19 @@ function requireConfiguredEnv(name: string, issues: string[]): string | undefine
   return value;
 }
 
-function requireUrl(name: string, issues: string[], options: { requireHttps?: boolean } = {}) {
-  const value = requireConfiguredEnv(name, issues);
-  if (!value) return;
+function envList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
 
+function validateUrlValue(
+  name: string,
+  value: string,
+  issues: string[],
+  options: { requireHttps?: boolean; requireOrigin?: boolean },
+) {
   try {
     const url = new URL(value);
     if (options.requireHttps && url.protocol !== 'https:') {
@@ -41,8 +52,30 @@ function requireUrl(name: string, issues: string[], options: { requireHttps?: bo
     if (isLocalHost(url.hostname)) {
       issues.push(`${name} must not point at localhost in production`);
     }
+    if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
+      issues.push(`${name} must be an origin-only URL in production`);
+    }
   } catch {
     issues.push(`${name} must be a valid URL`);
+  }
+}
+
+function requireUrl(
+  name: string,
+  issues: string[],
+  options: { requireHttps?: boolean; allowCommaSeparated?: boolean; requireOrigin?: boolean } = {},
+) {
+  const value = requireConfiguredEnv(name, issues);
+  if (!value) return;
+
+  const values = options.allowCommaSeparated ? envList(value) : [value];
+  if (values.length === 0) {
+    issues.push(`${name} is missing or still contains a placeholder value`);
+    return;
+  }
+
+  for (const urlValue of values) {
+    validateUrlValue(name, urlValue, issues, options);
   }
 }
 
@@ -62,6 +95,10 @@ function requireDatabaseUrl(name: string, issues: string[]) {
     }
     if (isLocalHost(url.hostname)) {
       issues.push(`${name} must not point at localhost in production`);
+    }
+    const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
+    if (!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) {
+      issues.push(`${name} must require TLS with sslmode=require, verify-ca, or verify-full in production`);
     }
   } catch {
     issues.push(`${name} must be a valid PostgreSQL connection URL`);
@@ -96,7 +133,7 @@ export function validateProductionEnv(): void {
 
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
-  requireUrl('FRONTEND_URL', issues, { requireHttps: true });
+  requireUrl('FRONTEND_URL', issues, { requireHttps: true, allowCommaSeparated: true, requireOrigin: true });
 
   requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requireConfiguredEnv('STRIPE_WEBHOOK_SECRET', issues);

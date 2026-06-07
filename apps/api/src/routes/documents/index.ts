@@ -11,11 +11,8 @@ import { ZodError } from 'zod';
 
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
-  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
   'text/csv',
@@ -27,21 +24,14 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const MIME_EXTENSIONS: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
-  'application/msword': ['.doc'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-  'application/vnd.ms-excel': ['.xls'],
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-  'application/vnd.ms-powerpoint': ['.ppt'],
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
   'text/plain': ['.txt'],
   'text/csv': ['.csv'],
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
 };
-
-function hasOleSignature(buffer: Buffer): boolean {
-  return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
-}
 
 function hasZipSignature(buffer: Buffer): boolean {
   return buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
@@ -55,10 +45,6 @@ function hasValidSignature(mimeType: string, buffer: Buffer): boolean {
   switch (mimeType) {
     case 'application/pdf':
       return buffer.subarray(0, 5).toString('utf8') === '%PDF-';
-    case 'application/msword':
-    case 'application/vnd.ms-excel':
-    case 'application/vnd.ms-powerpoint':
-      return hasOleSignature(buffer);
     case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
     case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
     case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
@@ -136,7 +122,7 @@ export async function documentRoutes(app: FastifyInstance) {
 
       if (!ALLOWED_MIME_TYPES.has(data.mimetype)) {
         return reply.status(400).send({
-          error: `File type '${data.mimetype}' is not allowed. Accepted types: PDF, Word, Excel, PowerPoint, text, CSV, JPEG, PNG.`,
+          error: `File type '${data.mimetype}' is not allowed. Accepted types: PDF, modern Office documents, text, CSV, JPEG, PNG.`,
           code: 'INVALID_MIME_TYPE',
         });
       }

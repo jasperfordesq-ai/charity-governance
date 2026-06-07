@@ -47,7 +47,7 @@ test('validateProductionEnv rejects placeholder production configuration', () =>
 test('validateProductionEnv accepts complete production configuration', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
@@ -63,6 +63,81 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
 
   assert.doesNotThrow(() => validateProductionEnv());
+});
+
+test('validateProductionEnv accepts comma-separated production frontend origins', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie, https://admin.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.doesNotThrow(() => validateProductionEnv());
+});
+
+test('validateProductionEnv rejects production database URLs without TLS', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+  );
+});
+
+test('validateProductionEnv rejects production frontend URLs that are not origins', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie/login';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('FRONTEND_URL must be an origin-only URL in production'),
+  );
 });
 
 test('validateProductionEnv rejects local URLs and Stripe test mode in production', () => {

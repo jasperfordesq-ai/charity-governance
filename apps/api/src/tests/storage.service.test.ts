@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { StorageService } from '../services/storage.service.js';
+import { StorageService, withReadinessTimeout } from '../services/storage.service.js';
 import { AppError } from '../utils/errors.js';
 
 type GuardedStorageService = {
@@ -35,4 +35,15 @@ test('deleteFile rejects storage paths outside the organisation prefix before st
   await assertForbiddenStoragePath(() => service.deleteFile('org-a', 'org-b/policy.pdf'));
   await assertForbiddenStoragePath(() => service.deleteFile('org-a', '../org-a/policy.pdf'));
   await assertForbiddenStoragePath(() => service.deleteFile('org-a', 'org-a'));
+});
+
+test('readiness timeout returns null when a dependency check stalls', async () => {
+  const startedAt = Date.now();
+  const result = await withReadinessTimeout(
+    new Promise((resolve) => setTimeout(() => resolve('late'), 100)),
+    10,
+  );
+
+  assert.equal(result, null);
+  assert.ok(Date.now() - startedAt < 80);
 });

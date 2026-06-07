@@ -17,6 +17,13 @@ function parseUrl(value: unknown): URL | null {
   }
 }
 
+function hashSearchParams(url: URL): URLSearchParams | null {
+  const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  if (!hash || !hash.includes('=')) return null;
+
+  return new URLSearchParams(hash);
+}
+
 function normaliseHttpsOrigins(origins: Array<string | undefined>): Set<string> {
   const normalised = new Set<string>();
 
@@ -62,11 +69,28 @@ export function removeSensitiveSearchParams(rawUrl: string, paramNames: string[]
     url.searchParams.delete(paramName);
   }
 
+  const fragmentParams = hashSearchParams(url);
+  if (fragmentParams) {
+    for (const paramName of paramNames) {
+      fragmentParams.delete(paramName);
+    }
+
+    url.hash = fragmentParams.size ? fragmentParams.toString() : '';
+  }
+
   if (isRelative) {
     return `${url.pathname}${url.search}${url.hash}`;
   }
 
   return url.toString();
+}
+
+export function getSensitiveUrlToken(rawUrl: string, paramName: string): string {
+  const url = new URL(rawUrl, 'https://charitypilot.local');
+  const queryToken = url.searchParams.get(paramName);
+  if (queryToken) return queryToken;
+
+  return hashSearchParams(url)?.get(paramName) ?? '';
 }
 
 export function getTrustedStripeRedirectUrl(value: unknown): string | null {

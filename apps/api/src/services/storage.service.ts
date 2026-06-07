@@ -6,6 +6,24 @@ function getBucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET ?? 'documents';
 }
 
+function readinessTimeoutMs(): number {
+  const configured = Number(process.env.STORAGE_READINESS_TIMEOUT_MS);
+  return Number.isInteger(configured) && configured > 0 ? configured : 3000;
+}
+
+export async function withReadinessTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function getSupabaseClient() {
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -54,8 +72,11 @@ export class StorageService {
     if (!this.isConfigured()) return false;
 
     try {
-      const { data, error } = await getSupabaseClient().storage.getBucket(getBucketName());
-      return !error && Boolean(data);
+      const result = await withReadinessTimeout(
+        getSupabaseClient().storage.getBucket(getBucketName()),
+        readinessTimeoutMs(),
+      );
+      return Boolean(result && !result.error && result.data);
     } catch {
       return false;
     }

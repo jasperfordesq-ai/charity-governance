@@ -1,5 +1,5 @@
 const DEFAULT_PRODUCTION_API_URL = 'https://api.charitypilot.ie';
-const DEFAULT_DEVELOPMENT_API_URL = 'http://localhost:3001';
+const DEFAULT_DEVELOPMENT_API_URL = 'http://localhost:3002';
 
 type ApiEnv = {
   NEXT_PUBLIC_API_URL?: string;

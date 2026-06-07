@@ -67,7 +67,7 @@ export default function ExportPage() {
     fetchSummary();
   }, [fetchSummary]);
 
-  /* ── Fetch report HTML and open in new tab for print-to-PDF ── */
+  /* Open the API-rendered report directly so its response CSP is enforced. */
   const [exporting, setExporting] = useState(false);
 
   const handleSaveSignoff = async () => {
@@ -102,18 +102,14 @@ export default function ExportPage() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = () => {
     setExporting(true);
     try {
-      const res = await api.get(`/export/compliance-report?year=${year}`, {
-        responseType: 'text',
-      });
-      const html = typeof res.data === 'string' ? res.data : String(res.data);
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      // Clean up after a short delay to allow the new tab to load
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      const reportUrl = api.getUri({ url: `/export/compliance-report?year=${year}` });
+      const opened = window.open(reportUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        toast('Could not open the report tab. Please allow pop-ups for CharityPilot and try again.');
+      }
     } catch (err) {
       console.error('Export failed', err);
     } finally {

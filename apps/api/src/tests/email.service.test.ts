@@ -46,7 +46,7 @@ test('welcome email escapes user-controlled HTML values', async () => {
   assert.match(html, /Good Works &amp; &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
-test('token emails URL-encode tokens and do not print raw token URLs in the body', async () => {
+test('token emails put encoded tokens in URL fragments, not query strings', async () => {
   const { service, sent } = captureEmailService();
   const token = 'abc&next=<script>alert(1)</script>';
 
@@ -55,6 +55,7 @@ test('token emails URL-encode tokens and do not print raw token URLs in the body
   const { html } = sent();
   assert.equal(html.includes(token), false);
   assert.equal(html.includes('Or paste this link into your browser:'), false);
-  assert.match(html, /href="https:\/\/app\.example\.org\/reset-password\?token=abc%26next%3D%3Cscript%3Ealert/);
+  assert.doesNotMatch(html, /\?token=/);
+  assert.match(html, /href="https:\/\/app\.example\.org\/reset-password#token=abc%26next%3D%3Cscript%3Ealert/);
   assert.match(html, /Ada &lt;Admin&gt;/);
 });

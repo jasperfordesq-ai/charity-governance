@@ -518,7 +518,7 @@ export default function DocumentsPage() {
                     type="file"
                     onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-primary/10 file:text-teal-primary hover:file:bg-teal-primary/20"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg"
+                    accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg"
                   />
                   {uploadFile && (
                     <p className={`text-xs mt-1 ${uploadFile.size > MAX_FILE_SIZE ? 'text-red-500 font-medium' : 'text-gray-400'}`}>

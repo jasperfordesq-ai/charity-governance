@@ -124,6 +124,45 @@ test('document upload rejects files whose signature does not match the claimed d
   }
 });
 
+test('document upload rejects macro-capable legacy Office files before storage', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let uploadCalled = false;
+
+  StorageService.prototype.uploadFile = async () => {
+    uploadCalled = true;
+    return { storagePath: 'org-1/policy.doc' };
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {
+      create: async () => ({ id: 'doc-1' }),
+    },
+  });
+
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.doc',
+      mimetype: 'application/msword',
+      content: Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00]),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { ...request.headers, authorization: authHeader },
+      payload: request.payload,
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, 'INVALID_MIME_TYPE');
+    assert.equal(uploadCalled, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
 test('document upload translates multipart file size errors to 413', { concurrency: false }, async () => {
   const originalUpload = StorageService.prototype.uploadFile;
   let uploadCalled = false;

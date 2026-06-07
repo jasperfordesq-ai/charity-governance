@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { removeSensitiveSearchParams } from './url-security';
+import { getSensitiveUrlToken, removeSensitiveSearchParams } from './url-security';
 
 export function useSensitiveQueryToken(paramName = 'token') {
   const searchParams = useSearchParams();
@@ -14,7 +14,10 @@ export function useSensitiveQueryToken(paramName = 'token') {
     if (capturedRef.current) return;
     capturedRef.current = true;
 
-    const capturedToken = searchParams.get(paramName) ?? '';
+    const capturedToken =
+      (typeof window !== 'undefined' ? getSensitiveUrlToken(window.location.href, paramName) : '') ||
+      searchParams.get(paramName) ||
+      '';
     setToken(capturedToken);
     setIsReady(true);
 

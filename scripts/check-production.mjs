@@ -38,6 +38,7 @@ const REQUIRED = [
 ];
 
 const ENV_FILE_FLAG = '--production-env-file=';
+const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 
 function parseEnvFile(path) {
   return Object.fromEntries(
@@ -91,10 +92,14 @@ function requireIntegerPort(env, key, issues) {
   }
 }
 
-function requireUrl(env, key, issues) {
-  const value = envValue(env, key);
-  if (!isConfigured(value)) return;
+function envList(value) {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
 
+function validateUrlValue(key, value, issues, options = {}) {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:') {
@@ -103,9 +108,45 @@ function requireUrl(env, key, issues) {
     if (isLocalHost(url.hostname)) {
       issues.push(`${key} must not point at localhost for production`);
     }
+    if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
+      issues.push(`${key} must be an origin-only URL for production`);
+    }
   } catch {
     issues.push(`${key} must be a valid URL`);
   }
+}
+
+function requireUrl(env, key, issues, options = {}) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  const values = options.allowCommaSeparated ? envList(value) : [value];
+  if (values.length === 0) {
+    issues.push(`${key} is missing or still contains a placeholder value`);
+    return;
+  }
+
+  for (const urlValue of values) {
+    validateUrlValue(key, urlValue, issues, options);
+  }
+}
+
+function configuredUrls(env, key, options = {}) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return [];
+
+  const values = options.allowCommaSeparated ? envList(value) : [value];
+  const urls = [];
+
+  for (const urlValue of values) {
+    try {
+      urls.push(new URL(urlValue));
+    } catch {
+      // URL validity is reported by requireUrl.
+    }
+  }
+
+  return urls;
 }
 
 function requireDatabaseUrl(env, key, issues) {
@@ -120,6 +161,10 @@ function requireDatabaseUrl(env, key, issues) {
     if (isLocalHost(url.hostname)) {
       issues.push(`${key} must not point at localhost for production`);
     }
+    const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
+    if (!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) {
+      issues.push(`${key} must require TLS with sslmode=require, verify-ca, or verify-full for production`);
+    }
   } catch {
     issues.push(`${key} must be a valid PostgreSQL connection URL`);
   }
@@ -131,6 +176,41 @@ function requirePrefix(env, key, prefix, label, issues) {
 
   if (!value.startsWith(prefix)) {
     issues.push(`${key} must use a ${label}`);
+  }
+}
+
+function hostMatchesCookieDomain(hostname, cookieDomain) {
+  const normalizedHost = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
+
+  return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
+}
+
+function requireAuthCookieDomainForSplitHosts(env, issues) {
+  const frontendUrls = configuredUrls(env, 'FRONTEND_URL', { allowCommaSeparated: true });
+  const apiUrls = configuredUrls(env, 'NEXT_PUBLIC_API_URL');
+  if (!frontendUrls.length || !apiUrls.length) return;
+
+  const apiHostname = apiUrls[0].hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const splitHostnames = frontendUrls.some((url) => url.hostname.toLowerCase().replace(/^\[|\]$/g, '') !== apiHostname);
+  if (!splitHostnames) return;
+
+  const cookieDomain = envValue(env, 'AUTH_COOKIE_DOMAIN').trim();
+  if (!isConfigured(cookieDomain)) {
+    issues.push('AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames');
+    return;
+  }
+
+  if (cookieDomain.includes('/') || cookieDomain.includes(':')) {
+    issues.push('AUTH_COOKIE_DOMAIN must be a cookie domain, not a URL');
+    return;
+  }
+
+  for (const url of [...frontendUrls, ...apiUrls]) {
+    if (!hostMatchesCookieDomain(url.hostname, cookieDomain)) {
+      issues.push('AUTH_COOKIE_DOMAIN must cover both FRONTEND_URL and NEXT_PUBLIC_API_URL hostnames');
+      return;
+    }
   }
 }
 
@@ -164,9 +244,10 @@ for (const key of ['JWT_SECRET']) {
   }
 }
 
-requireUrl(env, 'FRONTEND_URL', issues);
+requireUrl(env, 'FRONTEND_URL', issues, { allowCommaSeparated: true, requireOrigin: true });
 requireUrl(env, 'SUPABASE_URL', issues);
-requireUrl(env, 'NEXT_PUBLIC_API_URL', issues);
+requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true });
+requireAuthCookieDomainForSplitHosts(env, issues);
 
 if (issues.length) {
   console.error(`Production preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`);

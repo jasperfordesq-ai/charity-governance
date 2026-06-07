@@ -13,6 +13,6 @@ test('does not fall back to localhost in production when API URL is omitted', ()
   assert.equal(getApiBaseUrl({ NODE_ENV: 'production' }), 'https://api.charitypilot.ie');
 });
 
-test('keeps the localhost fallback for local development only', () => {
-  assert.equal(getApiBaseUrl({ NODE_ENV: 'development' }), 'http://localhost:3001');
+test('keeps the local Docker API fallback for local development only', () => {
+  assert.equal(getApiBaseUrl({ NODE_ENV: 'development' }), 'http://localhost:3002');
 });

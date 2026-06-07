@@ -38,9 +38,18 @@ const envToLogger: Record<string, unknown> = {
 const environment = process.env.NODE_ENV ?? 'development';
 const isProduction = environment === 'production';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
+function normaliseOrigin(origin: string): string {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return origin.replace(/\/+$/, '');
+  }
+}
+
 const allowedOrigins = new Set(
   (process.env.FRONTEND_URL?.split(',') ?? defaultFrontendOrigins)
     .map((origin) => origin.trim())
+    .map(normaliseOrigin)
     .filter(Boolean),
 );
 
@@ -163,7 +172,7 @@ app.get('/api/v1/health/readiness', async (request, reply) => {
 
 // ── Start ──
 
-const port = parsePort(process.env.PORT, isProduction ? 3002 : 3001);
+const port = parsePort(process.env.PORT, 3002);
 const host = process.env.HOST ?? '0.0.0.0';
 
 try {

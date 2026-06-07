@@ -43,6 +43,25 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.doesNotMatch(compose, /web:[\s\S]*command:[\s\S]*npm\s+(ci|install)/);
 });
 
+test('local development defaults use the documented API port', () => {
+  const apiServer = readRepoFile('apps/api/src/server.ts');
+  const webApiConfig = readRepoFile('apps/web/src/lib/api-config.ts');
+  const rootEnvExample = readRepoFile('.env.example');
+
+  assert.match(apiServer, /parsePort\(process\.env\.PORT,\s*3002\)/);
+  assert.match(webApiConfig, /DEFAULT_DEVELOPMENT_API_URL\s*=\s*'http:\/\/localhost:3002'/);
+  assert.match(rootEnvExample, /PORT=3002/);
+});
+
+test('web local env example matches the development CSP API origin', () => {
+  const webEnvExample = readRepoFile('apps/web/.env.local.example');
+  const webConfig = readRepoFile('apps/web/next.config.ts');
+  const match = webEnvExample.match(/^NEXT_PUBLIC_API_URL=(.+)$/m);
+
+  assert.ok(match, 'apps/web/.env.local.example must define NEXT_PUBLIC_API_URL');
+  assert.match(webConfig, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
 test('local Docker overlay does not weaken production image gates', () => {
   const localCompose = readRepoFile('compose.local.yml');
   const apiDockerfile = readRepoFile('apps/api/Dockerfile');

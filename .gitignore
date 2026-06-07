@@ -10,6 +10,9 @@ out/
 # Environment
 .env
 .env.local
+.env.production
+.env.production.*
+!.env.production.example
 .env.*.local
 
 # IDE

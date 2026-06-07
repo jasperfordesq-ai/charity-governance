@@ -53,7 +53,7 @@ test('fails with configuration issues when the selected env file contains placeh
   const result = runPreflight(['--production-env-file=.env.example']);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Production preflight failed \(17 issues\):/);
+  assert.match(result.stderr, /Production preflight failed \(18 issues\):/);
   assert.match(result.stderr, /JWT_SECRET is missing or still contains a placeholder value/);
   assert.match(result.stderr, /STRIPE_SECRET_KEY is missing or still contains a placeholder value/);
   assert.match(result.stderr, /FRONTEND_URL must use https:\/\/ for production/);
@@ -69,9 +69,10 @@ test('passes when the selected env file contains complete production values', ()
     [
       'NODE_ENV=production',
       'PORT=3002',
-      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
       `JWT_SECRET=${'a'.repeat(40)}`,
       'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
       'STRIPE_SECRET_KEY=sk_live_configuredSecret',
       'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
       'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
@@ -109,9 +110,10 @@ test('fails when NODE_ENV is not production', () => {
     [
       'NODE_ENV=development',
       'PORT=3002',
-      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
       `JWT_SECRET=${'a'.repeat(40)}`,
       'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
       'STRIPE_SECRET_KEY=sk_live_configuredSecret',
       'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
       'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
@@ -174,10 +176,173 @@ test('fails when production values are local, malformed, or test-mode', () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /PORT must be an integer from 1 to 65535/);
     assert.match(result.stderr, /DATABASE_URL must not point at localhost for production/);
+    assert.match(result.stderr, /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/);
     assert.match(result.stderr, /FRONTEND_URL must not point at localhost for production/);
     assert.match(result.stderr, /NEXT_PUBLIC_API_URL must not point at localhost for production/);
     assert.match(result.stderr, /STRIPE_SECRET_KEY must use a live Stripe secret key/);
     assert.match(result.stderr, /NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY must use a live Stripe publishable key/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('passes when production frontend origins include multiple approved HTTPS origins', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-multi-origin-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie, https://admin.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when production database URL omits TLS mode', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-db-tls-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when public production URLs are not origin-only', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-origin-only-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie/login',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie/v1',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FRONTEND_URL must be an origin-only URL for production/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must be an origin-only URL for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when split web and API production hosts omit a shared auth cookie domain', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-cookie-domain-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -192,7 +357,7 @@ test('fails when production URLs point at bracketed IPv6 localhost', () => {
     [
       'NODE_ENV=production',
       'PORT=3002',
-      'DATABASE_URL=postgresql://user:pass@[::1]:5432/charitypilot',
+      'DATABASE_URL=postgresql://user:pass@[::1]:5432/charitypilot?sslmode=require',
       `JWT_SECRET=${'a'.repeat(40)}`,
       'FRONTEND_URL=https://[::1]:3003',
       'STRIPE_SECRET_KEY=sk_live_configuredSecret',
@@ -231,6 +396,24 @@ test('production API scripts run built entrypoints without local env-file depend
   assert.equal(apiPackage.scripts['jobs:deadline-reminders'], 'node dist/jobs/send-deadline-reminders.js');
   assert.doesNotMatch(apiPackage.scripts.start, /--env-file|tsx|src\//);
   assert.doesNotMatch(apiPackage.scripts['jobs:deadline-reminders'], /--env-file|tsx|src\//);
+});
+
+test('production secret env files are ignored by git without hiding the template', () => {
+  for (const path of ['.env.production', '.env.production.secrets', '.env.production.local']) {
+    const result = spawnSync('git', ['check-ignore', '--quiet', '--no-index', path], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, `${path} must be ignored`);
+  }
+
+  const templateResult = spawnSync('git', ['check-ignore', '--quiet', '--no-index', '.env.production.example'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(templateResult.status, 1, '.env.production.example must remain visible');
 });
 
 test('API Docker image documents the production runtime port and non-root user', () => {
@@ -275,6 +458,13 @@ test('web config disables generated agent-rule files during local dev startup', 
   assert.match(webPackage.scripts.dev, /--webpack/);
   assert.equal(existsSync(join(repoRoot, 'apps/web/AGENTS.md')), false);
   assert.equal(existsSync(join(repoRoot, 'apps/web/CLAUDE.md')), false);
+});
+
+test('web development CSP allows the local Docker API port', () => {
+  const config = readRepoFile('apps/web/next.config.ts');
+
+  assert.match(config, /http:\/\/localhost:3002/);
+  assert.doesNotMatch(config, /http:\/\/localhost:3001/);
 });
 
 test('web route protection uses the Next proxy convention instead of deprecated middleware', () => {
@@ -324,6 +514,24 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test('web export opens the API-rendered report directly with opener isolation', () => {
+  const exportPage = readRepoFile('apps/web/src/app/(dashboard)/export/page.tsx');
+
+  assert.match(exportPage, /api\.getUri\(\{\s*url:\s*`\/export\/compliance-report\?year=\$\{year\}`\s*\}\)/);
+  assert.match(exportPage, /window\.open\([^)]*'noopener,noreferrer'[^)]*\)/);
+  assert.doesNotMatch(exportPage, /new Blob\(/);
+  assert.doesNotMatch(exportPage, /URL\.createObjectURL/);
+});
+
+test('web document upload picker does not advertise legacy Office formats', () => {
+  const documentsPage = readRepoFile('apps/web/src/app/(dashboard)/documents/page.tsx');
+
+  assert.doesNotMatch(documentsPage, /accept="[^"]*\.(doc|xls|ppt)(,|")/);
+  assert.match(documentsPage, /\.docx/);
+  assert.match(documentsPage, /\.xlsx/);
+  assert.match(documentsPage, /\.pptx/);
 });
 
 test('CI deploys Prisma migrations against PostgreSQL before release gates', () => {

@@ -8,7 +8,7 @@ if (process.env.NODE_ENV !== 'production') {
 const connectSrc =
   process.env.NODE_ENV === 'production'
     ? `'self' ${process.env.NEXT_PUBLIC_API_URL ?? 'https://api.charitypilot.ie'}`
-    : "'self' http://localhost:3001 http://localhost:3003 ws://localhost:3003";
+    : "'self' http://localhost:3002 http://localhost:3003 ws://localhost:3003";
 
 const contentSecurityPolicyDirectives = [
   "default-src 'self'",

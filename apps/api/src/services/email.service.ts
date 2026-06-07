@@ -15,7 +15,9 @@ function escapeHtml(value: string): string {
 
 function buildTokenUrl(frontendUrl: string, path: string, token: string): string {
   const url = new URL(path, frontendUrl);
-  url.searchParams.set('token', token);
+  const fragmentParams = new URLSearchParams();
+  fragmentParams.set('token', token);
+  url.hash = fragmentParams.toString();
   return url.toString();
 }
 
