@@ -15,11 +15,14 @@ x-app-volumes: &app-volumes
 
 services:
   deps:
-    image: node:22-alpine
+    image: ${CHARITYPILOT_LOCAL_NODE_IMAGE:-node:22-alpine}
     container_name: charitypilot-deps-local
     working_dir: /app
+    user: ${CHARITYPILOT_LOCAL_CONTAINER_USER:-root}
+    environment:
+      NODE_ENV: development
     command: >
-      sh -lc "npm ci &&
+      sh -lc "npm ci --include=dev &&
       npm run build -w @charitypilot/shared &&
       npm run db:generate -w @charitypilot/api"
     volumes: *app-volumes
@@ -27,9 +30,10 @@ services:
       - charitypilot-internal
 
   api:
-    image: node:22-alpine
+    image: ${CHARITYPILOT_LOCAL_NODE_IMAGE:-node:22-alpine}
     container_name: charitypilot-api-local
     working_dir: /app
+    user: ${CHARITYPILOT_LOCAL_CONTAINER_USER:-root}
     depends_on:
       db:
         condition: service_healthy
@@ -77,9 +81,10 @@ services:
       start_period: 30s
 
   web:
-    image: node:22-alpine
+    image: ${CHARITYPILOT_LOCAL_NODE_IMAGE:-node:22-alpine}
     container_name: charitypilot-web-local
     working_dir: /app
+    user: ${CHARITYPILOT_LOCAL_CONTAINER_USER:-root}
     depends_on:
       api:
         condition: service_healthy

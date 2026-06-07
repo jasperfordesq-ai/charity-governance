@@ -30,6 +30,11 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /\nservices:\s*\n\s+deps:/);
   assert.match(compose, /\n\s+api:/);
   assert.match(compose, /\n\s+web:/);
+  assert.match(compose, /deps:[\s\S]*environment:[\s\S]*NODE_ENV:\s+development/);
+  assert.match(compose, /deps:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
+  assert.match(compose, /deps:[\s\S]*npm ci --include=dev/);
+  assert.match(compose, /api:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
+  assert.match(compose, /web:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /NODE_ENV:\s+development/);
   assert.match(compose, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_dev@db:5432\/charitypilot/);
   assert.match(compose, /FRONTEND_URL:\s+http:\/\/localhost:3003/);
@@ -69,7 +74,7 @@ test('local Docker overlay does not weaken production image gates', () => {
   const webDockerfile = readRepoFile('apps/web/Dockerfile');
 
   assert.doesNotMatch(localCompose, /\n\s+build:/);
-  assert.match(localCompose, /image:\s+node:22-alpine/);
+  assert.match(localCompose, /image:\s+\$\{CHARITYPILOT_LOCAL_NODE_IMAGE:-node:22-alpine\}/);
   assert.match(apiDockerfile, /ENV\s+NODE_ENV=production/);
   assert.match(apiDockerfile, /CMD\s+\["node",\s*"dist\/start\.js"\]/);
   assert.match(webDockerfile, /NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL/);
