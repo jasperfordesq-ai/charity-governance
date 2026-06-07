@@ -461,10 +461,61 @@ test('web config disables generated agent-rule files during local dev startup', 
 });
 
 test('web development CSP allows the local Docker API port', () => {
+  const csp = readRepoFile('apps/web/src/lib/content-security-policy.ts');
+
+  assert.match(csp, /http:\/\/localhost:3002/);
+  assert.doesNotMatch(csp, /http:\/\/localhost:3001/);
+});
+
+test('web production CSP uses per-request script nonces without unsafe inline execution', () => {
   const config = readRepoFile('apps/web/next.config.ts');
 
-  assert.match(config, /http:\/\/localhost:3002/);
-  assert.doesNotMatch(config, /http:\/\/localhost:3001/);
+  assert.doesNotMatch(config, /script-src[^;\n]*'unsafe-inline'/);
+
+  const script = `
+    import assert from 'node:assert/strict';
+
+    const cspModule = await import('./apps/web/src/lib/content-security-policy.ts');
+    const createContentSecurityPolicy =
+      cspModule.createContentSecurityPolicy ?? cspModule.default?.createContentSecurityPolicy;
+
+    const csp = createContentSecurityPolicy({
+      nonce: 'releaseGateNonce',
+      isDevelopment: false,
+      apiUrl: 'https://api.charitypilot.ie',
+    });
+
+    const scriptSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('script-src '));
+
+    assert.ok(scriptSrc, csp);
+    assert.match(scriptSrc, /'nonce-releaseGateNonce'/);
+    assert.match(scriptSrc, /'strict-dynamic'/);
+    assert.doesNotMatch(scriptSrc, /'unsafe-inline'/);
+    assert.doesNotMatch(scriptSrc, /'unsafe-eval'/);
+  `;
+
+  const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: process.env,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test('web executable inline scripts are nonce-bound for strict production CSP', () => {
+  const layout = readRepoFile('apps/web/src/app/layout.tsx');
+  const jsonLd = readRepoFile('apps/web/src/components/json-ld.tsx');
+  const proxy = readRepoFile('apps/web/src/proxy.ts');
+
+  assert.match(layout, /nonce=\{nonce\}/);
+  assert.match(layout, /headers\(\)/);
+  assert.match(jsonLd, /nonce=\{nonce\}/);
+  assert.match(proxy, /requestHeaders\.set\('x-nonce', nonce\)/);
+  assert.match(proxy, /Content-Security-Policy/);
 });
 
 test('web route protection uses the Next proxy convention instead of deprecated middleware', () => {

@@ -55,11 +55,11 @@ test('local development defaults use the documented API port', () => {
 
 test('web local env example matches the development CSP API origin', () => {
   const webEnvExample = readRepoFile('apps/web/.env.local.example');
-  const webConfig = readRepoFile('apps/web/next.config.ts');
+  const contentSecurityPolicy = readRepoFile('apps/web/src/lib/content-security-policy.ts');
   const match = webEnvExample.match(/^NEXT_PUBLIC_API_URL=(.+)$/m);
 
   assert.ok(match, 'apps/web/.env.local.example must define NEXT_PUBLIC_API_URL');
-  assert.match(webConfig, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(contentSecurityPolicy, new RegExp(match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('local Docker overlay does not weaken production image gates', () => {

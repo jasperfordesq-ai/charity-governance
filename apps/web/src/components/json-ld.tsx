@@ -1,4 +1,11 @@
-export function OrganisationJsonLd() {
+import { headers } from 'next/headers';
+
+async function getNonce() {
+  return (await headers()).get('x-nonce') ?? undefined;
+}
+
+export async function OrganisationJsonLd() {
+  const nonce = await getNonce();
   const data = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
@@ -23,13 +30,14 @@ export function OrganisationJsonLd() {
 
   return (
     <script
+      nonce={nonce}
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
     />
   );
 }
 
-export function BlogPostJsonLd({
+export async function BlogPostJsonLd({
   title,
   excerpt,
   date,
@@ -42,6 +50,7 @@ export function BlogPostJsonLd({
   author: string;
   slug: string;
 }) {
+  const nonce = await getNonce();
   const data = {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
@@ -59,13 +68,15 @@ export function BlogPostJsonLd({
 
   return (
     <script
+      nonce={nonce}
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
     />
   );
 }
 
-export function FaqJsonLd({ faqs }: { faqs: Array<{ question: string; answer: string }> }) {
+export async function FaqJsonLd({ faqs }: { faqs: Array<{ question: string; answer: string }> }) {
+  const nonce = await getNonce();
   const data = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -78,6 +89,7 @@ export function FaqJsonLd({ faqs }: { faqs: Array<{ question: string; answer: st
 
   return (
     <script
+      nonce={nonce}
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
     />

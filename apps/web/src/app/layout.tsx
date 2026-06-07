@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -38,7 +39,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -48,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         {/* Prevent FOUC for explicit dark mode without forcing public pages into OS dark mode */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var p=location.pathname;var app=/^\\/(dashboard|compliance|regulator|documents|board|registers|deadlines|organisation|team|billing|export)(\\/|$)/.test(p);if(app&&localStorage.theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}` }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var p=location.pathname;var app=/^\\/(dashboard|compliance|regulator|documents|board|registers|deadlines|organisation|team|billing|export)(\\/|$)/.test(p);if(app&&localStorage.theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}` }} />
       </head>
       <body className="font-sans antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors" suppressHydrationWarning>
         <Providers>{children}</Providers>
