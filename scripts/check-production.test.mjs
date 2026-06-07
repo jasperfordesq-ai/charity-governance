@@ -33,11 +33,11 @@ function cleanEnv() {
   return Object.fromEntries(Object.entries(env).filter(([, value]) => value));
 }
 
-function runPreflight(args) {
+function runPreflight(args, envOverrides = {}) {
   return spawnSync(process.execPath, [scriptPath, ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
-    env: cleanEnv(),
+    env: { ...cleanEnv(), ...envOverrides },
   });
 }
 
@@ -105,6 +105,50 @@ test('passes when the selected env file contains complete production values', ()
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production preflight passed using /);
     assert.ok(result.stdout.includes(envPath));
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when a required production value is absent from the selected env file even if the shell has it', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-env-file-authority-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      READINESS_API_KEY: 'configured-readiness-key-from-parent-shell',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /READINESS_API_KEY is missing or still contains a placeholder value/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1231,7 +1275,13 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
   assert.match(workflow, /-e RESEND_API_KEY=re_ci_smoke_key/);
   assert.match(workflow, /docker ps --filter name=charitypilot-api-smoke --filter status=running --quiet/);
-  assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(workflow, /api_headers="\$\(mktemp\)"/);
+  assert.match(workflow, /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
   assert.match(workflow, /name:\s+Verify API Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-api-ci[\s\S]*@prisma\/client/);
@@ -1240,7 +1290,14 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
-  assert.match(workflow, /curl --fail --silent http:\/\/127\.0\.0\.1:3003\//);
+  assert.match(workflow, /web_headers="\$\(mktemp\)"/);
+  assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
+  assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https:\/\/api\.charitypilot\.ie" "\$\{web_headers\}"/);
   assert.match(workflow, /docker rm -f charitypilot-web-smoke/);
   assert.match(workflow, /name:\s+Verify web Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-web-ci[\s\S]*require\.resolve\('next'\)/);
@@ -1303,7 +1360,22 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
   assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui\/react'\]/);
+  assert.match(workflow, /api_headers="\$\(mktemp\)"/);
+  assert.match(workflow, /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
   assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
+  assert.match(workflow, /web_headers="\$\(mktemp\)"/);
+  assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
+  assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https:\/\/api\.charitypilot\.ie" "\$\{web_headers\}"/);
   assert.match(workflow, /docker tag charitypilot-api-ci "\$\{api_image\}"/);
   assert.match(workflow, /docker tag charitypilot-web-ci "\$\{web_image\}"/);
   assert.match(workflow, /docker tag charitypilot-api-migrations-ci "\$\{migration_image\}"/);

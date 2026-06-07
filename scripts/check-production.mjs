@@ -61,7 +61,7 @@ function parseEnvFile(path) {
 }
 
 function envValue(env, key) {
-  return env[key] ?? process.env[key] ?? '';
+  return env[key] ?? '';
 }
 
 function isConfigured(value) {

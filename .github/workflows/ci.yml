@@ -116,7 +116,8 @@ jobs:
             -e RESEND_API_KEY=re_ci_smoke_key \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_ci \
             charitypilot-api-ci
-          until curl --fail --silent http://127.0.0.1:3002/api/v1/health; do
+          api_headers="$(mktemp)"
+          until curl --fail --silent --dump-header "${api_headers}" http://127.0.0.1:3002/api/v1/health; do
             if ! docker ps --filter name=charitypilot-api-smoke --filter status=running --quiet | grep -q .; then
               docker logs charitypilot-api-smoke --tail 50
               exit 1
@@ -127,6 +128,11 @@ jobs:
             fi
             sleep 2
           done
+          grep -qi "^x-content-type-options: nosniff" "${api_headers}"
+          grep -qi "^x-frame-options: DENY" "${api_headers}"
+          grep -qi "^referrer-policy: strict-origin-when-cross-origin" "${api_headers}"
+          grep -qi "^permissions-policy: camera=(), microphone=(), geolocation=(), payment=()" "${api_headers}"
+          grep -qi "^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "${api_headers}"
 
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
@@ -145,7 +151,8 @@ jobs:
             -e PORT=3003 \
             -e HOST=0.0.0.0 \
             charitypilot-web-ci
-          until curl --fail --silent http://127.0.0.1:3003/; do
+          web_headers="$(mktemp)"
+          until curl --fail --silent --dump-header "${web_headers}" http://127.0.0.1:3003/; do
             if ! docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet | grep -q .; then
               docker logs charitypilot-web-smoke --tail 50
               exit 1
@@ -156,6 +163,12 @@ jobs:
             fi
             sleep 2
           done
+          grep -qi "^x-content-type-options: nosniff" "${web_headers}"
+          grep -qi "^x-frame-options: DENY" "${web_headers}"
+          grep -qi "^referrer-policy: strict-origin-when-cross-origin" "${web_headers}"
+          grep -qi "^permissions-policy: camera=(), microphone=(), geolocation=(), payment=()" "${web_headers}"
+          grep -qi "^strict-transport-security: max-age=63072000; includeSubDomains; preload" "${web_headers}"
+          grep -qi "^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https://api.charitypilot.ie" "${web_headers}"
 
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate
