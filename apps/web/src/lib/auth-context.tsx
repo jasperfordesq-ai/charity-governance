@@ -7,8 +7,8 @@ import type { UserResponse } from '@charitypilot/shared';
 interface AuthContextType {
   user: UserResponse | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; name: string; organisationName: string }) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserResponse>;
+  register: (data: { email: string; password: string; name: string; organisationName: string }) => Promise<UserResponse>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       skipAuthRedirect: true,
     });
     setUser(data.user);
+    return data.user;
   };
 
   const register = async (regData: {
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       skipAuthRedirect: true,
     });
     setUser(data.user);
+    return data.user;
   };
 
   const logout = async () => {

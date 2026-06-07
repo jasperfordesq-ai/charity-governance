@@ -8,7 +8,11 @@ declare module 'fastify' {
   }
 }
 
-export async function authGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+async function authenticateRequest(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  options: { allowUnverified: boolean },
+): Promise<void> {
   const authHeader = request.headers.authorization;
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
   const token = bearerToken ?? getAccessTokenFromRequest(request);
@@ -42,6 +46,7 @@ export async function authGuard(request: FastifyRequest, reply: FastifyReply): P
         id: true,
         organisationId: true,
         role: true,
+        emailVerified: true,
       },
     }),
   ]);
@@ -51,10 +56,26 @@ export async function authGuard(request: FastifyRequest, reply: FastifyReply): P
     return;
   }
 
+  if (!user.emailVerified && !options.allowUnverified) {
+    reply.status(403).send({
+      error: 'Please verify your email before continuing',
+      code: 'EMAIL_NOT_VERIFIED',
+    });
+    return;
+  }
+
   request.user = {
     userId: user.id,
     organisationId: user.organisationId,
     role: user.role,
     sessionId: session.id,
   };
+}
+
+export async function authGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await authenticateRequest(request, reply, { allowUnverified: false });
+}
+
+export async function authIdentityGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await authenticateRequest(request, reply, { allowUnverified: true });
 }

@@ -131,6 +131,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace('/login');
+      return;
+    }
+
+    if (!isLoading && user && !user.emailVerified) {
+      router.replace('/verify-email');
     }
   }, [isLoading, user, router]);
 
@@ -149,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!user) return null;
+  if (!user || !user.emailVerified) return null;
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';

@@ -1,8 +1,81 @@
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 
+type DocumentStorageDeletionRecord = {
+  id: string;
+  organisationId: string;
+  storagePath: string;
+};
+
+type QueryRaw = <T = unknown>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
+
+type DocumentStorageDeletionDelegate = {
+  create(args: {
+    data: {
+      organisationId: string;
+      storagePath: string;
+    };
+  }): Promise<{ id: string }>;
+  update(args: {
+    where: { id: string };
+    data: {
+      attempts?: { increment: number };
+      lastError?: string | null;
+      processedAt?: Date;
+    };
+  }): Promise<unknown>;
+  findMany(args: {
+    where: { processedAt: null };
+    orderBy: { createdAt: 'asc' };
+    take: number;
+  }): Promise<DocumentStorageDeletionRecord[]>;
+};
+
+type DocumentStorageDeletionClient = {
+  documentStorageDeletion: DocumentStorageDeletionDelegate;
+  $queryRaw?: QueryRaw;
+  $transaction?: <T>(callback: (tx: DocumentStorageDeletionClient) => Promise<T>) => Promise<T>;
+};
+
+function deletionDelegate(prisma: unknown): DocumentStorageDeletionDelegate {
+  return (prisma as DocumentStorageDeletionClient).documentStorageDeletion;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
 export class DocumentService {
   constructor(private prisma: PrismaClient) {}
+
+  private async claimPendingStorageDeletions(limit: number): Promise<DocumentStorageDeletionRecord[]> {
+    const client = this.prisma as unknown as DocumentStorageDeletionClient;
+
+    if (client.$transaction && client.$queryRaw) {
+      return client.$transaction(async (tx) => {
+        const queryRaw = tx.$queryRaw;
+        if (!queryRaw) {
+          return [];
+        }
+
+        return queryRaw<DocumentStorageDeletionRecord[]>`
+          SELECT "id", "organisationId", "storagePath"
+          FROM "DocumentStorageDeletion"
+          WHERE "processedAt" IS NULL
+          ORDER BY "createdAt" ASC
+          LIMIT ${limit}
+          FOR UPDATE SKIP LOCKED
+        `;
+      });
+    }
+
+    return deletionDelegate(this.prisma).findMany({
+      where: { processedAt: null },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+  }
 
   async list(organisationId: string, page = 1, pageSize = 50) {
     const skip = (page - 1) * pageSize;
@@ -82,23 +155,70 @@ export class DocumentService {
     });
   }
 
-  /**
-   * Deletes the document record from the database and returns the stored
-   * `fileUrl` (Supabase storage path) so the caller can remove the file
-   * from object storage.
-   */
-  async remove(organisationId: string, id: string): Promise<string> {
-    const doc = await this.prisma.document.findFirst({
-      where: { id, organisationId },
-    });
+  async remove(organisationId: string, id: string): Promise<{ storagePath: string; storageDeletionId: string }> {
+    return this.prisma.$transaction(async (tx) => {
+      const doc = await tx.document.findFirst({
+        where: { id, organisationId },
+      });
 
-    if (!doc) {
-      throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+      if (!doc) {
+        throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+      }
+
+      const deletion = await deletionDelegate(tx).create({
+        data: {
+          organisationId,
+          storagePath: doc.fileUrl,
+        },
+      });
+
+      await tx.document.delete({ where: { id } });
+
+      return { storagePath: doc.fileUrl, storageDeletionId: deletion.id };
+    });
+  }
+
+  async markStorageDeletionProcessed(id: string): Promise<void> {
+    await deletionDelegate(this.prisma).update({
+      where: { id },
+      data: {
+        processedAt: new Date(),
+        lastError: null,
+      },
+    });
+  }
+
+  async recordStorageDeletionFailure(id: string, error: unknown): Promise<void> {
+    await deletionDelegate(this.prisma).update({
+      where: { id },
+      data: {
+        attempts: { increment: 1 },
+        lastError: errorMessage(error),
+      },
+    });
+  }
+
+  async retryPendingStorageDeletions(
+    deleteFile: (organisationId: string, storagePath: string) => Promise<void>,
+    limit = 25,
+  ): Promise<{ processed: number; failed: number }> {
+    const pending = await this.claimPendingStorageDeletions(limit);
+
+    let processed = 0;
+    let failed = 0;
+
+    for (const deletion of pending) {
+      try {
+        await deleteFile(deletion.organisationId, deletion.storagePath);
+        await this.markStorageDeletionProcessed(deletion.id);
+        processed += 1;
+      } catch (error) {
+        await this.recordStorageDeletionFailure(deletion.id, error);
+        failed += 1;
+      }
     }
 
-    await this.prisma.document.delete({ where: { id } });
-
-    return doc.fileUrl;
+    return { processed, failed };
   }
 
   async linkStandard(organisationId: string, documentId: string, standardId: string) {

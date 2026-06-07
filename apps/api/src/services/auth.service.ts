@@ -175,6 +175,36 @@ export class AuthService {
     return { message: 'If an account with that email exists, a reset link has been sent.' };
   }
 
+  async resendEmailVerification(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    if (user.emailVerified) {
+      return { message: 'Email is already verified.' };
+    }
+
+    const verify = createOneTimeToken();
+    const verifyTokenExpiry = new Date();
+    verifyTokenExpiry.setHours(verifyTokenExpiry.getHours() + VERIFY_TOKEN_EXPIRY_HOURS);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { verifyToken: verify.hash, verifyTokenExpiry },
+    });
+
+    const sent = await this.emailService.sendEmailVerification(user.email, user.name, verify.token);
+    if (!sent) {
+      throw new AppError(503, 'EMAIL_DELIVERY_FAILED', 'Verification email could not be sent. Please try again later.');
+    }
+
+    return { message: 'Verification email sent.' };
+  }
+
   async resetPassword(token: string, password: string) {
     const user = await this.prisma.user.findFirst({
       where: {

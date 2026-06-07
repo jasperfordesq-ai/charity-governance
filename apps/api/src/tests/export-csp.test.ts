@@ -26,7 +26,7 @@ test('export HTML route sets a scoped CSP that allows its inline stylesheet', as
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
-    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN' }) },
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
     subscription: subscription(),
     organisation: {
       findUniqueOrThrow: async () => ({

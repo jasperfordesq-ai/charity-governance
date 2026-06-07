@@ -55,7 +55,7 @@ test('authGuard uses current database role and organisation instead of stale JWT
         user: {
           findUnique: async (query: { where: { id: string } }) => {
             assert.equal(query.where.id, 'user-1');
-            return { id: 'user-1', organisationId: 'current-org', role: 'MEMBER' };
+            return { id: 'user-1', organisationId: 'current-org', role: 'MEMBER', emailVerified: true };
           },
         },
       },
@@ -106,6 +106,168 @@ test('authGuard rejects access tokens whose backing session has been revoked', a
   assert.equal(reply.statusCode, 401);
   assert.deepEqual(reply.payload, { error: 'Invalid or expired token', code: 'UNAUTHORIZED' });
   assert.equal((request as { user?: unknown }).user, undefined);
+});
+
+test('authGuard rejects valid sessions for users whose email is not verified', async () => {
+  const { authGuard } = await import('../middleware/auth.js');
+  const { signAccessToken } = await import('../utils/jwt.js');
+
+  const token = signAccessToken({
+    userId: 'user-1',
+    organisationId: 'org-1',
+    role: 'OWNER',
+    sessionId: 'session-1',
+  } as never);
+
+  const request = {
+    headers: { authorization: `Bearer ${token}` },
+    server: {
+      prisma: {
+        authSession: {
+          findFirst: async () => ({ id: 'session-1' }),
+        },
+        user: {
+          findUnique: async () => ({
+            id: 'user-1',
+            organisationId: 'org-1',
+            role: 'OWNER',
+            emailVerified: false,
+          }),
+        },
+      },
+    },
+  };
+  const reply = createReply();
+
+  await authGuard(request as never, reply as never);
+
+  assert.equal(reply.statusCode, 403);
+  assert.deepEqual(reply.payload, {
+    error: 'Please verify your email before continuing',
+    code: 'EMAIL_NOT_VERIFIED',
+  });
+  assert.equal((request as { user?: unknown }).user, undefined);
+});
+
+test('authIdentityGuard allows valid sessions for users whose email is not verified', async () => {
+  const { authIdentityGuard } = await import('../middleware/auth.js');
+  const { signAccessToken } = await import('../utils/jwt.js');
+
+  const token = signAccessToken({
+    userId: 'user-1',
+    organisationId: 'org-1',
+    role: 'OWNER',
+    sessionId: 'session-1',
+  } as never);
+
+  const request = {
+    headers: { authorization: `Bearer ${token}` },
+    server: {
+      prisma: {
+        authSession: {
+          findFirst: async () => ({ id: 'session-1' }),
+        },
+        user: {
+          findUnique: async () => ({
+            id: 'user-1',
+            organisationId: 'org-1',
+            role: 'OWNER',
+            emailVerified: false,
+          }),
+        },
+      },
+    },
+  };
+  const reply = createReply();
+
+  await authIdentityGuard(request as never, reply as never);
+
+  assert.equal(reply.statusCode, 200);
+  assert.equal(reply.payload, undefined);
+  assert.deepEqual((request as { user?: unknown }).user, {
+    userId: 'user-1',
+    organisationId: 'org-1',
+    role: 'OWNER',
+    sessionId: 'session-1',
+  });
+});
+
+test('resendEmailVerification rotates the token and emails unverified users', async () => {
+  const { AuthService } = await import('../services/auth.service.js');
+
+  let updateData: { verifyToken?: string; verifyTokenExpiry?: Date } | undefined;
+  const sentMessages: Array<{ email: string; name: string; token: string }> = [];
+  const prisma = {
+    user: {
+      findUnique: async (query: { where: { id: string } }) => {
+        assert.equal(query.where.id, 'user-1');
+        return {
+          id: 'user-1',
+          email: 'owner@example.org',
+          name: 'Owner One',
+          emailVerified: false,
+        };
+      },
+      update: async ({ data }: { data: { verifyToken: string; verifyTokenExpiry: Date } }) => {
+        updateData = data;
+        return {};
+      },
+    },
+  };
+  const emailService = {
+    sendEmailVerification: async (email: string, name: string, token: string) => {
+      sentMessages.push({ email, name, token });
+      return true;
+    },
+  };
+  const service = new AuthService(prisma as never, emailService as never);
+
+  const result = await (service as unknown as {
+    resendEmailVerification(userId: string): Promise<{ message: string }>;
+  }).resendEmailVerification('user-1');
+
+  assert.deepEqual(result, { message: 'Verification email sent.' });
+  assert.match(updateData?.verifyToken ?? '', /^[a-f0-9]{64}$/);
+  assert.ok(updateData?.verifyTokenExpiry instanceof Date);
+  assert.ok(updateData.verifyTokenExpiry.getTime() > Date.now());
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].email, 'owner@example.org');
+  assert.equal(sentMessages[0].name, 'Owner One');
+  assert.ok(sentMessages[0].token.length >= 32);
+});
+
+test('resendEmailVerification does not issue a new token for verified users', async () => {
+  const { AuthService } = await import('../services/auth.service.js');
+
+  let updateCalled = false;
+  let emailCalled = false;
+  const prisma = {
+    user: {
+      findUnique: async () => ({
+        id: 'user-1',
+        email: 'owner@example.org',
+        name: 'Owner One',
+        emailVerified: true,
+      }),
+      update: async () => {
+        updateCalled = true;
+      },
+    },
+  };
+  const emailService = {
+    sendEmailVerification: async () => {
+      emailCalled = true;
+    },
+  };
+  const service = new AuthService(prisma as never, emailService as never);
+
+  const result = await (service as unknown as {
+    resendEmailVerification(userId: string): Promise<{ message: string }>;
+  }).resendEmailVerification('user-1');
+
+  assert.deepEqual(result, { message: 'Email is already verified.' });
+  assert.equal(updateCalled, false);
+  assert.equal(emailCalled, false);
 });
 
 test('non-owner admins may invite members but not new admins', async () => {

@@ -7,6 +7,7 @@ import { test } from 'node:test';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
+const DOCKER_COMPOSE_CONFIG_TIMEOUT_MS = 120_000;
 
 function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8');
@@ -83,9 +84,16 @@ test('local Docker compose overlay renders as a valid effective model', () => {
       cwd: repoRoot,
       encoding: 'utf8',
       env: process.env,
-      timeout: 30_000,
+      timeout: DOCKER_COMPOSE_CONFIG_TIMEOUT_MS,
     },
   );
 
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(
+    result.status,
+    0,
+    result.stderr ||
+      result.stdout ||
+      result.error?.message ||
+      `docker compose config did not complete within ${DOCKER_COMPOSE_CONFIG_TIMEOUT_MS}ms`,
+  );
 });

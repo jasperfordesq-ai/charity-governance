@@ -4,14 +4,19 @@ import { Suspense, useEffect, useState } from 'react';
 import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { useAuth } from '@/lib/auth-context';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 
-type Status = 'loading' | 'success' | 'error';
+type Status = 'loading' | 'pending' | 'success' | 'error';
 
 function VerifyEmailContent() {
   const { token, isReady } = useSensitiveQueryToken();
+  const { refreshUser } = useAuth();
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState('');
+  const [resendMessage, setResendMessage] = useState('');
+  const [resendError, setResendError] = useState('');
+  const [isResending, setIsResending] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -20,8 +25,8 @@ function VerifyEmailContent() {
     }
 
     if (!token) {
-      setStatus('error');
-      setMessage('No verification token found. Please check the link in your email.');
+      setStatus('pending');
+      setMessage('We sent a verification link to your email address.');
       return;
     }
 
@@ -36,6 +41,7 @@ function VerifyEmailContent() {
     async function verify() {
       try {
         await api.post('/auth/verify-email', { token });
+        await refreshUser();
         if (!timedOut) {
           clearTimeout(timeout);
           setStatus('success');
@@ -53,12 +59,27 @@ function VerifyEmailContent() {
     verify();
 
     return () => clearTimeout(timeout);
-  }, [attempt, isReady, token]);
+  }, [attempt, isReady, refreshUser, token]);
 
   const handleRetry = () => {
     setStatus('loading');
     setMessage('');
     setAttempt((current) => current + 1);
+  };
+
+  const handleResend = async () => {
+    setIsResending(true);
+    setResendMessage('');
+    setResendError('');
+
+    try {
+      const { data } = await api.post('/auth/resend-verification', {});
+      setResendMessage(data.message ?? 'Verification email sent.');
+    } catch (err: unknown) {
+      setResendError(apiErrorMessage(err, 'Verification email could not be sent. Please try again later.'));
+    } finally {
+      setIsResending(false);
+    }
   };
 
   return (
@@ -73,6 +94,40 @@ function VerifyEmailContent() {
               </div>
             )}
 
+            {status === 'pending' && (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-full bg-teal-primary/10 flex items-center justify-center mx-auto mb-5">
+                  <svg className="w-7 h-7 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-15A2.25 2.25 0 012.25 16.5v-9m19.5 0A2.25 2.25 0 0019.5 5.25h-15A2.25 2.25 0 002.25 7.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 9.66A2.25 2.25 0 012.25 7.743V7.5" />
+                  </svg>
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h1>
+                <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
+                <div className="flex flex-col items-center gap-3">
+                  <Button
+                    onPress={handleResend}
+                    isLoading={isResending}
+                    className="bg-teal-primary text-white font-semibold"
+                    radius="full"
+                  >
+                    Resend verification email
+                  </Button>
+                  {resendMessage && (
+                    <p role="status" className="text-sm text-green-600">{resendMessage}</p>
+                  )}
+                  {resendError && (
+                    <p role="alert" className="text-sm text-red-600">{resendError}</p>
+                  )}
+                  <Link
+                    href="/login"
+                    className="text-teal-primary font-semibold hover:underline text-sm"
+                  >
+                    Back to sign in
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {status === 'success' && (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-5">
@@ -83,10 +138,10 @@ function VerifyEmailContent() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Email verified</h1>
                 <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
                 <Link
-                  href="/login"
+                  href="/dashboard"
                   className="inline-flex items-center justify-center rounded-full bg-teal-primary text-white font-semibold px-8 py-2.5 hover:opacity-90 transition-opacity"
                 >
-                  Sign in to your account
+                  Continue to dashboard
                 </Link>
               </div>
             )}

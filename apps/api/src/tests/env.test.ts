@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
-import { validateProductionEnv } from '../utils/env.js';
+import { validateDocumentStorageCleanupEnv, validateProductionEnv } from '../utils/env.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -47,6 +47,8 @@ test('validateProductionEnv rejects placeholder production configuration', () =>
 test('validateProductionEnv accepts complete production configuration', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
@@ -67,9 +69,129 @@ test('validateProductionEnv accepts complete production configuration', () => {
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
+test('validateDocumentStorageCleanupEnv accepts storage-only production configuration', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
+});
+
+test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configuration', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot';
+
+  assert.throws(
+    () => validateDocumentStorageCleanupEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message === 'Document storage cleanup environment is not ready' &&
+      Array.isArray(error.details) &&
+      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production') &&
+      error.details.includes('SUPABASE_URL is missing or still contains a placeholder value') &&
+      error.details.includes('SUPABASE_SERVICE_ROLE_KEY is missing or still contains a placeholder value') &&
+      error.details.includes('SUPABASE_STORAGE_BUCKET is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateProductionEnv rejects missing production readiness key', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('READINESS_API_KEY is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateProductionEnv rejects short production readiness keys', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'short-readiness-key';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('READINESS_API_KEY must be at least 32 characters'),
+  );
+});
+
+test('validateProductionEnv requires explicit trusted proxy addresses in production', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_realisticConfiguredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('TRUSTED_PROXY_ADDRESSES must list the reverse proxy address or CIDR for production rate limits'),
+  );
+});
+
 test('validateProductionEnv accepts comma-separated production frontend origins', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie, https://admin.charitypilot.ie';

@@ -14,7 +14,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "jobs:deadline-reminders": "node dist/jobs/send-deadline-reminders.js"
+    "jobs:deadline-reminders": "node dist/jobs/send-deadline-reminders.js",
+    "jobs:document-storage-cleanup": "node dist/jobs/cleanup-document-storage.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

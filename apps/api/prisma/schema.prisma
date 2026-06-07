@@ -322,6 +322,20 @@ model DocumentStandardLink {
   @@unique([documentId, standardId])
 }
 
+model DocumentStorageDeletion {
+  id             String    @id @default(cuid())
+  organisationId String
+  storagePath    String
+  attempts       Int       @default(0)
+  lastError      String?
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organisationId])
+  @@index([processedAt, createdAt])
+}
+
 model ConflictRecord {
   id              String         @id @default(cuid())
   organisationId  String

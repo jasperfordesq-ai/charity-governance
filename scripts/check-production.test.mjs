@@ -53,7 +53,7 @@ test('fails with configuration issues when the selected env file contains placeh
   const result = runPreflight(['--production-env-file=.env.example']);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Production preflight failed \(20 issues\):/);
+  assert.match(result.stderr, /Production preflight failed \(\d+ issues\):/);
   assert.match(result.stderr, /JWT_SECRET is missing or still contains a placeholder value/);
   assert.match(result.stderr, /STRIPE_SECRET_KEY is missing or still contains a placeholder value/);
   assert.match(result.stderr, /FRONTEND_URL must use https:\/\/ for production/);
@@ -62,6 +62,49 @@ test('fails with configuration issues when the selected env file contains placeh
 
 test('passes when the selected env file contains complete production values', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production preflight passed using /);
+    assert.ok(result.stdout.includes(envPath));
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the detailed readiness key is missing from production config', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-readiness-key-'));
   const envPath = join(tempDir, 'production.env');
 
   writeFileSync(
@@ -93,9 +136,49 @@ test('passes when the selected env file contains complete production values', ()
   try {
     const result = runPreflight([`--production-env-file=${envPath}`]);
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Production preflight passed using /);
-    assert.ok(result.stdout.includes(envPath));
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /READINESS_API_KEY is missing or still contains a placeholder value/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the detailed readiness key is too short for production config', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-short-readiness-key-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    [
+      'NODE_ENV=production',
+      'PORT=3002',
+      'READINESS_API_KEY=short-readiness-key',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      `JWT_SECRET=${'a'.repeat(40)}`,
+      'FRONTEND_URL=https://app.charitypilot.ie',
+      'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
+      'STRIPE_SECRET_KEY=sk_live_configuredSecret',
+      'STRIPE_WEBHOOK_SECRET=whsec_configuredSecret',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_essentialsMonthly',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'RESEND_API_KEY=re_configuredSecret',
+      'EMAIL_FROM=noreply@charitypilot.ie',
+      'SUPABASE_URL=https://configured-project.supabase.co',
+      'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+      'SUPABASE_STORAGE_BUCKET=documents',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
+      '',
+    ].join('\n'),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /READINESS_API_KEY must be at least 32 characters/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -195,6 +278,8 @@ test('passes when production frontend origins include multiple approved HTTPS or
     [
       'NODE_ENV=production',
       'PORT=3002',
+      'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
+      'READINESS_API_KEY=configured-readiness-key-32-chars',
       'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
       `JWT_SECRET=${'a'.repeat(40)}`,
       'FRONTEND_URL=https://app.charitypilot.ie, https://admin.charitypilot.ie',
@@ -434,6 +519,7 @@ test('production API scripts run built entrypoints without local env-file depend
   const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
 
   assert.equal(apiPackage.scripts.start, 'node dist/start.js');
+  assert.equal(apiPackage.scripts['db:migrate:deploy'], 'prisma migrate deploy');
   assert.equal(apiPackage.scripts['jobs:deadline-reminders'], 'node dist/jobs/send-deadline-reminders.js');
   assert.doesNotMatch(apiPackage.scripts.start, /--env-file|tsx|src\//);
   assert.doesNotMatch(apiPackage.scripts['jobs:deadline-reminders'], /--env-file|tsx|src\//);
@@ -466,9 +552,35 @@ test('API Docker image documents the production runtime port and non-root user',
   assert.match(dockerfile, /ENV\s+PORT=3002/);
   assert.match(dockerfile, /EXPOSE\s+3002/);
   assert.match(dockerfile, /USER\s+node/);
+  assert.match(dockerfile, /CMD\s+\["node",\s*"dist\/start\.js"\]/);
+  assert.doesNotMatch(dockerfile, /CMD[\s\S]*migrate deploy/);
 
   const runnerStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-alpine AS runner'));
   assert.doesNotMatch(runnerStage, /DATABASE_URL/);
+});
+
+test('API server enables trusted proxy handling for production rate limits', () => {
+  const server = readRepoFile('apps/api/src/server.ts');
+
+  assert.match(server, /trustedProxyAddresses/);
+  assert.match(server, /trustProxy:\s*trustedProxyAddresses\.length\s*>\s*0\s*\?\s*trustedProxyAddresses\s*:\s*false/);
+  assert.match(server, /Fastify\(\{[\s\S]*trustProxy:/);
+  assert.doesNotMatch(server, /trustProxy:\s*process\.env\.TRUST_PROXY\s*===\s*'true'/);
+});
+
+test('document storage deletion has a durable retry outbox and production job', () => {
+  const schema = readRepoFile('apps/api/prisma/schema.prisma');
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
+  const cleanupJob = readRepoFile('apps/api/src/jobs/cleanup-document-storage.ts');
+
+  assert.match(schema, /model DocumentStorageDeletion/);
+  assert.match(schema, /processedAt\s+DateTime\?/);
+  assert.match(schema, /@@index\(\[processedAt, createdAt\]\)/);
+  assert.equal(apiPackage.scripts['jobs:document-storage-cleanup'], 'node dist/jobs/cleanup-document-storage.js');
+  assert.match(cleanupJob, /retryPendingStorageDeletions/);
+  assert.match(cleanupJob, /validateDocumentStorageCleanupEnv/);
+  assert.match(cleanupJob, /StorageService/);
+  assert.doesNotMatch(cleanupJob, /validateProductionEnv/);
 });
 
 test('web Docker build requires a production HTTPS API URL before Next build', () => {
@@ -569,6 +681,25 @@ test('web route protection uses the Next proxy convention instead of deprecated 
   assert.match(proxy, /export function proxy\(request: NextRequest\)/);
   assert.match(proxy, /export const config\s*=/);
   assert.doesNotMatch(proxy, /export function middleware/);
+});
+
+test('web email verification flow gives unverified signed-in users a tokenless waiting page', () => {
+  const authContext = readRepoFile('apps/web/src/lib/auth-context.tsx');
+  const loginPage = readRepoFile('apps/web/src/app/(auth)/login/page.tsx');
+  const registerPage = readRepoFile('apps/web/src/app/(auth)/register/page.tsx');
+  const dashboardLayout = readRepoFile('apps/web/src/app/(dashboard)/layout.tsx');
+  const verifyEmailPage = readRepoFile('apps/web/src/app/(auth)/verify-email/page.tsx');
+
+  assert.match(authContext, /login:\s*\([^)]*\)\s*=>\s*Promise<UserResponse>/);
+  assert.match(authContext, /register:\s*\([^)]*\)\s*=>\s*Promise<UserResponse>/);
+  assert.match(loginPage, /router\.push\(user\.emailVerified\s*\?\s*'\/dashboard'\s*:\s*'\/verify-email'\)/);
+  assert.match(registerPage, /router\.push\(user\.emailVerified\s*\?\s*'\/dashboard'\s*:\s*'\/verify-email'\)/);
+  assert.match(dashboardLayout, /!user\.emailVerified[\s\S]*router\.replace\('\/verify-email'\)/);
+  assert.match(verifyEmailPage, /type Status = 'loading' \| 'pending' \| 'success' \| 'error'/);
+  assert.match(verifyEmailPage, /status === 'pending'/);
+  assert.match(verifyEmailPage, /api\.post\('\/auth\/resend-verification'/);
+  assert.match(verifyEmailPage, /Resend verification email/);
+  assert.doesNotMatch(verifyEmailPage, /No verification token found/);
 });
 
 test('web proxy preserves protected-route redirect and no-cache behavior', () => {

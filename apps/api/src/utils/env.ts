@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { AppError } from './errors.js';
 import { parsePort } from './port.js';
 
@@ -158,6 +159,41 @@ function requireMinLength(name: string, minLength: number, issues: string[]) {
   }
 }
 
+function isValidProxyAddress(entry: string): boolean {
+  if (['true', 'false', '*', 'all', '0.0.0.0/0', '::/0'].includes(entry.toLowerCase())) {
+    return false;
+  }
+
+  const parts = entry.split('/');
+  if (parts.length > 2) return false;
+
+  const address = parts[0].replace(/^\[|\]$/g, '');
+  const version = isIP(address);
+  if (!version) return false;
+
+  if (parts.length === 1) return true;
+
+  const prefix = parts[1];
+  if (!/^\d+$/.test(prefix)) return false;
+
+  const prefixLength = Number(prefix);
+  const maxPrefixLength = version === 4 ? 32 : 128;
+  return prefixLength >= 0 && prefixLength <= maxPrefixLength;
+}
+
+function requireTrustedProxyAddresses(issues: string[]) {
+  const value = process.env.TRUSTED_PROXY_ADDRESSES;
+  if (!isConfiguredSecret(value)) {
+    issues.push('TRUSTED_PROXY_ADDRESSES must list the reverse proxy address or CIDR for production rate limits');
+    return;
+  }
+
+  const addresses = envList(value);
+  if (!addresses.length || addresses.some((address) => !isValidProxyAddress(address))) {
+    issues.push('TRUSTED_PROXY_ADDRESSES must contain only explicit proxy IP addresses or CIDR ranges');
+  }
+}
+
 function hostMatchesCookieDomain(hostname: string, cookieDomain: string): boolean {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -199,6 +235,34 @@ function requireAuthCookieDomainForSplitHosts(issues: string[]) {
   }
 }
 
+function throwIfProductionIssues(code: string, message: string, issues: string[]): void {
+  if (issues.length) {
+    throw new AppError(
+      500,
+      code,
+      message,
+      issues,
+    );
+  }
+}
+
+export function validateDocumentStorageCleanupEnv(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  const issues: string[] = [];
+
+  requireDatabaseUrl('DATABASE_URL', issues);
+  requireUrl('SUPABASE_URL', issues, { requireHttps: true });
+  requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
+  requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+
+  throwIfProductionIssues(
+    'DOCUMENT_STORAGE_CLEANUP_ENV_INVALID',
+    'Document storage cleanup environment is not ready',
+    issues,
+  );
+}
+
 export function validateProductionEnv(): void {
   if (process.env.NODE_ENV !== 'production') return;
 
@@ -211,6 +275,8 @@ export function validateProductionEnv(): void {
     issues.push(error instanceof Error ? error.message : 'PORT must be an integer from 1 to 65535');
   }
 
+  requireTrustedProxyAddresses(issues);
+  requireMinLength('READINESS_API_KEY', 32, issues);
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
   requireUrl('FRONTEND_URL', issues, {
@@ -240,12 +306,5 @@ export function validateProductionEnv(): void {
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
 
-  if (issues.length) {
-    throw new AppError(
-      500,
-      'PRODUCTION_ENV_INVALID',
-      'Production environment is not ready',
-      issues,
-    );
-  }
+  throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);
 }

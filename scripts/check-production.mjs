@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import process from 'node:process';
 
 const PLACEHOLDERS = [
@@ -19,6 +20,8 @@ const PLACEHOLDERS = [
 const REQUIRED = [
   'NODE_ENV',
   'PORT',
+  'TRUSTED_PROXY_ADDRESSES',
+  'READINESS_API_KEY',
   'DATABASE_URL',
   'JWT_SECRET',
   'FRONTEND_URL',
@@ -80,6 +83,38 @@ function requireExactValue(env, key, expected, issues) {
 
   if (value !== expected) {
     issues.push(`${key} must be ${expected}`);
+  }
+}
+
+function isValidProxyAddress(entry) {
+  if (['true', 'false', '*', 'all', '0.0.0.0/0', '::/0'].includes(entry.toLowerCase())) {
+    return false;
+  }
+
+  const parts = entry.split('/');
+  if (parts.length > 2) return false;
+
+  const address = parts[0].replace(/^\[|\]$/g, '');
+  const version = isIP(address);
+  if (!version) return false;
+
+  if (parts.length === 1) return true;
+
+  const prefix = parts[1];
+  if (!/^\d+$/.test(prefix)) return false;
+
+  const prefixLength = Number(prefix);
+  const maxPrefixLength = version === 4 ? 32 : 128;
+  return prefixLength >= 0 && prefixLength <= maxPrefixLength;
+}
+
+function requireTrustedProxyAddresses(env, issues) {
+  const value = envValue(env, 'TRUSTED_PROXY_ADDRESSES');
+  if (!isConfigured(value)) return;
+
+  const addresses = envList(value);
+  if (!addresses.length || addresses.some((address) => !isValidProxyAddress(address))) {
+    issues.push('TRUSTED_PROXY_ADDRESSES must contain only explicit proxy IP addresses or CIDR ranges');
   }
 }
 
@@ -246,12 +281,13 @@ for (const key of REQUIRED) {
 }
 
 requireExactValue(env, 'NODE_ENV', 'production', issues);
+requireTrustedProxyAddresses(env, issues);
 requireIntegerPort(env, 'PORT', issues);
 requireDatabaseUrl(env, 'DATABASE_URL', issues);
 requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
 requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
 
-for (const key of ['JWT_SECRET']) {
+for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
   const value = envValue(env, key);
   if (isConfigured(value) && value.length < 32) {
     issues.push(`${key} must be at least 32 characters`);

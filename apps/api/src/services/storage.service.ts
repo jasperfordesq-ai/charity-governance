@@ -76,7 +76,7 @@ export class StorageService {
         getSupabaseClient().storage.getBucket(getBucketName()),
         readinessTimeoutMs(),
       );
-      return Boolean(result && !result.error && result.data);
+      return Boolean(result && !result.error && result.data?.public === false);
     } catch {
       return false;
     }

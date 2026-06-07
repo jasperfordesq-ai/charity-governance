@@ -23,8 +23,8 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      router.push('/dashboard');
+      const user = await login(email, password);
+      router.push(user.emailVerified ? '/dashboard' : '/verify-email');
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Invalid email or password. Please try again.'));
     } finally {

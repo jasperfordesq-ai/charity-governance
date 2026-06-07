@@ -16,10 +16,8 @@ import { exportRoutes } from './routes/export/index.js';
 import { dashboardRoutes } from './routes/dashboard/index.js';
 import { governanceRegisterRoutes } from './routes/governance-registers/index.js';
 import { teamRoutes } from './routes/team/index.js';
+import { healthRoutes } from './routes/health/index.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
-import { BillingService } from './services/billing.service.js';
-import { EmailService } from './services/email.service.js';
-import { StorageService } from './services/storage.service.js';
 import { startCronJobs } from './utils/cron.js';
 import { validateProductionEnv } from './utils/env.js';
 import { parsePort } from './utils/port.js';
@@ -52,11 +50,16 @@ const allowedOrigins = new Set(
     .map(normaliseOrigin)
     .filter(Boolean),
 );
+const trustedProxyAddresses = (process.env.TRUSTED_PROXY_ADDRESSES ?? '')
+  .split(',')
+  .map((address) => address.trim())
+  .filter(Boolean);
 
 validateProductionEnv();
 
 const app = Fastify({
   logger: envToLogger[environment] ?? true,
+  trustProxy: trustedProxyAddresses.length > 0 ? trustedProxyAddresses : false,
 });
 
 // ── Plugins ──
@@ -131,44 +134,9 @@ await app.register(exportRoutes, { prefix: '/api/v1/export' });
 await app.register(dashboardRoutes, { prefix: '/api/v1/dashboard' });
 await app.register(governanceRegisterRoutes, { prefix: '/api/v1/governance-registers' });
 await app.register(teamRoutes, { prefix: '/api/v1/team' });
+await app.register(healthRoutes, { prefix: '/api/v1/health' });
 
 // ── Health check ──
-
-app.get('/api/v1/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
-
-app.get('/api/v1/health/readiness', async (request, reply) => {
-  const billing = new BillingService(app.prisma);
-  const email = new EmailService();
-  const storage = new StorageService();
-
-  let database = false;
-  try {
-    await app.prisma.$queryRaw`SELECT 1`;
-    database = true;
-  } catch (err) {
-    request.log.error(err, 'Readiness database check failed');
-  }
-
-  const checks = {
-    database,
-    billingConfigured: billing.isConfigured(),
-    emailConfigured: email.isConfigured(),
-    storageConfigured: storage.isConfigured(),
-    storageBucketReachable: await storage.verifyBucket(),
-  };
-
-  const ready =
-    database &&
-    checks.billingConfigured &&
-    checks.emailConfigured &&
-    checks.storageConfigured &&
-    checks.storageBucketReachable;
-  reply.status(ready ? 200 : 503).send({
-    status: ready ? 'ready' : 'not_ready',
-    checks,
-    timestamp: new Date().toISOString(),
-  });
-});
 
 // ── Start ──
 

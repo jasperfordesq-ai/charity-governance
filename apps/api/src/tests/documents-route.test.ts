@@ -15,12 +15,17 @@ const [{ default: Fastify }, { default: multipart }, { documentRoutes }, { Stora
 
 type PrismaMock = {
   authSession?: { findFirst: () => Promise<{ id: string } | null> };
-  user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: 'ADMIN' } | null> };
+  user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: 'ADMIN'; emailVerified: boolean } | null> };
+  $transaction?: (callback: (tx: PrismaMock) => Promise<unknown>) => Promise<unknown>;
   subscription: { findUnique: () => Promise<{ status: string; trialEndsAt: Date | null }> };
   document: {
     create?: (args: unknown) => Promise<unknown>;
     findFirst?: (args: unknown) => Promise<unknown>;
     delete?: (args: unknown) => Promise<unknown>;
+  };
+  documentStorageDeletion?: {
+    create?: (args: unknown) => Promise<{ id: string }>;
+    update?: (args: unknown) => Promise<unknown>;
   };
 };
 
@@ -45,7 +50,7 @@ const authHeader = `Bearer ${signAccessToken({
 function authModels() {
   return {
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
-    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN' as const }) },
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN' as const, emailVerified: true }) },
   };
 }
 
@@ -57,7 +62,9 @@ function subscription() {
 
 async function buildDocumentsApp(prisma: PrismaMock, fileSizeLimit = 1024 * 1024) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', { ...authModels(), ...prisma } as never);
+  const decoratedPrisma = { ...authModels(), ...prisma };
+  decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
+  app.decorate('prisma', decoratedPrisma as never);
   await app.register(multipart, { limits: { fileSize: fileSizeLimit } });
   await app.register(documentRoutes);
   return app;
@@ -285,11 +292,13 @@ test('document upload preserves the database error when storage cleanup fails', 
   }
 });
 
-test('document delete removes storage before deleting the database record', { concurrency: false }, async () => {
+test('document delete removes storage after deleting the database record', { concurrency: false }, async () => {
   const originalDeleteFile = StorageService.prototype.deleteFile;
   let order = 0;
   let storageDeleteOrder = 0;
   let databaseDeleteOrder = 0;
+  let outboxCreateOrder = 0;
+  let outboxProcessedOrder = 0;
   let storageDeleteArgs: string[] = [];
 
   StorageService.prototype.deleteFile = async (...args: string[]) => {
@@ -306,6 +315,16 @@ test('document delete removes storage before deleting the database record', { co
         return { id: 'doc-1' };
       },
     },
+    documentStorageDeletion: {
+      create: async () => {
+        outboxCreateOrder = ++order;
+        return { id: 'deletion-1' };
+      },
+      update: async () => {
+        outboxProcessedOrder = ++order;
+        return {};
+      },
+    },
   });
 
   try {
@@ -317,8 +336,98 @@ test('document delete removes storage before deleting the database record', { co
 
     assert.equal(response.statusCode, 204);
     assert.deepEqual(storageDeleteArgs, ['org-1', 'org-1/policy.pdf']);
-    assert.equal(storageDeleteOrder, 1);
+    assert.equal(outboxCreateOrder, 1);
     assert.equal(databaseDeleteOrder, 2);
+    assert.equal(storageDeleteOrder, 3);
+    assert.equal(outboxProcessedOrder, 4);
+  } finally {
+    StorageService.prototype.deleteFile = originalDeleteFile;
+    await app.close();
+  }
+});
+
+test('document delete does not remove storage when database deletion fails', { concurrency: false }, async () => {
+  const originalDeleteFile = StorageService.prototype.deleteFile;
+  let storageDeleteCalled = false;
+
+  StorageService.prototype.deleteFile = async () => {
+    storageDeleteCalled = true;
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => {
+        throw new Error('database unavailable');
+      },
+    },
+    documentStorageDeletion: {
+      create: async () => ({ id: 'deletion-1' }),
+      update: async () => {
+        throw new Error('outbox should not be processed');
+      },
+    },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/doc-1',
+      headers: { authorization: authHeader },
+    });
+
+    assert.equal(response.statusCode, 500);
+    assert.equal(storageDeleteCalled, false);
+  } finally {
+    StorageService.prototype.deleteFile = originalDeleteFile;
+    await app.close();
+  }
+});
+
+test('document delete reports success when post-delete storage cleanup fails', { concurrency: false }, async () => {
+  const originalDeleteFile = StorageService.prototype.deleteFile;
+  let databaseDeleteCalled = false;
+  const outboxUpdates: unknown[] = [];
+
+  StorageService.prototype.deleteFile = async () => {
+    throw new Error('storage unavailable');
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => {
+        databaseDeleteCalled = true;
+        return { id: 'doc-1' };
+      },
+    },
+    documentStorageDeletion: {
+      create: async () => ({ id: 'deletion-1' }),
+      update: async (args: unknown) => {
+        outboxUpdates.push(args);
+        return {};
+      },
+    },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/doc-1',
+      headers: { authorization: authHeader },
+    });
+
+    assert.equal(response.statusCode, 204);
+    assert.equal(databaseDeleteCalled, true);
+    assert.deepEqual(outboxUpdates, [{
+      where: { id: 'deletion-1' },
+      data: {
+        attempts: { increment: 1 },
+        lastError: 'storage unavailable',
+      },
+    }]);
   } finally {
     StorageService.prototype.deleteFile = originalDeleteFile;
     await app.close();

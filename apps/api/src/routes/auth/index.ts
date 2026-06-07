@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { AuthService } from '../../services/auth.service.js';
-import { authGuard } from '../../middleware/auth.js';
+import { authIdentityGuard } from '../../middleware/auth.js';
 import {
   registerSchema,
   loginSchema,
@@ -135,7 +135,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/me', { preHandler: [authGuard] }, async (request, reply) => {
+  app.get('/me', { preHandler: [authIdentityGuard] }, async (request, reply) => {
     try {
       const user = await authService.getMe(request.user.userId);
       reply.send(publicUser(user));
@@ -144,49 +144,78 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/forgot-password', async (request, reply) => {
-    try {
-      const body = forgotPasswordSchema.parse(request.body);
-      const result = await authService.forgotPassword(body.email);
+  app.post(
+    '/forgot-password',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      try {
+        const body = forgotPasswordSchema.parse(request.body);
+        const result = await authService.forgotPassword(body.email);
 
-      reply.send(result);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        reply.status(400).send(formatZodError(err));
-        return;
+        reply.send(result);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
       }
-      handleError(reply, err);
-    }
-  });
+    },
+  );
 
-  app.post('/reset-password', async (request, reply) => {
-    try {
-      const body = resetPasswordSchema.parse(request.body);
-      const result = await authService.resetPassword(body.token, body.password);
+  app.post(
+    '/resend-verification',
+    {
+      preHandler: [authIdentityGuard],
+      config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      try {
+        const result = await authService.resendEmailVerification(request.user.userId);
 
-      clearAuthCookies(reply);
-      reply.send(result);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        reply.status(400).send(formatZodError(err));
-        return;
+        reply.send(result);
+      } catch (err) {
+        handleError(reply, err);
       }
-      handleError(reply, err);
-    }
-  });
+    },
+  );
 
-  app.post('/verify-email', async (request, reply) => {
-    try {
-      const body = verifyEmailSchema.parse(request.body);
-      const result = await authService.verifyEmail(body.token);
+  app.post(
+    '/reset-password',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      try {
+        const body = resetPasswordSchema.parse(request.body);
+        const result = await authService.resetPassword(body.token, body.password);
 
-      reply.send(result);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        reply.status(400).send(formatZodError(err));
-        return;
+        clearAuthCookies(reply);
+        reply.send(result);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
       }
-      handleError(reply, err);
-    }
-  });
+    },
+  );
+
+  app.post(
+    '/verify-email',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      try {
+        const body = verifyEmailSchema.parse(request.body);
+        const result = await authService.verifyEmail(body.token);
+
+        reply.send(result);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
+      }
+    },
+  );
 }

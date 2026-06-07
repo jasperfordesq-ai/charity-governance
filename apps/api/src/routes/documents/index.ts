@@ -206,9 +206,18 @@ export async function documentRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const doc = await service.getById(request.user.organisationId, request.params.id);
-      await storageService.deleteFile(request.user.organisationId, doc.fileUrl);
-      await service.remove(request.user.organisationId, request.params.id);
+      const deleted = await service.remove(request.user.organisationId, request.params.id);
+      try {
+        await storageService.deleteFile(request.user.organisationId, deleted.storagePath);
+        await service.markStorageDeletionProcessed(deleted.storageDeletionId);
+      } catch (cleanupError) {
+        try {
+          await service.recordStorageDeletionFailure(deleted.storageDeletionId, cleanupError);
+        } catch (outboxError) {
+          request.log.error(outboxError, 'Failed to update document storage cleanup retry record');
+        }
+        request.log.error(cleanupError, 'Failed to clean up document storage after database delete succeeded');
+      }
       return sendNoContent(reply);
     } catch (err) {
       handleError(reply, err);
