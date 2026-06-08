@@ -168,6 +168,7 @@ Evidence:
 - [ ] API logs are captured by the production platform.
 - [ ] Web logs or platform events are captured.
 - [ ] Error alert destination is configured and tested.
+- [ ] `npm run check:production:observability -- --production-env-file=.env.production` completed from a trusted shell and the received test alert was confirmed in the incident system.
 - [ ] Public uptime monitoring checks `/api/v1/health`.
 - [ ] Internal readiness monitoring checks `/api/v1/health/readiness` with `x-charitypilot-readiness-key`.
 - [ ] Incident owner and escalation path are recorded outside git.

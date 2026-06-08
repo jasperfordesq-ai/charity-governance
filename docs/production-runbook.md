@@ -31,6 +31,7 @@ npm run deploy:production -- --production-env-file=.env.production
 npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
+npm run check:production:observability -- --production-env-file=.env.production
 npm run check:production:evidence -- --evidence-file=production-launch-evidence.json
 ```
 
@@ -111,6 +112,8 @@ Run `docs/production-browser-qa.md` against the deployed HTTPS production URL an
 ## Incident Basics
 
 Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys after any suspected secret exposure. Password reset invalidates all active sessions for that user.
+
+Run `npm run check:production:observability -- --production-env-file=.env.production` before launch from a trusted shell. The checker verifies `ERROR_ALERT_WEBHOOK_URL` is an HTTPS public destination, resolves through public DNS, accepts the same sanitized JSON payload shape used by API and job error alerts, and keeps the secret webhook URL out of output. Confirm the received alert in the external incident system and record the redacted evidence reference in the launch ledger.
 
 ## Billing And Email
 
