@@ -1441,6 +1441,8 @@ test('production env template documents the compose runtime web public origins',
   assert.match(template, /CHARITYPILOT_API_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:REPLACE_ME_API_IMAGE_DIGEST/);
   assert.match(template, /CHARITYPILOT_WEB_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:REPLACE_ME_WEB_IMAGE_DIGEST/);
   assert.match(template, /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/);
+  assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/REPLACE_ME_PUBLIC_API_ORIGIN\.example/);
+  assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /Docker Compose/);
 });
 
@@ -1938,12 +1940,17 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /CHARITYPILOT_API_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_WEB_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_MIGRATION_IMAGE=.*@sha256:/);
+  assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL/);
+  assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(runbook, /cosign verify/);
   assert.match(runbook, /Do not deploy mutable image tags/);
 
   assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
+  assert.match(launchChecklist, /rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence/);
+  assert.doesNotMatch(launchChecklist, /dry-run evidence capture/);
+  assert.match(launchChecklist, /web image build origins match the promoted production public origins/);
   assert.match(launchChecklist, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:observability -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:database -- --production-env-file=\.env\.production/);
@@ -2989,6 +2996,8 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_repository\}@\$\{api_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_IMAGE="\$\{web_repository\}@\$\{web_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_MIGRATION_IMAGE="\$\{migration_repository\}@\$\{migration_digest\}"/);
+  assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
+  assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"/);
   assert.doesNotMatch(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_image\}@\$\{api_digest\}"/);
   assert.match(manifestStep, /cat release-image-digests\.env >> "\$\{GITHUB_STEP_SUMMARY\}"/);
   assert.match(uploadStep, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);

@@ -58,6 +58,8 @@ function productionEnv(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${currentDigest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${currentDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${currentDigest}`,
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     ...overrides,
   };
 
@@ -69,6 +71,8 @@ function rollbackManifest(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${rollbackDigest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${rollbackDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`,
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     ...overrides,
   };
 
@@ -117,6 +121,8 @@ test('production rollback dry-run delegates to deploy with rollback digests merg
     assert.match(deployCalls[0].mergedEnv, new RegExp(`CHARITYPILOT_API_IMAGE=ghcr\\.io/jasperfordesq-ai/charity-governance-api@sha256:${rollbackDigest}`));
     assert.match(deployCalls[0].mergedEnv, new RegExp(`CHARITYPILOT_WEB_IMAGE=ghcr\\.io/jasperfordesq-ai/charity-governance-web@sha256:${rollbackDigest}`));
     assert.match(deployCalls[0].mergedEnv, new RegExp(`CHARITYPILOT_MIGRATION_IMAGE=ghcr\\.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`));
+    assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+    assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/configured-project\.supabase\.co/);
     assert.match(deployCalls[0].mergedEnv, /JWT_SECRET=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/);
     assert.doesNotMatch(deployCalls[0].mergedEnv, new RegExp(currentDigest));
     assert.match(result.stdout, /Production compose rollback dry-run/);
@@ -155,6 +161,38 @@ test('production rollback fails before deploy when rollback digest manifest uses
     assert.equal(deployCalled, false);
     assert.match(result.stderr, /Production compose rollback failed/);
     assert.match(result.stderr, /CHARITYPILOT_API_IMAGE must be pinned to an immutable sha256 digest/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production rollback requires web image build origin metadata in the rollback manifest', async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-rollback-missing-origin-'));
+  const envPath = join(tempDir, 'production.env');
+  const manifestPath = join(tempDir, 'release-image-digests.previous.env');
+  let deployCalled = false;
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(manifestPath, rollbackManifest({
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: '',
+  }));
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      ['--production-env-file', envPath, '--rollback-digest-file', manifestPath],
+      {
+        processEnv: cleanEnv(),
+        runDeploy: () => {
+          deployCalled = true;
+          return { status: 0, stdout: '', stderr: '' };
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(deployCalled, false);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL is required in the rollback digest manifest/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

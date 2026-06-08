@@ -22,6 +22,17 @@ const requiredImages = [
   },
 ];
 
+const requiredWebBuildOrigins = [
+  {
+    envName: 'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL',
+    expectedEnvName: 'NEXT_PUBLIC_API_URL',
+  },
+  {
+    envName: 'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
+    expectedEnvName: 'NEXT_PUBLIC_SUPABASE_URL',
+  },
+];
+
 const cosignIdentityRegex = '^https://github.com/jasperfordesq-ai/charity-governance/\\.github/workflows/release-images\\.yml@refs/(heads/master|tags/v.*)$';
 const cosignIssuer = 'https://token.actions.githubusercontent.com';
 
@@ -95,6 +106,18 @@ function imageRefIssue({ envName, repository }, value) {
   const expected = new RegExp(`^${repository.replaceAll('.', '\\.')}@sha256:[a-f0-9]{64}$`);
   if (!expected.test(value)) {
     return `${envName} must use ${repository}@sha256:<64 lowercase hex chars>`;
+  }
+
+  return null;
+}
+
+function webBuildOriginIssue({ envName, expectedEnvName }, deploymentEnv) {
+  const value = deploymentEnv[envName];
+  if (!value) return `${envName} is required from the release image digest manifest`;
+
+  const expected = deploymentEnv[expectedEnvName];
+  if (value !== expected) {
+    return `${envName} must match ${expectedEnvName} from the promoted web image manifest`;
   }
 
   return null;
@@ -179,6 +202,10 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
   const issues = [];
   for (const image of requiredImages) {
     const issue = imageRefIssue(image, deploymentEnv[image.envName]);
+    if (issue) issues.push(issue);
+  }
+  for (const buildOrigin of requiredWebBuildOrigins) {
+    const issue = webBuildOriginIssue(buildOrigin, deploymentEnv);
     if (issue) issues.push(issue);
   }
 

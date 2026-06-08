@@ -37,6 +37,8 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     ...overrides,
   };
 
@@ -68,6 +70,54 @@ test('deploy preflight rejects mutable tag images before promotion', () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /CHARITYPILOT_API_IMAGE must be pinned to an immutable sha256 digest/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight rejects web image build origin drift before promotion', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-web-origin-drift-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://old-api.charitypilot.ie',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL must match NEXT_PUBLIC_API_URL from the promoted web image manifest/,
+    );
+    assert.doesNotMatch(result.stdout, /cosign verify/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight requires web image build origin metadata from the release manifest', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-web-origin-missing-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: '',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: '',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL is required from the release image digest manifest/,
+    );
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL is required from the release image digest manifest/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -529,6 +529,8 @@ jobs:
           CHARITYPILOT_API_IMAGE="${api_repository}@${api_digest}"
           CHARITYPILOT_WEB_IMAGE="${web_repository}@${web_digest}"
           CHARITYPILOT_MIGRATION_IMAGE="${migration_repository}@${migration_digest}"
+          CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}"
+          CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"
           EOF
           echo "### Release image digest manifest" >> "${GITHUB_STEP_SUMMARY}"
           echo '```env' >> "${GITHUB_STEP_SUMMARY}"

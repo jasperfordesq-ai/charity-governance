@@ -24,6 +24,11 @@ const requiredImages = [
   },
 ];
 
+const requiredWebBuildOrigins = [
+  'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL',
+  'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
+];
+
 function usage() {
   return [
     'Usage: node scripts/production-compose-rollback.mjs --production-env-file <path> --rollback-digest-file <path> [--dry-run] [--wait-timeout <seconds>]',
@@ -148,6 +153,11 @@ function validateRollbackImages(rollbackEnv) {
     const issue = imageRefIssue(image, rollbackEnv[image.envName]);
     if (issue) issues.push(issue);
   }
+  for (const envName of requiredWebBuildOrigins) {
+    if (!rollbackEnv[envName]) {
+      issues.push(`${envName} is required in the rollback digest manifest`);
+    }
+  }
 
   if (issues.length > 0) {
     throw new Error([
@@ -160,6 +170,9 @@ function validateRollbackImages(rollbackEnv) {
 function mergedEnvContent(productionEnv, rollbackEnv) {
   const merged = { ...productionEnv };
   for (const { envName } of requiredImages) {
+    merged[envName] = rollbackEnv[envName];
+  }
+  for (const envName of requiredWebBuildOrigins) {
     merged[envName] = rollbackEnv[envName];
   }
 
