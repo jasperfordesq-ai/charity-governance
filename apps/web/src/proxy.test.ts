@@ -54,3 +54,23 @@ test('server-side protected route refresh sends the deployed web Origin required
   assert.ok(refreshCall, 'expected proxy to call the refresh endpoint');
   assert.equal(new Headers(refreshCall.init?.headers).get('Origin'), 'https://app.charitypilot.ie');
 });
+
+test('server-side protected route validation fails closed for unapproved production API origins', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.attacker.example';
+
+  const fetchCalls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    fetchCalls.push(input.toString());
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+
+  const response = await proxy(new NextRequest('https://app.charitypilot.ie/dashboard', {
+    headers: {
+      cookie: 'charitypilot_access=sensitive-access; charitypilot_refresh=sensitive-refresh',
+    },
+  }));
+
+  assert.deepEqual(fetchCalls, []);
+  assert.equal(response.headers.get('location'), 'https://app.charitypilot.ie/login?next=%2Fdashboard');
+});

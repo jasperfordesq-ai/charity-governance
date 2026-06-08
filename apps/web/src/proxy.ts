@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createContentSecurityPolicy } from './lib/content-security-policy';
+import { getApiBaseUrl } from './lib/api-config';
 import { isProtectedAppPath } from './lib/protected-routes';
 
 const AUTH_COOKIE_NAMES = ['charitypilot_access', 'charitypilot_refresh'] as const;
@@ -22,13 +23,8 @@ function protectedAuthCookieHeader(request: NextRequest): string {
 }
 
 function createApiAuthUrl(pathname: string): URL | null {
-  const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3002');
-
-  if (!configuredApiUrl) return null;
-
   try {
-    return new URL(pathname, configuredApiUrl.replace(/\/+$/, ''));
+    return new URL(pathname, getApiBaseUrl());
   } catch {
     return null;
   }
