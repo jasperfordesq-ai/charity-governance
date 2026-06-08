@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "node --import tsx --test src/tests/*.test.ts",
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
   },
@@ -20,6 +21,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }
 }

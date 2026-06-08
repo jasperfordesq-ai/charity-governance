@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,21 @@ function dockerRunForCommand(step, command) {
 
   const nextRun = step.indexOf('docker run --rm --network host', commandIndex + command.length);
   return step.slice(runStart, nextRun === -1 ? undefined : nextRun);
+}
+
+function workspacePackageDirs() {
+  return ['apps', 'packages'].flatMap((workspaceRoot) => readdirSync(join(repoRoot, workspaceRoot), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(workspaceRoot, entry.name)));
+}
+
+function workspaceHasSourceTests(workspaceDir) {
+  const testsDir = join(repoRoot, workspaceDir, 'src', 'tests');
+  if (!existsSync(testsDir)) return false;
+
+  return readdirSync(testsDir).some((fileName) => /\.test\.(?:ts|tsx|js|mjs)$/.test(fileName));
 }
 
 function cleanEnv() {
@@ -1072,6 +1087,21 @@ test('production API scripts run built entrypoints without local env-file depend
   assert.equal(apiPackage.scripts['jobs:deadline-reminders'], 'node dist/jobs/send-deadline-reminders.js');
   assert.doesNotMatch(apiPackage.scripts.start, /--env-file|tsx|src\//);
   assert.doesNotMatch(apiPackage.scripts['jobs:deadline-reminders'], /--env-file|tsx|src\//);
+});
+
+test('workspaces with source tests expose a test script for the root test gate', () => {
+  const orphanedTestWorkspaces = workspacePackageDirs()
+    .filter((workspaceDir) => workspaceHasSourceTests(workspaceDir))
+    .filter((workspaceDir) => {
+      const packageJson = JSON.parse(readRepoFile(join(workspaceDir, 'package.json')));
+      return typeof packageJson.scripts?.test !== 'string' || !packageJson.scripts.test.trim();
+    });
+
+  assert.deepEqual(
+    orphanedTestWorkspaces,
+    [],
+    `Workspaces with src/tests/*.test files must define package scripts.test: ${orphanedTestWorkspaces.join(', ')}`,
+  );
 });
 
 test('production secret env files are ignored by git without hiding the template', () => {
