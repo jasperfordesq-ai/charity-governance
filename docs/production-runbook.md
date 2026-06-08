@@ -33,7 +33,7 @@ The production preflight command requires a real `.env.production` file or equiv
 
 ## Published Image Promotion
 
-Production Docker promotion must use digest-pinned GHCR image references from the signed release workflow output:
+Production Docker promotion must use digest-pinned GHCR image references from the signed release workflow output. Download the release-image-digests artifact from the release workflow run and copy the values from `release-image-digests.env` into the approved production secret source:
 
 ```bash
 CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<api-digest>

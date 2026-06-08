@@ -2881,6 +2881,46 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   );
 });
 
+test('release workflow archives a deployable image digest manifest', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const checklist = readRepoFile('docs/production-launch-checklist.md');
+  const manifestStepStart = workflow.indexOf('name: Generate release image digest manifest');
+  const uploadStepStart = workflow.indexOf('name: Upload release image digest manifest');
+
+  assert.notEqual(manifestStepStart, -1, 'release workflow must generate a machine-readable digest manifest');
+  assert.notEqual(uploadStepStart, -1, 'release workflow must upload the digest manifest as an artifact');
+
+  const manifestStep = workflow.slice(manifestStepStart, uploadStepStart);
+  const uploadStep = workflow.slice(uploadStepStart, workflow.indexOf('name: Stop PostgreSQL'));
+
+  assert.match(manifestStep, /release-image-digests\.env/);
+  assert.match(manifestStep, /api_repository="\$\{api_image%:\*\}"/);
+  assert.match(manifestStep, /web_repository="\$\{web_image%:\*\}"/);
+  assert.match(manifestStep, /migration_repository="\$\{migration_image%:\*\}"/);
+  assert.match(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_repository\}@\$\{api_digest\}"/);
+  assert.match(manifestStep, /CHARITYPILOT_WEB_IMAGE="\$\{web_repository\}@\$\{web_digest\}"/);
+  assert.match(manifestStep, /CHARITYPILOT_MIGRATION_IMAGE="\$\{migration_repository\}@\$\{migration_digest\}"/);
+  assert.doesNotMatch(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_image\}@\$\{api_digest\}"/);
+  assert.match(manifestStep, /cat release-image-digests\.env >> "\$\{GITHUB_STEP_SUMMARY\}"/);
+  assert.match(uploadStep, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);
+  assert.match(uploadStep, /name:\s+release-image-digests/);
+  assert.match(uploadStep, /path:\s+release-image-digests\.env/);
+  assert.match(uploadStep, /if-no-files-found:\s+error/);
+  assert.match(uploadStep, /retention-days:\s+30/);
+  assert.ok(
+    workflow.indexOf('name: Verify published image signatures') < manifestStepStart,
+    'manifest must be generated only after signatures are verified',
+  );
+  assert.ok(
+    manifestStepStart < uploadStepStart,
+    'manifest must be generated before upload',
+  );
+  assert.match(runbook, /release-image-digests artifact/);
+  assert.match(runbook, /release-image-digests\.env/);
+  assert.match(checklist, /Release image digest manifest artifact/);
+});
+
 test('release workflow runs full production gates before publishing images', () => {
   const workflow = readRepoFile('.github/workflows/release-images.yml');
   const publishIndex = workflow.indexOf('name: Push image tags');

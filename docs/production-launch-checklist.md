@@ -39,6 +39,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm run check:production -- --production-env-file=.env.production` completed against the real production secret source.
 - [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with digest-pinned API, web, and migration images.
 - [ ] `cosign signature verification` passed for all promoted image digests.
+- [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 
 Evidence:
 

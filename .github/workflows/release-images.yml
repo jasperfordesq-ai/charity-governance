@@ -506,6 +506,38 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${migration_image}@${migration_digest}"
 
+      - name: Generate release image digest manifest
+        env:
+          api_image: ${{ steps.meta.outputs.api_image }}
+          web_image: ${{ steps.meta.outputs.web_image }}
+          migration_image: ${{ steps.meta.outputs.migration_image }}
+          api_digest: ${{ steps.published-digests.outputs.api_digest }}
+          web_digest: ${{ steps.published-digests.outputs.web_digest }}
+          migration_digest: ${{ steps.published-digests.outputs.migration_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_repository="${api_image%:*}"
+          web_repository="${web_image%:*}"
+          migration_repository="${migration_image%:*}"
+          cat > release-image-digests.env <<EOF
+          CHARITYPILOT_API_IMAGE="${api_repository}@${api_digest}"
+          CHARITYPILOT_WEB_IMAGE="${web_repository}@${web_digest}"
+          CHARITYPILOT_MIGRATION_IMAGE="${migration_repository}@${migration_digest}"
+          EOF
+          echo "### Release image digest manifest" >> "${GITHUB_STEP_SUMMARY}"
+          echo '```env' >> "${GITHUB_STEP_SUMMARY}"
+          cat release-image-digests.env >> "${GITHUB_STEP_SUMMARY}"
+          echo '```' >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload release image digest manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-image-digests
+          path: release-image-digests.env
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Stop PostgreSQL
         if: always()
         run: docker rm -f charitypilot-ci-postgres 2>/dev/null || true
