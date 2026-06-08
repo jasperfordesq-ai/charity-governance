@@ -240,7 +240,7 @@ function completeProductionEnv(overrides = {}) {
     SUPABASE_URL: 'https://configured-project.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
     SUPABASE_STORAGE_BUCKET: 'documents',
-    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
@@ -303,7 +303,7 @@ test('passes when the selected env file contains complete production values', ()
       'SUPABASE_URL=https://configured-project.supabase.co',
       'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
       'SUPABASE_STORAGE_BUCKET=documents',
-      'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
+      'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
       'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
@@ -594,7 +594,7 @@ test('fails when a required production value is absent from the selected env fil
       'SUPABASE_URL=https://configured-project.supabase.co',
       'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
       'SUPABASE_STORAGE_BUCKET=documents',
-      'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
+      'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
       'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
@@ -700,6 +700,24 @@ test('fails when the production error alert webhook is not an HTTPS public URL',
     assert.equal(result.status, 1);
     assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use https:\/\/ for production/);
     assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must not point at localhost for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the production error alert webhook uses a reserved documentation hostname', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-reserved-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv({
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+  }));
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL for production/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1090,7 +1108,7 @@ test('passes when production frontend origins include multiple approved HTTPS or
       'SUPABASE_URL=https://configured-project.supabase.co',
       'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
       'SUPABASE_STORAGE_BUCKET=documents',
-      'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
+      'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
       'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
@@ -2682,12 +2700,12 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(deadlineRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(deadlineRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(deadlineRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
-  assert.match(deadlineRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(deadlineRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(cleanupRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
-  assert.match(cleanupRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(cleanupRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(schedulerRun, /-e PRODUCTION_SCHEDULER_RUN_ONCE=true/);
   assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
@@ -2696,7 +2714,7 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
-  assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
@@ -2724,7 +2742,7 @@ test('CI validates API production env inside the built Docker image', () => {
   assert.match(workflow, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(workflow, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
   assert.match(workflow, /-e STRIPE_SECRET_KEY=sk_live_ci_configured_secret/);
-  assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Validate API Docker production configuration'),
     'API image must be built before validating production configuration inside it',
@@ -2783,7 +2801,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /const forbiddenPaths = \['src', 'dist', 'prisma\/seed\.ts', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo', '\.\.\/\.\.\/apps\/web', '\.\.\/\.\.\/packages\/shared'\]/);
   assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-migrations-ci[\s\S]*migrate status --schema prisma\/schema\.prisma/);
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
-  assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assertWorkflowChecksForbiddenApiRuntimePackages(workflow);
   assertWorkflowUsesPackagePathAbsenceChecks(
     workflowStepBetween(workflow, 'Verify API Docker runtime dependencies', 'Smoke API Docker image'),
@@ -3100,12 +3118,12 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(deadlineRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(deadlineRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(deadlineRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
-  assert.match(deadlineRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(deadlineRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(cleanupRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
-  assert.match(cleanupRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(cleanupRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(schedulerRun, /-e PRODUCTION_SCHEDULER_RUN_ONCE=true/);
   assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
@@ -3114,7 +3132,7 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
-  assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);

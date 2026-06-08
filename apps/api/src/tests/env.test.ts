@@ -39,7 +39,7 @@ function setCompleteProductionEnv(overrides: Record<string, string | undefined> 
     SUPABASE_URL: 'https://configured-project.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
     SUPABASE_STORAGE_BUCKET: 'documents',
-    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     ...overrides,
   };
 
@@ -100,7 +100,7 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateProductionEnv());
 });
@@ -126,7 +126,7 @@ test('validateProductionEnv rejects unapproved production email sender domains',
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.throws(
     () => validateProductionEnv(),
@@ -167,7 +167,7 @@ test('validateDocumentStorageCleanupEnv accepts storage-only production configur
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
 });
@@ -178,7 +178,7 @@ test('validateDeadlineRemindersEnv accepts reminder-only production configuratio
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateDeadlineRemindersEnv());
 });
@@ -189,7 +189,7 @@ test('validateDeadlineRemindersEnv rejects malformed Resend API keys in producti
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 'configuredResendSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.throws(
     () => validateDeadlineRemindersEnv(),
@@ -304,6 +304,20 @@ test('validateProductionEnv rejects local production error alert webhooks', () =
   );
 });
 
+test('validateProductionEnv rejects reserved documentation error alert webhooks', () => {
+  setCompleteProductionEnv({
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+  });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL must use a public, non-local URL in production'),
+  );
+});
+
 test('validateProductionEnv rejects private production error alert webhooks', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
@@ -411,7 +425,7 @@ test('validateDocumentStorageCleanupEnv rejects private Supabase URLs', () => {
   process.env.SUPABASE_URL = 'https://10.0.0.5';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.throws(
     () => validateDocumentStorageCleanupEnv(),
@@ -563,7 +577,7 @@ test('validateProductionEnv accepts comma-separated production frontend origins'
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateProductionEnv());
 });
@@ -793,7 +807,7 @@ test('validateProductionEnv rejects the local database smoke override outside Gi
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
   process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
   process.env.CI = 'true';
   process.env.GITHUB_ACTIONS = 'false';
@@ -829,7 +843,7 @@ test('validateProductionEnv treats Docker host gateway database URLs as local pr
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.throws(
     () => validateProductionEnv(),
@@ -862,7 +876,7 @@ test('validateProductionEnv allows local database URLs only for GitHub Actions p
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
   process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
   process.env.CI = 'true';
   process.env.GITHUB_ACTIONS = 'true';
@@ -891,7 +905,7 @@ test('validateProductionEnv rejects non-local plaintext database URLs even for G
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
   process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
   process.env.CI = 'true';
   process.env.GITHUB_ACTIONS = 'true';

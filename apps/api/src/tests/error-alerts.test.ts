@@ -74,7 +74,7 @@ async function buildErrorApp() {
 
 test('production 5xx errors send a sanitized alert webhook payload', { concurrency: false }, async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alertCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   globalThis.fetch = (async (url, init) => {
@@ -105,7 +105,7 @@ test('production 5xx errors send a sanitized alert webhook payload', { concurren
     assert.equal(alertCalls.length, 1);
 
     const alert = alertCalls[0];
-    assert.equal(alert.url, 'https://alerts.example/hooks/charitypilot');
+    assert.equal(alert.url, 'https://alerts.charitypilot.ie/hooks/charitypilot');
     assert.equal(alert.body.service, 'charitypilot-api');
     assert.equal(alert.body.environment, 'production');
     assert.equal(alert.body.severity, 'error');
@@ -134,7 +134,7 @@ test('production 5xx errors send a sanitized alert webhook payload', { concurren
 
 test('client errors do not send alert webhooks', { concurrency: false }, async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   let fetchCalled = false;
   globalThis.fetch = (async () => {
@@ -160,7 +160,7 @@ test('client errors do not send alert webhooks', { concurrency: false }, async (
 
 test('caught route 5xx errors are sanitized and still send alert webhooks', { concurrency: false }, async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alertCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   globalThis.fetch = (async (url, init) => {
@@ -183,7 +183,7 @@ test('caught route 5xx errors are sanitized and still send alert webhooks', { co
     assert.equal(body.code, 'INTERNAL_ERROR');
     assert.equal(JSON.stringify(body).includes('provider-secret'), false);
     assert.equal(alertCalls.length, 1);
-    assert.equal(alertCalls[0].url, 'https://alerts.example/hooks/charitypilot');
+    assert.equal(alertCalls[0].url, 'https://alerts.charitypilot.ie/hooks/charitypilot');
     assert.equal(alertCalls[0].body.statusCode, 500);
     assert.equal(alertCalls[0].body.code, 'STORAGE_SIGNED_URL_FAILED');
     assert.equal(alertCalls[0].body.method, 'GET');
@@ -203,7 +203,7 @@ test('caught route 5xx errors are sanitized and still send alert webhooks', { co
 
 test('caught route non-500 5xx errors keep status while sanitizing response and alerts', { concurrency: false }, async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alertCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   globalThis.fetch = (async (url, init) => {
@@ -237,7 +237,7 @@ test('caught route non-500 5xx errors keep status while sanitizing response and 
 
 test('alert webhook failures do not change the API error response', { concurrency: false }, async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   globalThis.fetch = (async () => {
     throw new Error('alert destination unavailable');
@@ -256,7 +256,7 @@ test('alert webhook failures do not change the API error response', { concurrenc
 });
 
 test('alert webhook sends are capped during error storms', { concurrency: false }, async () => {
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
   process.env.ERROR_ALERT_WEBHOOK_MAX_IN_FLIGHT = '1';
 
   const payload: ErrorAlertPayload = {
@@ -296,7 +296,7 @@ test('alert webhook sends are capped during error storms', { concurrency: false 
 });
 
 test('alert webhook sends do not follow redirects', { concurrency: false }, async () => {
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const payload: ErrorAlertPayload = {
     service: 'charitypilot-api',

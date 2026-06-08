@@ -113,7 +113,7 @@ jobs:
             -e SUPABASE_URL=https://ci-project.supabase.co \
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
-            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             --entrypoint node \
             charitypilot-api-ci \
             -e "import('./dist/utils/env.js').then(({ validateProductionEnv }) => validateProductionEnv())"
@@ -153,7 +153,7 @@ jobs:
             -e SUPABASE_STORAGE_BUCKET=documents \
             -e STORAGE_READINESS_TIMEOUT_MS=1000 \
             -e READINESS_DEPENDENCY_TIMEOUT_MS=1000 \
-            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_ci \
             charitypilot-api-ci
           api_headers="$(mktemp)"
@@ -249,7 +249,7 @@ jobs:
             -e SUPABASE_URL=https://ci-project.supabase.co \
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
-            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/send-deadline-reminders.js | tee "${deadline_output}"
           grep -F "[DeadlineReminders] Run complete - 0 reminder(s) sent, 0 failed, 0 deadline(s) skipped" "${deadline_output}"
@@ -265,7 +265,7 @@ jobs:
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
             -e DOCUMENT_STORAGE_CLEANUP_LIMIT=1 \
-            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/cleanup-document-storage.js | tee "${cleanup_output}"
           grep -F "Document storage cleanup completed. Processed: 0. Failed: 0." "${cleanup_output}"
@@ -283,7 +283,7 @@ jobs:
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
             -e DOCUMENT_STORAGE_CLEANUP_LIMIT=1 \
-            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e PRODUCTION_SCHEDULER_RUN_ONCE=true \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/production-scheduler.js | tee "${scheduler_output}"

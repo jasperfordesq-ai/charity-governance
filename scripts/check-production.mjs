@@ -93,6 +93,21 @@ function isDnsHostname(hostname) {
   ));
 }
 
+function isReservedDocumentationHostname(hostname) {
+  const normalizedHostname = normaliseHostname(hostname);
+  return (
+    normalizedHostname === 'example.com' ||
+    normalizedHostname === 'example.net' ||
+    normalizedHostname === 'example.org' ||
+    normalizedHostname.endsWith('.example') ||
+    normalizedHostname.endsWith('.example.com') ||
+    normalizedHostname.endsWith('.example.net') ||
+    normalizedHostname.endsWith('.example.org') ||
+    normalizedHostname.endsWith('.test') ||
+    normalizedHostname.endsWith('.invalid')
+  );
+}
+
 function isPublicHost(hostname) {
   const normalizedHostname = normaliseHostname(hostname);
   if (
@@ -102,7 +117,8 @@ function isPublicHost(hostname) {
     normalizedHostname.endsWith('.local') ||
     normalizedHostname.endsWith('.internal') ||
     normalizedHostname.endsWith('.lan') ||
-    normalizedHostname.endsWith('.home')
+    normalizedHostname.endsWith('.home') ||
+    isReservedDocumentationHostname(normalizedHostname)
   ) {
     return false;
   }

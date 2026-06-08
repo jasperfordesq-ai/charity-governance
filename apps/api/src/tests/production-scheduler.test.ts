@@ -105,7 +105,7 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
 
 test('runDeadlineReminders sends a sanitized operational alert when the production reminder run fails', async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alerts: ErrorAlertPayload[] = [];
   const logs: string[] = [];
@@ -144,7 +144,7 @@ test('runDeadlineReminders sends a sanitized operational alert when the producti
 
 test('runDocumentStorageCleanup sends a sanitized operational alert when storage cleanup fails', async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alerts: ErrorAlertPayload[] = [];
   const failed = await runDocumentStorageCleanup({
@@ -181,7 +181,7 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
 
 test('runDocumentStorageCleanup alerts when cleanup records failed storage deletions without throwing', async () => {
   process.env.NODE_ENV = 'production';
-  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alerts: ErrorAlertPayload[] = [];
   const failed = await runDocumentStorageCleanup({
