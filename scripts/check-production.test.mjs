@@ -1289,6 +1289,26 @@ test('workspaces with source tests expose a test script for the root test gate',
   );
 });
 
+test('package test scripts stay compatible with the Node 22 production runtime', () => {
+  const packageJsonPaths = ['package.json', ...workspacePackageDirs().map((workspaceDir) => join(workspaceDir, 'package.json'))];
+  const incompatibleScripts = [];
+
+  for (const packageJsonPath of packageJsonPaths) {
+    const packageJson = JSON.parse(readRepoFile(packageJsonPath));
+    for (const [scriptName, scriptCommand] of Object.entries(packageJson.scripts ?? {})) {
+      if (typeof scriptCommand === 'string' && scriptCommand.includes('--test-isolation=')) {
+        incompatibleScripts.push(`${packageJsonPath}:${scriptName}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    incompatibleScripts,
+    [],
+    `Node 22 rejects --test-isolation in package scripts: ${incompatibleScripts.join(', ')}`,
+  );
+});
+
 test('production secret env files are ignored by git without hiding the template', () => {
   const gitignoreLines = readRepoFile('.gitignore')
     .split(/\r?\n/)
