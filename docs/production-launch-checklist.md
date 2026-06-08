@@ -105,7 +105,7 @@ Evidence:
 - [ ] Production PostgreSQL database is provisioned.
 - [ ] Production `DATABASE_URL` is present only in the secret store.
 - [ ] `npm run db:migrate:deploy -w @charitypilot/api` completed against production.
-- [ ] `npm run check:production:database -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted backup/restore evidence.
+- [ ] `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel` completed from a trusted shell and recorded redacted backup/restore evidence.
 - [ ] Managed backups or point-in-time recovery are enabled.
 - [ ] Restore test evidence exists and has an owner.
 
@@ -115,7 +115,7 @@ Evidence:
 | --- | --- |
 | Migration output location | |
 | Backup policy location | |
-| Restore test location | |
+| Operational sentinel restore test location | |
 
 ## 5. Supabase Storage
 

@@ -342,6 +342,25 @@ function validateEvidenceEntries(entries, path, issues, options = {}) {
   });
 }
 
+function evidenceText(entries) {
+  return Array.isArray(entries)
+    ? entries.map((entry) => `${entry?.type ?? ''} ${entry?.reference ?? ''} ${entry?.description ?? ''}`).join('\n')
+    : '';
+}
+
+function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, issues) {
+  if (areaId === 'database' && checkId === 'database-check') {
+    const hasCommandOutput = Array.isArray(actualCheck.evidence) && actualCheck.evidence.some((entry) => entry?.type === 'command-output');
+    if (!hasCommandOutput) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    if (!evidenceText(actualCheck.evidence).includes('--expect-operational-sentinel')) {
+      issues.push(`${checkPath}.evidence must show check:production:database was run with --expect-operational-sentinel`);
+    }
+  }
+}
+
 function validateLaunchEvidence(evidence) {
   const issues = [];
 
@@ -399,6 +418,7 @@ function validateLaunchEvidence(evidence) {
         notAfter: preparedAt,
         notAfterLabel: 'preparedAt',
       });
+      validateCheckSpecificEvidence(area.id, check.id, actualCheck, checkPath, issues);
     }
   }
 

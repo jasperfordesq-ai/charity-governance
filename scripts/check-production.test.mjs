@@ -1930,7 +1930,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
-  assert.match(runbook, /npm run check:production:database -- --production-env-file=\.env\.production/);
+  assert.match(runbook, /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/);
+  assert.match(runbook, /representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows/);
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
@@ -1956,7 +1957,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /web image build origins match the promoted production public origins/);
   assert.match(launchChecklist, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:observability -- --production-env-file=\.env\.production/);
-  assert.match(launchChecklist, /npm run check:production:database -- --production-env-file=\.env\.production/);
+  assert.match(launchChecklist, /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/);
+  assert.match(launchChecklist, /Operational sentinel restore test location/);
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);

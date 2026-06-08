@@ -19,12 +19,19 @@ async function loadEvidenceRunner() {
 }
 
 function evidenceEntry(areaId, checkId) {
-  return {
+  const entry = {
     type: 'artifact',
     reference: `https://evidence.charitypilot.ie/launch/${areaId}/${checkId}`,
     description: `${areaId} ${checkId} evidence`,
     capturedAt,
   };
+
+  if (areaId === 'database' && checkId === 'database-check') {
+    entry.type = 'command-output';
+    entry.description = 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel completed with operational sentinel checks';
+  }
+
+  return entry;
 }
 
 function completeEvidence(requiredAreas) {
@@ -165,6 +172,30 @@ test('production launch evidence validator requires all executable production ch
     assert.match(result.stderr, /supabaseStorage\.checks\.supabase-check is required/);
     assert.match(result.stderr, /billingAndEmail\.checks\.providers-check is required/);
     assert.match(result.stderr, /observability\.checks\.observability-check is required/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires operational sentinel database check evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.database.checks['database-check'].evidence = [
+    {
+      type: 'artifact',
+      reference: 'https://evidence.charitypilot.ie/launch/database/database-check',
+      description: 'npm run check:production:database -- --production-env-file=.env.production completed',
+      capturedAt,
+    },
+  ];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must show check:production:database was run with --expect-operational-sentinel/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
