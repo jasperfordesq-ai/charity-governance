@@ -14,6 +14,8 @@ function evidenceTemplate() {
     release: {
       commitSha: 'REPLACE_WITH_40_CHARACTER_GIT_SHA',
       workflowRunUrl: 'REPLACE_WITH_GITHUB_ACTIONS_RELEASE_WORKFLOW_RUN_URL',
+      workflowFile: '.github/workflows/release-images.yml',
+      gitRef: 'REPLACE_WITH_RELEASE_GIT_REF',
       imageDigestManifest: {
         apiImage: 'REPLACE_WITH_GHCR_API_IMAGE_SHA256_DIGEST',
         webImage: 'REPLACE_WITH_GHCR_WEB_IMAGE_SHA256_DIGEST',

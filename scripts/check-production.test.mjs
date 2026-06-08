@@ -1949,6 +1949,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run --silent check:production:evidence:template > production-launch-evidence\.json/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
+  assert.match(runbook, /\.github\/workflows\/release-images\.yml/);
+  assert.match(runbook, /refs\/heads\/master/);
+  assert.match(runbook, /refs\/tags\/v/);
   assert.match(runbook, /finalSignoff\.approvals/);
   assert.match(runbook, /engineering, operations, security, and business owners/);
   assert.match(runbook, /GitHub Actions release workflow run URL/);
@@ -1983,6 +1986,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run --silent check:production:evidence:template > production-launch-evidence\.json/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(launchChecklist, /Release workflow run URL/);
+  assert.match(launchChecklist, /Release workflow file/);
+  assert.match(launchChecklist, /\.github\/workflows\/release-images\.yml/);
+  assert.match(launchChecklist, /Release git ref/);
   assert.match(launchChecklist, /Web image build origins/);
   assert.match(launchChecklist, /finalSignoff\.approvals/);
   assert.match(launchChecklist, /`engineering`, `operations`, `security`, and `business` approvals/);

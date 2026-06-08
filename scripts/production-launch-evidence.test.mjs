@@ -10,6 +10,13 @@ const evidenceScriptPath = join(scriptsDir, 'production-launch-evidence.mjs');
 const evidenceTemplateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
 const capturedAt = '2026-06-08T12:00:00.000Z';
 const digest = 'a'.repeat(64);
+const commitSha = 'b'.repeat(40);
+const releaseWorkflowRunUrl = 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789';
+const releaseWorkflowFile = '.github/workflows/release-images.yml';
+const releaseGitRef = 'refs/heads/master';
+const apiImage = `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`;
+const webImage = `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`;
+const migrationImage = `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`;
 
 async function loadEvidenceRunner() {
   assert.ok(existsSync(evidenceScriptPath), 'production launch evidence script must exist');
@@ -39,6 +46,53 @@ function evidenceEntry(areaId, checkId) {
     entry.description = 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel completed with operational sentinel checks';
   }
 
+  if (areaId === 'releaseGate' && checkId === 'release-workflow-identity') {
+    entry.type = 'command-output';
+    entry.reference = releaseWorkflowRunUrl;
+    entry.description = [
+      'gh run view evidence:',
+      `path ${releaseWorkflowFile}`,
+      `headSha ${commitSha}`,
+      `headRef ${releaseGitRef}`,
+      'conclusion success',
+      'artifact release-image-digests',
+    ].join(' ');
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'deploy-preflight') {
+    entry.type = 'command-output';
+    entry.description = [
+      'Production deploy preflight passed: env, compose config, and image signatures verified.',
+      apiImage,
+      webImage,
+      migrationImage,
+    ].join(' ');
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'cosign') {
+    entry.type = 'command-output';
+    entry.description = [
+      'cosign verify',
+      '--certificate-identity-regexp ^https://github.com/jasperfordesq-ai/charity-governance/\\.github/workflows/release-images\\.yml@refs/(heads/master|tags/v.*)$',
+      '--certificate-oidc-issuer https://token.actions.githubusercontent.com',
+      apiImage,
+      webImage,
+      migrationImage,
+    ].join(' ');
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'digest-manifest') {
+    entry.reference = `${releaseWorkflowRunUrl}/artifacts/release-image-digests`;
+    entry.description = [
+      'release-image-digests artifact from release workflow',
+      apiImage,
+      webImage,
+      migrationImage,
+      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+    ].join(' ');
+  }
+
   if (areaId === 'jobs' && checkId === 'scheduler-command') {
     entry.type = 'command-output';
     entry.description = [
@@ -59,12 +113,14 @@ function completeEvidence(requiredAreas) {
     preparedAt: capturedAt,
     approvedForLaunch: true,
     release: {
-      commitSha: 'b'.repeat(40),
-      workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+      commitSha,
+      workflowRunUrl: releaseWorkflowRunUrl,
+      workflowFile: releaseWorkflowFile,
+      gitRef: releaseGitRef,
       imageDigestManifest: {
-        apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
-        webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
-        migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+        apiImage,
+        webImage,
+        migrationImage,
         webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
         webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
       },
@@ -170,7 +226,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /77 check\(s\)/);
+    assert.match(result.stdout, /78 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -181,6 +237,8 @@ test('production launch evidence validator requires a bound release artifact ide
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
   evidence.release.commitSha = 'not-a-sha';
   evidence.release.workflowRunUrl = 'https://github.com/jasperfordesq-ai/charity-governance/actions';
+  evidence.release.workflowFile = '.github/workflows/ci.yml';
+  evidence.release.gitRef = 'refs/heads/feature-preview';
   evidence.release.imageDigestManifest.webImage = 'ghcr.io/jasperfordesq-ai/charity-governance-web:latest';
   evidence.release.imageDigestManifest.webBuildNextPublicApiUrl = 'https://api.attacker.example';
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
@@ -191,6 +249,8 @@ test('production launch evidence validator requires a bound release artifact ide
     assert.equal(result.status, 1);
     assert.match(result.stderr, /release\.commitSha must be a 40 character lowercase git SHA/);
     assert.match(result.stderr, /release\.workflowRunUrl must be a GitHub Actions release workflow run URL/);
+    assert.match(result.stderr, /release\.workflowFile must be \.github\/workflows\/release-images\.yml/);
+    assert.match(result.stderr, /release\.gitRef must be refs\/heads\/master or refs\/tags\/v/);
     assert.match(result.stderr, /release\.imageDigestManifest\.webImage must use ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256/);
     assert.match(result.stderr, /release\.imageDigestManifest\.webBuildNextPublicApiUrl must use an approved charitypilot\.ie hostname/);
   } finally {
@@ -291,6 +351,37 @@ test('production launch evidence validator requires every production job command
   }
 });
 
+test('production launch evidence validator binds release-gate evidence to the exact workflow and promoted digests', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.releaseGate.checks['release-workflow-identity'].evidence[0].reference =
+    'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/999999999';
+  evidence.areas.releaseGate.checks['release-workflow-identity'].evidence[0].description =
+    'GitHub Actions run completed successfully';
+  evidence.areas.releaseGate.checks['deploy-preflight'].evidence[0].description =
+    'Production deploy preflight passed for promoted images';
+  evidence.areas.releaseGate.checks.cosign.evidence[0].description =
+    'cosign signature verification completed';
+  evidence.areas.releaseGate.checks['digest-manifest'].evidence[0].description =
+    'release-image-digests artifact downloaded';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-workflow-identity\.evidence must reference release\.workflowRunUrl/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-workflow-identity\.evidence must include release\.workflowFile/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-workflow-identity\.evidence must include release\.commitSha/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-workflow-identity\.evidence must include successful workflow conclusion/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-preflight\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.cosign\.evidence must include release-images/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.digest-manifest\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator fails closed when evidence file is missing', async () => {
   const { runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
 
@@ -353,6 +444,8 @@ test('production launch evidence template covers every required area and final s
 
   try {
     assert.equal(template.approvedForLaunch, false);
+    assert.equal(template.release.workflowFile, '.github/workflows/release-images.yml');
+    assert.equal(template.release.gitRef, 'REPLACE_WITH_RELEASE_GIT_REF');
     assert.equal(template.finalSignoff.status, 'pending');
     assert.deepEqual(Object.keys(template.areas).sort(), REQUIRED_LAUNCH_AREAS.map((area) => area.id).sort());
     for (const area of REQUIRED_LAUNCH_AREAS) {

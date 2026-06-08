@@ -24,6 +24,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['deploy-smoke', 'post-deploy public HTTPS smoke completed'],
       ['deploy-rollback', 'rollback rehearsal completed'],
       ['cosign', 'cosign signature verification completed'],
+      ['release-workflow-identity', 'release workflow identity and git ref verified'],
       ['digest-manifest', 'release image digest manifest used'],
     ],
   },
@@ -170,6 +171,7 @@ const imageRepositories = {
   webImage: 'ghcr.io/jasperfordesq-ai/charity-governance-web',
   migrationImage: 'ghcr.io/jasperfordesq-ai/charity-governance-migrations',
 };
+const releaseWorkflowFile = '.github/workflows/release-images.yml';
 export const FINAL_SIGNOFF_ROLES = [
   ['engineering', 'Engineering owner'],
   ['operations', 'Operations owner'],
@@ -293,6 +295,12 @@ function validateReleaseBinding(release, issues) {
     issues.push('release.commitSha must be a 40 character lowercase git SHA');
   }
   validateReleaseWorkflowUrl(release.workflowRunUrl, 'release.workflowRunUrl', issues);
+  if (release.workflowFile !== releaseWorkflowFile) {
+    issues.push(`release.workflowFile must be ${releaseWorkflowFile}`);
+  }
+  if (typeof release.gitRef !== 'string' || !/^refs\/(?:heads\/master|tags\/v.+)$/.test(release.gitRef)) {
+    issues.push('release.gitRef must be refs/heads/master or refs/tags/v*');
+  }
 
   if (!isPlainObject(release.imageDigestManifest)) {
     issues.push('release.imageDigestManifest is required');
@@ -354,10 +362,105 @@ function evidenceText(entries) {
     : '';
 }
 
-function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, issues) {
+function hasEvidenceType(actualCheck, type) {
+  return Array.isArray(actualCheck.evidence) && actualCheck.evidence.some((entry) => entry?.type === type);
+}
+
+function requireEvidenceText(text, needle, message, issues) {
+  if (!text.includes(needle)) {
+    issues.push(message);
+  }
+}
+
+function releaseImageRefs(release) {
+  return [
+    ['apiImage', release?.imageDigestManifest?.apiImage],
+    ['webImage', release?.imageDigestManifest?.webImage],
+    ['migrationImage', release?.imageDigestManifest?.migrationImage],
+  ].filter(([, value]) => typeof value === 'string' && value.length > 0);
+}
+
+function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues) {
+  const text = evidenceText(actualCheck.evidence);
+  const images = releaseImageRefs(release);
+
+  if (checkId === 'release-workflow-identity') {
+    if (typeof release?.workflowRunUrl === 'string') {
+      requireEvidenceText(text, release.workflowRunUrl, `${checkPath}.evidence must reference release.workflowRunUrl`, issues);
+    }
+    if (typeof release?.workflowFile === 'string') {
+      requireEvidenceText(text, release.workflowFile, `${checkPath}.evidence must include release.workflowFile`, issues);
+    }
+    if (typeof release?.gitRef === 'string') {
+      requireEvidenceText(text, release.gitRef, `${checkPath}.evidence must include release.gitRef`, issues);
+    }
+    if (typeof release?.commitSha === 'string') {
+      requireEvidenceText(text, release.commitSha, `${checkPath}.evidence must include release.commitSha`, issues);
+    }
+    if (!/\bconclusion\s*[:=]?\s*success\b/i.test(text)) {
+      issues.push(`${checkPath}.evidence must include successful workflow conclusion`);
+    }
+    requireEvidenceText(text, 'release-image-digests', `${checkPath}.evidence must include release-image-digests artifact`, issues);
+  }
+
+  if (checkId === 'deploy-preflight') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(text, 'Production deploy preflight passed', `${checkPath}.evidence must include Production deploy preflight passed`, issues);
+    for (const [, image] of images) {
+      requireEvidenceText(text, image, `${checkPath}.evidence must include ${image}`, issues);
+    }
+  }
+
+  if (checkId === 'cosign') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(text, 'cosign verify', `${checkPath}.evidence must include cosign verify`, issues);
+    requireEvidenceText(text, 'release-images', `${checkPath}.evidence must include release-images workflow identity`, issues);
+    requireEvidenceText(
+      text,
+      'https://token.actions.githubusercontent.com',
+      `${checkPath}.evidence must include GitHub Actions OIDC issuer`,
+      issues,
+    );
+    for (const [, image] of images) {
+      requireEvidenceText(text, image, `${checkPath}.evidence must include ${image}`, issues);
+    }
+  }
+
+  if (checkId === 'digest-manifest') {
+    requireEvidenceText(text, 'release-image-digests', `${checkPath}.evidence must include release-image-digests artifact`, issues);
+    for (const [, image] of images) {
+      requireEvidenceText(text, image, `${checkPath}.evidence must include ${image}`, issues);
+    }
+    if (typeof release?.imageDigestManifest?.webBuildNextPublicApiUrl === 'string') {
+      requireEvidenceText(
+        text,
+        release.imageDigestManifest.webBuildNextPublicApiUrl,
+        `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicApiUrl`,
+        issues,
+      );
+    }
+    if (typeof release?.imageDigestManifest?.webBuildNextPublicSupabaseUrl === 'string') {
+      requireEvidenceText(
+        text,
+        release.imageDigestManifest.webBuildNextPublicSupabaseUrl,
+        `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicSupabaseUrl`,
+        issues,
+      );
+    }
+  }
+}
+
+function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, issues, release) {
+  if (areaId === 'releaseGate') {
+    validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues);
+  }
+
   if (areaId === 'database' && checkId === 'database-check') {
-    const hasCommandOutput = Array.isArray(actualCheck.evidence) && actualCheck.evidence.some((entry) => entry?.type === 'command-output');
-    if (!hasCommandOutput) {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
       issues.push(`${checkPath}.evidence must include command-output evidence`);
     }
 
@@ -471,7 +574,7 @@ function validateLaunchEvidence(evidence) {
         notAfter: preparedAt,
         notAfterLabel: 'preparedAt',
       });
-      validateCheckSpecificEvidence(area.id, check.id, actualCheck, checkPath, issues);
+      validateCheckSpecificEvidence(area.id, check.id, actualCheck, checkPath, issues, evidence.release);
     }
   }
 

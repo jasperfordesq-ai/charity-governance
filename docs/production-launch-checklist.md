@@ -42,6 +42,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] The deploy command's post-deploy public HTTPS smoke completed against the production web and API origins.
 - [ ] `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env` rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence.
 - [ ] `cosign signature verification` passed for all promoted image digests.
+- [ ] The release workflow evidence identifies `.github/workflows/release-images.yml` and a release ref of `refs/heads/master` or `refs/tags/v*`.
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 - [ ] The release manifest's web image build origins match the promoted production public origins.
 - [ ] `npm run --silent check:production:evidence:template > production-launch-evidence.json` was used as the starting schema for the non-committed external launch evidence ledger.
@@ -55,6 +56,8 @@ Evidence:
 | Date | |
 | Build identifier | |
 | Release workflow run URL | |
+| Release workflow file | `.github/workflows/release-images.yml` |
+| Release git ref | |
 | Evidence location | |
 | Digest-pinned image refs | |
 | Web image build origins | |
