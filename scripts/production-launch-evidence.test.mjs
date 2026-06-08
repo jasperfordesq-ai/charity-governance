@@ -79,7 +79,42 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /72 check\(s\)/);
+    assert.match(result.stdout, /77 check\(s\)/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires all executable production checker evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const requiredCommandChecks = {
+    hostingDnsTls: 'hosting-check',
+    database: 'database-check',
+    supabaseStorage: 'supabase-check',
+    billingAndEmail: 'providers-check',
+    observability: 'observability-check',
+  };
+
+  for (const [areaId, checkId] of Object.entries(requiredCommandChecks)) {
+    assert.ok(
+      REQUIRED_LAUNCH_AREAS.find((area) => area.id === areaId)?.checks.some((check) => check.id === checkId),
+      `${areaId}.${checkId} must be part of REQUIRED_LAUNCH_AREAS`,
+    );
+    delete evidence.areas[areaId].checks[checkId];
+  }
+
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /hostingDnsTls\.checks\.hosting-check is required/);
+    assert.match(result.stderr, /database\.checks\.database-check is required/);
+    assert.match(result.stderr, /supabaseStorage\.checks\.supabase-check is required/);
+    assert.match(result.stderr, /billingAndEmail\.checks\.providers-check is required/);
+    assert.match(result.stderr, /observability\.checks\.observability-check is required/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

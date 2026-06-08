@@ -1912,6 +1912,11 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /runProductionComposeDeployFromArgs/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /REQUIRED_LAUNCH_AREAS/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /hosting-check/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /database-check/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /supabase-check/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /providers-check/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /observability-check/);
   assert.match(readRepoFile('scripts/check-production-supabase.mjs'), /runProductionSupabaseCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-providers.mjs'), /runProductionProvidersCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-hosting.mjs'), /runProductionHostingCheckFromArgs/);
