@@ -208,6 +208,10 @@ function isIsoDate(value) {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
+function isoTimestamp(value) {
+  return isIsoDate(value) ? Date.parse(value) : null;
+}
+
 function validateExternalText(value, path, issues) {
   if (typeof value !== 'string' || value.trim().length < 8) {
     issues.push(`${path} must be a non-empty external evidence reference`);
@@ -225,7 +229,7 @@ function validateExternalText(value, path, issues) {
   }
 }
 
-function validateEvidenceEntries(entries, path, issues) {
+function validateEvidenceEntries(entries, path, issues, options = {}) {
   if (!Array.isArray(entries) || entries.length === 0) {
     issues.push(`${path} must include at least one evidence entry`);
     return;
@@ -243,8 +247,11 @@ function validateEvidenceEntries(entries, path, issues) {
     }
     validateExternalText(entry.reference, `${entryPath}.reference`, issues);
     validateExternalText(entry.description, `${entryPath}.description`, issues);
-    if (!isIsoDate(entry.capturedAt)) {
+    const capturedAt = isoTimestamp(entry.capturedAt);
+    if (capturedAt === null) {
       issues.push(`${entryPath}.capturedAt must be an ISO timestamp`);
+    } else if (typeof options.notAfter === 'number' && capturedAt > options.notAfter) {
+      issues.push(`${entryPath}.capturedAt must not be after ${options.notAfterLabel}`);
     }
   });
 }
@@ -261,7 +268,8 @@ function validateLaunchEvidence(evidence) {
   if (typeof evidence.preparedBy !== 'string' || evidence.preparedBy.trim().length < 3) {
     issues.push('preparedBy is required');
   }
-  if (!isIsoDate(evidence.preparedAt)) {
+  const preparedAt = isoTimestamp(evidence.preparedAt);
+  if (preparedAt === null) {
     issues.push('preparedAt must be an ISO timestamp');
   }
   if (evidence.approvedForLaunch !== true) {
@@ -300,7 +308,10 @@ function validateLaunchEvidence(evidence) {
       if (actualCheck.status !== 'complete') {
         issues.push(`${checkPath}.status must be complete`);
       }
-      validateEvidenceEntries(actualCheck.evidence, `${checkPath}.evidence`, issues);
+      validateEvidenceEntries(actualCheck.evidence, `${checkPath}.evidence`, issues, {
+        notAfter: preparedAt,
+        notAfterLabel: 'preparedAt',
+      });
     }
   }
 
@@ -313,10 +324,16 @@ function validateLaunchEvidence(evidence) {
     if (typeof evidence.finalSignoff.owner !== 'string' || evidence.finalSignoff.owner.trim().length < 3) {
       issues.push('finalSignoff.owner is required');
     }
-    if (!isIsoDate(evidence.finalSignoff.approvedAt)) {
+    const approvedAt = isoTimestamp(evidence.finalSignoff.approvedAt);
+    if (approvedAt === null) {
       issues.push('finalSignoff.approvedAt must be an ISO timestamp');
+    } else if (preparedAt !== null && approvedAt < preparedAt) {
+      issues.push('finalSignoff.approvedAt must not be before preparedAt');
     }
-    validateEvidenceEntries(evidence.finalSignoff.evidence, 'finalSignoff.evidence', issues);
+    validateEvidenceEntries(evidence.finalSignoff.evidence, 'finalSignoff.evidence', issues, {
+      notAfter: approvedAt,
+      notAfterLabel: 'finalSignoff.approvedAt',
+    });
   }
 
   return issues;

@@ -148,6 +148,26 @@ test('production launch evidence validator requires every checklist check to be 
   }
 });
 
+test('production launch evidence validator rejects chronologically impossible evidence dates', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.releaseGate.checks.test.evidence[0].capturedAt = '2026-06-09T12:00:00.000Z';
+  evidence.finalSignoff.approvedAt = '2026-06-07T12:00:00.000Z';
+  evidence.finalSignoff.evidence[0].capturedAt = '2026-06-08T12:00:00.000Z';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /releaseGate\.checks\.test\.evidence\[0\]\.capturedAt must not be after preparedAt/);
+    assert.match(result.stderr, /finalSignoff\.approvedAt must not be before preparedAt/);
+    assert.match(result.stderr, /finalSignoff\.evidence\[0\]\.capturedAt must not be after finalSignoff\.approvedAt/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator rejects placeholders, local URLs, and raw secrets', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
