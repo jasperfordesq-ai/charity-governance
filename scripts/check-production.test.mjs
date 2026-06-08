@@ -1434,6 +1434,33 @@ test('Prisma CLI and client versions are pinned together for production migratio
   );
 });
 
+test('migration runner package lock supports the production Docker npm ci command', () => {
+  const npmArgs = ['ci', '--omit=dev', '--omit=peer', '--no-audit', '--no-fund', '--dry-run'];
+  const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';
+  const npmCommandArgs = process.platform === 'win32'
+    ? [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), ...npmArgs]
+    : npmArgs;
+  const result = spawnSync(
+    npmCommand,
+    npmCommandArgs,
+    {
+      cwd: join(repoRoot, 'apps/api/prisma/migration-runner'),
+      encoding: 'utf8',
+    },
+  );
+
+  assert.equal(
+    result.status,
+    0,
+    [
+      'migration runner package-lock.json must stay in sync with package.json for the Docker migration-deps stage.',
+      result.error ? String(result.error) : '',
+      result.stdout,
+      result.stderr,
+    ].join('\n'),
+  );
+});
+
 test('API Dockerfile includes a dedicated Prisma migration runner target', () => {
   const dockerfile = readRepoFile('apps/api/Dockerfile');
   const migrationDepsStage = dockerfileStage(dockerfile, 'migration-deps');
