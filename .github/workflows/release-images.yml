@@ -237,6 +237,71 @@ jobs:
           test "${readiness_status}" = "503"
           node -e "const body = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (body.status !== 'not_ready' || body.checks.database !== true || body.checks.storageConfigured !== true || body.checks.storageBucketReachable !== false) { console.error(body); process.exit(1); }" "${readiness_body}"
 
+      - name: Smoke API Docker scheduled jobs
+        run: |
+          set -euo pipefail
+          drop_job_smoke_db() {
+            docker run --rm --network host \
+              -e PGPASSWORD=charitypilot_ci \
+              postgres:16.4-alpine \
+              psql -h 127.0.0.1 -U charitypilot -d postgres -v ON_ERROR_STOP=1 \
+                -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'charitypilot_job_smoke';" \
+                -c "DROP DATABASE IF EXISTS charitypilot_job_smoke;"
+          }
+          drop_job_smoke_db
+          trap drop_job_smoke_db EXIT
+          docker run --rm --network host \
+            -e PGPASSWORD=charitypilot_ci \
+            postgres:16.4-alpine \
+            psql -h 127.0.0.1 -U charitypilot -d postgres -v ON_ERROR_STOP=1 \
+              -c "CREATE DATABASE charitypilot_job_smoke OWNER charitypilot;"
+          DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
+            npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+
+          deadline_output="$(mktemp)"
+          docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e PORT=3002 \
+            -e TRUSTED_PROXY_ADDRESSES=10.0.0.10 \
+            -e READINESS_API_KEY=ci-readiness-key-with-enough-entropy \
+            -e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true \
+            -e CI=true \
+            -e GITHUB_ACTIONS=true \
+            -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
+            -e FRONTEND_URL=https://app.charitypilot.ie \
+            -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret \
+            -e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret \
+            -e STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_ci_essentials_monthly \
+            -e STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_ci_essentials_yearly \
+            -e STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_ci_complete_monthly \
+            -e STRIPE_COMPLETE_YEARLY_PRICE_ID=price_ci_complete_yearly \
+            -e RESEND_API_KEY=re_ci_smoke_key \
+            -e EMAIL_FROM=noreply@charitypilot.ie \
+            -e SUPABASE_URL=https://ci-project.supabase.co \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
+            -e SUPABASE_STORAGE_BUCKET=documents \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
+            -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
+            charitypilot-api-ci node dist/jobs/send-deadline-reminders.js | tee "${deadline_output}"
+          grep -F "[DeadlineReminders] Run complete - 0 reminder(s) sent, 0 failed, 0 deadline(s) skipped" "${deadline_output}"
+          grep -F "Deadline reminders job completed successfully." "${deadline_output}"
+
+          cleanup_output="$(mktemp)"
+          docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true \
+            -e CI=true \
+            -e GITHUB_ACTIONS=true \
+            -e SUPABASE_URL=https://ci-project.supabase.co \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
+            -e SUPABASE_STORAGE_BUCKET=documents \
+            -e DOCUMENT_STORAGE_CLEANUP_LIMIT=1 \
+            -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
+            charitypilot-api-ci node dist/jobs/cleanup-document-storage.js | tee "${cleanup_output}"
+          grep -F "Document storage cleanup completed. Processed: 0. Failed: 0." "${cleanup_output}"
+
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
 

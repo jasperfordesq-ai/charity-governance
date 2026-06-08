@@ -23,6 +23,17 @@ function composeServiceBlock(compose, serviceName) {
   return match[0];
 }
 
+function dockerRunForCommand(step, command) {
+  const commandIndex = step.indexOf(command);
+  assert.notEqual(commandIndex, -1, `scheduled job smoke command must exist: ${command}`);
+
+  const runStart = step.lastIndexOf('docker run --rm --network host', commandIndex);
+  assert.notEqual(runStart, -1, `scheduled job smoke command must run in Docker: ${command}`);
+
+  const nextRun = step.indexOf('docker run --rm --network host', commandIndex + command.length);
+  return step.slice(runStart, nextRun === -1 ? undefined : nextRun);
+}
+
 function cleanEnv() {
   const env = {
     PATH: process.env.PATH ?? '',
@@ -1607,6 +1618,61 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
 });
 
+test('CI smoke-runs production API scheduled job entrypoints inside the Docker image', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+  const jobSmokeStep = workflow.slice(
+    workflow.indexOf('name: Smoke API Docker scheduled jobs'),
+    workflow.indexOf('name: Build web Docker image'),
+  );
+  const deadlineRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js');
+  const cleanupRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js');
+
+  assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
+  assert.match(jobSmokeStep, /charitypilot_job_smoke/);
+  assert.match(jobSmokeStep, /CREATE DATABASE charitypilot_job_smoke OWNER charitypilot/);
+  assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  for (const run of [deadlineRun, cleanupRun]) {
+    assert.match(run, /-e NODE_ENV=production/);
+    assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
+    assert.match(run, /-e CI=true/);
+    assert.match(run, /-e GITHUB_ACTIONS=true/);
+    assert.match(run, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/);
+  }
+  assert.match(deadlineRun, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
+  assert.match(deadlineRun, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
+  assert.match(deadlineRun, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
+  assert.match(deadlineRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret/);
+  assert.match(deadlineRun, /-e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret/);
+  assert.match(deadlineRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
+  assert.match(deadlineRun, /-e EMAIL_FROM=noreply@charitypilot\.ie/);
+  assert.match(deadlineRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
+  assert.match(deadlineRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
+  assert.match(deadlineRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
+  assert.match(deadlineRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(cleanupRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
+  assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
+  assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
+  assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
+  assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
+  assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
+  assert.ok(
+    workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
+    'API image must be built before scheduled job smoke runs',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
+    'API runtime smoke must run before scheduled job smoke',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke API Docker scheduled jobs') < workflow.indexOf('name: Build web Docker image'),
+    'scheduled job smoke must run before continuing to web image gates',
+  );
+});
+
 test('CI validates API production env inside the built Docker image', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
@@ -1776,6 +1842,61 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
   assert.ok(
     workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
     'API image must be smoke-tested before publishing',
+  );
+});
+
+test('release workflow smoke-runs production API scheduled job entrypoints before publish', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const jobSmokeStep = workflow.slice(
+    workflow.indexOf('name: Smoke API Docker scheduled jobs'),
+    workflow.indexOf('name: Build web Docker image'),
+  );
+  const deadlineRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js');
+  const cleanupRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js');
+
+  assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
+  assert.match(jobSmokeStep, /charitypilot_job_smoke/);
+  assert.match(jobSmokeStep, /CREATE DATABASE charitypilot_job_smoke OWNER charitypilot/);
+  assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  for (const run of [deadlineRun, cleanupRun]) {
+    assert.match(run, /-e NODE_ENV=production/);
+    assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
+    assert.match(run, /-e CI=true/);
+    assert.match(run, /-e GITHUB_ACTIONS=true/);
+    assert.match(run, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/);
+  }
+  assert.match(deadlineRun, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
+  assert.match(deadlineRun, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
+  assert.match(deadlineRun, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
+  assert.match(deadlineRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret/);
+  assert.match(deadlineRun, /-e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret/);
+  assert.match(deadlineRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
+  assert.match(deadlineRun, /-e EMAIL_FROM=noreply@charitypilot\.ie/);
+  assert.match(deadlineRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
+  assert.match(deadlineRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
+  assert.match(deadlineRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
+  assert.match(deadlineRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
+  assert.match(cleanupRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
+  assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
+  assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
+  assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
+  assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
+  assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
+  assert.ok(
+    workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
+    'API image must be built before scheduled job smoke runs',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
+    'API runtime smoke must run before scheduled job smoke',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke API Docker scheduled jobs') < workflow.indexOf('name: Push image tags'),
+    'scheduled job smoke must run before publishing images',
   );
 });
 

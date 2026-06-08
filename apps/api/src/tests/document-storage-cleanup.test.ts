@@ -48,7 +48,8 @@ test('retryPendingStorageDeletions atomically claims pending cleanup rows with P
       transactionCalled = true;
       return callback(prisma);
     },
-    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    async $queryRaw(this: unknown, strings: TemplateStringsArray, ...values: unknown[]) {
+      assert.equal(this, prisma);
       query = strings.join('?');
       queryValues = values;
       return [

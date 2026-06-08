@@ -57,12 +57,11 @@ export class DocumentService {
 
     if (client.$transaction && client.$queryRaw) {
       return client.$transaction(async (tx) => {
-        const queryRaw = tx.$queryRaw;
-        if (!queryRaw) {
+        if (!tx.$queryRaw) {
           return [];
         }
 
-        return queryRaw<DocumentStorageDeletionRecord[]>`
+        return tx.$queryRaw<DocumentStorageDeletionRecord[]>`
           UPDATE "DocumentStorageDeletion"
           SET "claimedAt" = CURRENT_TIMESTAMP,
               "updatedAt" = CURRENT_TIMESTAMP
