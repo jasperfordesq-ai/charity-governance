@@ -7,6 +7,7 @@ import { test } from 'node:test';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const evidenceScriptPath = join(scriptsDir, 'production-launch-evidence.mjs');
+const evidenceTemplateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
 const capturedAt = '2026-06-08T12:00:00.000Z';
 const digest = 'a'.repeat(64);
 
@@ -15,6 +16,13 @@ async function loadEvidenceRunner() {
   const module = await import(pathToFileURL(evidenceScriptPath).href);
   assert.equal(typeof module.runProductionLaunchEvidenceFromArgs, 'function');
   assert.ok(Array.isArray(module.REQUIRED_LAUNCH_AREAS));
+  return module;
+}
+
+async function loadEvidenceTemplateGenerator() {
+  assert.ok(existsSync(evidenceTemplateScriptPath), 'production launch evidence template script must exist');
+  const module = await import(pathToFileURL(evidenceTemplateScriptPath).href);
+  assert.equal(typeof module.renderProductionLaunchEvidenceTemplate, 'function');
   return module;
 }
 
@@ -79,6 +87,60 @@ function completeEvidence(requiredAreas) {
       status: 'approved',
       owner: 'Accountable owner',
       approvedAt: capturedAt,
+      approvals: {
+        engineering: {
+          status: 'approved',
+          owner: 'Engineering owner',
+          approvedAt: capturedAt,
+          evidence: [
+            {
+              type: 'approval',
+              reference: 'https://evidence.charitypilot.ie/launch/final-signoff/engineering',
+              description: 'Engineering owner launch approval',
+              capturedAt,
+            },
+          ],
+        },
+        operations: {
+          status: 'approved',
+          owner: 'Operations owner',
+          approvedAt: capturedAt,
+          evidence: [
+            {
+              type: 'approval',
+              reference: 'https://evidence.charitypilot.ie/launch/final-signoff/operations',
+              description: 'Operations owner launch approval',
+              capturedAt,
+            },
+          ],
+        },
+        security: {
+          status: 'approved',
+          owner: 'Security owner',
+          approvedAt: capturedAt,
+          evidence: [
+            {
+              type: 'approval',
+              reference: 'https://evidence.charitypilot.ie/launch/final-signoff/security',
+              description: 'Security owner launch approval',
+              capturedAt,
+            },
+          ],
+        },
+        business: {
+          status: 'approved',
+          owner: 'Business owner',
+          approvedAt: capturedAt,
+          evidence: [
+            {
+              type: 'approval',
+              reference: 'https://evidence.charitypilot.ie/launch/final-signoff/business',
+              description: 'Business owner launch approval',
+              capturedAt,
+            },
+          ],
+        },
+      },
       evidence: [
         {
           type: 'approval',
@@ -252,6 +314,65 @@ test('production launch evidence validator requires every checklist check to be 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /releaseGate\.checks\.deploy-production is required/);
     assert.match(result.stderr, /finalSignoff\.status must be approved/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires every final signoff role approval', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  delete evidence.finalSignoff.approvals.security;
+  evidence.finalSignoff.approvals.operations.status = 'pending';
+  evidence.finalSignoff.approvals.business.approvedAt = '2026-06-07T12:00:00.000Z';
+  evidence.finalSignoff.approvals.engineering.evidence = [];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /finalSignoff\.approvals\.security is required/);
+    assert.match(result.stderr, /finalSignoff\.approvals\.operations\.status must be approved/);
+    assert.match(result.stderr, /finalSignoff\.approvals\.business\.approvedAt must not be before preparedAt/);
+    assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.evidence must include at least one evidence entry/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence template covers every required area and final signoff role but cannot launch', async () => {
+  const {
+    FINAL_SIGNOFF_ROLES,
+    REQUIRED_LAUNCH_AREAS,
+    runProductionLaunchEvidenceFromArgs,
+  } = await loadEvidenceRunner();
+  const { renderProductionLaunchEvidenceTemplate } = await loadEvidenceTemplateGenerator();
+  const template = JSON.parse(renderProductionLaunchEvidenceTemplate());
+  const { tempDir, evidencePath } = writeEvidenceFile(template);
+
+  try {
+    assert.equal(template.approvedForLaunch, false);
+    assert.equal(template.finalSignoff.status, 'pending');
+    assert.deepEqual(Object.keys(template.areas).sort(), REQUIRED_LAUNCH_AREAS.map((area) => area.id).sort());
+    for (const area of REQUIRED_LAUNCH_AREAS) {
+      assert.deepEqual(
+        Object.keys(template.areas[area.id].checks).sort(),
+        area.checks.map((check) => check.id).sort(),
+      );
+    }
+    assert.deepEqual(
+      Object.keys(template.finalSignoff.approvals).sort(),
+      FINAL_SIGNOFF_ROLES.map((role) => role.id).sort(),
+    );
+    assert.doesNotMatch(JSON.stringify(template), /sk_live_|whsec_|re_[A-Za-z0-9]|postgres(?:ql)?:\/\/|SUPABASE_SERVICE_ROLE_KEY=/);
+
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /approvedForLaunch must be true/);
+    assert.match(result.stderr, /areas\.releaseGate\.status must be complete/);
+    assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.status must be approved/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

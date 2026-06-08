@@ -23,6 +23,7 @@
     "check:production:hosting": "node scripts/check-production-hosting.mjs",
     "check:production:observability": "node scripts/check-production-observability.mjs",
     "check:production:database": "node scripts/check-production-database.mjs",
+    "check:production:evidence:template": "node scripts/generate-production-launch-evidence-template.mjs",
     "deploy:preflight": "node scripts/production-deploy-preflight.mjs",
     "deploy:production": "node scripts/production-compose-deploy.mjs",
     "deploy:rollback": "node scripts/production-compose-rollback.mjs",

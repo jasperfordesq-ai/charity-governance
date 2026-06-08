@@ -1890,6 +1890,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-deploy.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-rollback.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'generate-production-launch-evidence-template.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-supabase.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-providers.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-hosting.mjs')));
@@ -1902,6 +1903,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.equal(packageJson.scripts['check:production:providers'], 'node scripts/check-production-providers.mjs');
   assert.equal(packageJson.scripts['check:production:supabase'], 'node scripts/check-production-supabase.mjs');
   assert.equal(packageJson.scripts['check:production:evidence'], 'node scripts/production-launch-evidence.mjs');
+  assert.equal(packageJson.scripts['check:production:evidence:template'], 'node scripts/generate-production-launch-evidence-template.mjs');
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.equal(packageJson.scripts['deploy:production'], 'node scripts/production-compose-deploy.mjs');
   assert.equal(packageJson.scripts['deploy:rollback'], 'node scripts/production-compose-rollback.mjs');
@@ -1925,6 +1927,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /supabase-check/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /providers-check/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /observability-check/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /FINAL_SIGNOFF_ROLES/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /finalSignoff\.approvals/);
+  assert.match(readRepoFile('scripts/generate-production-launch-evidence-template.mjs'), /REQUIRED_LAUNCH_AREAS/);
+  assert.match(readRepoFile('scripts/generate-production-launch-evidence-template.mjs'), /FINAL_SIGNOFF_ROLES/);
   assert.match(readRepoFile('scripts/check-production-supabase.mjs'), /runProductionSupabaseCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-providers.mjs'), /runProductionProvidersCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-hosting.mjs'), /runProductionHostingCheckFromArgs/);
@@ -1940,8 +1946,11 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows/);
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
+  assert.match(runbook, /npm run --silent check:production:evidence:template > production-launch-evidence\.json/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
+  assert.match(runbook, /finalSignoff\.approvals/);
+  assert.match(runbook, /engineering, operations, security, and business owners/);
   assert.match(runbook, /GitHub Actions release workflow run URL/);
   assert.match(runbook, /digest-pinned API\/web\/migration image refs/);
   assert.match(runbook, /node dist\/jobs\/production-scheduler\.js/);
@@ -1971,9 +1980,12 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /Operational sentinel restore test location/);
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:providers -- --production-env-file=\.env\.production/);
+  assert.match(launchChecklist, /npm run --silent check:production:evidence:template > production-launch-evidence\.json/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(launchChecklist, /Release workflow run URL/);
   assert.match(launchChecklist, /Web image build origins/);
+  assert.match(launchChecklist, /finalSignoff\.approvals/);
+  assert.match(launchChecklist, /`engineering`, `operations`, `security`, and `business` approvals/);
   assert.match(launchChecklist, /node dist\/jobs\/production-scheduler\.js/);
   assert.match(launchChecklist, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(launchChecklist, /node dist\/jobs\/cleanup-document-storage\.js/);

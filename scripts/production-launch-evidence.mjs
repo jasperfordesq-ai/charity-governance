@@ -170,6 +170,12 @@ const imageRepositories = {
   webImage: 'ghcr.io/jasperfordesq-ai/charity-governance-web',
   migrationImage: 'ghcr.io/jasperfordesq-ai/charity-governance-migrations',
 };
+export const FINAL_SIGNOFF_ROLES = [
+  ['engineering', 'Engineering owner'],
+  ['operations', 'Operations owner'],
+  ['security', 'Security owner'],
+  ['business', 'Business owner'],
+].map(([id, label]) => ({ id, label }));
 
 function usage() {
   return 'Usage: node scripts/production-launch-evidence.mjs --evidence-file <path>\n';
@@ -375,6 +381,39 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
   }
 }
 
+function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {
+  if (!isPlainObject(finalSignoff.approvals)) {
+    issues.push('finalSignoff.approvals is required');
+    return;
+  }
+
+  for (const role of FINAL_SIGNOFF_ROLES) {
+    const approvalPath = `finalSignoff.approvals.${role.id}`;
+    const approval = finalSignoff.approvals[role.id];
+    if (!isPlainObject(approval)) {
+      issues.push(`${approvalPath} is required`);
+      continue;
+    }
+
+    if (approval.status !== 'approved') {
+      issues.push(`${approvalPath}.status must be approved`);
+    }
+    if (typeof approval.owner !== 'string' || approval.owner.trim().length < 3) {
+      issues.push(`${approvalPath}.owner is required`);
+    }
+    const approvedAt = isoTimestamp(approval.approvedAt);
+    if (approvedAt === null) {
+      issues.push(`${approvalPath}.approvedAt must be an ISO timestamp`);
+    } else if (preparedAt !== null && approvedAt < preparedAt) {
+      issues.push(`${approvalPath}.approvedAt must not be before preparedAt`);
+    }
+    validateEvidenceEntries(approval.evidence, `${approvalPath}.evidence`, issues, {
+      notAfter: approvedAt,
+      notAfterLabel: `${approvalPath}.approvedAt`,
+    });
+  }
+}
+
 function validateLaunchEvidence(evidence) {
   const issues = [];
 
@@ -455,6 +494,7 @@ function validateLaunchEvidence(evidence) {
       notAfter: approvedAt,
       notAfterLabel: 'finalSignoff.approvedAt',
     });
+    validateFinalSignoffApprovals(evidence.finalSignoff, preparedAt, issues);
   }
 
   return issues;

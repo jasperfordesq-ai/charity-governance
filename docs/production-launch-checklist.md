@@ -44,6 +44,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `cosign signature verification` passed for all promoted image digests.
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 - [ ] The release manifest's web image build origins match the promoted production public origins.
+- [ ] `npm run --silent check:production:evidence:template > production-launch-evidence.json` was used as the starting schema for the non-committed external launch evidence ledger.
 - [ ] `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
 
 Evidence:
@@ -236,6 +237,8 @@ Evidence:
 | Remediation evidence location | |
 
 ## Final Signoff
+
+The machine-readable `production-launch-evidence.json` must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and non-secret external evidence references.
 
 | Role | Name | Date | Evidence reference |
 | --- | --- | --- | --- |

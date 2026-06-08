@@ -33,6 +33,7 @@ npm run check:production:database -- --production-env-file=.env.production --exp
 npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:observability -- --production-env-file=.env.production
+npm run --silent check:production:evidence:template > production-launch-evidence.json
 npm run check:production:evidence -- --evidence-file=production-launch-evidence.json
 ```
 
@@ -130,4 +131,4 @@ Run `npm run check:production:providers -- --production-env-file=.env.production
 
 Code readiness is not the full production gate. Do not launch with real charity data until hosting, DNS/TLS, secrets, backups, monitoring alerts, legal documents, deployed browser QA, and external security review are complete and recorded in `docs/production-launch-checklist.md`.
 
-Before launch, materialize a non-committed `production-launch-evidence.json` file from the external evidence ledger and run `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json`. The validator requires all launch checklist areas, every machine-readable checklist check, dated external evidence references, and final signoff. It also requires a `release` block binding the evidence to the promoted commit SHA, GitHub Actions release workflow run URL, digest-pinned API/web/migration image refs, and web image build origins from `release-image-digests.env`. It rejects placeholders, local URLs, and raw secret-looking values so evidence capture does not accidentally become secret storage.
+Before launch, materialize a non-committed `production-launch-evidence.json` file from the external evidence ledger. Start from `npm run --silent check:production:evidence:template > production-launch-evidence.json`, replace every placeholder from external evidence systems, and then run `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json`. The validator requires all launch checklist areas, every machine-readable checklist check, dated external evidence references, final signoff, and separate `finalSignoff.approvals` entries for engineering, operations, security, and business owners. It also requires a `release` block binding the evidence to the promoted commit SHA, GitHub Actions release workflow run URL, digest-pinned API/web/migration image refs, and web image build origins from `release-image-digests.env`. It rejects placeholders, local URLs, and raw secret-looking values so evidence capture does not accidentally become secret storage.
