@@ -77,6 +77,7 @@ async function validateProtectedAuthSession(request: NextRequest): Promise<{
       headers: {
         Cookie: cookieHeader,
         'Content-Type': 'application/json',
+        Origin: request.nextUrl.origin,
       },
       body: '{}',
       cache: 'no-store',

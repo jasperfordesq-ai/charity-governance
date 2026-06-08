@@ -908,6 +908,41 @@ test('refresh token rotation fails without creating a replacement session when r
   assert.deepEqual(createdSessions, []);
 });
 
+test('refresh token replay revokes active sessions for the affected user', async () => {
+  const { rotateSessionTokens } = await import('../services/session-tokens.js');
+  const { AppError } = await import('../utils/errors.js');
+  let userSessionsRevoked = false;
+  const future = new Date(Date.now() + 60_000);
+  const prisma = {
+    $queryRaw: async () => [{
+      id: 'old-session',
+      userId: 'user-1',
+      expiresAt: future,
+      revokedAt: new Date(Date.now() - 1000),
+    }],
+    $executeRaw: async () => {
+      userSessionsRevoked = true;
+      return 1;
+    },
+    user: {
+      findUnique: async () => {
+        throw new Error('user lookup should not run for replayed refresh tokens');
+      },
+    },
+    authSession: {
+      create: async () => {
+        throw new Error('replacement session should not be created for replayed refresh tokens');
+      },
+    },
+  };
+
+  await assert.rejects(
+    () => rotateSessionTokens(prisma as never, 'replayed-refresh-token'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 401 && error.code === 'INVALID_REFRESH_TOKEN',
+  );
+  assert.equal(userSessionsRevoked, true);
+});
+
 test('resetPassword consumes the reset token atomically before revoking sessions', async () => {
   const { AuthService } = await import('../services/auth.service.js');
   const { hashOpaqueToken } = await import('../services/session-tokens.js');

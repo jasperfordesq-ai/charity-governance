@@ -20,6 +20,8 @@
     "src/lib/safe-next-path.ts",
     "src/lib/safe-next-path.test.ts",
     "src/lib/url-security.ts",
-    "src/lib/url-security.test.ts"
+    "src/lib/url-security.test.ts",
+    "src/proxy.ts",
+    "src/proxy.test.ts"
   ]
 }

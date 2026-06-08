@@ -81,7 +81,16 @@ export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: st
   `;
   const session = sessions[0];
 
-  if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+  if (!session) {
+    throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
+  }
+
+  if (session.revokedAt) {
+    await revokeUserSessions(prisma, session.userId);
+    throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
+  }
+
+  if (session.expiresAt <= new Date()) {
     throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
   }
 
