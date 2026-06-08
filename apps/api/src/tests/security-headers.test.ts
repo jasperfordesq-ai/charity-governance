@@ -41,6 +41,9 @@ test('API responses include baseline security headers', async () => {
     assert.equal(response.headers['x-frame-options'], 'DENY');
     assert.equal(response.headers['referrer-policy'], 'strict-origin-when-cross-origin');
     assert.equal(response.headers['permissions-policy'], 'camera=(), microphone=(), geolocation=(), payment=()');
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.headers.pragma, 'no-cache');
+    assert.equal(response.headers.expires, '0');
     assert.equal(
       response.headers['content-security-policy'],
       "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
@@ -81,6 +84,28 @@ test('API responses preserve route-specific content security policies', async ()
     assert.equal(response.statusCode, 200);
     assert.equal(response.headers['content-security-policy'], routeSpecificCsp);
     assert.equal(response.headers['x-content-type-options'], 'nosniff');
+  } finally {
+    await app.close();
+  }
+});
+
+test('API responses preserve route-specific cache policies', async () => {
+  process.env.NODE_ENV = 'test';
+  const routeSpecificCachePolicy = 'public, max-age=60';
+  const app = Fastify({ logger: false });
+
+  await app.register(securityHeadersPlugin);
+  app.get('/cacheable', async (_request, reply) => {
+    return reply.header('Cache-Control', routeSpecificCachePolicy).send({ ok: true });
+  });
+
+  try {
+    const response = await app.inject({ method: 'GET', url: '/cacheable' });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['cache-control'], routeSpecificCachePolicy);
+    assert.equal(response.headers.pragma, undefined);
+    assert.equal(response.headers.expires, undefined);
   } finally {
     await app.close();
   }

@@ -1608,6 +1608,9 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^cache-control: no-store" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
   assert.match(workflow, /name:\s+Verify API Docker runtime dependencies/);
@@ -1775,6 +1778,9 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^cache-control: no-store" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
   assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
