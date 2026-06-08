@@ -119,6 +119,7 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   const smokeScript = readRepoFile('scripts/smoke-local-docker.mjs');
   assert.match(smokeScript, /compose\.yml/);
   assert.match(smokeScript, /compose\.local\.yml/);
+  assert.match(smokeScript, /mkdirSync\(join\(repoRoot, 'apps', 'web', '\.next'\), \{ recursive: true \}\)/);
   assert.match(smokeScript, /'up', '--wait', '--wait-timeout', '180', '-d'/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness/);

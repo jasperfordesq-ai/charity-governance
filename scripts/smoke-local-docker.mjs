@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -129,6 +130,8 @@ async function smokeWeb() {
 }
 
 try {
+  mkdirSync(join(repoRoot, 'apps', 'web', '.next'), { recursive: true });
+
   if (localServicesAreRunning()) {
     console.log('Local Docker services already running; skipping compose up.');
     try {
