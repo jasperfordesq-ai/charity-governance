@@ -1,5 +1,5 @@
-import type { FastifyError, FastifyRequest } from 'fastify';
-import { isConfiguredSecret } from '../utils/env.js';
+import type { FastifyRequest } from 'fastify';
+import { isConfiguredSecret } from '../utils/secrets.js';
 
 const DEFAULT_ALERT_TIMEOUT_MS = 2000;
 const DEFAULT_MAX_IN_FLIGHT_ALERTS = 3;
@@ -33,7 +33,9 @@ function requestPathWithoutQuery(url: string): string {
   return queryIndex === -1 ? url : url.slice(0, queryIndex);
 }
 
-function errorCode(error: FastifyError): string {
+type AlertableError = Error & { code?: string };
+
+function errorCode(error: AlertableError): string {
   return typeof error.code === 'string' && error.code.trim() ? error.code : 'INTERNAL_ERROR';
 }
 
@@ -46,7 +48,7 @@ export function shouldSendErrorAlert(statusCode: number): boolean {
 }
 
 export function buildErrorAlertPayload(
-  error: FastifyError,
+  error: AlertableError,
   request: FastifyRequest,
   statusCode: number,
 ): ErrorAlertPayload {

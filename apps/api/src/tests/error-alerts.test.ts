@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { sendErrorAlert, type ErrorAlertPayload } from '../services/error-alerts.service.js';
-import { AppError } from '../utils/errors.js';
+import { AppError, handleError } from '../utils/errors.js';
 
 const [{ default: Fastify }, { errorHandlerPlugin }] = await Promise.all([
   import('fastify'),
@@ -35,6 +35,38 @@ async function buildErrorApp() {
 
   app.get('/bad-request', async () => {
     throw new AppError(400, 'BAD_REQUEST', 'Bad request');
+  });
+
+  app.get('/caught-bad-request', async (_request, reply) => {
+    try {
+      throw new AppError(400, 'BAD_REQUEST', 'Bad request', { field: 'name' });
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
+  app.get('/caught-provider-error', async (_request, reply) => {
+    try {
+      throw new AppError(
+        500,
+        'STORAGE_SIGNED_URL_FAILED',
+        'Failed to generate signed URL: provider-secret',
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
+  app.get('/caught-provider-unavailable', async (_request, reply) => {
+    try {
+      throw new AppError(
+        503,
+        'STORAGE_PROVIDER_UNAVAILABLE',
+        'Storage provider unavailable: provider-secret',
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
   });
 
   return app;
@@ -113,10 +145,91 @@ test('client errors do not send alert webhooks', { concurrency: false }, async (
   const app = await buildErrorApp();
 
   try {
-    const response = await app.inject({ method: 'GET', url: '/bad-request' });
+    const response = await app.inject({ method: 'GET', url: '/caught-bad-request' });
+    const body = response.json();
 
     assert.equal(response.statusCode, 400);
+    assert.equal(body.error, 'Bad request');
+    assert.equal(body.code, 'BAD_REQUEST');
+    assert.deepEqual(body.details, { field: 'name' });
     assert.equal(fetchCalled, false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('caught route 5xx errors are sanitized and still send alert webhooks', { concurrency: false }, async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+
+  const alertCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  globalThis.fetch = (async (url, init) => {
+    alertCalls.push({
+      url: String(url),
+      body: JSON.parse(String(init?.body)),
+    });
+
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+
+  const app = await buildErrorApp();
+
+  try {
+    const response = await app.inject({ method: 'GET', url: '/caught-provider-error' });
+    const body = response.json();
+
+    assert.equal(response.statusCode, 500);
+    assert.equal(body.error, 'Internal server error');
+    assert.equal(body.code, 'INTERNAL_ERROR');
+    assert.equal(JSON.stringify(body).includes('provider-secret'), false);
+    assert.equal(alertCalls.length, 1);
+    assert.equal(alertCalls[0].url, 'https://alerts.example/hooks/charitypilot');
+    assert.equal(alertCalls[0].body.statusCode, 500);
+    assert.equal(alertCalls[0].body.code, 'STORAGE_SIGNED_URL_FAILED');
+    assert.equal(alertCalls[0].body.method, 'GET');
+    assert.equal(alertCalls[0].body.url, '/caught-provider-error');
+    assert.equal(alertCalls[0].body.errorName, 'AppError');
+    assert.equal(typeof alertCalls[0].body.requestId, 'string');
+    assert.equal(typeof alertCalls[0].body.timestamp, 'string');
+    assert.equal('message' in alertCalls[0].body, false);
+    assert.equal('stack' in alertCalls[0].body, false);
+
+    const serializedAlert = JSON.stringify(alertCalls[0].body);
+    assert.equal(serializedAlert.includes('provider-secret'), false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('caught route non-500 5xx errors keep status while sanitizing response and alerts', { concurrency: false }, async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+
+  const alertCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  globalThis.fetch = (async (url, init) => {
+    alertCalls.push({
+      url: String(url),
+      body: JSON.parse(String(init?.body)),
+    });
+
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+
+  const app = await buildErrorApp();
+
+  try {
+    const response = await app.inject({ method: 'GET', url: '/caught-provider-unavailable' });
+    const body = response.json();
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(body.error, 'Internal server error');
+    assert.equal(body.code, 'INTERNAL_ERROR');
+    assert.equal(JSON.stringify(body).includes('provider-secret'), false);
+    assert.equal(alertCalls.length, 1);
+    assert.equal(alertCalls[0].body.statusCode, 503);
+    assert.equal(alertCalls[0].body.code, 'STORAGE_PROVIDER_UNAVAILABLE');
+    assert.equal(alertCalls[0].body.url, '/caught-provider-unavailable');
+    assert.equal(JSON.stringify(alertCalls[0].body).includes('provider-secret'), false);
   } finally {
     await app.close();
   }

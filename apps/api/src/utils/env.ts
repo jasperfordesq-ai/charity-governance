@@ -1,28 +1,12 @@
 import { isIP } from 'node:net';
 import { AppError } from './errors.js';
 import { parsePort } from './port.js';
+import { isConfiguredSecret } from './secrets.js';
 
-const PLACEHOLDER_PATTERNS = [
-  'REPLACE_ME',
-  'change-me',
-  'your_',
-  'your-',
-  'sk_test_...',
-  'pk_test_...',
-  'whsec_...',
-  'price_...',
-  're_...',
-  'eyJ...',
-  'https://your-project.supabase.co',
-] as const;
+export { isConfiguredSecret } from './secrets.js';
 
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
-
-export function isConfiguredSecret(value: string | undefined): value is string {
-  if (!value?.trim()) return false;
-  return !PLACEHOLDER_PATTERNS.some((placeholder) => value.includes(placeholder));
-}
 
 function requireConfiguredEnv(name: string, issues: string[]): string | undefined {
   const value = process.env[name];
