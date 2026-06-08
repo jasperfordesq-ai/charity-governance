@@ -92,15 +92,17 @@ Run `npm run check:production:database -- --production-env-file=.env.production 
 
 ## Jobs
 
-In production, the API does not run deadline reminders in-process unless `ENABLE_IN_PROCESS_JOBS=true`. Prefer a platform scheduler that runs:
+In production, the API container does not run scheduled jobs in-process. The default Docker Compose stack runs a separate `production-scheduler` service, and the `jobs` profile exposes one-shot reminder and cleanup commands for rehearsal or platform scheduler integrations:
 
 ```bash
-npm run jobs:deadline-reminders -w @charitypilot/api
+node dist/jobs/production-scheduler.js
+node dist/jobs/send-deadline-reminders.js
+node dist/jobs/cleanup-document-storage.js
 ```
 
-The scheduled job must receive the same production secret source that passed preflight. If the platform invokes the npm script as written, materialize a non-committed env file for the API job runtime from the approved production secrets, or inject equivalent environment variables and invoke the built job entrypoint directly.
+The scheduled job runtime must receive the same production secret source that passed preflight. For Docker Compose, `production-scheduler` must be running after deploy, and the `deadline-reminders` and `document-storage-cleanup` profile jobs must have recorded successful test-run evidence. If a platform scheduler replaces Compose scheduling, materialize a non-committed env file for the API job runtime from the approved production secrets, or inject equivalent environment variables and invoke the built job entrypoints directly.
 
-Record scheduler ownership and test-run evidence in `docs/production-launch-checklist.md`.
+Record scheduler ownership, command coverage for all three job entrypoints, log capture, and failure-alert evidence in `docs/production-launch-checklist.md`.
 
 ## Storage
 

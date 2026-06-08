@@ -137,18 +137,23 @@ Evidence:
 
 ## 6. Jobs
 
-- [ ] Production reminder scheduling is owned by the platform scheduler or explicitly enabled with `ENABLE_IN_PROCESS_JOBS=true`.
-- [ ] If using the scheduler, it runs `npm run jobs:deadline-reminders -w @charitypilot/api`.
-- [ ] The scheduler receives the same production secret source that passed preflight, either as injected environment variables or as a non-committed env file materialized for the job runtime.
-- [ ] Scheduler logs and failure alerts are available.
+- [ ] Production job scheduling is owned by the Docker Compose `production-scheduler` service or an explicitly approved platform scheduler replacement.
+- [ ] The deployed scheduler command is `node dist/jobs/production-scheduler.js`.
+- [ ] Reminder job test evidence covers `node dist/jobs/send-deadline-reminders.js`.
+- [ ] Document storage cleanup test evidence covers `node dist/jobs/cleanup-document-storage.js`.
+- [ ] The scheduler and one-shot job runtimes receive the same production secret source that passed preflight, either as injected environment variables or as a non-committed env file materialized for the job runtime.
+- [ ] Scheduler and job logs are captured.
+- [ ] Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`.
 
 Evidence:
 
 | Field | Value |
 | --- | --- |
 | Scheduler owner | |
-| Schedule definition location | |
-| Test run output location | |
+| Scheduler service evidence location | |
+| Reminder job test output location | |
+| Cleanup job test output location | |
+| Failure alert evidence location | |
 
 ## 7. Billing And Email
 

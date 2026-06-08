@@ -31,6 +31,16 @@ function evidenceEntry(areaId, checkId) {
     entry.description = 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel completed with operational sentinel checks';
   }
 
+  if (areaId === 'jobs' && checkId === 'scheduler-command') {
+    entry.type = 'command-output';
+    entry.description = [
+      'Production Compose job commands verified:',
+      'node dist/jobs/production-scheduler.js',
+      'node dist/jobs/send-deadline-reminders.js',
+      'node dist/jobs/cleanup-document-storage.js',
+    ].join(' ');
+  }
+
   return entry;
 }
 
@@ -196,6 +206,24 @@ test('production launch evidence validator requires operational sentinel databas
     assert.equal(result.status, 1);
     assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must show check:production:database was run with --expect-operational-sentinel/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires every production job command surface', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.jobs.checks['scheduler-command'].evidence[0].description =
+    'Production scheduler evidence only mentioned node dist/jobs/send-deadline-reminders.js';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-command\.evidence must include dist\/jobs\/production-scheduler\.js/);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-command\.evidence must include dist\/jobs\/cleanup-document-storage\.js/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

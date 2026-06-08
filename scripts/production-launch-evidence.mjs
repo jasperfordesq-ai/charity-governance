@@ -88,7 +88,7 @@ export const REQUIRED_LAUNCH_AREAS = [
     label: 'Jobs',
     checks: [
       ['scheduler-owned', 'production reminder scheduling is owned'],
-      ['scheduler-command', 'scheduler runs the approved job command when used'],
+      ['scheduler-command', 'scheduler runs the approved production scheduler and job commands'],
       ['scheduler-secret-source', 'scheduler receives the production secret source'],
       ['scheduler-logs-alerts', 'scheduler logs and failure alerts are available'],
     ],
@@ -357,6 +357,20 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
 
     if (!evidenceText(actualCheck.evidence).includes('--expect-operational-sentinel')) {
       issues.push(`${checkPath}.evidence must show check:production:database was run with --expect-operational-sentinel`);
+    }
+  }
+
+  if (areaId === 'jobs' && checkId === 'scheduler-command') {
+    const text = evidenceText(actualCheck.evidence);
+    const requiredJobCommands = [
+      'dist/jobs/production-scheduler.js',
+      'dist/jobs/send-deadline-reminders.js',
+      'dist/jobs/cleanup-document-storage.js',
+    ];
+    for (const command of requiredJobCommands) {
+      if (!text.includes(command)) {
+        issues.push(`${checkPath}.evidence must include ${command}`);
+      }
     }
   }
 }

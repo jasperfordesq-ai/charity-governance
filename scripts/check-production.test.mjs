@@ -1370,9 +1370,13 @@ test('production API scripts run built entrypoints without local env-file depend
 
   assert.equal(apiPackage.scripts.start, 'node dist/start.js');
   assert.equal(apiPackage.scripts['db:migrate:deploy'], 'prisma migrate deploy');
+  assert.equal(apiPackage.scripts['jobs:production-scheduler'], 'node dist/jobs/production-scheduler.js');
   assert.equal(apiPackage.scripts['jobs:deadline-reminders'], 'node dist/jobs/send-deadline-reminders.js');
+  assert.equal(apiPackage.scripts['jobs:document-storage-cleanup'], 'node dist/jobs/cleanup-document-storage.js');
   assert.doesNotMatch(apiPackage.scripts.start, /--env-file|tsx|src\//);
+  assert.doesNotMatch(apiPackage.scripts['jobs:production-scheduler'], /--env-file|tsx|src\//);
   assert.doesNotMatch(apiPackage.scripts['jobs:deadline-reminders'], /--env-file|tsx|src\//);
+  assert.doesNotMatch(apiPackage.scripts['jobs:document-storage-cleanup'], /--env-file|tsx|src\//);
 });
 
 test('workspaces with source tests expose a test script for the root test gate', () => {
@@ -1816,6 +1820,7 @@ test('production API runtime leaves scheduled jobs to dedicated job containers',
   const api = composeServiceBlock(compose, 'api');
   const productionScheduler = composeServiceBlock(compose, 'production-scheduler');
   const deadlineReminders = composeServiceBlock(compose, 'deadline-reminders');
+  const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
 
   assert.match(cron, /NODE_ENV === 'production' && process\.env\.ENABLE_IN_PROCESS_JOBS !== 'true'/);
   assert.match(cron, /In-process jobs disabled/);
@@ -1825,6 +1830,7 @@ test('production API runtime leaves scheduled jobs to dedicated job containers',
   assert.match(productionScheduler, /restart:\s+unless-stopped/);
   assert.doesNotMatch(productionScheduler, /profiles:/);
   assert.match(deadlineReminders, /command:\s+\["node",\s*"dist\/jobs\/send-deadline-reminders\.js"\]/);
+  assert.match(documentStorageCleanup, /command:\s+\["node",\s*"dist\/jobs\/cleanup-document-storage\.js"\]/);
 });
 
 test('document storage deletion has a durable retry outbox and production job', () => {
@@ -1938,6 +1944,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
   assert.match(runbook, /GitHub Actions release workflow run URL/);
   assert.match(runbook, /digest-pinned API\/web\/migration image refs/);
+  assert.match(runbook, /node dist\/jobs\/production-scheduler\.js/);
+  assert.match(runbook, /node dist\/jobs\/send-deadline-reminders\.js/);
+  assert.match(runbook, /node dist\/jobs\/cleanup-document-storage\.js/);
+  assert.match(runbook, /failure-alert evidence/);
   assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml up --wait --wait-timeout 180 -d/);
   assert.match(runbook, /post-deploy public HTTPS smoke/);
   assert.match(runbook, /Rollback reuses the production deploy path/);
@@ -1964,6 +1974,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(launchChecklist, /Release workflow run URL/);
   assert.match(launchChecklist, /Web image build origins/);
+  assert.match(launchChecklist, /node dist\/jobs\/production-scheduler\.js/);
+  assert.match(launchChecklist, /node dist\/jobs\/send-deadline-reminders\.js/);
+  assert.match(launchChecklist, /node dist\/jobs\/cleanup-document-storage\.js/);
+  assert.match(launchChecklist, /Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`/);
   assert.match(launchChecklist, /post-deploy public HTTPS smoke/);
   assert.match(launchChecklist, /rollback rehearsal/);
   assert.match(launchChecklist, /digest-pinned/);
