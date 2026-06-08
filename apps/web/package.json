@@ -6,6 +6,7 @@
     "dev": "next dev --webpack --port 3003",
     "build": "next build --webpack",
     "start": "node server.mjs",
+    "test": "node --import tsx --test src/lib/*.test.ts",
     "lint": "eslint src next.config.ts"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4.1.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }
 }

@@ -66,6 +66,8 @@ jobs:
         run: npm run build -w @charitypilot/api
 
       - name: Build web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.charitypilot.ie
         run: npm run build -w @charitypilot/web
 
       - name: Build API Docker image
