@@ -48,6 +48,14 @@ The deploy preflight validates the selected production env file, renders `compos
 
 The production deploy command runs the same preflight first, then executes `docker compose --env-file .env.production -f compose.production.yml up --wait --wait-timeout 180 -d`, then runs a post-deploy public HTTPS smoke against the configured web and API origins. The smoke checks the public web root, API health, approved-origin CORS, unauthenticated readiness protection, keyed readiness, and required security headers. Use `--dry-run` to print the preflight, compose, and post-deploy public HTTPS smoke commands without deploying.
 
+For a bad digest promotion, download the previous signed `release-image-digests.env` artifact as `release-image-digests.previous.env` and run:
+
+```bash
+npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env
+```
+
+Rollback reuses the production deploy path: the command validates that the rollback manifest contains only digest-pinned API, web, and migration images, writes a temporary merged env file with the rollback image refs overlaid onto the selected production env file, runs the same preflight, Docker Compose wait, and post-deploy public HTTPS smoke, then removes the temporary env file. Use `--dry-run` to print the delegated deploy path before changing running containers.
+
 ## Environment
 
 The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
