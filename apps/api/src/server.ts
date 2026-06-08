@@ -1,11 +1,11 @@
 import Fastify from 'fastify';
-import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import { prismaPlugin } from './plugins/prisma.js';
 import { errorHandlerPlugin } from './plugins/error-handler.js';
 import { securityHeadersPlugin } from './plugins/security-headers.js';
+import { registerBrowserOriginProtection } from './plugins/browser-origin-protection.js';
 import { authRoutes } from './routes/auth/index.js';
 import { organisationRoutes } from './routes/organisations/index.js';
 import { complianceRoutes } from './routes/compliance/index.js';
@@ -22,7 +22,7 @@ import { DeadlineRemindersService } from './services/deadline-reminders.service.
 import { startCronJobs } from './utils/cron.js';
 import { validateProductionEnv } from './utils/env.js';
 import { parsePort } from './utils/port.js';
-import { normaliseOrigin, validateUnsafeRequestOrigin } from './utils/request-origin.js';
+import { normaliseOrigin } from './utils/request-origin.js';
 
 const envToLogger: Record<string, unknown> = {
   development: {
@@ -60,29 +60,9 @@ const app = Fastify({
 
 await app.register(errorHandlerPlugin);
 await app.register(securityHeadersPlugin);
-
-app.addHook('preHandler', async (request, reply) => {
-  const originValidation = validateUnsafeRequestOrigin(request, allowedOrigins);
-  if (!originValidation.ok) {
-    return reply.status(originValidation.statusCode).send(originValidation.payload);
-  }
-});
-
-await app.register(cors, {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.has(normaliseOrigin(origin))) {
-      callback(null, true);
-      return;
-    }
-
-    callback(new Error('Origin not allowed by CORS'), false);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-});
-
 await app.register(cookie);
+
+await registerBrowserOriginProtection(app, allowedOrigins);
 
 await app.register(rateLimit, {
   max: 100,

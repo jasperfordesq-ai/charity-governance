@@ -42,6 +42,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Validate release ref
         shell: bash
@@ -51,6 +53,13 @@ jobs:
             { [ "${GITHUB_REF_TYPE}" != "branch" ] || [ "${GITHUB_REF_NAME}" != "master" ]; }; then
             echo "Manual image releases must run from master." >&2
             exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            git fetch origin master:refs/remotes/origin/master
+            if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/master; then
+              echo "Release tags must point at a commit contained in master." >&2
+              exit 1
+            fi
           fi
 
       - name: Resolve image tags

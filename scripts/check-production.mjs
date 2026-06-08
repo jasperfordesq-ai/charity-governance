@@ -114,6 +114,40 @@ function isApprovedPublicHostname(hostname) {
   return normalizedHostname === APPROVED_PUBLIC_HOST_ROOT || normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`);
 }
 
+function senderEmailHostname(value) {
+  const trimmed = value.trim();
+  const angleMatch = trimmed.match(/^[^<>]*<([^<>]+)>$/);
+  const address = (angleMatch?.[1] ?? trimmed).trim();
+  const parts = address.split('@');
+
+  if (
+    parts.length !== 2 ||
+    !parts[0] ||
+    !parts[1] ||
+    /[\s<>]/.test(address) ||
+    !isDnsHostname(normaliseHostname(parts[1]))
+  ) {
+    return null;
+  }
+
+  return parts[1];
+}
+
+function requireApprovedEmailSender(env, key, issues) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  const hostname = senderEmailHostname(value);
+  if (!hostname) {
+    issues.push(`${key} must be a valid email sender address for production`);
+    return;
+  }
+
+  if (!isApprovedPublicHostname(hostname)) {
+    issues.push(`${key} must use an approved CharityPilot sender domain for production`);
+  }
+}
+
 function requireExactValue(env, key, expected, issues) {
   const value = envValue(env, key);
   if (!isConfigured(value)) return;
@@ -356,6 +390,7 @@ requireIntegerPort(env, 'PORT', issues);
 requireDatabaseUrl(env, 'DATABASE_URL', issues);
 requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
 requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
+requireApprovedEmailSender(env, 'EMAIL_FROM', issues);
 
 for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
   const value = envValue(env, key);

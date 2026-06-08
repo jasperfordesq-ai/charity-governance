@@ -146,6 +146,40 @@ function isApprovedPublicHostname(hostname: string): boolean {
   );
 }
 
+function senderEmailHostname(value: string): string | null {
+  const trimmed = value.trim();
+  const angleMatch = trimmed.match(/^[^<>]*<([^<>]+)>$/);
+  const address = (angleMatch?.[1] ?? trimmed).trim();
+  const parts = address.split('@');
+
+  if (
+    parts.length !== 2 ||
+    !parts[0] ||
+    !parts[1] ||
+    /[\s<>]/.test(address) ||
+    !isDnsHostname(normaliseHostname(parts[1]))
+  ) {
+    return null;
+  }
+
+  return parts[1];
+}
+
+function requireApprovedEmailSender(name: string, issues: string[]): void {
+  const value = requireConfiguredEnv(name, issues);
+  if (!value) return;
+
+  const hostname = senderEmailHostname(value);
+  if (!hostname) {
+    issues.push(`${name} must be a valid email sender address in production`);
+    return;
+  }
+
+  if (!isApprovedPublicHostname(hostname)) {
+    issues.push(`${name} must use an approved CharityPilot sender domain in production`);
+  }
+}
+
 function configuredUrls(name: string, options: { allowCommaSeparated?: boolean } = {}): URL[] {
   const value = process.env[name];
   if (!isConfiguredSecret(value)) return [];
@@ -340,7 +374,7 @@ export function validateProductionEnv(): void {
   requireConfiguredEnv('STRIPE_COMPLETE_YEARLY_PRICE_ID', issues);
 
   requireConfiguredEnv('RESEND_API_KEY', issues);
-  requireConfiguredEnv('EMAIL_FROM', issues);
+  requireApprovedEmailSender('EMAIL_FROM', issues);
 
   requireUrl('SUPABASE_URL', issues, { requireHttps: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);

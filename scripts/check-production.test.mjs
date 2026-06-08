@@ -852,6 +852,22 @@ test('fails when public production URLs use unapproved hostnames', () => {
   }
 });
 
+test('fails when the production email sender uses an unapproved domain', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-email-from-host-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv({ EMAIL_FROM: 'noreply@attacker.example' }));
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /EMAIL_FROM must use an approved CharityPilot sender domain for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when production database URL omits TLS mode', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-db-tls-'));
   const envPath = join(tempDir, 'production.env');
@@ -1616,6 +1632,16 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
     workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
     'API image must be smoke-tested before publishing',
   );
+});
+
+test('release workflow only publishes tag images for commits contained in master', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+
+  assert.match(workflow, /uses:\s+actions\/checkout@v5[\s\S]*with:[\s\S]*fetch-depth:\s+0/);
+  assert.match(workflow, /if \[ "\$\{GITHUB_REF_TYPE\}" = "tag" \]; then/);
+  assert.match(workflow, /git fetch origin master:refs\/remotes\/origin\/master/);
+  assert.match(workflow, /git merge-base --is-ancestor "\$\{GITHUB_SHA\}" origin\/master/);
+  assert.match(workflow, /Release tags must point at a commit contained in master/);
 });
 
 test('stale Vercel API project auto-deploys are disabled while Docker is the release gate', () => {

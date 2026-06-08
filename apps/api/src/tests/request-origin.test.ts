@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import Fastify from 'fastify';
+import { registerBrowserOriginProtection } from '../plugins/browser-origin-protection.js';
 import { ACCESS_TOKEN_COOKIE } from '../utils/auth-cookie-names.js';
 import { validateUnsafeRequestOrigin } from '../utils/request-origin.js';
 
 const allowedOrigins = new Set(['https://app.charitypilot.ie']);
+
+async function buildOriginProtectedApp() {
+  const app = Fastify({ logger: false });
+  await registerBrowserOriginProtection(app, allowedOrigins);
+
+  app.get('/ok', async () => ({ ok: true }));
+  app.post('/ok', async () => ({ ok: true }));
+
+  return app;
+}
 
 function request(method: string, options: { origin?: string; authorization?: string; accessCookie?: string } = {}) {
   return {
@@ -68,4 +80,38 @@ test('safe methods and approved browser origins pass origin validation', () => {
     ),
     { ok: true },
   );
+});
+
+test('disallowed CORS origins do not become server errors before the origin guard', async () => {
+  const app = await buildOriginProtectedApp();
+
+  try {
+    const getResponse = await app.inject({
+      method: 'GET',
+      url: '/ok',
+      headers: { origin: 'https://evil.example' },
+    });
+    assert.equal(getResponse.statusCode, 200);
+    assert.equal(getResponse.headers['access-control-allow-origin'], undefined);
+
+    const postResponse = await app.inject({
+      method: 'POST',
+      url: '/ok',
+      headers: { origin: 'https://evil.example' },
+    });
+    assert.equal(postResponse.statusCode, 403);
+    assert.equal(postResponse.json().code, 'INVALID_ORIGIN');
+
+    const optionsResponse = await app.inject({
+      method: 'OPTIONS',
+      url: '/ok',
+      headers: {
+        origin: 'https://evil.example',
+        'access-control-request-method': 'POST',
+      },
+    });
+    assert.notEqual(optionsResponse.statusCode, 500);
+  } finally {
+    await app.close();
+  }
 });
