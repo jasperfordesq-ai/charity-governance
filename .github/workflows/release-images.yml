@@ -72,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Security scan
+        run: npm run security:scan
+
       - name: Generate Prisma client
         run: npm run db:generate -w @charitypilot/api
 

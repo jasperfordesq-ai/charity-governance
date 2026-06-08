@@ -1576,11 +1576,18 @@ test('CI verifies PostgreSQL backup and restore against the migrated database', 
 
 test('CI keeps every production release gate wired', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
+  const packageJson = JSON.parse(readRepoFile('package.json'));
 
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:[\s\S]*branches:[\s\S]*- master/);
+  assert.match(workflow, /^permissions:\s*\n\s+contents:\s+read\s*$/m);
   assert.match(workflow, /node-version:\s+22/);
   assert.match(workflow, /run:\s+npm ci/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/security-scan\.test\.mjs/);
+  assert.equal(packageJson.scripts['security:secrets'], 'node scripts/security-scan.mjs secrets');
+  assert.equal(packageJson.scripts['security:sast'], 'node scripts/security-scan.mjs sast');
+  assert.equal(packageJson.scripts['security:scan'], 'npm run security:secrets && npm run security:sast');
+  assert.match(workflow, /run:\s+npm run security:scan/);
   assert.match(workflow, /run:\s+npm run db:generate -w @charitypilot\/api/);
   assert.match(workflow, /run:\s+npx prisma validate/);
   assert.match(workflow, /run:\s+npm run lint/);
@@ -1589,6 +1596,42 @@ test('CI keeps every production release gate wired', () => {
   assert.match(workflow, /run:\s+npm run build -w @charitypilot\/api/);
   assert.match(workflow, /run:\s+npm run build -w @charitypilot\/web/);
   assert.match(workflow, /run:\s+npm audit --omit=dev --audit-level=moderate/);
+});
+
+test('repo-owned security scanner is wired before CI and release Docker gates', () => {
+  const ci = readRepoFile('.github/workflows/ci.yml');
+  const release = readRepoFile('.github/workflows/release-images.yml');
+
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'security-scan.mjs')), 'security scanner script must exist');
+
+  for (const [workflowName, workflow] of [
+    ['CI', ci],
+    ['release', release],
+  ]) {
+    const installIndex = workflow.indexOf('name: Install dependencies');
+    const securityIndex = workflow.indexOf('name: Security scan');
+
+    assert.notEqual(securityIndex, -1, `${workflowName} workflow must run a security scan step`);
+    assert.match(workflow.slice(securityIndex), /run:\s+npm run security:scan/);
+    assert.ok(installIndex < securityIndex, `${workflowName} security scan must run after dependencies install`);
+  }
+
+  assert.ok(
+    ci.indexOf('name: Security scan') < ci.indexOf('name: Generate Prisma client'),
+    'CI security scan must run before application build/test gates',
+  );
+  assert.ok(
+    ci.indexOf('name: Security scan') < ci.indexOf('name: Build API Docker image'),
+    'CI security scan must run before Docker image build gates',
+  );
+  assert.ok(
+    release.indexOf('name: Security scan') < release.indexOf('name: Login to GHCR'),
+    'release security scan must run before registry login',
+  );
+  assert.ok(
+    release.indexOf('name: Security scan') < release.indexOf('name: Push image tags'),
+    'release security scan must run before publishing images',
+  );
 });
 
 test('CI uses GitHub Actions releases that run on the Node 24 action runtime', () => {
