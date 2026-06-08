@@ -1,11 +1,16 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyError } from 'fastify';
 import { buildErrorAlertPayload, sendErrorAlert, shouldSendErrorAlert } from '../services/error-alerts.service.js';
+import { serializeErrorForLog } from '../utils/logger.js';
 
 export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
   app.setErrorHandler((error: FastifyError, request, reply) => {
-    app.log.error(error);
     const isProduction = process.env.NODE_ENV === 'production';
+    const statusCode = error.statusCode ?? 500;
+    app.log.error(
+      { safeError: serializeErrorForLog(error), statusCode },
+      'Request failed',
+    );
 
     // Handle Fastify validation errors
     if (error.validation) {
@@ -24,7 +29,6 @@ export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
       });
     }
 
-    const statusCode = error.statusCode ?? 500;
     const exposeMessage = statusCode < 500 || !isProduction;
     if (shouldSendErrorAlert(statusCode)) {
       const payload = buildErrorAlertPayload(error, request, statusCode);

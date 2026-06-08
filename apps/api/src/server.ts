@@ -21,19 +21,9 @@ import { healthRoutes } from './routes/health/index.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
 import { startCronJobs } from './utils/cron.js';
 import { validateProductionEnv } from './utils/env.js';
+import { apiLoggerOptionsForEnvironment } from './utils/logger.js';
 import { parsePort } from './utils/port.js';
 import { normaliseOrigin } from './utils/request-origin.js';
-
-const envToLogger: Record<string, unknown> = {
-  development: {
-    transport: {
-      target: 'pino-pretty',
-      options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
-    },
-  },
-  production: true,
-  test: false,
-};
 
 const environment = process.env.NODE_ENV ?? 'development';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
@@ -52,7 +42,7 @@ const trustedProxyAddresses = (process.env.TRUSTED_PROXY_ADDRESSES ?? '')
 validateProductionEnv();
 
 const app = Fastify({
-  logger: envToLogger[environment] ?? true,
+  logger: apiLoggerOptionsForEnvironment(environment),
   trustProxy: trustedProxyAddresses.length > 0 ? trustedProxyAddresses : false,
 });
 
