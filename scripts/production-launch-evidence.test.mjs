@@ -59,6 +59,17 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'releaseGate' && checkId === 'release-run-api-verification') {
+    entry.type = 'command-output';
+    entry.reference = releaseWorkflowRunUrl;
+    entry.description = [
+      'npm run check:production:release-run -- --evidence-file=production-launch-evidence.json',
+      'Production release run evidence passed',
+      releaseWorkflowRunUrl,
+      'release-image-digests',
+    ].join(' ');
+  }
+
   if (areaId === 'releaseGate' && checkId === 'deploy-preflight') {
     entry.type = 'command-output';
     entry.description = [
@@ -226,7 +237,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /78 check\(s\)/);
+    assert.match(result.stdout, /79 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -364,6 +375,8 @@ test('production launch evidence validator binds release-gate evidence to the ex
     'cosign signature verification completed';
   evidence.areas.releaseGate.checks['digest-manifest'].evidence[0].description =
     'release-image-digests artifact downloaded';
+  evidence.areas.releaseGate.checks['release-run-api-verification'].evidence[0].description =
+    'GitHub release run was checked';
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
   try {
@@ -377,6 +390,7 @@ test('production launch evidence validator binds release-gate evidence to the ex
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-preflight\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.cosign\.evidence must include release-images/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.digest-manifest\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-run-api-verification\.evidence must include the check:production:release-run command/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

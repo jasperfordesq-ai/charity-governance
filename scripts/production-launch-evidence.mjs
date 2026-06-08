@@ -25,6 +25,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['deploy-rollback', 'rollback rehearsal completed'],
       ['cosign', 'cosign signature verification completed'],
       ['release-workflow-identity', 'release workflow identity and git ref verified'],
+      ['release-run-api-verification', 'GitHub release workflow run API verification completed'],
       ['digest-manifest', 'release image digest manifest used'],
     ],
   },
@@ -450,6 +451,27 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
         `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicSupabaseUrl`,
         issues,
       );
+    }
+  }
+
+  if (checkId === 'release-run-api-verification') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(
+      text,
+      'npm run check:production:release-run -- --evidence-file=production-launch-evidence.json',
+      `${checkPath}.evidence must include the check:production:release-run command`,
+      issues,
+    );
+    requireEvidenceText(
+      text,
+      'Production release run evidence passed',
+      `${checkPath}.evidence must include Production release run evidence passed`,
+      issues,
+    );
+    if (typeof release?.workflowRunUrl === 'string') {
+      requireEvidenceText(text, release.workflowRunUrl, `${checkPath}.evidence must reference release.workflowRunUrl`, issues);
     }
   }
 }

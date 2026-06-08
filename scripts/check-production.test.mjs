@@ -1890,6 +1890,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-deploy.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-rollback.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'production-release-run-evidence.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'generate-production-launch-evidence-template.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-supabase.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-providers.mjs')));
@@ -1903,6 +1904,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.equal(packageJson.scripts['check:production:providers'], 'node scripts/check-production-providers.mjs');
   assert.equal(packageJson.scripts['check:production:supabase'], 'node scripts/check-production-supabase.mjs');
   assert.equal(packageJson.scripts['check:production:evidence'], 'node scripts/production-launch-evidence.mjs');
+  assert.equal(packageJson.scripts['check:production:release-run'], 'node scripts/production-release-run-evidence.mjs');
   assert.equal(packageJson.scripts['check:production:evidence:template'], 'node scripts/generate-production-launch-evidence-template.mjs');
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.equal(packageJson.scripts['deploy:production'], 'node scripts/production-compose-deploy.mjs');
@@ -1911,6 +1913,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-deploy\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-rollback\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence\.test\.mjs/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/production-release-run-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-supabase\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-providers\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-hosting\.test\.mjs/);
@@ -1929,6 +1932,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /observability-check/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /FINAL_SIGNOFF_ROLES/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /finalSignoff\.approvals/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /release-run-api-verification/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /check:production:release-run/);
+  assert.match(readRepoFile('scripts/production-release-run-evidence.mjs'), /api\.github\.com/);
+  assert.match(readRepoFile('scripts/production-release-run-evidence.mjs'), /release-image-digests/);
   assert.match(readRepoFile('scripts/generate-production-launch-evidence-template.mjs'), /REQUIRED_LAUNCH_AREAS/);
   assert.match(readRepoFile('scripts/generate-production-launch-evidence-template.mjs'), /FINAL_SIGNOFF_ROLES/);
   assert.match(readRepoFile('scripts/check-production-supabase.mjs'), /runProductionSupabaseCheckFromArgs/);
@@ -1947,6 +1954,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run --silent check:production:evidence:template > production-launch-evidence\.json/);
+  assert.match(runbook, /npm run check:production:release-run -- --evidence-file=production-launch-evidence\.json/);
+  assert.match(runbook, /GitHub API/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
   assert.match(runbook, /\.github\/workflows\/release-images\.yml/);
@@ -1984,6 +1993,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run --silent check:production:evidence:template > production-launch-evidence\.json/);
+  assert.match(launchChecklist, /npm run check:production:release-run -- --evidence-file=production-launch-evidence\.json/);
+  assert.match(launchChecklist, /GitHub API release-run verification output/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(launchChecklist, /Release workflow run URL/);
   assert.match(launchChecklist, /Release workflow file/);
