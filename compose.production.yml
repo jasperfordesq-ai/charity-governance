@@ -32,7 +32,7 @@ services:
       PORT: 3002
       HOST: 0.0.0.0
     ports:
-      - "${CHARITYPILOT_API_PORT:-3002}:3002"
+      - "127.0.0.1:${CHARITYPILOT_API_PORT:-3002}:3002"
     tmpfs:
       - /tmp
     security_opt:
@@ -65,7 +65,7 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_API_URL: ${CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL}
     ports:
-      - "${CHARITYPILOT_WEB_PORT:-3003}:3003"
+      - "127.0.0.1:${CHARITYPILOT_WEB_PORT:-3003}:3003"
     security_opt:
       - no-new-privileges:true
     cap_drop:

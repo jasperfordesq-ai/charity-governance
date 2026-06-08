@@ -17,6 +17,7 @@ test('base compose remains database-only for local development', () => {
   const compose = readRepoFile('compose.yml');
 
   assert.match(compose, /\nservices:\s*\n\s+db:/);
+  assert.match(compose, /ports:[\s\S]*127\.0\.0\.1:5434:5432/);
   assert.doesNotMatch(compose, /\n\s+api:/);
   assert.doesNotMatch(compose, /\n\s+web:/);
 });
@@ -39,8 +40,8 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_dev@db:5432\/charitypilot/);
   assert.match(compose, /FRONTEND_URL:\s+http:\/\/localhost:3003/);
   assert.match(compose, /NEXT_PUBLIC_API_URL:\s+http:\/\/localhost:3002/);
-  assert.match(compose, /3002:3002/);
-  assert.match(compose, /3003:3003/);
+  assert.match(compose, /127\.0\.0\.1:3002:3002/);
+  assert.match(compose, /127\.0\.0\.1:3003:3003/);
   assert.match(compose, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(compose, /\/api\/v1\/health/);
   assert.match(compose, /api:[\s\S]*deps:[\s\S]*condition:\s+service_completed_successfully/);
@@ -81,10 +82,10 @@ test('local Docker overlay does not weaken production image gates', () => {
   assert.match(webDockerfile, /CMD\s+\["node",\s*"server\.mjs"\]/);
 });
 
-test('local Docker compose overlay renders as a valid effective model', () => {
+test('local Docker compose overlay renders as a valid effective model with loopback-bound ports', () => {
   const result = spawnSync(
     'docker',
-    ['compose', '-f', 'compose.yml', '-f', 'compose.local.yml', 'config', '--quiet'],
+    ['compose', '-f', 'compose.yml', '-f', 'compose.local.yml', 'config'],
     {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -97,8 +98,10 @@ test('local Docker compose overlay renders as a valid effective model', () => {
     result.status,
     0,
     result.stderr ||
-      result.stdout ||
       result.error?.message ||
       `docker compose config did not complete within ${DOCKER_COMPOSE_CONFIG_TIMEOUT_MS}ms`,
   );
+  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3002[\s\S]*published:\s+"3002"/);
+  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3003[\s\S]*published:\s+"3003"/);
+  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+5432[\s\S]*published:\s+"5434"/);
 });

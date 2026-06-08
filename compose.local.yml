@@ -69,7 +69,7 @@ services:
       SEED_DEMO_WORKSPACE: "false"
       CHOKIDAR_USEPOLLING: "true"
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
     volumes: *app-volumes
     networks:
       - charitypilot-internal
@@ -99,7 +99,7 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
     ports:
-      - "3003:3003"
+      - "127.0.0.1:3003:3003"
     volumes:
       - .:/app
       - charitypilot-node-modules:/app/node_modules

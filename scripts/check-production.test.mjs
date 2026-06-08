@@ -1183,7 +1183,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(api, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
   assert.match(api, /fetch\('http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness'/);
   assert.match(api, /'x-charitypilot-readiness-key':\s*process\.env\.READINESS_API_KEY/);
-  assert.match(api, /ports:[\s\S]*\$\{CHARITYPILOT_API_PORT:-3002\}:3002/);
+  assert.match(api, /ports:[\s\S]*127\.0\.0\.1:\$\{CHARITYPILOT_API_PORT:-3002\}:3002/);
 
   assert.match(web, /image:\s+\$\{CHARITYPILOT_WEB_IMAGE:\?Set CHARITYPILOT_WEB_IMAGE\}/);
   assert.doesNotMatch(web, /env_file:/);
@@ -1191,7 +1191,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(web, /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/);
   assert.match(web, /depends_on:[\s\S]*api:[\s\S]*condition:\s+service_healthy/);
   assert.match(web, /fetch\('http:\/\/127\.0\.0\.1:3003\/'\)/);
-  assert.match(web, /ports:[\s\S]*\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003/);
+  assert.match(web, /ports:[\s\S]*127\.0\.0\.1:\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003/);
 
   for (const secret of [
     'DATABASE_URL',
@@ -1226,8 +1226,8 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(documentStorageCleanup, /command:\s+\["node",\s*"dist\/jobs\/cleanup-document-storage\.js"\]/);
 });
 
-test('production Docker compose renders with published image variables and an external env file', () => {
-  const result = spawnSync('docker', ['compose', '-f', 'compose.production.yml', 'config', '--quiet'], {
+test('production Docker compose renders with published image variables and loopback-bound ports', () => {
+  const result = spawnSync('docker', ['compose', '-f', 'compose.production.yml', 'config'], {
     cwd: repoRoot,
     encoding: 'utf8',
     env: {
@@ -1246,6 +1246,8 @@ test('production Docker compose renders with published image variables and an ex
     0,
     result.stderr || result.stdout || result.error?.message || 'docker compose production config failed',
   );
+  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3002[\s\S]*published:\s+"3002"/);
+  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3003[\s\S]*published:\s+"3003"/);
 });
 
 test('API server enables trusted proxy handling for production rate limits', () => {
