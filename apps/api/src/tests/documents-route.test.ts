@@ -3,7 +3,14 @@ import test from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'documents-route-test-secret';
 
-const [{ default: Fastify }, { default: multipart }, { documentRoutes }, { StorageService }, { AppError }, { signAccessToken }] =
+const [
+  { default: Fastify },
+  { default: multipart },
+  { documentRoutes, DOCUMENT_UPLOAD_MULTIPART_LIMITS },
+  { StorageService },
+  { AppError },
+  { signAccessToken },
+] =
   await Promise.all([
     import('fastify'),
     import('@fastify/multipart'),
@@ -35,6 +42,10 @@ type MultipartFile = {
   content: Buffer;
 };
 
+type MultipartPart =
+  | { type: 'field'; name: string; value: string }
+  | { type: 'file'; name?: string; file: MultipartFile };
+
 const baseFields = {
   name: 'Safeguarding policy',
   category: 'POLICY',
@@ -60,35 +71,71 @@ function subscription() {
   };
 }
 
-async function buildDocumentsApp(prisma: PrismaMock, fileSizeLimit = 1024 * 1024) {
+async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MULTIPART_LIMITS) {
   const app = Fastify({ logger: false });
   const decoratedPrisma = { ...authModels(), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
   app.decorate('prisma', decoratedPrisma as never);
-  await app.register(multipart, { limits: { fileSize: fileSizeLimit } });
+  await app.register(multipart, { limits });
   await app.register(documentRoutes);
   return app;
 }
 
 function multipartRequest(fields: Record<string, string>, file: MultipartFile) {
+  return multipartRequestFromParts([
+    ...Object.entries(fields).map(([name, value]) => ({ type: 'field' as const, name, value })),
+    { type: 'file' as const, file },
+  ]);
+}
+
+function multipartRequestFromParts(parts: MultipartPart[]) {
   const boundary = `charitypilot-test-${Math.random().toString(16).slice(2)}`;
   const chunks: Buffer[] = [];
 
-  for (const [name, value] of Object.entries(fields)) {
+  for (const part of parts) {
+    if (part.type === 'field') {
+      chunks.push(Buffer.from(`--${boundary}\r\n`));
+      chunks.push(Buffer.from(`Content-Disposition: form-data; name="${part.name}"\r\n\r\n`));
+      chunks.push(Buffer.from(`${part.value}\r\n`));
+      continue;
+    }
+
     chunks.push(Buffer.from(`--${boundary}\r\n`));
-    chunks.push(Buffer.from(`Content-Disposition: form-data; name="${name}"\r\n\r\n`));
-    chunks.push(Buffer.from(`${value}\r\n`));
+    chunks.push(Buffer.from(`Content-Disposition: form-data; name="${part.name ?? 'file'}"; filename="${part.file.filename}"\r\n`));
+    chunks.push(Buffer.from(`Content-Type: ${part.file.mimetype}\r\n\r\n`));
+    chunks.push(part.file.content);
+    chunks.push(Buffer.from('\r\n'));
   }
 
-  chunks.push(Buffer.from(`--${boundary}\r\n`));
-  chunks.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${file.filename}"\r\n`));
-  chunks.push(Buffer.from(`Content-Type: ${file.mimetype}\r\n\r\n`));
-  chunks.push(file.content);
-  chunks.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
 
   return {
     payload: Buffer.concat(chunks),
     headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+  };
+}
+
+function publicDocument(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'doc-1',
+    organisationId: 'org-1',
+    name: 'Safeguarding policy',
+    description: null,
+    category: 'POLICY',
+    fileUrl: 'org-1/policy.txt',
+    fileSize: 12,
+    mimeType: 'text/plain',
+    owner: null,
+    approvedDate: null,
+    nextReviewDate: null,
+    boardMinuteReference: null,
+    uploadedById: 'user-1',
+    createdAt: new Date('2026-06-08T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-08T00:00:00.000Z'),
+    version: 1,
+    standardLinks: [],
+    uploadedBy: { id: 'user-1', name: 'Admin User' },
+    ...overrides,
   };
 }
 
@@ -184,7 +231,7 @@ test('document upload translates multipart file size errors to 413', { concurren
     document: {
       create: async () => ({ id: 'doc-1' }),
     },
-  }, 8);
+  }, { ...DOCUMENT_UPLOAD_MULTIPART_LIMITS, fileSize: 8 });
 
   try {
     const request = multipartRequest(baseFields, {
@@ -202,6 +249,141 @@ test('document upload translates multipart file size errors to 413', { concurren
 
     assert.equal(response.statusCode, 413);
     assert.equal(response.json().code, 'FILE_TOO_LARGE');
+    assert.equal(uploadCalled, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('document upload rejects requests with too many multipart fields before storage', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let uploadCalled = false;
+
+  StorageService.prototype.uploadFile = async () => {
+    uploadCalled = true;
+    return { storagePath: 'org-1/policy.txt' };
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {
+      create: async () => publicDocument(),
+    },
+  });
+
+  try {
+    const request = multipartRequest({
+      ...baseFields,
+      description: 'A policy for safeguarding.',
+      owner: 'Board',
+      approvedDate: '2026-06-08',
+      nextReviewDate: '2027-06-08',
+      boardMinuteReference: 'BM-2026-06',
+      unexpected: 'this extra field should exceed the upload request shape',
+    }, {
+      filename: 'policy.txt',
+      mimetype: 'text/plain',
+      content: Buffer.from('plain policy text'),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { ...request.headers, authorization: authHeader },
+      payload: request.payload,
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.equal(response.json().code, 'MULTIPART_LIMIT_EXCEEDED');
+    assert.equal(uploadCalled, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('document upload rejects requests with more than one file before storage', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let uploadCalled = false;
+
+  StorageService.prototype.uploadFile = async () => {
+    uploadCalled = true;
+    return { storagePath: 'org-1/policy.txt' };
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {
+      create: async () => publicDocument(),
+    },
+  });
+
+  try {
+    const request = multipartRequestFromParts([
+      ...Object.entries(baseFields).map(([name, value]) => ({ type: 'field' as const, name, value })),
+      {
+        type: 'file',
+        file: { filename: 'policy.txt', mimetype: 'text/plain', content: Buffer.from('plain policy text') },
+      },
+      {
+        type: 'file',
+        name: 'attachment',
+        file: { filename: 'extra.txt', mimetype: 'text/plain', content: Buffer.from('extra file') },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { ...request.headers, authorization: authHeader },
+      payload: request.payload,
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.equal(response.json().code, 'MULTIPART_LIMIT_EXCEEDED');
+    assert.equal(uploadCalled, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('document upload rejects oversized multipart field values before storage', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let uploadCalled = false;
+
+  StorageService.prototype.uploadFile = async () => {
+    uploadCalled = true;
+    return { storagePath: 'org-1/policy.txt' };
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {
+      create: async () => publicDocument(),
+    },
+  });
+
+  try {
+    const request = multipartRequest({
+      ...baseFields,
+      description: 'x'.repeat(DOCUMENT_UPLOAD_MULTIPART_LIMITS.fieldSize + 1),
+    }, {
+      filename: 'policy.txt',
+      mimetype: 'text/plain',
+      content: Buffer.from('plain policy text'),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { ...request.headers, authorization: authHeader },
+      payload: request.payload,
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.equal(response.json().code, 'MULTIPART_LIMIT_EXCEEDED');
     assert.equal(uploadCalled, false);
   } finally {
     StorageService.prototype.uploadFile = originalUpload;

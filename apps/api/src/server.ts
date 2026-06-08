@@ -10,7 +10,7 @@ import { authRoutes } from './routes/auth/index.js';
 import { organisationRoutes } from './routes/organisations/index.js';
 import { complianceRoutes } from './routes/compliance/index.js';
 import { boardMemberRoutes } from './routes/board-members/index.js';
-import { documentRoutes } from './routes/documents/index.js';
+import { documentRoutes, DOCUMENT_UPLOAD_MULTIPART_LIMITS } from './routes/documents/index.js';
 import { deadlineRoutes } from './routes/deadlines/index.js';
 import { billingRoutes } from './routes/billing/index.js';
 import { exportRoutes } from './routes/export/index.js';
@@ -60,9 +60,7 @@ await app.register(rateLimit, {
 });
 
 await app.register(multipart, {
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB
-  },
+  limits: DOCUMENT_UPLOAD_MULTIPART_LIMITS,
 });
 
 await app.register(prismaPlugin);

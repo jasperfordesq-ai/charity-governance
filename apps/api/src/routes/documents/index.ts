@@ -21,7 +21,16 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/png',
 ]);
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+export const DOCUMENT_UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+export const DOCUMENT_UPLOAD_MULTIPART_LIMITS = {
+  fileSize: DOCUMENT_UPLOAD_MAX_FILE_SIZE,
+  files: 1,
+  fields: 7,
+  parts: 8,
+  fieldNameSize: 64,
+  fieldSize: 4 * 1024,
+  headerPairs: 50,
+} as const;
 
 const MIME_EXTENSIONS: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
@@ -74,6 +83,12 @@ function isFileTooLargeError(error: unknown): boolean {
   return code === 'FST_REQ_FILE_TOO_LARGE' || /file.*too large|request file too large/i.test(message);
 }
 
+function isMultipartLimitError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'FST_PARTS_LIMIT' || code === 'FST_FIELDS_LIMIT' || code === 'FST_FILES_LIMIT';
+}
+
 export async function documentRoutes(app: FastifyInstance) {
   const service = new DocumentService(app.prisma);
   const storageService = new StorageService();
@@ -116,19 +131,94 @@ export async function documentRoutes(app: FastifyInstance) {
   // Upload document (multipart/form-data)
   app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const data = await request.file();
-      if (!data) {
+      const fields: Record<string, { value?: string }> = {};
+      let uploadedFile: { filename: string; mimetype: string; buffer: Buffer } | null = null;
+      let partCount = 0;
+      let fieldCount = 0;
+      let fileCount = 0;
+
+      try {
+        for await (const part of request.parts()) {
+          partCount += 1;
+          if (partCount > DOCUMENT_UPLOAD_MULTIPART_LIMITS.parts) {
+            return reply.status(413).send({
+              error: 'Multipart upload exceeds the document request limits.',
+              code: 'MULTIPART_LIMIT_EXCEEDED',
+            });
+          }
+
+          if (part.type === 'field') {
+            fieldCount += 1;
+            const fieldValue = typeof part.value === 'string' ? part.value : String(part.value ?? '');
+
+            if (
+              fieldCount > DOCUMENT_UPLOAD_MULTIPART_LIMITS.fields ||
+              part.fieldnameTruncated ||
+              part.valueTruncated ||
+              Buffer.byteLength(part.fieldname) > DOCUMENT_UPLOAD_MULTIPART_LIMITS.fieldNameSize ||
+              Buffer.byteLength(fieldValue) > DOCUMENT_UPLOAD_MULTIPART_LIMITS.fieldSize
+            ) {
+              return reply.status(413).send({
+                error: 'Multipart upload exceeds the document request limits.',
+                code: 'MULTIPART_LIMIT_EXCEEDED',
+              });
+            }
+
+            fields[part.fieldname] = {
+              value: fieldValue,
+            };
+            continue;
+          }
+
+          fileCount += 1;
+          if (fileCount > DOCUMENT_UPLOAD_MULTIPART_LIMITS.files || uploadedFile) {
+            return reply.status(413).send({
+              error: 'Multipart upload exceeds the document request limits.',
+              code: 'MULTIPART_LIMIT_EXCEEDED',
+            });
+          }
+
+          if (!ALLOWED_MIME_TYPES.has(part.mimetype)) {
+            return reply.status(400).send({
+              error: `File type '${part.mimetype}' is not allowed. Accepted types: PDF, modern Office documents, text, CSV, JPEG, PNG.`,
+              code: 'INVALID_MIME_TYPE',
+            });
+          }
+
+          const buffer = await part.toBuffer();
+          if (buffer.length > DOCUMENT_UPLOAD_MAX_FILE_SIZE) {
+            return reply.status(413).send({
+              error: 'File size exceeds the 10 MB limit.',
+              code: 'FILE_TOO_LARGE',
+            });
+          }
+
+          uploadedFile = {
+            filename: part.filename,
+            mimetype: part.mimetype,
+            buffer,
+          };
+        }
+      } catch (error) {
+        if (isFileTooLargeError(error)) {
+          return reply.status(413).send({
+            error: 'File size exceeds the 10 MB limit.',
+            code: 'FILE_TOO_LARGE',
+          });
+        }
+        if (isMultipartLimitError(error)) {
+          return reply.status(413).send({
+            error: 'Multipart upload exceeds the document request limits.',
+            code: 'MULTIPART_LIMIT_EXCEEDED',
+          });
+        }
+        throw error;
+      }
+
+      if (!uploadedFile) {
         return reply.status(400).send({ error: 'No file uploaded', code: 'NO_FILE' });
       }
 
-      if (!ALLOWED_MIME_TYPES.has(data.mimetype)) {
-        return reply.status(400).send({
-          error: `File type '${data.mimetype}' is not allowed. Accepted types: PDF, modern Office documents, text, CSV, JPEG, PNG.`,
-          code: 'INVALID_MIME_TYPE',
-        });
-      }
-
-      const fields = data.fields as Record<string, { value?: string }>;
       const meta = uploadDocumentSchema.parse({
         name: fields.name?.value,
         description: fields.description?.value,
@@ -139,27 +229,7 @@ export async function documentRoutes(app: FastifyInstance) {
         boardMinuteReference: fields.boardMinuteReference?.value,
       });
 
-      let buffer: Buffer;
-      try {
-        buffer = await data.toBuffer();
-      } catch (error) {
-        if (isFileTooLargeError(error)) {
-          return reply.status(413).send({
-            error: 'File size exceeds the 10 MB limit.',
-            code: 'FILE_TOO_LARGE',
-          });
-        }
-        throw error;
-      }
-
-      if (buffer.length > MAX_FILE_SIZE) {
-        return reply.status(413).send({
-          error: 'File size exceeds the 10 MB limit.',
-          code: 'FILE_TOO_LARGE',
-        });
-      }
-
-      if (!hasAllowedExtension(data.filename, data.mimetype) || !hasValidSignature(data.mimetype, buffer)) {
+      if (!hasAllowedExtension(uploadedFile.filename, uploadedFile.mimetype) || !hasValidSignature(uploadedFile.mimetype, uploadedFile.buffer)) {
         return reply.status(400).send({
           error: 'File content does not match the declared document type.',
           code: 'INVALID_FILE_SIGNATURE',
@@ -168,9 +238,9 @@ export async function documentRoutes(app: FastifyInstance) {
 
       const { storagePath } = await storageService.uploadFile(
         request.user.organisationId,
-        data.filename,
-        buffer,
-        data.mimetype,
+        uploadedFile.filename,
+        uploadedFile.buffer,
+        uploadedFile.mimetype,
       );
 
       let doc;
@@ -180,8 +250,8 @@ export async function documentRoutes(app: FastifyInstance) {
           description: meta.description,
           category: meta.category,
           fileUrl: storagePath,
-          fileSize: buffer.length,
-          mimeType: data.mimetype,
+          fileSize: uploadedFile.buffer.length,
+          mimeType: uploadedFile.mimetype,
           owner: meta.owner || null,
           approvedDate: meta.approvedDate || null,
           nextReviewDate: meta.nextReviewDate || null,
