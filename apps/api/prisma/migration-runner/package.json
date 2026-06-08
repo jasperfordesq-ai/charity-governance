@@ -1,0 +1,9 @@
+{
+  "name": "@charitypilot/api-migration-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "prisma": "6.19.3"
+  }
+}

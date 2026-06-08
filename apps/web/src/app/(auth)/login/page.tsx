@@ -5,6 +5,12 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
+import { safeNextPath } from '@/lib/safe-next-path';
+
+function loginDestination(user: { emailVerified: boolean }): string {
+  const nextPath = new URLSearchParams(window.location.search).get('next');
+  return user.emailVerified ? safeNextPath(nextPath) : '/verify-email';
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,7 +30,7 @@ export default function LoginPage() {
 
     try {
       const user = await login(email, password);
-      router.push(user.emailVerified ? '/dashboard' : '/verify-email');
+      router.push(loginDestination(user));
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Invalid email or password. Please try again.'));
     } finally {

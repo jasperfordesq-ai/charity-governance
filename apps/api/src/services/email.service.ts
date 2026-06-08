@@ -81,6 +81,11 @@ function smallNote(text: string): string {
   return `<p style="margin:24px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">${escapeHtml(text)}</p>`;
 }
 
+function formatEmailDeliveryError(err: unknown): string {
+  if (err instanceof Error && err.name) return err.name;
+  return 'unknown error';
+}
+
 export class EmailService {
   private resend: Resend;
   private from: string;
@@ -231,7 +236,7 @@ export class EmailService {
 
   private async _send(to: string, subject: string, html: string): Promise<boolean> {
     if (!this.isConfigured()) {
-      console.warn(`[EmailService] Email not sent because RESEND_API_KEY is not configured: "${subject}" to ${to}`);
+      console.warn('[EmailService] Email not sent because delivery is not configured');
       return false;
     }
 
@@ -239,7 +244,7 @@ export class EmailService {
       await this.resend.emails.send({ from: this.from, to, subject, html });
       return true;
     } catch (err) {
-      console.error(`[EmailService] Failed to send "${subject}" to ${to}:`, err);
+      console.error(`[EmailService] Failed to send email: ${formatEmailDeliveryError(err)}`);
       // Do not rethrow — email failure must not break the calling flow
       return false;
     }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
-import { validateDocumentStorageCleanupEnv, validateProductionEnv } from '../utils/env.js';
+import { validateDeadlineRemindersEnv, validateDocumentStorageCleanupEnv, validateProductionEnv } from '../utils/env.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -16,6 +16,41 @@ afterEach(() => {
     process.env[key] = value;
   }
 });
+
+function setCompleteProductionEnv(overrides: Record<string, string | undefined> = {}) {
+  const values: Record<string, string | undefined> = {
+    NODE_ENV: 'production',
+    PORT: '3002',
+    TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
+    READINESS_API_KEY: 'configured-readiness-key-32-chars',
+    DATABASE_URL: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require',
+    JWT_SECRET: 'a'.repeat(40),
+    FRONTEND_URL: 'https://app.charitypilot.ie',
+    AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
+    NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    STRIPE_SECRET_KEY: 'sk_live_realisticConfiguredSecret',
+    STRIPE_WEBHOOK_SECRET: 'whsec_realisticConfiguredSecret',
+    STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_essentialsMonthly',
+    STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentialsYearly',
+    STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_completeMonthly',
+    STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
+    RESEND_API_KEY: 're_realisticConfiguredSecret',
+    EMAIL_FROM: 'noreply@charitypilot.ie',
+    SUPABASE_URL: 'https://configured-project.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
+    SUPABASE_STORAGE_BUCKET: 'documents',
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+    ...overrides,
+  };
+
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
 
 test('validateProductionEnv rejects placeholder production configuration', () => {
   process.env.NODE_ENV = 'production';
@@ -102,6 +137,30 @@ test('validateProductionEnv rejects unapproved production email sender domains',
   );
 });
 
+test('validateProductionEnv rejects malformed billing and email provider identifiers', () => {
+  setCompleteProductionEnv({
+    STRIPE_WEBHOOK_SECRET: 'configured-webhook-secret',
+    STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'essentialsMonthly',
+    STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'essentialsYearly',
+    STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'completeMonthly',
+    STRIPE_COMPLETE_YEARLY_PRICE_ID: 'completeYearly',
+    RESEND_API_KEY: 'configuredResendSecret',
+  });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('STRIPE_WEBHOOK_SECRET must use a Stripe webhook signing secret in production') &&
+      error.details.includes('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID must use a Stripe price ID in production') &&
+      error.details.includes('STRIPE_ESSENTIALS_YEARLY_PRICE_ID must use a Stripe price ID in production') &&
+      error.details.includes('STRIPE_COMPLETE_MONTHLY_PRICE_ID must use a Stripe price ID in production') &&
+      error.details.includes('STRIPE_COMPLETE_YEARLY_PRICE_ID must use a Stripe price ID in production') &&
+      error.details.includes('RESEND_API_KEY must use a Resend API key in production'),
+  );
+});
+
 test('validateDocumentStorageCleanupEnv accepts storage-only production configuration', () => {
   process.env.NODE_ENV = 'production';
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
@@ -110,6 +169,53 @@ test('validateDocumentStorageCleanupEnv accepts storage-only production configur
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
 
   assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
+});
+
+test('validateDeadlineRemindersEnv accepts reminder-only production configuration', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+
+  assert.doesNotThrow(() => validateDeadlineRemindersEnv());
+});
+
+test('validateDeadlineRemindersEnv rejects malformed Resend API keys in production', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.RESEND_API_KEY = 'configuredResendSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+
+  assert.throws(
+    () => validateDeadlineRemindersEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message === 'Deadline reminders environment is not ready' &&
+      Array.isArray(error.details) &&
+      error.details.includes('RESEND_API_KEY must use a Resend API key in production'),
+  );
+});
+
+test('validateDeadlineRemindersEnv rejects missing reminder-only production configuration', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot';
+  process.env.FRONTEND_URL = 'https://localhost:3003';
+  delete process.env.RESEND_API_KEY;
+  process.env.EMAIL_FROM = 'noreply@attacker.example';
+
+  assert.throws(
+    () => validateDeadlineRemindersEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message === 'Deadline reminders environment is not ready' &&
+      Array.isArray(error.details) &&
+      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production') &&
+      error.details.includes('FRONTEND_URL must not point at localhost in production') &&
+      error.details.includes('RESEND_API_KEY is missing or still contains a placeholder value') &&
+      error.details.includes('EMAIL_FROM must use an approved CharityPilot sender domain in production'),
+  );
 });
 
 test('validateProductionEnv rejects missing production error alert webhook', () => {
@@ -258,6 +364,9 @@ test('validateProductionEnv rejects malformed production error alert webhook hos
 test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configuration', () => {
   process.env.NODE_ENV = 'production';
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot';
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_STORAGE_BUCKET;
 
   assert.throws(
     () => validateDocumentStorageCleanupEnv(),
@@ -269,6 +378,34 @@ test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configur
       error.details.includes('SUPABASE_URL is missing or still contains a placeholder value') &&
       error.details.includes('SUPABASE_SERVICE_ROLE_KEY is missing or still contains a placeholder value') &&
       error.details.includes('SUPABASE_STORAGE_BUCKET is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateDocumentStorageCleanupEnv rejects private Supabase URLs', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.SUPABASE_URL = 'https://10.0.0.5';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+
+  assert.throws(
+    () => validateDocumentStorageCleanupEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('SUPABASE_URL must use a public, non-local URL in production'),
+  );
+});
+
+test('validateProductionEnv rejects private Supabase URLs', () => {
+  setCompleteProductionEnv({ SUPABASE_URL: 'https://10.0.0.5' });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('SUPABASE_URL must use a public, non-local URL in production'),
   );
 });
 

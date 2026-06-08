@@ -10,6 +10,7 @@ import {
   updateTeamMemberRoleSchema,
 } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
+import { publicUser } from '../../utils/public-dtos.js';
 
 function formatZodError(error: ZodError) {
   return {
@@ -25,31 +26,27 @@ function formatZodError(error: ZodError) {
 export async function teamRoutes(app: FastifyInstance) {
   const service = new TeamService(app.prisma);
 
-  app.post('/accept-invite', async (request, reply) => {
-    try {
-      const body = acceptTeamInviteSchema.parse(request.body);
-      const result = await service.acceptInvite(body);
+  app.post(
+    '/accept-invite',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      try {
+        const body = acceptTeamInviteSchema.parse(request.body);
+        const result = await service.acceptInvite(body);
 
-      setAuthCookies(reply, result);
-      reply.status(201).send({
-        user: {
-          id: result.user.id,
-          email: result.user.email,
-          name: result.user.name,
-          role: result.user.role,
-          emailVerified: result.user.emailVerified,
-          organisationId: result.user.organisationId,
-            organisation: result.user.organisation,
-        },
-      });
-    } catch (err) {
-      if (err instanceof ZodError) {
-        reply.status(400).send(formatZodError(err));
-        return;
+        setAuthCookies(reply, result);
+        reply.status(201).send({
+          user: publicUser(result.user),
+        });
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
       }
-      handleError(reply, err);
-    }
-  });
+    },
+  );
 
   app.register(async (authedApp: FastifyInstance) => {
     authedApp.addHook('onRequest', authGuard);

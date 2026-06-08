@@ -391,7 +391,10 @@ test('document delete reports success when post-delete storage cleanup fails', {
   const outboxUpdates: unknown[] = [];
 
   StorageService.prototype.deleteFile = async () => {
-    throw new Error('storage unavailable');
+    throw Object.assign(
+      new Error('storage unavailable for ops@example.org at org-1/policy.pdf?token=secret-token'),
+      { code: 'StorageApiError', status: 503 },
+    );
   };
 
   const app = await buildDocumentsApp({
@@ -421,11 +424,19 @@ test('document delete reports success when post-delete storage cleanup fails', {
 
     assert.equal(response.statusCode, 204);
     assert.equal(databaseDeleteCalled, true);
+    const lastError = (outboxUpdates[0] as { data: { lastError: string } }).data.lastError;
+    assert.match(lastError, /name=Error/);
+    assert.match(lastError, /code=StorageApiError/);
+    assert.match(lastError, /status=503/);
+    assert.match(lastError, /\[email\]/);
+    assert.match(lastError, /\[storage-path\]/);
+    assert.doesNotMatch(lastError, /ops@example\.org/);
+    assert.doesNotMatch(lastError, /secret-token/);
     assert.deepEqual(outboxUpdates, [{
       where: { id: 'deletion-1' },
       data: {
         attempts: { increment: 1 },
-        lastError: 'storage unavailable',
+        lastError,
         claimedAt: null,
       },
     }]);

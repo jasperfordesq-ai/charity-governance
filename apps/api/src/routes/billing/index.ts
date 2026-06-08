@@ -3,7 +3,7 @@ import { BillingService } from '../../services/billing.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireOwner } from '../../middleware/roles.js';
 import { createCheckoutSchema, type SubscriptionPlan } from '@charitypilot/shared';
-import { handleError } from '../../utils/errors.js';
+import { AppError, handleError } from '../../utils/errors.js';
 import { ZodError } from 'zod';
 
 export async function billingRoutes(app: FastifyInstance) {
@@ -24,7 +24,7 @@ export async function billingRoutes(app: FastifyInstance) {
 
     webhookScope.post('/webhooks', async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const sig = request.headers['stripe-signature'] as string;
+        const sig = request.headers['stripe-signature'] as string | undefined;
         const rawBody = request.body as Buffer;
 
         const event = service.constructWebhookEvent(rawBody, sig);
@@ -32,7 +32,11 @@ export async function billingRoutes(app: FastifyInstance) {
         await service.handleWebhook(event);
         return { received: true };
       } catch (err) {
-        app.log.error(err);
+        if (err instanceof AppError && err.statusCode < 500) {
+          app.log.warn({ code: err.code, statusCode: err.statusCode }, err.message);
+        } else {
+          app.log.error(err);
+        }
         handleError(reply, err);
       }
     });

@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "./.test-dist",
+    "rootDir": "./src",
+    "sourceMap": false
+  },
+  "include": [
+    "src/lib/api-config.ts",
+    "src/lib/api-config.test.ts",
+    "src/lib/protected-routes.ts",
+    "src/lib/protected-routes.test.ts",
+    "src/lib/safe-next-path.ts",
+    "src/lib/safe-next-path.test.ts",
+    "src/lib/url-security.ts",
+    "src/lib/url-security.test.ts"
+  ]
+}

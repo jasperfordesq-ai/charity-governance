@@ -312,7 +312,6 @@ export interface DocumentResponse {
   name: string;
   description: string | null;
   category: DocumentCategory;
-  fileUrl: string;
   fileSize: number;
   mimeType: string;
   version: number;

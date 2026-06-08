@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
@@ -146,7 +147,7 @@ export default function RegistersPage() {
       setAnnual(annualRes.data ?? emptyAnnual(year));
       setFinancial(financialRes.data ?? emptyFinancial(year));
     } catch (err) {
-      console.error('Failed to load governance registers', err);
+      logClientError('Failed to load governance registers', err);
       toast('Failed to load governance registers', 'error');
     } finally {
       setLoading(false);
@@ -240,7 +241,7 @@ export default function RegistersPage() {
       await fetchRegisters();
       toast('Register record added');
     } catch (err) {
-      console.error('Failed to save register record', err);
+      logClientError('Failed to save register record', err);
       toast('Failed to save register record', 'error');
     } finally {
       setSaving(false);
@@ -269,7 +270,7 @@ export default function RegistersPage() {
       await fetchRegisters();
       toast('Annual Report readiness saved');
     } catch (err) {
-      console.error('Failed to save Annual Report readiness', err);
+      logClientError('Failed to save Annual Report readiness', err);
       toast('Failed to save Annual Report readiness', 'error');
     } finally {
       setSaving(false);
@@ -286,7 +287,7 @@ export default function RegistersPage() {
       await fetchRegisters();
       toast('Financial controls review saved');
     } catch (err) {
-      console.error('Failed to save financial controls review', err);
+      logClientError('Failed to save financial controls review', err);
       toast('Failed to save financial controls review', 'error');
     } finally {
       setSaving(false);

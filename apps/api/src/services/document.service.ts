@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { formatProviderError } from '../utils/provider-errors.js';
 
 type DocumentStorageDeletionRecord = {
   id: string;
@@ -40,13 +41,62 @@ type DocumentStorageDeletionClient = {
   $transaction?: <T>(callback: (tx: DocumentStorageDeletionClient) => Promise<T>) => Promise<T>;
 };
 
+type DocumentWithStandardLinks = {
+  id: string;
+  organisationId: string;
+  name: string;
+  description: string | null;
+  category: unknown;
+  fileSize: number;
+  mimeType: string;
+  version: number;
+  owner: string | null;
+  approvedDate: Date | null;
+  nextReviewDate: Date | null;
+  boardMinuteReference: string | null;
+  uploadedById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  standardLinks: Array<{
+    standardId: string;
+    standard: {
+      code: string;
+    };
+  }>;
+};
+
+const publicDocumentInclude = {
+  standardLinks: {
+    include: { standard: { select: { id: true, code: true } } },
+  },
+};
+
 function deletionDelegate(prisma: unknown): DocumentStorageDeletionDelegate {
   return (prisma as DocumentStorageDeletionClient).documentStorageDeletion;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
+function publicDocument(doc: DocumentWithStandardLinks) {
+  return {
+    id: doc.id,
+    organisationId: doc.organisationId,
+    name: doc.name,
+    description: doc.description,
+    category: doc.category,
+    fileSize: doc.fileSize,
+    mimeType: doc.mimeType,
+    version: doc.version,
+    owner: doc.owner,
+    approvedDate: doc.approvedDate,
+    nextReviewDate: doc.nextReviewDate,
+    boardMinuteReference: doc.boardMinuteReference,
+    uploadedById: doc.uploadedById,
+    standardLinks: doc.standardLinks.map((link) => ({
+      standardId: link.standardId,
+      standardCode: link.standard.code,
+    })),
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  };
 }
 
 export class DocumentService {
@@ -94,37 +144,40 @@ export class DocumentService {
     const [data, total] = await Promise.all([
       this.prisma.document.findMany({
         where: { organisationId },
-        include: {
-          standardLinks: {
-            include: { standard: { select: { id: true, code: true } } },
-          },
-          uploadedBy: { select: { id: true, name: true } },
-        },
+        include: publicDocumentInclude,
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
       this.prisma.document.count({ where: { organisationId } }),
     ]);
-    return { data, total, page, pageSize, hasMore: skip + data.length < total };
+    return { data: data.map(publicDocument), total, page, pageSize, hasMore: skip + data.length < total };
   }
 
   async getById(organisationId: string, id: string) {
     const doc = await this.prisma.document.findFirst({
       where: { id, organisationId },
-      include: {
-        standardLinks: {
-          include: { standard: { select: { id: true, code: true } } },
-        },
-        uploadedBy: { select: { id: true, name: true } },
-      },
+      include: publicDocumentInclude,
     });
 
     if (!doc) {
       throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     }
 
-    return doc;
+    return publicDocument(doc);
+  }
+
+  async getStoragePath(organisationId: string, id: string): Promise<string> {
+    const doc = await this.prisma.document.findFirst({
+      where: { id, organisationId },
+      select: { fileUrl: true },
+    });
+
+    if (!doc) {
+      throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+    }
+
+    return doc.fileUrl;
   }
 
   async create(
@@ -144,7 +197,7 @@ export class DocumentService {
       boardMinuteReference?: string | null;
     },
   ) {
-    return this.prisma.document.create({
+    const doc = await this.prisma.document.create({
       data: {
         organisationId,
         uploadedById: userId,
@@ -159,12 +212,10 @@ export class DocumentService {
         nextReviewDate: data.nextReviewDate ? new Date(data.nextReviewDate) : null,
         boardMinuteReference: data.boardMinuteReference,
       },
-      include: {
-        standardLinks: {
-          include: { standard: { select: { id: true, code: true } } },
-        },
-      },
+      include: publicDocumentInclude,
     });
+
+    return publicDocument(doc);
   }
 
   async remove(organisationId: string, id: string): Promise<{ storagePath: string; storageDeletionId: string }> {
@@ -206,7 +257,7 @@ export class DocumentService {
       where: { id },
       data: {
         attempts: { increment: 1 },
-        lastError: errorMessage(error),
+        lastError: formatProviderError(error),
         claimedAt: null,
       },
     });

@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Chip } from '@heroui/react';
@@ -64,7 +65,7 @@ export default function BillingPage() {
       setBilling(res.data);
       setBillingError(null);
     } catch (err) {
-      console.error('Failed to load billing', err);
+      logClientError('Failed to load billing', err);
       setBillingError('Billing status could not be loaded.');
     } finally {
       setLoading(false);
@@ -89,7 +90,7 @@ export default function BillingPage() {
       }
       window.location.assign(redirectUrl);
     } catch (err: unknown) {
-      console.error('Checkout failed', err);
+      logClientError('Checkout failed', err);
       setBillingError(apiErrorMessage(err, 'Checkout could not be started.'));
     } finally {
       setCheckoutLoading(null);
@@ -109,7 +110,7 @@ export default function BillingPage() {
       }
       window.location.assign(redirectUrl);
     } catch (err: unknown) {
-      console.error('Portal failed', err);
+      logClientError('Portal failed', err);
       setBillingError(apiErrorMessage(err, 'The Stripe customer portal could not be opened.'));
     } finally {
       setPortalLoading(false);
@@ -156,10 +157,9 @@ export default function BillingPage() {
 
       {!loading && !billingConfigured && (
         <Card className="border border-amber-200 bg-amber-50 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-amber-900">Stripe is not production-ready yet</h2>
+          <h2 className="text-sm font-semibold text-amber-900">Billing setup is temporarily unavailable</h2>
           <p className="text-sm text-amber-800 mt-1">
-            Checkout is disabled until the Stripe secret key, webhook secret, and all four price IDs are configured.
-            This protects live customers from broken payment sessions.
+            Checkout is disabled while payment setup is unavailable. Please contact support to change your plan.
           </p>
         </Card>
       )}

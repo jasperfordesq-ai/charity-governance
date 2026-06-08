@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
@@ -68,7 +69,7 @@ export default function DocumentsPage() {
       const res = await api.get('/documents');
       setDocuments(res.data?.data ?? res.data ?? []);
     } catch (err) {
-      console.error('Failed to load documents', err);
+      logClientError('Failed to load documents', err);
     } finally {
       setLoading(false);
     }
@@ -86,7 +87,7 @@ export default function DocumentsPage() {
       }
       setStandards(allStandards);
     } catch (err) {
-      console.error('Failed to load standards', err);
+      logClientError('Failed to load standards', err);
     }
   }, []);
 
@@ -138,7 +139,7 @@ export default function DocumentsPage() {
       fetchDocuments();
       toast('Document uploaded successfully');
     } catch (err) {
-      console.error('Upload failed', err);
+      logClientError('Upload failed', err);
       setUploadError('Upload failed. Please try again.');
       toast('Upload failed', 'error');
     } finally {
@@ -162,7 +163,7 @@ export default function DocumentsPage() {
       setDeleteDocId(null);
       toast('Document deleted');
     } catch (err) {
-      console.error('Delete failed', err);
+      logClientError('Delete failed', err);
     } finally {
       setDeleting(false);
     }
@@ -178,7 +179,7 @@ export default function DocumentsPage() {
       setLinkStandardId('');
       fetchDocuments();
     } catch (err) {
-      console.error('Link failed', err);
+      logClientError('Link failed', err);
     }
   };
 
@@ -188,7 +189,7 @@ export default function DocumentsPage() {
       await api.delete(`/documents/${docId}/standards/${standardId}`);
       fetchDocuments();
     } catch (err) {
-      console.error('Unlink failed', err);
+      logClientError('Unlink failed', err);
     }
   };
 
@@ -202,7 +203,7 @@ export default function DocumentsPage() {
       }
       toast('Could not prepare this document download', 'error');
     } catch (err) {
-      console.error('Download failed', err);
+      logClientError('Download failed', err);
       toast('Could not prepare this document download', 'error');
     }
   };

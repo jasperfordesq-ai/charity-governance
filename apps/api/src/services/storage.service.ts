@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import { AppError } from '../utils/errors.js';
 import { isConfiguredSecret } from '../utils/env.js';
 
+const STORAGE_UNAVAILABLE_MESSAGE = 'Document storage is temporarily unavailable. Please contact support.';
+const STORAGE_OPERATION_FAILED_MESSAGE = 'Document storage operation failed. Please try again later.';
+
 function getBucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET ?? 'documents';
 }
@@ -29,7 +32,7 @@ function getSupabaseClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!isConfiguredSecret(url) || !isConfiguredSecret(serviceRoleKey)) {
-    throw new AppError(503, 'STORAGE_NOT_CONFIGURED', 'Supabase storage is not configured');
+    throw new AppError(503, 'STORAGE_NOT_CONFIGURED', STORAGE_UNAVAILABLE_MESSAGE);
   }
 
   return createClient(url, serviceRoleKey);
@@ -97,7 +100,7 @@ export class StorageService {
       .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
 
     if (error) {
-      throw new AppError(500, 'STORAGE_UPLOAD_FAILED', `Failed to upload file: ${error.message}`);
+      throw new AppError(500, 'STORAGE_UPLOAD_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
     return { storagePath };
@@ -110,7 +113,7 @@ export class StorageService {
       .createSignedUrl(guardedPath, expiresIn);
 
     if (error || !data?.signedUrl) {
-      throw new AppError(500, 'STORAGE_SIGNED_URL_FAILED', `Failed to generate signed URL: ${error?.message ?? 'unknown error'}`);
+      throw new AppError(500, 'STORAGE_SIGNED_URL_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
     return data.signedUrl;
@@ -121,7 +124,7 @@ export class StorageService {
     const { error } = await getSupabaseClient().storage.from(getBucketName()).remove([guardedPath]);
 
     if (error) {
-      throw new AppError(500, 'STORAGE_DELETE_FAILED', `Failed to delete file: ${error.message}`);
+      throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
   }
 }

@@ -320,13 +320,35 @@ export function validateDocumentStorageCleanupEnv(): void {
   const issues: string[] = [];
 
   requireDatabaseUrl('DATABASE_URL', issues);
-  requireUrl('SUPABASE_URL', issues, { requireHttps: true });
+  requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
 
   throwIfProductionIssues(
     'DOCUMENT_STORAGE_CLEANUP_ENV_INVALID',
     'Document storage cleanup environment is not ready',
+    issues,
+  );
+}
+
+export function validateDeadlineRemindersEnv(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  const issues: string[] = [];
+
+  requireDatabaseUrl('DATABASE_URL', issues);
+  requireUrl('FRONTEND_URL', issues, {
+    requireHttps: true,
+    allowCommaSeparated: true,
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+  });
+  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+  requireApprovedEmailSender('EMAIL_FROM', issues);
+
+  throwIfProductionIssues(
+    'DEADLINE_REMINDERS_ENV_INVALID',
+    'Deadline reminders environment is not ready',
     issues,
   );
 }
@@ -361,16 +383,16 @@ export function validateProductionEnv(): void {
   requireAuthCookieDomainForSplitHosts(issues);
 
   requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
-  requireConfiguredEnv('STRIPE_WEBHOOK_SECRET', issues);
-  requireConfiguredEnv('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID', issues);
-  requireConfiguredEnv('STRIPE_ESSENTIALS_YEARLY_PRICE_ID', issues);
-  requireConfiguredEnv('STRIPE_COMPLETE_MONTHLY_PRICE_ID', issues);
-  requireConfiguredEnv('STRIPE_COMPLETE_YEARLY_PRICE_ID', issues);
+  requirePrefix('STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
+  requirePrefix('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+  requirePrefix('STRIPE_ESSENTIALS_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+  requirePrefix('STRIPE_COMPLETE_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+  requirePrefix('STRIPE_COMPLETE_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
 
-  requireConfiguredEnv('RESEND_API_KEY', issues);
+  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);
 
-  requireUrl('SUPABASE_URL', issues, { requireHttps: true });
+  requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
   requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });

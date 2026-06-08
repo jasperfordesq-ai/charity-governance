@@ -47,16 +47,22 @@ function normaliseHttpsOrigins(origins: Array<string | undefined>): Set<string> 
 function defaultDocumentDownloadOrigins(): Set<string> {
   return normaliseHttpsOrigins([
     process.env.NEXT_PUBLIC_DOCUMENT_DOWNLOAD_ORIGINS,
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_API_URL,
     'https://api.charitypilot.ie',
   ]);
 }
 
+function configuredSupabaseStorageOrigin(): string | null {
+  const origins = normaliseHttpsOrigins([process.env.NEXT_PUBLIC_SUPABASE_URL]);
+  return origins.values().next().value ?? null;
+}
+
 function isSupabaseSignedStorageUrl(url: URL): boolean {
+  const configuredOrigin = configuredSupabaseStorageOrigin();
+  if (!configuredOrigin || url.origin !== configuredOrigin) return false;
+
   return (
     url.protocol === 'https:' &&
-    url.hostname.endsWith('.supabase.co') &&
     url.pathname.startsWith('/storage/v1/object/sign/')
   );
 }
@@ -87,10 +93,13 @@ export function removeSensitiveSearchParams(rawUrl: string, paramNames: string[]
 
 export function getSensitiveUrlToken(rawUrl: string, paramName: string): string {
   const url = new URL(rawUrl, 'https://charitypilot.local');
+  const fragmentToken = hashSearchParams(url)?.get(paramName);
+  if (fragmentToken) return fragmentToken;
+
   const queryToken = url.searchParams.get(paramName);
   if (queryToken) return queryToken;
 
-  return hashSearchParams(url)?.get(paramName) ?? '';
+  return '';
 }
 
 export function getTrustedStripeRedirectUrl(value: unknown): string | null {

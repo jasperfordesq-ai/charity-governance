@@ -25,20 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
-    services:
-      postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_DB: charitypilot_ci
-          POSTGRES_USER: charitypilot
-          POSTGRES_PASSWORD: charitypilot_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U charitypilot -d charitypilot_ci"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
 
     steps:
       - name: Checkout
@@ -88,6 +74,17 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Build shared package
+        run: npm run build -w @charitypilot/shared
+
+      - name: Build API
+        run: npm run build -w @charitypilot/api
+
+      - name: Build web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.charitypilot.ie
+        run: npm run build -w @charitypilot/web
+
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate
 
@@ -135,6 +132,16 @@ jobs:
       - name: Build migration runner image
         run: docker build -f apps/api/Dockerfile --target migration-runner -t charitypilot-api-migrations-ci .
 
+      - name: Verify migration runner Docker runtime dependencies
+        run: |
+          docker run --rm --entrypoint node charitypilot-api-migrations-ci -e "const fs = require('fs'); const path = require('path'); require.resolve('prisma/build/index.js'); if (require('prisma/package.json').version !== '6.19.3') { console.error('prisma CLI version must match the repository lockfile'); process.exit(1); } if (!fs.existsSync('node_modules/.bin/prisma')) { console.error('node_modules/.bin/prisma must be present in the production migration image'); process.exit(1); } const requiredPaths = ['prisma/schema.prisma', 'prisma/migrations']; for (const entry of requiredPaths) { if (!fs.existsSync(entry)) { console.error(entry + ' must be present in the production migration image'); process.exit(1); } } if (fs.readdirSync('prisma/migrations').length === 0) { console.error('prisma/migrations must not be empty in the production migration image'); process.exit(1); } for (const pkg of ['@prisma/client', 'fastify', '@fastify/cookie', '@fastify/cors', '@fastify/multipart', '@fastify/rate-limit', 'stripe', 'resend', '@supabase/supabase-js', 'bcryptjs', 'jsonwebtoken', 'next', 'react', 'react-dom', '@heroui/react', 'typescript', 'tsx', 'turbo', 'pino-pretty']) { const packagePath = path.join('node_modules', ...pkg.split('/')); if (fs.existsSync(packagePath)) { console.error(pkg + ' must not be present in the production migration image'); process.exit(1); } } const forbiddenPaths = ['src', 'dist', 'prisma/seed.ts', '.env', 'tsconfig.json', 'tsconfig.tsbuildinfo', '../../apps/web', '../../packages/shared']; for (const entry of forbiddenPaths) { if (fs.existsSync(entry)) { console.error(entry + ' must not be present in the production migration image'); process.exit(1); } }"
+
+      - name: Audit migration runner Docker runtime dependencies
+        run: docker run --rm --entrypoint npm charitypilot-api-migrations-ci audit --omit=dev --audit-level=moderate
+
+      - name: Start PostgreSQL
+        run: node scripts/start-ci-postgres.mjs
+
       - name: Run migration runner against CI PostgreSQL
         run: |
           set -euo pipefail
@@ -150,6 +157,9 @@ jobs:
           set -euo pipefail
           backup_dir="$(mktemp -d)"
           trap 'rm -rf "${backup_dir}"' EXIT
+          node scripts/postgres-backup.mjs seed-restore-sentinel \
+            --database-url="${DATABASE_URL}" \
+            --docker-network=host
           node scripts/postgres-backup.mjs backup \
             --database-url="${DATABASE_URL}" \
             --docker-network=host \
@@ -157,7 +167,8 @@ jobs:
             --output-file=ci-postgres.dump \
             --overwrite
           node scripts/postgres-backup.mjs verify-restore \
-            --dump-file="${backup_dir}/ci-postgres.dump"
+            --dump-file="${backup_dir}/ci-postgres.dump" \
+            --expect-operational-sentinel
 
       - name: Build API Docker image
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
@@ -192,7 +203,7 @@ jobs:
 
       - name: Verify API Docker runtime dependencies
         run: |
-          docker run --rm --entrypoint node charitypilot-api-ci -e "require.resolve('@prisma/client'); for (const pkg of ['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui/react']) { try { require.resolve(pkg); console.error(pkg + ' must not be present in the production API image'); process.exit(1); } catch {} }"
+          docker run --rm --entrypoint node charitypilot-api-ci -e "const fs = require('fs'); const path = require('path'); require.resolve('@prisma/client'); for (const pkg of ['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui/react', 'pino-pretty']) { const packagePath = path.join('node_modules', ...pkg.split('/')); if (fs.existsSync(packagePath)) { console.error(pkg + ' must not be present in the production API image'); process.exit(1); } } const forbiddenPaths = ['src', 'prisma', '.env', 'tsconfig.json', 'tsconfig.tsbuildinfo']; for (const entry of forbiddenPaths) { if (fs.existsSync(entry)) { console.error(entry + ' must not be present in the production API image'); process.exit(1); } } for (const entry of ['../../packages/shared/src', '../../packages/shared/.test-dist']) { if (fs.existsSync(entry)) { console.error(entry + ' must not be present in the production API image'); process.exit(1); } }"
 
       - name: Smoke API Docker image
         run: |
@@ -340,12 +351,30 @@ jobs:
             charitypilot-api-ci node dist/jobs/cleanup-document-storage.js | tee "${cleanup_output}"
           grep -F "Document storage cleanup completed. Processed: 0. Failed: 0." "${cleanup_output}"
 
+          scheduler_output="$(mktemp)"
+          docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true \
+            -e CI=true \
+            -e GITHUB_ACTIONS=true \
+            -e FRONTEND_URL=https://app.charitypilot.ie \
+            -e RESEND_API_KEY=re_ci_smoke_key \
+            -e EMAIL_FROM=noreply@charitypilot.ie \
+            -e SUPABASE_URL=https://ci-project.supabase.co \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
+            -e SUPABASE_STORAGE_BUCKET=documents \
+            -e DOCUMENT_STORAGE_CLEANUP_LIMIT=1 \
+            -e PRODUCTION_SCHEDULER_RUN_ONCE=true \
+            -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
+            charitypilot-api-ci node dist/jobs/production-scheduler.js | tee "${scheduler_output}"
+          grep -F "Production scheduler run-once completed successfully." "${scheduler_output}"
+
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
 
       - name: Verify web Docker runtime dependencies
         run: |
-          docker run --rm --entrypoint node charitypilot-web-ci -e "require.resolve('next'); for (const pkg of ['typescript', 'eslint', 'turbo']) { try { require.resolve(pkg); console.error(pkg + ' must not be present in the production web image'); process.exit(1); } catch {} }"
+          docker run --rm --entrypoint node charitypilot-web-ci -e "const fs = require('fs'); const path = require('path'); require.resolve('next'); for (const pkg of ['typescript', 'eslint', 'turbo', '@prisma/client', 'fastify', '@fastify/cookie', '@fastify/cors', '@fastify/multipart', '@fastify/rate-limit', 'stripe', 'fastify-plugin', 'resend', '@supabase/supabase-js', 'bcryptjs', 'jsonwebtoken', 'pino-pretty']) { const packagePath = path.join('node_modules', ...pkg.split('/')); if (fs.existsSync(packagePath)) { console.error(pkg + ' must not be present in the production web image'); process.exit(1); } } const forbiddenPaths = ['src', '.test-dist', '.next/cache', '.next/export', '.next/export-detail.json', '.next/server/proxy.js', '.next/server/proxy.js.nft.json', 'next-codex-build', 'tsconfig.test.json', 'tsconfig.tsbuildinfo', 'next-env.d.ts']; for (const entry of forbiddenPaths) { if (fs.existsSync(entry)) { console.error(entry + ' must not be present in the production web image'); process.exit(1); } } for (const entry of fs.readdirSync('.')) { if (entry.startsWith('.next-build') || entry.startsWith('.env')) { console.error(entry + ' must not be present in the production web image'); process.exit(1); } } for (const entry of ['../../packages/shared/src', '../../packages/shared/.test-dist']) { if (fs.existsSync(entry)) { console.error(entry + ' must not be present in the production web image'); process.exit(1); } }"
 
       - name: Smoke web Docker image
         run: |
@@ -457,3 +486,7 @@ jobs:
             --certificate-identity-regexp "${identity_regex}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${migration_image}@${migration_digest}"
+
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker rm -f charitypilot-ci-postgres 2>/dev/null || true

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
 import { hashOpaqueToken, issueSessionTokens } from './session-tokens.js';
+import { publicOrganisationSelect, type PublicOrganisation } from '../utils/public-dtos.js';
 
 interface InviteTeamMemberData {
   email: string;
@@ -257,7 +258,6 @@ export class TeamService {
     const now = new Date();
     const invite = await this.prisma.teamInvite.findUnique({
       where: { token },
-      include: { organisation: true },
     });
 
     if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) {
@@ -281,7 +281,7 @@ export class TeamService {
       role: UserRole;
       emailVerified: boolean;
       organisationId: string;
-      organisation: unknown;
+      organisation: PublicOrganisation;
     };
     try {
       user = await this.prisma.$transaction(async (tx) => {
@@ -309,7 +309,15 @@ export class TeamService {
             organisationId: invite.organisationId,
             emailVerified: true,
           },
-          include: { organisation: true },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            emailVerified: true,
+            organisationId: true,
+            organisation: { select: publicOrganisationSelect },
+          },
         });
 
         return created;

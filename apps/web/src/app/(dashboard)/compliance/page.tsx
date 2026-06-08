@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Progress, Select, SelectItem, Chip, Button } from '@heroui/react';
@@ -32,7 +33,7 @@ export default function CompliancePage() {
       setPrinciples(principlesRes.data?.data ?? principlesRes.data ?? []);
       setSummary(summaryRes.data);
     } catch (err) {
-      console.error('Failed to load compliance data', err);
+      logClientError('Failed to load compliance data', err);
     } finally {
       setLoading(false);
     }

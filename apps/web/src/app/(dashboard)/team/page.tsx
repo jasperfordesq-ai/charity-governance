@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Chip, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
@@ -70,7 +71,7 @@ export default function TeamPage() {
       setTeam(data);
       setError(null);
     } catch (err) {
-      console.error('Failed to load team', err);
+      logClientError('Failed to load team', err);
       setError('Team settings could not be loaded.');
     } finally {
       setLoading(false);

@@ -31,6 +31,13 @@ test('extracts sensitive tokens from URL fragments before query strings are logg
   );
 });
 
+test('prefers fragment tokens over query tokens for sensitive auth links', () => {
+  assert.equal(
+    getSensitiveUrlToken('https://charitypilot.ie/reset-password?token=query-token#token=fragment-token', 'token'),
+    'fragment-token',
+  );
+});
+
 test('scrubs sensitive token parameters from URL fragments', () => {
   assert.equal(
     removeSensitiveSearchParams('https://charitypilot.ie/reset-password#token=secret&step=confirm', ['token']),
@@ -53,6 +60,8 @@ test('trusts only hosted Stripe https redirect origins', () => {
 });
 
 test('trusts document downloads only from https expected origins or Supabase storage', () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://configured-project.supabase.co';
+
   assert.equal(
     getTrustedDocumentDownloadUrl('https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf'),
     'https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf',
@@ -68,4 +77,8 @@ test('trusts document downloads only from https expected origins or Supabase sto
     null,
   );
   assert.equal(getTrustedDocumentDownloadUrl('https://evil.test/download/a.pdf'), null);
+  assert.equal(
+    getTrustedDocumentDownloadUrl('https://attacker.supabase.co/storage/v1/object/sign/documents/a.pdf'),
+    null,
+  );
 });

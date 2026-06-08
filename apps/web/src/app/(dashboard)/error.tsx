@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect } from 'react';
 import { Button, Card } from '@heroui/react';
 
@@ -10,7 +11,7 @@ interface ErrorProps {
 
 export default function DashboardError({ error, reset }: ErrorProps) {
   useEffect(() => {
-    console.error('[Dashboard Error]', error);
+    logClientError('[Dashboard Error]', error);
   }, [error]);
 
   return (

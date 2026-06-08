@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { test } from 'node:test';
-
-const scriptsDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(scriptsDir, '..');
-const scriptPath = join(scriptsDir, 'production-deploy-preflight.mjs');
+import { runProductionDeployPreflightFromArgs } from './production-deploy-preflight.mjs';
 
 const digest = 'a'.repeat(64);
 
@@ -47,18 +42,14 @@ function completeDeployEnv(overrides = {}) {
 }
 
 function runPreflight(args, env = {}) {
-  return spawnSync(process.execPath, [scriptPath, ...args], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: {
-      PATH: process.env.PATH ?? '',
-      Path: process.env.Path ?? '',
-      SystemRoot: process.env.SystemRoot ?? '',
-      WINDIR: process.env.WINDIR ?? '',
-      TEMP: process.env.TEMP ?? tmpdir(),
-      TMP: process.env.TMP ?? tmpdir(),
-      ...env,
-    },
+  return runProductionDeployPreflightFromArgs(args, {
+    PATH: process.env.PATH ?? '',
+    Path: process.env.Path ?? '',
+    SystemRoot: process.env.SystemRoot ?? '',
+    WINDIR: process.env.WINDIR ?? '',
+    TEMP: process.env.TEMP ?? tmpdir(),
+    TMP: process.env.TMP ?? tmpdir(),
+    ...env,
   });
 }
 
@@ -75,6 +66,27 @@ test('deploy preflight rejects mutable tag images before promotion', () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /CHARITYPILOT_API_IMAGE must be pinned to an immutable sha256 digest/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight dry-run validates production environment values', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-env-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    NEXT_PUBLIC_API_URL: 'https://attacker.example',
+    CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://attacker.example',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /production environment validation failed/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname/);
+    assert.doesNotMatch(result.stdout, /cosign verify/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

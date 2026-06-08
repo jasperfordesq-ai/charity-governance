@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -70,7 +70,7 @@ const sastDetectors = [
 ];
 
 function usage() {
-  console.error('Usage: node scripts/security-scan.mjs <secrets|sast|scan> [--path <path>...]');
+  return 'Usage: node scripts/security-scan.mjs <secrets|sast|scan> [--path <path>...]\n';
 }
 
 function parseArgs(argv) {
@@ -106,15 +106,28 @@ function normalizePath(path) {
   return path.split(sep).join('/');
 }
 
-function isGeneratedPath(path) {
-  return normalizePath(path).split('/').some((part) => generatedPathParts.has(part));
+function isGeneratedPath(path, options = {}) {
+  const normalized = normalizePath(path);
+  const parts = normalized.split('/');
+  const fileName = parts.at(-1) ?? '';
+
+  if (options.skipLocalEnvFiles && /^\.env(?:$|[.-])/.test(fileName) && !fileName.endsWith('.example')) {
+    return true;
+  }
+
+  return parts.some((part) => (
+    generatedPathParts.has(part) ||
+    part.startsWith('.codex-') ||
+    part.startsWith('.next-build') ||
+    part === '.charitypilot-backups'
+  ));
 }
 
 function isLikelyBinary(content) {
   return content.includes('\u0000');
 }
 
-function collectFilesUnder(targetPath, displayRoot) {
+function collectFilesUnder(targetPath, displayRoot, options = {}) {
   const stats = statSync(targetPath);
   if (stats.isFile()) {
     return [{
@@ -128,8 +141,8 @@ function collectFilesUnder(targetPath, displayRoot) {
   return readdirSync(targetPath, { withFileTypes: true }).flatMap((entry) => {
     const childPath = join(targetPath, entry.name);
     const relativePath = relative(displayRoot, childPath);
-    if (isGeneratedPath(relativePath)) return [];
-    if (entry.isDirectory()) return collectFilesUnder(childPath, displayRoot);
+    if (isGeneratedPath(relativePath, options)) return [];
+    if (entry.isDirectory()) return collectFilesUnder(childPath, displayRoot, options);
     if (!entry.isFile()) return [];
     return [{
       absolutePath: childPath,
@@ -138,14 +151,17 @@ function collectFilesUnder(targetPath, displayRoot) {
   });
 }
 
-function trackedRepoFiles() {
+function trackedRepoFiles({ scanRoot = repoRoot, stderr = (message) => process.stderr.write(message), processEnv = process.env } = {}) {
   const result = spawnSync('git', ['ls-files', '-z'], {
-    cwd: repoRoot,
+    cwd: scanRoot,
     encoding: 'utf8',
+    env: processEnv,
   });
 
   if (result.status !== 0) {
-    throw new Error(`git ls-files failed: ${result.stderr.trim()}`);
+    const reason = result.stderr?.trim() || result.error?.message || `exit status ${result.status}`;
+    stderr(`git ls-files unavailable (${reason}); scanning working tree fallback.\n`);
+    return collectFilesUnder(scanRoot, scanRoot, { skipLocalEnvFiles: true });
   }
 
   return result.stdout
@@ -153,17 +169,18 @@ function trackedRepoFiles() {
     .filter(Boolean)
     .filter((path) => !isGeneratedPath(path))
     .map((path) => ({
-      absolutePath: join(repoRoot, path),
+      absolutePath: join(scanRoot, path),
       displayPath: normalizePath(path),
     }))
     .filter(({ absolutePath }) => existsSync(absolutePath));
 }
 
-function targetFiles(paths) {
-  if (paths.length === 0) return trackedRepoFiles();
+function targetFiles(paths, context = {}) {
+  const scanRoot = context.scanRoot ?? repoRoot;
+  if (paths.length === 0) return trackedRepoFiles({ ...context, scanRoot });
 
   return paths.flatMap((path) => {
-    const resolvedPath = resolve(repoRoot, path);
+    const resolvedPath = resolve(scanRoot, path);
     if (!existsSync(resolvedPath)) {
       throw new Error(`scan path does not exist: ${path}`);
     }
@@ -274,48 +291,77 @@ function scanSast(files) {
   return findings;
 }
 
-function printFindings(label, findings) {
+function printFindings(label, findings, stderr = (message) => process.stderr.write(message)) {
   if (findings.length === 0) return;
-  console.error(`${label} failed: ${findings.length} finding(s)`);
+  stderr(`${label} failed: ${findings.length} finding(s)\n`);
   for (const finding of findings) {
-    console.error(`- ${finding.detector} ${finding.file}:${finding.line}`);
+    stderr(`- ${finding.detector} ${finding.file}:${finding.line}\n`);
   }
 }
 
-function run() {
+function result(status, stdout = '', stderr = '') {
+  return { status, stdout, stderr };
+}
+
+export function runSecurityScanFromArgs(args = process.argv.slice(2), {
+  processEnv = process.env,
+  scanRoot = repoRoot,
+} = {}) {
+  let stdout = '';
+  let stderr = '';
+  const writeStdout = (message) => {
+    stdout += message;
+  };
+  const writeStderr = (message) => {
+    stderr += message;
+  };
+
   let options;
   try {
-    options = parseArgs(process.argv.slice(2));
+    options = parseArgs(args);
   } catch (error) {
-    usage();
-    console.error(error.message);
-    process.exit(2);
+    return result(2, '', `${usage()}${error.message}\n`);
   }
 
-  const files = targetFiles(options.paths);
+  let files;
+  try {
+    files = targetFiles(options.paths, { scanRoot, stderr: writeStderr, processEnv });
+  } catch (error) {
+    return result(1, '', `Security scan failed: ${error.message}\n`);
+  }
+
   let failed = false;
 
   if (options.mode === 'secrets' || options.mode === 'scan') {
     const findings = scanSecrets(files);
     if (findings.length > 0) {
-      printFindings('Secret scan', findings);
+      printFindings('Secret scan', findings, writeStderr);
       failed = true;
     } else {
-      console.log(`Secret scan passed: scanned ${files.length} file(s).`);
+      writeStdout(`Secret scan passed: scanned ${files.length} file(s).\n`);
     }
   }
 
   if (options.mode === 'sast' || options.mode === 'scan') {
     const findings = scanSast(files);
     if (findings.length > 0) {
-      printFindings('SAST scan', findings);
+      printFindings('SAST scan', findings, writeStderr);
       failed = true;
     } else {
-      console.log(`SAST scan passed: scanned ${files.length} file(s).`);
+      writeStdout(`SAST scan passed: scanned ${files.length} file(s).\n`);
     }
   }
 
-  if (failed) process.exit(1);
+  return result(failed ? 1 : 0, stdout, stderr);
 }
 
-run();
+function main() {
+  const scanResult = runSecurityScanFromArgs();
+  if (scanResult.stdout) process.stdout.write(scanResult.stdout);
+  if (scanResult.stderr) process.stderr.write(scanResult.stderr);
+  process.exit(scanResult.status);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

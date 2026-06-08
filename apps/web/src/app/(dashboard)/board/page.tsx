@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
@@ -56,7 +57,7 @@ export default function BoardPage() {
       const res = await api.get('/board-members');
       setMembers(res.data?.data ?? res.data ?? []);
     } catch (err) {
-      console.error('Failed to load board members', err);
+      logClientError('Failed to load board members', err);
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,7 @@ export default function BoardPage() {
       fetchMembers();
       toast(editing ? 'Board member updated' : 'Board member added');
     } catch (err) {
-      console.error('Save failed', err);
+      logClientError('Save failed', err);
       toast('Failed to save board member', 'error');
     } finally {
       setSaving(false);
@@ -157,7 +158,7 @@ export default function BoardPage() {
       });
       fetchMembers();
     } catch (err) {
-      console.error('Toggle failed', err);
+      logClientError('Toggle failed', err);
     }
   };
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Chip, Select, SelectItem, Textarea, Button } from '@heroui/react';
@@ -85,7 +86,7 @@ export default function PrincipleDetailPage() {
 
         setFormState(initialForm);
       } catch (err) {
-        console.error('Failed to load principle data', err);
+        logClientError('Failed to load principle data', err);
       } finally {
         setLoading(false);
       }
@@ -122,7 +123,7 @@ export default function PrincipleDetailPage() {
             setSaveState((prev) => ({ ...prev, [standardId]: 'idle' }));
           }, 2000);
         } catch (err) {
-          console.error(`Failed to save standard ${standardId}`, err);
+          logClientError(`Failed to save standard ${standardId}`, err);
           setSaveState((prev) => ({ ...prev, [standardId]: 'error' }));
         }
       }, 800);

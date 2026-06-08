@@ -10,6 +10,12 @@ test('matches dashboard application routes that require an auth cookie', () => {
   assert.equal(isProtectedAppPath('/export?year=2026'), true);
 });
 
+test('matches encoded dashboard application routes before Next normalisation', () => {
+  assert.equal(isProtectedAppPath('/dashboard%2Fsettings'), true);
+  assert.equal(isProtectedAppPath('/compliance%2Fstandard-1'), true);
+  assert.equal(isProtectedAppPath('/documents%5Creports'), true);
+});
+
 test('does not match public, auth, or similarly named routes', () => {
   assert.equal(isProtectedAppPath('/'), false);
   assert.equal(isProtectedAppPath('/login'), false);

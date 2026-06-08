@@ -1,20 +1,14 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { runSecurityScanFromArgs } from './security-scan.mjs';
 
-const scriptsDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(scriptsDir, '..');
-const scannerPath = join(scriptsDir, 'security-scan.mjs');
-
-function runScanner(args) {
-  return spawnSync(process.execPath, [scannerPath, ...args], {
-    cwd: repoRoot,
-    encoding: 'utf8',
+function runScanner(args, env = {}, options = {}) {
+  return runSecurityScanFromArgs(args, {
+    processEnv: { ...process.env, ...env },
+    ...options,
   });
 }
 
@@ -38,6 +32,20 @@ test('secret scanner fails on committed credential patterns without printing the
     assert.equal(result.status, 1);
     assert.match(result.stderr, /stripe-secret-key/);
     assert.match(result.stderr, /leak\.env:1/);
+    assert.doesNotMatch(result.stderr, new RegExp(leakedSecret));
+  });
+});
+
+test('secret scanner checks explicitly scanned env files', () => {
+  withTempProject((tempDir) => {
+    const leakedSecret = 'sk_live_1234567890abcdefghijklmnopqrstuvwxyz';
+    writeFileSync(join(tempDir, '.env'), `STRIPE_SECRET_KEY=${leakedSecret}\n`);
+
+    const result = runScanner(['secrets', '--path', tempDir]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /stripe-secret-key/);
+    assert.match(result.stderr, /\.env:1/);
     assert.doesNotMatch(result.stderr, new RegExp(leakedSecret));
   });
 });
@@ -66,6 +74,32 @@ test('secret scanner allows documented local placeholders and CI sentinels', () 
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Secret scan passed/);
+  });
+});
+
+test('scanner falls back to the working tree when git tracked-file listing is unavailable', () => {
+  withTempProject((tempDir) => {
+    writeFileSync(join(tempDir, 'safe.ts'), 'export const value = 1;\n');
+    const result = runScanner(['sast'], {}, { scanRoot: tempDir });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /git ls-files unavailable/);
+    assert.match(result.stdout, /SAST scan passed/);
+    assert.doesNotMatch(result.stderr, /Cannot read properties/);
+  });
+});
+
+test('scanner skips generated Next build output directories', () => {
+  withTempProject((tempDir) => {
+    mkdirSync(join(tempDir, '.next-build-verify'));
+    mkdirSync(join(tempDir, 'src'));
+    writeFileSync(join(tempDir, '.next-build-verify', 'generated.js'), 'eval("generated");\n');
+    writeFileSync(join(tempDir, 'src', 'safe.ts'), 'export const value = 1;\n');
+
+    const result = runScanner(['sast', '--path', tempDir]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /SAST scan passed/);
   });
 });
 

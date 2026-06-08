@@ -13,6 +13,11 @@ type OriginValidationResult =
     };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const AUTH_COOKIE_SETTING_PATH_SUFFIXES = [
+  '/auth/login',
+  '/auth/refresh',
+  '/team/accept-invite',
+] as const;
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
@@ -36,8 +41,21 @@ function hasAuthCookie(request: Pick<FastifyRequest, 'cookies'>): boolean {
   return Boolean(request.cookies?.[ACCESS_TOKEN_COOKIE] || request.cookies?.[REFRESH_TOKEN_COOKIE]);
 }
 
+function requestPath(request: Pick<FastifyRequest, 'url'>): string {
+  try {
+    return new URL(request.url, 'http://charitypilot.local').pathname;
+  } catch {
+    return request.url.split('?')[0] ?? request.url;
+  }
+}
+
+function isAuthCookieSettingPath(request: Pick<FastifyRequest, 'url'>): boolean {
+  const path = requestPath(request).replace(/\/+$/, '');
+  return AUTH_COOKIE_SETTING_PATH_SUFFIXES.some((suffix) => path.endsWith(suffix));
+}
+
 export function validateUnsafeRequestOrigin(
-  request: Pick<FastifyRequest, 'method' | 'headers' | 'cookies'>,
+  request: Pick<FastifyRequest, 'method' | 'url' | 'headers' | 'cookies'>,
   allowedOrigins: ReadonlySet<string>,
 ): OriginValidationResult {
   if (SAFE_METHODS.has(request.method)) {
@@ -60,7 +78,7 @@ export function validateUnsafeRequestOrigin(
     };
   }
 
-  if (hasAuthCookie(request) && !hasBearerAuthorization(request)) {
+  if (isAuthCookieSettingPath(request) || (hasAuthCookie(request) && !hasBearerAuthorization(request))) {
     return {
       ok: false,
       statusCode: 403,

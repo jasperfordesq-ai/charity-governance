@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
@@ -60,7 +61,7 @@ export default function DeadlinesPage() {
       const res = await api.get('/deadlines');
       setDeadlines(res.data?.data ?? res.data ?? []);
     } catch (err) {
-      console.error('Failed to load deadlines', err);
+      logClientError('Failed to load deadlines', err);
     } finally {
       setLoading(false);
     }
@@ -90,7 +91,7 @@ export default function DeadlinesPage() {
       fetchDeadlines();
       toast('Deadline added');
     } catch (err) {
-      console.error('Failed to add deadline', err);
+      logClientError('Failed to add deadline', err);
       toast('Failed to add deadline', 'error');
     } finally {
       setSaving(false);
@@ -105,7 +106,7 @@ export default function DeadlinesPage() {
       });
       fetchDeadlines();
     } catch (err) {
-      console.error('Toggle failed', err);
+      logClientError('Toggle failed', err);
     }
   };
 

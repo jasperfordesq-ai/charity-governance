@@ -3,7 +3,10 @@ node_modules/
 
 # Build outputs
 dist/
+.test-dist/
 .next/
+.next-build*/
+next-codex-build/
 out/
 *.tsbuildinfo
 
@@ -35,7 +38,7 @@ apps/api/prisma/*.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.codex-*/
+.codex-*
 
 # Operational artifacts
 .charitypilot-backups/

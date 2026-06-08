@@ -1,4 +1,4 @@
-FROM node:22-alpine AS deps
+FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -14,10 +14,18 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN node -e "try{const url=new URL(process.env.NEXT_PUBLIC_API_URL);const host=url.hostname.toLowerCase();if(url.protocol!=='https:'||url.origin!==process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/,'')||!(host==='charitypilot.ie'||host.endsWith('.charitypilot.ie')))throw new Error();}catch{console.error('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL such as https://api.charitypilot.ie');process.exit(1)}"
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
+RUN rm -rf apps/web/.next/cache \
+    apps/web/.next/export \
+    apps/web/.next/export-detail.json \
+    apps/web/.next/server/proxy.js \
+    apps/web/.next/server/proxy.js.nft.json
 
-FROM build AS runtime-deps
+FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runtime-deps
 WORKDIR /app
-RUN npm prune --omit=dev --omit=peer --workspaces && \
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --omit=dev --omit=peer --workspace @charitypilot/web --workspace @charitypilot/shared --include-workspace-root=false && \
     rm -rf node_modules/typescript \
       node_modules/eslint \
       node_modules/turbo \
@@ -26,14 +34,18 @@ RUN npm prune --omit=dev --omit=peer --workspaces && \
       node_modules/.bin/eslint \
       node_modules/.bin/turbo
 
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3003
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
-COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
-COPY --chown=node:node --from=build /app/apps/web ./apps/web
+COPY --chown=node:node --from=build /app/packages/shared/package.json ./packages/shared/package.json
+COPY --chown=node:node --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --chown=node:node --from=build /app/apps/web/package.json ./apps/web/package.json
+COPY --chown=node:node --from=build /app/apps/web/server.mjs ./apps/web/server.mjs
+COPY --chown=node:node --from=build /app/apps/web/next.config.ts ./apps/web/next.config.ts
+COPY --chown=node:node --from=build /app/apps/web/.next ./apps/web/.next
 WORKDIR /app/apps/web
 EXPOSE 3003
 USER node

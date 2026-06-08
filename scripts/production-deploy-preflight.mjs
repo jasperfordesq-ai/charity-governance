@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { runProductionPreflight } from './check-production.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -25,7 +26,7 @@ const cosignIdentityRegex = '^https://github.com/jasperfordesq-ai/charity-govern
 const cosignIssuer = 'https://token.actions.githubusercontent.com';
 
 function usage() {
-  console.error('Usage: node scripts/production-deploy-preflight.mjs --production-env-file <path> [--dry-run]');
+  return 'Usage: node scripts/production-deploy-preflight.mjs --production-env-file <path> [--dry-run]\n';
 }
 
 function parseArgs(argv) {
@@ -142,14 +143,16 @@ function commandsFor({ productionEnvFile, images }) {
   return commands;
 }
 
-function run() {
+function result(status, stdout = '', stderr = '') {
+  return { status, stdout, stderr };
+}
+
+export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2), processEnv = process.env) {
   let options;
   try {
-    options = parseArgs(process.argv.slice(2));
+    options = parseArgs(args);
   } catch (error) {
-    usage();
-    console.error(error.message);
-    process.exit(2);
+    return result(2, '', `${usage()}${error.message}\n`);
   }
 
   const envPath = resolve(repoRoot, options.productionEnvFile);
@@ -157,11 +160,22 @@ function run() {
   try {
     fileEnv = parseEnvFile(envPath);
   } catch (error) {
-    console.error(`Production deploy preflight failed: ${error.message}`);
-    process.exit(1);
+    return result(1, '', `Production deploy preflight failed: ${error.message}\n`);
   }
 
-  const deploymentEnv = { ...process.env, ...fileEnv };
+  const deploymentEnv = { ...processEnv, ...fileEnv };
+  const productionEnvResult = runProductionPreflight({
+    envFile: envPath,
+    processEnv: deploymentEnv,
+  });
+  if (productionEnvResult.status !== 0) {
+    return result(
+      1,
+      '',
+      `Production deploy preflight failed: production environment validation failed.\n${productionEnvResult.stderr}`,
+    );
+  }
+
   const issues = [];
   for (const image of requiredImages) {
     const issue = imageRefIssue(image, deploymentEnv[image.envName]);
@@ -169,35 +183,52 @@ function run() {
   }
 
   if (issues.length > 0) {
-    console.error(`Production deploy preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`);
-    for (const issue of issues) {
-      console.error(`- ${issue}`);
-    }
-    process.exit(1);
+    return result(
+      1,
+      '',
+      [
+        `Production deploy preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+        ...issues.map((issue) => `- ${issue}`),
+        '',
+      ].join('\n'),
+    );
   }
 
   const images = requiredImages.map(({ envName }) => deploymentEnv[envName]);
   const commands = commandsFor({ productionEnvFile: options.productionEnvFile, images });
 
   if (options.dryRun) {
-    console.log('Production deploy preflight dry-run:');
-    for (const command of commands) {
-      console.log(commandLine(command));
-    }
-    return;
+    return result(0, [
+      'Production deploy preflight dry-run:',
+      ...commands.map(commandLine),
+      '',
+    ].join('\n'));
   }
 
   const commandEnv = {
-    ...process.env,
+    ...processEnv,
     ...fileEnv,
     CHARITYPILOT_PRODUCTION_ENV_FILE: options.productionEnvFile,
   };
 
-  for (const command of commands) {
-    runCommand(command, commandEnv);
+  try {
+    for (const command of commands) {
+      runCommand(command, commandEnv);
+    }
+  } catch (error) {
+    return result(1, '', `Production deploy preflight failed: ${error.message}\n`);
   }
 
-  console.log('Production deploy preflight passed: env, compose config, and image signatures verified.');
+  return result(0, 'Production deploy preflight passed: env, compose config, and image signatures verified.\n');
 }
 
-run();
+function main() {
+  const preflightResult = runProductionDeployPreflightFromArgs();
+  if (preflightResult.stdout) process.stdout.write(preflightResult.stdout);
+  if (preflightResult.stderr) process.stderr.write(preflightResult.stderr);
+  process.exit(preflightResult.status);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

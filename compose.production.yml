@@ -8,10 +8,14 @@
 services:
   migrate:
     image: ${CHARITYPILOT_MIGRATION_IMAGE:?Set CHARITYPILOT_MIGRATION_IMAGE}
-    env_file:
-      - ${CHARITYPILOT_PRODUCTION_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
     command: ["migrate", "deploy", "--schema", "prisma/schema.prisma"]
     restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -31,8 +35,10 @@ services:
       NODE_ENV: production
       PORT: 3002
       HOST: 0.0.0.0
+      ENABLE_IN_PROCESS_JOBS: "false"
     ports:
       - "127.0.0.1:${CHARITYPILOT_API_PORT:-3002}:3002"
+    read_only: true
     tmpfs:
       - /tmp
     security_opt:
@@ -66,6 +72,9 @@ services:
       NEXT_PUBLIC_API_URL: ${CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL}
     ports:
       - "127.0.0.1:${CHARITYPILOT_WEB_PORT:-3003}:3003"
+    read_only: true
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -83,12 +92,39 @@ services:
       retries: 12
       start_period: 30s
 
+  production-scheduler:
+    image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
+    command: ["node", "dist/jobs/production-scheduler.js"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:?Set SUPABASE_STORAGE_BUCKET}
+      DOCUMENT_STORAGE_CLEANUP_LIMIT: ${DOCUMENT_STORAGE_CLEANUP_LIMIT:-25}
+      DEADLINE_REMINDERS_INTERVAL_MS: ${DEADLINE_REMINDERS_INTERVAL_MS:-86400000}
+      DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: ${DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:-3600000}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - charitypilot-production
+
   deadline-reminders:
     image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
     profiles:
       - jobs
-    env_file:
-      - ${CHARITYPILOT_PRODUCTION_ENV_FILE:-.env.production}
     command: ["node", "dist/jobs/send-deadline-reminders.js"]
     restart: "no"
     depends_on:
@@ -96,6 +132,13 @@ services:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
+    read_only: true
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -107,8 +150,6 @@ services:
     image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
     profiles:
       - jobs
-    env_file:
-      - ${CHARITYPILOT_PRODUCTION_ENV_FILE:-.env.production}
     command: ["node", "dist/jobs/cleanup-document-storage.js"]
     restart: "no"
     depends_on:
@@ -116,6 +157,14 @@ services:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:?Set SUPABASE_STORAGE_BUCKET}
+      DOCUMENT_STORAGE_CLEANUP_LIMIT: ${DOCUMENT_STORAGE_CLEANUP_LIMIT:-25}
+    read_only: true
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:

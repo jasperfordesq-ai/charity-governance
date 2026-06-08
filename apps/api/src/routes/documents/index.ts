@@ -7,6 +7,7 @@ import { requireAdmin } from '../../middleware/roles.js';
 import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent } from '../../utils/response.js';
+import { formatProviderError } from '../../utils/provider-errors.js';
 import { ZodError } from 'zod';
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -104,8 +105,8 @@ export async function documentRoutes(app: FastifyInstance) {
   // GET /api/v1/documents/:id/download — returns a time-limited signed URL
   app.get<{ Params: { id: string } }>('/:id/download', async (request, reply) => {
     try {
-      const doc = await service.getById(request.user.organisationId, request.params.id);
-      const url = await storageService.getSignedUrl(request.user.organisationId, doc.fileUrl);
+      const storagePath = await service.getStoragePath(request.user.organisationId, request.params.id);
+      const url = await storageService.getSignedUrl(request.user.organisationId, storagePath);
       return reply.send({ url });
     } catch (err) {
       handleError(reply, err);
@@ -190,7 +191,10 @@ export async function documentRoutes(app: FastifyInstance) {
         try {
           await storageService.deleteFile(request.user.organisationId, storagePath);
         } catch (cleanupError) {
-          request.log.error(cleanupError, 'Failed to clean up uploaded document after database create failed');
+          request.log.error(
+            { providerError: formatProviderError(cleanupError) },
+            'Failed to clean up uploaded document after database create failed',
+          );
         }
         throw error;
       }
@@ -214,9 +218,15 @@ export async function documentRoutes(app: FastifyInstance) {
         try {
           await service.recordStorageDeletionFailure(deleted.storageDeletionId, cleanupError);
         } catch (outboxError) {
-          request.log.error(outboxError, 'Failed to update document storage cleanup retry record');
+          request.log.error(
+            { providerError: formatProviderError(outboxError) },
+            'Failed to update document storage cleanup retry record',
+          );
         }
-        request.log.error(cleanupError, 'Failed to clean up document storage after database delete succeeded');
+        request.log.error(
+          { providerError: formatProviderError(cleanupError) },
+          'Failed to clean up document storage after database delete succeeded',
+        );
       }
       return sendNoContent(reply);
     } catch (err) {

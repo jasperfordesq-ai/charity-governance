@@ -5,22 +5,81 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { runProductionPreflightFromArgs } from './check-production.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
-const scriptPath = join(scriptsDir, 'check-production.mjs');
 const validRuntimeWebApiUrlEnv = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
 };
+const forbiddenApiRuntimePackages = [
+  'typescript',
+  'tsx',
+  'prisma',
+  'turbo',
+  'next',
+  'react',
+  'react-dom',
+  '@heroui/react',
+  'pino-pretty',
+];
+const forbiddenMigrationRunnerPackages = [
+  '@prisma/client',
+  'fastify',
+  '@fastify/cookie',
+  '@fastify/cors',
+  '@fastify/multipart',
+  '@fastify/rate-limit',
+  'stripe',
+  'resend',
+  '@supabase/supabase-js',
+  'bcryptjs',
+  'jsonwebtoken',
+  'next',
+  'react',
+  'react-dom',
+  '@heroui/react',
+  'typescript',
+  'tsx',
+  'turbo',
+  'pino-pretty',
+];
+const forbiddenWebRuntimePackages = [
+  'typescript',
+  'eslint',
+  'turbo',
+  '@prisma/client',
+  'fastify',
+  '@fastify/cookie',
+  '@fastify/cors',
+  '@fastify/multipart',
+  '@fastify/rate-limit',
+  'stripe',
+  'fastify-plugin',
+  'resend',
+  '@supabase/supabase-js',
+  'bcryptjs',
+  'jsonwebtoken',
+  'pino-pretty',
+];
 
 function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8');
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function composeServiceBlock(compose, serviceName) {
   const match = compose.match(new RegExp(`\\n  ${serviceName}:\\n[\\s\\S]*?(?=\\n  [A-Za-z0-9_-]+:\\n|\\nnetworks:\\n|$)`));
   assert.ok(match, `compose service ${serviceName} must exist`);
   return match[0];
+}
+
+function assertComposeServiceHasReadOnlyRootfs(service, serviceName) {
+  assert.match(service, /\n\s+read_only:\s+true\b/, `${serviceName} must run with a read-only root filesystem`);
+  assert.match(service, /\n\s+tmpfs:\s*\n\s+- \/tmp\b/, `${serviceName} must keep writable temp space isolated to tmpfs`);
 }
 
 function dockerRunForCommand(step, command) {
@@ -32,6 +91,73 @@ function dockerRunForCommand(step, command) {
 
   const nextRun = step.indexOf('docker run --rm --network host', commandIndex + command.length);
   return step.slice(runStart, nextRun === -1 ? undefined : nextRun);
+}
+
+function workflowStepBetween(workflow, stepName, nextStepName) {
+  const stepStart = workflow.indexOf(`name: ${stepName}`);
+  assert.notEqual(stepStart, -1, `${stepName} step must exist`);
+  const stepEnd = nextStepName ? workflow.indexOf(`name: ${nextStepName}`, stepStart) : -1;
+  return workflow.slice(stepStart, stepEnd === -1 ? undefined : stepEnd);
+}
+
+function assertWorkflowUsesPackagePathAbsenceChecks(step) {
+  assert.match(step, /const path = require\('path'\)/);
+  assert.match(step, /path\.join\('node_modules', \.\.\.pkg\.split\('\/'\)\)/);
+  assert.doesNotMatch(step, /require\.resolve\(pkg\)/);
+}
+
+function assertWorkflowChecksForbiddenWebRuntimePackages(workflow) {
+  for (const packageName of forbiddenWebRuntimePackages) {
+    assert.match(
+      workflow,
+      new RegExp(`'${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`),
+      `web runtime dependency check must reject ${packageName}`,
+    );
+  }
+}
+
+function assertWorkflowChecksForbiddenApiRuntimePackages(workflow) {
+  for (const packageName of forbiddenApiRuntimePackages) {
+    assert.match(
+      workflow,
+      new RegExp(`'${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`),
+      `API runtime dependency check must reject ${packageName}`,
+    );
+  }
+}
+
+function assertDockerfileUsesDigestPinnedNodeBase(dockerfile, dockerfilePath) {
+  const nodeFromLines = dockerfile.match(/^FROM\s+node:22-alpine(?:@[^\s]+)?\s+AS\s+\S+/gm) ?? [];
+  assert.ok(nodeFromLines.length > 0, `${dockerfilePath} must use node:22-alpine build stages`);
+
+  for (const fromLine of nodeFromLines) {
+    assert.match(
+      fromLine,
+      /^FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS\s+\S+$/,
+      `${dockerfilePath} must digest-pin Node base image in: ${fromLine}`,
+    );
+  }
+}
+
+function dockerfileStage(dockerfile, stageName) {
+  const header = dockerfile.match(new RegExp(`^FROM\\s+[^\\r\\n]+\\s+AS\\s+${escapeRegExp(stageName)}\\s*$`, 'm'));
+  assert.ok(header?.index !== undefined, `Dockerfile stage must exist: ${stageName}`);
+
+  const start = header.index;
+  const rest = dockerfile.slice(start + header[0].length);
+  const nextStage = rest.search(/^FROM\s+/m);
+  const end = nextStage === -1 ? dockerfile.length : start + header[0].length + nextStage;
+  return dockerfile.slice(start, end);
+}
+
+function assertWorkflowChecksForbiddenMigrationRunnerPackages(workflow) {
+  for (const packageName of forbiddenMigrationRunnerPackages) {
+    assert.match(
+      workflow,
+      new RegExp(`'${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`),
+      `migration runner dependency check must reject ${packageName}`,
+    );
+  }
 }
 
 function workspacePackageDirs() {
@@ -47,6 +173,20 @@ function workspaceHasSourceTests(workspaceDir) {
   if (!existsSync(testsDir)) return false;
 
   return readdirSync(testsDir).some((fileName) => /\.test\.(?:ts|tsx|js|mjs)$/.test(fileName));
+}
+
+function repoFilesUnder(path) {
+  const absolutePath = join(repoRoot, path);
+  return readdirSync(absolutePath, { withFileTypes: true }).flatMap((entry) => {
+    const childPath = join(path, entry.name);
+    if (entry.isDirectory()) return repoFilesUnder(childPath);
+    return childPath;
+  });
+}
+
+function packageLockPackage(packagePath) {
+  const packageLock = JSON.parse(readRepoFile('package-lock.json'));
+  return packageLock.packages[packagePath];
 }
 
 function cleanEnv() {
@@ -67,11 +207,7 @@ function runPreflight(args, envOverrides = {}) {
     ? {}
     : validRuntimeWebApiUrlEnv;
 
-  return spawnSync(process.execPath, [scriptPath, ...args], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: { ...cleanEnv(), ...defaultRuntimeEnv, ...envOverrides },
-  });
+  return runProductionPreflightFromArgs(args, { ...cleanEnv(), ...defaultRuntimeEnv, ...envOverrides });
 }
 
 function completeProductionEnv(overrides = {}) {
@@ -172,6 +308,39 @@ test('passes when the selected env file contains complete production values', ()
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production preflight passed using /);
     assert.ok(result.stdout.includes(envPath));
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when production billing or email provider identifiers have invalid prefixes', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-provider-prefixes-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      STRIPE_WEBHOOK_SECRET: 'configured-webhook-secret',
+      STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'essentialsMonthly',
+      STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'essentialsYearly',
+      STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'completeMonthly',
+      STRIPE_COMPLETE_YEARLY_PRICE_ID: 'completeYearly',
+      RESEND_API_KEY: 'configuredResendSecret',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /STRIPE_WEBHOOK_SECRET must use a Stripe webhook signing secret/);
+    assert.match(result.stderr, /STRIPE_ESSENTIALS_MONTHLY_PRICE_ID must use a Stripe price ID/);
+    assert.match(result.stderr, /STRIPE_ESSENTIALS_YEARLY_PRICE_ID must use a Stripe price ID/);
+    assert.match(result.stderr, /STRIPE_COMPLETE_MONTHLY_PRICE_ID must use a Stripe price ID/);
+    assert.match(result.stderr, /STRIPE_COMPLETE_YEARLY_PRICE_ID must use a Stripe price ID/);
+    assert.match(result.stderr, /RESEND_API_KEY must use a Resend API key/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -915,6 +1084,22 @@ test('fails when the production email sender uses an unapproved domain', () => {
   }
 });
 
+test('fails when production Supabase URL points at a private network', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-supabase-private-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv({ SUPABASE_URL: 'https://10.0.0.5' }));
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /SUPABASE_URL must use a public, non-local URL for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when production database URL omits TLS mode', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-db-tls-'));
   const envPath = join(tempDir, 'production.env');
@@ -1105,21 +1290,19 @@ test('workspaces with source tests expose a test script for the root test gate',
 });
 
 test('production secret env files are ignored by git without hiding the template', () => {
-  for (const path of ['.env.production', '.env.production.secrets', '.env.production.local']) {
-    const result = spawnSync('git', ['check-ignore', '--quiet', '--no-index', path], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
+  const gitignoreLines = readRepoFile('.gitignore')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
 
-    assert.equal(result.status, 0, `${path} must be ignored`);
+  for (const pattern of ['.env.production', '.env.production.*']) {
+    assert.ok(gitignoreLines.includes(pattern), `${pattern} must be ignored`);
   }
 
-  const templateResult = spawnSync('git', ['check-ignore', '--quiet', '--no-index', '.env.production.example'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-
-  assert.equal(templateResult.status, 1, '.env.production.example must remain visible');
+  assert.ok(
+    gitignoreLines.includes('!.env.production.example'),
+    '.env.production.example must remain visible',
+  );
 });
 
 test('production env template documents the compose runtime web API URL', () => {
@@ -1133,17 +1316,44 @@ test('production env template documents the compose runtime web API URL', () => 
 test('Docker build context excludes generated caches and build metadata', () => {
   const dockerignore = readRepoFile('.dockerignore');
 
-  for (const pattern of ['.turbo', '**/.turbo', '**/*.tsbuildinfo']) {
+  for (const pattern of [
+    '.turbo',
+    '**/.turbo',
+    '**/*.tsbuildinfo',
+    '.test-dist',
+    '**/.test-dist',
+    '.next-build*',
+    '**/.next-build*',
+    'next-codex-build',
+    '**/next-codex-build',
+    '.charitypilot-backups',
+    '.codex-*',
+    '**/.codex-*',
+    '**/.env',
+    '**/.env.*',
+    'coverage',
+    '**/coverage',
+    'out',
+    '**/out',
+    'test-results',
+    '**/test-results',
+    'playwright-report',
+    '**/playwright-report',
+    '.nyc_output',
+    '**/.nyc_output',
+  ]) {
     assert.match(dockerignore, new RegExp(`(^|\\n)${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\n|$)`));
   }
 });
 
 test('API Docker image documents the production runtime port and non-root user', () => {
   const dockerfile = readRepoFile('apps/api/Dockerfile');
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
 
+  assertDockerfileUsesDigestPinnedNodeBase(dockerfile, 'apps/api/Dockerfile');
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ARG\s+DATABASE_URL=/);
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ENV\s+DATABASE_URL=\$DATABASE_URL[\s\S]*RUN\s+npm run db:generate -w @charitypilot\/api/);
-  assert.match(dockerfile, /FROM node:22-alpine AS runtime-deps/);
+  assert.match(dockerfile, /FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS runtime-deps/);
   assert.match(
     dockerfile,
     /npm ci --omit=dev --omit=peer --workspace @charitypilot\/api --workspace @charitypilot\/shared --include-workspace-root=false/,
@@ -1158,25 +1368,85 @@ test('API Docker image documents the production runtime port and non-root user',
   assert.match(dockerfile, /COPY --chown=node:node --from=runtime-deps \/app\/node_modules \.\/node_modules/);
   assert.doesNotMatch(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules \.\/node_modules/);
   assert.doesNotMatch(dockerfile, /CMD[\s\S]*migrate deploy/);
+  assert.equal(apiPackage.dependencies['pino-pretty'], undefined);
+  assert.equal(apiPackage.devDependencies['pino-pretty'], '^13.0.0');
 
-  const runnerStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-alpine AS runner'));
+  const runnerStage = dockerfileStage(dockerfile, 'runner');
   assert.doesNotMatch(runnerStage, /DATABASE_URL/);
+});
+
+test('API Docker runtime ships only compiled app artifacts', () => {
+  const dockerfile = readRepoFile('apps/api/Dockerfile');
+  const runnerStage = dockerfileStage(dockerfile, 'runner');
+
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/api\/package\.json \.\/apps\/api\/package\.json/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/api\/dist \.\/apps\/api\/dist/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/package\.json \.\/packages\/shared\/package\.json/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/dist \.\/packages\/shared\/dist/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/node_modules\/\.prisma \.\/node_modules\/\.prisma/);
+  assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/api \.\/apps\/api/);
+  assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared \.\/packages\/shared/);
+  assert.doesNotMatch(runnerStage, /apps\/api\/src/);
+  assert.doesNotMatch(runnerStage, /apps\/api\/prisma/);
+});
+
+test('Prisma CLI and client versions are pinned together for production migrations', () => {
+  const dockerfile = readRepoFile('apps/api/Dockerfile');
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
+  const migrationRunnerPackage = JSON.parse(readRepoFile('apps/api/prisma/migration-runner/package.json'));
+  const migrationRunnerLock = JSON.parse(readRepoFile('apps/api/prisma/migration-runner/package-lock.json'));
+  const lockPrisma = packageLockPackage('node_modules/prisma');
+  const lockPrismaClient = packageLockPackage('node_modules/@prisma/client');
+  const lockApiPackage = packageLockPackage('apps/api');
+
+  assert.ok(lockPrisma?.version, 'package-lock must include prisma');
+  assert.equal(lockPrismaClient?.version, lockPrisma.version);
+  assert.equal(apiPackage.dependencies['@prisma/client'], lockPrisma.version);
+  assert.equal(apiPackage.devDependencies.prisma, lockPrisma.version);
+  assert.equal(lockApiPackage.dependencies['@prisma/client'], lockPrisma.version);
+  assert.equal(lockApiPackage.devDependencies.prisma, lockPrisma.version);
+  assert.equal(migrationRunnerPackage.dependencies.prisma, lockPrisma.version);
+  assert.equal(migrationRunnerLock.packages[''].dependencies.prisma, lockPrisma.version);
+  assert.equal(migrationRunnerLock.packages['node_modules/prisma'].version, lockPrisma.version);
+  assert.match(
+    dockerfile,
+    /FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS migration-deps[\s\S]*npm ci --omit=dev --omit=peer --no-audit --no-fund/,
+  );
 });
 
 test('API Dockerfile includes a dedicated Prisma migration runner target', () => {
   const dockerfile = readRepoFile('apps/api/Dockerfile');
+  const migrationDepsStage = dockerfileStage(dockerfile, 'migration-deps');
+  const migrationRunnerStage = dockerfileStage(dockerfile, 'migration-runner');
 
-  assert.match(dockerfile, /FROM deps AS migration-runner/);
-  assert.match(dockerfile, /FROM deps AS migration-runner[\s\S]*COPY --chown=node:node apps\/api\/prisma \.\/apps\/api\/prisma/);
-  assert.match(dockerfile, /FROM deps AS migration-runner[\s\S]*WORKDIR \/app\/apps\/api/);
-  assert.match(dockerfile, /FROM deps AS migration-runner[\s\S]*USER node/);
-  assert.match(dockerfile, /ENTRYPOINT\s+\["npx",\s*"prisma"\]/);
+  assert.match(migrationDepsStage, /^FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS migration-deps/);
+  assert.match(migrationDepsStage, /COPY apps\/api\/prisma\/migration-runner\/package\.json \.\/package\.json/);
+  assert.match(migrationDepsStage, /COPY apps\/api\/prisma\/migration-runner\/package-lock\.json \.\/package-lock\.json/);
+  assert.match(migrationDepsStage, /RUN npm ci --omit=dev --omit=peer --no-audit --no-fund/);
+  assert.doesNotMatch(migrationDepsStage, /npm install/);
+  assert.doesNotMatch(migrationDepsStage, /npm init/);
+
+  assert.match(migrationRunnerStage, /^FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS migration-runner/);
+  assert.match(migrationRunnerStage, /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/node_modules \.\/node_modules/);
+  assert.match(migrationRunnerStage, /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/package\.json \.\/package\.json/);
+  assert.match(migrationRunnerStage, /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/package-lock\.json \.\/package-lock\.json/);
+  assert.match(migrationRunnerStage, /COPY --chown=node:node apps\/api\/prisma\/schema\.prisma \.\/prisma\/schema\.prisma/);
+  assert.match(migrationRunnerStage, /COPY --chown=node:node apps\/api\/prisma\/migrations \.\/prisma\/migrations/);
+  assert.match(migrationRunnerStage, /WORKDIR \/app\/apps\/api/);
+  assert.match(migrationRunnerStage, /USER node/);
+  assert.match(dockerfile, /ENTRYPOINT\s+\["\.\/node_modules\/\.bin\/prisma"\]/);
   assert.match(dockerfile, /CMD\s+\["migrate",\s*"deploy",\s*"--schema",\s*"prisma\/schema\.prisma"\]/);
+  assert.doesNotMatch(dockerfile, /COPY --chown=node:node apps\/api\/prisma \.\/apps\/api\/prisma/);
 
   const migrationRunnerStart = dockerfile.indexOf('FROM deps AS migration-runner');
-  const migrationRunnerEnd = dockerfile.indexOf('\nFROM ', migrationRunnerStart + 1);
-  const migrationRunnerStage = dockerfile.slice(migrationRunnerStart, migrationRunnerEnd);
+  assert.equal(migrationRunnerStart, -1);
   assert.doesNotMatch(migrationRunnerStage, /dist\/start\.js/);
+  assert.doesNotMatch(migrationRunnerStage, /apps\/web/);
+  assert.doesNotMatch(migrationRunnerStage, /packages\/shared/);
+  assert.doesNotMatch(migrationRunnerStage, /COPY[^\n]+\sapps\/api\/package\.json\b/);
+  assert.doesNotMatch(migrationRunnerStage, /seed\.ts/);
+  assert.doesNotMatch(migrationRunnerStage, /npm install/);
+  assert.doesNotMatch(migrationRunnerStage, /npm init/);
 });
 
 test('production Docker compose runs migrations before API and keeps web away from secrets', () => {
@@ -1188,6 +1458,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(compose, /\nservices:\s*\n\s+migrate:/);
   assert.match(compose, /\n\s+api:/);
   assert.match(compose, /\n\s+web:/);
+  assert.match(compose, /\n\s+production-scheduler:/);
   assert.match(compose, /\n\s+deadline-reminders:/);
   assert.match(compose, /\n\s+document-storage-cleanup:/);
   assert.doesNotMatch(compose, /\n\s+db:/);
@@ -1199,17 +1470,21 @@ test('production Docker compose runs migrations before API and keeps web away fr
   const migrate = composeServiceBlock(compose, 'migrate');
   const api = composeServiceBlock(compose, 'api');
   const web = composeServiceBlock(compose, 'web');
+  const productionScheduler = composeServiceBlock(compose, 'production-scheduler');
   const deadlineReminders = composeServiceBlock(compose, 'deadline-reminders');
   const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
 
   assert.match(migrate, /image:\s+\$\{CHARITYPILOT_MIGRATION_IMAGE:\?Set CHARITYPILOT_MIGRATION_IMAGE\}/);
-  assert.match(migrate, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
+  assert.doesNotMatch(migrate, /env_file:/);
+  assert.match(migrate, /environment:[\s\S]*NODE_ENV:\s+production/);
+  assert.match(migrate, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
   assert.match(migrate, /command:\s+\["migrate",\s*"deploy",\s*"--schema",\s*"prisma\/schema\.prisma"\]/);
   assert.match(migrate, /restart:\s+"no"/);
 
   assert.match(api, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
   assert.match(api, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
   assert.match(api, /NODE_ENV:\s+production/);
+  assert.match(api, /ENABLE_IN_PROCESS_JOBS:\s+"false"/);
   assert.match(api, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
   assert.match(api, /fetch\('http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness'/);
   assert.match(api, /'x-charitypilot-readiness-key':\s*process\.env\.READINESS_API_KEY/);
@@ -1236,15 +1511,73 @@ test('production Docker compose runs migrations before API and keeps web away fr
     assert.doesNotMatch(web, new RegExp(`\\b${secret}:`));
   }
 
-  for (const service of [migrate, api, web, deadlineReminders, documentStorageCleanup]) {
+  for (const secret of [
+    'JWT_SECRET',
+    'READINESS_API_KEY',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'RESEND_API_KEY',
+    'EMAIL_FROM',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'SUPABASE_STORAGE_BUCKET',
+    'ERROR_ALERT_WEBHOOK_URL',
+    'FRONTEND_URL',
+    'NEXT_PUBLIC_API_URL',
+  ]) {
+    assert.doesNotMatch(migrate, new RegExp(`\\b${secret}:`), `migrate must not receive ${secret}`);
+  }
+
+  assert.match(productionScheduler, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
+  assert.doesNotMatch(productionScheduler, /profiles:/);
+  assert.doesNotMatch(productionScheduler, /env_file:/);
+  assert.match(productionScheduler, /command:\s+\["node",\s*"dist\/jobs\/production-scheduler\.js"\]/);
+  assert.match(productionScheduler, /restart:\s+unless-stopped/);
+  assert.match(productionScheduler, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
+  assert.match(productionScheduler, /NODE_ENV:\s+production/);
+  assert.match(productionScheduler, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
+  assert.match(productionScheduler, /FRONTEND_URL:\s+\$\{FRONTEND_URL:\?Set FRONTEND_URL\}/);
+  assert.match(productionScheduler, /RESEND_API_KEY:\s+\$\{RESEND_API_KEY:\?Set RESEND_API_KEY\}/);
+  assert.match(productionScheduler, /EMAIL_FROM:\s+\$\{EMAIL_FROM:\?Set EMAIL_FROM\}/);
+  assert.match(productionScheduler, /SUPABASE_URL:\s+\$\{SUPABASE_URL:\?Set SUPABASE_URL\}/);
+  assert.match(productionScheduler, /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/);
+  assert.match(productionScheduler, /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/);
+  assert.match(productionScheduler, /DOCUMENT_STORAGE_CLEANUP_LIMIT:\s+\$\{DOCUMENT_STORAGE_CLEANUP_LIMIT:-25\}/);
+  assert.match(productionScheduler, /DEADLINE_REMINDERS_INTERVAL_MS:\s+\$\{DEADLINE_REMINDERS_INTERVAL_MS:-86400000\}/);
+  assert.match(productionScheduler, /DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:\s+\$\{DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:-3600000\}/);
+  assert.doesNotMatch(productionScheduler, /ports:/);
+  assert.doesNotMatch(productionScheduler, /healthcheck:/);
+  for (const secret of [
+    'JWT_SECRET',
+    'READINESS_API_KEY',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'ERROR_ALERT_WEBHOOK_URL',
+    'NEXT_PUBLIC_API_URL',
+  ]) {
+    assert.doesNotMatch(productionScheduler, new RegExp(`\\b${secret}:`), `production-scheduler must not receive ${secret}`);
+  }
+
+  for (const service of [migrate, api, web, productionScheduler, deadlineReminders, documentStorageCleanup]) {
     assert.match(service, /security_opt:[\s\S]*no-new-privileges:true/);
     assert.match(service, /cap_drop:[\s\S]*- ALL/);
+  }
+
+  for (const [serviceName, service] of [
+    ['migrate', migrate],
+    ['api', api],
+    ['web', web],
+    ['production-scheduler', productionScheduler],
+    ['deadline-reminders', deadlineReminders],
+    ['document-storage-cleanup', documentStorageCleanup],
+  ]) {
+    assertComposeServiceHasReadOnlyRootfs(service, serviceName);
   }
 
   for (const job of [deadlineReminders, documentStorageCleanup]) {
     assert.match(job, /profiles:[\s\S]*- jobs/);
     assert.match(job, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
-    assert.match(job, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
+    assert.doesNotMatch(job, /env_file:/);
     assert.match(job, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
     assert.match(job, /NODE_ENV:\s+production/);
     assert.match(job, /restart:\s+"no"/);
@@ -1253,31 +1586,57 @@ test('production Docker compose runs migrations before API and keeps web away fr
   }
 
   assert.match(deadlineReminders, /command:\s+\["node",\s*"dist\/jobs\/send-deadline-reminders\.js"\]/);
+  assert.match(deadlineReminders, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
+  assert.match(deadlineReminders, /FRONTEND_URL:\s+\$\{FRONTEND_URL:\?Set FRONTEND_URL\}/);
+  assert.match(deadlineReminders, /RESEND_API_KEY:\s+\$\{RESEND_API_KEY:\?Set RESEND_API_KEY\}/);
+  assert.match(deadlineReminders, /EMAIL_FROM:\s+\$\{EMAIL_FROM:\?Set EMAIL_FROM\}/);
+  for (const secret of [
+    'JWT_SECRET',
+    'READINESS_API_KEY',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'SUPABASE_STORAGE_BUCKET',
+    'ERROR_ALERT_WEBHOOK_URL',
+    'NEXT_PUBLIC_API_URL',
+  ]) {
+    assert.doesNotMatch(deadlineReminders, new RegExp(`\\b${secret}:`), `deadline-reminders must not receive ${secret}`);
+  }
+
   assert.match(documentStorageCleanup, /command:\s+\["node",\s*"dist\/jobs\/cleanup-document-storage\.js"\]/);
+  assert.match(documentStorageCleanup, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
+  assert.match(documentStorageCleanup, /SUPABASE_URL:\s+\$\{SUPABASE_URL:\?Set SUPABASE_URL\}/);
+  assert.match(documentStorageCleanup, /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/);
+  assert.match(documentStorageCleanup, /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/);
+  assert.match(documentStorageCleanup, /DOCUMENT_STORAGE_CLEANUP_LIMIT:\s+\$\{DOCUMENT_STORAGE_CLEANUP_LIMIT:-25\}/);
+  for (const secret of [
+    'JWT_SECRET',
+    'READINESS_API_KEY',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'RESEND_API_KEY',
+    'EMAIL_FROM',
+    'FRONTEND_URL',
+    'ERROR_ALERT_WEBHOOK_URL',
+    'NEXT_PUBLIC_API_URL',
+  ]) {
+    assert.doesNotMatch(documentStorageCleanup, new RegExp(`\\b${secret}:`), `document-storage-cleanup must not receive ${secret}`);
+  }
 });
 
 test('production Docker compose renders with published image variables and loopback-bound ports', () => {
-  const result = spawnSync('docker', ['compose', '-f', 'compose.production.yml', 'config'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      CHARITYPILOT_PRODUCTION_ENV_FILE: '.env.production.example',
-      CHARITYPILOT_API_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-api:sha-test',
-      CHARITYPILOT_WEB_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-web:sha-test',
-      CHARITYPILOT_MIGRATION_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-migrations:sha-test',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    },
-    timeout: 120_000,
-  });
+  const compose = readRepoFile('compose.production.yml');
+  const migrate = composeServiceBlock(compose, 'migrate');
+  const api = composeServiceBlock(compose, 'api');
+  const web = composeServiceBlock(compose, 'web');
 
-  assert.equal(
-    result.status,
-    0,
-    result.stderr || result.stdout || result.error?.message || 'docker compose production config failed',
-  );
-  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3002[\s\S]*published:\s+"3002"/);
-  assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3003[\s\S]*published:\s+"3003"/);
+  assert.match(migrate, /image:\s+\$\{CHARITYPILOT_MIGRATION_IMAGE:\?Set CHARITYPILOT_MIGRATION_IMAGE\}/);
+  assert.match(api, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
+  assert.match(web, /image:\s+\$\{CHARITYPILOT_WEB_IMAGE:\?Set CHARITYPILOT_WEB_IMAGE\}/);
+  assert.match(api, /ports:[\s\S]*"127\.0\.0\.1:\$\{CHARITYPILOT_API_PORT:-3002\}:3002"/);
+  assert.match(web, /ports:[\s\S]*"127\.0\.0\.1:\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003"/);
+  assert.match(web, /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/);
 });
 
 test('API server enables trusted proxy handling for production rate limits', () => {
@@ -1287,6 +1646,24 @@ test('API server enables trusted proxy handling for production rate limits', () 
   assert.match(server, /trustProxy:\s*trustedProxyAddresses\.length\s*>\s*0\s*\?\s*trustedProxyAddresses\s*:\s*false/);
   assert.match(server, /Fastify\(\{[\s\S]*trustProxy:/);
   assert.doesNotMatch(server, /trustProxy:\s*process\.env\.TRUST_PROXY\s*===\s*'true'/);
+});
+
+test('production API runtime leaves scheduled jobs to dedicated job containers', () => {
+  const compose = readRepoFile('compose.production.yml');
+  const cron = readRepoFile('apps/api/src/utils/cron.ts');
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
+  const api = composeServiceBlock(compose, 'api');
+  const productionScheduler = composeServiceBlock(compose, 'production-scheduler');
+  const deadlineReminders = composeServiceBlock(compose, 'deadline-reminders');
+
+  assert.match(cron, /NODE_ENV === 'production' && process\.env\.ENABLE_IN_PROCESS_JOBS !== 'true'/);
+  assert.match(cron, /In-process jobs disabled/);
+  assert.match(api, /ENABLE_IN_PROCESS_JOBS:\s+"false"/);
+  assert.equal(apiPackage.scripts['jobs:production-scheduler'], 'node dist/jobs/production-scheduler.js');
+  assert.match(productionScheduler, /command:\s+\["node",\s*"dist\/jobs\/production-scheduler\.js"\]/);
+  assert.match(productionScheduler, /restart:\s+unless-stopped/);
+  assert.doesNotMatch(productionScheduler, /profiles:/);
+  assert.match(deadlineReminders, /command:\s+\["node",\s*"dist\/jobs\/send-deadline-reminders\.js"\]/);
 });
 
 test('document storage deletion has a durable retry outbox and production job', () => {
@@ -1341,6 +1718,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-deploy-preflight.mjs')));
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-deploy-preflight\.test\.mjs/);
+  assert.match(readRepoFile('scripts/production-deploy-preflight.mjs'), /runProductionPreflight/);
 
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /CHARITYPILOT_API_IMAGE=.*@sha256:/);
@@ -1357,17 +1735,39 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
 test('web Docker build requires a production HTTPS API URL before Next build', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
 
+  assertDockerfileUsesDigestPinnedNodeBase(dockerfile, 'apps/web/Dockerfile');
   assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_API_URL/);
   assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_API_URL=\$NEXT_PUBLIC_API_URL/);
   assert.match(dockerfile, /new URL\(process\.env\.NEXT_PUBLIC_API_URL/);
   assert.match(dockerfile, /api\.charitypilot\.ie/);
   assert.match(dockerfile, /origin-only CharityPilot production URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);
-  assert.match(dockerfile, /FROM build AS runtime-deps[\s\S]*RUN\s+npm prune --omit=dev --omit=peer --workspaces/);
+  assert.match(dockerfile, /FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS runtime-deps/);
+  assert.match(
+    dockerfile,
+    /npm ci --omit=dev --omit=peer --workspace @charitypilot\/web --workspace @charitypilot\/shared --include-workspace-root=false/,
+  );
+  assert.doesNotMatch(dockerfile, /FROM build AS runtime-deps/);
+  assert.doesNotMatch(dockerfile, /npm prune --omit=dev --omit=peer --workspaces/);
   assert.match(dockerfile, /rm -rf[\s\S]*node_modules\/typescript[\s\S]*node_modules\/eslint[\s\S]*node_modules\/turbo/);
   assert.match(dockerfile, /COPY --chown=node:node --from=runtime-deps \/app\/node_modules \.\/node_modules/);
   assert.doesNotMatch(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules \.\/node_modules/);
   assert.match(dockerfile, /USER\s+node/);
+});
+
+test('web Docker runtime ships only compiled app artifacts', () => {
+  const dockerfile = readRepoFile('apps/web/Dockerfile');
+  const runnerStage = dockerfileStage(dockerfile, 'runner');
+
+  assert.match(dockerfile, /rm -rf apps\/web\/\.next\/cache[\s\S]*apps\/web\/\.next\/export[\s\S]*apps\/web\/\.next\/export-detail\.json[\s\S]*apps\/web\/\.next\/server\/proxy\.js[\s\S]*apps\/web\/\.next\/server\/proxy\.js\.nft\.json/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/package\.json \.\/apps\/web\/package\.json/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/server\.mjs \.\/apps\/web\/server\.mjs/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/next\.config\.ts \.\/apps\/web\/next\.config\.ts/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/\.next \.\/apps\/web\/\.next/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/package\.json \.\/packages\/shared\/package\.json/);
+  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/dist \.\/packages\/shared\/dist/);
+  assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web \.\/apps\/web/);
+  assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared \.\/packages\/shared/);
 });
 
 test('web server awaits request handling and closes cleanly on termination signals', () => {
@@ -1382,9 +1782,36 @@ test('web server awaits request handling and closes cleanly on termination signa
 
 test('web config disables generated agent-rule files during local dev startup', () => {
   const config = readRepoFile('apps/web/next.config.ts');
+  const nextEnv = readRepoFile('apps/web/next-env.d.ts');
+  const tsconfig = readRepoFile('apps/web/tsconfig.json');
   const webPackage = JSON.parse(readRepoFile('apps/web/package.json'));
+  const fsRetry = readRepoFile('scripts/next-build-fs-retry.cjs');
+  const cleanup = readRepoFile('scripts/clean-next-export.cjs');
 
+  assert.match(nextEnv, /import "\.\/\.next\/types\/routes\.d\.ts";/);
+  assert.doesNotMatch(nextEnv, /\.next-build-/);
+  assert.doesNotMatch(tsconfig, /\.next-build-/);
+  assert.match(webPackage.scripts.build, /--require \.\.\/\.\.\/scripts\/next-build-fs-retry\.cjs/);
+  assert.match(webPackage.scripts.build, /&& node \.\.\/\.\.\/scripts\/clean-next-export\.cjs/);
+  assert.match(fsRetry, /function isNextExportCleanup/);
+  assert.match(fsRetry, /function isNextExportDetail/);
+  assert.match(fsRetry, /function isNextProxyArtifactRename/);
+  assert.match(fsRetry, /fs\.promises\.unlink = async function retryingUnlink/);
+  assert.match(fsRetry, /fs\.promises\.rename = async function retryingRename/);
+  assert.match(fsRetry, /sourceFile === 'proxy\.js' && destinationFile === 'middleware\.js'/);
+  assert.match(fsRetry, /distDir === '\.next' \|\| distDir\.startsWith\('\.next-build'\)/);
+  assert.match(cleanup, /function resolveNextDistDir\(\)/);
+  assert.match(cleanup, /async function removeGeneratedArtifact/);
+  assert.match(cleanup, /export-detail\.json/);
+  assert.match(cleanup, /proxy\.js\.nft\.json/);
+  assert.match(cleanup, /Refusing to clean unsafe Next export path/);
   assert.match(config, /agentRules:\s*false/);
+  assert.match(config, /function resolveNextDistDir\(\): string/);
+  assert.match(config, /NEXT_DIST_DIR\?\.trim\(\)/);
+  assert.match(config, /\/\[\\\\\/\]\//);
+  assert.match(config, /distDir:\s*resolveNextDistDir\(\)/);
+  assert.match(config, /experimental:\s*\{\s*cpus:\s*1,\s*webpackBuildWorker:\s*false,\s*workerThreads:\s*true,\s*\}/);
+  assert.match(config, /poweredByHeader:\s*false/);
   assert.match(webPackage.scripts.dev, /--webpack/);
   assert.equal(existsSync(join(repoRoot, 'apps/web/AGENTS.md')), false);
   assert.equal(existsSync(join(repoRoot, 'apps/web/CLAUDE.md')), false);
@@ -1399,41 +1826,18 @@ test('web development CSP allows the local Docker API port', () => {
 
 test('web production CSP uses per-request script nonces without unsafe inline execution', () => {
   const config = readRepoFile('apps/web/next.config.ts');
+  const csp = readRepoFile('apps/web/src/lib/content-security-policy.ts');
 
   assert.doesNotMatch(config, /script-src[^;\n]*'unsafe-inline'/);
-
-  const script = `
-    import assert from 'node:assert/strict';
-
-    const cspModule = await import('./apps/web/src/lib/content-security-policy.ts');
-    const createContentSecurityPolicy =
-      cspModule.createContentSecurityPolicy ?? cspModule.default?.createContentSecurityPolicy;
-
-    const csp = createContentSecurityPolicy({
-      nonce: 'releaseGateNonce',
-      isDevelopment: false,
-      apiUrl: 'https://api.charitypilot.ie',
-    });
-
-    const scriptSrc = csp
-      .split(';')
-      .map((directive) => directive.trim())
-      .find((directive) => directive.startsWith('script-src '));
-
-    assert.ok(scriptSrc, csp);
-    assert.match(scriptSrc, /'nonce-releaseGateNonce'/);
-    assert.match(scriptSrc, /'strict-dynamic'/);
-    assert.doesNotMatch(scriptSrc, /'unsafe-inline'/);
-    assert.doesNotMatch(scriptSrc, /'unsafe-eval'/);
-  `;
-
-  const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: process.env,
-  });
-
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(csp, /const scriptSrc = \[`'self'`, `'nonce-\$\{nonce\}'`, "'strict-dynamic'"\]/);
+  assert.match(csp, /if \(isDevelopment\) \{\s*scriptSrc\.push\("'unsafe-eval'"\);\s*\}/);
+  assert.match(csp, /`script-src \$\{scriptSrc\.join\(' '\)\}`/);
+  assert.doesNotMatch(csp, /scriptSrc\.push\("'unsafe-inline'"\)/);
+  assert.doesNotMatch(csp, /script-src[^`]*'unsafe-inline'/);
+  assert.ok(
+    csp.indexOf("scriptSrc.push(\"'unsafe-eval'\")") > csp.indexOf('if (isDevelopment)'),
+    'unsafe-eval must only be added in development',
+  );
 });
 
 test('web executable inline scripts are nonce-bound for strict production CSP', () => {
@@ -1453,7 +1857,7 @@ test('web route protection uses the Next proxy convention instead of deprecated 
   assert.equal(existsSync(join(repoRoot, 'apps/web/src/proxy.ts')), true);
 
   const proxy = readRepoFile('apps/web/src/proxy.ts');
-  assert.match(proxy, /export function proxy\(request: NextRequest\)/);
+  assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
   assert.match(proxy, /export const config\s*=/);
   assert.doesNotMatch(proxy, /export function middleware/);
 });
@@ -1461,13 +1865,31 @@ test('web route protection uses the Next proxy convention instead of deprecated 
 test('web email verification flow supports generic registration and unverified signed-in users', () => {
   const authContext = readRepoFile('apps/web/src/lib/auth-context.tsx');
   const loginPage = readRepoFile('apps/web/src/app/(auth)/login/page.tsx');
+  const safeNextPath = readRepoFile('apps/web/src/lib/safe-next-path.ts');
+  const safeNextPathTest = readRepoFile('apps/web/src/lib/safe-next-path.test.ts');
   const registerPage = readRepoFile('apps/web/src/app/(auth)/register/page.tsx');
   const dashboardLayout = readRepoFile('apps/web/src/app/(dashboard)/layout.tsx');
   const verifyEmailPage = readRepoFile('apps/web/src/app/(auth)/verify-email/page.tsx');
+  const refreshUserBlock = authContext.match(/const refreshUser = useCallback[\s\S]*?\n  }, \[\]\);/)?.[0] ?? '';
 
   assert.match(authContext, /login:\s*\([^)]*\)\s*=>\s*Promise<UserResponse>/);
   assert.match(authContext, /register:\s*\([^)]*\)\s*=>\s*Promise<void>/);
-  assert.match(loginPage, /router\.push\(user\.emailVerified\s*\?\s*'\/dashboard'\s*:\s*'\/verify-email'\)/);
+  assert.ok(refreshUserBlock, 'auth context must define refreshUser');
+  assert.doesNotMatch(
+    refreshUserBlock,
+    /skipAuthRefresh:\s*true/,
+    'auth bootstrap must allow refresh-cookie-only sessions to refresh before reporting logged out',
+  );
+  assert.match(loginPage, /import \{ safeNextPath \} from '@\/lib\/safe-next-path'/);
+  assert.match(safeNextPath, /export function safeNextPath\(nextPath: string \| null, origin = currentOrigin\(\)\): string/);
+  assert.match(safeNextPath, /new URL\(nextPath, baseOrigin\)/);
+  assert.match(safeNextPath, /destination\.origin !== baseOrigin/);
+  assert.match(safeNextPath, /isProtectedAppPath\(path\)/);
+  assert.match(safeNextPathTest, /\/%5C%5Cevil\.example/);
+  assert.match(safeNextPathTest, /\/%2F%2Fevil\.example/);
+  assert.match(loginPage, /new URLSearchParams\(window\.location\.search\)\.get\('next'\)/);
+  assert.match(loginPage, /user\.emailVerified\s*\?\s*safeNextPath\(nextPath\)\s*:\s*'\/verify-email'/);
+  assert.match(loginPage, /router\.push\(loginDestination\(user\)\)/);
   assert.match(registerPage, /await register\(\{ name, email, password, organisationName \}\)/);
   assert.match(registerPage, /router\.push\('\/verify-email'\)/);
   assert.match(dashboardLayout, /!user\.emailVerified[\s\S]*router\.replace\('\/verify-email'\)/);
@@ -1479,6 +1901,109 @@ test('web email verification flow supports generic registration and unverified s
   assert.match(verifyEmailPage, /\{user \? 'Continue to dashboard' : 'Go to sign in'\}/);
   assert.match(verifyEmailPage, /Resend verification email/);
   assert.doesNotMatch(verifyEmailPage, /No verification token found/);
+});
+
+test('billing page fails closed without exposing internal production setup gaps', () => {
+  const billingPage = readRepoFile('apps/web/src/app/(dashboard)/billing/page.tsx');
+
+  assert.doesNotMatch(billingPage, /Stripe is not production-ready yet/);
+  assert.doesNotMatch(billingPage, /secret key|webhook secret|price IDs/i);
+  assert.match(billingPage, /Billing setup is temporarily unavailable/);
+  assert.match(billingPage, /Please contact support to change your plan/);
+  assert.match(billingPage, /isDisabled=\{!billingConfigured\}/);
+});
+
+test('billing API unavailable errors do not expose internal Stripe configuration names', () => {
+  const billingService = readRepoFile('apps/api/src/services/billing.service.ts');
+
+  assert.doesNotMatch(billingService, /Stripe secret key is not configured/);
+  assert.doesNotMatch(billingService, /Stripe webhook secret is not configured/);
+  assert.doesNotMatch(billingService, /Stripe price ID is not configured/);
+  assert.match(billingService, /BILLING_UNAVAILABLE_MESSAGE/);
+  assert.match(billingService, /Billing is temporarily unavailable/);
+});
+
+test('Stripe webhook processing does not hold a DB transaction across provider I/O', () => {
+  const billingService = readRepoFile('apps/api/src/services/billing.service.ts');
+  const handleWebhook = billingService.match(/async handleWebhook\(event: Stripe\.Event\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+  const transactionBody = handleWebhook.match(/this\.prisma\.\$transaction[\s\S]*?\n    \}\);/)?.[0] ?? '';
+  const checkoutHandler = billingService.match(/private async handleCheckoutCompleted[\s\S]*?\n  \}/)?.[0] ?? '';
+
+  assert.ok(handleWebhook, 'handleWebhook must exist');
+  assert.ok(transactionBody, 'handleWebhook must use a transaction for ledger plus local mutation');
+  assert.match(billingService, /private async resolveCheckoutSubscription/);
+  assert.match(billingService, /private async hasProcessedWebhookEvent/);
+  assert.ok(
+    handleWebhook.indexOf('resolveCheckoutSubscription') < handleWebhook.indexOf('this.prisma.$transaction'),
+    'Stripe subscription retrieval must happen before opening the local DB transaction',
+  );
+  assert.doesNotMatch(transactionBody, /subscriptions\.retrieve/);
+  assert.doesNotMatch(checkoutHandler, /subscriptions\.retrieve/);
+  assert.doesNotMatch(checkoutHandler, /stripe:\s*Stripe/);
+});
+
+test('storage API unavailable errors do not expose internal Supabase configuration names', () => {
+  const storageService = readRepoFile('apps/api/src/services/storage.service.ts');
+
+  assert.doesNotMatch(storageService, /Supabase storage is not configured/);
+  assert.match(storageService, /STORAGE_UNAVAILABLE_MESSAGE/);
+  assert.match(storageService, /Document storage is temporarily unavailable/);
+});
+
+test('email delivery logs do not include recipient or subject PII', () => {
+  const emailService = readRepoFile('apps/api/src/services/email.service.ts');
+  const logStatements = emailService.match(/console\.(?:warn|error)\([^;]+;/g) ?? [];
+
+  assert.ok(logStatements.length > 0, 'email service should keep operational delivery logs');
+  for (const statement of logStatements) {
+    assert.doesNotMatch(statement, /\bsubject\b/);
+    assert.doesNotMatch(statement, /\$\{to\}/);
+    assert.doesNotMatch(statement, /,\s*err\)/);
+  }
+  assert.match(emailService, /formatEmailDeliveryError/);
+});
+
+test('public API user and organisation responses omit internal provider and credential fields', () => {
+  const publicDtos = readRepoFile('apps/api/src/utils/public-dtos.ts');
+  const authService = readRepoFile('apps/api/src/services/auth.service.ts');
+  const teamService = readRepoFile('apps/api/src/services/team.service.ts');
+  const organisationService = readRepoFile('apps/api/src/services/organisation.service.ts');
+  const authRoutes = readRepoFile('apps/api/src/routes/auth/index.ts');
+  const teamRoutes = readRepoFile('apps/api/src/routes/team/index.ts');
+
+  for (const content of [publicDtos, authService, teamService, organisationService, authRoutes, teamRoutes]) {
+    assert.doesNotMatch(content, /organisation:\s*true/);
+    assert.doesNotMatch(content, /organisation:\s*user\.organisation/);
+    assert.doesNotMatch(content, /organisation:\s*result\.user\.organisation/);
+  }
+
+  assert.match(publicDtos, /publicOrganisationSelect/);
+  assert.match(publicDtos, /export function publicOrganisation/);
+  assert.match(publicDtos, /export function publicUser/);
+  assert.doesNotMatch(publicDtos, /stripeCustomerId:\s*true/);
+  assert.doesNotMatch(publicDtos, /passwordHash:\s*true/);
+  assert.doesNotMatch(publicDtos, /resetToken:\s*true/);
+  assert.doesNotMatch(publicDtos, /verifyToken:\s*true/);
+
+  assert.match(authService, /organisation:\s*\{\s*select:\s*publicOrganisationSelect\s*\}/);
+  assert.match(teamService, /organisation:\s*\{\s*select:\s*publicOrganisationSelect\s*\}/);
+  assert.match(organisationService, /select:\s*publicOrganisationSelect/);
+  assert.match(authRoutes, /publicUser\(result\.user\)/);
+  assert.match(authRoutes, /publicUser\(user\)/);
+  assert.match(teamRoutes, /publicUser\(result\.user\)/);
+});
+
+test('refresh and logout auth endpoints have route-specific throttles', () => {
+  const authRoutes = readRepoFile('apps/api/src/routes/auth/index.ts');
+
+  assert.match(
+    authRoutes,
+    /app\.post\(\s*'\/refresh',\s*\{\s*config:\s*\{\s*rateLimit:\s*\{\s*max:\s*5,\s*timeWindow:\s*'1 minute'\s*\}\s*\}\s*\}/,
+  );
+  assert.match(
+    authRoutes,
+    /app\.post\(\s*'\/logout',\s*\{\s*config:\s*\{\s*rateLimit:\s*\{\s*max:\s*10,\s*timeWindow:\s*'1 minute'\s*\}\s*\}\s*\}/,
+  );
 });
 
 test('team invite flows keep account enumeration and duplicate active invites guarded', () => {
@@ -1504,43 +2029,186 @@ test('team invite flows keep account enumeration and duplicate active invites gu
   assert.match(migration, /WHERE "acceptedAt" IS NULL\s+AND "revokedAt" IS NULL/);
 });
 
+test('production migrations install governance code reference data', () => {
+  const migrationsDir = join(repoRoot, 'apps/api/prisma/migrations');
+  const migrations = readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => readFileSync(join(migrationsDir, entry.name, 'migration.sql'), 'utf8'));
+
+  const migration = migrations.find((content) =>
+    content.includes('Seed governance code reference data') &&
+    content.includes('"GovernancePrinciple"') &&
+    content.includes('"GovernanceStandard"') &&
+    content.includes('ON CONFLICT ("number")') &&
+    content.includes('ON CONFLICT ("code")'));
+
+  assert.ok(migration, 'production migrations must seed governance reference data');
+  assert.equal((migration.match(/\('governance-principle-/g) ?? []).length, 6);
+  assert.equal((migration.match(/\('governance-standard-/g) ?? []).length, 49);
+  const principleConflictBlock = migration.match(/ON CONFLICT \("number"\) DO UPDATE SET([\s\S]*?);/)?.[1] ?? '';
+  const standardConflictBlock = migration.match(/ON CONFLICT \("code"\) DO UPDATE SET([\s\S]*?);/)?.[1] ?? '';
+  assert.match(migration, /"description"\s+=\s+EXCLUDED\."description"/);
+  assert.match(migration, /"principleId"\s+=\s+EXCLUDED\."principleId"/);
+  assert.match(migration, /ON principles\."number"\s+=\s+standards\.principle_number/);
+  assert.doesNotMatch(
+    principleConflictBlock,
+    /"id"\s*=/,
+    'principle upserts must preserve existing IDs so legacy references remain valid',
+  );
+  assert.doesNotMatch(
+    standardConflictBlock,
+    /"id"\s*=/,
+    'standard upserts must preserve existing IDs so compliance and document links remain valid',
+  );
+});
+
 test('web proxy preserves protected-route redirect and no-cache behavior', () => {
-  const script = `
-    import assert from 'node:assert/strict';
-    import { NextRequest } from 'next/server';
+  const proxy = readRepoFile('apps/web/src/proxy.ts');
+  const redirectToLogin = proxy.match(/function redirectToLogin\(request: NextRequest, csp: string\): NextResponse \{[\s\S]*?\n}/)?.[0] ?? '';
+  const protectedBranch = proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?return addSetCookieHeaders/)?.[0] ?? '';
+  const publicBranch = proxy.match(/if \(!isProtectedAppPath\(pathname\)\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
 
-    const proxyModule = await import('./apps/web/src/proxy.ts');
-    const proxy = proxyModule.proxy ?? proxyModule.default?.proxy;
+  assert.ok(redirectToLogin, 'proxy must keep a dedicated login redirect helper');
+  assert.match(redirectToLogin, /loginUrl\.pathname = '\/login'/);
+  assert.match(redirectToLogin, /loginUrl\.search = ''/);
+  assert.match(redirectToLogin, /loginUrl\.searchParams\.set\('next', `\$\{pathname\}\$\{search\}`\)/);
+  assert.match(redirectToLogin, /NextResponse\.redirect\(loginUrl\)/);
+  assert.match(redirectToLogin, /addProtectedNoCacheHeaders\(response\)/);
+  assert.match(proxy, /const PROTECTED_RESPONSE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate'/);
+  assert.match(proxy, /response\.headers\.set\('Cache-Control', PROTECTED_RESPONSE_CACHE_CONTROL\)/);
+  assert.match(proxy, /response\.headers\.set\('Pragma', 'no-cache'\)/);
 
-    const unauthenticated = proxy(new NextRequest('https://app.charitypilot.ie/dashboard?tab=deadlines'));
-    assert.equal(unauthenticated.status, 307);
-    assert.equal(
-      unauthenticated.headers.get('location'),
-      'https://app.charitypilot.ie/login?next=%2Fdashboard%3Ftab%3Ddeadlines',
+  assert.ok(protectedBranch, 'protected branch must exist');
+  assert.match(protectedBranch, /return redirectToLogin\(request, csp\)/);
+  assert.match(protectedBranch, /await validateProtectedAuthSession\(request\)/);
+  assert.match(protectedBranch, /addProtectedNoCacheHeaders\(NextResponse\.next/);
+
+  assert.ok(publicBranch, 'public branch must exist');
+  assert.match(publicBranch, /NextResponse\.next/);
+  assert.doesNotMatch(publicBranch, /addProtectedNoCacheHeaders/);
+  assert.match(publicBranch, /isSensitiveAuthPath\(pathname\) \? addSensitiveAuthHeaders\(responseWithCsp\) : responseWithCsp/);
+});
+
+test('web proxy validates protected sessions with API auth authority before rendering', () => {
+  const proxy = readRepoFile('apps/web/src/proxy.ts');
+  const protectedBranch = proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?const requestHeaders = createCspRequestHeaders/)?.[0] ?? '';
+
+  assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
+  assert.match(proxy, /async function validateProtectedAuthSession\(request: NextRequest\): Promise<\{/);
+  assert.match(proxy, /authenticated:\s*boolean/);
+  assert.match(proxy, /setCookieHeaders:\s*string\[\]/);
+  assert.match(proxy, /createApiAuthUrl\('\/api\/v1\/auth\/me'\)/);
+  assert.match(proxy, /createApiAuthUrl\('\/api\/v1\/auth\/refresh'\)/);
+  assert.match(proxy, /fetch\(authUrl/);
+  assert.match(proxy, /fetch\(refreshUrl/);
+  assert.match(proxy, /cache:\s*'no-store'/);
+  assert.match(proxy, /redirect:\s*'manual'/);
+  assert.match(proxy, /protectedAuthCookieHeader\(request\)/);
+  assert.match(proxy, /Cookie:\s*cookieHeader/);
+  assert.match(proxy, /addSetCookieHeaders\(response,\s*authSession\.setCookieHeaders\)/);
+  assert.ok(protectedBranch, 'protected proxy branch must still check missing auth cookies first');
+  assert.match(protectedBranch, /await validateProtectedAuthSession\(request\)/);
+  assert.ok(
+    protectedBranch.indexOf('await validateProtectedAuthSession(request)') <
+      protectedBranch.indexOf('const requestHeaders = createCspRequestHeaders'),
+    'protected content must not render until the API auth session check succeeds',
+  );
+});
+
+test('sensitive URL token helper prefers fragment tokens over query tokens', () => {
+  const urlSecurity = readRepoFile('apps/web/src/lib/url-security.ts');
+  const helperBody = urlSecurity.match(/export function getSensitiveUrlToken[\s\S]*?\n}/)?.[0] ?? '';
+
+  assert.ok(helperBody, 'getSensitiveUrlToken helper must exist');
+  assert.match(helperBody, /const fragmentToken = hashSearchParams\(url\)\?\.get\(paramName\)/);
+  assert.match(helperBody, /if \(fragmentToken\) return fragmentToken/);
+  assert.ok(
+    helperBody.indexOf('fragmentToken') < helperBody.indexOf('queryToken'),
+    'fragment token must be read before query token so URL fragments remain authoritative',
+  );
+});
+
+test('document download trust only permits the configured Supabase storage project', () => {
+  const urlSecurity = readRepoFile('apps/web/src/lib/url-security.ts');
+
+  assert.match(urlSecurity, /function configuredSupabaseStorageOrigin/);
+  assert.match(urlSecurity, /url\.origin !== configuredOrigin/);
+  assert.doesNotMatch(urlSecurity, /hostname\.endsWith\('\.supabase\.co'\)[\s\S]*pathname\.startsWith/);
+  assert.match(urlSecurity, /NEXT_PUBLIC_SUPABASE_URL/);
+});
+
+test('document metadata responses do not expose internal storage object keys', () => {
+  const sharedApiTypes = readRepoFile('packages/shared/src/types/api.ts');
+  const documentService = readRepoFile('apps/api/src/services/document.service.ts');
+  const documentRoutes = readRepoFile('apps/api/src/routes/documents/index.ts');
+
+  const documentResponse = sharedApiTypes.match(/export interface DocumentResponse \{[\s\S]*?\n}/)?.[0] ?? '';
+  assert.ok(documentResponse, 'DocumentResponse type must exist');
+  assert.doesNotMatch(documentResponse, /fileUrl/);
+
+  assert.match(documentService, /function publicDocument/);
+  assert.match(documentService, /data\.map\(publicDocument\)/);
+  assert.match(documentService, /return publicDocument\(doc\)/);
+  assert.match(documentService, /async getStoragePath/);
+  assert.doesNotMatch(documentService, /return doc;\s*$/m);
+  assert.match(documentRoutes, /service\.getStoragePath\(request\.user\.organisationId, request\.params\.id\)/);
+  assert.doesNotMatch(documentRoutes, /doc\.fileUrl/);
+});
+
+test('storage provider failures are sanitized before logs and retry state', () => {
+  const providerErrors = readRepoFile('apps/api/src/utils/provider-errors.ts');
+  const documentService = readRepoFile('apps/api/src/services/document.service.ts');
+  const documentRoutes = readRepoFile('apps/api/src/routes/documents/index.ts');
+  const storageService = readRepoFile('apps/api/src/services/storage.service.ts');
+
+  assert.match(providerErrors, /export function formatProviderError/);
+  assert.match(providerErrors, /\$1=\[redacted\]/);
+  assert.match(providerErrors, /\[email\]/);
+  assert.match(providerErrors, /\[storage-path\]/);
+  assert.match(documentService, /formatProviderError\(error\)/);
+  assert.doesNotMatch(documentService, /function errorMessage/);
+  assert.doesNotMatch(documentService, /lastError:\s*errorMessage\(error\)/);
+  assert.match(documentRoutes, /formatProviderError\(cleanupError\)/);
+  assert.match(documentRoutes, /formatProviderError\(outboxError\)/);
+  assert.doesNotMatch(documentRoutes, /request\.log\.error\(cleanupError/);
+  assert.doesNotMatch(documentRoutes, /request\.log\.error\(outboxError/);
+  assert.doesNotMatch(storageService, /Failed to upload file: \$\{error\.message\}/);
+  assert.doesNotMatch(storageService, /Failed to generate signed URL: \$\{error\?\.message/);
+  assert.doesNotMatch(storageService, /Failed to delete file: \$\{error\.message\}/);
+});
+
+test('client code uses production-safe logging instead of raw error objects', () => {
+  const clientFiles = repoFilesUnder('apps/web/src')
+    .filter((file) => /\.(?:ts|tsx)$/.test(file))
+    .filter((file) => !/\.test\.(?:ts|tsx)$/.test(file))
+    .filter((file) => file.replace(/\\/g, '/') !== 'apps/web/src/lib/client-logger.ts');
+
+  for (const file of clientFiles) {
+    const content = readRepoFile(file);
+    assert.doesNotMatch(
+      content,
+      /console\.error\([\s\S]*?\b(?:err|error)\b[\s\S]*?\);/,
+      `${file} must use logClientError instead of logging raw browser error objects`,
     );
-    assert.equal(unauthenticated.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
-    assert.equal(unauthenticated.headers.get('pragma'), 'no-cache');
+  }
 
-    const authenticated = proxy(new NextRequest('https://app.charitypilot.ie/dashboard', {
-      headers: { cookie: 'charitypilot_access=token' },
-    }));
-    assert.equal(authenticated.status, 200);
-    assert.equal(authenticated.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
-    assert.equal(authenticated.headers.get('pragma'), 'no-cache');
+  const logger = readRepoFile('apps/web/src/lib/client-logger.ts');
+  assert.match(logger, /export function logClientError/);
+  assert.match(logger, /process\.env\.NODE_ENV !== 'production'/);
+  assert.match(logger, /console\.error\(message, error\)/);
+  assert.match(logger, /console\.error\(`\$\{message\}: \$\{clientErrorSummary\(error\)\}`\)/);
+});
 
-    const publicRoute = proxy(new NextRequest('https://app.charitypilot.ie/login'));
-    assert.equal(publicRoute.status, 200);
-    assert.equal(publicRoute.headers.get('cache-control'), null);
-    assert.equal(publicRoute.headers.get('pragma'), null);
-  `;
+test('web proxy transitions legacy query auth tokens to URL fragments before render', () => {
+  const proxy = readRepoFile('apps/web/src/proxy.ts');
 
-  const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: process.env,
-  });
-
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(proxy, /function redirectSensitiveQueryToken/);
+  assert.match(proxy, /request\.nextUrl\.searchParams\.get\('token'\)/);
+  assert.match(proxy, /redirectUrl\.searchParams\.delete\('token'\)/);
+  assert.match(proxy, /fragmentParams\.set\('token', token\)/);
+  assert.match(proxy, /redirectUrl\.hash = fragmentParams\.toString\(\)/);
+  assert.match(proxy, /NextResponse\.redirect\(redirectUrl\)/);
+  assert.match(proxy, /redirectSensitiveQueryToken\(request, csp\)/);
 });
 
 test('web export opens the API-rendered report directly with opener isolation', () => {
@@ -1564,27 +2232,58 @@ test('web document upload picker does not advertise legacy Office formats', () =
 test('CI deploys Prisma migrations against PostgreSQL before release gates', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
-  assert.match(workflow, /services:\s*\n\s+postgres:/);
-  assert.match(workflow, /image:\s+postgres:/);
-  assert.match(workflow, /POSTGRES_DB:\s+charitypilot_ci/);
+  assert.doesNotMatch(workflow, /^\s+services:\s*$/m);
   assert.match(workflow, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci/);
+  assert.match(workflow, /node scripts\/start-ci-postgres\.mjs/);
   assert.match(workflow, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(workflow, /prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
 });
 
+test('CI starts PostgreSQL after checkout with repo-owned retry logic', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.doesNotMatch(
+    workflow,
+    /^\s+services:\s*$/m,
+    'CI must not use service containers that can fail before checkout',
+  );
+  assert.match(workflow, /name:\s+Start PostgreSQL/);
+  assert.match(workflow, /node scripts\/start-ci-postgres\.mjs/);
+  assert.match(workflow, /name:\s+Stop PostgreSQL/);
+  assert.match(workflow, /if:\s+always\(\)/);
+  assert.ok(
+    workflow.indexOf('name: Checkout') < workflow.indexOf('name: Start PostgreSQL'),
+    'PostgreSQL startup must happen after checkout so retry behavior is repo-controlled',
+  );
+  assert.ok(
+    workflow.indexOf('name: Start PostgreSQL') < workflow.indexOf('name: Deploy Prisma migrations'),
+    'PostgreSQL must start before migrations deploy',
+  );
+});
+
 test('CI verifies PostgreSQL backup and restore against the migrated database', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
+  const backupScript = readRepoFile('scripts/postgres-backup.mjs');
   const stepStart = workflow.indexOf('name: Verify PostgreSQL backup and restore');
   assert.notEqual(stepStart, -1, 'CI must verify database backup and restore');
   const step = workflow.slice(stepStart, workflow.indexOf('name: Lint'));
 
+  assert.match(backupScript, /allow-remote-sentinel/);
+  assert.match(backupScript, /Refusing to seed restore sentinel into a non-local database URL/);
+  assert.match(backupScript, /isLocalDatabaseUrl\(databaseUrl\)/);
   assert.match(step, /backup_dir="\$\(mktemp -d\)"/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs seed-restore-sentinel/);
   assert.match(step, /node scripts\/postgres-backup\.mjs backup/);
   assert.match(step, /--database-url="\$\{DATABASE_URL\}"/);
   assert.match(step, /--docker-network=host/);
   assert.match(step, /--output-file=ci-postgres\.dump/);
   assert.match(step, /node scripts\/postgres-backup\.mjs verify-restore/);
   assert.match(step, /--dump-file="\$\{backup_dir\}\/ci-postgres\.dump"/);
+  assert.match(step, /--expect-operational-sentinel/);
+  assert.ok(
+    step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs backup'),
+    'CI must seed operational data before taking the backup dump',
+  );
   assert.ok(
     workflow.indexOf('name: Verify Prisma migration status') < stepStart,
     'backup verification must run after migration status is checked',
@@ -1604,6 +2303,7 @@ test('CI keeps every production release gate wired', () => {
   assert.match(workflow, /^permissions:\s*\n\s+contents:\s+read\s*$/m);
   assert.match(workflow, /node-version:\s+22/);
   assert.match(workflow, /run:\s+npm ci/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/start-ci-postgres\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/security-scan\.test\.mjs/);
   assert.equal(packageJson.scripts['security:secrets'], 'node scripts/security-scan.mjs secrets');
   assert.equal(packageJson.scripts['security:sast'], 'node scripts/security-scan.mjs sast');
@@ -1706,7 +2406,12 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
   assert.match(workflow, /name:\s+Verify API Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-api-ci[\s\S]*@prisma\/client/);
-  assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui\/react'\]/);
+  assertWorkflowChecksForbiddenApiRuntimePackages(workflow);
+  assertWorkflowUsesPackagePathAbsenceChecks(
+    workflowStepBetween(workflow, 'Verify API Docker runtime dependencies', 'Smoke API Docker image'),
+  );
+  assert.match(workflow, /const forbiddenPaths = \['src', 'prisma', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo'\]/);
+  assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
 
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
@@ -1723,7 +2428,13 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /docker rm -f charitypilot-web-smoke/);
   assert.match(workflow, /name:\s+Verify web Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-web-ci[\s\S]*require\.resolve\('next'\)/);
-  assert.match(workflow, /for \(const pkg of \['typescript', 'eslint', 'turbo'\]/);
+  assertWorkflowChecksForbiddenWebRuntimePackages(workflow);
+  assertWorkflowUsesPackagePathAbsenceChecks(
+    workflowStepBetween(workflow, 'Verify web Docker runtime dependencies', 'Smoke web Docker image'),
+  );
+  assert.match(workflow, /const forbiddenPaths = \['src', '\.test-dist', '\.next\/cache', '\.next\/export', '\.next\/export-detail\.json', '\.next\/server\/proxy\.js', '\.next\/server\/proxy\.js\.nft\.json', 'next-codex-build', 'tsconfig\.test\.json', 'tsconfig\.tsbuildinfo', 'next-env\.d\.ts'\]/);
+  assert.match(workflow, /entry\.startsWith\('\.next-build'\)/);
+  assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
 
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker image'),
@@ -1790,12 +2501,13 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   );
   const deadlineRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js');
   const cleanupRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js');
+  const schedulerRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/production-scheduler.js');
 
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
   assert.match(jobSmokeStep, /charitypilot_job_smoke/);
   assert.match(jobSmokeStep, /CREATE DATABASE charitypilot_job_smoke OWNER charitypilot/);
   assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
-  for (const run of [deadlineRun, cleanupRun]) {
+  for (const run of [deadlineRun, cleanupRun, schedulerRun]) {
     assert.match(run, /-e NODE_ENV=production/);
     assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
     assert.match(run, /-e CI=true/);
@@ -1820,9 +2532,18 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(schedulerRun, /-e PRODUCTION_SCHEDULER_RUN_ONCE=true/);
+  assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
+  assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
+  assert.match(schedulerRun, /-e EMAIL_FROM=noreply@charitypilot\.ie/);
+  assert.match(schedulerRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
+  assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
+  assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
+  assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
+  assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
     'API image must be built before scheduled job smoke runs',
@@ -1867,15 +2588,46 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /permissions:[\s\S]*contents:\s+read[\s\S]*packages:\s+write[\s\S]*id-token:\s+write/);
   assert.match(workflow, /environment:\s+production/);
   assert.match(workflow, /REGISTRY:\s+ghcr\.io/);
+  assert.doesNotMatch(
+    workflow,
+    /^\s+services:\s*$/m,
+    'release workflow must not use service containers that can fail before checkout',
+  );
+  assert.match(workflow, /name:\s+Start PostgreSQL/);
+  assert.match(workflow, /node scripts\/start-ci-postgres\.mjs/);
+  assert.match(workflow, /name:\s+Stop PostgreSQL/);
+  assert.match(workflow, /if:\s+always\(\)/);
   assert.match(workflow, /name:\s+Validate release ref/);
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);
   assert.match(workflow, /docker login "\$\{REGISTRY\}"/);
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --target migration-runner[\s\S]*-t charitypilot-api-migrations-ci \./);
+  assert.match(workflow, /name:\s+Verify migration runner Docker runtime dependencies/);
+  const migrationDependencyStep = workflow.slice(
+    workflow.indexOf('name: Verify migration runner Docker runtime dependencies'),
+    workflow.indexOf('name: Start PostgreSQL'),
+  );
+  assert.match(migrationDependencyStep, /docker run --rm --entrypoint node charitypilot-api-migrations-ci/);
+  assert.match(migrationDependencyStep, /require\.resolve\('prisma\/build\/index\.js'\)/);
+  assert.match(migrationDependencyStep, /require\('prisma\/package\.json'\)\.version !== '6\.19\.3'/);
+  assert.match(migrationDependencyStep, /fs\.existsSync\('node_modules\/\.bin\/prisma'\)/);
+  assert.match(migrationDependencyStep, /fs\.readdirSync\('prisma\/migrations'\)\.length === 0/);
+  assert.match(migrationDependencyStep, /path\.join\('node_modules', \.\.\.pkg\.split\('\/'\)\)/);
+  assert.doesNotMatch(migrationDependencyStep, /require\.resolve\(pkg\)/);
+  assertWorkflowChecksForbiddenMigrationRunnerPackages(workflow);
+  assert.match(workflow, /name:\s+Audit migration runner Docker runtime dependencies/);
+  assert.match(workflow, /docker run --rm --entrypoint npm charitypilot-api-migrations-ci audit --omit=dev --audit-level=moderate/);
+  assert.match(workflow, /const requiredPaths = \['prisma\/schema\.prisma', 'prisma\/migrations'\]/);
+  assert.match(workflow, /const forbiddenPaths = \['src', 'dist', 'prisma\/seed\.ts', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo', '\.\.\/\.\.\/apps\/web', '\.\.\/\.\.\/packages\/shared'\]/);
   assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-migrations-ci[\s\S]*migrate status --schema prisma\/schema\.prisma/);
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
   assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
-  assert.match(workflow, /for \(const pkg of \['typescript', 'tsx', 'prisma', 'turbo', 'next', 'react', 'react-dom', '@heroui\/react'\]/);
+  assertWorkflowChecksForbiddenApiRuntimePackages(workflow);
+  assertWorkflowUsesPackagePathAbsenceChecks(
+    workflowStepBetween(workflow, 'Verify API Docker runtime dependencies', 'Smoke API Docker image'),
+  );
+  assert.match(workflow, /const forbiddenPaths = \['src', 'prisma', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo'\]/);
+  assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
   assert.match(workflow, /api_headers="\$\(mktemp\)"/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{api_headers\}"/);
@@ -1896,6 +2648,13 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https:\/\/api\.charitypilot\.ie" "\$\{web_headers\}"/);
+  assertWorkflowChecksForbiddenWebRuntimePackages(workflow);
+  assertWorkflowUsesPackagePathAbsenceChecks(
+    workflowStepBetween(workflow, 'Verify web Docker runtime dependencies', 'Smoke web Docker image'),
+  );
+  assert.match(workflow, /const forbiddenPaths = \['src', '\.test-dist', '\.next\/cache', '\.next\/export', '\.next\/export-detail\.json', '\.next\/server\/proxy\.js', '\.next\/server\/proxy\.js\.nft\.json', 'next-codex-build', 'tsconfig\.test\.json', 'tsconfig\.tsbuildinfo', 'next-env\.d\.ts'\]/);
+  assert.match(workflow, /entry\.startsWith\('\.next-build'\)/);
+  assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
   assert.match(workflow, /docker tag charitypilot-api-ci "\$\{api_image\}"/);
   assert.match(workflow, /docker tag charitypilot-web-ci "\$\{web_image\}"/);
   assert.match(workflow, /docker tag charitypilot-api-migrations-ci "\$\{migration_image\}"/);
@@ -1927,8 +2686,18 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
 
   assert.ok(
     workflow.indexOf('name: Build migration runner image') <
+      workflow.indexOf('name: Verify migration runner Docker runtime dependencies'),
+    'migration runner image must be built before runtime inspection',
+  );
+  assert.ok(
+    workflow.indexOf('name: Verify migration runner Docker runtime dependencies') <
+      workflow.indexOf('name: Audit migration runner Docker runtime dependencies'),
+    'migration runner image must be inspected before its runtime audit',
+  );
+  assert.ok(
+    workflow.indexOf('name: Audit migration runner Docker runtime dependencies') <
       workflow.indexOf('name: Run migration runner against CI PostgreSQL'),
-    'migration runner image must be built before its smoke run',
+    'migration runner image dependencies must be audited before its smoke run',
   );
   assert.ok(
     workflow.indexOf('name: Smoke web Docker image') < workflow.indexOf('name: Push image tags'),
@@ -1970,6 +2739,9 @@ test('release workflow runs full production gates before publishing images', () 
   assert.match(workflow, /run:\s+npx prisma validate/);
   assert.match(workflow, /run:\s+npm run lint/);
   assert.match(workflow, /run:\s+npm run test/);
+  assert.match(workflow, /name:\s+Build shared package[\s\S]*run:\s+npm run build -w @charitypilot\/shared/);
+  assert.match(workflow, /name:\s+Build API[\s\S]*run:\s+npm run build -w @charitypilot\/api/);
+  assert.match(workflow, /name:\s+Build web[\s\S]*NEXT_PUBLIC_API_URL:\s+https:\/\/api\.charitypilot\.ie[\s\S]*run:\s+npm run build -w @charitypilot\/web/);
   assert.match(workflow, /run:\s+npm audit --omit=dev --audit-level=moderate/);
 
   for (const gate of [
@@ -1978,6 +2750,9 @@ test('release workflow runs full production gates before publishing images', () 
     'name: Validate Prisma schema',
     'name: Lint',
     'name: Test',
+    'name: Build shared package',
+    'name: Build API',
+    'name: Build web',
     'name: Dependency audit',
   ]) {
     assert.ok(workflow.indexOf(gate) > -1, `${gate} must exist in release workflow`);
@@ -1993,12 +2768,18 @@ test('release workflow verifies PostgreSQL backup and restore before publishing 
   const step = workflow.slice(stepStart, workflow.indexOf('name: Build API Docker image'));
 
   assert.match(step, /backup_dir="\$\(mktemp -d\)"/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs seed-restore-sentinel/);
   assert.match(step, /node scripts\/postgres-backup\.mjs backup/);
   assert.match(step, /--database-url="\$\{DATABASE_URL\}"/);
   assert.match(step, /--docker-network=host/);
   assert.match(step, /--output-file=ci-postgres\.dump/);
   assert.match(step, /node scripts\/postgres-backup\.mjs verify-restore/);
   assert.match(step, /--dump-file="\$\{backup_dir\}\/ci-postgres\.dump"/);
+  assert.match(step, /--expect-operational-sentinel/);
+  assert.ok(
+    step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs backup'),
+    'release workflow must seed operational data before taking the backup dump',
+  );
   assert.ok(
     workflow.indexOf('name: Run migration runner against CI PostgreSQL') < stepStart,
     'backup verification must run after the release migration runner smoke',
@@ -2056,12 +2837,13 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   );
   const deadlineRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js');
   const cleanupRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js');
+  const schedulerRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/production-scheduler.js');
 
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
   assert.match(jobSmokeStep, /charitypilot_job_smoke/);
   assert.match(jobSmokeStep, /CREATE DATABASE charitypilot_job_smoke OWNER charitypilot/);
   assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
-  for (const run of [deadlineRun, cleanupRun]) {
+  for (const run of [deadlineRun, cleanupRun, schedulerRun]) {
     assert.match(run, /-e NODE_ENV=production/);
     assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
     assert.match(run, /-e CI=true/);
@@ -2086,9 +2868,18 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(schedulerRun, /-e PRODUCTION_SCHEDULER_RUN_ONCE=true/);
+  assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
+  assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
+  assert.match(schedulerRun, /-e EMAIL_FROM=noreply@charitypilot\.ie/);
+  assert.match(schedulerRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
+  assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
+  assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
+  assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
+  assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
     'API image must be built before scheduled job smoke runs',

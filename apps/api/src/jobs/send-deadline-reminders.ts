@@ -1,9 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
-import { validateProductionEnv } from '../utils/env.js';
+import { validateDeadlineRemindersEnv } from '../utils/env.js';
 
 process.env.NODE_ENV ??= 'production';
-validateProductionEnv();
+validateDeadlineRemindersEnv();
 
 const prisma = new PrismaClient();
 

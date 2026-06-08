@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx --test src/tests/*.test.ts",
+    "test": "tsc -p tsconfig.json && node --test --test-isolation=none dist/tests/*.test.js",
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
   },

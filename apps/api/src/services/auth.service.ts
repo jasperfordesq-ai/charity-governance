@@ -9,6 +9,7 @@ import {
   revokeSessionToken,
   rotateSessionTokens,
 } from './session-tokens.js';
+import { publicOrganisationSelect } from '../utils/public-dtos.js';
 
 interface RegisterData {
   email: string;
@@ -135,7 +136,16 @@ export class AuthService {
   async login(data: LoginData) {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizeEmail(data.email) },
-      include: { organisation: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        passwordHash: true,
+        role: true,
+        emailVerified: true,
+        organisationId: true,
+        organisation: { select: publicOrganisationSelect },
+      },
     });
 
     if (!user) {
@@ -165,7 +175,15 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { organisation: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        emailVerified: true,
+        organisationId: true,
+        organisation: { select: publicOrganisationSelect },
+      },
     });
 
     if (!user) {

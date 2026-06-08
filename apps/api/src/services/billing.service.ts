@@ -9,6 +9,7 @@ import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 type BillingPrisma = Pick<PrismaClient, 'organisation' | 'stripeWebhookEvent' | 'subscription'>;
 
 const SUBSCRIPTION_PLANS = [SubscriptionPlan.ESSENTIALS, SubscriptionPlan.COMPLETE] as const;
+const BILLING_UNAVAILABLE_MESSAGE = 'Billing is temporarily unavailable. Please contact support to change your plan.';
 
 function getPriceConfig(): Array<{
   plan: SubscriptionPlan;
@@ -48,6 +49,14 @@ function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'P2002');
 }
 
+function isStripeSignatureVerificationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const stripeError = error as { type?: unknown; name?: unknown };
+  return stripeError.type === 'StripeSignatureVerificationError' ||
+    stripeError.name === 'StripeSignatureVerificationError';
+}
+
 function mapStripeSubscriptionStatus(status: string): SubscriptionStatus {
   switch (status) {
     case 'active':
@@ -82,7 +91,7 @@ export class BillingService {
     const secretKey = process.env.STRIPE_SECRET_KEY;
 
     if (!isConfiguredSecret(secretKey)) {
-      throw new AppError(503, 'BILLING_NOT_CONFIGURED', 'Stripe secret key is not configured');
+      throw new AppError(503, 'BILLING_NOT_CONFIGURED', BILLING_UNAVAILABLE_MESSAGE);
     }
 
     return new Stripe(secretKey);
@@ -95,7 +104,7 @@ export class BillingService {
       throw new AppError(
         503,
         'BILLING_NOT_CONFIGURED',
-        `Stripe price ID is not configured for ${plan.toLowerCase()} ${interval}`,
+        BILLING_UNAVAILABLE_MESSAGE,
       );
     }
 
@@ -123,11 +132,11 @@ export class BillingService {
     }
   }
 
-  private async handleCheckoutCompleted(
-    tx: BillingPrisma,
-    stripe: Stripe,
-    session: Stripe.Checkout.Session,
-  ): Promise<void> {
+  private getCheckoutSubscriptionContext(session: Stripe.Checkout.Session): {
+    organisationId: string;
+    requestedPlan: SubscriptionPlan;
+    subscriptionId: string;
+  } {
     const organisationId = session.metadata?.organisationId;
     const requestedPlan = session.metadata?.plan;
     const subscriptionId = getStripeObjectId(session.subscription);
@@ -140,13 +149,36 @@ export class BillingService {
       );
     }
 
-    const [organisation, sub] = await Promise.all([
-      tx.organisation.findUnique({
-        where: { id: organisationId },
-        select: { id: true, stripeCustomerId: true },
-      }),
-      stripe.subscriptions.retrieve(subscriptionId),
-    ]);
+    return { organisationId, requestedPlan, subscriptionId };
+  }
+
+  private async resolveCheckoutSubscription(
+    stripe: Stripe,
+    session: Stripe.Checkout.Session,
+  ): Promise<Stripe.Subscription> {
+    const { subscriptionId } = this.getCheckoutSubscriptionContext(session);
+    return stripe.subscriptions.retrieve(subscriptionId);
+  }
+
+  private async hasProcessedWebhookEvent(eventId: string): Promise<boolean> {
+    const existing = await this.prisma.stripeWebhookEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true },
+    });
+    return Boolean(existing);
+  }
+
+  private async handleCheckoutCompleted(
+    tx: BillingPrisma,
+    session: Stripe.Checkout.Session,
+    sub: Stripe.Subscription,
+  ): Promise<void> {
+    const { organisationId, requestedPlan } = this.getCheckoutSubscriptionContext(session);
+
+    const organisation = await tx.organisation.findUnique({
+      where: { id: organisationId },
+      select: { id: true, stripeCustomerId: true },
+    });
 
     if (!organisation) {
       throw new AppError(400, 'STRIPE_WEBHOOK_MISMATCH', 'Stripe checkout organisation does not match local data');
@@ -269,14 +301,22 @@ export class BillingService {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!isConfiguredSecret(webhookSecret)) {
-      throw new AppError(503, 'BILLING_NOT_CONFIGURED', 'Stripe webhook secret is not configured');
+      throw new AppError(503, 'BILLING_NOT_CONFIGURED', BILLING_UNAVAILABLE_MESSAGE);
     }
 
-    return this.getStripe().webhooks.constructEvent(
-      rawBody,
-      signature,
-      webhookSecret,
-    );
+    try {
+      return this.getStripe().webhooks.constructEvent(
+        rawBody,
+        signature,
+        webhookSecret,
+      );
+    } catch (error) {
+      if (isStripeSignatureVerificationError(error)) {
+        throw new AppError(400, 'INVALID_STRIPE_SIGNATURE', 'Invalid Stripe signature');
+      }
+
+      throw error;
+    }
   }
 
   async createCheckoutSession(
@@ -366,7 +406,14 @@ export class BillingService {
   }
 
   async handleWebhook(event: Stripe.Event) {
+    if (await this.hasProcessedWebhookEvent(event.id)) {
+      return;
+    }
+
     const stripe = this.getStripe();
+    const checkoutSubscription = event.type === 'checkout.session.completed'
+      ? await this.resolveCheckoutSubscription(stripe, event.data.object as Stripe.Checkout.Session)
+      : null;
 
     await this.prisma.$transaction(async (transaction) => {
       const tx = transaction as BillingPrisma;
@@ -384,7 +431,10 @@ export class BillingService {
 
       switch (event.type) {
         case 'checkout.session.completed':
-          await this.handleCheckoutCompleted(tx, stripe, event.data.object as Stripe.Checkout.Session);
+          if (!checkoutSubscription) {
+            throw new AppError(400, 'STRIPE_WEBHOOK_MISMATCH', 'Stripe checkout subscription is unavailable');
+          }
+          await this.handleCheckoutCompleted(tx, event.data.object as Stripe.Checkout.Session, checkoutSubscription);
           break;
 
         case 'customer.subscription.updated':

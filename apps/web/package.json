@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack --port 3003",
-    "build": "next build --webpack",
+    "build": "node --require ../../scripts/next-build-fs-retry.cjs ../../node_modules/next/dist/bin/next build --webpack && node ../../scripts/clean-next-export.cjs",
     "start": "node server.mjs",
-    "test": "node --import tsx --test src/lib/*.test.ts",
+    "test": "tsc -p tsconfig.test.json && node --test --test-isolation=none .test-dist/lib/*.test.js",
     "lint": "eslint src next.config.ts"
   },
   "dependencies": {

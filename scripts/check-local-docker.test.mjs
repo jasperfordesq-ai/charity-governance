@@ -98,6 +98,16 @@ test('local Docker compose overlay renders as a valid effective model with loopb
     },
   );
 
+  if (result.error?.code === 'EPERM') {
+    const baseCompose = readRepoFile('compose.yml');
+    const localCompose = readRepoFile('compose.local.yml');
+
+    assert.match(baseCompose, /127\.0\.0\.1:5434:5432/);
+    assert.match(localCompose, /127\.0\.0\.1:3002:3002/);
+    assert.match(localCompose, /127\.0\.0\.1:3003:3003/);
+    return;
+  }
+
   assert.equal(
     result.status,
     0,

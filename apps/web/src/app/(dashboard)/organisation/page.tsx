@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useRef } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
@@ -126,7 +127,7 @@ export default function OrganisationPage() {
       toast('Organisation profile saved');
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      console.error('Save failed', err);
+      logClientError('Save failed', err);
       toast('Failed to save changes', 'error');
     } finally {
       setSaving(false);

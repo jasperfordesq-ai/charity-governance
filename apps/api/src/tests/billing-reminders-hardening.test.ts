@@ -7,12 +7,17 @@ process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentials_monthly';
 process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentials_yearly';
 process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_complete_monthly';
 process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_complete_yearly';
+process.env.JWT_SECRET = 'unit-test-jwt-secret-with-enough-entropy';
+process.env.FRONTEND_URL = 'https://app.example.org';
 
 const { BillingService } = await import('../services/billing.service.js');
 const { DeadlineRemindersService } = await import('../services/deadline-reminders.service.js');
+const { default: Fastify } = await import('fastify');
+const { billingRoutes } = await import('../routes/billing/index.js');
 
 type BillingHarnessOptions = {
   existingSubscription?: Record<string, unknown> | null;
+  existingWebhookEvent?: Record<string, unknown> | null;
   organisation?: Record<string, unknown> | null;
   retrievedSubscription?: Record<string, unknown>;
   ledgerCreate?: (args: unknown) => Promise<unknown>;
@@ -49,10 +54,24 @@ function stripeSubscription(overrides: Record<string, unknown> = {}) {
 function billingHarness(options: BillingHarnessOptions = {}) {
   const calls: Array<{ name: string; args: unknown }> = [];
   const retrievedSubscription = options.retrievedSubscription ?? stripeSubscription();
+  let inTransaction = false;
 
   const prisma: Record<string, unknown> = {
-    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+      calls.push({ name: 'transaction.start', args: null });
+      inTransaction = true;
+      try {
+        return await callback(prisma);
+      } finally {
+        inTransaction = false;
+        calls.push({ name: 'transaction.end', args: null });
+      }
+    },
     stripeWebhookEvent: {
+      findUnique: async (args: unknown) => {
+        calls.push({ name: 'stripeWebhookEvent.findUnique', args });
+        return options.existingWebhookEvent ?? null;
+      },
       create: async (args: unknown) => {
         calls.push({ name: 'stripeWebhookEvent.create', args });
         if (options.ledgerCreate) return options.ledgerCreate(args);
@@ -96,7 +115,7 @@ function billingHarness(options: BillingHarnessOptions = {}) {
   const stripe = {
     subscriptions: {
       retrieve: async (id: string) => {
-        calls.push({ name: 'stripe.subscriptions.retrieve', args: id });
+        calls.push({ name: 'stripe.subscriptions.retrieve', args: { id, inTransaction } });
         return retrievedSubscription;
       },
     },
@@ -107,6 +126,65 @@ function billingHarness(options: BillingHarnessOptions = {}) {
 
   return { service, calls };
 }
+
+test('invalid Stripe webhook signatures return a client error', async () => {
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {} as never);
+  await app.register(billingRoutes, { prefix: '/billing' });
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/billing/webhooks',
+      headers: {
+        'content-type': 'application/json',
+        'stripe-signature': 'invalid',
+      },
+      payload: JSON.stringify({
+        id: 'evt_invalid_signature',
+        type: 'checkout.session.completed',
+        data: { object: {} },
+      }),
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), {
+      error: 'Invalid Stripe signature',
+      code: 'INVALID_STRIPE_SIGNATURE',
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('missing Stripe webhook signatures return a client error', async () => {
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {} as never);
+  await app.register(billingRoutes, { prefix: '/billing' });
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/billing/webhooks',
+      headers: {
+        'content-type': 'application/json',
+      },
+      payload: JSON.stringify({
+        id: 'evt_missing_signature',
+        type: 'checkout.session.completed',
+        data: { object: {} },
+      }),
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), {
+      error: 'Missing Stripe signature header',
+      code: 'MISSING_STRIPE_SIGNATURE',
+    });
+  } finally {
+    await app.close();
+  }
+});
 
 test('checkout.session.completed derives subscription status from the retrieved Stripe subscription', async () => {
   const { service, calls } = billingHarness({
@@ -130,6 +208,10 @@ test('checkout.session.completed derives subscription status from the retrieved 
   assert.ok(upsert);
   assert.equal((upsert.args as { create: { status: string } }).create.status, 'PAST_DUE');
   assert.equal((upsert.args as { update: { status: string } }).update.status, 'PAST_DUE');
+
+  const retrieve = calls.find((call) => call.name === 'stripe.subscriptions.retrieve');
+  assert.ok(retrieve);
+  assert.equal((retrieve.args as { inTransaction: boolean }).inTransaction, false);
 });
 
 test('subscription.updated maps unhandled Stripe statuses to an access-denying status', async () => {
@@ -177,11 +259,8 @@ test('checkout.session.completed rejects metadata when the customer or price doe
 });
 
 test('duplicate Stripe webhook event ids are ignored before subscription mutation', async () => {
-  const uniqueError = Object.assign(new Error('duplicate event id'), { code: 'P2002' });
   const { service, calls } = billingHarness({
-    ledgerCreate: async () => {
-      throw uniqueError;
-    },
+    existingWebhookEvent: { id: 'evt_duplicate' },
   });
 
   await service.handleWebhook({
@@ -198,6 +277,7 @@ test('duplicate Stripe webhook event ids are ignored before subscription mutatio
   } as never);
 
   assert.equal(calls.some((call) => call.name === 'stripe.subscriptions.retrieve'), false);
+  assert.equal(calls.some((call) => call.name === 'stripeWebhookEvent.create'), false);
   assert.equal(calls.some((call) => call.name === 'subscription.upsert'), false);
 });
 

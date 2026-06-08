@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 const PLACEHOLDERS = [
   'REPLACE_ME',
@@ -361,61 +362,91 @@ function requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues) {
   }
 }
 
-const envFileArg = process.argv.find((arg) => arg.startsWith(ENV_FILE_FLAG));
-const envFile = envFileArg ? envFileArg.slice(ENV_FILE_FLAG.length) : '.env.production';
-
-if (!existsSync(envFile)) {
-  console.error(`Production preflight failed: environment file not found: ${envFile}`);
-  process.exit(1);
+function result(status, stdout = '', stderr = '', issues = []) {
+  return { status, stdout, stderr, issues };
 }
 
-const env = parseEnvFile(envFile);
-const runtimeWebApiUrlFromProcess = process.env[COMPOSE_RUNTIME_WEB_API_URL] ?? '';
-const runtimeEnv = {
-  [COMPOSE_RUNTIME_WEB_API_URL]: runtimeWebApiUrlFromProcess.trim()
-    ? runtimeWebApiUrlFromProcess
-    : envValue(env, COMPOSE_RUNTIME_WEB_API_URL),
-};
-const issues = [];
-
-for (const key of REQUIRED) {
-  if (!isConfigured(envValue(env, key))) {
-    issues.push(`${key} is missing or still contains a placeholder value`);
+export function runProductionPreflight({ envFile = '.env.production', processEnv = process.env } = {}) {
+  if (!existsSync(envFile)) {
+    return result(1, '', `Production preflight failed: environment file not found: ${envFile}\n`);
   }
-}
 
-requireExactValue(env, 'NODE_ENV', 'production', issues);
-requireTrustedProxyAddresses(env, issues);
-requireIntegerPort(env, 'PORT', issues);
-requireDatabaseUrl(env, 'DATABASE_URL', issues);
-requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
-requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
-requireApprovedEmailSender(env, 'EMAIL_FROM', issues);
+  const env = parseEnvFile(envFile);
+  const runtimeWebApiUrlFromProcess = processEnv[COMPOSE_RUNTIME_WEB_API_URL] ?? '';
+  const runtimeEnv = {
+    [COMPOSE_RUNTIME_WEB_API_URL]: runtimeWebApiUrlFromProcess.trim()
+      ? runtimeWebApiUrlFromProcess
+      : envValue(env, COMPOSE_RUNTIME_WEB_API_URL),
+  };
+  const issues = [];
 
-for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
-  const value = envValue(env, key);
-  if (isConfigured(value) && value.length < 32) {
-    issues.push(`${key} must be at least 32 characters`);
+  for (const key of REQUIRED) {
+    if (!isConfigured(envValue(env, key))) {
+      issues.push(`${key} is missing or still contains a placeholder value`);
+    }
   }
-}
 
-requireUrl(env, 'FRONTEND_URL', issues, {
-  allowCommaSeparated: true,
-  requireOrigin: true,
-  requireApprovedPublicHost: true,
-});
-requireUrl(env, 'SUPABASE_URL', issues);
-requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
-requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
-requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);
-requireAuthCookieDomainForSplitHosts(env, issues);
-
-if (issues.length) {
-  console.error(`Production preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`);
-  for (const issue of issues) {
-    console.error(`- ${issue}`);
+  requireExactValue(env, 'NODE_ENV', 'production', issues);
+  requireTrustedProxyAddresses(env, issues);
+  requireIntegerPort(env, 'PORT', issues);
+  requireDatabaseUrl(env, 'DATABASE_URL', issues);
+  requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
+  requirePrefix(env, 'STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
+  for (const key of [
+    'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+    'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+    'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+    'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+  ]) {
+    requirePrefix(env, key, 'price_', 'Stripe price ID', issues);
   }
-  process.exit(1);
+  requirePrefix(env, 'RESEND_API_KEY', 're_', 'Resend API key', issues);
+  requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
+  requireApprovedEmailSender(env, 'EMAIL_FROM', issues);
+
+  for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
+    const value = envValue(env, key);
+    if (isConfigured(value) && value.length < 32) {
+      issues.push(`${key} must be at least 32 characters`);
+    }
+  }
+
+  requireUrl(env, 'FRONTEND_URL', issues, {
+    allowCommaSeparated: true,
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+  });
+  requireUrl(env, 'SUPABASE_URL', issues, { requirePublicHost: true });
+  requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
+  requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
+  requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);
+  requireAuthCookieDomainForSplitHosts(env, issues);
+
+  if (issues.length) {
+    const stderr = [
+      `Production preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+      ...issues.map((issue) => `- ${issue}`),
+      '',
+    ].join('\n');
+    return result(1, '', stderr, issues);
+  }
+
+  return result(0, `Production preflight passed using ${envFile}\n`);
 }
 
-console.log(`Production preflight passed using ${envFile}`);
+export function runProductionPreflightFromArgs(args = process.argv.slice(2), processEnv = process.env) {
+  const envFileArg = args.find((arg) => arg.startsWith(ENV_FILE_FLAG));
+  const envFile = envFileArg ? envFileArg.slice(ENV_FILE_FLAG.length) : '.env.production';
+  return runProductionPreflight({ envFile, processEnv });
+}
+
+function main() {
+  const preflightResult = runProductionPreflightFromArgs();
+  if (preflightResult.stdout) process.stdout.write(preflightResult.stdout);
+  if (preflightResult.stderr) process.stderr.write(preflightResult.stderr);
+  process.exit(preflightResult.status);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

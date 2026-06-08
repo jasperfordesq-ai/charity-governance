@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
@@ -57,7 +58,7 @@ export default function ExportPage() {
       });
       setSignoffError('');
     } catch (err) {
-      console.error('Failed to load compliance summary', err);
+      logClientError('Failed to load compliance summary', err);
     } finally {
       setLoading(false);
     }
@@ -95,7 +96,7 @@ export default function ExportPage() {
       setSignoff(res.data);
       toast('Board sign-off saved');
     } catch (err) {
-      console.error('Failed to save board sign-off', err);
+      logClientError('Failed to save board sign-off', err);
       setSignoffError('Could not save the board sign-off record. Please review the fields and try again.');
     } finally {
       setSavingSignoff(false);
@@ -111,7 +112,7 @@ export default function ExportPage() {
         toast('Could not open the report tab. Please allow pop-ups for CharityPilot and try again.');
       }
     } catch (err) {
-      console.error('Export failed', err);
+      logClientError('Export failed', err);
     } finally {
       setExporting(false);
     }

@@ -1,7 +1,25 @@
 import type { NextConfig } from 'next';
 
+function resolveNextDistDir(): string {
+  const distDir = process.env.NEXT_DIST_DIR?.trim();
+  if (!distDir) return '.next';
+
+  if (/[\\/]/.test(distDir) || distDir === '.' || distDir === '..' || distDir.includes('..')) {
+    throw new Error('NEXT_DIST_DIR must be a project-local directory name.');
+  }
+
+  return distDir;
+}
+
 const nextConfig: NextConfig = {
   agentRules: false,
+  distDir: resolveNextDistDir(),
+  experimental: {
+    cpus: 1,
+    webpackBuildWorker: false,
+    workerThreads: true,
+  },
+  poweredByHeader: false,
   transpilePackages: ['@charitypilot/shared'],
   async headers() {
     const securityHeaders = [

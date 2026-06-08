@@ -1,5 +1,6 @@
 'use client';
 
+import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Button, Card, Progress, Chip } from '@heroui/react';
@@ -117,7 +118,7 @@ export default function DashboardPage() {
 
         setBoardAlerts(alerts);
       } catch (err) {
-        console.error('Failed to load dashboard data', err);
+        logClientError('Failed to load dashboard data', err);
         setError(true);
       } finally {
         setLoading(false);
