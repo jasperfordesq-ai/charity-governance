@@ -1501,10 +1501,24 @@ test('CI keeps every production release gate wired', () => {
 test('CI uses GitHub Actions releases that run on the Node 24 action runtime', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
-  assert.match(workflow, /uses:\s+actions\/checkout@v5/);
-  assert.match(workflow, /uses:\s+actions\/setup-node@v6/);
-  assert.doesNotMatch(workflow, /uses:\s+actions\/checkout@v4/);
-  assert.doesNotMatch(workflow, /uses:\s+actions\/setup-node@v4/);
+  assert.match(workflow, /uses:\s+actions\/checkout@[a-f0-9]{40}\s+# v5/);
+  assert.match(workflow, /uses:\s+actions\/setup-node@[a-f0-9]{40}\s+# v6/);
+  assert.doesNotMatch(workflow, /uses:\s+actions\/checkout@v[0-9]/);
+  assert.doesNotMatch(workflow, /uses:\s+actions\/setup-node@v[0-9]/);
+});
+
+test('GitHub Actions workflow actions are pinned to immutable commits', () => {
+  for (const workflowPath of ['.github/workflows/ci.yml', '.github/workflows/release-images.yml']) {
+    const workflow = readRepoFile(workflowPath);
+    const actionRefs = [...workflow.matchAll(/^\s+uses:\s+([^@\s]+)@([^\s#]+)/gm)];
+
+    assert.ok(actionRefs.length > 0, `${workflowPath} must use at least one action`);
+
+    for (const [, action, ref] of actionRefs) {
+      assert.match(ref, /^[a-f0-9]{40}$/, `${workflowPath} action ${action} must be pinned to a full commit SHA`);
+      assert.doesNotMatch(ref, /^(main|master|v[0-9].*)$/, `${workflowPath} action ${action} must not use a mutable ref`);
+    }
+  }
 });
 
 test('CI builds API and web production Docker images', () => {
@@ -1620,7 +1634,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /inputs:[\s\S]*image_tag/);
   assert.match(workflow, /push:[\s\S]*tags:[\s\S]*- 'v\*'/);
-  assert.match(workflow, /permissions:[\s\S]*contents:\s+read[\s\S]*packages:\s+write/);
+  assert.match(workflow, /permissions:[\s\S]*contents:\s+read[\s\S]*packages:\s+write[\s\S]*id-token:\s+write/);
   assert.match(workflow, /environment:\s+production/);
   assert.match(workflow, /REGISTRY:\s+ghcr\.io/);
   assert.match(workflow, /name:\s+Validate release ref/);
@@ -1655,6 +1669,28 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /docker push "\$\{api_image\}"/);
   assert.match(workflow, /docker push "\$\{web_image\}"/);
   assert.match(workflow, /docker push "\$\{migration_image\}"/);
+  assert.match(workflow, /name:\s+Install cosign/);
+  assert.match(workflow, /uses:\s+sigstore\/cosign-installer@[a-f0-9]{40}\s+# v3\.10\.0/);
+  assert.match(workflow, /name:\s+Resolve published image digests/);
+  assert.match(workflow, /docker buildx imagetools inspect "\$\{api_image\}"/);
+  assert.match(workflow, /docker buildx imagetools inspect "\$\{web_image\}"/);
+  assert.match(workflow, /docker buildx imagetools inspect "\$\{migration_image\}"/);
+  assert.match(workflow, /name:\s+Sign published image digests/);
+  assert.match(
+    workflow,
+    /cosign sign --yes "\$\{api_image\}@\$\{api_digest\}" "\$\{web_image\}@\$\{web_digest\}" "\$\{migration_image\}@\$\{migration_digest\}"/,
+  );
+  assert.match(workflow, /name:\s+Verify published image signatures/);
+  assert.ok(
+    workflow.includes(
+      'identity_regex="^https://github.com/${GITHUB_REPOSITORY}/\\\\.github/workflows/release-images\\\\.yml@refs/(heads/master|tags/v.*)$"',
+    ),
+  );
+  assert.match(workflow, /cosign verify[\s\S]*"\$\{api_image\}@\$\{api_digest\}"/);
+  assert.match(workflow, /cosign verify[\s\S]*"\$\{web_image\}@\$\{web_digest\}"/);
+  assert.match(workflow, /cosign verify[\s\S]*"\$\{migration_image\}@\$\{migration_digest\}"/);
+  assert.match(workflow, /--certificate-oidc-issuer "https:\/\/token\.actions\.githubusercontent\.com"/);
+  assert.match(workflow, /--certificate-identity-regexp/);
 
   assert.ok(
     workflow.indexOf('name: Build migration runner image') <
@@ -1677,6 +1713,43 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
     workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
     'API image must be smoke-tested before publishing',
   );
+  assert.ok(
+    workflow.indexOf('name: Push image tags') < workflow.indexOf('name: Resolve published image digests'),
+    'image digests must be resolved after publishing',
+  );
+  assert.ok(
+    workflow.indexOf('name: Resolve published image digests') < workflow.indexOf('name: Sign published image digests'),
+    'published image digests must be resolved before signing',
+  );
+  assert.ok(
+    workflow.indexOf('name: Sign published image digests') < workflow.indexOf('name: Verify published image signatures'),
+    'published signatures must be verified before the release job completes',
+  );
+});
+
+test('release workflow runs full production gates before publishing images', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const publishIndex = workflow.indexOf('name: Push image tags');
+
+  assert.match(workflow, /uses:\s+actions\/setup-node@[a-f0-9]{40}\s+# v6/);
+  assert.match(workflow, /run:\s+npm ci/);
+  assert.match(workflow, /run:\s+npm run db:generate -w @charitypilot\/api/);
+  assert.match(workflow, /run:\s+npx prisma validate/);
+  assert.match(workflow, /run:\s+npm run lint/);
+  assert.match(workflow, /run:\s+npm run test/);
+  assert.match(workflow, /run:\s+npm audit --omit=dev --audit-level=moderate/);
+
+  for (const gate of [
+    'name: Install dependencies',
+    'name: Generate Prisma client',
+    'name: Validate Prisma schema',
+    'name: Lint',
+    'name: Test',
+    'name: Dependency audit',
+  ]) {
+    assert.ok(workflow.indexOf(gate) > -1, `${gate} must exist in release workflow`);
+    assert.ok(workflow.indexOf(gate) < publishIndex, `${gate} must run before image publishing`);
+  }
 });
 
 test('release API Docker smoke runs in production mode and exercises keyed readiness before publish', () => {
@@ -1709,7 +1782,7 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
 test('release workflow only publishes tag images for commits contained in master', () => {
   const workflow = readRepoFile('.github/workflows/release-images.yml');
 
-  assert.match(workflow, /uses:\s+actions\/checkout@v5[\s\S]*with:[\s\S]*fetch-depth:\s+0/);
+  assert.match(workflow, /uses:\s+actions\/checkout@[a-f0-9]{40}\s+# v5[\s\S]*with:[\s\S]*fetch-depth:\s+0/);
   assert.match(workflow, /if \[ "\$\{GITHUB_REF_TYPE\}" = "tag" \]; then/);
   assert.match(workflow, /git fetch origin master:refs\/remotes\/origin\/master/);
   assert.match(workflow, /git merge-base --is-ancestor "\$\{GITHUB_SHA\}" origin\/master/);
