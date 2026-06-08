@@ -84,6 +84,7 @@ jobs:
       - name: Build web
         env:
           NEXT_PUBLIC_API_URL: https://api.charitypilot.ie
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-project.supabase.co
         run: npm run build -w @charitypilot/web
 
       - name: Build API Docker image
@@ -263,6 +264,7 @@ jobs:
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
             -e DOCUMENT_STORAGE_CLEANUP_LIMIT=1 \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/cleanup-document-storage.js | tee "${cleanup_output}"
           grep -F "Document storage cleanup completed. Processed: 0. Failed: 0." "${cleanup_output}"
@@ -280,13 +282,18 @@ jobs:
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \
             -e DOCUMENT_STORAGE_CLEANUP_LIMIT=1 \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
             -e PRODUCTION_SCHEDULER_RUN_ONCE=true \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/production-scheduler.js | tee "${scheduler_output}"
           grep -F "Production scheduler run-once completed successfully." "${scheduler_output}"
 
       - name: Build web Docker image
-        run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .
+        run: |
+          docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL=https://ci-project.supabase.co \
+            -t charitypilot-web-ci .
 
       - name: Verify web Docker runtime dependencies
         run: |
@@ -302,6 +309,7 @@ jobs:
             -e PORT=3003 \
             -e HOST=0.0.0.0 \
             -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e NEXT_PUBLIC_SUPABASE_URL=https://ci-project.supabase.co \
             charitypilot-web-ci
           web_headers="$(mktemp)"
           until curl --fail --silent --dump-header "${web_headers}" http://127.0.0.1:3003/; do

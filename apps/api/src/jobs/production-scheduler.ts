@@ -2,6 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { pathToFileURL } from 'node:url';
 import { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
 import { DocumentService } from '../services/document.service.js';
+import {
+  buildOperationalErrorAlertPayload,
+  sendErrorAlert,
+  type ErrorAlertPayload,
+} from '../services/error-alerts.service.js';
 import { StorageService } from '../services/storage.service.js';
 import { validateDeadlineRemindersEnv, validateDocumentStorageCleanupEnv } from '../utils/env.js';
 
@@ -30,6 +35,8 @@ type DocumentStorageCleanupRunner = {
 type StorageDeletionRunner = {
   deleteFile(organisationId: string, storagePath: string): Promise<void>;
 };
+
+type AlertSender = (payload: ErrorAlertPayload) => Promise<void>;
 
 export type ProductionSchedulerConfig = {
   deadlineRemindersIntervalMs: number;
@@ -69,6 +76,7 @@ function positiveIntegerEnv(value: string | undefined, fallback: number): number
 export async function runDeadlineReminders(input: {
   deadlineService: DeadlineReminderRunner;
   logger: SchedulerLogger;
+  alertSender?: AlertSender;
 }): Promise<boolean> {
   try {
     await input.deadlineService.sendDueReminders();
@@ -76,6 +84,13 @@ export async function runDeadlineReminders(input: {
     return false;
   } catch (error) {
     input.logger.error('[ProductionScheduler] Deadline reminders run failed.', error);
+    await sendJobFailureAlert({
+      job: 'deadline-reminders',
+      code: 'DEADLINE_REMINDERS_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
     return true;
   }
 }
@@ -85,6 +100,7 @@ export async function runDocumentStorageCleanup(input: {
   storageService: StorageDeletionRunner;
   documentStorageCleanupLimit: number;
   logger: SchedulerLogger;
+  alertSender?: AlertSender;
 }): Promise<boolean> {
   try {
     const result = await input.documentService.retryPendingStorageDeletions(
@@ -94,9 +110,27 @@ export async function runDocumentStorageCleanup(input: {
     input.logger.info(
       `[ProductionScheduler] Document storage cleanup run completed. Processed: ${result.processed}. Failed: ${result.failed}.`,
     );
+    if (result.failed > 0) {
+      const cleanupFailure = new Error(`Document storage cleanup reported ${result.failed} failed deletion(s).`);
+      cleanupFailure.name = 'DocumentStorageCleanupFailure';
+      await sendJobFailureAlert({
+        job: 'document-storage-cleanup',
+        code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
+        error: cleanupFailure,
+        logger: input.logger,
+        alertSender: input.alertSender,
+      });
+    }
     return result.failed > 0;
   } catch (error) {
     input.logger.error('[ProductionScheduler] Document storage cleanup run failed.', error);
+    await sendJobFailureAlert({
+      job: 'document-storage-cleanup',
+      code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
     return true;
   }
 }
@@ -107,19 +141,43 @@ export async function runProductionSchedulerOnce(input: {
   storageService: StorageDeletionRunner;
   documentStorageCleanupLimit: number;
   logger: SchedulerLogger;
+  alertSender?: AlertSender;
 }): Promise<ProductionSchedulerRunResult> {
   const deadlineRemindersFailed = await runDeadlineReminders({
     deadlineService: input.deadlineService,
     logger: input.logger,
+    alertSender: input.alertSender,
   });
   const documentStorageCleanupFailed = await runDocumentStorageCleanup({
     documentService: input.documentService,
     storageService: input.storageService,
     documentStorageCleanupLimit: input.documentStorageCleanupLimit,
     logger: input.logger,
+    alertSender: input.alertSender,
   });
 
   return { deadlineRemindersFailed, documentStorageCleanupFailed };
+}
+
+export async function sendJobFailureAlert(input: {
+  job: 'deadline-reminders' | 'document-storage-cleanup';
+  code: 'DEADLINE_REMINDERS_FAILED' | 'DOCUMENT_STORAGE_CLEANUP_FAILED';
+  error: unknown;
+  logger: SchedulerLogger;
+  alertSender?: AlertSender;
+}): Promise<void> {
+  const alertSender = input.alertSender ?? sendErrorAlert;
+  const payload = buildOperationalErrorAlertPayload({
+    job: input.job,
+    code: input.code,
+    error: input.error,
+  });
+
+  try {
+    await alertSender(payload);
+  } catch (alertError) {
+    input.logger.error(`[ProductionScheduler] Failed to send ${input.job} failure alert.`, alertError);
+  }
 }
 
 function startRecurringJob(input: {

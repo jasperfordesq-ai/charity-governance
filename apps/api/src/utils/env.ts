@@ -323,6 +323,7 @@ export function validateDocumentStorageCleanupEnv(): void {
   requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 
   throwIfProductionIssues(
     'DOCUMENT_STORAGE_CLEANUP_ENV_INVALID',
@@ -345,6 +346,7 @@ export function validateDeadlineRemindersEnv(): void {
   });
   requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);
+  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 
   throwIfProductionIssues(
     'DEADLINE_REMINDERS_ENV_INVALID',

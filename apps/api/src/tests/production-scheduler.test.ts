@@ -1,9 +1,26 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import {
   productionSchedulerConfigFromEnv,
+  runDeadlineReminders,
+  runDocumentStorageCleanup,
   runProductionSchedulerOnce,
 } from '../jobs/production-scheduler.js';
+import type { ErrorAlertPayload } from '../services/error-alerts.service.js';
+
+const ORIGINAL_ENV = { ...process.env };
+
+afterEach(() => {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in ORIGINAL_ENV)) {
+      delete process.env[key];
+    }
+  }
+
+  for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+    process.env[key] = value;
+  }
+});
 
 test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup limit', () => {
   const config = productionSchedulerConfigFromEnv({
@@ -84,4 +101,111 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
   });
   assert.ok(logs.some((message) => message.includes('Deadline reminders run completed')));
   assert.ok(logs.some((message) => message.includes('Document storage cleanup run completed')));
+});
+
+test('runDeadlineReminders sends a sanitized operational alert when the production reminder run fails', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+
+  const alerts: ErrorAlertPayload[] = [];
+  const logs: string[] = [];
+  const failed = await runDeadlineReminders({
+    deadlineService: {
+      async sendDueReminders() {
+        throw new Error('SMTP provider secret leaked in exception');
+      },
+    },
+    logger: {
+      info(message: string) {
+        logs.push(message);
+      },
+      error(message: string) {
+        logs.push(message);
+      },
+    },
+    alertSender: async (payload) => {
+      alerts.push(payload);
+    },
+  });
+
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].service, 'charitypilot-api');
+  assert.equal(alerts[0].method, 'JOB');
+  assert.equal(alerts[0].url, '/jobs/deadline-reminders');
+  assert.equal(alerts[0].statusCode, 500);
+  assert.equal(alerts[0].code, 'DEADLINE_REMINDERS_FAILED');
+  assert.equal(alerts[0].errorName, 'Error');
+  assert.equal(typeof alerts[0].requestId, 'string');
+  assert.equal(typeof alerts[0].timestamp, 'string');
+  assert.equal(JSON.stringify(alerts[0]).includes('SMTP provider secret'), false);
+  assert.ok(logs.some((message) => message.includes('Deadline reminders run failed')));
+});
+
+test('runDocumentStorageCleanup sends a sanitized operational alert when storage cleanup fails', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+
+  const alerts: ErrorAlertPayload[] = [];
+  const failed = await runDocumentStorageCleanup({
+    documentService: {
+      async retryPendingStorageDeletions() {
+        throw new Error('Supabase service key leaked in exception');
+      },
+    },
+    storageService: {
+      async deleteFile() {
+        throw new Error('not reached');
+      },
+    },
+    documentStorageCleanupLimit: 7,
+    logger: {
+      info() {},
+      error() {},
+    },
+    alertSender: async (payload) => {
+      alerts.push(payload);
+    },
+  });
+
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].service, 'charitypilot-api');
+  assert.equal(alerts[0].method, 'JOB');
+  assert.equal(alerts[0].url, '/jobs/document-storage-cleanup');
+  assert.equal(alerts[0].statusCode, 500);
+  assert.equal(alerts[0].code, 'DOCUMENT_STORAGE_CLEANUP_FAILED');
+  assert.equal(alerts[0].errorName, 'Error');
+  assert.equal(JSON.stringify(alerts[0]).includes('Supabase service key'), false);
+});
+
+test('runDocumentStorageCleanup alerts when cleanup records failed storage deletions without throwing', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+
+  const alerts: ErrorAlertPayload[] = [];
+  const failed = await runDocumentStorageCleanup({
+    documentService: {
+      async retryPendingStorageDeletions() {
+        return { processed: 3, failed: 1 };
+      },
+    },
+    storageService: {
+      async deleteFile() {},
+    },
+    documentStorageCleanupLimit: 7,
+    logger: {
+      info() {},
+      error() {},
+    },
+    alertSender: async (payload) => {
+      alerts.push(payload);
+    },
+  });
+
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].url, '/jobs/document-storage-cleanup');
+  assert.equal(alerts[0].code, 'DOCUMENT_STORAGE_CLEANUP_FAILED');
+  assert.equal(alerts[0].errorName, 'DocumentStorageCleanupFailure');
 });

@@ -11,6 +11,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const validRuntimeWebApiUrlEnv = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
 };
 const forbiddenApiRuntimePackages = [
   'typescript',
@@ -203,9 +204,17 @@ function cleanEnv() {
 }
 
 function runPreflight(args, envOverrides = {}) {
-  const defaultRuntimeEnv = Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL')
-    ? {}
-    : validRuntimeWebApiUrlEnv;
+  const defaultRuntimeEnv = {
+    ...(Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL')
+      ? {}
+      : { CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL }),
+    ...(Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL')
+      ? {}
+      : {
+        CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL:
+          validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL,
+      }),
+  };
 
   return runProductionPreflightFromArgs(args, { ...cleanEnv(), ...defaultRuntimeEnv, ...envOverrides });
 }
@@ -233,6 +242,7 @@ function completeProductionEnv(overrides = {}) {
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     ...overrides,
   };
@@ -295,6 +305,7 @@ test('passes when the selected env file contains complete production values', ()
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -303,6 +314,7 @@ test('passes when the selected env file contains complete production values', ()
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -428,6 +440,71 @@ test('fails when the compose runtime web API URL is not origin-only', () => {
   }
 });
 
+test('fails when the compose runtime web Supabase URL is missing', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-supabase-missing-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: '',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the compose runtime web Supabase URL drifts from the production Supabase URL', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-supabase-drift-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://attacker.supabase.co',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL must match NEXT_PUBLIC_SUPABASE_URL/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the public Supabase URL drifts from the API Supabase URL', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-public-supabase-drift-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv({
+    NEXT_PUBLIC_SUPABASE_URL: 'https://different-project.supabase.co',
+  }));
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://different-project.supabase.co',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /NEXT_PUBLIC_SUPABASE_URL must match SUPABASE_URL/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when the compose runtime web API URL drifts from the production env API URL', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-drift-'));
   const envPath = join(tempDir, 'production.env');
@@ -475,12 +552,14 @@ test('passes when the compose runtime web API URL is supplied by the selected en
     envPath,
     completeProductionEnv({
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     }),
   );
 
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: '',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: '',
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -517,6 +596,7 @@ test('fails when a required production value is absent from the selected env fil
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -569,6 +649,7 @@ test('fails when the production error alert webhook is missing', () => {
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     });
 
     assert.equal(result.status, 1);
@@ -1011,6 +1092,7 @@ test('passes when production frontend origins include multiple approved HTTPS or
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -1019,6 +1101,7 @@ test('passes when production frontend origins include multiple approved HTTPS or
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -1325,11 +1408,17 @@ test('production secret env files are ignored by git without hiding the template
   );
 });
 
-test('production env template documents the compose runtime web API URL', () => {
+test('production env template documents the compose runtime web public origins', () => {
   const template = readRepoFile('.env.production.example');
 
   assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/REPLACE_ME_PUBLIC_API_ORIGIN\.example/);
+  assert.match(template, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
+  assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /must match `NEXT_PUBLIC_API_URL`/);
+  assert.match(template, /must match `NEXT_PUBLIC_SUPABASE_URL`/);
+  assert.match(template, /CHARITYPILOT_API_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:REPLACE_ME_API_IMAGE_DIGEST/);
+  assert.match(template, /CHARITYPILOT_WEB_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:REPLACE_ME_WEB_IMAGE_DIGEST/);
+  assert.match(template, /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/);
   assert.match(template, /Docker Compose/);
 });
 
@@ -1541,6 +1630,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.doesNotMatch(web, /env_file:/);
   assert.match(web, /NODE_ENV:\s+production/);
   assert.match(web, /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/);
+  assert.match(web, /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL\}/);
   assert.match(web, /depends_on:[\s\S]*api:[\s\S]*condition:\s+service_healthy/);
   assert.match(web, /fetch\('http:\/\/127\.0\.0\.1:3003\/'\)/);
   assert.match(web, /ports:[\s\S]*127\.0\.0\.1:\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003/);
@@ -1599,11 +1689,11 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'READINESS_API_KEY',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
-    'ERROR_ALERT_WEBHOOK_URL',
     'NEXT_PUBLIC_API_URL',
   ]) {
     assert.doesNotMatch(productionScheduler, new RegExp(`\\b${secret}:`), `production-scheduler must not receive ${secret}`);
   }
+  assert.match(productionScheduler, /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/);
 
   for (const service of [migrate, api, web, productionScheduler, deadlineReminders, documentStorageCleanup]) {
     assert.match(service, /security_opt:[\s\S]*no-new-privileges:true/);
@@ -1637,6 +1727,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(deadlineReminders, /FRONTEND_URL:\s+\$\{FRONTEND_URL:\?Set FRONTEND_URL\}/);
   assert.match(deadlineReminders, /RESEND_API_KEY:\s+\$\{RESEND_API_KEY:\?Set RESEND_API_KEY\}/);
   assert.match(deadlineReminders, /EMAIL_FROM:\s+\$\{EMAIL_FROM:\?Set EMAIL_FROM\}/);
+  assert.match(deadlineReminders, /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/);
   for (const secret of [
     'JWT_SECRET',
     'READINESS_API_KEY',
@@ -1645,7 +1736,6 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
     'SUPABASE_STORAGE_BUCKET',
-    'ERROR_ALERT_WEBHOOK_URL',
     'NEXT_PUBLIC_API_URL',
   ]) {
     assert.doesNotMatch(deadlineReminders, new RegExp(`\\b${secret}:`), `deadline-reminders must not receive ${secret}`);
@@ -1657,6 +1747,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(documentStorageCleanup, /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/);
   assert.match(documentStorageCleanup, /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/);
   assert.match(documentStorageCleanup, /DOCUMENT_STORAGE_CLEANUP_LIMIT:\s+\$\{DOCUMENT_STORAGE_CLEANUP_LIMIT:-25\}/);
+  assert.match(documentStorageCleanup, /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/);
   for (const secret of [
     'JWT_SECRET',
     'READINESS_API_KEY',
@@ -1665,7 +1756,6 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'RESEND_API_KEY',
     'EMAIL_FROM',
     'FRONTEND_URL',
-    'ERROR_ALERT_WEBHOOK_URL',
     'NEXT_PUBLIC_API_URL',
   ]) {
     assert.doesNotMatch(documentStorageCleanup, new RegExp(`\\b${secret}:`), `document-storage-cleanup must not receive ${secret}`);
@@ -1746,15 +1836,19 @@ test('production operations docs keep detailed readiness checks behind the inter
   assert.doesNotMatch(supabaseSetup, /curl -i https:\/\/api\.charitypilot\.ie\/api\/v1\/health\/readiness/);
 });
 
-test('production operations docs explain the compose runtime web API URL', () => {
+test('production operations docs explain the compose runtime web public origins', () => {
   const runbook = readRepoFile('docs/production-runbook.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
 
   assert.match(runbook, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
   assert.match(runbook, /must match `NEXT_PUBLIC_API_URL`/);
+  assert.match(runbook, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(runbook, /must match `NEXT_PUBLIC_SUPABASE_URL`/);
   assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml config --quiet/);
   assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_API_URL`/);
+  assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(launchChecklist, /matches `NEXT_PUBLIC_SUPABASE_URL`/);
 });
 
 test('production deploy preflight is wired for digest-pinned image promotion', () => {
@@ -1779,15 +1873,19 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /cosign signature verification/);
 });
 
-test('web Docker build requires a production HTTPS API URL before Next build', () => {
+test('web Docker build requires production HTTPS public origins before Next build', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
 
   assertDockerfileUsesDigestPinnedNodeBase(dockerfile, 'apps/web/Dockerfile');
   assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_API_URL/);
+  assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_API_URL=\$NEXT_PUBLIC_API_URL/);
-  assert.match(dockerfile, /new URL\(process\.env\.NEXT_PUBLIC_API_URL/);
+  assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_SUPABASE_URL=\$NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_API_URL'/);
+  assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_SUPABASE_URL'/);
   assert.match(dockerfile, /api\.charitypilot\.ie/);
   assert.match(dockerfile, /origin-only CharityPilot production URL/);
+  assert.match(dockerfile, /origin-only HTTPS Supabase project URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);
   assert.match(dockerfile, /FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS runtime-deps/);
   assert.match(
@@ -2429,7 +2527,8 @@ test('CI builds API and web production Docker images', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
   assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
-  assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
+  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+https:\/\/ci-project\.supabase\.co/);
+  assert.match(workflow, /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*-t charitypilot-web-ci \./);
 });
 
 test('CI smoke-runs API and web Docker images after building them', () => {
@@ -2463,6 +2562,7 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/);
+  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
@@ -2579,6 +2679,7 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(cleanupRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.match(schedulerRun, /-e PRODUCTION_SCHEDULER_RUN_ONCE=true/);
   assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
@@ -2587,6 +2688,7 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
@@ -2645,6 +2747,8 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /name:\s+Stop PostgreSQL/);
   assert.match(workflow, /if:\s+always\(\)/);
   assert.match(workflow, /name:\s+Validate release ref/);
+  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_SUPABASE_URL\s*\}\}/);
+  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL production variable is required/);
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);
   assert.match(workflow, /docker login "\$\{REGISTRY\}"/);
@@ -2685,9 +2789,10 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
-  assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
+  assert.match(workflow, /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*-t charitypilot-web-ci \./);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
   assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/);
+  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{web_headers\}"/);
@@ -2915,6 +3020,7 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(cleanupRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(cleanupRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(cleanupRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(cleanupRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.match(schedulerRun, /-e PRODUCTION_SCHEDULER_RUN_ONCE=true/);
   assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
@@ -2923,6 +3029,7 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
   assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
+  assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.example\/hooks\/charitypilot/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);

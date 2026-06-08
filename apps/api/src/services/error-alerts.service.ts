@@ -18,6 +18,12 @@ export type ErrorAlertPayload = {
   timestamp: string;
 };
 
+export type OperationalErrorAlertInput = {
+  job: 'deadline-reminders' | 'document-storage-cleanup';
+  code: 'DEADLINE_REMINDERS_FAILED' | 'DOCUMENT_STORAGE_CLEANUP_FAILED';
+  error: unknown;
+};
+
 function alertTimeoutMs(): number {
   const configured = Number(process.env.ERROR_ALERT_WEBHOOK_TIMEOUT_MS);
   return Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_ALERT_TIMEOUT_MS;
@@ -37,6 +43,10 @@ type AlertableError = Error & { code?: string };
 
 function errorCode(error: AlertableError): string {
   return typeof error.code === 'string' && error.code.trim() ? error.code : 'INTERNAL_ERROR';
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error && error.name ? error.name : 'Error';
 }
 
 export function shouldSendErrorAlert(statusCode: number): boolean {
@@ -60,8 +70,23 @@ export function buildErrorAlertPayload(
     url: requestPathWithoutQuery(request.url),
     statusCode,
     code: errorCode(error),
-    errorName: error.name || 'Error',
+    errorName: errorName(error),
     requestId: String(request.id),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export function buildOperationalErrorAlertPayload(input: OperationalErrorAlertInput): ErrorAlertPayload {
+  return {
+    service: 'charitypilot-api',
+    environment: process.env.NODE_ENV ?? 'development',
+    severity: 'error',
+    method: 'JOB',
+    url: `/jobs/${input.job}`,
+    statusCode: 500,
+    code: input.code,
+    errorName: errorName(input.error),
+    requestId: `job-${input.job}-${Date.now()}`,
     timestamp: new Date().toISOString(),
   };
 }

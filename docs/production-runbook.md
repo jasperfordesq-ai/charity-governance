@@ -48,7 +48,7 @@ The deploy preflight validates the selected production env file, renders `compos
 
 The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
 
-The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API origin. Docker Compose also requires `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` for the web runtime; it must match `NEXT_PUBLIC_API_URL`. Keep both in the selected production env file, export them before running Compose, or pass the env file with `docker compose --env-file .env.production`.
+The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API origin and `NEXT_PUBLIC_SUPABASE_URL` pointing to the same Supabase project origin as `SUPABASE_URL`. Docker Compose also requires `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` and `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` for the web runtime. `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` must match `NEXT_PUBLIC_API_URL`, and `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` must match `NEXT_PUBLIC_SUPABASE_URL`. Keep all four public origin values in the selected production env file, export them before running Compose, or pass the env file with `docker compose --env-file .env.production`.
 
 Configure the API `FRONTEND_URL` to the exact HTTPS web origin, or a comma-separated list of approved production origins.
 

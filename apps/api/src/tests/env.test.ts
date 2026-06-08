@@ -167,6 +167,7 @@ test('validateDocumentStorageCleanupEnv accepts storage-only production configur
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
 });
@@ -177,6 +178,7 @@ test('validateDeadlineRemindersEnv accepts reminder-only production configuratio
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateDeadlineRemindersEnv());
 });
@@ -187,6 +189,7 @@ test('validateDeadlineRemindersEnv rejects malformed Resend API keys in producti
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 'configuredResendSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
 
   assert.throws(
     () => validateDeadlineRemindersEnv(),
@@ -204,6 +207,7 @@ test('validateDeadlineRemindersEnv rejects missing reminder-only production conf
   process.env.FRONTEND_URL = 'https://localhost:3003';
   delete process.env.RESEND_API_KEY;
   process.env.EMAIL_FROM = 'noreply@attacker.example';
+  delete process.env.ERROR_ALERT_WEBHOOK_URL;
 
   assert.throws(
     () => validateDeadlineRemindersEnv(),
@@ -214,7 +218,25 @@ test('validateDeadlineRemindersEnv rejects missing reminder-only production conf
       error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production') &&
       error.details.includes('FRONTEND_URL must not point at localhost in production') &&
       error.details.includes('RESEND_API_KEY is missing or still contains a placeholder value') &&
-      error.details.includes('EMAIL_FROM must use an approved CharityPilot sender domain in production'),
+      error.details.includes('EMAIL_FROM must use an approved CharityPilot sender domain in production') &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateDeadlineRemindersEnv rejects missing production job alert webhook', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  delete process.env.ERROR_ALERT_WEBHOOK_URL;
+
+  assert.throws(
+    () => validateDeadlineRemindersEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value'),
   );
 });
 
@@ -367,6 +389,7 @@ test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configur
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   delete process.env.SUPABASE_STORAGE_BUCKET;
+  delete process.env.ERROR_ALERT_WEBHOOK_URL;
 
   assert.throws(
     () => validateDocumentStorageCleanupEnv(),
@@ -377,7 +400,8 @@ test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configur
       error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production') &&
       error.details.includes('SUPABASE_URL is missing or still contains a placeholder value') &&
       error.details.includes('SUPABASE_SERVICE_ROLE_KEY is missing or still contains a placeholder value') &&
-      error.details.includes('SUPABASE_STORAGE_BUCKET is missing or still contains a placeholder value'),
+      error.details.includes('SUPABASE_STORAGE_BUCKET is missing or still contains a placeholder value') &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value'),
   );
 });
 
@@ -387,6 +411,7 @@ test('validateDocumentStorageCleanupEnv rejects private Supabase URLs', () => {
   process.env.SUPABASE_URL = 'https://10.0.0.5';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
 
   assert.throws(
     () => validateDocumentStorageCleanupEnv(),
@@ -394,6 +419,23 @@ test('validateDocumentStorageCleanupEnv rejects private Supabase URLs', () => {
       error instanceof AppError &&
       Array.isArray(error.details) &&
       error.details.includes('SUPABASE_URL must use a public, non-local URL in production'),
+  );
+});
+
+test('validateDocumentStorageCleanupEnv rejects missing production job alert webhook', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  delete process.env.ERROR_ALERT_WEBHOOK_URL;
+
+  assert.throws(
+    () => validateDocumentStorageCleanupEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value'),
   );
 });
 

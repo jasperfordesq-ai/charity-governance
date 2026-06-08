@@ -39,11 +39,13 @@ const REQUIRED = [
   'SUPABASE_STORAGE_BUCKET',
   'ERROR_ALERT_WEBHOOK_URL',
   'NEXT_PUBLIC_API_URL',
+  'NEXT_PUBLIC_SUPABASE_URL',
   'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
 ];
 
 const ENV_FILE_FLAG = '--production-env-file=';
 const COMPOSE_RUNTIME_WEB_API_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL';
+const COMPOSE_RUNTIME_WEB_SUPABASE_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 
@@ -362,6 +364,40 @@ function requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues) {
   }
 }
 
+function requireComposeRuntimeWebSupabaseUrl(env, runtimeEnv, issues) {
+  const value = envValue(runtimeEnv, COMPOSE_RUNTIME_WEB_SUPABASE_URL);
+  if (!isConfigured(value)) {
+    issues.push(`${COMPOSE_RUNTIME_WEB_SUPABASE_URL} is missing or still contains a placeholder value`);
+    return;
+  }
+
+  const issueCountBeforeUrlValidation = issues.length;
+  requireUrl(runtimeEnv, COMPOSE_RUNTIME_WEB_SUPABASE_URL, issues, {
+    requireOrigin: true,
+    requirePublicHost: true,
+  });
+
+  if (issues.length !== issueCountBeforeUrlValidation) return;
+
+  const [envFileSupabaseUrl] = configuredUrls(env, 'NEXT_PUBLIC_SUPABASE_URL');
+  const [runtimeSupabaseUrl] = configuredUrls(runtimeEnv, COMPOSE_RUNTIME_WEB_SUPABASE_URL);
+  if (envFileSupabaseUrl && runtimeSupabaseUrl && runtimeSupabaseUrl.origin !== envFileSupabaseUrl.origin) {
+    issues.push(
+      `${COMPOSE_RUNTIME_WEB_SUPABASE_URL} must match NEXT_PUBLIC_SUPABASE_URL so the production web runtime and client bundle trust the same signed document download origin`,
+    );
+  }
+}
+
+function requirePublicSupabaseUrlMatchesApiSupabaseUrl(env, issues) {
+  const [apiSupabaseUrl] = configuredUrls(env, 'SUPABASE_URL');
+  const [publicSupabaseUrl] = configuredUrls(env, 'NEXT_PUBLIC_SUPABASE_URL');
+  if (apiSupabaseUrl && publicSupabaseUrl && apiSupabaseUrl.origin !== publicSupabaseUrl.origin) {
+    issues.push(
+      'NEXT_PUBLIC_SUPABASE_URL must match SUPABASE_URL so signed document downloads are trusted by the production web client',
+    );
+  }
+}
+
 function result(status, stdout = '', stderr = '', issues = []) {
   return { status, stdout, stderr, issues };
 }
@@ -373,10 +409,14 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
 
   const env = parseEnvFile(envFile);
   const runtimeWebApiUrlFromProcess = processEnv[COMPOSE_RUNTIME_WEB_API_URL] ?? '';
+  const runtimeWebSupabaseUrlFromProcess = processEnv[COMPOSE_RUNTIME_WEB_SUPABASE_URL] ?? '';
   const runtimeEnv = {
     [COMPOSE_RUNTIME_WEB_API_URL]: runtimeWebApiUrlFromProcess.trim()
       ? runtimeWebApiUrlFromProcess
       : envValue(env, COMPOSE_RUNTIME_WEB_API_URL),
+    [COMPOSE_RUNTIME_WEB_SUPABASE_URL]: runtimeWebSupabaseUrlFromProcess.trim()
+      ? runtimeWebSupabaseUrlFromProcess
+      : envValue(env, COMPOSE_RUNTIME_WEB_SUPABASE_URL),
   };
   const issues = [];
 
@@ -419,7 +459,10 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   requireUrl(env, 'SUPABASE_URL', issues, { requirePublicHost: true });
   requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
   requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
+  requireUrl(env, 'NEXT_PUBLIC_SUPABASE_URL', issues, { requireOrigin: true, requirePublicHost: true });
+  requirePublicSupabaseUrlMatchesApiSupabaseUrl(env, issues);
   requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);
+  requireComposeRuntimeWebSupabaseUrl(env, runtimeEnv, issues);
   requireAuthCookieDomainForSplitHosts(env, issues);
 
   if (issues.length) {

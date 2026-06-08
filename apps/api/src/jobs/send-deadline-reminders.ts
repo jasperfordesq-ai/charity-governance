@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
 import { validateDeadlineRemindersEnv } from '../utils/env.js';
+import { sendJobFailureAlert } from './production-scheduler.js';
 
 process.env.NODE_ENV ??= 'production';
 validateDeadlineRemindersEnv();
@@ -13,6 +14,12 @@ try {
   console.log('Deadline reminders job completed successfully.');
 } catch (error) {
   console.error('Deadline reminders job failed:', error);
+  await sendJobFailureAlert({
+    job: 'deadline-reminders',
+    code: 'DEADLINE_REMINDERS_FAILED',
+    error,
+    logger: console,
+  });
   process.exitCode = 1;
 } finally {
   await prisma.$disconnect();
