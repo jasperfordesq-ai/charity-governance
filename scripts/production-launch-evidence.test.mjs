@@ -8,6 +8,7 @@ import { test } from 'node:test';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const evidenceScriptPath = join(scriptsDir, 'production-launch-evidence.mjs');
 const capturedAt = '2026-06-08T12:00:00.000Z';
+const digest = 'a'.repeat(64);
 
 async function loadEvidenceRunner() {
   assert.ok(existsSync(evidenceScriptPath), 'production launch evidence script must exist');
@@ -32,6 +33,17 @@ function completeEvidence(requiredAreas) {
     preparedBy: 'Release owner',
     preparedAt: capturedAt,
     approvedForLaunch: true,
+    release: {
+      commitSha: 'b'.repeat(40),
+      workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+      imageDigestManifest: {
+        apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
+        webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
+        migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+        webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
+        webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+      },
+    },
     areas: Object.fromEntries(requiredAreas.map((area) => [
       area.id,
       {
@@ -80,6 +92,44 @@ test('production launch evidence validator accepts complete dated external evide
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
     assert.match(result.stdout, /77 check\(s\)/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires a bound release artifact identity', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.release.commitSha = 'not-a-sha';
+  evidence.release.workflowRunUrl = 'https://github.com/jasperfordesq-ai/charity-governance/actions';
+  evidence.release.imageDigestManifest.webImage = 'ghcr.io/jasperfordesq-ai/charity-governance-web:latest';
+  evidence.release.imageDigestManifest.webBuildNextPublicApiUrl = 'https://api.attacker.example';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /release\.commitSha must be a 40 character lowercase git SHA/);
+    assert.match(result.stderr, /release\.workflowRunUrl must be a GitHub Actions release workflow run URL/);
+    assert.match(result.stderr, /release\.imageDigestManifest\.webImage must use ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256/);
+    assert.match(result.stderr, /release\.imageDigestManifest\.webBuildNextPublicApiUrl must use an approved charitypilot\.ie hostname/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator fails when release binding is missing', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  delete evidence.release;
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /release is required/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

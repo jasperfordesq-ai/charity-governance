@@ -53,8 +53,10 @@ Evidence:
 | Owner | |
 | Date | |
 | Build identifier | |
+| Release workflow run URL | |
 | Evidence location | |
 | Digest-pinned image refs | |
+| Web image build origins | |
 
 ## 2. Secrets And Environment
 

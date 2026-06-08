@@ -165,6 +165,11 @@ const allowedEvidenceTypes = new Set([
 
 const placeholderOrLocalPattern = /\b(todo|tbd|pending|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|file:\/\//i;
 const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|RESEND_API_KEY=)\b/;
+const imageRepositories = {
+  apiImage: 'ghcr.io/jasperfordesq-ai/charity-governance-api',
+  webImage: 'ghcr.io/jasperfordesq-ai/charity-governance-web',
+  migrationImage: 'ghcr.io/jasperfordesq-ai/charity-governance-migrations',
+};
 
 function usage() {
   return 'Usage: node scripts/production-launch-evidence.mjs --evidence-file <path>\n';
@@ -229,6 +234,87 @@ function validateExternalText(value, path, issues) {
   }
 }
 
+function validateReleaseWorkflowUrl(value, path, issues) {
+  validateExternalText(value, path, issues);
+
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname.toLowerCase() !== 'github.com' ||
+      !/^\/jasperfordesq-ai\/charity-governance\/actions\/runs\/\d+$/.test(url.pathname)
+    ) {
+      issues.push(`${path} must be a GitHub Actions release workflow run URL for charity-governance`);
+    }
+  } catch {
+    issues.push(`${path} must be a valid URL`);
+  }
+}
+
+function validateHttpsOrigin(value, path, issues, options = {}) {
+  validateExternalText(value, path, issues);
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+    if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '')) {
+      issues.push(`${path} must be an origin-only https URL`);
+    }
+    if (options.hostSuffix && hostname !== options.hostSuffix && !hostname.endsWith(`.${options.hostSuffix}`)) {
+      issues.push(`${path} must use an approved ${options.hostSuffix} hostname`);
+    }
+  } catch {
+    issues.push(`${path} must be a valid URL`);
+  }
+}
+
+function validateImageRef(value, path, repository, issues) {
+  validateExternalText(value, path, issues);
+
+  const expected = new RegExp(`^${repository.replaceAll('.', '\\.')}@sha256:[a-f0-9]{64}$`);
+  if (typeof value !== 'string' || !expected.test(value)) {
+    issues.push(`${path} must use ${repository}@sha256:<64 lowercase hex chars>`);
+  }
+}
+
+function validateReleaseBinding(release, issues) {
+  if (!isPlainObject(release)) {
+    issues.push('release is required');
+    return;
+  }
+
+  if (typeof release.commitSha !== 'string' || !/^[a-f0-9]{40}$/.test(release.commitSha)) {
+    issues.push('release.commitSha must be a 40 character lowercase git SHA');
+  }
+  validateReleaseWorkflowUrl(release.workflowRunUrl, 'release.workflowRunUrl', issues);
+
+  if (!isPlainObject(release.imageDigestManifest)) {
+    issues.push('release.imageDigestManifest is required');
+    return;
+  }
+
+  validateImageRef(release.imageDigestManifest.apiImage, 'release.imageDigestManifest.apiImage', imageRepositories.apiImage, issues);
+  validateImageRef(release.imageDigestManifest.webImage, 'release.imageDigestManifest.webImage', imageRepositories.webImage, issues);
+  validateImageRef(
+    release.imageDigestManifest.migrationImage,
+    'release.imageDigestManifest.migrationImage',
+    imageRepositories.migrationImage,
+    issues,
+  );
+  validateHttpsOrigin(
+    release.imageDigestManifest.webBuildNextPublicApiUrl,
+    'release.imageDigestManifest.webBuildNextPublicApiUrl',
+    issues,
+    { hostSuffix: 'charitypilot.ie' },
+  );
+  validateHttpsOrigin(
+    release.imageDigestManifest.webBuildNextPublicSupabaseUrl,
+    'release.imageDigestManifest.webBuildNextPublicSupabaseUrl',
+    issues,
+    { hostSuffix: 'supabase.co' },
+  );
+}
+
 function validateEvidenceEntries(entries, path, issues, options = {}) {
   if (!Array.isArray(entries) || entries.length === 0) {
     issues.push(`${path} must include at least one evidence entry`);
@@ -275,6 +361,7 @@ function validateLaunchEvidence(evidence) {
   if (evidence.approvedForLaunch !== true) {
     issues.push('approvedForLaunch must be true');
   }
+  validateReleaseBinding(evidence.release, issues);
   if (!isPlainObject(evidence.areas)) {
     issues.push('areas is required');
     return issues;

@@ -1934,6 +1934,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
+  assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
+  assert.match(runbook, /GitHub Actions release workflow run URL/);
+  assert.match(runbook, /digest-pinned API\/web\/migration image refs/);
   assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml up --wait --wait-timeout 180 -d/);
   assert.match(runbook, /post-deploy public HTTPS smoke/);
   assert.match(runbook, /Rollback reuses the production deploy path/);
@@ -1957,6 +1960,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
+  assert.match(launchChecklist, /Release workflow run URL/);
+  assert.match(launchChecklist, /Web image build origins/);
   assert.match(launchChecklist, /post-deploy public HTTPS smoke/);
   assert.match(launchChecklist, /rollback rehearsal/);
   assert.match(launchChecklist, /digest-pinned/);
