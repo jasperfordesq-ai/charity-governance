@@ -123,6 +123,29 @@ test('postgres backup CLI renders a database URL dump command without exposing t
   }
 });
 
+test('postgres backup CLI supports host networking for database URL dumps in CI', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-url-backup-network-dry-run-'));
+
+  try {
+    const result = runBackupCli([
+      'backup',
+      '--database-url=postgresql://backup-user:secret@localhost:5432/charitypilot_ci',
+      '--docker-network=host',
+      `--output-dir=${tempDir}`,
+      '--output-file=remote.dump',
+      '--dry-run',
+    ]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /docker run --rm --network host/);
+    assert.match(result.stdout, /CHARITYPILOT_BACKUP_DATABASE_URL/);
+    assert.doesNotMatch(result.stdout, /backup-user:secret/);
+    assert.equal(existsSync(join(tempDir, 'remote.dump')), false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('postgres backup CLI renders restore verification commands in dry-run mode', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-restore-dry-run-'));
   const dumpPath = join(tempDir, 'charitypilot-postgres.dump');

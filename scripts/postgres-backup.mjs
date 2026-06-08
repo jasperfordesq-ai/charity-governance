@@ -22,6 +22,7 @@ Usage:
 Backup options:
   --database-container=<name>  Dump a local Docker Postgres container with docker exec.
   --database-url=<url>         Dump a database URL with a postgres tools container.
+  --docker-network=<name>      Docker network for --database-url backup tools container.
   --database-name=<name>       Database name for --database-container. Default: charitypilot.
   --database-user=<user>       Database user for --database-container. Default: charitypilot.
   --output-dir=<path>          Backup output directory. Default: .charitypilot-backups/postgres.
@@ -304,6 +305,7 @@ async function backup(options) {
   } else {
     validateDatabaseUrl(target.databaseUrl);
     const tempOutputFile = temporaryBackupFileName(outputFile);
+    const dockerNetwork = optionString(options, 'docker-network');
     const env = {
       ...process.env,
       CHARITYPILOT_BACKUP_DATABASE_URL: target.databaseUrl,
@@ -312,6 +314,7 @@ async function backup(options) {
     const args = [
       'run',
       '--rm',
+      ...(dockerNetwork ? ['--network', dockerNetwork] : []),
       '-e',
       'CHARITYPILOT_BACKUP_DATABASE_URL',
       '-e',

@@ -1492,6 +1492,29 @@ test('CI deploys Prisma migrations against PostgreSQL before release gates', () 
   assert.match(workflow, /prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
 });
 
+test('CI verifies PostgreSQL backup and restore against the migrated database', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+  const stepStart = workflow.indexOf('name: Verify PostgreSQL backup and restore');
+  assert.notEqual(stepStart, -1, 'CI must verify database backup and restore');
+  const step = workflow.slice(stepStart, workflow.indexOf('name: Lint'));
+
+  assert.match(step, /backup_dir="\$\(mktemp -d\)"/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs backup/);
+  assert.match(step, /--database-url="\$\{DATABASE_URL\}"/);
+  assert.match(step, /--docker-network=host/);
+  assert.match(step, /--output-file=ci-postgres\.dump/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs verify-restore/);
+  assert.match(step, /--dump-file="\$\{backup_dir\}\/ci-postgres\.dump"/);
+  assert.ok(
+    workflow.indexOf('name: Verify Prisma migration status') < stepStart,
+    'backup verification must run after migration status is checked',
+  );
+  assert.ok(
+    stepStart < workflow.indexOf('name: Build API Docker image'),
+    'backup verification must run before release Docker gates',
+  );
+});
+
 test('CI keeps every production release gate wired', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
@@ -1818,6 +1841,27 @@ test('release workflow runs full production gates before publishing images', () 
     assert.ok(workflow.indexOf(gate) > -1, `${gate} must exist in release workflow`);
     assert.ok(workflow.indexOf(gate) < publishIndex, `${gate} must run before image publishing`);
   }
+});
+
+test('release workflow verifies PostgreSQL backup and restore before publishing images', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const stepStart = workflow.indexOf('name: Verify PostgreSQL backup and restore');
+  const publishIndex = workflow.indexOf('name: Push image tags');
+  assert.notEqual(stepStart, -1, 'release workflow must verify database backup and restore');
+  const step = workflow.slice(stepStart, workflow.indexOf('name: Build API Docker image'));
+
+  assert.match(step, /backup_dir="\$\(mktemp -d\)"/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs backup/);
+  assert.match(step, /--database-url="\$\{DATABASE_URL\}"/);
+  assert.match(step, /--docker-network=host/);
+  assert.match(step, /--output-file=ci-postgres\.dump/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs verify-restore/);
+  assert.match(step, /--dump-file="\$\{backup_dir\}\/ci-postgres\.dump"/);
+  assert.ok(
+    workflow.indexOf('name: Run migration runner against CI PostgreSQL') < stepStart,
+    'backup verification must run after the release migration runner smoke',
+  );
+  assert.ok(stepStart < publishIndex, 'backup verification must run before image publishing');
 });
 
 test('release API Docker smoke runs in production mode and exercises keyed readiness before publish', () => {

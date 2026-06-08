@@ -142,6 +142,20 @@ jobs:
             -e DATABASE_URL="${DATABASE_URL}" \
             charitypilot-api-migrations-ci migrate status --schema prisma/schema.prisma
 
+      - name: Verify PostgreSQL backup and restore
+        run: |
+          set -euo pipefail
+          backup_dir="$(mktemp -d)"
+          trap 'rm -rf "${backup_dir}"' EXIT
+          node scripts/postgres-backup.mjs backup \
+            --database-url="${DATABASE_URL}" \
+            --docker-network=host \
+            --output-dir="${backup_dir}" \
+            --output-file=ci-postgres.dump \
+            --overwrite
+          node scripts/postgres-backup.mjs verify-restore \
+            --dump-file="${backup_dir}/ci-postgres.dump"
+
       - name: Build API Docker image
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
 
