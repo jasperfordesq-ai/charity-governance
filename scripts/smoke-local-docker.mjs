@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,8 +8,10 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const composeArgs = ['compose', '-f', 'compose.yml', '-f', 'compose.local.yml'];
 const migrationScriptPath = join('scripts', 'migrate-local-docker.mjs');
+const nextEnvPath = join(repoRoot, 'apps', 'web', 'next-env.d.ts');
 const cleanup = process.argv.includes('--cleanup');
 const cleanupVolumes = process.argv.includes('--cleanup-volumes');
+const nextEnvSnapshot = existsSync(nextEnvPath) ? readFileSync(nextEnvPath, 'utf8') : null;
 
 function runDocker(args) {
   const result = spawnSync('docker', args, {
@@ -146,6 +148,8 @@ async function smokeWeb() {
 try {
   mkdirSync(join(repoRoot, 'apps', 'web', '.next'), { recursive: true });
 
+  await runLocalDockerMigrations();
+
   if (localServicesAreRunning()) {
     console.log('Local Docker services already running; skipping compose up.');
     try {
@@ -158,8 +162,6 @@ try {
     runDocker([...composeArgs, 'up', '--wait', '--wait-timeout', '180', '-d']);
   }
 
-  await runLocalDockerMigrations();
-
   await waitForCheck('API health', smokeApiHealth);
   await waitForCheck('API readiness', smokeApiReadiness);
   await waitForCheck('web root', smokeWeb);
@@ -170,5 +172,9 @@ try {
     const downArgs = [...composeArgs, 'down', '--remove-orphans'];
     if (cleanupVolumes) downArgs.push('--volumes');
     runDocker(downArgs);
+  }
+
+  if (nextEnvSnapshot !== null) {
+    writeFileSync(nextEnvPath, nextEnvSnapshot);
   }
 }

@@ -130,6 +130,9 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   assert.match(smokeScript, /compose\.yml/);
   assert.match(smokeScript, /compose\.local\.yml/);
   assert.match(smokeScript, /mkdirSync\(join\(repoRoot, 'apps', 'web', '\.next'\), \{ recursive: true \}\)/);
+  assert.match(smokeScript, /const nextEnvPath = join\(repoRoot, 'apps', 'web', 'next-env\.d\.ts'\)/);
+  assert.match(smokeScript, /const nextEnvSnapshot = existsSync\(nextEnvPath\) \? readFileSync\(nextEnvPath, 'utf8'\) : null/);
+  assert.match(smokeScript, /writeFileSync\(nextEnvPath, nextEnvSnapshot\)/);
   assert.match(smokeScript, /'up', '--wait', '--wait-timeout', '180', '-d'/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness/);
@@ -165,6 +168,10 @@ test('local Docker smoke reapplies migrations even when services are already run
 
   assert.match(smokeScript, /migrate-local-docker\.mjs/);
   assert.match(smokeScript, /await runLocalDockerMigrations\(\)/);
+  assert.ok(
+    smokeScript.indexOf('await runLocalDockerMigrations()') < smokeScript.indexOf('if (localServicesAreRunning())'),
+    'local migrations must run before reusing or starting local app services',
+  );
   assert.ok(
     smokeScript.indexOf('await runLocalDockerMigrations()') < smokeScript.indexOf("await waitForCheck('API health'"),
     'local migrations must run before API readiness assertions',
