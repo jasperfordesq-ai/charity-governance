@@ -2755,8 +2755,11 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /name:\s+Stop PostgreSQL/);
   assert.match(workflow, /if:\s+always\(\)/);
   assert.match(workflow, /name:\s+Validate release ref/);
+  assert.match(workflow, /NEXT_PUBLIC_API_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_API_URL\s*\}\}/);
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_SUPABASE_URL\s*\}\}/);
+  assert.match(workflow, /NEXT_PUBLIC_API_URL production variable is required/);
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL production variable is required/);
+  assert.match(workflow, /NEXT_PUBLIC_API_URL must be an origin-only HTTPS CharityPilot production URL/);
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);
   assert.match(workflow, /docker login "\$\{REGISTRY\}"/);
@@ -2798,9 +2801,9 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
-  assert.match(workflow, /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*-t charitypilot-web-ci \./);
+  assert.match(workflow, /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*-t charitypilot-web-ci \./);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
-  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/);
+  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
@@ -2808,7 +2811,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https:\/\/api\.charitypilot\.ie" "\$\{web_headers\}"/);
+  assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' \$\{NEXT_PUBLIC_API_URL\}" "\$\{web_headers\}"/);
   assertWorkflowChecksForbiddenWebRuntimePackages(workflow);
   assertWorkflowUsesPackagePathAbsenceChecks(
     workflowStepBetween(workflow, 'Verify web Docker runtime dependencies', 'Smoke web Docker image'),
@@ -2946,8 +2949,8 @@ test('release workflow rehearses deploy preflight against generated digest manif
   assert.match(rehearsalStep, /cat > \.env\.production\.ci <<EOF/);
   assert.match(rehearsalStep, /NODE_ENV=production/);
   assert.match(rehearsalStep, /DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
-  assert.match(rehearsalStep, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
-  assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(rehearsalStep, /NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
+  assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
   assert.match(rehearsalStep, /NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
   assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
   assert.match(rehearsalStep, /cat release-image-digests\.env >> \.env\.production\.ci/);
@@ -2974,7 +2977,8 @@ test('release workflow runs full production gates before publishing images', () 
   assert.match(workflow, /run:\s+npm run test/);
   assert.match(workflow, /name:\s+Build shared package[\s\S]*run:\s+npm run build -w @charitypilot\/shared/);
   assert.match(workflow, /name:\s+Build API[\s\S]*run:\s+npm run build -w @charitypilot\/api/);
-  assert.match(workflow, /name:\s+Build web[\s\S]*NEXT_PUBLIC_API_URL:\s+https:\/\/api\.charitypilot\.ie[\s\S]*run:\s+npm run build -w @charitypilot\/web/);
+  assert.match(workflow, /NEXT_PUBLIC_API_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_API_URL\s*\}\}/);
+  assert.match(workflow, /name:\s+Build web[\s\S]*run:\s+npm run build -w @charitypilot\/web/);
   assert.match(workflow, /run:\s+npm audit --omit=dev --audit-level=moderate/);
 
   for (const gate of [
@@ -3088,7 +3092,7 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(deadlineRun, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
   assert.match(deadlineRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(deadlineRun, /-e AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
-  assert.match(deadlineRun, /-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(deadlineRun, /-e NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
   assert.match(deadlineRun, /-e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret/);
   assert.match(deadlineRun, /-e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret/);
   assert.match(deadlineRun, /-e RESEND_API_KEY=re_ci_smoke_key/);

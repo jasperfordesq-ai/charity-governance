@@ -26,6 +26,7 @@ jobs:
     environment: production
     timeout-minutes: 45
     env:
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
 
     steps:
@@ -55,10 +56,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${NEXT_PUBLIC_API_URL:-}" ]; then
+            echo "NEXT_PUBLIC_API_URL production variable is required." >&2
+            exit 1
+          fi
           if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ]; then
             echo "NEXT_PUBLIC_SUPABASE_URL production variable is required." >&2
             exit 1
           fi
+          node -e "const value = process.env.NEXT_PUBLIC_API_URL; const url = new URL(value); const hostname = url.hostname.toLowerCase().replace(/\.$/, ''); if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '') || (hostname !== 'charitypilot.ie' && !hostname.endsWith('.charitypilot.ie'))) { console.error('NEXT_PUBLIC_API_URL must be an origin-only HTTPS CharityPilot production URL.'); process.exit(1); }"
           node -e "const value = process.env.NEXT_PUBLIC_SUPABASE_URL; const url = new URL(value); if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '') || !url.hostname.toLowerCase().endsWith('.supabase.co')) { console.error('NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL.'); process.exit(1); }"
 
       - name: Setup Node
@@ -93,8 +99,6 @@ jobs:
         run: npm run build -w @charitypilot/api
 
       - name: Build web
-        env:
-          NEXT_PUBLIC_API_URL: https://api.charitypilot.ie
         run: npm run build -w @charitypilot/web
 
       - name: Dependency audit
@@ -196,7 +200,7 @@ jobs:
             -e JWT_SECRET=ci-production-jwt-secret-with-enough-entropy \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
-            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
             -e STRIPE_SECRET_KEY=sk_live_ci_configured_secret \
             -e STRIPE_WEBHOOK_SECRET=whsec_ci_configured_secret \
             -e STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_ci_essentials_monthly \
@@ -234,7 +238,7 @@ jobs:
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
-            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
             -e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret \
             -e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret \
             -e STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_ci_essentials_monthly \
@@ -332,7 +336,7 @@ jobs:
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
-            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
             -e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret \
             -e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret \
             -e STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_ci_essentials_monthly \
@@ -387,7 +391,7 @@ jobs:
       - name: Build web Docker image
         run: |
           docker build -f apps/web/Dockerfile \
-            --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
             --build-arg NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
             -t charitypilot-web-ci .
 
@@ -404,7 +408,7 @@ jobs:
             -e NODE_ENV=production \
             -e PORT=3003 \
             -e HOST=0.0.0.0 \
-            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
             -e NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
             charitypilot-web-ci
           web_headers="$(mktemp)"
@@ -424,7 +428,7 @@ jobs:
           grep -qi "^referrer-policy: strict-origin-when-cross-origin" "${web_headers}"
           grep -qi "^permissions-policy: camera=(), microphone=(), geolocation=(), payment=()" "${web_headers}"
           grep -qi "^strict-transport-security: max-age=63072000; includeSubDomains; preload" "${web_headers}"
-          grep -qi "^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https://api.charitypilot.ie" "${web_headers}"
+          grep -qi "^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' ${NEXT_PUBLIC_API_URL}" "${web_headers}"
 
       - name: Push image tags
         run: |
@@ -556,10 +560,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key
           SUPABASE_STORAGE_BUCKET=documents
           ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot
-          NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
+          NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
           NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_ci_configured_secret
-          CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
+          CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
           CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
           EOF
           cat release-image-digests.env >> .env.production.ci
