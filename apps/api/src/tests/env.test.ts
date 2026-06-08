@@ -593,6 +593,139 @@ test('validateProductionEnv rejects local URLs and Stripe test mode in productio
   );
 });
 
+test('validateProductionEnv rejects the local database smoke override outside GitHub Actions', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@127.0.0.1:5432/charitypilot';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_configuredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_configuredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_configuredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
+  process.env.CI = 'true';
+  process.env.GITHUB_ACTIONS = 'false';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('DATABASE_URL must not point at localhost in production') &&
+      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+  );
+});
+
+test('validateProductionEnv treats Docker host gateway database URLs as local production URLs', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@host.docker.internal:5432/charitypilot';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_configuredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_configuredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_configuredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('DATABASE_URL must not point at localhost in production') &&
+      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+  );
+});
+
+test('validateProductionEnv allows local database URLs only for GitHub Actions production smoke', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@127.0.0.1:5432/charitypilot';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_configuredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_configuredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_configuredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
+  process.env.CI = 'true';
+  process.env.GITHUB_ACTIONS = 'true';
+
+  assert.doesNotThrow(() => validateProductionEnv());
+});
+
+test('validateProductionEnv rejects non-local plaintext database URLs even for GitHub Actions production smoke', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.PORT = '3002';
+  process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
+  process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
+  process.env.DATABASE_URL = 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot';
+  process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  process.env.STRIPE_SECRET_KEY = 'sk_live_configuredSecret';
+  process.env.STRIPE_WEBHOOK_SECRET = 'whsec_configuredSecret';
+  process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentialsMonthly';
+  process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
+  process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
+  process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.RESEND_API_KEY = 're_configuredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.example/hooks/charitypilot';
+  process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
+  process.env.CI = 'true';
+  process.env.GITHUB_ACTIONS = 'true';
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+  );
+});
+
 test('validateProductionEnv rejects bracketed IPv6 localhost URLs in production', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';

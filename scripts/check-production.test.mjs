@@ -767,6 +767,27 @@ test('fails when production values are local, malformed, or test-mode', () => {
   }
 });
 
+test('fails when production database URL uses the Docker host gateway', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-docker-host-db-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      DATABASE_URL: 'postgresql://user:pass@host.docker.internal:5432/charitypilot?sslmode=require',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /DATABASE_URL must not point at localhost for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('passes when production frontend origins include multiple approved HTTPS origins', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-multi-origin-'));
   const envPath = join(tempDir, 'production.env');
@@ -1548,6 +1569,30 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   );
 });
 
+test('CI API Docker smoke runs in production mode and exercises keyed readiness', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+  const smokeStep = workflow.slice(
+    workflow.indexOf('name: Smoke API Docker image'),
+    workflow.indexOf('name: Build web Docker image'),
+  );
+
+  assert.match(smokeStep, /-e NODE_ENV=production/);
+  assert.match(smokeStep, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
+  assert.match(smokeStep, /-e CI=true/);
+  assert.match(smokeStep, /-e GITHUB_ACTIONS=true/);
+  assert.match(smokeStep, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
+  assert.match(smokeStep, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
+  assert.match(smokeStep, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_ci/);
+  assert.match(smokeStep, /readiness_unauthorized_status/);
+  assert.match(smokeStep, /test "\$\{readiness_unauthorized_status\}" = "401"/);
+  assert.match(smokeStep, /x-charitypilot-readiness-key: ci-readiness-key-with-enough-entropy/);
+  assert.match(smokeStep, /test "\$\{readiness_status\}" = "503"/);
+  assert.match(smokeStep, /body\.status !== 'not_ready'/);
+  assert.match(smokeStep, /body\.checks\.database !== true/);
+  assert.match(smokeStep, /body\.checks\.storageConfigured !== true/);
+  assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
+});
+
 test('CI validates API production env inside the built Docker image', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
@@ -1628,6 +1673,33 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
     workflow.indexOf('name: Validate API Docker production configuration') < workflow.indexOf('name: Push image tags'),
     'API production config must be validated before publishing',
   );
+  assert.ok(
+    workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
+    'API image must be smoke-tested before publishing',
+  );
+});
+
+test('release API Docker smoke runs in production mode and exercises keyed readiness before publish', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const smokeStep = workflow.slice(
+    workflow.indexOf('name: Smoke API Docker image'),
+    workflow.indexOf('name: Build web Docker image'),
+  );
+
+  assert.match(smokeStep, /-e NODE_ENV=production/);
+  assert.match(smokeStep, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
+  assert.match(smokeStep, /-e CI=true/);
+  assert.match(smokeStep, /-e GITHUB_ACTIONS=true/);
+  assert.match(smokeStep, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
+  assert.match(smokeStep, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
+  assert.match(smokeStep, /readiness_unauthorized_status/);
+  assert.match(smokeStep, /test "\$\{readiness_unauthorized_status\}" = "401"/);
+  assert.match(smokeStep, /x-charitypilot-readiness-key: ci-readiness-key-with-enough-entropy/);
+  assert.match(smokeStep, /test "\$\{readiness_status\}" = "503"/);
+  assert.match(smokeStep, /body\.status !== 'not_ready'/);
+  assert.match(smokeStep, /body\.checks\.database !== true/);
+  assert.match(smokeStep, /body\.checks\.storageConfigured !== true/);
+  assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
   assert.ok(
     workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
     'API image must be smoke-tested before publishing',

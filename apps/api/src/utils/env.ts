@@ -8,6 +8,14 @@ export { isConfiguredSecret } from './secrets.js';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 
+function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
+  return (
+    process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE === 'true' &&
+    process.env.CI === 'true' &&
+    process.env.GITHUB_ACTIONS === 'true'
+  );
+}
+
 function requireConfiguredEnv(name: string, issues: string[]): string | undefined {
   const value = process.env[name];
   if (!isConfiguredSecret(value)) {
@@ -84,7 +92,7 @@ function requireUrl(
 
 function isLocalHost(hostname: string): boolean {
   const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
+  return ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'host.docker.internal'].includes(normalizedHostname);
 }
 
 function normaliseHostname(hostname: string): string {
@@ -188,14 +196,16 @@ function requireDatabaseUrl(name: string, issues: string[]) {
 
   try {
     const url = new URL(value);
+    const allowCiSmokeLocalDatabase = isCiProductionSmokeLocalDatabaseAllowed();
+    const localDatabaseHost = isLocalHost(url.hostname);
     if (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') {
       issues.push(`${name} must use a PostgreSQL connection URL`);
     }
-    if (isLocalHost(url.hostname)) {
+    if (localDatabaseHost && !allowCiSmokeLocalDatabase) {
       issues.push(`${name} must not point at localhost in production`);
     }
     const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
-    if (!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) {
+    if ((!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) && !(allowCiSmokeLocalDatabase && localDatabaseHost)) {
       issues.push(`${name} must require TLS with sslmode=require, verify-ca, or verify-full in production`);
     }
   } catch {

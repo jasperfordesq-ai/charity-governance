@@ -154,11 +154,32 @@ jobs:
           docker rm -f charitypilot-api-smoke 2>/dev/null || true
           trap 'docker rm -f charitypilot-api-smoke 2>/dev/null || true' EXIT
           docker run -d --name charitypilot-api-smoke --network host \
-            -e NODE_ENV=test \
+            -e NODE_ENV=production \
             -e PORT=3002 \
             -e HOST=0.0.0.0 \
+            -e TRUSTED_PROXY_ADDRESSES=10.0.0.10 \
+            -e READINESS_API_KEY=ci-readiness-key-with-enough-entropy \
+            -e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true \
+            -e CI=true \
+            -e GITHUB_ACTIONS=true \
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
+            -e FRONTEND_URL=https://app.charitypilot.ie \
+            -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
+            -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
+            -e STRIPE_SECRET_KEY=sk_live_ci_smoke_secret \
+            -e STRIPE_WEBHOOK_SECRET=whsec_ci_smoke_secret \
+            -e STRIPE_ESSENTIALS_MONTHLY_PRICE_ID=price_ci_essentials_monthly \
+            -e STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_ci_essentials_yearly \
+            -e STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_ci_complete_monthly \
+            -e STRIPE_COMPLETE_YEARLY_PRICE_ID=price_ci_complete_yearly \
             -e RESEND_API_KEY=re_ci_smoke_key \
+            -e EMAIL_FROM=noreply@charitypilot.ie \
+            -e SUPABASE_URL=https://ci-project.supabase.co \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
+            -e SUPABASE_STORAGE_BUCKET=documents \
+            -e STORAGE_READINESS_TIMEOUT_MS=1000 \
+            -e READINESS_DEPENDENCY_TIMEOUT_MS=1000 \
+            -e ERROR_ALERT_WEBHOOK_URL=https://alerts.example/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_ci \
             charitypilot-api-ci
           api_headers="$(mktemp)"
@@ -178,6 +199,14 @@ jobs:
           grep -qi "^referrer-policy: strict-origin-when-cross-origin" "${api_headers}"
           grep -qi "^permissions-policy: camera=(), microphone=(), geolocation=(), payment=()" "${api_headers}"
           grep -qi "^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "${api_headers}"
+          readiness_unauthorized_body="$(mktemp)"
+          readiness_unauthorized_status="$(curl --silent --show-error --output "${readiness_unauthorized_body}" --write-out "%{http_code}" http://127.0.0.1:3002/api/v1/health/readiness)"
+          test "${readiness_unauthorized_status}" = "401"
+          node -e "const body = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (body.code !== 'READINESS_UNAUTHORIZED' || 'checks' in body) { console.error(body); process.exit(1); }" "${readiness_unauthorized_body}"
+          readiness_body="$(mktemp)"
+          readiness_status="$(curl --silent --show-error --output "${readiness_body}" --write-out "%{http_code}" -H "x-charitypilot-readiness-key: ci-readiness-key-with-enough-entropy" http://127.0.0.1:3002/api/v1/health/readiness)"
+          test "${readiness_status}" = "503"
+          node -e "const body = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (body.status !== 'not_ready' || body.checks.database !== true || body.checks.storageConfigured !== true || body.checks.storageBucketReachable !== false) { console.error(body); process.exit(1); }" "${readiness_body}"
 
       - name: Build web Docker image
         run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie -t charitypilot-web-ci .

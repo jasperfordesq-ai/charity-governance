@@ -71,7 +71,7 @@ function isConfigured(value) {
 
 function isLocalHost(hostname) {
   const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(normalizedHostname);
+  return ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'host.docker.internal'].includes(normalizedHostname);
 }
 
 function normaliseHostname(hostname) {
