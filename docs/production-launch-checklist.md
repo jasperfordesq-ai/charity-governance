@@ -54,6 +54,7 @@ Evidence:
 - [ ] `NODE_ENV=production` is set for the API, web app, and scheduled job runtime.
 - [ ] `JWT_SECRET` is high entropy and at least 32 characters.
 - [ ] `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` use HTTPS public origins.
+- [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` is set for Docker Compose and matches `NEXT_PUBLIC_API_URL`.
 - [ ] `AUTH_COOKIE_DOMAIN` matches the deployed cookie scope or is intentionally unset for a single-host deployment.
 - [ ] Stripe keys are live-mode production keys.
 - [ ] Resend sender domain is verified for production sending.

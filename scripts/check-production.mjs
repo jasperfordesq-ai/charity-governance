@@ -42,6 +42,7 @@ const REQUIRED = [
 ];
 
 const ENV_FILE_FLAG = '--production-env-file=';
+const COMPOSE_RUNTIME_WEB_API_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 
@@ -302,6 +303,30 @@ function requireAuthCookieDomainForSplitHosts(env, issues) {
   }
 }
 
+function requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues) {
+  const value = envValue(runtimeEnv, COMPOSE_RUNTIME_WEB_API_URL);
+  if (!isConfigured(value)) {
+    issues.push(`${COMPOSE_RUNTIME_WEB_API_URL} is missing or still contains a placeholder value`);
+    return;
+  }
+
+  const issueCountBeforeUrlValidation = issues.length;
+  requireUrl(runtimeEnv, COMPOSE_RUNTIME_WEB_API_URL, issues, {
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+  });
+
+  if (issues.length !== issueCountBeforeUrlValidation) return;
+
+  const [envFileApiUrl] = configuredUrls(env, 'NEXT_PUBLIC_API_URL');
+  const [runtimeApiUrl] = configuredUrls(runtimeEnv, COMPOSE_RUNTIME_WEB_API_URL);
+  if (envFileApiUrl && runtimeApiUrl && runtimeApiUrl.origin !== envFileApiUrl.origin) {
+    issues.push(
+      `${COMPOSE_RUNTIME_WEB_API_URL} must match NEXT_PUBLIC_API_URL so the production web runtime, CSP, and client bundle use the same API origin`,
+    );
+  }
+}
+
 const envFileArg = process.argv.find((arg) => arg.startsWith(ENV_FILE_FLAG));
 const envFile = envFileArg ? envFileArg.slice(ENV_FILE_FLAG.length) : '.env.production';
 
@@ -311,6 +336,12 @@ if (!existsSync(envFile)) {
 }
 
 const env = parseEnvFile(envFile);
+const runtimeWebApiUrlFromProcess = process.env[COMPOSE_RUNTIME_WEB_API_URL] ?? '';
+const runtimeEnv = {
+  [COMPOSE_RUNTIME_WEB_API_URL]: runtimeWebApiUrlFromProcess.trim()
+    ? runtimeWebApiUrlFromProcess
+    : envValue(env, COMPOSE_RUNTIME_WEB_API_URL),
+};
 const issues = [];
 
 for (const key of REQUIRED) {
@@ -341,6 +372,7 @@ requireUrl(env, 'FRONTEND_URL', issues, {
 requireUrl(env, 'SUPABASE_URL', issues);
 requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
 requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
+requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);
 requireAuthCookieDomainForSplitHosts(env, issues);
 
 if (issues.length) {

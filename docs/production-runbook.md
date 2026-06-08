@@ -25,6 +25,7 @@ npm run build -w @charitypilot/api
 npm run build -w @charitypilot/web
 npm audit --omit=dev --audit-level=moderate
 npm run check:production -- --production-env-file=.env.production
+docker compose --env-file .env.production -f compose.production.yml config --quiet
 ```
 
 The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time. Do not commit that file to the repository. Use `.env.production.example` only as a template; it is expected to fail preflight until real values replace the placeholders.
@@ -33,7 +34,9 @@ The production preflight command requires a real `.env.production` file or equiv
 
 The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
 
-The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API origin. Configure the API `FRONTEND_URL` to the exact HTTPS web origin, or a comma-separated list of approved production origins.
+The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API origin. Docker Compose also requires `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` for the web runtime; it must match `NEXT_PUBLIC_API_URL`. Keep both in the selected production env file, export them before running Compose, or pass the env file with `docker compose --env-file .env.production`.
+
+Configure the API `FRONTEND_URL` to the exact HTTPS web origin, or a comma-separated list of approved production origins.
 
 Set `AUTH_COOKIE_DOMAIN` only when the deployed web and API hosts need a shared parent cookie domain. Leave it unset for single-host deployments.
 

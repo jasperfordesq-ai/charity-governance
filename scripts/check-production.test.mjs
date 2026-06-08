@@ -9,6 +9,9 @@ import { test } from 'node:test';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const scriptPath = join(scriptsDir, 'check-production.mjs');
+const validRuntimeWebApiUrlEnv = {
+  CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+};
 
 function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8');
@@ -34,11 +37,45 @@ function cleanEnv() {
 }
 
 function runPreflight(args, envOverrides = {}) {
+  const defaultRuntimeEnv = Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL')
+    ? {}
+    : validRuntimeWebApiUrlEnv;
+
   return spawnSync(process.execPath, [scriptPath, ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
-    env: { ...cleanEnv(), ...envOverrides },
+    env: { ...cleanEnv(), ...defaultRuntimeEnv, ...envOverrides },
   });
+}
+
+function completeProductionEnv(overrides = {}) {
+  const values = {
+    NODE_ENV: 'production',
+    PORT: '3002',
+    TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
+    READINESS_API_KEY: 'configured-readiness-key-32-chars',
+    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+    JWT_SECRET: 'a'.repeat(40),
+    FRONTEND_URL: 'https://app.charitypilot.ie',
+    AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
+    STRIPE_SECRET_KEY: 'sk_live_configuredSecret',
+    STRIPE_WEBHOOK_SECRET: 'whsec_configuredSecret',
+    STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_essentialsMonthly',
+    STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentialsYearly',
+    STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_completeMonthly',
+    STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
+    RESEND_API_KEY: 're_configuredSecret',
+    EMAIL_FROM: 'noreply@charitypilot.ie',
+    SUPABASE_URL: 'https://configured-project.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
+    SUPABASE_STORAGE_BUCKET: 'documents',
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+    NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
+    ...overrides,
+  };
+
+  return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
 }
 
 test('fails clearly when the explicit production env file is missing', () => {
@@ -46,7 +83,9 @@ test('fails clearly when the explicit production env file is missing', () => {
   const envPath = join(tempDir, 'missing-production.env');
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`]);
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
 
     assert.equal(result.status, 1);
     assert.ok(result.stderr.includes(`Production preflight failed: environment file not found: ${envPath}`));
@@ -100,11 +139,157 @@ test('passes when the selected env file contains complete production values', ()
   );
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`]);
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production preflight passed using /);
     assert.ok(result.stdout.includes(envPath));
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the compose runtime web API URL is missing', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-missing-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: '',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL is missing or still contains a placeholder value/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the compose runtime web API URL is not an approved HTTPS origin', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-local-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'http://localhost:3002',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use https:\/\/ for production/);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must not point at localhost for production/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the compose runtime web API URL uses an unapproved hostname', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-attacker-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.attacker.example',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the compose runtime web API URL is not origin-only', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-path-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie/v1',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must be an origin-only URL for production/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when the compose runtime web API URL drifts from the production env API URL', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-drift-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://edge.charitypilot.ie',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must match NEXT_PUBLIC_API_URL/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('passes when the compose runtime web API URL matches the production env API URL', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-valid-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv());
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production preflight passed using /);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('passes when the compose runtime web API URL is supplied by the selected env file', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-env-file-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production preflight passed using /);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -187,7 +372,9 @@ test('fails when the production error alert webhook is missing', () => {
   );
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`]);
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value/);
@@ -230,7 +417,9 @@ test('fails when the production error alert webhook is not an HTTPS public URL',
   );
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`]);
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL must use https:\/\/ for production/);
@@ -612,7 +801,9 @@ test('passes when production frontend origins include multiple approved HTTPS or
   );
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`]);
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
 
     assert.equal(result.status, 0, result.stderr);
   } finally {
@@ -853,6 +1044,14 @@ test('production secret env files are ignored by git without hiding the template
   assert.equal(templateResult.status, 1, '.env.production.example must remain visible');
 });
 
+test('production env template documents the compose runtime web API URL', () => {
+  const template = readRepoFile('.env.production.example');
+
+  assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/REPLACE_ME_PUBLIC_API_ORIGIN\.example/);
+  assert.match(template, /must match `NEXT_PUBLIC_API_URL`/);
+  assert.match(template, /Docker Compose/);
+});
+
 test('Docker build context excludes generated caches and build metadata', () => {
   const dockerignore = readRepoFile('.dockerignore');
 
@@ -1041,6 +1240,17 @@ test('production operations docs keep detailed readiness checks behind the inter
   assert.match(supabaseSetup, /without `x-charitypilot-readiness-key` should return `401`/);
   assert.match(runbook, /Public monitoring can check `\/api\/v1\/health`/);
   assert.doesNotMatch(supabaseSetup, /curl -i https:\/\/api\.charitypilot\.ie\/api\/v1\/health\/readiness/);
+});
+
+test('production operations docs explain the compose runtime web API URL', () => {
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
+
+  assert.match(runbook, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
+  assert.match(runbook, /must match `NEXT_PUBLIC_API_URL`/);
+  assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml config --quiet/);
+  assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
+  assert.match(launchChecklist, /matches `NEXT_PUBLIC_API_URL`/);
 });
 
 test('web Docker build requires a production HTTPS API URL before Next build', () => {
@@ -1289,6 +1499,7 @@ test('CI smoke-runs API and web Docker images after building them', () => {
 
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
+  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
@@ -1369,6 +1580,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
   assert.match(workflow, /docker build -f apps\/web\/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie -t charitypilot-web-ci \./);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
+  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{web_headers\}"/);
