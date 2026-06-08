@@ -1596,9 +1596,11 @@ test('CI smoke-runs API and web Docker images after building them', () => {
 
 test('CI API Docker smoke runs in production mode and exercises keyed readiness', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
+  const smokeStepEnd = workflow.indexOf('name: Smoke API Docker scheduled jobs');
+  assert.notEqual(smokeStepEnd, -1, 'scheduled job smoke step must follow API smoke step');
   const smokeStep = workflow.slice(
     workflow.indexOf('name: Smoke API Docker image'),
-    workflow.indexOf('name: Build web Docker image'),
+    smokeStepEnd,
   );
 
   assert.match(smokeStep, /-e NODE_ENV=production/);
@@ -1820,9 +1822,11 @@ test('release workflow runs full production gates before publishing images', () 
 
 test('release API Docker smoke runs in production mode and exercises keyed readiness before publish', () => {
   const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const smokeStepEnd = workflow.indexOf('name: Smoke API Docker scheduled jobs');
+  assert.notEqual(smokeStepEnd, -1, 'scheduled job smoke step must follow API smoke step');
   const smokeStep = workflow.slice(
     workflow.indexOf('name: Smoke API Docker image'),
-    workflow.indexOf('name: Build web Docker image'),
+    smokeStepEnd,
   );
 
   assert.match(smokeStep, /-e NODE_ENV=production/);
