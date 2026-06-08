@@ -2114,6 +2114,10 @@ test('web production CSP uses per-request script nonces without unsafe inline ex
   const csp = readRepoFile('apps/web/src/lib/content-security-policy.ts');
 
   assert.doesNotMatch(config, /script-src[^;\n]*'unsafe-inline'/);
+  assert.match(csp, /function productionApiConnectSource\(apiUrl\?: string\): string/);
+  assert.match(csp, /url\.origin === normalizedConfiguredUrl/);
+  assert.match(csp, /isApprovedProductionHost\(url\.hostname\)/);
+  assert.doesNotMatch(csp, /apiUrl\?\.trim\(\) \|\| 'https:\/\/api\.charitypilot\.ie'/);
   assert.match(csp, /const scriptSrc = \[`'self'`, `'nonce-\$\{nonce\}'`, "'strict-dynamic'"\]/);
   assert.match(csp, /if \(isDevelopment\) \{\s*scriptSrc\.push\("'unsafe-eval'"\);\s*\}/);
   assert.match(csp, /`script-src \$\{scriptSrc\.join\(' '\)\}`/);

@@ -15,6 +15,8 @@
   "include": [
     "src/lib/api-config.ts",
     "src/lib/api-config.test.ts",
+    "src/lib/content-security-policy.ts",
+    "src/lib/content-security-policy.test.ts",
     "src/lib/protected-routes.ts",
     "src/lib/protected-routes.test.ts",
     "src/lib/safe-next-path.ts",

@@ -4,6 +4,35 @@ type CreateContentSecurityPolicyOptions = {
   apiUrl?: string;
 };
 
+const DEFAULT_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
+const APPROVED_PRODUCTION_HOST = 'charitypilot.ie';
+
+function isApprovedProductionHost(hostname: string): boolean {
+  const normalizedHost = hostname.toLowerCase().replace(/\.$/, '');
+  return normalizedHost === APPROVED_PRODUCTION_HOST || normalizedHost.endsWith(`.${APPROVED_PRODUCTION_HOST}`);
+}
+
+function productionApiConnectSource(apiUrl?: string): string {
+  const configuredUrl = apiUrl?.trim();
+  if (!configuredUrl) return DEFAULT_PRODUCTION_API_ORIGIN;
+
+  try {
+    const url = new URL(configuredUrl);
+    const normalizedConfiguredUrl = configuredUrl.replace(/\/+$/, '');
+    if (
+      url.protocol === 'https:' &&
+      url.origin === normalizedConfiguredUrl &&
+      isApprovedProductionHost(url.hostname)
+    ) {
+      return url.origin;
+    }
+  } catch {
+    return DEFAULT_PRODUCTION_API_ORIGIN;
+  }
+
+  return DEFAULT_PRODUCTION_API_ORIGIN;
+}
+
 export function createContentSecurityPolicy({
   nonce,
   isDevelopment,
@@ -11,7 +40,7 @@ export function createContentSecurityPolicy({
 }: CreateContentSecurityPolicyOptions): string {
   const connectSrc = isDevelopment
     ? "'self' http://localhost:3002 http://localhost:3003 ws://localhost:3003"
-    : `'self' ${apiUrl?.trim() || 'https://api.charitypilot.ie'}`;
+    : `'self' ${productionApiConnectSource(apiUrl)}`;
 
   const scriptSrc = [`'self'`, `'nonce-${nonce}'`, "'strict-dynamic'"];
   if (isDevelopment) {
