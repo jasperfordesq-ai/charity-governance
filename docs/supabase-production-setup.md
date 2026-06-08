@@ -33,6 +33,7 @@ Evidence:
 - [ ] Do not create public read policies for document files.
 - [ ] Confirm the API service role key can upload, delete, and create signed URLs.
 - [ ] Confirm anonymous public requests cannot fetch stored document paths directly.
+- [ ] Run `npm run check:production:supabase -- --production-env-file=.env.production` from a trusted shell and record only redacted output.
 
 Evidence:
 

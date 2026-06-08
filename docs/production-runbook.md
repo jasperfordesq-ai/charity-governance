@@ -28,6 +28,7 @@ npm run check:production -- --production-env-file=.env.production
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
+npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:evidence -- --evidence-file=production-launch-evidence.json
 ```
 
@@ -94,6 +95,8 @@ Record scheduler ownership and test-run evidence in `docs/production-launch-chec
 Use a private Supabase Storage bucket. Documents are saved as storage paths and are opened through short-lived signed URLs from `/api/v1/documents/:id/download`.
 
 Follow `docs/supabase-production-setup.md` before launch. Public monitoring can check `/api/v1/health`; detailed dependency readiness at `/api/v1/health/readiness` must include the internal `x-charitypilot-readiness-key` header. Confirm the keyed readiness response reports `storageConfigured: true` and `storageBucketReachable: true`.
+
+Run `npm run check:production:supabase -- --production-env-file=.env.production` from a trusted shell that can read the production Supabase service role key. The checker verifies the configured bucket is private, uploads a tiny non-sensitive probe object, creates a short signed URL, confirms anonymous direct access to the object is denied, and deletes the probe. Output is redacted and must not be used to store service role keys, object paths, or signed URL tokens.
 
 ## Browser QA
 

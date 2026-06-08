@@ -117,6 +117,7 @@ Evidence:
 - [ ] Supabase production project is separate from local or staging projects.
 - [ ] `documents` bucket exists or `SUPABASE_STORAGE_BUCKET` points to the approved private bucket.
 - [ ] Bucket is private.
+- [ ] `npm run check:production:supabase -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 - [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and signed download are verified through the deployed app.
