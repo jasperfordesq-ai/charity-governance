@@ -43,6 +43,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env` rollback rehearsal completed against a previous signed digest manifest or an approved dry-run evidence capture exists.
 - [ ] `cosign signature verification` passed for all promoted image digests.
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
+- [ ] `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
 
 Evidence:
 

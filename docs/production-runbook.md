@@ -28,6 +28,7 @@ npm run check:production -- --production-env-file=.env.production
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
+npm run check:production:evidence -- --evidence-file=production-launch-evidence.json
 ```
 
 The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time. Do not commit that file to the repository. Use `.env.production.example` only as a template; it is expected to fail preflight until real values replace the placeholders.
@@ -105,3 +106,5 @@ Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys
 ## Release Gate
 
 Code readiness is not the full production gate. Do not launch with real charity data until hosting, DNS/TLS, secrets, backups, monitoring alerts, legal documents, deployed browser QA, and external security review are complete and recorded in `docs/production-launch-checklist.md`.
+
+Before launch, materialize a non-committed `production-launch-evidence.json` file from the external evidence ledger and run `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json`. The validator requires all launch checklist areas, every machine-readable checklist check, dated external evidence references, and final signoff. It rejects placeholders, local URLs, and raw secret-looking values so evidence capture does not accidentally become secret storage.

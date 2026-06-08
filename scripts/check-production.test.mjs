@@ -1424,6 +1424,10 @@ test('production secret env files are ignored by git without hiding the template
     gitignoreLines.includes('!.env.production.example'),
     '.env.production.example must remain visible',
   );
+  assert.ok(
+    gitignoreLines.includes('production-launch-evidence*.json'),
+    'machine-readable production launch evidence must stay outside git',
+  );
 });
 
 test('production env template documents the compose runtime web public origins', () => {
@@ -1877,22 +1881,27 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-deploy-preflight.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-deploy.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-rollback.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'smoke-production-deploy.mjs')));
+  assert.equal(packageJson.scripts['check:production:evidence'], 'node scripts/production-launch-evidence.mjs');
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.equal(packageJson.scripts['deploy:production'], 'node scripts/production-compose-deploy.mjs');
   assert.equal(packageJson.scripts['deploy:rollback'], 'node scripts/production-compose-rollback.mjs');
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-deploy-preflight\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-deploy\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-rollback\.test\.mjs/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/smoke-production-deploy\.test\.mjs/);
   assert.match(readRepoFile('scripts/production-deploy-preflight.mjs'), /runProductionPreflight/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /runProductionDeployPreflightFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /runProductionComposeDeployFromArgs/);
+  assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /REQUIRED_LAUNCH_AREAS/);
 
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
+  assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml up --wait --wait-timeout 180 -d/);
   assert.match(runbook, /post-deploy public HTTPS smoke/);
   assert.match(runbook, /Rollback reuses the production deploy path/);
@@ -1905,6 +1914,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
+  assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
   assert.match(launchChecklist, /post-deploy public HTTPS smoke/);
   assert.match(launchChecklist, /rollback rehearsal/);
   assert.match(launchChecklist, /digest-pinned/);

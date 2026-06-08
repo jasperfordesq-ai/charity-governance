@@ -42,6 +42,7 @@ yarn-error.log*
 
 # Operational artifacts
 .charitypilot-backups/
+production-launch-evidence*.json
 
 # Coverage
 coverage/
