@@ -1703,6 +1703,19 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   assert.match(smokeStep, /body\.checks\.database !== true/);
   assert.match(smokeStep, /body\.checks\.storageConfigured !== true/);
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
+  assert.match(smokeStep, /register_email="api-smoke-\$\{GITHUB_SHA:-local\}@example\.com"/);
+  assert.match(smokeStep, /register_payload="\$\(mktemp\)"/);
+  assert.match(smokeStep, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/register/);
+  assert.match(smokeStep, /register_first_status="\$\(curl[\s\S]*--data @"\$\{register_payload\}"/);
+  assert.match(smokeStep, /register_duplicate_status="\$\(curl[\s\S]*--data @"\$\{register_payload\}"/);
+  assert.match(smokeStep, /test "\$\{register_first_status\}" = "202"/);
+  assert.match(smokeStep, /test "\$\{register_duplicate_status\}" = "202"/);
+  assert.match(smokeStep, /bodyA\.message !== bodyB\.message/);
+  assert.match(smokeStep, /check your email for next steps/);
+  assert.match(smokeStep, /'\buser\b' in bodyA/);
+  assert.match(smokeStep, /'\buser\b' in bodyB/);
+  assert.match(smokeStep, /grep -qi "\^set-cookie:" "\$\{register_first_headers\}" "\$\{register_duplicate_headers\}"/);
+  assert.match(smokeStep, /grep -qi "\^cache-control: no-store" "\$\{register_first_headers\}"/);
 });
 
 test('CI smoke-runs production API scheduled job entrypoints inside the Docker image', () => {
@@ -1952,6 +1965,19 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
   assert.match(smokeStep, /body\.checks\.database !== true/);
   assert.match(smokeStep, /body\.checks\.storageConfigured !== true/);
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
+  assert.match(smokeStep, /register_email="api-smoke-\$\{GITHUB_SHA:-local\}@example\.com"/);
+  assert.match(smokeStep, /register_payload="\$\(mktemp\)"/);
+  assert.match(smokeStep, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/register/);
+  assert.match(smokeStep, /register_first_status="\$\(curl[\s\S]*--data @"\$\{register_payload\}"/);
+  assert.match(smokeStep, /register_duplicate_status="\$\(curl[\s\S]*--data @"\$\{register_payload\}"/);
+  assert.match(smokeStep, /test "\$\{register_first_status\}" = "202"/);
+  assert.match(smokeStep, /test "\$\{register_duplicate_status\}" = "202"/);
+  assert.match(smokeStep, /bodyA\.message !== bodyB\.message/);
+  assert.match(smokeStep, /check your email for next steps/);
+  assert.match(smokeStep, /'\buser\b' in bodyA/);
+  assert.match(smokeStep, /'\buser\b' in bodyB/);
+  assert.match(smokeStep, /grep -qi "\^set-cookie:" "\$\{register_first_headers\}" "\$\{register_duplicate_headers\}"/);
+  assert.match(smokeStep, /grep -qi "\^cache-control: no-store" "\$\{register_first_headers\}"/);
   assert.ok(
     workflow.indexOf('name: Smoke API Docker image') < workflow.indexOf('name: Push image tags'),
     'API image must be smoke-tested before publishing',

@@ -13,6 +13,10 @@ function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8');
 }
 
+function packageJson() {
+  return JSON.parse(readRepoFile('package.json'));
+}
+
 test('base compose remains database-only for local development', () => {
   const compose = readRepoFile('compose.yml');
 
@@ -104,4 +108,38 @@ test('local Docker compose overlay renders as a valid effective model with loopb
   assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3002[\s\S]*published:\s+"3002"/);
   assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+3003[\s\S]*published:\s+"3003"/);
   assert.match(result.stdout, /host_ip:\s+127\.0\.0\.1[\s\S]*target:\s+5432[\s\S]*published:\s+"5434"/);
+});
+
+test('local Docker smoke script boots the stack and checks API plus web over loopback', () => {
+  const rootPackage = packageJson();
+  const smokeScriptPath = join(repoRoot, 'scripts', 'smoke-local-docker.mjs');
+  assert.equal(rootPackage.scripts['test:local-docker:smoke'], 'node scripts/smoke-local-docker.mjs');
+  assert.equal(existsSync(smokeScriptPath), true, 'scripts/smoke-local-docker.mjs must exist');
+
+  const smokeScript = readRepoFile('scripts/smoke-local-docker.mjs');
+  assert.match(smokeScript, /compose\.yml/);
+  assert.match(smokeScript, /compose\.local\.yml/);
+  assert.match(smokeScript, /'up', '--wait', '--wait-timeout', '180', '-d'/);
+  assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness/);
+  assert.match(smokeScript, /x-charitypilot-readiness-key/);
+  assert.match(smokeScript, /local-readiness-key-at-least-32-characters/);
+  assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3003\//);
+  assert.match(smokeScript, /CharityPilot/);
+  assert.doesNotMatch(smokeScript, /down', '-v'/);
+});
+
+test('CI runs the local Docker smoke before production Docker image gates', () => {
+  const workflow = readRepoFile('.github/workflows/ci.yml');
+
+  assert.match(workflow, /name:\s+Smoke local Docker app stack/);
+  assert.match(workflow, /run:\s+npm run test:local-docker:smoke -- --cleanup --cleanup-volumes/);
+  assert.ok(
+    workflow.indexOf('name: Test') < workflow.indexOf('name: Smoke local Docker app stack'),
+    'local Docker smoke must run after static tests',
+  );
+  assert.ok(
+    workflow.indexOf('name: Smoke local Docker app stack') < workflow.indexOf('name: Build API Docker image'),
+    'local Docker smoke must pass before production image gates',
+  );
 });

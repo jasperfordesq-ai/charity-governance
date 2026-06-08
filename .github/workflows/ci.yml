@@ -73,6 +73,9 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Smoke local Docker app stack
+        run: npm run test:local-docker:smoke -- --cleanup --cleanup-volumes
+
       - name: Build shared package
         run: npm run build -w @charitypilot/shared
 
@@ -181,6 +184,24 @@ jobs:
           readiness_status="$(curl --silent --show-error --output "${readiness_body}" --write-out "%{http_code}" -H "x-charitypilot-readiness-key: ci-readiness-key-with-enough-entropy" http://127.0.0.1:3002/api/v1/health/readiness)"
           test "${readiness_status}" = "503"
           node -e "const body = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); if (body.status !== 'not_ready' || body.checks.database !== true || body.checks.storageConfigured !== true || body.checks.storageBucketReachable !== false) { console.error(body); process.exit(1); }" "${readiness_body}"
+          register_email="api-smoke-${GITHUB_SHA:-local}@example.com"
+          register_payload="$(mktemp)"
+          node -e "const fs = require('fs'); fs.writeFileSync(process.argv[1], JSON.stringify({ email: process.argv[2], password: 'NewPassword1', name: 'API Smoke User', organisationName: 'API Smoke Organisation' }));" "${register_payload}" "${register_email}"
+          register_first_headers="$(mktemp)"
+          register_first_body="$(mktemp)"
+          register_first_status="$(curl --silent --show-error --output "${register_first_body}" --dump-header "${register_first_headers}" --write-out "%{http_code}" -H "content-type: application/json" -H "origin: https://app.charitypilot.ie" --data @"${register_payload}" http://127.0.0.1:3002/api/v1/auth/register)"
+          register_duplicate_headers="$(mktemp)"
+          register_duplicate_body="$(mktemp)"
+          register_duplicate_status="$(curl --silent --show-error --output "${register_duplicate_body}" --dump-header "${register_duplicate_headers}" --write-out "%{http_code}" -H "content-type: application/json" -H "origin: https://app.charitypilot.ie" --data @"${register_payload}" http://127.0.0.1:3002/api/v1/auth/register)"
+          test "${register_first_status}" = "202"
+          test "${register_duplicate_status}" = "202"
+          node -e "const fs = require('fs'); const bodyA = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); const bodyB = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); const expected = 'If this registration can be completed, check your email for next steps.'; if (bodyA.message !== expected || bodyB.message !== expected || bodyA.message !== bodyB.message || 'user' in bodyA || 'user' in bodyB) { console.error({ bodyA, bodyB }); process.exit(1); }" "${register_first_body}" "${register_duplicate_body}"
+          if grep -qi "^set-cookie:" "${register_first_headers}" "${register_duplicate_headers}"; then
+            echo "Registration smoke must not set auth cookies." >&2
+            exit 1
+          fi
+          grep -qi "^cache-control: no-store" "${register_first_headers}"
+          grep -qi "^cache-control: no-store" "${register_duplicate_headers}"
 
       - name: Smoke API Docker scheduled jobs
         run: |
