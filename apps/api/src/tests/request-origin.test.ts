@@ -3,8 +3,6 @@ import test from 'node:test';
 import cookie from '@fastify/cookie';
 import Fastify from 'fastify';
 import { registerBrowserOriginProtection } from '../plugins/browser-origin-protection.js';
-import { authRoutes } from '../routes/auth/index.js';
-import { teamRoutes } from '../routes/team/index.js';
 import { ACCESS_TOKEN_COOKIE } from '../utils/auth-cookie-names.js';
 import { validateUnsafeRequestOrigin } from '../utils/request-origin.js';
 
@@ -87,6 +85,10 @@ test('public auth-cookie-setting requests require an Origin header', () => {
 });
 
 test('browser origin protection enforces real public cookie-setting routes at production prefixes', async () => {
+  const [{ authRoutes }, { teamRoutes }] = await Promise.all([
+    import('../routes/auth/index.js'),
+    import('../routes/team/index.js'),
+  ]);
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
     user: {
