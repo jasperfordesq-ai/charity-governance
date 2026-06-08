@@ -9,7 +9,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "test": "turbo test && npm run test:production-check && npm run test:local-docker",
-    "test:production-check": "node --test scripts/check-production.test.mjs scripts/postgres-backup.test.mjs scripts/security-scan.test.mjs scripts/production-deploy-preflight.test.mjs scripts/production-compose-deploy.test.mjs scripts/start-ci-postgres.test.mjs",
+    "test:production-check": "node --test scripts/check-production.test.mjs scripts/postgres-backup.test.mjs scripts/security-scan.test.mjs scripts/production-deploy-preflight.test.mjs scripts/production-compose-deploy.test.mjs scripts/smoke-production-deploy.test.mjs scripts/start-ci-postgres.test.mjs",
     "test:local-docker": "node --test scripts/check-local-docker.test.mjs",
     "test:local-docker:smoke": "node scripts/smoke-local-docker.mjs",
     "lint": "turbo lint",

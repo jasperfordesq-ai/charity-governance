@@ -86,6 +86,7 @@ test('production deploy dry-run validates preflight before rendering compose up'
     assert.match(result.stdout, /--dry-run/);
     assert.match(result.stdout, /Compose environment:\nCHARITYPILOT_PRODUCTION_ENV_FILE=/);
     assert.match(result.stdout, /Compose command:\ndocker compose --env-file/);
+    assert.match(result.stdout, /Post-deploy smoke command:\nnode scripts\/smoke-production-deploy\.mjs/);
     assert.doesNotMatch(result.stdout, /CHARITYPILOT_PRODUCTION_ENV_FILE=.*docker compose --env-file/);
     assert.doesNotMatch(result.stdout, /[A-Z]:\\\\/);
     assert.match(result.stdout, /up --wait --wait-timeout 180 -d/);
@@ -134,11 +135,15 @@ test('production deploy runs preflight before compose up with the selected env f
       runCommand: (command, env) => {
         calls.push({ type: 'command', command, env });
       },
+      runSmoke: (args, env) => {
+        calls.push({ type: 'smoke', args, env });
+        return { status: 0, stdout: 'smoke ok\n', stderr: '' };
+      },
     },
   );
 
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(calls.map((call) => call.type), ['preflight', 'command']);
+  assert.deepEqual(calls.map((call) => call.type), ['preflight', 'command', 'smoke']);
   assert.deepEqual(calls[0].args, ['--production-env-file', envPath]);
   assert.deepEqual(calls[1].command, [
     'docker',
@@ -154,8 +159,41 @@ test('production deploy runs preflight before compose up with the selected env f
     '-d',
   ]);
   assert.equal(calls[1].env.CHARITYPILOT_PRODUCTION_ENV_FILE, envPath);
+  assert.deepEqual(calls[2].args, ['--production-env-file', envPath]);
+  assert.equal(calls[2].env.CHARITYPILOT_PRODUCTION_ENV_FILE, envPath);
   assert.match(result.stdout, /preflight ok/);
+  assert.match(result.stdout, /smoke ok/);
   assert.match(result.stdout, /Production compose deploy completed/);
+});
+
+test('production deploy fails after compose up when public smoke fails', async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  const envPath = join(tmpdir(), 'charitypilot-smoke-fail-production.env');
+  const calls = [];
+
+  const result = runProductionComposeDeployFromArgs(
+    ['--production-env-file', envPath],
+    {
+      processEnv: cleanEnv(),
+      runPreflight: (args, env) => {
+        calls.push({ type: 'preflight', args, env });
+        return { status: 0, stdout: 'preflight ok\n', stderr: '' };
+      },
+      runCommand: (command, env) => {
+        calls.push({ type: 'command', command, env });
+      },
+      runSmoke: (args, env) => {
+        calls.push({ type: 'smoke', args, env });
+        return { status: 1, stdout: '', stderr: 'keyed readiness must return 200 ready\n' };
+      },
+    },
+  );
+
+  assert.equal(result.status, 1);
+  assert.deepEqual(calls.map((call) => call.type), ['preflight', 'command', 'smoke']);
+  assert.match(result.stdout, /preflight ok/);
+  assert.match(result.stderr, /Production compose deploy failed: post-deploy smoke failed/);
+  assert.match(result.stderr, /keyed readiness must return 200 ready/);
 });
 
 test('production deploy rejects invalid wait timeouts before preflight', async () => {

@@ -89,6 +89,20 @@ function defaultRunCommand(command, env) {
   }
 }
 
+function defaultRunSmoke(args, env) {
+  const smokeResult = spawnSync('node', ['scripts/smoke-production-deploy.mjs', ...args], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env,
+  });
+
+  return {
+    status: smokeResult.status ?? 1,
+    stdout: smokeResult.stdout ?? '',
+    stderr: smokeResult.stderr ?? '',
+  };
+}
+
 function composeUpCommand({ productionEnvFile, waitTimeoutSeconds }) {
   return [
     'docker',
@@ -111,6 +125,7 @@ export function runProductionComposeDeployFromArgs(
     processEnv = process.env,
     runPreflight = runProductionDeployPreflightFromArgs,
     runCommand = defaultRunCommand,
+    runSmoke = defaultRunSmoke,
   } = {},
 ) {
   let options;
@@ -142,6 +157,8 @@ export function runProductionComposeDeployFromArgs(
     ...commandEnvOverrides,
   };
   const command = composeUpCommand(options);
+  const smokeArgs = ['--production-env-file', options.productionEnvFile];
+  const smokeCommand = ['node', 'scripts/smoke-production-deploy.mjs', ...smokeArgs];
 
   if (options.dryRun) {
     return result(0, [
@@ -154,6 +171,8 @@ export function runProductionComposeDeployFromArgs(
       ...Object.entries(commandEnvOverrides).map(([key, value]) => `${key}=${value}`),
       'Compose command:',
       commandLine(command),
+      'Post-deploy smoke command:',
+      commandLine([...smokeCommand, '--dry-run']),
       '',
     ].filter(Boolean).join('\n'));
   }
@@ -164,7 +183,16 @@ export function runProductionComposeDeployFromArgs(
     return result(1, preflightResult.stdout, `Production compose deploy failed: ${error.message}\n`);
   }
 
-  return result(0, `${preflightResult.stdout}Production compose deploy completed.\n`);
+  const smokeResult = runSmoke(smokeArgs, commandEnv);
+  if (smokeResult.status !== 0) {
+    return result(
+      1,
+      `${preflightResult.stdout}${smokeResult.stdout}`,
+      `Production compose deploy failed: post-deploy smoke failed.\n${smokeResult.stderr}`,
+    );
+  }
+
+  return result(0, `${preflightResult.stdout}${smokeResult.stdout}Production compose deploy completed.\n`);
 }
 
 function main() {

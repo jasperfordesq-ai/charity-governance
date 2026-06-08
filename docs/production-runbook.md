@@ -46,7 +46,7 @@ npm run deploy:production -- --production-env-file=.env.production
 
 The deploy preflight validates the selected production env file, renders `compose.production.yml`, and runs `cosign verify` against the API, web, and migration image digests. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
 
-The production deploy command runs the same preflight first, then executes `docker compose --env-file .env.production -f compose.production.yml up --wait --wait-timeout 180 -d`. Use `--dry-run` to print the preflight and compose commands without deploying.
+The production deploy command runs the same preflight first, then executes `docker compose --env-file .env.production -f compose.production.yml up --wait --wait-timeout 180 -d`, then runs a post-deploy public HTTPS smoke against the configured web and API origins. The smoke checks the public web root, API health, approved-origin CORS, unauthenticated readiness protection, keyed readiness, and required security headers. Use `--dry-run` to print the preflight, compose, and post-deploy public HTTPS smoke commands without deploying.
 
 ## Environment
 
