@@ -37,6 +37,8 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm run build -w @charitypilot/web` completed.
 - [ ] `npm audit --omit=dev --audit-level=moderate` completed with no moderate-or-higher production vulnerabilities.
 - [ ] `npm run check:production -- --production-env-file=.env.production` completed against the real production secret source.
+- [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with digest-pinned API, web, and migration images.
+- [ ] `cosign signature verification` passed for all promoted image digests.
 
 Evidence:
 
@@ -46,6 +48,7 @@ Evidence:
 | Date | |
 | Build identifier | |
 | Evidence location | |
+| Digest-pinned image refs | |
 
 ## 2. Secrets And Environment
 

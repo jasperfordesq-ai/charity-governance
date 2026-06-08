@@ -1,0 +1,107 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptsDir, '..');
+const scriptPath = join(scriptsDir, 'production-deploy-preflight.mjs');
+
+const digest = 'a'.repeat(64);
+
+function completeDeployEnv(overrides = {}) {
+  const values = {
+    NODE_ENV: 'production',
+    PORT: '3002',
+    TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
+    READINESS_API_KEY: 'configured-readiness-key-32-chars',
+    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+    JWT_SECRET: 'a'.repeat(40),
+    FRONTEND_URL: 'https://app.charitypilot.ie',
+    AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
+    STRIPE_SECRET_KEY: 'sk_live_configuredSecret',
+    STRIPE_WEBHOOK_SECRET: 'whsec_configuredSecret',
+    STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_essentialsMonthly',
+    STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentialsYearly',
+    STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_completeMonthly',
+    STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
+    RESEND_API_KEY: 're_configuredSecret',
+    EMAIL_FROM: 'noreply@charitypilot.ie',
+    SUPABASE_URL: 'https://configured-project.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
+    SUPABASE_STORAGE_BUCKET: 'documents',
+    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+    NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
+    CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
+    CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
+    CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+    ...overrides,
+  };
+
+  return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
+}
+
+function runPreflight(args, env = {}) {
+  return spawnSync(process.execPath, [scriptPath, ...args], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH ?? '',
+      Path: process.env.Path ?? '',
+      SystemRoot: process.env.SystemRoot ?? '',
+      WINDIR: process.env.WINDIR ?? '',
+      TEMP: process.env.TEMP ?? tmpdir(),
+      TMP: process.env.TMP ?? tmpdir(),
+      ...env,
+    },
+  });
+}
+
+test('deploy preflight rejects mutable tag images before promotion', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-tag-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    CHARITYPILOT_API_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-api:sha-test',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CHARITYPILOT_API_IMAGE must be pinned to an immutable sha256 digest/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight dry-run emits production validation and signature verification commands', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-valid-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv());
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production deploy preflight dry-run/);
+    assert.match(result.stdout, /node scripts\/check-production\.mjs "--production-env-file=.*production\.env"/);
+    assert.match(result.stdout, /docker compose --env-file ".*production\.env" -f compose\.production\.yml config --quiet/);
+    assert.match(result.stdout, /cosign verify/);
+    assert.match(result.stdout, /--certificate-identity-regexp "\^https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\//);
+    assert.match(result.stdout, /release-images\\\\\.yml@refs\/\(heads\/master\|tags\/v\.\*\)\$"/);
+    assert.match(result.stdout, /--certificate-oidc-issuer https:\/\/token\.actions\.githubusercontent\.com/);
+    assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:[a-f0-9]{64}/);
+    assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}/);
+    assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:[a-f0-9]{64}/);
+    assert.doesNotMatch(result.stdout, /docker compose[\s\S]* up /);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

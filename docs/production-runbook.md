@@ -25,10 +25,24 @@ npm run build -w @charitypilot/api
 npm run build -w @charitypilot/web
 npm audit --omit=dev --audit-level=moderate
 npm run check:production -- --production-env-file=.env.production
+npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
 ```
 
 The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time. Do not commit that file to the repository. Use `.env.production.example` only as a template; it is expected to fail preflight until real values replace the placeholders.
+
+## Published Image Promotion
+
+Production Docker promotion must use digest-pinned GHCR image references from the signed release workflow output:
+
+```bash
+CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<api-digest>
+CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<web-digest>
+CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
+npm run deploy:preflight -- --production-env-file=.env.production
+```
+
+The deploy preflight validates the selected production env file, renders `compose.production.yml`, and runs `cosign verify` against the API, web, and migration image digests. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
 
 ## Environment
 

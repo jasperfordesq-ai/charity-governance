@@ -1333,6 +1333,27 @@ test('production operations docs explain the compose runtime web API URL', () =>
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_API_URL`/);
 });
 
+test('production deploy preflight is wired for digest-pinned image promotion', () => {
+  const packageJson = JSON.parse(readRepoFile('package.json'));
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
+
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'production-deploy-preflight.mjs')));
+  assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/production-deploy-preflight\.test\.mjs/);
+
+  assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
+  assert.match(runbook, /CHARITYPILOT_API_IMAGE=.*@sha256:/);
+  assert.match(runbook, /CHARITYPILOT_WEB_IMAGE=.*@sha256:/);
+  assert.match(runbook, /CHARITYPILOT_MIGRATION_IMAGE=.*@sha256:/);
+  assert.match(runbook, /cosign verify/);
+  assert.match(runbook, /Do not deploy mutable image tags/);
+
+  assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
+  assert.match(launchChecklist, /digest-pinned/);
+  assert.match(launchChecklist, /cosign signature verification/);
+});
+
 test('web Docker build requires a production HTTPS API URL before Next build', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
 
