@@ -22,6 +22,7 @@
     "clean": "turbo clean",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
+    "db:migrate:local-docker": "node scripts/migrate-local-docker.mjs",
     "db:seed": "turbo db:seed",
     "db:backup": "node scripts/postgres-backup.mjs backup",
     "db:restore:verify": "node scripts/postgres-backup.mjs verify-restore"

@@ -2552,6 +2552,7 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^cache-control: no-store" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
@@ -2792,6 +2793,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
+  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^cache-control: no-store" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
@@ -2926,6 +2928,38 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(runbook, /release-image-digests artifact/);
   assert.match(runbook, /release-image-digests\.env/);
   assert.match(checklist, /Release image digest manifest artifact/);
+});
+
+test('release workflow rehearses deploy preflight against generated digest manifest', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const manifestStepStart = workflow.indexOf('name: Generate release image digest manifest');
+  const rehearsalStepStart = workflow.indexOf('name: Rehearse production deploy preflight with release digests');
+  const uploadStepStart = workflow.indexOf('name: Upload release image digest manifest');
+
+  assert.notEqual(manifestStepStart, -1, 'release workflow must generate the image digest manifest');
+  assert.notEqual(rehearsalStepStart, -1, 'release workflow must rehearse deploy preflight with the generated digests');
+  assert.notEqual(uploadStepStart, -1, 'release workflow must upload the image digest manifest');
+
+  const rehearsalStep = workflow.slice(rehearsalStepStart, uploadStepStart);
+
+  assert.match(rehearsalStep, /\.env\.production\.ci/);
+  assert.match(rehearsalStep, /cat > \.env\.production\.ci <<EOF/);
+  assert.match(rehearsalStep, /NODE_ENV=production/);
+  assert.match(rehearsalStep, /DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
+  assert.match(rehearsalStep, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(rehearsalStep, /NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
+  assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
+  assert.match(rehearsalStep, /cat release-image-digests\.env >> \.env\.production\.ci/);
+  assert.match(rehearsalStep, /npm run deploy:preflight -- --production-env-file=\.env\.production\.ci/);
+  assert.ok(
+    manifestStepStart < rehearsalStepStart,
+    'deploy preflight rehearsal must run after the digest manifest is generated',
+  );
+  assert.ok(
+    rehearsalStepStart < uploadStepStart,
+    'digest manifest must only be uploaded after deploy preflight rehearsal passes',
+  );
 });
 
 test('release workflow runs full production gates before publishing images', () => {

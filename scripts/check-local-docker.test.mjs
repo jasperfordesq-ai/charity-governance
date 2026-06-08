@@ -140,6 +140,37 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   assert.doesNotMatch(smokeScript, /down', '-v'/);
 });
 
+test('local Docker migrations are a first-class command and are dry-runnable', () => {
+  const rootPackage = packageJson();
+  const migrationScriptPath = join(repoRoot, 'scripts', 'migrate-local-docker.mjs');
+
+  assert.equal(rootPackage.scripts['db:migrate:local-docker'], 'node scripts/migrate-local-docker.mjs');
+  assert.equal(existsSync(migrationScriptPath), true, 'scripts/migrate-local-docker.mjs must exist');
+
+  const result = spawnSync('node', ['scripts/migrate-local-docker.mjs', '--dry-run'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: process.env,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml up --wait --wait-timeout 180 -d db/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc "npm ci --include=dev && npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api"/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
+});
+
+test('local Docker smoke reapplies migrations even when services are already running', () => {
+  const smokeScript = readRepoFile('scripts/smoke-local-docker.mjs');
+
+  assert.match(smokeScript, /migrate-local-docker\.mjs/);
+  assert.match(smokeScript, /await runLocalDockerMigrations\(\)/);
+  assert.ok(
+    smokeScript.indexOf('await runLocalDockerMigrations()') < smokeScript.indexOf("await waitForCheck('API health'"),
+    'local migrations must run before API readiness assertions',
+  );
+});
+
 test('CI runs the local Docker smoke before production Docker image gates', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 

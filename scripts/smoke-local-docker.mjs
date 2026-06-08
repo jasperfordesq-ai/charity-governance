@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const composeArgs = ['compose', '-f', 'compose.yml', '-f', 'compose.local.yml'];
+const migrationScriptPath = join('scripts', 'migrate-local-docker.mjs');
 const cleanup = process.argv.includes('--cleanup');
 const cleanupVolumes = process.argv.includes('--cleanup-volumes');
 
@@ -35,6 +36,19 @@ function captureDocker(args) {
   }
 
   return result.stdout;
+}
+
+async function runLocalDockerMigrations() {
+  const result = spawnSync(process.execPath, [migrationScriptPath], {
+    cwd: repoRoot,
+    env: process.env,
+    encoding: 'utf8',
+    stdio: 'inherit',
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`node ${migrationScriptPath} failed with exit code ${result.status ?? 'unknown'}`);
+  }
 }
 
 function localServicesAreRunning() {
@@ -143,6 +157,8 @@ try {
   } else {
     runDocker([...composeArgs, 'up', '--wait', '--wait-timeout', '180', '-d']);
   }
+
+  await runLocalDockerMigrations();
 
   await waitForCheck('API health', smokeApiHealth);
   await waitForCheck('API readiness', smokeApiReadiness);

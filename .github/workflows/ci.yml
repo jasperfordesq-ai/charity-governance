@@ -172,6 +172,7 @@ jobs:
           grep -qi "^x-frame-options: DENY" "${api_headers}"
           grep -qi "^referrer-policy: strict-origin-when-cross-origin" "${api_headers}"
           grep -qi "^permissions-policy: camera=(), microphone=(), geolocation=(), payment=()" "${api_headers}"
+          grep -qi "^strict-transport-security: max-age=63072000; includeSubDomains; preload" "${api_headers}"
           grep -qi "^cache-control: no-store" "${api_headers}"
           grep -qi "^pragma: no-cache" "${api_headers}"
           grep -qi "^expires: 0" "${api_headers}"
