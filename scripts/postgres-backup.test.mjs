@@ -156,8 +156,19 @@ test('postgres backup CLI renders restore verification commands in dry-run mode'
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /charitypilot-restore-verify-\d+-\d+-[a-f0-9]{8}/);
+    assert.match(result.stdout, /pg_isready -h 127\.0\.0\.1/);
     assert.match(result.stdout, /pg_restore/);
-    assert.match(result.stdout, /select count\(\*\) from information_schema\.tables/);
+    assert.match(
+      result.stdout,
+      /postgresql:\/\/charitypilot:charitypilot_restore@127\.0\.0\.1:5432\/charitypilot_restore/,
+    );
+    assert.match(result.stdout, /select table_name from information_schema\.tables/);
+    assert.match(result.stdout, /'_prisma_migrations'/);
+    assert.match(result.stdout, /'Organisation'/);
+    assert.match(result.stdout, /'User'/);
+    assert.match(result.stdout, /'Document'/);
+    assert.match(result.stdout, /'DocumentStorageDeletion'/);
+    assert.match(result.stdout, /'StripeWebhookEvent'/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

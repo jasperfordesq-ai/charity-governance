@@ -12,6 +12,14 @@ const DEFAULT_DATABASE_USER = 'charitypilot';
 const RESTORE_DATABASE_NAME = 'charitypilot_restore';
 const RESTORE_DATABASE_USER = 'charitypilot';
 const RESTORE_DATABASE_PASSWORD = 'charitypilot_restore';
+const CRITICAL_RESTORE_TABLES = [
+  '_prisma_migrations',
+  'Organisation',
+  'User',
+  'Document',
+  'DocumentStorageDeletion',
+  'StripeWebhookEvent',
+];
 
 function usage() {
   return `
@@ -355,7 +363,7 @@ function restoreContainerName() {
 }
 
 function restoreDatabaseUrl() {
-  return `postgresql://${RESTORE_DATABASE_USER}:${RESTORE_DATABASE_PASSWORD}@localhost:5432/${RESTORE_DATABASE_NAME}`;
+  return `postgresql://${RESTORE_DATABASE_USER}:${RESTORE_DATABASE_PASSWORD}@127.0.0.1:5432/${RESTORE_DATABASE_NAME}`;
 }
 
 function waitForRestoreDatabase(containerName, dryRun) {
@@ -363,6 +371,8 @@ function waitForRestoreDatabase(containerName, dryRun) {
     'exec',
     containerName,
     'pg_isready',
+    '-h',
+    '127.0.0.1',
     '-U',
     RESTORE_DATABASE_USER,
     '-d',
@@ -388,7 +398,10 @@ function waitForRestoreDatabase(containerName, dryRun) {
 }
 
 function verifyRestoredSchema(containerName, dryRun) {
-  const query = "select count(*) from information_schema.tables where table_schema='public';";
+  const criticalTableList = CRITICAL_RESTORE_TABLES
+    .map((table) => `'${table.replaceAll("'", "''")}'`)
+    .join(', ');
+  const query = `select table_name from information_schema.tables where table_schema='public' and table_name in (${criticalTableList}) order by table_name;`;
   const args = [
     'run',
     '--rm',
@@ -405,12 +418,13 @@ function verifyRestoredSchema(containerName, dryRun) {
   const stdout = runCommand('docker', args, { dryRun });
   if (dryRun) return;
 
-  const tableCount = Number(stdout.trim());
-  if (!Number.isInteger(tableCount) || tableCount < 1) {
-    throw new Error('Restore verification did not find any public tables');
+  const restoredTables = new Set(stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  const missingTables = CRITICAL_RESTORE_TABLES.filter((table) => !restoredTables.has(table));
+  if (missingTables.length > 0) {
+    throw new Error(`Restore verification is missing critical table(s): ${missingTables.join(', ')}`);
   }
 
-  console.log(`Restore verification found ${tableCount} public tables`);
+  console.log(`Restore verification found critical tables: ${CRITICAL_RESTORE_TABLES.join(', ')}`);
 }
 
 function verifyRestore(options) {
