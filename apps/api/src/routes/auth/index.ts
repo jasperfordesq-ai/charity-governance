@@ -59,8 +59,7 @@ export async function authRoutes(app: FastifyInstance) {
         const body = registerSchema.parse(request.body);
         const result = await authService.register(body);
 
-        setAuthCookies(reply, result);
-        reply.status(201).send({ user: publicUser(result.user) });
+        reply.status(202).send(result);
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));

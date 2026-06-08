@@ -86,8 +86,8 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const user = await register({ name, email, password, organisationName });
-      router.push(user.emailVerified ? '/dashboard' : '/verify-email');
+      await register({ name, email, password, organisationName });
+      router.push('/verify-email');
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Something went wrong. Please try again.'));
     } finally {

@@ -11,7 +11,7 @@ type Status = 'loading' | 'pending' | 'success' | 'error';
 
 function VerifyEmailContent() {
   const { token, isReady } = useSensitiveQueryToken();
-  const { refreshUser } = useAuth();
+  const { refreshUser, user } = useAuth();
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState('');
   const [resendMessage, setResendMessage] = useState('');
@@ -104,14 +104,16 @@ function VerifyEmailContent() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h1>
                 <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
                 <div className="flex flex-col items-center gap-3">
-                  <Button
-                    onPress={handleResend}
-                    isLoading={isResending}
-                    className="bg-teal-primary text-white font-semibold"
-                    radius="full"
-                  >
-                    Resend verification email
-                  </Button>
+                  {user && (
+                    <Button
+                      onPress={handleResend}
+                      isLoading={isResending}
+                      className="bg-teal-primary text-white font-semibold"
+                      radius="full"
+                    >
+                      Resend verification email
+                    </Button>
+                  )}
                   {resendMessage && (
                     <p role="status" className="text-sm text-green-600">{resendMessage}</p>
                   )}
@@ -138,10 +140,10 @@ function VerifyEmailContent() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Email verified</h1>
                 <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
                 <Link
-                  href="/dashboard"
+                  href={user ? '/dashboard' : '/login'}
                   className="inline-flex items-center justify-center rounded-full bg-teal-primary text-white font-semibold px-8 py-2.5 hover:opacity-90 transition-opacity"
                 >
-                  Continue to dashboard
+                  {user ? 'Continue to dashboard' : 'Go to sign in'}
                 </Link>
               </div>
             )}

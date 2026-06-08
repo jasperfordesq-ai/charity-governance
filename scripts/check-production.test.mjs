@@ -1437,7 +1437,7 @@ test('web route protection uses the Next proxy convention instead of deprecated 
   assert.doesNotMatch(proxy, /export function middleware/);
 });
 
-test('web email verification flow gives unverified signed-in users a tokenless waiting page', () => {
+test('web email verification flow supports generic registration and unverified signed-in users', () => {
   const authContext = readRepoFile('apps/web/src/lib/auth-context.tsx');
   const loginPage = readRepoFile('apps/web/src/app/(auth)/login/page.tsx');
   const registerPage = readRepoFile('apps/web/src/app/(auth)/register/page.tsx');
@@ -1445,15 +1445,42 @@ test('web email verification flow gives unverified signed-in users a tokenless w
   const verifyEmailPage = readRepoFile('apps/web/src/app/(auth)/verify-email/page.tsx');
 
   assert.match(authContext, /login:\s*\([^)]*\)\s*=>\s*Promise<UserResponse>/);
-  assert.match(authContext, /register:\s*\([^)]*\)\s*=>\s*Promise<UserResponse>/);
+  assert.match(authContext, /register:\s*\([^)]*\)\s*=>\s*Promise<void>/);
   assert.match(loginPage, /router\.push\(user\.emailVerified\s*\?\s*'\/dashboard'\s*:\s*'\/verify-email'\)/);
-  assert.match(registerPage, /router\.push\(user\.emailVerified\s*\?\s*'\/dashboard'\s*:\s*'\/verify-email'\)/);
+  assert.match(registerPage, /await register\(\{ name, email, password, organisationName \}\)/);
+  assert.match(registerPage, /router\.push\('\/verify-email'\)/);
   assert.match(dashboardLayout, /!user\.emailVerified[\s\S]*router\.replace\('\/verify-email'\)/);
   assert.match(verifyEmailPage, /type Status = 'loading' \| 'pending' \| 'success' \| 'error'/);
   assert.match(verifyEmailPage, /status === 'pending'/);
   assert.match(verifyEmailPage, /api\.post\('\/auth\/resend-verification'/);
+  assert.match(verifyEmailPage, /\{user && \(/);
+  assert.match(verifyEmailPage, /href=\{user \? '\/dashboard' : '\/login'\}/);
+  assert.match(verifyEmailPage, /\{user \? 'Continue to dashboard' : 'Go to sign in'\}/);
   assert.match(verifyEmailPage, /Resend verification email/);
   assert.doesNotMatch(verifyEmailPage, /No verification token found/);
+});
+
+test('team invite flows keep account enumeration and duplicate active invites guarded', () => {
+  const authRoutes = readRepoFile('apps/api/src/routes/auth/index.ts');
+  const teamRoutes = readRepoFile('apps/api/src/routes/team/index.ts');
+  const authService = readRepoFile('apps/api/src/services/auth.service.ts');
+  const teamService = readRepoFile('apps/api/src/services/team.service.ts');
+  const migration = readRepoFile(
+    'apps/api/prisma/migrations/20260608053000_add_active_team_invite_unique_index/migration.sql',
+  );
+
+  assert.match(authRoutes, /reply\.status\(202\)\.send\(result\)/);
+  assert.doesNotMatch(authRoutes, /setAuthCookies\(reply, result\)[\s\S]*\/register/);
+  assert.match(authService, /REGISTRATION_ACCEPTED_MESSAGE/);
+  assert.match(authService, /isUniqueConstraintError/);
+  assert.match(teamRoutes, /reply\.status\(202\)\.send\(invite\)/);
+  assert.match(teamService, /TEAM_INVITE_ACCEPTED_MESSAGE/);
+  assert.match(teamService, /isUniqueConstraintError/);
+  assert.match(teamService, /expiresAt:\s*\{\s*lte:\s*now\s*\}/);
+  assert.match(teamService, /catch \(err\)[\s\S]*isUniqueConstraintError\(err\)[\s\S]*return inviteAccepted\(\)/);
+  assert.match(migration, /CREATE UNIQUE INDEX "TeamInvite_active_email_unique"/);
+  assert.match(migration, /ON "TeamInvite"\("organisationId", "email"\)/);
+  assert.match(migration, /WHERE "acceptedAt" IS NULL\s+AND "revokedAt" IS NULL/);
 });
 
 test('web proxy preserves protected-route redirect and no-cache behavior', () => {

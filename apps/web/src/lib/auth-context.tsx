@@ -8,7 +8,7 @@ interface AuthContextType {
   user: UserResponse | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<UserResponse>;
-  register: (data: { email: string; password: string; name: string; organisationName: string }) => Promise<UserResponse>;
+  register: (data: { email: string; password: string; name: string; organisationName: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -50,12 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name: string;
     organisationName: string;
   }) => {
-    const { data } = await api.post('/auth/register', regData, {
+    await api.post('/auth/register', regData, {
       skipAuthRefresh: true,
       skipAuthRedirect: true,
     });
-    setUser(data.user);
-    return data.user;
+    setUser(null);
   };
 
   const logout = async () => {

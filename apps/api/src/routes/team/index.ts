@@ -72,7 +72,7 @@ export async function teamRoutes(app: FastifyInstance) {
           request.user.role,
           body,
         );
-        reply.status(201).send(invite);
+        reply.status(202).send(invite);
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));

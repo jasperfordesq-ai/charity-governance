@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
@@ -26,6 +26,7 @@ const SALT_ROUNDS = 12;
 const TRIAL_DAYS = 14;
 const RESET_TOKEN_EXPIRY_HOURS = 1;
 const VERIFY_TOKEN_EXPIRY_HOURS = 24;
+const REGISTRATION_ACCEPTED_MESSAGE = 'If this registration can be completed, check your email for next steps.';
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -34,6 +35,14 @@ function normalizeEmail(email: string): string {
 function createOneTimeToken(): { token: string; hash: string } {
   const token = crypto.randomBytes(32).toString('base64url');
   return { token, hash: hashOpaqueToken(token) };
+}
+
+function registrationAccepted() {
+  return { message: REGISTRATION_ACCEPTED_MESSAGE };
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
 export class AuthService {
@@ -48,52 +57,65 @@ export class AuthService {
 
   async register(data: RegisterData) {
     const email = normalizeEmail(data.email);
+    const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+
     const existing = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (existing) {
-      throw new AppError(409, 'EMAIL_EXISTS', 'An account with this email already exists');
+      return registrationAccepted();
     }
-
-    const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
 
     const trialEndsAt = new Date();
     trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
 
-    const { organisation, user } = await this.prisma.$transaction(async (tx) => {
-      const org = await tx.organisation.create({
-        data: {
-          name: data.organisationName,
-        },
+    let organisation: { name: string };
+    let user: { id: string; email: string; name: string };
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const org = await tx.organisation.create({
+          data: {
+            name: data.organisationName,
+          },
+        });
+
+        const usr = await tx.user.create({
+          data: {
+            email,
+            name: data.name,
+            passwordHash,
+            role: 'OWNER',
+            organisationId: org.id,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        });
+
+        await tx.subscription.create({
+          data: {
+            organisationId: org.id,
+            plan: 'ESSENTIALS',
+            status: 'TRIALING',
+            trialEndsAt,
+          },
+        });
+
+        return { organisation: org, user: usr };
       });
 
-      const usr = await tx.user.create({
-        data: {
-          email,
-          name: data.name,
-          passwordHash,
-          role: 'OWNER',
-          organisationId: org.id,
-        },
-        include: {
-          organisation: true,
-        },
-      });
+      organisation = created.organisation;
+      user = created.user;
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        return registrationAccepted();
+      }
 
-      await tx.subscription.create({
-        data: {
-          organisationId: org.id,
-          plan: 'ESSENTIALS',
-          status: 'TRIALING',
-          trialEndsAt,
-        },
-      });
-
-      return { organisation: org, user: usr };
-    });
-
-    const tokens = await issueSessionTokens(this.prisma, user);
+      throw err;
+    }
 
     const verify = createOneTimeToken();
     const verifyTokenExpiry = new Date();
@@ -107,7 +129,7 @@ export class AuthService {
     void this.emailService.sendWelcomeEmail(user.email, user.name, organisation.name);
     void this.emailService.sendEmailVerification(user.email, user.name, verify.token);
 
-    return { user, ...tokens };
+    return registrationAccepted();
   }
 
   async login(data: LoginData) {

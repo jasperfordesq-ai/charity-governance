@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors.js';
@@ -18,6 +18,8 @@ interface AcceptTeamInviteData {
 
 const SALT_ROUNDS = 12;
 const INVITE_EXPIRY_DAYS = 7;
+const INVALID_INVITE_MESSAGE = 'This invite is invalid or has expired';
+const TEAM_INVITE_ACCEPTED_MESSAGE = 'If the invite can be sent, we will email the recipient.';
 type UserRole = 'OWNER' | 'ADMIN' | 'MEMBER';
 
 function normalizeEmail(email: string): string {
@@ -38,6 +40,18 @@ function ensureOwner(role: UserRole) {
   if (role !== 'OWNER') {
     throw new AppError(403, 'FORBIDDEN', 'Only the account owner can change team member roles');
   }
+}
+
+function invalidInviteError() {
+  return new AppError(400, 'INVALID_INVITE', INVALID_INVITE_MESSAGE);
+}
+
+function inviteAccepted() {
+  return { message: TEAM_INVITE_ACCEPTED_MESSAGE };
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
 export class TeamService {
@@ -100,17 +114,28 @@ export class TeamService {
     ensureCanInvite(invitedByRole, data.role);
 
     const email = normalizeEmail(data.email);
-    const [organisation, inviter, existingUser, existingInvite] = await Promise.all([
+    const now = new Date();
+    const [organisation, inviter, existingUser, , existingInvite] = await Promise.all([
       this.prisma.organisation.findUnique({ where: { id: organisationId } }),
       this.prisma.user.findUnique({ where: { id: invitedById } }),
       this.prisma.user.findUnique({ where: { email } }),
+      this.prisma.teamInvite.updateMany({
+        where: {
+          organisationId,
+          email,
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { lte: now },
+        },
+        data: { revokedAt: now },
+      }),
       this.prisma.teamInvite.findFirst({
         where: {
           organisationId,
           email,
           acceptedAt: null,
           revokedAt: null,
-          expiresAt: { gt: new Date() },
+          expiresAt: { gt: now },
         },
       }),
     ]);
@@ -119,52 +144,44 @@ export class TeamService {
       throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
     }
 
-    if (existingUser?.organisationId === organisationId) {
-      throw new AppError(409, 'ALREADY_MEMBER', 'This person is already a member of your organisation');
-    }
-
-    if (existingUser) {
-      throw new AppError(409, 'EMAIL_IN_USE', 'This email is already used by another CharityPilot account');
-    }
-
     if (existingInvite) {
-      throw new AppError(409, 'INVITE_EXISTS', 'An active invite has already been sent to this email');
+      return inviteAccepted();
     }
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
 
     const inviteToken = crypto.randomBytes(32).toString('base64url');
-    const invite = await this.prisma.teamInvite.create({
-      data: {
-        organisationId,
+    try {
+      await this.prisma.teamInvite.create({
+        data: {
+          organisationId,
+          email,
+          role: data.role,
+          token: hashOpaqueToken(inviteToken),
+          invitedById,
+          expiresAt,
+        },
+      });
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        return inviteAccepted();
+      }
+
+      throw err;
+    }
+
+    if (!existingUser) {
+      void this.emailService.sendTeamInvite(
         email,
-        role: data.role,
-        token: hashOpaqueToken(inviteToken),
-        invitedById,
-        expiresAt,
-      },
-      include: { invitedBy: { select: { name: true } } },
-    });
+        organisation.name,
+        inviter?.name ?? 'A CharityPilot admin',
+        inviteToken,
+        data.role,
+      );
+    }
 
-    void this.emailService.sendTeamInvite(
-      email,
-      organisation.name,
-      inviter?.name ?? 'A CharityPilot admin',
-      inviteToken,
-      data.role,
-    );
-
-    return {
-      id: invite.id,
-      email: invite.email,
-      role: invite.role,
-      invitedByName: invite.invitedBy?.name ?? null,
-      acceptedAt: null,
-      revokedAt: null,
-      expiresAt: invite.expiresAt.toISOString(),
-      createdAt: invite.createdAt.toISOString(),
-    };
+    return inviteAccepted();
   }
 
   async revoke(organisationId: string, inviteId: string, actorRole: UserRole) {
@@ -244,7 +261,7 @@ export class TeamService {
     });
 
     if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) {
-      throw new AppError(400, 'INVALID_INVITE', 'This invite is invalid or has expired');
+      throw invalidInviteError();
     }
 
     const existingUser = await this.prisma.user.findUnique({
@@ -252,41 +269,58 @@ export class TeamService {
     });
 
     if (existingUser) {
-      throw new AppError(409, 'EMAIL_EXISTS', 'An account with this email already exists');
+      throw invalidInviteError();
     }
 
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
 
-    const user = await this.prisma.$transaction(async (tx) => {
-      const consumed = await tx.teamInvite.updateMany({
-        where: {
-          id: invite.id,
-          token,
-          acceptedAt: null,
-          revokedAt: null,
-          expiresAt: { gt: now },
-        },
-        data: { acceptedAt: now },
-      });
+    let user: {
+      id: string;
+      email: string;
+      name: string;
+      role: UserRole;
+      emailVerified: boolean;
+      organisationId: string;
+      organisation: unknown;
+    };
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
+        const consumed = await tx.teamInvite.updateMany({
+          where: {
+            id: invite.id,
+            token,
+            acceptedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { acceptedAt: now },
+        });
 
-      if (consumed.count !== 1) {
-        throw new AppError(400, 'INVALID_INVITE', 'This invite is invalid or has expired');
+        if (consumed.count !== 1) {
+          throw invalidInviteError();
+        }
+
+        const created = await tx.user.create({
+          data: {
+            email: invite.email,
+            name: data.name,
+            passwordHash,
+            role: invite.role,
+            organisationId: invite.organisationId,
+            emailVerified: true,
+          },
+          include: { organisation: true },
+        });
+
+        return created;
+      });
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw invalidInviteError();
       }
 
-      const created = await tx.user.create({
-        data: {
-          email: invite.email,
-          name: data.name,
-          passwordHash,
-          role: invite.role,
-          organisationId: invite.organisationId,
-          emailVerified: true,
-        },
-        include: { organisation: true },
-      });
-
-      return created;
-    });
+      throw err;
+    }
 
     const tokens = await issueSessionTokens(this.prisma, user);
 

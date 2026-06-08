@@ -3,6 +3,11 @@ import test from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-jwt-secret-with-enough-entropy';
 process.env.JWT_EXPIRY = '1h';
+process.env.RESEND_API_KEY = process.env.RESEND_API_KEY ?? 're_auth_isolation_test_key';
+process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? 'noreply@example.org';
+
+const REGISTRATION_ACCEPTED_MESSAGE = 'If this registration can be completed, check your email for next steps.';
+const TEAM_INVITE_ACCEPTED_MESSAGE = 'If the invite can be sent, we will email the recipient.';
 
 function createReply() {
   return {
@@ -270,6 +275,48 @@ test('resendEmailVerification does not issue a new token for verified users', as
   assert.equal(emailCalled, false);
 });
 
+test('register route does not disclose duplicate emails or issue session cookies', async () => {
+  const [{ default: Fastify }, { authRoutes }] = await Promise.all([
+    import('fastify'),
+    import('../routes/auth/index.js'),
+  ]);
+
+  let transactionCalled = false;
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    user: {
+      findUnique: async (query: { where: { email: string } }) => {
+        assert.equal(query.where.email, 'owner@example.org');
+        return { id: 'existing-user' };
+      },
+    },
+    $transaction: async () => {
+      transactionCalled = true;
+    },
+  } as never);
+  await app.register(authRoutes, { prefix: '/auth' });
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: {
+        email: 'Owner@Example.Org',
+        password: 'NewPassword1',
+        name: 'Owner One',
+        organisationName: 'Org One',
+      },
+    });
+
+    assert.equal(response.statusCode, 202);
+    assert.deepEqual(response.json(), { message: REGISTRATION_ACCEPTED_MESSAGE });
+    assert.equal(response.headers['set-cookie'], undefined);
+    assert.equal(transactionCalled, false);
+  } finally {
+    await app.close();
+  }
+});
+
 test('non-owner admins may invite members but not new admins', async () => {
   const { TeamService } = await import('../services/team.service.js');
   const { AppError } = await import('../utils/errors.js');
@@ -281,6 +328,7 @@ test('non-owner admins may invite members but not new admins', async () => {
         query.where.id ? { id: query.where.id, name: 'Inviting Admin', organisationId: 'org-1' } : null,
     },
     teamInvite: {
+      updateMany: async () => ({ count: 0 }),
       findFirst: async () => null,
       create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => {
         createdRoles.push(data.role);
@@ -304,7 +352,7 @@ test('non-owner admins may invite members but not new admins', async () => {
     email: 'member@example.org',
     role: 'MEMBER',
   });
-  assert.equal(memberInvite.role, 'MEMBER');
+  assert.deepEqual(memberInvite, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
 
   await assert.rejects(
     () =>
@@ -319,6 +367,7 @@ test('non-owner admins may invite members but not new admins', async () => {
 
 test('owners may invite admins', async () => {
   const { TeamService } = await import('../services/team.service.js');
+  const sentInvites: Array<{ email: string; role: string }> = [];
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
     user: {
@@ -326,6 +375,7 @@ test('owners may invite admins', async () => {
         query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : null,
     },
     teamInvite: {
+      updateMany: async () => ({ count: 0 }),
       findFirst: async () => null,
       create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => ({
         id: 'invite-1',
@@ -339,15 +389,204 @@ test('owners may invite admins', async () => {
       }),
     },
   };
-  const emailService = { sendTeamInvite: async () => true };
+  const emailService = {
+    sendTeamInvite: async (email: string, _orgName: string, _inviterName: string, _token: string, role: string) => {
+      sentInvites.push({ email, role });
+      return true;
+    },
+  };
   const service = new TeamService(prisma as never, emailService as never);
 
-  const invite = await service.invite('org-1', 'owner-1', 'OWNER', {
+  const result = await service.invite('org-1', 'owner-1', 'OWNER', {
     email: 'admin@example.org',
     role: 'ADMIN',
   });
 
-  assert.equal(invite.role, 'ADMIN');
+  assert.deepEqual(result, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
+  assert.deepEqual(sentInvites, [{ email: 'admin@example.org', role: 'ADMIN' }]);
+});
+
+test('team invite route returns an accepted response without exposing invite details', async () => {
+  const [{ default: Fastify }, { teamRoutes }, { signAccessToken }] = await Promise.all([
+    import('fastify'),
+    import('../routes/team/index.js'),
+    import('../utils/jwt.js'),
+  ]);
+
+  let createCalled = false;
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    authSession: {
+      findFirst: async () => ({ id: 'session-1' }),
+    },
+    subscription: {
+      findUnique: async () => ({
+        status: 'TRIALING',
+        trialEndsAt: new Date(Date.now() + 60_000),
+      }),
+    },
+    organisation: {
+      findUnique: async () => ({ id: 'org-1', name: 'Org One' }),
+    },
+    user: {
+      findUnique: async (query: { where: { id?: string; email?: string } }) =>
+        query.where.id
+          ? { id: 'user-1', organisationId: 'org-1', role: 'OWNER', emailVerified: true, name: 'Owner One' }
+          : null,
+    },
+    teamInvite: {
+      updateMany: async () => ({ count: 0 }),
+      findFirst: async () => null,
+      create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => {
+        createCalled = true;
+        return {
+          id: 'invite-1',
+          email: data.email,
+          role: data.role,
+          invitedBy: { name: 'Owner One' },
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: data.expiresAt,
+          createdAt: new Date('2026-06-01T00:00:00.000Z'),
+        };
+      },
+    },
+  } as never);
+  await app.register(teamRoutes, { prefix: '/team' });
+
+  try {
+    const token = signAccessToken({
+      userId: 'user-1',
+      organisationId: 'org-1',
+      role: 'OWNER',
+      sessionId: 'session-1',
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/team/invites',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { email: 'invitee@example.org', role: 'MEMBER' },
+    });
+
+    assert.equal(response.statusCode, 202);
+    assert.deepEqual(response.json(), { message: TEAM_INVITE_ACCEPTED_MESSAGE });
+    assert.equal(createCalled, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('team invites do not disclose why an invite recipient is unavailable', async () => {
+  const { TeamService } = await import('../services/team.service.js');
+
+  const scenarios = [
+    {
+      name: 'same organisation member',
+      existingUser: { id: 'member-1', organisationId: 'org-1' },
+      existingInvite: null,
+    },
+    {
+      name: 'another organisation user',
+      existingUser: { id: 'member-2', organisationId: 'org-2' },
+      existingInvite: null,
+    },
+    {
+      name: 'active invite',
+      existingUser: null,
+      existingInvite: { id: 'invite-1' },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    let createCalled = false;
+    let emailCalled = false;
+    const prisma = {
+      organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+      user: {
+        findUnique: async (query: { where: { id?: string; email?: string } }) =>
+          query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : scenario.existingUser,
+      },
+      teamInvite: {
+        updateMany: async () => ({ count: 0 }),
+        findFirst: async () => scenario.existingInvite,
+        create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => {
+          createCalled = true;
+          return {
+            id: 'invite-1',
+            email: data.email,
+            role: data.role,
+            invitedBy: { name: 'Owner' },
+            acceptedAt: null,
+            revokedAt: null,
+            expiresAt: data.expiresAt,
+            createdAt: new Date('2026-06-01T00:00:00.000Z'),
+          };
+        },
+      },
+    };
+    const emailService = {
+      sendTeamInvite: async () => {
+        emailCalled = true;
+        return true;
+      },
+    };
+    const service = new TeamService(prisma as never, emailService as never);
+
+    const result = await service.invite('org-1', 'owner-1', 'OWNER', {
+      email: `${scenario.name.replace(/\s+/g, '-')}@example.org`,
+      role: 'MEMBER',
+    });
+
+    assert.deepEqual(result, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
+    assert.equal(createCalled, scenario.existingInvite === null, scenario.name);
+    assert.equal(emailCalled, false, scenario.name);
+  }
+});
+
+test('team invites flatten database-enforced duplicate active invite races', async () => {
+  const [{ TeamService }, { Prisma }] = await Promise.all([
+    import('../services/team.service.js'),
+    import('@prisma/client'),
+  ]);
+
+  let createCalled = false;
+  let emailCalled = false;
+  const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: 'test',
+    meta: { target: 'TeamInvite_active_email_unique' },
+  });
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+    user: {
+      findUnique: async (query: { where: { id?: string; email?: string } }) =>
+        query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : null,
+    },
+    teamInvite: {
+      updateMany: async () => ({ count: 0 }),
+      findFirst: async () => null,
+      create: async () => {
+        createCalled = true;
+        throw uniqueError;
+      },
+    },
+  };
+  const emailService = {
+    sendTeamInvite: async () => {
+      emailCalled = true;
+      return true;
+    },
+  };
+  const service = new TeamService(prisma as never, emailService as never);
+
+  const result = await service.invite('org-1', 'owner-1', 'OWNER', {
+    email: 'invitee@example.org',
+    role: 'MEMBER',
+  });
+
+  assert.deepEqual(result, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
+  assert.equal(createCalled, true);
+  assert.equal(emailCalled, false);
 });
 
 test('acceptInvite consumes the invite atomically before issuing a session', async () => {
@@ -458,6 +697,122 @@ test('acceptInvite rejects invite reuse when another request already consumed it
   );
 
   assert.equal(userCreated, false);
+});
+
+test('acceptInvite does not disclose that the invite email already belongs to an account', async () => {
+  const { TeamService } = await import('../services/team.service.js');
+  const { AppError } = await import('../utils/errors.js');
+  const { hashOpaqueToken } = await import('../services/session-tokens.js');
+
+  let inviteConsumed = false;
+  let userCreated = false;
+  const prisma = {
+    teamInvite: {
+      findUnique: async () => ({
+        id: 'invite-1',
+        token: hashOpaqueToken('invite-token'),
+        email: 'invitee@example.org',
+        role: 'MEMBER',
+        organisationId: 'org-1',
+        organisation: { id: 'org-1', name: 'Org One' },
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      updateMany: async () => {
+        inviteConsumed = true;
+        return { count: 1 };
+      },
+    },
+    user: {
+      findUnique: async () => ({ id: 'existing-user', email: 'invitee@example.org' }),
+      create: async () => {
+        userCreated = true;
+        return {};
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new TeamService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () =>
+      service.acceptInvite({
+        token: 'invite-token',
+        name: 'Invitee',
+        password: 'NewPassword1',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 400 &&
+      error.code === 'INVALID_INVITE' &&
+      error.message === 'This invite is invalid or has expired',
+  );
+
+  assert.equal(inviteConsumed, false);
+  assert.equal(userCreated, false);
+});
+
+test('acceptInvite maps raced user email uniqueness failures to invalid invite', async () => {
+  const [{ TeamService }, { AppError }, { hashOpaqueToken }, { Prisma }] = await Promise.all([
+    import('../services/team.service.js'),
+    import('../utils/errors.js'),
+    import('../services/session-tokens.js'),
+    import('@prisma/client'),
+  ]);
+
+  let sessionCreated = false;
+  const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: 'test',
+    meta: { target: 'User_email_key' },
+  });
+  const prisma = {
+    teamInvite: {
+      findUnique: async () => ({
+        id: 'invite-1',
+        token: hashOpaqueToken('invite-token'),
+        email: 'invitee@example.org',
+        role: 'MEMBER',
+        organisationId: 'org-1',
+        organisation: { id: 'org-1', name: 'Org One' },
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    user: {
+      findUnique: async () => null,
+      create: async () => {
+        throw uniqueError;
+      },
+    },
+    authSession: {
+      create: async () => {
+        sessionCreated = true;
+        return { id: 'session-1' };
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new TeamService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () =>
+      service.acceptInvite({
+        token: 'invite-token',
+        name: 'Invitee',
+        password: 'NewPassword1',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 400 &&
+      error.code === 'INVALID_INVITE' &&
+      error.message === 'This invite is invalid or has expired',
+  );
+
+  assert.equal(sessionCreated, false);
 });
 
 test('conflict records reject board members from another organisation on create', async () => {
