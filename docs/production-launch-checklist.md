@@ -152,6 +152,7 @@ Evidence:
 - [ ] Stripe webhook signing secret matches `STRIPE_WEBHOOK_SECRET`.
 - [ ] Resend API key can send from `EMAIL_FROM`.
 - [ ] Password reset and verification email links point to the production frontend origin.
+- [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 
 Evidence:
 

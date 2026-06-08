@@ -29,6 +29,7 @@ npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
 npm run check:production:supabase -- --production-env-file=.env.production
+npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:evidence -- --evidence-file=production-launch-evidence.json
 ```
 
@@ -105,6 +106,10 @@ Run `docs/production-browser-qa.md` against the deployed HTTPS production URL an
 ## Incident Basics
 
 Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys after any suspected secret exposure. Password reset invalidates all active sessions for that user.
+
+## Billing And Email
+
+Run `npm run check:production:providers -- --production-env-file=.env.production` from a trusted shell before launch. The checker verifies the four configured Stripe price IDs exist as active live recurring prices, confirms an enabled live Stripe webhook endpoint targets `/api/v1/billing/webhooks` on the configured production API origin, and confirms the Resend sender domain from `EMAIL_FROM` is verified. Output is redacted and must not be used to store Stripe or Resend secrets.
 
 ## Release Gate
 
