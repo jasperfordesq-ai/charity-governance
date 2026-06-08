@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { SubscriptionPlan } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { isConfiguredSecret } from '../utils/env.js';
+import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
 import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 
 type BillingPrisma = Pick<PrismaClient, 'organisation' | 'stripeWebhookEvent' | 'subscription'>;
@@ -23,7 +24,7 @@ function getPriceConfig(): Array<{
 }
 
 function getFrontendUrl(): string {
-  return process.env.FRONTEND_URL ?? 'http://localhost:3000';
+  return getPrimaryFrontendOrigin();
 }
 
 function getStripeObjectId(value: unknown): string | null {

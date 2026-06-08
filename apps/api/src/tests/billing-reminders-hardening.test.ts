@@ -18,6 +18,12 @@ type BillingHarnessOptions = {
   ledgerCreate?: (args: unknown) => Promise<unknown>;
 };
 
+type StripeSessionArgs = {
+  success_url?: string;
+  cancel_url?: string;
+  return_url?: string;
+};
+
 function stripeSubscription(overrides: Record<string, unknown> = {}) {
   return {
     id: 'sub_stripe_1',
@@ -270,6 +276,53 @@ test('billing status only allows past-due access inside the grace window', async
   const inGrace = await service.getStatus('org_1');
 
   assert.equal(inGrace.hasAccess, true);
+});
+
+test('billing redirects use the primary frontend origin when multiple browser origins are configured', async () => {
+  process.env.FRONTEND_URL = 'https://app.example.org, https://admin.example.org';
+  const checkoutSessions: StripeSessionArgs[] = [];
+  const portalSessions: StripeSessionArgs[] = [];
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org_1',
+        name: 'Good Works',
+        contactEmail: 'owner@example.org',
+        stripeCustomerId: 'cus_existing',
+      }),
+      update: async () => undefined,
+    },
+  };
+  const stripe = {
+    customers: {
+      create: async () => ({ id: 'cus_new' }),
+    },
+    checkout: {
+      sessions: {
+        create: async (args: StripeSessionArgs) => {
+          checkoutSessions.push(args);
+          return { url: 'https://checkout.stripe.example/session' };
+        },
+      },
+    },
+    billingPortal: {
+      sessions: {
+        create: async (args: StripeSessionArgs) => {
+          portalSessions.push(args);
+          return { url: 'https://billing.stripe.example/session' };
+        },
+      },
+    },
+  };
+  const service = new BillingService(prisma as never);
+  (service as unknown as { getStripe: () => unknown }).getStripe = () => stripe;
+
+  await service.createCheckoutSession('org_1', 'COMPLETE' as never, 'monthly');
+  await service.createPortalSession('org_1');
+
+  assert.equal(checkoutSessions[0]?.success_url, 'https://app.example.org/billing?success=true');
+  assert.equal(checkoutSessions[0]?.cancel_url, 'https://app.example.org/billing?cancelled=true');
+  assert.equal(portalSessions[0]?.return_url, 'https://app.example.org/billing');
 });
 
 test('subscriptionGuard denies past-due tenants after the grace window', async () => {

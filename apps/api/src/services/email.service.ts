@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { isConfiguredSecret } from '../utils/env.js';
+import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
 
 const BRAND_TEAL = '#0D7377';
 const BRAND_TEAL_LIGHT = '#e6f4f5';
@@ -88,7 +89,7 @@ export class EmailService {
   constructor() {
     this.resend = new Resend(process.env.RESEND_API_KEY);
     this.from = process.env.EMAIL_FROM ?? 'noreply@charitypilot.ie';
-    this.frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    this.frontendUrl = getPrimaryFrontendOrigin();
   }
 
   isConfigured(): boolean {
