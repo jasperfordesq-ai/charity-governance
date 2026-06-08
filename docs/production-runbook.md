@@ -29,6 +29,7 @@ npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
 npm run check:production:hosting -- --production-env-file=.env.production
+npm run check:production:database -- --production-env-file=.env.production
 npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:observability -- --production-env-file=.env.production
@@ -84,6 +85,8 @@ npm run db:migrate:deploy -w @charitypilot/api
 ```
 
 Use managed PostgreSQL backups with point-in-time recovery enabled. Confirm backup restore quarterly and record the evidence in `docs/production-launch-checklist.md`.
+
+Run `npm run check:production:database -- --production-env-file=.env.production` before launch from a trusted shell with Docker available. The checker takes a temporary custom-format dump from the production `DATABASE_URL`, restores it into a disposable local PostgreSQL container, verifies the critical application tables and governance reference data, then removes the temporary dump by default. Add `--expect-operational-sentinel` after seeding the restore sentinel when you need proof that representative organisation, user, document, compliance, storage deletion, and Stripe webhook rows survived the backup/restore path. Do not store retained dumps in evidence systems.
 
 ## Jobs
 

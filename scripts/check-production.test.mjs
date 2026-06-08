@@ -1886,7 +1886,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-providers.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-hosting.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-observability.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-database.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'smoke-production-deploy.mjs')));
+  assert.equal(packageJson.scripts['check:production:database'], 'node scripts/check-production-database.mjs');
   assert.equal(packageJson.scripts['check:production:observability'], 'node scripts/check-production-observability.mjs');
   assert.equal(packageJson.scripts['check:production:hosting'], 'node scripts/check-production-hosting.mjs');
   assert.equal(packageJson.scripts['check:production:providers'], 'node scripts/check-production-providers.mjs');
@@ -1903,6 +1905,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-providers\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-hosting\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-observability\.test\.mjs/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-database\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/smoke-production-deploy\.test\.mjs/);
   assert.match(readRepoFile('scripts/production-deploy-preflight.mjs'), /runProductionPreflight/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /runProductionDeployPreflightFromArgs/);
@@ -1913,12 +1916,14 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/check-production-providers.mjs'), /runProductionProvidersCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-hosting.mjs'), /runProductionHostingCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-observability.mjs'), /runProductionObservabilityCheckFromArgs/);
+  assert.match(readRepoFile('scripts/check-production-database.mjs'), /runProductionDatabaseCheckFromArgs/);
 
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
+  assert.match(runbook, /npm run check:production:database -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);
@@ -1936,6 +1941,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(launchChecklist, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:observability -- --production-env-file=\.env\.production/);
+  assert.match(launchChecklist, /npm run check:production:database -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=production-launch-evidence\.json/);

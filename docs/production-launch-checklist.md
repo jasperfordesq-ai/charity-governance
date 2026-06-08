@@ -102,6 +102,7 @@ Evidence:
 - [ ] Production PostgreSQL database is provisioned.
 - [ ] Production `DATABASE_URL` is present only in the secret store.
 - [ ] `npm run db:migrate:deploy -w @charitypilot/api` completed against production.
+- [ ] `npm run check:production:database -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted backup/restore evidence.
 - [ ] Managed backups or point-in-time recovery are enabled.
 - [ ] Restore test evidence exists and has an owner.
 
