@@ -86,6 +86,7 @@ Evidence:
 - [ ] TLS certificates are valid for the web and API origins.
 - [ ] API CORS allows only the approved `FRONTEND_URL` origin list.
 - [ ] Security headers are present on API responses.
+- [ ] `npm run check:production:hosting -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 
 Evidence:
 

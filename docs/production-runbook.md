@@ -28,6 +28,7 @@ npm run check:production -- --production-env-file=.env.production
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
+npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:evidence -- --evidence-file=production-launch-evidence.json
@@ -68,6 +69,10 @@ The web app requires `NEXT_PUBLIC_API_URL` pointing to the public HTTPS API orig
 Configure the API `FRONTEND_URL` to the exact HTTPS web origin, or a comma-separated list of approved production origins.
 
 Set `AUTH_COOKIE_DOMAIN` only when the deployed web and API hosts need a shared parent cookie domain. Leave it unset for single-host deployments.
+
+## Hosting, DNS, And TLS
+
+Run `npm run check:production:hosting -- --production-env-file=.env.production` before launch. The checker verifies the configured production web and API origins are origin-only HTTPS CharityPilot hosts, resolve through public DNS, present authorized TLS certificates with enough remaining lifetime, respond over HTTPS, and include baseline security headers. Record the redacted output in the launch evidence ledger.
 
 ## Database
 
