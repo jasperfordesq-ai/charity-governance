@@ -109,11 +109,12 @@ test('deploy preflight dry-run emits production validation and signature verific
     assert.match(result.stdout, /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml config --quiet/);
     assert.match(result.stdout, /cosign verify/);
     assert.match(result.stdout, /--certificate-identity-regexp "\^https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\//);
-    assert.match(result.stdout, /release-images\\\\\.yml@refs\/\(heads\/master\|tags\/v\.\*\)\$"/);
+    assert.match(result.stdout, /release-images\\\.yml@refs\/\(heads\/master\|tags\/v\.\*\)\$"/);
     assert.match(result.stdout, /--certificate-oidc-issuer https:\/\/token\.actions\.githubusercontent\.com/);
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:[a-f0-9]{64}/);
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}/);
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:[a-f0-9]{64}/);
+    assert.doesNotMatch(result.stdout, /[A-Z]:\\\\/);
     assert.doesNotMatch(result.stdout, /docker compose[\s\S]* up /);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

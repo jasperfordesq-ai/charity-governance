@@ -27,6 +27,7 @@ npm audit --omit=dev --audit-level=moderate
 npm run check:production -- --production-env-file=.env.production
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml config --quiet
+npm run deploy:production -- --production-env-file=.env.production
 ```
 
 The production preflight command requires a real `.env.production` file or equivalent generated secret file at release time. Do not commit that file to the repository. Use `.env.production.example` only as a template; it is expected to fail preflight until real values replace the placeholders.
@@ -40,9 +41,12 @@ CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<a
 CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<web-digest>
 CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
 npm run deploy:preflight -- --production-env-file=.env.production
+npm run deploy:production -- --production-env-file=.env.production
 ```
 
 The deploy preflight validates the selected production env file, renders `compose.production.yml`, and runs `cosign verify` against the API, web, and migration image digests. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
+
+The production deploy command runs the same preflight first, then executes `docker compose --env-file .env.production -f compose.production.yml up --wait --wait-timeout 180 -d`. Use `--dry-run` to print the preflight and compose commands without deploying.
 
 ## Environment
 

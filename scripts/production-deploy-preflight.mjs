@@ -102,7 +102,7 @@ function imageRefIssue({ envName, repository }, value) {
 
 function shellQuote(value) {
   if (/^[A-Za-z0-9_./:=@,+-]+$/.test(value)) return value;
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+  return `"${value.replaceAll('"', '\\"')}"`;
 }
 
 function commandLine(command) {
