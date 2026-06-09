@@ -306,10 +306,11 @@ jobs:
       - name: Smoke API Docker scheduled jobs
         run: |
           set -euo pipefail
+          postgres_tools_image="postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c"
           drop_job_smoke_db() {
             docker run --rm --network host \
               -e PGPASSWORD=charitypilot_ci \
-              postgres:16.4-alpine \
+              "${postgres_tools_image}" \
               psql -h 127.0.0.1 -U charitypilot -d postgres -v ON_ERROR_STOP=1 \
                 -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'charitypilot_job_smoke';" \
                 -c "DROP DATABASE IF EXISTS charitypilot_job_smoke;"
@@ -318,7 +319,7 @@ jobs:
           trap drop_job_smoke_db EXIT
           docker run --rm --network host \
             -e PGPASSWORD=charitypilot_ci \
-            postgres:16.4-alpine \
+            "${postgres_tools_image}" \
             psql -h 127.0.0.1 -U charitypilot -d postgres -v ON_ERROR_STOP=1 \
               -c "CREATE DATABASE charitypilot_job_smoke OWNER charitypilot;"
           DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \

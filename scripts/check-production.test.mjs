@@ -2929,6 +2929,8 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
   assert.match(jobSmokeStep, /charitypilot_job_smoke/);
   assert.match(jobSmokeStep, /CREATE DATABASE charitypilot_job_smoke OWNER charitypilot/);
+  assert.match(jobSmokeStep, /postgres@sha256:[a-f0-9]{64}/);
+  assert.doesNotMatch(jobSmokeStep, /postgres:16\.4-alpine/);
   assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   for (const run of [deadlineRun, cleanupRun, schedulerRun]) {
     assert.match(run, /-e NODE_ENV=production/);

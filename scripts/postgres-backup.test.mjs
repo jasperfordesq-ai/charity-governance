@@ -111,7 +111,32 @@ test('postgres backup CLI renders a database URL dump command without exposing t
     assert.match(result.stdout, /docker run --rm/);
     assert.match(result.stdout, /CHARITYPILOT_BACKUP_DATABASE_URL/);
     assert.match(result.stdout, /pg_dump --dbname/);
+    assert.match(result.stdout, /postgres@sha256:[a-f0-9]{64}/);
+    assert.doesNotMatch(result.stdout, /postgres:16\.4-alpine/);
     assert.doesNotMatch(result.stdout, /backup-user:secret/);
+    assert.equal(existsSync(join(tempDir, 'remote.dump')), false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('postgres backup CLI rejects mutable Postgres tools image overrides', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-url-backup-mutable-tools-image-'));
+
+  try {
+    const result = await runBackupCli([
+      'backup',
+      '--database-url=postgresql://backup-user:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+      `--output-dir=${tempDir}`,
+      '--output-file=remote.dump',
+      '--dry-run',
+    ], {
+      CHARITYPILOT_POSTGRES_TOOLS_IMAGE: 'postgres:16.4-alpine',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CHARITYPILOT_POSTGRES_TOOLS_IMAGE must be digest-pinned/);
+    assert.doesNotMatch(result.stdout, /pg_dump --dbname/);
     assert.equal(existsSync(join(tempDir, 'remote.dump')), false);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

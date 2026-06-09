@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_POSTGRES_IMAGE = process.env.CHARITYPILOT_POSTGRES_TOOLS_IMAGE || 'postgres:16.4-alpine';
+const DEFAULT_POSTGRES_IMAGE = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const DEFAULT_BACKUP_DIR = '.charitypilot-backups/postgres';
 const DEFAULT_DATABASE_NAME = 'charitypilot';
 const DEFAULT_DATABASE_USER = 'charitypilot';
@@ -47,6 +47,19 @@ const RESTORE_OPERATIONAL_SENTINEL = {
   storagePath: 'restore-sentinel/documents/board-minutes.pdf',
   webhookType: 'restore.sentinel',
 };
+
+function requireDigestPinnedPostgresImage(image) {
+  if (!/@sha256:[a-f0-9]{64}$/i.test(image)) {
+    throw new Error('CHARITYPILOT_POSTGRES_TOOLS_IMAGE must be digest-pinned with @sha256:<digest>');
+  }
+
+  return image;
+}
+
+function postgresToolsImage() {
+  const configuredImage = process.env.CHARITYPILOT_POSTGRES_TOOLS_IMAGE?.trim();
+  return requireDigestPinnedPostgresImage(configuredImage || DEFAULT_POSTGRES_IMAGE);
+}
 
 function usage() {
   return `
@@ -519,7 +532,7 @@ function runDatabaseUrlSql(databaseUrl, query, { dryRun = false, dockerNetwork }
     'CHARITYPILOT_RESTORE_SENTINEL_DATABASE_URL',
     '-e',
     'CHARITYPILOT_RESTORE_SENTINEL_SQL',
-    DEFAULT_POSTGRES_IMAGE,
+    postgresToolsImage(),
     'sh',
     '-lc',
     'psql --dbname "$CHARITYPILOT_RESTORE_SENTINEL_DATABASE_URL" -v ON_ERROR_STOP=1 -c "$CHARITYPILOT_RESTORE_SENTINEL_SQL"',
@@ -603,7 +616,7 @@ async function backup(options) {
       'CHARITYPILOT_BACKUP_FILE',
       '-v',
       `${outputDir}:/backup`,
-      DEFAULT_POSTGRES_IMAGE,
+      postgresToolsImage(),
       'sh',
       '-lc',
       'pg_dump --dbname "$CHARITYPILOT_BACKUP_DATABASE_URL" --format=custom --no-owner --no-privileges --file "/backup/$CHARITYPILOT_BACKUP_FILE"',
@@ -681,7 +694,7 @@ function verifyRestoredSchema(containerName, dryRun) {
     '--rm',
     '--network',
     `container:${containerName}`,
-    DEFAULT_POSTGRES_IMAGE,
+    postgresToolsImage(),
     'psql',
     '--dbname',
     restoreDatabaseUrl(),
@@ -716,7 +729,7 @@ function verifyRestoredReferenceData(containerName, dryRun) {
     '--rm',
     '--network',
     `container:${containerName}`,
-    DEFAULT_POSTGRES_IMAGE,
+    postgresToolsImage(),
     'psql',
     '--dbname',
     restoreDatabaseUrl(),
@@ -786,7 +799,7 @@ function verifyRestoredOperationalSentinel(containerName, dryRun) {
     '--rm',
     '--network',
     `container:${containerName}`,
-    DEFAULT_POSTGRES_IMAGE,
+    postgresToolsImage(),
     'psql',
     '--dbname',
     restoreDatabaseUrl(),
@@ -842,7 +855,7 @@ function verifyRestore(options) {
     `POSTGRES_PASSWORD=${RESTORE_DATABASE_PASSWORD}`,
     '-e',
     `POSTGRES_DB=${RESTORE_DATABASE_NAME}`,
-    DEFAULT_POSTGRES_IMAGE,
+    postgresToolsImage(),
   ];
   const restoreArgs = [
     'run',
@@ -851,7 +864,7 @@ function verifyRestore(options) {
     `container:${containerName}`,
     '-v',
     `${dumpDir}:/backup:ro`,
-    DEFAULT_POSTGRES_IMAGE,
+    postgresToolsImage(),
     'pg_restore',
     '--dbname',
     restoreDatabaseUrl(),
