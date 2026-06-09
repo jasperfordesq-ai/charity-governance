@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 const ENV_FILE_FLAG = '--production-env-file=';
 const READINESS_PATH = '/api/v1/health/readiness';
+const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 
 function usage() {
   return 'Usage: node scripts/smoke-production-deploy.mjs --production-env-file <path> [--dry-run]\n';
@@ -76,6 +77,15 @@ function envList(value) {
     .filter(Boolean);
 }
 
+function normaliseHostname(hostname) {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+}
+
+function isApprovedPublicHostname(hostname) {
+  const normalizedHostname = normaliseHostname(hostname);
+  return normalizedHostname === APPROVED_PUBLIC_HOST_ROOT || normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`);
+}
+
 function originFor(name, value, issues) {
   if (!value?.trim()) {
     issues.push(`${name} is required for production deploy smoke`);
@@ -86,6 +96,10 @@ function originFor(name, value, issues) {
     const url = new URL(value.trim());
     if (url.protocol !== 'https:' || url.origin !== value.trim().replace(/\/+$/, '')) {
       issues.push(`${name} must be an origin-only HTTPS URL for production deploy smoke`);
+      return null;
+    }
+    if (!isApprovedPublicHostname(url.hostname)) {
+      issues.push(`${name} must use an approved CharityPilot production hostname for production deploy smoke`);
       return null;
     }
     return url.origin;

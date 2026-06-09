@@ -198,3 +198,35 @@ test('production deploy smoke fails when keyed readiness is not ready', async ()
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production deploy smoke rejects unapproved production hostnames before fetching', async () => {
+  const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-unapproved-host-'));
+  const envPath = join(tempDir, 'production.env');
+  let fetchCalled = false;
+
+  writeFileSync(envPath, completeSmokeEnv({
+    FRONTEND_URL: 'https://app.attacker.example',
+    NEXT_PUBLIC_API_URL: 'https://api.attacker.example',
+  }));
+
+  try {
+    const result = await runProductionDeploySmokeFromArgs(
+      ['--production-env-file', envPath],
+      {
+        processEnv: cleanEnv(),
+        fetchImpl: async () => {
+          fetchCalled = true;
+          return response(200, {}, baselineHeaders());
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(fetchCalled, false);
+    assert.match(result.stderr, /FRONTEND_URL must use an approved CharityPilot production hostname/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
