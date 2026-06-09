@@ -376,12 +376,21 @@ export class DocumentService {
   }
 
   async linkStandard(organisationId: string, documentId: string, standardId: string) {
-    const [doc, standard] = await Promise.all([
+    const [doc, standard, organisation, subscription] = await Promise.all([
       this.prisma.document.findFirst({
         where: { id: documentId, organisationId },
       }),
       this.prisma.governanceStandard.findUnique({
         where: { id: standardId },
+        select: { id: true, isCore: true },
+      }),
+      this.prisma.organisation.findUniqueOrThrow({
+        where: { id: organisationId },
+        select: { complexity: true },
+      }),
+      this.prisma.subscription.findUnique({
+        where: { organisationId },
+        select: { plan: true },
       }),
     ]);
 
@@ -391,6 +400,14 @@ export class DocumentService {
 
     if (!standard) {
       throw new AppError(404, 'STANDARD_NOT_FOUND', 'Governance standard not found');
+    }
+
+    if (!standard.isCore && (organisation.complexity !== 'COMPLEX' || subscription?.plan !== SubscriptionPlan.COMPLETE)) {
+      throw new AppError(
+        403,
+        'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN',
+        'This governance standard requires the Complete plan and a complex organisation profile.',
+      );
     }
 
     return this.prisma.documentStandardLink.create({

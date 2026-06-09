@@ -35,6 +35,15 @@ type PrismaMock = {
     create?: (args: unknown) => Promise<{ id: string }>;
     update?: (args: unknown) => Promise<unknown>;
   };
+  governanceStandard?: {
+    findUnique?: (args: unknown) => Promise<unknown>;
+  };
+  organisation?: {
+    findUniqueOrThrow?: (args: unknown) => Promise<unknown>;
+  };
+  documentStandardLink?: {
+    create?: (args: unknown) => Promise<unknown>;
+  };
 };
 
 type MultipartFile = {
@@ -521,6 +530,45 @@ test('document upload preserves the database error when storage cleanup fails', 
   } finally {
     StorageService.prototype.uploadFile = originalUpload;
     StorageService.prototype.deleteFile = originalDelete;
+    await app.close();
+  }
+});
+
+test('Essentials organisations cannot link documents to additional governance standards', async () => {
+  let linkCreated = false;
+  const app = await buildDocumentsApp({
+    subscription: {
+      findUnique: async () => ({ status: 'ACTIVE', trialEndsAt: null, plan: 'ESSENTIALS' }),
+    },
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1' }),
+    },
+    organisation: {
+      findUniqueOrThrow: async () => ({ complexity: 'COMPLEX' }),
+    },
+    governanceStandard: {
+      findUnique: async () => ({ id: 'additional-standard', isCore: false }),
+    },
+    documentStandardLink: {
+      create: async () => {
+        linkCreated = true;
+        return { documentId: 'doc-1', standardId: 'additional-standard' };
+      },
+    },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/doc-1/standards',
+      headers: { authorization: authHeader },
+      payload: { standardId: 'additional-standard' },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN');
+    assert.equal(linkCreated, false);
+  } finally {
     await app.close();
   }
 });
