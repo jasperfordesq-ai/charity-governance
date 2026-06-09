@@ -139,6 +139,76 @@ test('production release run checker rejects mismatched GitHub workflow metadata
   }
 });
 
+test('production release run checker rejects a workflow trigger that does not match the release ref', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence({ gitRef: 'refs/heads/master' }));
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/actions/runs/123456789')) {
+      return response(200, {
+        html_url: workflowRunUrl,
+        path: '.github/workflows/release-images.yml',
+        head_sha: commitSha,
+        head_branch: 'master',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'push',
+      });
+    }
+    if (url.endsWith('/actions/runs/123456789/artifacts')) {
+      return response(200, {
+        artifacts: [
+          { name: 'release-image-digests', expired: false, archive_download_url: 'https://api.github.com/artifact.zip' },
+        ],
+      });
+    }
+    return response(404, {});
+  };
+
+  try {
+    const result = await runProductionReleaseRunEvidenceFromArgs(['--evidence-file', evidencePath], { fetchImpl });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /workflow run event must be workflow_dispatch for refs\/heads\/master releases/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production release run checker accepts tag release workflow pushes', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence({ gitRef: 'refs/tags/v1.2.3' }));
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/actions/runs/123456789')) {
+      return response(200, {
+        html_url: workflowRunUrl,
+        path: '.github/workflows/release-images.yml',
+        head_sha: commitSha,
+        head_branch: 'v1.2.3',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'push',
+      });
+    }
+    if (url.endsWith('/actions/runs/123456789/artifacts')) {
+      return response(200, {
+        artifacts: [
+          { name: 'release-image-digests', expired: false, archive_download_url: 'https://api.github.com/artifact.zip' },
+        ],
+      });
+    }
+    return response(404, {});
+  };
+
+  try {
+    const result = await runProductionReleaseRunEvidenceFromArgs(['--evidence-file', evidencePath], { fetchImpl });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production release run evidence passed/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production release run checker rejects non-release workflow evidence before GitHub calls', async () => {
   const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
   const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence({

@@ -59,6 +59,12 @@ function releaseRefName(gitRef) {
   return match?.[1] ?? null;
 }
 
+function expectedWorkflowEvent(gitRef) {
+  if (gitRef === 'refs/heads/master') return 'workflow_dispatch';
+  if (typeof gitRef === 'string' && gitRef.startsWith('refs/tags/v')) return 'push';
+  return null;
+}
+
 function githubHeaders(processEnv) {
   const headers = {
     accept: 'application/vnd.github+json',
@@ -121,6 +127,10 @@ function validateWorkflowRun(run, release, issues) {
   const expectedRef = releaseRefName(release.gitRef);
   if (expectedRef !== null && run.head_branch !== expectedRef) {
     issues.push('workflow run ref must match release.gitRef');
+  }
+  const expectedEvent = expectedWorkflowEvent(release.gitRef);
+  if (expectedEvent !== null && run.event !== expectedEvent) {
+    issues.push(`workflow run event must be ${expectedEvent} for ${release.gitRef} releases`);
   }
 }
 
