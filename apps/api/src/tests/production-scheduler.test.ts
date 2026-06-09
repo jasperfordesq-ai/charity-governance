@@ -108,19 +108,19 @@ test('runDeadlineReminders sends a sanitized operational alert when the producti
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alerts: ErrorAlertPayload[] = [];
-  const logs: string[] = [];
+  const logs: Array<{ message: string; error?: unknown }> = [];
   const failed = await runDeadlineReminders({
     deadlineService: {
       async sendDueReminders() {
-        throw new Error('SMTP provider secret leaked in exception');
+        throw new Error('SMTP provider failed token=raw-token user@example.org org-1/private-policy.pdf');
       },
     },
     logger: {
       info(message: string) {
-        logs.push(message);
+        logs.push({ message });
       },
-      error(message: string) {
-        logs.push(message);
+      error(message: string, error?: unknown) {
+        logs.push({ message, error });
       },
     },
     alertSender: async (payload) => {
@@ -138,8 +138,15 @@ test('runDeadlineReminders sends a sanitized operational alert when the producti
   assert.equal(alerts[0].errorName, 'Error');
   assert.equal(typeof alerts[0].requestId, 'string');
   assert.equal(typeof alerts[0].timestamp, 'string');
-  assert.equal(JSON.stringify(alerts[0]).includes('SMTP provider secret'), false);
-  assert.ok(logs.some((message) => message.includes('Deadline reminders run failed')));
+  assert.equal(JSON.stringify(alerts[0]).includes('raw-token'), false);
+  const failureLog = logs.find((entry) => entry.message.includes('Deadline reminders run failed'));
+  assert.ok(failureLog);
+  assert.equal(failureLog.error instanceof Error, false);
+  const serializedLog = JSON.stringify(failureLog);
+  assert.equal(serializedLog.includes('raw-token'), false);
+  assert.equal(serializedLog.includes('user@example.org'), false);
+  assert.equal(serializedLog.includes('org-1/private-policy.pdf'), false);
+  assert.equal(serializedLog.includes('token=[redacted]'), true);
 });
 
 test('runDocumentStorageCleanup sends a sanitized operational alert when storage cleanup fails', async () => {
@@ -147,10 +154,11 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alerts: ErrorAlertPayload[] = [];
+  const logs: Array<{ message: string; error?: unknown }> = [];
   const failed = await runDocumentStorageCleanup({
     documentService: {
       async retryPendingStorageDeletions() {
-        throw new Error('Supabase service key leaked in exception');
+        throw new Error('Supabase failed token=raw-token user@example.org org-1/private-policy.pdf');
       },
     },
     storageService: {
@@ -161,7 +169,9 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
     documentStorageCleanupLimit: 7,
     logger: {
       info() {},
-      error() {},
+      error(message: string, error?: unknown) {
+        logs.push({ message, error });
+      },
     },
     alertSender: async (payload) => {
       alerts.push(payload);
@@ -176,7 +186,15 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
   assert.equal(alerts[0].statusCode, 500);
   assert.equal(alerts[0].code, 'DOCUMENT_STORAGE_CLEANUP_FAILED');
   assert.equal(alerts[0].errorName, 'Error');
-  assert.equal(JSON.stringify(alerts[0]).includes('Supabase service key'), false);
+  assert.equal(JSON.stringify(alerts[0]).includes('raw-token'), false);
+  const failureLog = logs.find((entry) => entry.message.includes('Document storage cleanup run failed'));
+  assert.ok(failureLog);
+  assert.equal(failureLog.error instanceof Error, false);
+  const serializedLog = JSON.stringify(failureLog);
+  assert.equal(serializedLog.includes('raw-token'), false);
+  assert.equal(serializedLog.includes('user@example.org'), false);
+  assert.equal(serializedLog.includes('org-1/private-policy.pdf'), false);
+  assert.equal(serializedLog.includes('token=[redacted]'), true);
 });
 
 test('runDocumentStorageCleanup alerts when cleanup records failed storage deletions without throwing', async () => {

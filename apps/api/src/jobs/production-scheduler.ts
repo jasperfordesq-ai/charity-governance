@@ -9,6 +9,7 @@ import {
 } from '../services/error-alerts.service.js';
 import { StorageService } from '../services/storage.service.js';
 import { validateDeadlineRemindersEnv, validateDocumentStorageCleanupEnv } from '../utils/env.js';
+import { serializeErrorForLog } from '../utils/logger.js';
 
 const DEFAULT_DEADLINE_REMINDERS_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -73,6 +74,10 @@ function positiveIntegerEnv(value: string | undefined, fallback: number): number
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export function logSchedulerError(logger: SchedulerLogger, message: string, error: unknown): void {
+  logger.error(message, serializeErrorForLog(error));
+}
+
 export async function runDeadlineReminders(input: {
   deadlineService: DeadlineReminderRunner;
   logger: SchedulerLogger;
@@ -83,7 +88,7 @@ export async function runDeadlineReminders(input: {
     input.logger.info('[ProductionScheduler] Deadline reminders run completed.');
     return false;
   } catch (error) {
-    input.logger.error('[ProductionScheduler] Deadline reminders run failed.', error);
+    logSchedulerError(input.logger, '[ProductionScheduler] Deadline reminders run failed.', error);
     await sendJobFailureAlert({
       job: 'deadline-reminders',
       code: 'DEADLINE_REMINDERS_FAILED',
@@ -123,7 +128,7 @@ export async function runDocumentStorageCleanup(input: {
     }
     return result.failed > 0;
   } catch (error) {
-    input.logger.error('[ProductionScheduler] Document storage cleanup run failed.', error);
+    logSchedulerError(input.logger, '[ProductionScheduler] Document storage cleanup run failed.', error);
     await sendJobFailureAlert({
       job: 'document-storage-cleanup',
       code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
@@ -176,7 +181,7 @@ export async function sendJobFailureAlert(input: {
   try {
     await alertSender(payload);
   } catch (alertError) {
-    input.logger.error(`[ProductionScheduler] Failed to send ${input.job} failure alert.`, alertError);
+    logSchedulerError(input.logger, `[ProductionScheduler] Failed to send ${input.job} failure alert.`, alertError);
   }
 }
 

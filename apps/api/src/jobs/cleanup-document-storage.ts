@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '../services/document.service.js';
 import { StorageService } from '../services/storage.service.js';
 import { validateDocumentStorageCleanupEnv } from '../utils/env.js';
-import { sendJobFailureAlert } from './production-scheduler.js';
+import { logSchedulerError, sendJobFailureAlert } from './production-scheduler.js';
 
 process.env.NODE_ENV ??= 'production';
 validateDocumentStorageCleanupEnv();
@@ -35,7 +35,7 @@ try {
     process.exitCode = 1;
   }
 } catch (error) {
-  console.error('Document storage cleanup job failed:', error);
+  logSchedulerError(console, 'Document storage cleanup job failed:', error);
   await sendJobFailureAlert({
     job: 'document-storage-cleanup',
     code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
