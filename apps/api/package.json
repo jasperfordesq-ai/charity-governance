@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=.env --import tsx/esm --watch src/server.ts",
+    "dev": "node --env-file=.env --import tsx --watch src/server.ts",
     "build": "tsc",
     "test": "tsc -p tsconfig.json && node --test dist/tests/*.test.js",
     "start": "node dist/start.js",

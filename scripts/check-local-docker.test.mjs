@@ -31,6 +31,7 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.equal(existsSync(localComposePath), true, 'compose.local.yml must exist');
 
   const compose = readRepoFile('compose.local.yml');
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
 
   assert.match(compose, /\nservices:\s*\n\s+deps:/);
   assert.match(compose, /\n\s+api:/);
@@ -47,6 +48,9 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /127\.0\.0\.1:3002:3002/);
   assert.match(compose, /127\.0\.0\.1:3003:3003/);
   assert.match(compose, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(compose, /node --import tsx --watch src\/server\.ts/);
+  assert.doesNotMatch(compose, /tsx\/esm/);
+  assert.equal(apiPackage.scripts.dev, 'node --env-file=.env --import tsx --watch src/server.ts');
   assert.match(compose, /\/api\/v1\/health/);
   assert.match(compose, /api:[\s\S]*deps:[\s\S]*condition:\s+service_completed_successfully/);
   assert.match(compose, /web:[\s\S]*deps:[\s\S]*condition:\s+service_completed_successfully/);
@@ -161,6 +165,31 @@ test('local Docker migrations are a first-class command and are dry-runnable', (
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc "npm ci --include=dev && npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api"/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
+});
+
+test('local Docker migrations stop running app services before refreshing dependencies', () => {
+  const migrationScript = readRepoFile('scripts/migrate-local-docker.mjs');
+
+  assert.match(migrationScript, /const localAppServicesRunningBeforeMigration = runningLocalAppServices\(\)/);
+  assert.match(migrationScript, /stopLocalAppServices\(localAppServicesRunningBeforeMigration\)/);
+  assert.match(migrationScript, /startLocalAppServices\(localAppServicesRunningBeforeMigration\)/);
+  assert.ok(
+    migrationScript.indexOf('const localAppServicesRunningBeforeMigration = runningLocalAppServices()') <
+      migrationScript.indexOf('stopLocalAppServices(localAppServicesRunningBeforeMigration)'),
+    'local app services must be recorded before they are stopped',
+  );
+  assert.ok(
+    migrationScript.indexOf('stopLocalAppServices(localAppServicesRunningBeforeMigration)') <
+      migrationScript.indexOf('for (const command of commands)'),
+    'local app services must be recorded before the dependency refresh can disrupt watchers',
+  );
+  assert.ok(
+    migrationScript.indexOf('startLocalAppServices(localAppServicesRunningBeforeMigration)') >
+      migrationScript.indexOf('for (const command of commands)'),
+    'running local app services must be started after migrations and dependency refresh complete',
+  );
+  assert.match(migrationScript, /'stop',\s*\.\.\.services/);
+  assert.match(migrationScript, /'up', '--wait', '--wait-timeout', '180', '-d', \.\.\.services/);
 });
 
 test('local Docker smoke reapplies migrations even when services are already running', () => {
