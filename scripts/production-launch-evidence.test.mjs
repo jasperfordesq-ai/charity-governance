@@ -80,6 +80,17 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'releaseGate' && checkId === 'deploy-smoke') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run deploy:production -- --production-env-file=.env.production',
+      'node scripts/smoke-production-deploy.mjs --production-env-file .env.production',
+      'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
+      'Web origin: https://app.charitypilot.ie',
+      'API origin: https://api.charitypilot.ie',
+    ].join(' ');
+  }
+
   if (areaId === 'releaseGate' && checkId === 'cosign') {
     entry.type = 'command-output';
     entry.description = [
@@ -418,6 +429,28 @@ test('production launch evidence validator binds release-gate evidence to the ex
     assert.match(result.stderr, /areas\.releaseGate\.checks\.cosign\.evidence must include release-images/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.digest-manifest\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.release-run-api-verification\.evidence must include the check:production:release-run command/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires post-deploy smoke command output', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.releaseGate.checks['deploy-smoke'].evidence[0].type = 'artifact';
+  evidence.areas.releaseGate.checks['deploy-smoke'].evidence[0].description =
+    'Post-deploy smoke was reviewed in the release notes';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include the production deploy smoke command/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include Production deploy smoke passed/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include https:\/\/api\.charitypilot\.ie/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

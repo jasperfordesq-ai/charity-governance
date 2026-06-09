@@ -414,6 +414,32 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     }
   }
 
+  if (checkId === 'deploy-smoke') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(
+      text,
+      'npm run deploy:production -- --production-env-file=.env.production',
+      `${checkPath}.evidence must include the production deploy smoke command`,
+      issues,
+    );
+    requireEvidenceText(
+      text,
+      'node scripts/smoke-production-deploy.mjs',
+      `${checkPath}.evidence must include the smoke-production-deploy command`,
+      issues,
+    );
+    requireEvidenceText(
+      text,
+      'Production deploy smoke passed',
+      `${checkPath}.evidence must include Production deploy smoke passed`,
+      issues,
+    );
+    requireEvidenceText(text, 'https://app.charitypilot.ie', `${checkPath}.evidence must include https://app.charitypilot.ie`, issues);
+    requireEvidenceText(text, 'https://api.charitypilot.ie', `${checkPath}.evidence must include https://api.charitypilot.ie`, issues);
+  }
+
   if (checkId === 'cosign') {
     if (!hasEvidenceType(actualCheck, 'command-output')) {
       issues.push(`${checkPath}.evidence must include command-output evidence`);
