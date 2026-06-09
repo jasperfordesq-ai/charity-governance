@@ -62,7 +62,7 @@ test('API responses include HSTS in production', async () => {
     const response = await app.inject({ method: 'GET', url: '/ok' });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(response.headers['strict-transport-security'], 'max-age=31536000; includeSubDomains');
+    assert.equal(response.headers['strict-transport-security'], 'max-age=63072000; includeSubDomains; preload');
   } finally {
     await app.close();
   }

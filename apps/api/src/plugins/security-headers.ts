@@ -18,7 +18,7 @@ export const securityHeadersPlugin = fp(async (app: FastifyInstance) => {
       reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     }
     if (isProduction) {
-      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+      reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     }
 
     return payload;
