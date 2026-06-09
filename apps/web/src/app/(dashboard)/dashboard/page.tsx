@@ -1,6 +1,7 @@
 'use client';
 
 import { logClientError } from '@/lib/client-logger';
+import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
 import { useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Button, Card, Progress, Chip } from '@heroui/react';
@@ -42,11 +43,6 @@ function SkeletonList({ rows = 3 }: { rows?: number }) {
       ))}
     </Card>
   );
-}
-
-function isPlanFeatureUnavailable(error: unknown) {
-  const response = (error as { response?: { status?: number; data?: { code?: unknown } } } | null)?.response;
-  return response?.status === 403 && response.data?.code === 'PLAN_FEATURE_UNAVAILABLE';
 }
 
 /* ------------------------------------------------------------------ */

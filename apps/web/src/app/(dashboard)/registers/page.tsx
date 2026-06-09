@@ -1,7 +1,9 @@
 'use client';
 
 import { logClientError } from '@/lib/client-logger';
+import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Button,
   Card,
@@ -117,6 +119,7 @@ export default function RegistersPage() {
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [planUnavailable, setPlanUnavailable] = useState(false);
   const [summary, setSummary] = useState<GovernanceRegistersSummary | null>(null);
   const [conflicts, setConflicts] = useState<ConflictRecordResponse[]>([]);
   const [risks, setRisks] = useState<RiskRecordResponse[]>([]);
@@ -129,6 +132,7 @@ export default function RegistersPage() {
 
   const fetchRegisters = useCallback(async () => {
     setLoading(true);
+    setPlanUnavailable(false);
     try {
       const [summaryRes, conflictsRes, risksRes, complaintsRes, fundraisingRes, annualRes, financialRes] = await Promise.all([
         api.get(`/governance-registers/summary?year=${year}`),
@@ -147,6 +151,17 @@ export default function RegistersPage() {
       setAnnual(annualRes.data ?? emptyAnnual(year));
       setFinancial(financialRes.data ?? emptyFinancial(year));
     } catch (err) {
+      if (isPlanFeatureUnavailable(err)) {
+        setPlanUnavailable(true);
+        setSummary(null);
+        setConflicts([]);
+        setRisks([]);
+        setComplaints([]);
+        setFundraising([]);
+        setAnnual(emptyAnnual(year));
+        setFinancial(emptyFinancial(year));
+        return;
+      }
       logClientError('Failed to load governance registers', err);
       toast('Failed to load governance registers', 'error');
     } finally {
@@ -296,6 +311,38 @@ export default function RegistersPage() {
 
   const riskScore = (risk: RiskRecordResponse) => risk.likelihood * risk.impact;
   const highRisks = useMemo(() => risks.filter((risk) => risk.status !== RegisterStatus.CLOSED && riskScore(risk) >= 12), [risks]);
+
+  if (!loading && planUnavailable) {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Governance Registers</h1>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500">
+              Structured trustee, risk, finance, fundraising, complaints, and annual reporting records for board review.
+            </p>
+          </div>
+        </div>
+
+        <Card className="border border-teal-primary/20 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-primary">
+                Complete plan
+              </Chip>
+              <h2 className="text-lg font-semibold text-gray-900">Governance registers are available on Complete.</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+                Upgrade to manage conflict, risk, complaints, fundraising, Annual Report readiness, and financial control registers.
+              </p>
+            </div>
+            <Button as={Link} href="/billing" color="primary" className="bg-teal-primary text-white">
+              View billing
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

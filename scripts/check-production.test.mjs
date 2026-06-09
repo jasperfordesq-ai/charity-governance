@@ -2541,6 +2541,16 @@ test('web export opens the API-rendered report directly with opener isolation', 
   assert.doesNotMatch(exportPage, /URL\.createObjectURL/);
 });
 
+test('registers page handles Complete-plan denial as an upgrade state', () => {
+  const registersPage = readRepoFile('apps/web/src/app/(dashboard)/registers/page.tsx');
+
+  assert.match(registersPage, /isPlanFeatureUnavailable/);
+  assert.match(registersPage, /setPlanUnavailable\(true\)/);
+  assert.match(registersPage, /Complete plan/);
+  assert.match(registersPage, /href="\/billing"/);
+  assert.doesNotMatch(registersPage, /toast\('Failed to load governance registers', 'error'\);[\s\S]*PLAN_FEATURE_UNAVAILABLE/);
+});
+
 test('web document upload picker does not advertise legacy Office formats', () => {
   const documentsPage = readRepoFile('apps/web/src/app/(dashboard)/documents/page.tsx');
 
