@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ComplianceService } from '../../services/compliance.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
-import { complianceQuerySchema } from '@charitypilot/shared';
+import { SubscriptionPlan, complianceQuerySchema } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { ZodError } from 'zod';
 
@@ -22,14 +22,14 @@ export async function exportRoutes(app: FastifyInstance) {
       const principles = await complianceService.getPrinciplesForOrganisation(request.user.organisationId);
       const records = await complianceService.getRecords(request.user.organisationId, year);
       const signoff = await complianceService.getSignoff(request.user.organisationId, year);
-      const [conflicts, risks, complaints, fundraising, annualReport, financialControls] = await Promise.all([
-        app.prisma.conflictRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { dateDeclared: 'desc' } }),
-        app.prisma.riskRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { updatedAt: 'desc' } }),
-        app.prisma.complaintRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { receivedDate: 'desc' } }),
-        app.prisma.fundraisingRecord.findMany({ where: { organisationId: request.user.organisationId }, orderBy: { updatedAt: 'desc' } }),
-        app.prisma.annualReportReadiness.findUnique({ where: { organisationId_reportingYear: { organisationId: request.user.organisationId, reportingYear: year } } }),
-        app.prisma.financialControlReview.findUnique({ where: { organisationId_reportingYear: { organisationId: request.user.organisationId, reportingYear: year } } }),
-      ]);
+      const subscription = await app.prisma.subscription.findUnique({
+        where: { organisationId: request.user.organisationId },
+        select: { plan: true },
+      });
+      const registers =
+        subscription?.plan === SubscriptionPlan.COMPLETE
+          ? await loadGovernanceRegisters(app, request.user.organisationId, year)
+          : null;
       const recordMap = new Map(records.map((r) => [r.standardId, r]));
 
       // Build a printable HTML report that the browser can save as PDF.
@@ -38,7 +38,7 @@ export async function exportRoutes(app: FastifyInstance) {
         principles,
         recordMap,
         signoff,
-        { conflicts, risks, complaints, fundraising, annualReport, financialControls },
+        registers,
         year,
       );
 
@@ -67,6 +67,53 @@ export async function exportRoutes(app: FastifyInstance) {
   app.get('/compliance-report', sendComplianceReport);
 }
 
+async function loadGovernanceRegisters(
+  app: FastifyInstance,
+  organisationId: string,
+  year: number,
+): Promise<GovernanceRegistersForExport> {
+  const [conflicts, risks, complaints, fundraising, annualReport, financialControls] = await Promise.all([
+    app.prisma.conflictRecord.findMany({ where: { organisationId }, orderBy: { dateDeclared: 'desc' } }),
+    app.prisma.riskRecord.findMany({ where: { organisationId }, orderBy: { updatedAt: 'desc' } }),
+    app.prisma.complaintRecord.findMany({ where: { organisationId }, orderBy: { receivedDate: 'desc' } }),
+    app.prisma.fundraisingRecord.findMany({ where: { organisationId }, orderBy: { updatedAt: 'desc' } }),
+    app.prisma.annualReportReadiness.findUnique({ where: { organisationId_reportingYear: { organisationId, reportingYear: year } } }),
+    app.prisma.financialControlReview.findUnique({ where: { organisationId_reportingYear: { organisationId, reportingYear: year } } }),
+  ]);
+
+  return { conflicts, risks, complaints, fundraising, annualReport, financialControls };
+}
+
+type GovernanceRegistersForExport = {
+  conflicts: Array<{ trusteeName: string; matter: string; status: string; dateDeclared: Date; actionTaken: string; minuteReference: string | null }>;
+  risks: Array<{ title: string; category: string; likelihood: number; impact: number; mitigation: string; status: string; owner: string | null; reviewDate: Date | null }>;
+  complaints: Array<{ receivedDate: Date; summary: string; status: string; reviewedByBoard: boolean; outcome: string | null }>;
+  fundraising: Array<{ name: string; activityType: string; status: string; controls: string | null; complaintsReceived: boolean }>;
+  annualReport: null | {
+    filingStatus: string;
+    financialStatementsApproved: boolean;
+    annualReportUploaded: boolean;
+    trusteeDetailsReviewed: boolean;
+    fundraisingReviewed: boolean;
+    complaintsReviewed: boolean;
+    boardApprovalDate: Date | null;
+    filedDate: Date | null;
+  };
+  financialControls: null | {
+    bankReconciliationsReviewed: boolean;
+    dualAuthorisation: boolean;
+    budgetApproved: boolean;
+    managementAccountsReviewed: boolean;
+    reservesReviewed: boolean;
+    restrictedFundsReviewed: boolean;
+    assetsInsuranceReviewed: boolean;
+    payrollControlsReviewed: boolean;
+    fundraisingControlsReviewed: boolean;
+    reviewDate: Date | null;
+    minuteReference: string | null;
+  };
+};
+
 function buildComplianceReportHtml(
   org: { name: string; rcnNumber: string | null },
   principles: Array<{
@@ -84,35 +131,7 @@ function buildComplianceReportHtml(
     approvalNotes: string | null;
     approvedAt: string | null;
   },
-  registers: {
-    conflicts: Array<{ trusteeName: string; matter: string; status: string; dateDeclared: Date; actionTaken: string; minuteReference: string | null }>;
-    risks: Array<{ title: string; category: string; likelihood: number; impact: number; mitigation: string; status: string; owner: string | null; reviewDate: Date | null }>;
-    complaints: Array<{ receivedDate: Date; summary: string; status: string; reviewedByBoard: boolean; outcome: string | null }>;
-    fundraising: Array<{ name: string; activityType: string; status: string; controls: string | null; complaintsReceived: boolean }>;
-    annualReport: null | {
-      filingStatus: string;
-      financialStatementsApproved: boolean;
-      annualReportUploaded: boolean;
-      trusteeDetailsReviewed: boolean;
-      fundraisingReviewed: boolean;
-      complaintsReviewed: boolean;
-      boardApprovalDate: Date | null;
-      filedDate: Date | null;
-    };
-    financialControls: null | {
-      bankReconciliationsReviewed: boolean;
-      dualAuthorisation: boolean;
-      budgetApproved: boolean;
-      managementAccountsReviewed: boolean;
-      reservesReviewed: boolean;
-      restrictedFundsReviewed: boolean;
-      assetsInsuranceReviewed: boolean;
-      payrollControlsReviewed: boolean;
-      fundraisingControlsReviewed: boolean;
-      reviewDate: Date | null;
-      minuteReference: string | null;
-    };
-  },
+  registers: GovernanceRegistersForExport | null,
   year: number,
 ): string {
   const standardRows = principles
@@ -148,7 +167,8 @@ function buildComplianceReportHtml(
     )
     .join('');
 
-  const governanceRegisterRows = `
+  const governanceRegisterRows = registers
+    ? `
       <h2>Governance registers</h2>
       <h3>Conflicts of interest</h3>
       ${simpleTable(
@@ -211,7 +231,8 @@ function buildComplianceReportHtml(
           ['Budget approved', yesNo(registers.financialControls?.budgetApproved)],
           ['Management accounts reviewed', yesNo(registers.financialControls?.managementAccountsReviewed)],
         ],
-      )}`;
+      )}`
+    : '';
 
   const signoffLabel =
     signoff.status === 'APPROVED'
