@@ -48,6 +48,7 @@ const COMPOSE_RUNTIME_WEB_API_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL';
 const COMPOSE_RUNTIME_WEB_SUPABASE_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
+const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 
 function parseEnvFile(path) {
   return Object.fromEntries(
@@ -316,6 +317,24 @@ function requirePrefix(env, key, prefix, label, issues) {
   }
 }
 
+function requireAccessTokenExpiry(env, issues) {
+  const value = envValue(env, 'JWT_EXPIRY').trim();
+  if (!value) return;
+
+  const match = value.match(/^([1-9]\d*)([smh])$/i);
+  if (!match) {
+    issues.push('JWT_EXPIRY must be a duration like 15m, 1h, or 3600s');
+    return;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const multiplier = unit === 'h' ? 3600 : unit === 'm' ? 60 : 1;
+  if (amount * multiplier > MAX_ACCESS_TOKEN_EXPIRY_SECONDS) {
+    issues.push('JWT_EXPIRY must not exceed 1h in production');
+  }
+}
+
 function hostMatchesCookieDomain(hostname, cookieDomain) {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -323,17 +342,16 @@ function hostMatchesCookieDomain(hostname, cookieDomain) {
   return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
 }
 
-function requireAuthCookieDomainForSplitHosts(env, issues) {
+function requireAuthCookieDomain(env, issues) {
   const frontendUrls = configuredUrls(env, 'FRONTEND_URL', { allowCommaSeparated: true });
   const apiUrls = configuredUrls(env, 'NEXT_PUBLIC_API_URL');
   if (!frontendUrls.length || !apiUrls.length) return;
 
   const apiHostname = normaliseHostname(apiUrls[0].hostname);
   const splitHostnames = frontendUrls.some((url) => normaliseHostname(url.hostname) !== apiHostname);
-  if (!splitHostnames) return;
-
   const cookieDomain = envValue(env, 'AUTH_COOKIE_DOMAIN').trim();
   if (!isConfigured(cookieDomain)) {
+    if (!splitHostnames) return;
     issues.push('AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames');
     return;
   }
@@ -459,6 +477,7 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   requirePrefix(env, 'RESEND_API_KEY', 're_', 'Resend API key', issues);
   requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
   requireApprovedEmailSender(env, 'EMAIL_FROM', issues);
+  requireAccessTokenExpiry(env, issues);
 
   for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
     const value = envValue(env, key);
@@ -479,7 +498,7 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   requirePublicSupabaseUrlMatchesApiSupabaseUrl(env, issues);
   requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);
   requireComposeRuntimeWebSupabaseUrl(env, runtimeEnv, issues);
-  requireAuthCookieDomainForSplitHosts(env, issues);
+  requireAuthCookieDomain(env, issues);
 
   if (issues.length) {
     const stderr = [

@@ -358,6 +358,27 @@ test('fails when production billing or email provider identifiers have invalid p
   }
 });
 
+test('fails when production access token expiry is malformed or overlong', () => {
+  for (const [expiry, expectedIssue] of [
+    ['forever', 'JWT_EXPIRY must be a duration like 15m, 1h, or 3600s'],
+    ['2h', 'JWT_EXPIRY must not exceed 1h in production'],
+  ]) {
+    const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-jwt-expiry-'));
+    const envPath = join(tempDir, 'production.env');
+
+    writeFileSync(envPath, completeProductionEnv({ JWT_EXPIRY: expiry }));
+
+    try {
+      const result = runPreflight([`--production-env-file=${envPath}`]);
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, new RegExp(escapeRegExp(expectedIssue)));
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('fails when the compose runtime web API URL is missing', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-missing-'));
   const envPath = join(tempDir, 'production.env');
@@ -1319,6 +1340,56 @@ test('fails when split web and API production hosts omit a shared auth cookie do
       result.stderr,
       /AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames/,
     );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when same-host production sets an invalid auth cookie domain', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-same-host-cookie-domain-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      FRONTEND_URL: 'https://charitypilot.ie',
+      NEXT_PUBLIC_API_URL: 'https://charitypilot.ie',
+      AUTH_COOKIE_DOMAIN: '.attacker.example',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://charitypilot.ie',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('passes when same-host production omits auth cookie domain', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-same-host-no-cookie-domain-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      FRONTEND_URL: 'https://charitypilot.ie',
+      NEXT_PUBLIC_API_URL: 'https://charitypilot.ie',
+      AUTH_COOKIE_DOMAIN: '',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://charitypilot.ie',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production preflight passed using /);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
