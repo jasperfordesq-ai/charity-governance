@@ -142,6 +142,10 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness/);
   assert.match(smokeScript, /x-charitypilot-readiness-key/);
   assert.match(smokeScript, /local-readiness-key-at-least-32-characters/);
+  assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/register/);
+  assert.match(smokeScript, /NewPassword1/);
+  assert.match(smokeScript, /If this registration can be completed, check your email for next steps\./);
+  assert.match(smokeScript, /set-cookie/i);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3003\//);
   assert.match(smokeScript, /CharityPilot/);
   assert.doesNotMatch(smokeScript, /down', '-v'/);

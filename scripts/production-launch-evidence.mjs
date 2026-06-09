@@ -414,6 +414,24 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     }
   }
 
+  if (checkId === 'deploy-production') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(
+      text,
+      'npm run deploy:production -- --production-env-file=.env.production',
+      `${checkPath}.evidence must include the production deploy command`,
+      issues,
+    );
+    requireEvidenceText(
+      text,
+      'Production compose deploy completed',
+      `${checkPath}.evidence must include Production compose deploy completed`,
+      issues,
+    );
+  }
+
   if (checkId === 'deploy-smoke') {
     if (!hasEvidenceType(actualCheck, 'command-output')) {
       issues.push(`${checkPath}.evidence must include command-output evidence`);
@@ -438,6 +456,24 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     );
     requireEvidenceText(text, 'https://app.charitypilot.ie', `${checkPath}.evidence must include https://app.charitypilot.ie`, issues);
     requireEvidenceText(text, 'https://api.charitypilot.ie', `${checkPath}.evidence must include https://api.charitypilot.ie`, issues);
+  }
+
+  if (checkId === 'deploy-rollback') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(
+      text,
+      'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+      `${checkPath}.evidence must include the production rollback command`,
+      issues,
+    );
+    requireEvidenceText(
+      text,
+      'Production compose rollback completed',
+      `${checkPath}.evidence must include Production compose rollback completed`,
+      issues,
+    );
   }
 
   if (checkId === 'cosign') {

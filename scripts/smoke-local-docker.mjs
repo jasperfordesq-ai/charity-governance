@@ -136,6 +136,32 @@ async function smokeApiReadiness() {
   );
 }
 
+async function smokeApiRegistration() {
+  const email = `local-docker-smoke-${Date.now()}@example.com`;
+  const response = await fetchWithTimeout('http://127.0.0.1:3002/api/v1/auth/register', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'http://localhost:3003',
+    },
+    body: JSON.stringify({
+      email,
+      password: 'NewPassword1',
+      name: 'Local Docker Smoke User',
+      organisationName: 'Local Docker Smoke Organisation',
+    }),
+  });
+  const body = await response.json();
+  const expectedMessage = 'If this registration can be completed, check your email for next steps.';
+
+  if (response.status !== 202 || body.message !== expectedMessage) {
+    throw new Error(`local registration returned ${response.status}: ${JSON.stringify(body)}`);
+  }
+  if (response.headers.has('set-cookie')) {
+    throw new Error('local registration smoke must not issue auth cookies');
+  }
+}
+
 async function smokeWeb() {
   const response = await fetchWithTimeout('http://127.0.0.1:3003/');
   const body = await response.text();
@@ -164,9 +190,10 @@ try {
 
   await waitForCheck('API health', smokeApiHealth);
   await waitForCheck('API readiness', smokeApiReadiness);
+  await waitForCheck('API registration', smokeApiRegistration);
   await waitForCheck('web root', smokeWeb);
 
-  console.log('Local Docker smoke passed: API health/readiness and web root responded over loopback.');
+  console.log('Local Docker smoke passed: API health/readiness, registration, and web root responded over loopback.');
 } finally {
   if (cleanup) {
     const downArgs = [...composeArgs, 'down', '--remove-orphans'];

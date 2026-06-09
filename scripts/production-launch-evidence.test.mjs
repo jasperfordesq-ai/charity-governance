@@ -80,6 +80,16 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'releaseGate' && checkId === 'deploy-production') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run deploy:production -- --production-env-file=.env.production',
+      'Production deploy preflight passed: env, compose config, and image signatures verified.',
+      'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
+      'Production compose deploy completed.',
+    ].join(' ');
+  }
+
   if (areaId === 'releaseGate' && checkId === 'deploy-smoke') {
     entry.type = 'command-output';
     entry.description = [
@@ -88,6 +98,14 @@ function evidenceEntry(areaId, checkId) {
       'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
       'Web origin: https://app.charitypilot.ie',
       'API origin: https://api.charitypilot.ie',
+    ].join(' ');
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'deploy-rollback') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+      'Production compose rollback completed.',
     ].join(' ');
   }
 
@@ -451,6 +469,32 @@ test('production launch evidence validator requires post-deploy smoke command ou
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include Production deploy smoke passed/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-smoke\.evidence must include https:\/\/api\.charitypilot\.ie/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires production deploy and rollback command output', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.releaseGate.checks['deploy-production'].evidence[0].type = 'artifact';
+  evidence.areas.releaseGate.checks['deploy-production'].evidence[0].description =
+    'Production deployment was noted in the release log';
+  evidence.areas.releaseGate.checks['deploy-rollback'].evidence[0].type = 'artifact';
+  evidence.areas.releaseGate.checks['deploy-rollback'].evidence[0].description =
+    'Rollback rehearsal was noted in the release log';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include the production deploy command/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include Production compose deploy completed/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include the production rollback command/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include Production compose rollback completed/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
