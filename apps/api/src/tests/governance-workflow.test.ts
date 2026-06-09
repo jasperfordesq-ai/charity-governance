@@ -163,6 +163,57 @@ test('Essentials recent activity excludes additional-standard compliance records
   );
 });
 
+test('Essentials document metadata excludes additional-standard links', async () => {
+  const { DocumentService } = await import('../services/document.service.js');
+  const documentRecord = {
+    id: 'doc-1',
+    organisationId: 'org-1',
+    name: 'Evidence pack',
+    description: null,
+    category: 'POLICY',
+    fileSize: 1024,
+    mimeType: 'application/pdf',
+    version: 1,
+    owner: null,
+    approvedDate: null,
+    nextReviewDate: null,
+    boardMinuteReference: null,
+    uploadedById: 'user-1',
+    createdAt: new Date('2026-01-04T10:00:00.000Z'),
+    updatedAt: new Date('2026-01-04T10:00:00.000Z'),
+  };
+  const standardLinks = [
+    { standardId: 'standard-core', standard: { id: 'standard-core', code: '1.1' } },
+    { standardId: 'standard-additional', standard: { id: 'standard-additional', code: '1.A' } },
+  ];
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({ id: 'org-1', complexity: 'COMPLEX' }),
+    },
+    subscription: {
+      findUnique: async () => ({ plan: 'ESSENTIALS' }),
+    },
+    document: {
+      findMany: async (query: { include?: { standardLinks?: { where?: { standard?: { isCore?: boolean } } } } }) => [
+        {
+          ...documentRecord,
+          standardLinks: query.include?.standardLinks?.where?.standard?.isCore
+            ? [standardLinks[0]]
+            : standardLinks,
+        },
+      ],
+      count: async () => 1,
+    },
+  };
+  const service = new DocumentService(prisma as never);
+
+  const documents = await service.list('org-1');
+
+  assert.deepEqual(documents.data[0]?.standardLinks, [
+    { standardId: 'standard-core', standardCode: '1.1' },
+  ]);
+});
+
 test('Essentials organisations cannot write compliance records for additional standards', async () => {
   const { ComplianceService } = await import('../services/compliance.service.js');
   const { AppError } = await import('../utils/errors.js');

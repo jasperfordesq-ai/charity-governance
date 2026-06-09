@@ -106,11 +106,43 @@ type DocumentWithStandardLinks = {
   }>;
 };
 
-const publicDocumentInclude = {
-  standardLinks: {
-    include: { standard: { select: { id: true, code: true } } },
-  },
+const standardLinkInclude = {
+  include: { standard: { select: { id: true, code: true } } },
 };
+
+const coreStandardLinkInclude = {
+  where: { standard: { isCore: true } },
+  include: { standard: { select: { id: true, code: true } } },
+};
+
+const publicDocumentInclude = {
+  standardLinks: standardLinkInclude,
+};
+
+function scopedPublicDocumentInclude(includeAdditionalStandards: boolean) {
+  return {
+    standardLinks: includeAdditionalStandards ? standardLinkInclude : coreStandardLinkInclude,
+  };
+}
+
+function includesAdditionalStandards(organisation: { complexity: string }, subscription: { plan: string } | null): boolean {
+  return organisation.complexity === 'COMPLEX' && subscription?.plan === SubscriptionPlan.COMPLETE;
+}
+
+async function documentStandardLinkScope(prisma: PrismaClient, organisationId: string): Promise<boolean> {
+  const [organisation, subscription] = await Promise.all([
+    prisma.organisation.findUniqueOrThrow({
+      where: { id: organisationId },
+      select: { complexity: true },
+    }),
+    prisma.subscription.findUnique({
+      where: { organisationId },
+      select: { plan: true },
+    }),
+  ]);
+
+  return includesAdditionalStandards(organisation, subscription);
+}
 
 function deletionDelegate(prisma: unknown): DocumentStorageDeletionDelegate {
   return (prisma as DocumentStorageDeletionClient).documentStorageDeletion;
@@ -222,10 +254,11 @@ export class DocumentService {
 
   async list(organisationId: string, page = 1, pageSize = 50) {
     const skip = (page - 1) * pageSize;
+    const includeAdditionalStandards = await documentStandardLinkScope(this.prisma, organisationId);
     const [data, total] = await Promise.all([
       this.prisma.document.findMany({
         where: { organisationId },
-        include: publicDocumentInclude,
+        include: scopedPublicDocumentInclude(includeAdditionalStandards),
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
@@ -236,9 +269,10 @@ export class DocumentService {
   }
 
   async getById(organisationId: string, id: string) {
+    const includeAdditionalStandards = await documentStandardLinkScope(this.prisma, organisationId);
     const doc = await this.prisma.document.findFirst({
       where: { id, organisationId },
-      include: publicDocumentInclude,
+      include: scopedPublicDocumentInclude(includeAdditionalStandards),
     });
 
     if (!doc) {
