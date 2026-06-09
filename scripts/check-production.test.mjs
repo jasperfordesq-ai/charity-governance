@@ -2785,7 +2785,11 @@ test('CI uses GitHub Actions releases that run on the Node 24 action runtime', (
 });
 
 test('GitHub Actions workflow actions are pinned to immutable commits', () => {
-  for (const workflowPath of ['.github/workflows/ci.yml', '.github/workflows/release-images.yml']) {
+  for (const workflowPath of [
+    '.github/workflows/ci.yml',
+    '.github/workflows/release-images.yml',
+    '.github/workflows/production-launch-evidence.yml',
+  ]) {
     const workflow = readRepoFile(workflowPath);
     const actionRefs = [...workflow.matchAll(/^\s+uses:\s+([^@\s]+)@([^\s#]+)/gm)];
 
@@ -2796,6 +2800,40 @@ test('GitHub Actions workflow actions are pinned to immutable commits', () => {
       assert.doesNotMatch(ref, /^(main|master|v[0-9].*)$/, `${workflowPath} action ${action} must not use a mutable ref`);
     }
   }
+});
+
+test('manual production launch evidence workflow validates final signoff evidence', () => {
+  const workflow = readRepoFile('.github/workflows/production-launch-evidence.yml');
+  const runbook = readRepoFile('docs/production-runbook.md');
+
+  assert.match(workflow, /name:\s+Production Launch Evidence/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /evidence_artifact_run_id:/);
+  assert.match(workflow, /evidence_artifact_name:/);
+  assert.match(workflow, /default:\s+production-launch-evidence/);
+  assert.match(workflow, /evidence_file_name:/);
+  assert.match(workflow, /default:\s+production-launch-evidence\.json/);
+  assert.match(workflow, /^permissions:\s*\n\s+contents:\s+read\s*\n\s+actions:\s+read\s*$/m);
+  assert.match(workflow, /environment:\s+production/);
+  assert.match(workflow, /uses:\s+actions\/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd\s+# v5/);
+  assert.match(workflow, /uses:\s+actions\/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e\s+# v6/);
+  assert.match(workflow, /uses:\s+actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093\s+# v4\.3\.0/);
+  assert.match(workflow, /name:\s+\$\{\{\s*inputs\.evidence_artifact_name\s*\}\}/);
+  assert.match(workflow, /path:\s+launch-evidence/);
+  assert.match(workflow, /run-id:\s+\$\{\{\s*inputs\.evidence_artifact_run_id\s*\}\}/);
+  assert.match(workflow, /test -f "launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /npm ci/);
+  assert.match(workflow, /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /tee production-launch-evidence-validation\.log/);
+  assert.match(workflow, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);
+  assert.match(workflow, /name:\s+production-launch-evidence-validation/);
+  assert.match(workflow, /path:\s+production-launch-evidence-validation\.log/);
+  assert.match(workflow, /if-no-files-found:\s+error/);
+  assert.match(workflow, /retention-days:\s+90/);
+  assert.match(runbook, /\.github\/workflows\/production-launch-evidence\.yml/);
+  assert.match(runbook, /evidence_artifact_run_id/);
+  assert.match(runbook, /production-launch-evidence-validation/);
 });
 
 test('CI builds API and web production Docker images', () => {

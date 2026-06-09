@@ -1,0 +1,76 @@
+name: Production Launch Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_artifact_run_id:
+        description: GitHub Actions run id that uploaded the production launch evidence artifact
+        required: true
+        type: string
+      evidence_artifact_name:
+        description: Artifact name containing the production launch evidence JSON file
+        required: true
+        default: production-launch-evidence
+        type: string
+      evidence_file_name:
+        description: Evidence JSON filename inside the downloaded artifact
+        required: true
+        default: production-launch-evidence.json
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    name: Validate production launch evidence
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download production launch evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.evidence_artifact_name }}
+          path: launch-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.evidence_artifact_run_id }}
+
+      - name: Verify evidence file exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "launch-evidence/${{ inputs.evidence_file_name }}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate launch evidence
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check:production:release-run -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" |
+            tee production-launch-evidence-validation.log
+          npm run check:production:evidence -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" |
+            tee -a production-launch-evidence-validation.log
+
+      - name: Upload launch evidence validation output
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: production-launch-evidence-validation
+          path: production-launch-evidence-validation.log
+          if-no-files-found: error
+          retention-days: 90
