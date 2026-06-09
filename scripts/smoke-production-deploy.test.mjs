@@ -68,6 +68,13 @@ function baselineHeaders(extra = {}) {
   };
 }
 
+function webHeaders(extra = {}) {
+  return baselineHeaders({
+    'content-security-policy': "default-src 'self'; frame-ancestors 'none'; connect-src 'self' https://api.charitypilot.ie",
+    ...extra,
+  });
+}
+
 test('production deploy smoke dry-run lists public HTTPS checks without fetching', async () => {
   const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-dry-run-'));
@@ -117,9 +124,7 @@ test('production deploy smoke verifies public web, API, CORS, and keyed readines
           calls.push({ url: String(url), headers: options.headers ?? {} });
 
           if (url === 'https://app.charitypilot.ie/') {
-            return response(200, {}, baselineHeaders({
-              'content-security-policy': "default-src 'self'; frame-ancestors 'none'; connect-src 'self' https://api.charitypilot.ie",
-            }));
+            return response(200, {}, webHeaders());
           }
 
           if (url === 'https://api.charitypilot.ie/api/v1/health') {
@@ -167,6 +172,57 @@ test('production deploy smoke verifies public web, API, CORS, and keyed readines
   }
 });
 
+test('production deploy smoke fails when web CSP omits the configured API origin', async () => {
+  const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-web-csp-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeSmokeEnv());
+
+  try {
+    const result = await runProductionDeploySmokeFromArgs(
+      ['--production-env-file', envPath],
+      {
+        processEnv: cleanEnv(),
+        fetchImpl: async (url, options = {}) => {
+          if (url === 'https://app.charitypilot.ie/') {
+            return response(200, {}, webHeaders({
+              'content-security-policy': "default-src 'self'; frame-ancestors 'none'; connect-src 'self'",
+            }));
+          }
+          if (url === 'https://api.charitypilot.ie/api/v1/health') {
+            if (options.headers?.origin === 'https://not-charitypilot.example') {
+              return response(200, { status: 'ok' }, baselineHeaders());
+            }
+            return response(200, { status: 'ok' }, baselineHeaders({
+              'access-control-allow-origin': 'https://app.charitypilot.ie',
+              'access-control-allow-credentials': 'true',
+            }));
+          }
+          if (!options.headers?.['x-charitypilot-readiness-key']) {
+            return response(401, { code: 'READINESS_UNAUTHORIZED' }, baselineHeaders());
+          }
+          return response(200, {
+            status: 'ready',
+            checks: {
+              database: true,
+              billingConfigured: true,
+              emailConfigured: true,
+              storageConfigured: true,
+              storageBucketReachable: true,
+            },
+          }, baselineHeaders());
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /web origin CSP connect-src must include https:\/\/api\.charitypilot\.ie/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production deploy smoke fails when API CORS allows an unapproved origin', async () => {
   const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-cors-deny-'));
@@ -180,7 +236,7 @@ test('production deploy smoke fails when API CORS allows an unapproved origin', 
       {
         processEnv: cleanEnv(),
         fetchImpl: async (url, options = {}) => {
-          if (url === 'https://app.charitypilot.ie/') return response(200, {}, baselineHeaders());
+          if (url === 'https://app.charitypilot.ie/') return response(200, {}, webHeaders());
           if (url === 'https://api.charitypilot.ie/api/v1/health') {
             return response(200, { status: 'ok' }, baselineHeaders({
               'access-control-allow-origin': options.headers?.origin ?? '*',
@@ -224,7 +280,7 @@ test('production deploy smoke fails when keyed readiness is not ready', async ()
       {
         processEnv: cleanEnv(),
         fetchImpl: async (url, options = {}) => {
-          if (url === 'https://app.charitypilot.ie/') return response(200, {}, baselineHeaders());
+          if (url === 'https://app.charitypilot.ie/') return response(200, {}, webHeaders());
           if (url === 'https://api.charitypilot.ie/api/v1/health') {
             if (options.headers?.origin === 'https://not-charitypilot.example') {
               return response(200, { status: 'ok' }, baselineHeaders());

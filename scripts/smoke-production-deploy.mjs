@@ -139,6 +139,19 @@ function requireSecurityHeaders(response, issues, label) {
   requireHeader(response, 'content-security-policy', /frame-ancestors 'none'/i, issues, label);
 }
 
+function requireWebCspConnectsToApi(response, apiOrigin, issues) {
+  const csp = response.headers.get('content-security-policy') ?? '';
+  const connectSrc = csp
+    .split(';')
+    .map((directive) => directive.trim())
+    .find((directive) => /^connect-src\b/i.test(directive));
+
+  const allowedOrigins = connectSrc?.split(/\s+/).slice(1) ?? [];
+  if (!allowedOrigins.includes(apiOrigin)) {
+    issues.push(`web origin CSP connect-src must include ${apiOrigin}`);
+  }
+}
+
 async function safeJson(response) {
   try {
     return await response.json();
@@ -158,6 +171,7 @@ async function runSmoke({ webOrigin, apiOrigin, readinessKey, fetchImpl }) {
     issues.push(`web origin must return 2xx: ${webResponse.status}`);
   }
   requireSecurityHeaders(webResponse, issues, 'web origin');
+  requireWebCspConnectsToApi(webResponse, apiOrigin, issues);
 
   const healthResponse = await fetchImpl(healthUrl, {
     headers: { origin: webOrigin },
