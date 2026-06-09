@@ -143,6 +143,19 @@ function validateArtifacts(artifacts, issues) {
   }
 }
 
+function releaseBindingSummary(release) {
+  const manifest = release?.imageDigestManifest ?? {};
+  return [
+    ['apiImage', manifest.apiImage],
+    ['webImage', manifest.webImage],
+    ['migrationImage', manifest.migrationImage],
+    ['webBuildNextPublicApiUrl', manifest.webBuildNextPublicApiUrl],
+    ['webBuildNextPublicSupabaseUrl', manifest.webBuildNextPublicSupabaseUrl],
+  ]
+    .filter(([, value]) => typeof value === 'string' && value.length > 0)
+    .map(([key, value]) => `${key}=${value}`);
+}
+
 export async function runProductionReleaseRunEvidenceFromArgs(
   args = process.argv.slice(2),
   { fetchImpl = globalThis.fetch, processEnv = process.env } = {},
@@ -201,7 +214,11 @@ export async function runProductionReleaseRunEvidenceFromArgs(
 
   return result(
     0,
-    `Production release run evidence passed: GitHub Actions run ${runId} matches release workflow metadata and has release-image-digests artifact.\n`,
+    [
+      `Production release run evidence passed: GitHub Actions run ${runId} matches release workflow metadata and has release-image-digests artifact.`,
+      ...releaseBindingSummary(evidence.release),
+      '',
+    ].join('\n'),
   );
 }
 

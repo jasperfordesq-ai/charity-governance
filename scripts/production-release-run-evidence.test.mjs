@@ -95,6 +95,11 @@ test('production release run checker verifies GitHub workflow metadata and diges
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production release run evidence passed/);
     assert.match(result.stdout, /release-image-digests/);
+    assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:/);
+    assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:/);
+    assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:/);
+    assert.match(result.stdout, /webBuildNextPublicApiUrl=https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stdout, /webBuildNextPublicSupabaseUrl=https:\/\/configured-project\.supabase\.co/);
     assert.equal(seenRequests.length, 2);
     assert.equal(seenRequests[0].options.headers.authorization, 'Bearer ghp_not_printed_token');
     assert.doesNotMatch(result.stdout + result.stderr, /ghp_not_printed_token/);

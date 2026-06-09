@@ -535,6 +535,25 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     if (typeof release?.workflowRunUrl === 'string') {
       requireEvidenceText(text, release.workflowRunUrl, `${checkPath}.evidence must reference release.workflowRunUrl`, issues);
     }
+    for (const [, image] of images) {
+      requireEvidenceText(text, image, `${checkPath}.evidence must include ${image}`, issues);
+    }
+    if (typeof release?.imageDigestManifest?.webBuildNextPublicApiUrl === 'string') {
+      requireEvidenceText(
+        text,
+        release.imageDigestManifest.webBuildNextPublicApiUrl,
+        `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicApiUrl`,
+        issues,
+      );
+    }
+    if (typeof release?.imageDigestManifest?.webBuildNextPublicSupabaseUrl === 'string') {
+      requireEvidenceText(
+        text,
+        release.imageDigestManifest.webBuildNextPublicSupabaseUrl,
+        `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicSupabaseUrl`,
+        issues,
+      );
+    }
   }
 }
 

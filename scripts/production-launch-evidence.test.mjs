@@ -67,6 +67,11 @@ function evidenceEntry(areaId, checkId) {
       'Production release run evidence passed',
       releaseWorkflowRunUrl,
       'release-image-digests',
+      `apiImage=${apiImage}`,
+      `webImage=${webImage}`,
+      `migrationImage=${migrationImage}`,
+      'webBuildNextPublicApiUrl=https://api.charitypilot.ie',
+      'webBuildNextPublicSupabaseUrl=https://configured-project.supabase.co',
     ].join(' ');
   }
 
@@ -447,6 +452,8 @@ test('production launch evidence validator binds release-gate evidence to the ex
     assert.match(result.stderr, /areas\.releaseGate\.checks\.cosign\.evidence must include release-images/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.digest-manifest\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.release-run-api-verification\.evidence must include the check:production:release-run command/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-run-api-verification\.evidence must include ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.release-run-api-verification\.evidence must include release\.imageDigestManifest\.webBuildNextPublicApiUrl/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
