@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createContentSecurityPolicy } from './lib/content-security-policy';
-import { getApiBaseUrl } from './lib/api-config';
+import { getServerApiBaseUrl } from './lib/api-config';
 import { isProtectedAppPath } from './lib/protected-routes';
 
 const AUTH_COOKIE_NAMES = ['charitypilot_access', 'charitypilot_refresh'] as const;
@@ -24,7 +24,7 @@ function protectedAuthCookieHeader(request: NextRequest): string {
 
 function createApiAuthUrl(pathname: string): URL | null {
   try {
-    return new URL(pathname, getApiBaseUrl());
+    return new URL(pathname, getServerApiBaseUrl());
   } catch {
     return null;
   }

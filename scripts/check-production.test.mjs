@@ -2501,8 +2501,8 @@ test('web proxy validates protected sessions with API auth authority before rend
   const protectedBranch = proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?const requestHeaders = createCspRequestHeaders/)?.[0] ?? '';
 
   assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
-  assert.match(proxy, /import \{ getApiBaseUrl \} from '\.\/lib\/api-config'/);
-  assert.match(proxy, /new URL\(pathname,\s*getApiBaseUrl\(\)\)/);
+  assert.match(proxy, /import \{ getServerApiBaseUrl \} from '\.\/lib\/api-config'/);
+  assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(\)\)/);
   assert.doesNotMatch(proxy, /process\.env\.NEXT_PUBLIC_API_URL\?\.trim\(\)\s*\|\|/);
   assert.match(proxy, /async function validateProtectedAuthSession\(request: NextRequest\): Promise<\{/);
   assert.match(proxy, /authenticated:\s*boolean/);

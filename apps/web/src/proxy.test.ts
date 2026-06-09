@@ -55,6 +55,31 @@ test('server-side protected route refresh sends the deployed web Origin required
   assert.equal(new Headers(refreshCall.init?.headers).get('Origin'), 'https://app.charitypilot.ie');
 });
 
+test('local Docker server-side protected route validation uses the internal API origin', async () => {
+  process.env.NODE_ENV = 'development';
+  process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3002';
+  process.env.CHARITYPILOT_INTERNAL_API_URL = 'http://api:3002';
+
+  const fetchCalls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    fetchCalls.push(input.toString());
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+
+  const response = await proxy(new NextRequest('http://localhost:3003/dashboard', {
+    headers: {
+      cookie: 'charitypilot_access=local-access; charitypilot_refresh=local-refresh',
+    },
+  }));
+
+  assert.equal(response.headers.get('location'), null);
+  assert.deepEqual(fetchCalls, ['http://api:3002/api/v1/auth/me']);
+  assert.match(
+    response.headers.get('Content-Security-Policy') ?? '',
+    /connect-src[^;]*http:\/\/localhost:3002/,
+  );
+});
+
 test('server-side protected route validation fails closed for unapproved production API origins', async () => {
   process.env.NODE_ENV = 'production';
   process.env.NEXT_PUBLIC_API_URL = 'https://api.attacker.example';

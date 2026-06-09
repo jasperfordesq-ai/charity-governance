@@ -45,6 +45,7 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_dev@db:5432\/charitypilot/);
   assert.match(compose, /FRONTEND_URL:\s+http:\/\/localhost:3003/);
   assert.match(compose, /NEXT_PUBLIC_API_URL:\s+http:\/\/localhost:3002/);
+  assert.match(compose, /CHARITYPILOT_INTERNAL_API_URL:\s+http:\/\/api:3002/);
   assert.match(compose, /127\.0\.0\.1:3002:3002/);
   assert.match(compose, /127\.0\.0\.1:3003:3003/);
   assert.match(compose, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);

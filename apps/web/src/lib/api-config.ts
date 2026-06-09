@@ -2,6 +2,7 @@ const DEFAULT_DEVELOPMENT_API_URL = 'http://localhost:3002';
 const APPROVED_PRODUCTION_HOST = 'charitypilot.ie';
 
 type ApiEnv = {
+  CHARITYPILOT_INTERNAL_API_URL?: string;
   NEXT_PUBLIC_API_URL?: string;
   NODE_ENV?: string;
 };
@@ -26,6 +27,18 @@ export function getApiBaseUrl(env: ApiEnv = process.env): string {
   return DEFAULT_DEVELOPMENT_API_URL;
 }
 
+export function getServerApiBaseUrl(env: ApiEnv = process.env): string {
+  const configuredInternalUrl = env.CHARITYPILOT_INTERNAL_API_URL?.trim();
+
+  if (configuredInternalUrl) {
+    const normalizedUrl = configuredInternalUrl.replace(/\/+$/, '');
+    validateServerApiUrl(normalizedUrl, env);
+    return normalizedUrl;
+  }
+
+  return getApiBaseUrl(env);
+}
+
 function validateProductionApiUrl(value: string): void {
   let url: URL;
 
@@ -46,5 +59,27 @@ function validateProductionApiUrl(value: string): void {
   const host = url.hostname.toLowerCase();
   if (host !== APPROVED_PRODUCTION_HOST && !host.endsWith(`.${APPROVED_PRODUCTION_HOST}`)) {
     throw new Error('NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname');
+  }
+}
+
+function validateServerApiUrl(value: string, env: ApiEnv): void {
+  if (env.NODE_ENV === 'production') {
+    validateProductionApiUrl(value);
+    return;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('CHARITYPILOT_INTERNAL_API_URL must be a valid URL');
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('CHARITYPILOT_INTERNAL_API_URL must use http:// or https://');
+  }
+
+  if (url.origin !== value) {
+    throw new Error('CHARITYPILOT_INTERNAL_API_URL must be an origin-only URL');
   }
 }
