@@ -49,6 +49,7 @@ const COMPOSE_RUNTIME_WEB_SUPABASE_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
+const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 
 function parseEnvFile(path) {
   return Object.fromEntries(
@@ -335,6 +336,21 @@ function requireAccessTokenExpiry(env, issues) {
   }
 }
 
+function requireRefreshTokenTtlDays(env, issues) {
+  const value = envValue(env, 'REFRESH_TOKEN_TTL_DAYS').trim();
+  if (!value) return;
+
+  if (!/^[1-9]\d*$/.test(value)) {
+    issues.push('REFRESH_TOKEN_TTL_DAYS must be an integer from 1 to 30');
+    return;
+  }
+
+  const ttlDays = Number(value);
+  if (ttlDays > MAX_REFRESH_TOKEN_TTL_DAYS) {
+    issues.push('REFRESH_TOKEN_TTL_DAYS must be an integer from 1 to 30');
+  }
+}
+
 function hostMatchesCookieDomain(hostname, cookieDomain) {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -478,6 +494,7 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
   requireApprovedEmailSender(env, 'EMAIL_FROM', issues);
   requireAccessTokenExpiry(env, issues);
+  requireRefreshTokenTtlDays(env, issues);
 
   for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
     const value = envValue(env, key);

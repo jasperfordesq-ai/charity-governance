@@ -122,6 +122,20 @@ test('validateProductionEnv rejects malformed or overlong access token expiry va
   }
 });
 
+test('validateProductionEnv rejects malformed or out-of-range refresh token TTL values', () => {
+  for (const ttl of ['forever', '0', '-1', '31']) {
+    setCompleteProductionEnv({ REFRESH_TOKEN_TTL_DAYS: ttl });
+
+    assert.throws(
+      () => validateProductionEnv(),
+      (error: unknown) =>
+        error instanceof AppError &&
+        Array.isArray(error.details) &&
+        error.details.includes('REFRESH_TOKEN_TTL_DAYS must be an integer from 1 to 30'),
+    );
+  }
+});
+
 test('validateProductionEnv rejects unapproved production email sender domains', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';

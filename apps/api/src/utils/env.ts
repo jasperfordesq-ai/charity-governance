@@ -8,6 +8,7 @@ export { isConfiguredSecret } from './secrets.js';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
+const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 
 function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
   return (
@@ -262,6 +263,21 @@ function requireAccessTokenExpiry(issues: string[]) {
   }
 }
 
+function requireRefreshTokenTtlDays(issues: string[]) {
+  const value = process.env.REFRESH_TOKEN_TTL_DAYS?.trim();
+  if (!value) return;
+
+  if (!/^[1-9]\d*$/.test(value)) {
+    issues.push('REFRESH_TOKEN_TTL_DAYS must be an integer from 1 to 30');
+    return;
+  }
+
+  const ttlDays = Number(value);
+  if (ttlDays > MAX_REFRESH_TOKEN_TTL_DAYS) {
+    issues.push('REFRESH_TOKEN_TTL_DAYS must be an integer from 1 to 30');
+  }
+}
+
 function isValidProxyAddress(entry: string): boolean {
   if (['true', 'false', '*', 'all', '0.0.0.0/0', '::/0'].includes(entry.toLowerCase())) {
     return false;
@@ -406,6 +422,7 @@ export function validateProductionEnv(): void {
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
   requireAccessTokenExpiry(issues);
+  requireRefreshTokenTtlDays(issues);
   requireUrl('FRONTEND_URL', issues, {
     requireHttps: true,
     allowCommaSeparated: true,

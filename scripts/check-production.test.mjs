@@ -379,6 +379,24 @@ test('fails when production access token expiry is malformed or overlong', () =>
   }
 });
 
+test('fails when production refresh token TTL is malformed or out of range', () => {
+  for (const ttl of ['forever', '0', '-1', '31']) {
+    const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-refresh-ttl-'));
+    const envPath = join(tempDir, 'production.env');
+
+    writeFileSync(envPath, completeProductionEnv({ REFRESH_TOKEN_TTL_DAYS: ttl }));
+
+    try {
+      const result = runPreflight([`--production-env-file=${envPath}`]);
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /REFRESH_TOKEN_TTL_DAYS must be an integer from 1 to 30/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('fails when the compose runtime web API URL is missing', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-missing-'));
   const envPath = join(tempDir, 'production.env');
