@@ -276,6 +276,13 @@ jobs:
           grep -qi "^pragma: no-cache" "${api_headers}"
           grep -qi "^expires: 0" "${api_headers}"
           grep -qi "^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "${api_headers}"
+          disallowed_cors_headers="$(mktemp)"
+          curl --silent --show-error --output /dev/null --dump-header "${disallowed_cors_headers}" -H "origin: https://not-charitypilot.example" http://127.0.0.1:3002/api/v1/health
+          if grep -qi "^access-control-allow-origin: https://not-charitypilot.example" "${disallowed_cors_headers}" ||
+            grep -qi "^access-control-allow-origin: \\*" "${disallowed_cors_headers}"; then
+            echo "API Docker smoke must not allow an unapproved browser Origin." >&2
+            exit 1
+          fi
           readiness_unauthorized_body="$(mktemp)"
           readiness_unauthorized_status="$(curl --silent --show-error --output "${readiness_unauthorized_body}" --write-out "%{http_code}" http://127.0.0.1:3002/api/v1/health/readiness)"
           test "${readiness_unauthorized_status}" = "401"

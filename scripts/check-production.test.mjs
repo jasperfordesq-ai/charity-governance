@@ -2901,6 +2901,10 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   assert.match(smokeStep, /body\.checks\.database !== true/);
   assert.match(smokeStep, /body\.checks\.storageConfigured !== true/);
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
+  assert.match(smokeStep, /disallowed_cors_headers="\$\(mktemp\)"/);
+  assert.match(smokeStep, /-H "origin: https:\/\/not-charitypilot\.example"/);
+  assert.match(smokeStep, /grep -qi "\^access-control-allow-origin: https:\/\/not-charitypilot\.example" "\$\{disallowed_cors_headers\}"/);
+  assert.match(smokeStep, /API Docker smoke must not allow an unapproved browser Origin/);
   assert.match(smokeStep, /register_email="api-smoke-\$\{GITHUB_SHA:-local\}@example\.com"/);
   assert.match(smokeStep, /register_payload="\$\(mktemp\)"/);
   assert.match(smokeStep, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/register/);
@@ -3319,6 +3323,10 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
   assert.match(smokeStep, /body\.checks\.database !== true/);
   assert.match(smokeStep, /body\.checks\.storageConfigured !== true/);
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
+  assert.match(smokeStep, /disallowed_cors_headers="\$\(mktemp\)"/);
+  assert.match(smokeStep, /-H "origin: https:\/\/not-charitypilot\.example"/);
+  assert.match(smokeStep, /grep -qi "\^access-control-allow-origin: https:\/\/not-charitypilot\.example" "\$\{disallowed_cors_headers\}"/);
+  assert.match(smokeStep, /API Docker smoke must not allow an unapproved browser Origin/);
   assert.match(smokeStep, /register_email="api-smoke-\$\{GITHUB_SHA:-local\}@example\.com"/);
   assert.match(smokeStep, /register_payload="\$\(mktemp\)"/);
   assert.match(smokeStep, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/register/);
