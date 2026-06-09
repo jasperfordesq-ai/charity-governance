@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const composeArgs = ['compose', '-f', 'compose.yml', '-f', 'compose.local.yml'];
 const prismaConfigArgs = ['--config', 'apps/api/prisma.config.ts'];
 const prismaSchemaArgs = ['--schema', 'apps/api/prisma/schema.prisma'];
-const dryRun = process.argv.includes('--dry-run');
 const localAppServices = ['api', 'web'];
 
 const commands = [
@@ -66,16 +65,16 @@ function formatCommand(command) {
   return command.map(shellQuote).join(' ');
 }
 
-function captureCommand(command) {
+function captureCommand(command, { dryRun, processEnv, spawnSyncImpl, writeOutput }) {
   if (dryRun) {
-    console.log(formatCommand(command));
+    writeOutput(`${formatCommand(command)}\n`);
     return '';
   }
 
   const [executable, ...args] = command;
-  const result = spawnSync(executable, args, {
+  const result = spawnSyncImpl(executable, args, {
     cwd: repoRoot,
-    env: process.env,
+    env: processEnv,
     encoding: 'utf8',
   });
 
@@ -86,16 +85,16 @@ function captureCommand(command) {
   return result.stdout;
 }
 
-function runCommand(command) {
+function runCommand(command, { dryRun, processEnv, spawnSyncImpl, writeOutput }) {
   if (dryRun) {
-    console.log(formatCommand(command));
+    writeOutput(`${formatCommand(command)}\n`);
     return;
   }
 
   const [executable, ...args] = command;
-  const result = spawnSync(executable, args, {
+  const result = spawnSyncImpl(executable, args, {
     cwd: repoRoot,
-    env: process.env,
+    env: processEnv,
     encoding: 'utf8',
     stdio: 'inherit',
   });
@@ -105,12 +104,13 @@ function runCommand(command) {
   }
 }
 
-function runningLocalAppServices() {
+function runningLocalAppServices(context) {
+  const { dryRun } = context;
   if (dryRun) {
     return localAppServices;
   }
 
-  const output = captureCommand(['docker', ...composeArgs, 'ps', '--format', 'json']);
+  const output = captureCommand(['docker', ...composeArgs, 'ps', '--format', 'json'], context);
   const runningServices = output
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -127,32 +127,67 @@ function runningLocalAppServices() {
   return services;
 }
 
-function stopLocalAppServices(services) {
+function stopLocalAppServices(services, context) {
   if (services.length === 0) {
     return;
   }
 
-  runCommand(['docker', ...composeArgs, 'stop', ...services]);
+  runCommand(['docker', ...composeArgs, 'stop', ...services], context);
 }
 
-function startLocalAppServices(services) {
+function startLocalAppServices(services, context) {
   if (services.length === 0) {
     return;
   }
 
-  runCommand(['docker', ...composeArgs, 'up', '--wait', '--wait-timeout', '180', '-d', ...services]);
+  runCommand(['docker', ...composeArgs, 'up', '--wait', '--wait-timeout', '180', '-d', ...services], context);
 }
 
-const localAppServicesRunningBeforeMigration = runningLocalAppServices();
+export function runLocalDockerMigrations({
+  args = process.argv.slice(2),
+  processEnv = process.env,
+  spawnSyncImpl = spawnSync,
+  writeOutput = (value) => process.stdout.write(value),
+} = {}) {
+  const context = {
+    dryRun: args.includes('--dry-run'),
+    processEnv,
+    spawnSyncImpl,
+    writeOutput,
+  };
+  const localAppServicesRunningBeforeMigration = runningLocalAppServices(context);
 
-stopLocalAppServices(localAppServicesRunningBeforeMigration);
+  stopLocalAppServices(localAppServicesRunningBeforeMigration, context);
 
-for (const command of commands) {
-  runCommand(command);
+  let pendingError = null;
+  try {
+    for (const command of commands) {
+      runCommand(command, context);
+    }
+  } catch (error) {
+    pendingError = error;
+    throw error;
+  } finally {
+    try {
+      startLocalAppServices(localAppServicesRunningBeforeMigration, context);
+    } catch (restartError) {
+      if (!pendingError) {
+        throw restartError;
+      }
+      pendingError.message = `${pendingError.message}\nFailed to restart local app services: ${restartError.message}`;
+    }
+  }
+
+  if (!context.dryRun) {
+    writeOutput('Local Docker migrations applied and Prisma migration status verified.\n');
+  }
 }
 
-startLocalAppServices(localAppServicesRunningBeforeMigration);
-
-if (!dryRun) {
-  console.log('Local Docker migrations applied and Prisma migration status verified.');
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    runLocalDockerMigrations();
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(1);
+  }
 }

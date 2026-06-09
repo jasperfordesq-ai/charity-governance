@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -170,26 +170,78 @@ test('local Docker migrations are a first-class command and are dry-runnable', (
 test('local Docker migrations stop running app services before refreshing dependencies', () => {
   const migrationScript = readRepoFile('scripts/migrate-local-docker.mjs');
 
-  assert.match(migrationScript, /const localAppServicesRunningBeforeMigration = runningLocalAppServices\(\)/);
-  assert.match(migrationScript, /stopLocalAppServices\(localAppServicesRunningBeforeMigration\)/);
-  assert.match(migrationScript, /startLocalAppServices\(localAppServicesRunningBeforeMigration\)/);
+  assert.match(migrationScript, /const localAppServicesRunningBeforeMigration = runningLocalAppServices\(context\)/);
+  assert.match(migrationScript, /stopLocalAppServices\(localAppServicesRunningBeforeMigration, context\)/);
+  assert.match(migrationScript, /startLocalAppServices\(localAppServicesRunningBeforeMigration, context\)/);
   assert.ok(
-    migrationScript.indexOf('const localAppServicesRunningBeforeMigration = runningLocalAppServices()') <
-      migrationScript.indexOf('stopLocalAppServices(localAppServicesRunningBeforeMigration)'),
+    migrationScript.indexOf('const localAppServicesRunningBeforeMigration = runningLocalAppServices(context)') <
+      migrationScript.indexOf('stopLocalAppServices(localAppServicesRunningBeforeMigration, context)'),
     'local app services must be recorded before they are stopped',
   );
   assert.ok(
-    migrationScript.indexOf('stopLocalAppServices(localAppServicesRunningBeforeMigration)') <
+    migrationScript.indexOf('stopLocalAppServices(localAppServicesRunningBeforeMigration, context)') <
       migrationScript.indexOf('for (const command of commands)'),
     'local app services must be recorded before the dependency refresh can disrupt watchers',
   );
   assert.ok(
-    migrationScript.indexOf('startLocalAppServices(localAppServicesRunningBeforeMigration)') >
+    migrationScript.indexOf('startLocalAppServices(localAppServicesRunningBeforeMigration, context)') >
       migrationScript.indexOf('for (const command of commands)'),
     'running local app services must be started after migrations and dependency refresh complete',
   );
   assert.match(migrationScript, /'stop',\s*\.\.\.services/);
   assert.match(migrationScript, /'up', '--wait', '--wait-timeout', '180', '-d', \.\.\.services/);
+});
+
+test('local Docker migrations restart previously running app services when migration fails', async () => {
+  const originalArgv = process.argv;
+  let module;
+  try {
+    process.argv = ['node', 'scripts/migrate-local-docker.mjs', '--dry-run'];
+    module = await import(`${pathToFileURL(join(repoRoot, 'scripts', 'migrate-local-docker.mjs')).href}?restart-failure-test`);
+  } finally {
+    process.argv = originalArgv;
+  }
+  const calls = [];
+  const spawnSyncImpl = (executable, args) => {
+    const command = [executable, ...args];
+    calls.push(command.join(' '));
+    if (args.includes('ps') && args.includes('--format') && args.includes('json')) {
+      return {
+        status: 0,
+        stdout: [
+          JSON.stringify({ Service: 'api', State: 'running' }),
+          JSON.stringify({ Service: 'web', State: 'running' }),
+          '',
+        ].join('\n'),
+        stderr: '',
+      };
+    }
+    if (args.includes('migrate') && args.includes('deploy')) {
+      return { status: 23, stdout: '', stderr: 'simulated migrate deploy failure\n' };
+    }
+    return { status: 0, stdout: '', stderr: '' };
+  };
+
+  assert.equal(typeof module.runLocalDockerMigrations, 'function');
+  assert.throws(
+    () => module.runLocalDockerMigrations({
+      args: [],
+      processEnv: {},
+      spawnSyncImpl,
+      writeOutput: () => {},
+    }),
+    /migrate deploy.*failed with exit code 23/s,
+  );
+
+  const stopIndex = calls.indexOf('docker compose -f compose.yml -f compose.local.yml stop api web');
+  const failedMigrationIndex = calls.findIndex((call) => call.includes('migrate deploy'));
+  const restartIndex = calls.indexOf('docker compose -f compose.yml -f compose.local.yml up --wait --wait-timeout 180 -d api web');
+
+  assert.notEqual(stopIndex, -1, 'migration runner must stop previously running app services');
+  assert.notEqual(failedMigrationIndex, -1, 'test must simulate a migration failure');
+  assert.notEqual(restartIndex, -1, 'migration runner must restart previously running app services after failure');
+  assert.ok(stopIndex < failedMigrationIndex, 'services must stop before the failing migration');
+  assert.ok(failedMigrationIndex < restartIndex, 'services must restart after the failing migration');
 });
 
 test('local Docker smoke reapplies migrations even when services are already running', () => {
