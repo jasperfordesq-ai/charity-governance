@@ -17,6 +17,8 @@
     "src/lib/api-config.test.ts",
     "src/lib/content-security-policy.ts",
     "src/lib/content-security-policy.test.ts",
+    "src/lib/json-ld.ts",
+    "src/lib/json-ld.test.ts",
     "src/lib/plan-feature.ts",
     "src/lib/plan-feature.test.ts",
     "src/lib/protected-routes.ts",

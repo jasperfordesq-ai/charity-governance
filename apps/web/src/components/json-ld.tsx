@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { serialiseJsonLdForScript } from '@/lib/json-ld';
 
 async function getNonce() {
   return (await headers()).get('x-nonce') ?? undefined;
@@ -32,7 +33,7 @@ export async function OrganisationJsonLd() {
     <script
       nonce={nonce}
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serialiseJsonLdForScript(data) }}
     />
   );
 }
@@ -70,7 +71,7 @@ export async function BlogPostJsonLd({
     <script
       nonce={nonce}
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serialiseJsonLdForScript(data) }}
     />
   );
 }
@@ -91,7 +92,7 @@ export async function FaqJsonLd({ faqs }: { faqs: Array<{ question: string; answ
     <script
       nonce={nonce}
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serialiseJsonLdForScript(data) }}
     />
   );
 }
