@@ -3090,7 +3090,7 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(uploadStep, /name:\s+release-image-digests/);
   assert.match(uploadStep, /path:\s+release-image-digests\.env/);
   assert.match(uploadStep, /if-no-files-found:\s+error/);
-  assert.match(uploadStep, /retention-days:\s+30/);
+  assert.match(uploadStep, /retention-days:\s+90/);
   assert.ok(
     workflow.indexOf('name: Verify published image signatures') < manifestStepStart,
     'manifest must be generated only after signatures are verified',

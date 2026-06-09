@@ -504,6 +504,23 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       }
     }
   }
+
+  if (areaId === 'jobs' && checkId === 'scheduler-logs-alerts') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredFailureAlerts = [
+      'deadline-reminders failure alert',
+      'document-storage-cleanup failure alert',
+    ];
+    for (const alertEvidence of requiredFailureAlerts) {
+      if (!text.includes(alertEvidence)) {
+        issues.push(`${checkPath}.evidence must include ${alertEvidence} evidence`);
+      }
+    }
+  }
 }
 
 function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {

@@ -7,6 +7,7 @@ export { isConfiguredSecret } from './secrets.js';
 
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
+const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 
 function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
   return (
@@ -243,6 +244,24 @@ function requireMinLength(name: string, minLength: number, issues: string[]) {
   }
 }
 
+function requireAccessTokenExpiry(issues: string[]) {
+  const value = process.env.JWT_EXPIRY?.trim();
+  if (!value) return;
+
+  const match = value.match(/^([1-9]\d*)([smh])$/i);
+  if (!match) {
+    issues.push('JWT_EXPIRY must be a duration like 15m, 1h, or 3600s');
+    return;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const multiplier = unit === 'h' ? 3600 : unit === 'm' ? 60 : 1;
+  if (amount * multiplier > MAX_ACCESS_TOKEN_EXPIRY_SECONDS) {
+    issues.push('JWT_EXPIRY must not exceed 1h in production');
+  }
+}
+
 function isValidProxyAddress(entry: string): boolean {
   if (['true', 'false', '*', 'all', '0.0.0.0/0', '::/0'].includes(entry.toLowerCase())) {
     return false;
@@ -387,6 +406,7 @@ export function validateProductionEnv(): void {
   requireMinLength('READINESS_API_KEY', 32, issues);
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
+  requireAccessTokenExpiry(issues);
   requireUrl('FRONTEND_URL', issues, {
     requireHttps: true,
     allowCommaSeparated: true,

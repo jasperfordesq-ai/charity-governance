@@ -114,6 +114,15 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'jobs' && checkId === 'scheduler-logs-alerts') {
+    entry.type = 'command-output';
+    entry.description = [
+      'Production scheduler logs captured.',
+      'deadline-reminders failure alert evidence recorded.',
+      'document-storage-cleanup failure alert evidence recorded.',
+    ].join(' ');
+  }
+
   return entry;
 }
 
@@ -357,6 +366,24 @@ test('production launch evidence validator requires every production job command
     assert.equal(result.status, 1);
     assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-command\.evidence must include dist\/jobs\/production-scheduler\.js/);
     assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-command\.evidence must include dist\/jobs\/cleanup-document-storage\.js/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires both production job failure alerts', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.jobs.checks['scheduler-logs-alerts'].evidence[0].description =
+    'Production scheduler logs captured without named failure alert evidence';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-logs-alerts\.evidence must include deadline-reminders failure alert evidence/);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-logs-alerts\.evidence must include document-storage-cleanup failure alert evidence/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

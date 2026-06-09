@@ -577,7 +577,7 @@ jobs:
           name: release-image-digests
           path: release-image-digests.env
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
       - name: Stop PostgreSQL
         if: always()

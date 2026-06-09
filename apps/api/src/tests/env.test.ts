@@ -105,6 +105,23 @@ test('validateProductionEnv accepts complete production configuration', () => {
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
+test('validateProductionEnv rejects malformed or overlong access token expiry values', () => {
+  for (const [expiry, expectedIssue] of [
+    ['forever', 'JWT_EXPIRY must be a duration like 15m, 1h, or 3600s'],
+    ['2h', 'JWT_EXPIRY must not exceed 1h in production'],
+  ] as const) {
+    setCompleteProductionEnv({ JWT_EXPIRY: expiry });
+
+    assert.throws(
+      () => validateProductionEnv(),
+      (error: unknown) =>
+        error instanceof AppError &&
+        Array.isArray(error.details) &&
+        error.details.includes(expectedIssue),
+    );
+  }
+});
+
 test('validateProductionEnv rejects unapproved production email sender domains', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
