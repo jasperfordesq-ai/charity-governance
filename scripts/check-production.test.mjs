@@ -1551,6 +1551,20 @@ test('Prisma CLI and client versions are pinned together for production migratio
   );
 });
 
+test('API Prisma configuration avoids deprecated package.json config', () => {
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
+  const prismaConfig = readRepoFile('apps/api/prisma.config.ts');
+  const localMigrationScript = readRepoFile('scripts/migrate-local-docker.mjs');
+
+  assert.equal(apiPackage.prisma, undefined);
+  assert.match(prismaConfig, /import\s+\{\s*defineConfig\s*\}\s+from\s+'prisma\/config'/);
+  assert.match(prismaConfig, /export\s+default\s+defineConfig\(\{/);
+  assert.match(prismaConfig, /schema:\s*'prisma\/schema\.prisma'/);
+  assert.match(prismaConfig, /migrations:\s*\{[\s\S]*seed:\s*'tsx prisma\/seed\.ts'/);
+  assert.match(localMigrationScript, /--config', 'apps\/api\/prisma\.config\.ts'/);
+  assert.doesNotMatch(localMigrationScript, /package\.json#prisma/);
+});
+
 test('migration runner package lock supports the production Docker npm ci command', () => {
   const npmArgs = ['ci', '--omit=dev', '--omit=peer', '--no-audit', '--no-fund', '--dry-run'];
   const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';

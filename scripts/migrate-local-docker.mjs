@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const composeArgs = ['compose', '-f', 'compose.yml', '-f', 'compose.local.yml'];
+const prismaConfigArgs = ['--config', 'apps/api/prisma.config.ts'];
 const prismaSchemaArgs = ['--schema', 'apps/api/prisma/schema.prisma'];
 const dryRun = process.argv.includes('--dry-run');
 const localAppServices = ['api', 'web'];
@@ -24,8 +25,36 @@ const commands = [
     '-lc',
     'npm ci --include=dev && npm run build -w @charitypilot/shared && npm run db:generate -w @charitypilot/api',
   ],
-  ['docker', ...composeArgs, 'run', '--rm', '--no-deps', '-T', 'api', 'npx', 'prisma', 'migrate', 'deploy', ...prismaSchemaArgs],
-  ['docker', ...composeArgs, 'run', '--rm', '--no-deps', '-T', 'api', 'npx', 'prisma', 'migrate', 'status', ...prismaSchemaArgs],
+  [
+    'docker',
+    ...composeArgs,
+    'run',
+    '--rm',
+    '--no-deps',
+    '-T',
+    'api',
+    'npx',
+    'prisma',
+    ...prismaConfigArgs,
+    'migrate',
+    'deploy',
+    ...prismaSchemaArgs,
+  ],
+  [
+    'docker',
+    ...composeArgs,
+    'run',
+    '--rm',
+    '--no-deps',
+    '-T',
+    'api',
+    'npx',
+    'prisma',
+    ...prismaConfigArgs,
+    'migrate',
+    'status',
+    ...prismaSchemaArgs,
+  ],
 ];
 
 function shellQuote(value) {

@@ -163,8 +163,8 @@ test('local Docker migrations are a first-class command and are dry-runnable', (
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml up --wait --wait-timeout 180 -d db/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc "npm ci --include=dev && npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api"/);
-  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
-  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate status --schema apps\/api\/prisma\/schema\.prisma/);
 });
 
 test('local Docker migrations stop running app services before refreshing dependencies', () => {

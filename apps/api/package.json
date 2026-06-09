@@ -18,9 +18,6 @@
     "jobs:deadline-reminders": "node dist/jobs/send-deadline-reminders.js",
     "jobs:document-storage-cleanup": "node dist/jobs/cleanup-document-storage.js"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@charitypilot/shared": "*",
     "@fastify/cookie": "^11.0.2",
