@@ -287,7 +287,7 @@ export class TeamService {
           throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
         }
 
-        if (existingInvite) {
+        if (foundExistingUser || existingInvite) {
           return null;
         }
 
@@ -306,10 +306,6 @@ export class TeamService {
             expiresAt,
           },
         });
-        if (foundExistingUser) {
-          return null;
-        }
-
         return {
           organisationName: foundOrganisation.name,
           inviterName: foundInviter?.name ?? 'A CharityPilot admin',

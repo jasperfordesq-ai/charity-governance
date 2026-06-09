@@ -600,16 +600,19 @@ test('team invites do not disclose why an invite recipient is unavailable', asyn
       name: 'same organisation member',
       existingUser: { id: 'member-1', organisationId: 'org-1' },
       existingInvite: null,
+      expectInviteCreated: false,
     },
     {
       name: 'another organisation user',
       existingUser: { id: 'member-2', organisationId: 'org-2' },
       existingInvite: null,
+      expectInviteCreated: false,
     },
     {
       name: 'active invite',
       existingUser: null,
       existingInvite: { id: 'invite-1' },
+      expectInviteCreated: false,
     },
   ];
 
@@ -657,7 +660,7 @@ test('team invites do not disclose why an invite recipient is unavailable', asyn
     });
 
     assert.deepEqual(result, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
-    assert.equal(createCalled, scenario.existingInvite === null, scenario.name);
+    assert.equal(createCalled, scenario.expectInviteCreated, scenario.name);
     assert.equal(emailCalled, false, scenario.name);
   }
 });
