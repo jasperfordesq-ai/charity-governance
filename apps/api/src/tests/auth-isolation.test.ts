@@ -220,6 +220,42 @@ test('access tokens are signed and verified with the pinned HS256 algorithm', as
   assert.throws(() => verifyAccessToken(hs384Token), /invalid algorithm/);
 });
 
+test('access tokens are bound to the CharityPilot issuer and API audience', async () => {
+  const { default: jwt } = await import('jsonwebtoken');
+  const { signAccessToken, verifyAccessToken } = await import('../utils/jwt.js');
+
+  const payload = {
+    userId: 'user-1',
+    organisationId: 'org-1',
+    role: 'OWNER',
+    sessionId: 'session-1',
+  } as const;
+  const token = signAccessToken(payload);
+  const decoded = jwt.decode(token, { complete: true });
+  const decodedPayload = decoded?.payload && typeof decoded.payload === 'object'
+    ? decoded.payload
+    : {};
+
+  assert.equal(decodedPayload.iss, 'charitypilot-api');
+  assert.equal(decodedPayload.aud, 'charitypilot-web');
+  assert.deepEqual(verifyAccessToken(token), payload);
+
+  const wrongAudienceToken = jwt.sign(payload, process.env.JWT_SECRET as string, {
+    algorithm: 'HS256',
+    expiresIn: '1h',
+    issuer: 'charitypilot-api',
+    audience: 'attacker-client',
+  });
+  const missingIssuerToken = jwt.sign(payload, process.env.JWT_SECRET as string, {
+    algorithm: 'HS256',
+    expiresIn: '1h',
+    audience: 'charitypilot-web',
+  });
+
+  assert.throws(() => verifyAccessToken(wrongAudienceToken));
+  assert.throws(() => verifyAccessToken(missingIssuerToken));
+});
+
 test('resendEmailVerification rotates the token and emails unverified users', async () => {
   const { AuthService } = await import('../services/auth.service.js');
 

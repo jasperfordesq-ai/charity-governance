@@ -11,6 +11,8 @@ function requireEnv(name: string): string {
 const JWT_SECRET = requireEnv('JWT_SECRET');
 const JWT_EXPIRY = process.env.JWT_EXPIRY ?? '15m';
 const ACCESS_TOKEN_ALGORITHM = 'HS256';
+const ACCESS_TOKEN_ISSUER = 'charitypilot-api';
+const ACCESS_TOKEN_AUDIENCE = 'charitypilot-web';
 
 export interface TokenPayload {
   userId: string;
@@ -22,12 +24,18 @@ export interface TokenPayload {
 export function signAccessToken(payload: TokenPayload): string {
   return jwt.sign(payload, JWT_SECRET, {
     algorithm: ACCESS_TOKEN_ALGORITHM,
+    issuer: ACCESS_TOKEN_ISSUER,
+    audience: ACCESS_TOKEN_AUDIENCE,
     expiresIn: JWT_EXPIRY as string & jwt.SignOptions['expiresIn'],
   });
 }
 
 export function verifyAccessToken(token: string): TokenPayload {
-  const decoded = jwt.verify(token, JWT_SECRET, { algorithms: [ACCESS_TOKEN_ALGORITHM] });
+  const decoded = jwt.verify(token, JWT_SECRET, {
+    algorithms: [ACCESS_TOKEN_ALGORITHM],
+    issuer: ACCESS_TOKEN_ISSUER,
+    audience: ACCESS_TOKEN_AUDIENCE,
+  });
 
   if (!decoded || typeof decoded !== 'object') {
     throw new Error('Invalid token payload');

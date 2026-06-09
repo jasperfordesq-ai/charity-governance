@@ -2299,8 +2299,14 @@ test('API access tokens pin their JWT algorithm', () => {
   const jwtUtil = readRepoFile('apps/api/src/utils/jwt.ts');
 
   assert.match(jwtUtil, /const ACCESS_TOKEN_ALGORITHM = 'HS256'/);
+  assert.match(jwtUtil, /const ACCESS_TOKEN_ISSUER = 'charitypilot-api'/);
+  assert.match(jwtUtil, /const ACCESS_TOKEN_AUDIENCE = 'charitypilot-web'/);
   assert.match(jwtUtil, /jwt\.sign\(payload,\s*JWT_SECRET,\s*\{[\s\S]*algorithm:\s*ACCESS_TOKEN_ALGORITHM/);
-  assert.match(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET,\s*\{\s*algorithms:\s*\[ACCESS_TOKEN_ALGORITHM\]\s*\}\)/);
+  assert.match(jwtUtil, /jwt\.sign\(payload,\s*JWT_SECRET,\s*\{[\s\S]*issuer:\s*ACCESS_TOKEN_ISSUER/);
+  assert.match(jwtUtil, /jwt\.sign\(payload,\s*JWT_SECRET,\s*\{[\s\S]*audience:\s*ACCESS_TOKEN_AUDIENCE/);
+  assert.match(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET,\s*\{[\s\S]*algorithms:\s*\[ACCESS_TOKEN_ALGORITHM\]/);
+  assert.match(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET,\s*\{[\s\S]*issuer:\s*ACCESS_TOKEN_ISSUER/);
+  assert.match(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET,\s*\{[\s\S]*audience:\s*ACCESS_TOKEN_AUDIENCE/);
   assert.doesNotMatch(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET\);/);
 });
 
