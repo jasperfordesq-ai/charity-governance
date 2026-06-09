@@ -381,6 +381,57 @@ function releaseImageRefs(release) {
   ].filter(([, value]) => typeof value === 'string' && value.length > 0);
 }
 
+const executableCheckerEvidenceRequirements = new Map([
+  ['releaseGate.check-production', {
+    commandLabel: 'check:production',
+    command: 'npm run check:production -- --production-env-file=.env.production',
+    successText: 'Production preflight passed',
+  }],
+  ['hostingDnsTls.hosting-check', {
+    commandLabel: 'check:production:hosting',
+    command: 'npm run check:production:hosting -- --production-env-file=.env.production',
+    successText: 'Production hosting check passed',
+  }],
+  ['database.database-check', {
+    commandLabel: 'check:production:database',
+    command: 'npm run check:production:database -- --production-env-file=.env.production',
+    successText: 'Production database check passed',
+  }],
+  ['supabaseStorage.supabase-check', {
+    commandLabel: 'check:production:supabase',
+    command: 'npm run check:production:supabase -- --production-env-file=.env.production',
+    successText: 'Production Supabase storage check passed',
+  }],
+  ['billingAndEmail.providers-check', {
+    commandLabel: 'check:production:providers',
+    command: 'npm run check:production:providers -- --production-env-file=.env.production',
+    successText: 'Production provider check passed',
+  }],
+  ['observability.observability-check', {
+    commandLabel: 'check:production:observability',
+    command: 'npm run check:production:observability -- --production-env-file=.env.production',
+    successText: 'Production observability check passed',
+  }],
+]);
+
+function validateExecutableCheckerEvidence(areaId, checkId, actualCheck, checkPath, issues) {
+  const requirement = executableCheckerEvidenceRequirements.get(`${areaId}.${checkId}`);
+  if (!requirement) return;
+
+  if (!hasEvidenceType(actualCheck, 'command-output')) {
+    issues.push(`${checkPath}.evidence must include command-output evidence`);
+  }
+
+  const text = evidenceText(actualCheck.evidence);
+  requireEvidenceText(
+    text,
+    requirement.command,
+    `${checkPath}.evidence must include the ${requirement.commandLabel} command`,
+    issues,
+  );
+  requireEvidenceText(text, requirement.successText, `${checkPath}.evidence must include ${requirement.successText}`, issues);
+}
+
 function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues) {
   const text = evidenceText(actualCheck.evidence);
   const images = releaseImageRefs(release);
@@ -558,15 +609,13 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
 }
 
 function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, issues, release) {
+  validateExecutableCheckerEvidence(areaId, checkId, actualCheck, checkPath, issues);
+
   if (areaId === 'releaseGate') {
     validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues);
   }
 
   if (areaId === 'database' && checkId === 'database-check') {
-    if (!hasEvidenceType(actualCheck, 'command-output')) {
-      issues.push(`${checkPath}.evidence must include command-output evidence`);
-    }
-
     if (!evidenceText(actualCheck.evidence).includes('--expect-operational-sentinel')) {
       issues.push(`${checkPath}.evidence must show check:production:database was run with --expect-operational-sentinel`);
     }

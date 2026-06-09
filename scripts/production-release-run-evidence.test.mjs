@@ -59,6 +59,49 @@ function response(status, body) {
   };
 }
 
+function binaryResponse(status, body) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Error',
+    async arrayBuffer() {
+      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    },
+  };
+}
+
+function releaseDigestManifest(overrides = {}) {
+  const manifest = {
+    CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'a'.repeat(64)}`,
+    CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'a'.repeat(64)}`,
+    CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'a'.repeat(64)}`,
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    ...overrides,
+  };
+
+  return `${Object.entries(manifest).map(([key, value]) => `${key}="${value}"`).join('\n')}\n`;
+}
+
+function zipWithReleaseManifest(manifestText) {
+  const filename = Buffer.from('release-image-digests.env');
+  const content = Buffer.from(manifestText);
+  const header = Buffer.alloc(30);
+  header.writeUInt32LE(0x04034b50, 0);
+  header.writeUInt16LE(20, 4);
+  header.writeUInt16LE(0, 6);
+  header.writeUInt16LE(0, 8);
+  header.writeUInt16LE(0, 10);
+  header.writeUInt16LE(0, 12);
+  header.writeUInt32LE(0, 14);
+  header.writeUInt32LE(content.length, 18);
+  header.writeUInt32LE(content.length, 22);
+  header.writeUInt16LE(filename.length, 26);
+  header.writeUInt16LE(0, 28);
+  return Buffer.concat([header, filename, content]);
+}
+
 test('production release run checker verifies GitHub workflow metadata and digest artifact', async () => {
   const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
   const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence());
@@ -83,6 +126,9 @@ test('production release run checker verifies GitHub workflow metadata and diges
         ],
       });
     }
+    if (url === 'https://api.github.com/artifact.zip') {
+      return binaryResponse(200, zipWithReleaseManifest(releaseDigestManifest()));
+    }
     return response(404, {});
   };
 
@@ -100,9 +146,52 @@ test('production release run checker verifies GitHub workflow metadata and diges
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:/);
     assert.match(result.stdout, /webBuildNextPublicApiUrl=https:\/\/api\.charitypilot\.ie/);
     assert.match(result.stdout, /webBuildNextPublicSupabaseUrl=https:\/\/configured-project\.supabase\.co/);
-    assert.equal(seenRequests.length, 2);
+    assert.equal(seenRequests.length, 3);
     assert.equal(seenRequests[0].options.headers.authorization, 'Bearer ghp_not_printed_token');
+    assert.equal(seenRequests[2].options.headers.authorization, 'Bearer ghp_not_printed_token');
     assert.doesNotMatch(result.stdout + result.stderr, /ghp_not_printed_token/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production release run checker rejects digest artifact contents that do not match launch evidence', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence());
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/actions/runs/123456789')) {
+      return response(200, {
+        html_url: workflowRunUrl,
+        path: '.github/workflows/release-images.yml',
+        head_sha: commitSha,
+        head_branch: 'master',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'workflow_dispatch',
+      });
+    }
+    if (url.endsWith('/actions/runs/123456789/artifacts')) {
+      return response(200, {
+        artifacts: [
+          { name: 'release-image-digests', expired: false, archive_download_url: 'https://api.github.com/artifact.zip' },
+        ],
+      });
+    }
+    if (url === 'https://api.github.com/artifact.zip') {
+      return binaryResponse(200, zipWithReleaseManifest(releaseDigestManifest({
+        CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'c'.repeat(64)}`,
+        CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.drifted.charitypilot.ie',
+      })));
+    }
+    return response(404, {});
+  };
+
+  try {
+    const result = await runProductionReleaseRunEvidenceFromArgs(['--evidence-file', evidencePath], { fetchImpl });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /release-image-digests artifact CHARITYPILOT_API_IMAGE must match release\.imageDigestManifest\.apiImage/);
+    assert.match(result.stderr, /release-image-digests artifact CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL must match release\.imageDigestManifest\.webBuildNextPublicApiUrl/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -166,6 +255,9 @@ test('production release run checker rejects a workflow trigger that does not ma
         ],
       });
     }
+    if (url === 'https://api.github.com/artifact.zip') {
+      return binaryResponse(200, zipWithReleaseManifest(releaseDigestManifest()));
+    }
     return response(404, {});
   };
 
@@ -200,6 +292,9 @@ test('production release run checker accepts tag release workflow pushes', async
           { name: 'release-image-digests', expired: false, archive_download_url: 'https://api.github.com/artifact.zip' },
         ],
       });
+    }
+    if (url === 'https://api.github.com/artifact.zip') {
+      return binaryResponse(200, zipWithReleaseManifest(releaseDigestManifest()));
     }
     return response(404, {});
   };

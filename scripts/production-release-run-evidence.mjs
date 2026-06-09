@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { inflateRawSync } from 'node:zlib';
 
 const repository = 'jasperfordesq-ai/charity-governance';
 const releaseWorkflowFile = '.github/workflows/release-images.yml';
@@ -85,6 +86,17 @@ async function fetchJson(fetchImpl, url, headers, label) {
   return response.json();
 }
 
+async function fetchBytes(fetchImpl, url, headers, label) {
+  const response = await fetchImpl(url, { headers });
+  if (!response.ok) {
+    throw new Error(`${label} request failed with HTTP ${response.status} ${response.statusText}`);
+  }
+  if (typeof response.arrayBuffer !== 'function') {
+    throw new Error(`${label} response did not include binary artifact content`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
 function validateReleaseShape(release, issues) {
   if (!isPlainObject(release)) {
     issues.push('release is required');
@@ -141,6 +153,10 @@ function validateArtifacts(artifacts, issues) {
   if (!releaseDigestArtifact) {
     issues.push('workflow run artifacts must include non-expired release-image-digests');
   }
+  if (releaseDigestArtifact && typeof releaseDigestArtifact.archive_download_url !== 'string') {
+    issues.push('release-image-digests artifact must include archive_download_url');
+  }
+  return releaseDigestArtifact ?? null;
 }
 
 function releaseBindingSummary(release) {
@@ -154,6 +170,118 @@ function releaseBindingSummary(release) {
   ]
     .filter(([, value]) => typeof value === 'string' && value.length > 0)
     .map(([key, value]) => `${key}=${value}`);
+}
+
+function findEndOfCentralDirectory(zipBytes) {
+  for (let offset = zipBytes.length - 22; offset >= 0; offset -= 1) {
+    if (zipBytes.readUInt32LE(offset) === 0x06054b50) return offset;
+  }
+  return null;
+}
+
+function centralDirectoryEntries(zipBytes) {
+  const endOffset = findEndOfCentralDirectory(zipBytes);
+  if (endOffset === null) return [];
+
+  const entryCount = zipBytes.readUInt16LE(endOffset + 10);
+  let offset = zipBytes.readUInt32LE(endOffset + 16);
+  const entries = [];
+
+  for (let index = 0; index < entryCount && offset + 46 <= zipBytes.length; index += 1) {
+    if (zipBytes.readUInt32LE(offset) !== 0x02014b50) break;
+    const method = zipBytes.readUInt16LE(offset + 10);
+    const compressedSize = zipBytes.readUInt32LE(offset + 20);
+    const fileNameLength = zipBytes.readUInt16LE(offset + 28);
+    const extraLength = zipBytes.readUInt16LE(offset + 30);
+    const commentLength = zipBytes.readUInt16LE(offset + 32);
+    const localHeaderOffset = zipBytes.readUInt32LE(offset + 42);
+    const name = zipBytes.subarray(offset + 46, offset + 46 + fileNameLength).toString('utf8');
+    entries.push({ name, method, compressedSize, localHeaderOffset });
+    offset += 46 + fileNameLength + extraLength + commentLength;
+  }
+
+  return entries;
+}
+
+function localHeaderEntries(zipBytes) {
+  const entries = [];
+  let offset = 0;
+
+  while (offset + 30 <= zipBytes.length && zipBytes.readUInt32LE(offset) === 0x04034b50) {
+    const method = zipBytes.readUInt16LE(offset + 8);
+    const compressedSize = zipBytes.readUInt32LE(offset + 18);
+    const fileNameLength = zipBytes.readUInt16LE(offset + 26);
+    const extraLength = zipBytes.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const name = zipBytes.subarray(nameStart, nameStart + fileNameLength).toString('utf8');
+    const dataOffset = nameStart + fileNameLength + extraLength;
+    entries.push({ name, method, compressedSize, localHeaderOffset: offset, dataOffset });
+    offset = dataOffset + compressedSize;
+  }
+
+  return entries;
+}
+
+function extractZipFile(zipBytes, filename) {
+  const centralEntry = centralDirectoryEntries(zipBytes).find((entry) => entry.name === filename);
+  const entry = centralEntry ?? localHeaderEntries(zipBytes).find((candidate) => candidate.name === filename);
+  if (!entry) {
+    throw new Error(`release-image-digests artifact archive must contain ${filename}`);
+  }
+
+  let dataOffset = entry.dataOffset;
+  if (typeof dataOffset !== 'number') {
+    const localHeaderOffset = entry.localHeaderOffset;
+    if (zipBytes.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
+      throw new Error(`${filename} archive entry has an invalid local header`);
+    }
+    const fileNameLength = zipBytes.readUInt16LE(localHeaderOffset + 26);
+    const extraLength = zipBytes.readUInt16LE(localHeaderOffset + 28);
+    dataOffset = localHeaderOffset + 30 + fileNameLength + extraLength;
+  }
+
+  const compressed = zipBytes.subarray(dataOffset, dataOffset + entry.compressedSize);
+  if (entry.method === 0) return compressed.toString('utf8');
+  if (entry.method === 8) return inflateRawSync(compressed).toString('utf8');
+  throw new Error(`${filename} archive entry uses unsupported ZIP compression method ${entry.method}`);
+}
+
+function parseEnvManifest(text) {
+  const values = new Map();
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (!match) continue;
+    let value = match[2].trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values.set(match[1], value);
+  }
+  return values;
+}
+
+function validateArtifactManifest(manifestText, release, issues) {
+  const manifest = parseEnvManifest(manifestText);
+  const expectedBindings = [
+    ['CHARITYPILOT_API_IMAGE', 'apiImage'],
+    ['CHARITYPILOT_WEB_IMAGE', 'webImage'],
+    ['CHARITYPILOT_MIGRATION_IMAGE', 'migrationImage'],
+    ['CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL', 'webBuildNextPublicApiUrl'],
+    ['CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL', 'webBuildNextPublicSupabaseUrl'],
+  ];
+
+  for (const [envName, manifestKey] of expectedBindings) {
+    const actual = manifest.get(envName);
+    const expected = release?.imageDigestManifest?.[manifestKey];
+    if (actual !== expected) {
+      issues.push(`release-image-digests artifact ${envName} must match release.imageDigestManifest.${manifestKey}`);
+    }
+  }
 }
 
 export async function runProductionReleaseRunEvidenceFromArgs(
@@ -195,13 +323,23 @@ export async function runProductionReleaseRunEvidenceFromArgs(
 
   const headers = githubHeaders(processEnv);
   const apiBase = `https://api.github.com/repos/${repository}/actions/runs/${runId}`;
+  let releaseDigestArtifact = null;
   try {
     const workflowRun = await fetchJson(fetchImpl, apiBase, headers, 'workflow run');
     const artifacts = await fetchJson(fetchImpl, `${apiBase}/artifacts`, headers, 'workflow artifacts');
     validateWorkflowRun(workflowRun, evidence.release, issues);
-    validateArtifacts(artifacts, issues);
+    releaseDigestArtifact = validateArtifacts(artifacts, issues);
   } catch (error) {
     return result(1, '', `Production release run evidence failed: ${error.message}\n`);
+  }
+
+  if (issues.length === 0 && releaseDigestArtifact) {
+    try {
+      const artifactArchive = await fetchBytes(fetchImpl, releaseDigestArtifact.archive_download_url, headers, 'release-image-digests artifact');
+      validateArtifactManifest(extractZipFile(artifactArchive, 'release-image-digests.env'), evidence.release, issues);
+    } catch (error) {
+      return result(1, '', `Production release run evidence failed: ${error.message}\n`);
+    }
   }
 
   if (issues.length > 0) {

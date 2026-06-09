@@ -43,7 +43,50 @@ function evidenceEntry(areaId, checkId) {
 
   if (areaId === 'database' && checkId === 'database-check') {
     entry.type = 'command-output';
-    entry.description = 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel completed with operational sentinel checks';
+    entry.description = [
+      'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
+      'Production database check passed: production PostgreSQL backup completed and restore verification succeeded with operational sentinel checks.',
+    ].join(' ');
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'check-production') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run check:production -- --production-env-file=.env.production',
+      'Production preflight passed using .env.production',
+    ].join(' ');
+  }
+
+  if (areaId === 'hostingDnsTls' && checkId === 'hosting-check') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run check:production:hosting -- --production-env-file=.env.production',
+      'Production hosting check passed: 2 HTTPS origin(s) resolved publicly, served authorized TLS, responded over HTTPS, and included baseline security headers.',
+    ].join(' ');
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'supabase-check') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run check:production:supabase -- --production-env-file=.env.production',
+      'Production Supabase storage check passed: private bucket, service-role probe upload, signed URL creation, anonymous access denial, and probe cleanup verified.',
+    ].join(' ');
+  }
+
+  if (areaId === 'billingAndEmail' && checkId === 'providers-check') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run check:production:providers -- --production-env-file=.env.production',
+      'Production provider check passed: active live recurring Stripe prices, enabled live billing webhook endpoint, and verified Resend sender domain confirmed.',
+    ].join(' ');
+  }
+
+  if (areaId === 'observability' && checkId === 'observability-check') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run check:production:observability -- --production-env-file=.env.production',
+      'Production observability check passed: sent sanitized test alert to redacted webhook.',
+    ].join(' ');
   }
 
   if (areaId === 'releaseGate' && checkId === 'release-workflow-identity') {
@@ -382,6 +425,37 @@ test('production launch evidence validator requires operational sentinel databas
     assert.equal(result.status, 1);
     assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must show check:production:database was run with --expect-operational-sentinel/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires executable checker command transcripts', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/generic/checker',
+    description: 'Checker was reviewed in release evidence',
+    capturedAt,
+  };
+  evidence.areas.releaseGate.checks['check-production'].evidence = [genericEvidence];
+  evidence.areas.hostingDnsTls.checks['hosting-check'].evidence = [genericEvidence];
+  evidence.areas.supabaseStorage.checks['supabase-check'].evidence = [genericEvidence];
+  evidence.areas.billingAndEmail.checks['providers-check'].evidence = [genericEvidence];
+  evidence.areas.observability.checks['observability-check'].evidence = [genericEvidence];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.check-production\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.check-production\.evidence must include the check:production command/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.hosting-check\.evidence must include Production hosting check passed/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-check\.evidence must include the check:production:supabase command/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include Production provider check passed/);
+    assert.match(result.stderr, /areas\.observability\.checks\.observability-check\.evidence must include the check:production:observability command/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
