@@ -24,11 +24,12 @@ type PrismaMock = {
   authSession?: { findFirst: () => Promise<{ id: string } | null> };
   user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: 'ADMIN'; emailVerified: boolean } | null> };
   $transaction?: (callback: (tx: PrismaMock) => Promise<unknown>) => Promise<unknown>;
-  subscription: { findUnique: () => Promise<{ status: string; trialEndsAt: Date | null }> };
+  subscription: { findUnique: () => Promise<{ status: string; trialEndsAt: Date | null; plan?: string }> };
   document: {
     create?: (args: unknown) => Promise<unknown>;
     findFirst?: (args: unknown) => Promise<unknown>;
     delete?: (args: unknown) => Promise<unknown>;
+    aggregate?: (args: unknown) => Promise<{ _sum: { fileSize: number | null } }>;
   };
   documentStorageDeletion?: {
     create?: (args: unknown) => Promise<{ id: string }>;
@@ -67,7 +68,7 @@ function authModels() {
 
 function subscription() {
   return {
-    findUnique: async () => ({ status: 'TRIALING', trialEndsAt: new Date(Date.now() + 60_000) }),
+    findUnique: async () => ({ status: 'TRIALING', trialEndsAt: new Date(Date.now() + 60_000), plan: 'ESSENTIALS' }),
   };
 }
 
@@ -75,6 +76,7 @@ async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MU
   const app = Fastify({ logger: false });
   const decoratedPrisma = { ...authModels(), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
+  decoratedPrisma.document.aggregate ??= async () => ({ _sum: { fileSize: 0 } });
   app.decorate('prisma', decoratedPrisma as never);
   await app.register(multipart, { limits });
   await app.register(documentRoutes);
@@ -425,6 +427,55 @@ test('document upload deletes the stored object when database creation fails', {
     });
 
     assert.equal(response.statusCode, 500);
+    assert.deepEqual(deletedPaths, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    StorageService.prototype.deleteFile = originalDelete;
+    await app.close();
+  }
+});
+
+test('document upload rejects files that would exceed the plan storage quota and cleans up storage', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  const originalDelete = StorageService.prototype.deleteFile;
+  const deletedPaths: Array<{ organisationId: string; storagePath: string }> = [];
+  let createCalled = false;
+
+  StorageService.prototype.uploadFile = async () => ({ storagePath: 'org-1/policy.pdf' });
+  StorageService.prototype.deleteFile = async (organisationId: string, storagePath: string) => {
+    deletedPaths.push({ organisationId, storagePath });
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: {
+      findUnique: async () => ({ status: 'ACTIVE', trialEndsAt: null, plan: 'ESSENTIALS' }),
+    },
+    document: {
+      aggregate: async () => ({ _sum: { fileSize: 2 * 1024 * 1024 * 1024 - 10 } }),
+      create: async () => {
+        createCalled = true;
+        return publicDocument({ fileUrl: 'org-1/policy.pdf', mimeType: 'application/pdf' });
+      },
+    },
+  });
+
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.pdf',
+      mimetype: 'application/pdf',
+      content: Buffer.from('%PDF-1.7\n%%EOF'),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { ...request.headers, authorization: authHeader },
+      payload: request.payload,
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'DOCUMENT_STORAGE_QUOTA_EXCEEDED');
+    assert.equal(createCalled, false);
     assert.deepEqual(deletedPaths, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
   } finally {
     StorageService.prototype.uploadFile = originalUpload;

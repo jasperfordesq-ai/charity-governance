@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { SubscriptionPlan } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { formatProviderError } from '../utils/provider-errors.js';
 
@@ -9,6 +10,12 @@ type DocumentStorageDeletionRecord = {
 };
 
 const STORAGE_DELETION_CLAIM_STALE_AFTER_MS = 10 * 60 * 1000;
+const GIBIBYTE = 1024 * 1024 * 1024;
+
+export const DOCUMENT_STORAGE_QUOTA_BYTES: Record<SubscriptionPlan, number> = {
+  [SubscriptionPlan.ESSENTIALS]: 2 * GIBIBYTE,
+  [SubscriptionPlan.COMPLETE]: 10 * GIBIBYTE,
+};
 
 type QueryRaw = <T = unknown>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
 
@@ -39,6 +46,40 @@ type DocumentStorageDeletionClient = {
   documentStorageDeletion: DocumentStorageDeletionDelegate;
   $queryRaw?: QueryRaw;
   $transaction?: <T>(callback: (tx: DocumentStorageDeletionClient) => Promise<T>) => Promise<T>;
+};
+
+type DocumentQuotaClient = {
+  subscription: {
+    findUnique(args: {
+      where: { organisationId: string };
+      select?: { plan: true };
+    }): Promise<{ plan: SubscriptionPlan } | null>;
+  };
+  document: {
+    aggregate(args: {
+      where: { organisationId: string };
+      _sum: { fileSize: true };
+    }): Promise<{ _sum: { fileSize: number | null } }>;
+    create(args: {
+      data: {
+        organisationId: string;
+        uploadedById: string;
+        name: string;
+        description?: string;
+        category: never;
+        fileUrl: string;
+        fileSize: number;
+        mimeType: string;
+        owner?: string | null;
+        approvedDate: Date | null;
+        nextReviewDate: Date | null;
+        boardMinuteReference?: string | null;
+      };
+      include: typeof publicDocumentInclude;
+    }): Promise<DocumentWithStandardLinks>;
+  };
+  $queryRaw?: QueryRaw;
+  $transaction?: <T>(callback: (tx: DocumentQuotaClient) => Promise<T>) => Promise<T>;
 };
 
 type DocumentWithStandardLinks = {
@@ -101,6 +142,46 @@ function publicDocument(doc: DocumentWithStandardLinks) {
 
 export class DocumentService {
   constructor(private prisma: PrismaClient) {}
+
+  private async assertStorageQuota(client: DocumentQuotaClient, organisationId: string, requestedBytes: number): Promise<void> {
+    if (client.$queryRaw) {
+      await client.$queryRaw`
+        SELECT "id"
+        FROM "Organisation"
+        WHERE "id" = ${organisationId}
+        FOR UPDATE
+      `;
+    }
+
+    const subscription = await client.subscription.findUnique({
+      where: { organisationId },
+      select: { plan: true },
+    });
+
+    if (!subscription) {
+      throw new AppError(403, 'NO_SUBSCRIPTION', 'No active subscription. Please subscribe to continue.');
+    }
+
+    const quotaBytes = DOCUMENT_STORAGE_QUOTA_BYTES[subscription.plan];
+    const usage = await client.document.aggregate({
+      where: { organisationId },
+      _sum: { fileSize: true },
+    });
+    const usedBytes = usage._sum.fileSize ?? 0;
+
+    if (usedBytes + requestedBytes > quotaBytes) {
+      throw new AppError(
+        403,
+        'DOCUMENT_STORAGE_QUOTA_EXCEEDED',
+        'Document storage quota exceeded. Upgrade your plan or remove existing documents before uploading more.',
+        {
+          quotaBytes,
+          usedBytes,
+          requestedBytes,
+        },
+      );
+    }
+  }
 
   private async claimPendingStorageDeletions(limit: number): Promise<DocumentStorageDeletionRecord[]> {
     const client = this.prisma as unknown as DocumentStorageDeletionClient;
@@ -197,23 +278,31 @@ export class DocumentService {
       boardMinuteReference?: string | null;
     },
   ) {
-    const doc = await this.prisma.document.create({
-      data: {
-        organisationId,
-        uploadedById: userId,
-        name: data.name,
-        description: data.description,
-        category: data.category as never,
-        fileUrl: data.fileUrl,
-        fileSize: data.fileSize,
-        mimeType: data.mimeType,
-        owner: data.owner,
-        approvedDate: data.approvedDate ? new Date(data.approvedDate) : null,
-        nextReviewDate: data.nextReviewDate ? new Date(data.nextReviewDate) : null,
-        boardMinuteReference: data.boardMinuteReference,
-      },
-      include: publicDocumentInclude,
-    });
+    const client = this.prisma as unknown as DocumentQuotaClient;
+
+    const createDocument = async (tx: DocumentQuotaClient) => {
+      await this.assertStorageQuota(tx, organisationId, data.fileSize);
+
+      return tx.document.create({
+        data: {
+          organisationId,
+          uploadedById: userId,
+          name: data.name,
+          description: data.description,
+          category: data.category as never,
+          fileUrl: data.fileUrl,
+          fileSize: data.fileSize,
+          mimeType: data.mimeType,
+          owner: data.owner,
+          approvedDate: data.approvedDate ? new Date(data.approvedDate) : null,
+          nextReviewDate: data.nextReviewDate ? new Date(data.nextReviewDate) : null,
+          boardMinuteReference: data.boardMinuteReference,
+        },
+        include: publicDocumentInclude,
+      });
+    };
+
+    const doc = client.$transaction ? await client.$transaction(createDocument) : await createDocument(client);
 
     return publicDocument(doc);
   }
