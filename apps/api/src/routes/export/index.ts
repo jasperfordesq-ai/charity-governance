@@ -19,7 +19,7 @@ export async function exportRoutes(app: FastifyInstance) {
         where: { id: request.user.organisationId },
       });
 
-      const principles = await complianceService.getPrinciples(org.complexity);
+      const principles = await complianceService.getPrinciplesForOrganisation(request.user.organisationId);
       const records = await complianceService.getRecords(request.user.organisationId, year);
       const signoff = await complianceService.getSignoff(request.user.organisationId, year);
       const [conflicts, risks, complaints, fundraising, annualReport, financialControls] = await Promise.all([

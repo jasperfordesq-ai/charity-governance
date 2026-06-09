@@ -23,10 +23,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /principles — all 6 principles with standards (filtered by org complexity)
   app.get('/principles', async (request, reply) => {
     try {
-      const org = await app.prisma.organisation.findUniqueOrThrow({
-        where: { id: request.user.organisationId },
-      });
-      return sendSuccess(reply, await service.getPrinciples(org.complexity));
+      return sendSuccess(reply, await service.getPrinciplesForOrganisation(request.user.organisationId));
     } catch (err) {
       handleError(reply, err);
     }
@@ -35,18 +32,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /principles/:principleId - single principle with standards
   app.get<{ Params: { principleId: string } }>('/principles/:principleId', async (request, reply) => {
     try {
-      const org = await app.prisma.organisation.findUniqueOrThrow({
-        where: { id: request.user.organisationId },
-      });
-      const principle = await app.prisma.governancePrinciple.findUnique({
-        where: { id: request.params.principleId },
-        include: {
-          standards: {
-            orderBy: { sortOrder: 'asc' },
-            where: org.complexity === 'SIMPLE' ? { isCore: true } : undefined,
-          },
-        },
-      });
+      const principle = await service.getPrincipleForOrganisation(request.user.organisationId, request.params.principleId);
 
       if (!principle) {
         return reply.status(404).send({

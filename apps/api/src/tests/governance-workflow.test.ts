@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   acceptTeamInviteSchema,
+  ComplianceStatus,
   createCheckoutSchema,
   createRiskRecordSchema,
   inviteTeamMemberSchema,
@@ -74,4 +75,84 @@ test('billing checkout accepts only supported plan intervals', () => {
 test('refresh requests can rely on the secure refresh cookie', () => {
   assert.equal(refreshSchema.safeParse({}).success, true);
   assert.equal(refreshSchema.safeParse({ refreshToken: '' }).success, false);
+});
+
+test('Essentials compliance summaries include only core standards even for complex organisations', async () => {
+  const { ComplianceService } = await import('../services/compliance.service.js');
+
+  const coreStandard = {
+    id: 'standard-core',
+    principleId: 'principle-1',
+    isCore: true,
+    principle: { id: 'principle-1', number: 1, title: 'Advancing charitable purpose' },
+  };
+  const additionalStandard = {
+    id: 'standard-additional',
+    principleId: 'principle-1',
+    isCore: false,
+    principle: { id: 'principle-1', number: 1, title: 'Advancing charitable purpose' },
+  };
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({ id: 'org-1', complexity: 'COMPLEX' }),
+    },
+    subscription: {
+      findUnique: async () => ({ plan: 'ESSENTIALS' }),
+    },
+    governanceStandard: {
+      findMany: async (query: { where?: { isCore?: boolean } }) =>
+        query.where?.isCore ? [coreStandard] : [coreStandard, additionalStandard],
+    },
+    complianceRecord: {
+      findMany: async () => [
+        { standardId: 'standard-core', status: 'COMPLIANT' },
+        { standardId: 'standard-additional', status: 'COMPLIANT' },
+      ],
+    },
+  };
+  const service = new ComplianceService(prisma as never);
+
+  const summary = await service.getSummary('org-1', 2026);
+
+  assert.equal(summary.totalApplicable, 1);
+  assert.equal(summary.compliant, 1);
+  assert.equal(summary.percentComplete, 100);
+});
+
+test('Essentials organisations cannot write compliance records for additional standards', async () => {
+  const { ComplianceService } = await import('../services/compliance.service.js');
+  const { AppError } = await import('../utils/errors.js');
+  let upsertCalled = false;
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({ id: 'org-1', complexity: 'COMPLEX' }),
+    },
+    subscription: {
+      findUnique: async () => ({ plan: 'ESSENTIALS' }),
+    },
+    governanceStandard: {
+      findUnique: async () => ({ id: 'standard-additional', isCore: false }),
+    },
+    complianceRecord: {
+      upsert: async () => {
+        upsertCalled = true;
+        return {};
+      },
+    },
+  };
+  const service = new ComplianceService(prisma as never);
+
+  await assert.rejects(
+    () =>
+      service.upsertRecord('org-1', 'standard-additional', 'user-1', {
+        reportingYear: 2026,
+        status: ComplianceStatus.COMPLIANT,
+        actionTaken: 'Additional standard evidence',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 403 &&
+      error.code === 'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN',
+  );
+  assert.equal(upsertCalled, false);
 });

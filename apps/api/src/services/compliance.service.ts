@@ -1,15 +1,71 @@
 import type { PrismaClient } from '@prisma/client';
 import {
   ComplianceSignoffStatus,
+  SubscriptionPlan,
   type ComplianceSignoffResponse,
   type ComplianceSummary,
   type PrincipleComplianceSummary,
   type UpsertComplianceRecordRequest,
   type UpsertComplianceSignoffRequest,
 } from '@charitypilot/shared';
+import { AppError } from '../utils/errors.js';
+
+type OrganisationComplianceScope = {
+  complexity: string;
+  plan: string;
+};
+
+function includesAdditionalStandards(scope: OrganisationComplianceScope): boolean {
+  return scope.complexity === 'COMPLEX' && scope.plan === SubscriptionPlan.COMPLETE;
+}
+
+function standardsWhere(scope: OrganisationComplianceScope): { isCore: true } | undefined {
+  return includesAdditionalStandards(scope) ? undefined : { isCore: true };
+}
 
 export class ComplianceService {
   constructor(private prisma: PrismaClient) {}
+
+  private async getOrganisationComplianceScope(organisationId: string): Promise<OrganisationComplianceScope> {
+    const [organisation, subscription] = await Promise.all([
+      this.prisma.organisation.findUniqueOrThrow({
+        where: { id: organisationId },
+        select: { complexity: true },
+      }),
+      this.prisma.subscription.findUnique({
+        where: { organisationId },
+        select: { plan: true },
+      }),
+    ]);
+
+    if (!subscription) {
+      throw new AppError(403, 'NO_SUBSCRIPTION', 'No active subscription. Please subscribe to continue.');
+    }
+
+    return { complexity: organisation.complexity, plan: subscription.plan };
+  }
+
+  private async ensureStandardIncludedInPlan(organisationId: string, standardId: string): Promise<void> {
+    const [scope, standard] = await Promise.all([
+      this.getOrganisationComplianceScope(organisationId),
+      this.prisma.governanceStandard.findUnique({
+        where: { id: standardId },
+        select: { id: true, isCore: true },
+      }),
+    ]);
+
+    if (!standard) {
+      throw new AppError(404, 'STANDARD_NOT_FOUND', 'Governance standard not found');
+    }
+
+    if (!standard.isCore && !includesAdditionalStandards(scope)) {
+      throw new AppError(
+        403,
+        'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN',
+        'This governance standard requires the Complete plan and a complex organisation profile.',
+      );
+    }
+  }
 
   async getPrinciples(organisationComplexity: string) {
     const principles = await this.prisma.governancePrinciple.findMany({
@@ -25,6 +81,34 @@ export class ComplianceService {
     return principles;
   }
 
+  async getPrinciplesForOrganisation(organisationId: string) {
+    const scope = await this.getOrganisationComplianceScope(organisationId);
+
+    return this.prisma.governancePrinciple.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        standards: {
+          orderBy: { sortOrder: 'asc' },
+          where: standardsWhere(scope),
+        },
+      },
+    });
+  }
+
+  async getPrincipleForOrganisation(organisationId: string, principleId: string) {
+    const scope = await this.getOrganisationComplianceScope(organisationId);
+
+    return this.prisma.governancePrinciple.findUnique({
+      where: { id: principleId },
+      include: {
+        standards: {
+          orderBy: { sortOrder: 'asc' },
+          where: standardsWhere(scope),
+        },
+      },
+    });
+  }
+
   async getAllPrinciplesWithStandards() {
     return this.prisma.governancePrinciple.findMany({
       orderBy: { sortOrder: 'asc' },
@@ -35,8 +119,13 @@ export class ComplianceService {
   }
 
   async getRecords(organisationId: string, year: number) {
+    const scope = await this.getOrganisationComplianceScope(organisationId);
     const records = await this.prisma.complianceRecord.findMany({
-      where: { organisationId, reportingYear: year },
+      where: {
+        organisationId,
+        reportingYear: year,
+        standard: standardsWhere(scope),
+      },
       include: {
         standard: {
           include: { principle: true },
@@ -50,6 +139,8 @@ export class ComplianceService {
   }
 
   async getRecord(organisationId: string, standardId: string, year: number) {
+    await this.ensureStandardIncludedInPlan(organisationId, standardId);
+
     return this.prisma.complianceRecord.findUnique({
       where: {
         organisationId_standardId_reportingYear: {
@@ -71,6 +162,8 @@ export class ComplianceService {
     userId: string,
     data: UpsertComplianceRecordRequest,
   ) {
+    await this.ensureStandardIncludedInPlan(organisationId, standardId);
+
     const record = await this.prisma.complianceRecord.upsert({
       where: {
         organisationId_standardId_reportingYear: {
@@ -204,12 +297,10 @@ export class ComplianceService {
   }
 
   async getSummary(organisationId: string, year: number): Promise<ComplianceSummary> {
-    const org = await this.prisma.organisation.findUniqueOrThrow({
-      where: { id: organisationId },
-    });
+    const scope = await this.getOrganisationComplianceScope(organisationId);
 
     const standards = await this.prisma.governanceStandard.findMany({
-      where: org.complexity === 'SIMPLE' ? { isCore: true } : undefined,
+      where: standardsWhere(scope),
       include: { principle: true },
     });
 
