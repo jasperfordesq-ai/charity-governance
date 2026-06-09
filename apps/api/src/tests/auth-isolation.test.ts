@@ -197,6 +197,29 @@ test('authIdentityGuard allows valid sessions for users whose email is not verif
   });
 });
 
+test('access tokens are signed and verified with the pinned HS256 algorithm', async () => {
+  const { default: jwt } = await import('jsonwebtoken');
+  const { signAccessToken, verifyAccessToken } = await import('../utils/jwt.js');
+
+  const payload = {
+    userId: 'user-1',
+    organisationId: 'org-1',
+    role: 'OWNER',
+    sessionId: 'session-1',
+  } as const;
+  const token = signAccessToken(payload);
+
+  assert.equal(jwt.decode(token, { complete: true })?.header.alg, 'HS256');
+  assert.deepEqual(verifyAccessToken(token), payload);
+
+  const hs384Token = jwt.sign(payload, process.env.JWT_SECRET as string, {
+    algorithm: 'HS384',
+    expiresIn: '1h',
+  });
+
+  assert.throws(() => verifyAccessToken(hs384Token), /invalid algorithm/);
+});
+
 test('resendEmailVerification rotates the token and emails unverified users', async () => {
   const { AuthService } = await import('../services/auth.service.js');
 

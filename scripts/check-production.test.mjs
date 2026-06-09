@@ -2295,6 +2295,15 @@ test('refresh and logout auth endpoints have route-specific throttles', () => {
   );
 });
 
+test('API access tokens pin their JWT algorithm', () => {
+  const jwtUtil = readRepoFile('apps/api/src/utils/jwt.ts');
+
+  assert.match(jwtUtil, /const ACCESS_TOKEN_ALGORITHM = 'HS256'/);
+  assert.match(jwtUtil, /jwt\.sign\(payload,\s*JWT_SECRET,\s*\{[\s\S]*algorithm:\s*ACCESS_TOKEN_ALGORITHM/);
+  assert.match(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET,\s*\{\s*algorithms:\s*\[ACCESS_TOKEN_ALGORITHM\]\s*\}\)/);
+  assert.doesNotMatch(jwtUtil, /jwt\.verify\(token,\s*JWT_SECRET\);/);
+});
+
 test('team invite flows keep account enumeration and duplicate active invites guarded', () => {
   const authRoutes = readRepoFile('apps/api/src/routes/auth/index.ts');
   const teamRoutes = readRepoFile('apps/api/src/routes/team/index.ts');
