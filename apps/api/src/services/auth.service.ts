@@ -298,25 +298,36 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
+    const verifyToken = hashOpaqueToken(token);
+    const now = new Date();
     const user = await this.prisma.user.findFirst({
       where: {
-        verifyToken: hashOpaqueToken(token),
-        verifyTokenExpiry: { gt: new Date() },
+        verifyToken,
+        verifyTokenExpiry: { gt: now },
       },
+      select: { id: true },
     });
 
     if (!user) {
       throw new AppError(400, 'INVALID_VERIFY_TOKEN', 'This verification link is invalid or has expired.');
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
+    const consumed = await this.prisma.user.updateMany({
+      where: {
+        id: user.id,
+        verifyToken,
+        verifyTokenExpiry: { gt: now },
+      },
       data: {
         emailVerified: true,
         verifyToken: null,
         verifyTokenExpiry: null,
       },
     });
+
+    if (consumed.count !== 1) {
+      throw new AppError(400, 'INVALID_VERIFY_TOKEN', 'This verification link is invalid or has expired.');
+    }
 
     return { message: 'Email verified successfully.' };
   }

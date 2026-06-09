@@ -334,6 +334,58 @@ test('resendEmailVerification does not issue a new token for verified users', as
   assert.equal(emailCalled, false);
 });
 
+test('verifyEmail consumes the verification token atomically', async () => {
+  const { AuthService } = await import('../services/auth.service.js');
+  const { AppError } = await import('../utils/errors.js');
+  const { hashOpaqueToken } = await import('../services/session-tokens.js');
+
+  let updateManyCalled = false;
+  let unconditionalUpdateCalled = false;
+  const prisma = {
+    user: {
+      findFirst: async (query: { where: { verifyToken: string; verifyTokenExpiry: { gt: Date } } }) => {
+        assert.equal(query.where.verifyToken, hashOpaqueToken('verify-token'));
+        assert.ok(query.where.verifyTokenExpiry.gt instanceof Date);
+        return { id: 'user-1' };
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id: string; verifyToken: string; verifyTokenExpiry: { gt: Date } };
+        data: { emailVerified: true; verifyToken: null; verifyTokenExpiry: null };
+      }) => {
+        updateManyCalled = true;
+        assert.equal(where.id, 'user-1');
+        assert.equal(where.verifyToken, hashOpaqueToken('verify-token'));
+        assert.ok(where.verifyTokenExpiry.gt instanceof Date);
+        assert.deepEqual(data, {
+          emailVerified: true,
+          verifyToken: null,
+          verifyTokenExpiry: null,
+        });
+        return { count: 0 };
+      },
+      update: async () => {
+        unconditionalUpdateCalled = true;
+        return {};
+      },
+    },
+  };
+  const service = new AuthService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () => service.verifyEmail('verify-token'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 400 &&
+      error.code === 'INVALID_VERIFY_TOKEN',
+  );
+
+  assert.equal(updateManyCalled, true);
+  assert.equal(unconditionalUpdateCalled, false);
+});
+
 test('register route does not disclose duplicate emails or issue session cookies', async () => {
   const [{ default: Fastify }, { authRoutes }] = await Promise.all([
     import('fastify'),
