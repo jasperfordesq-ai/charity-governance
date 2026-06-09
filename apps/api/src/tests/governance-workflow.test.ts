@@ -122,6 +122,47 @@ test('Essentials compliance summaries include only core standards even for compl
   assert.equal(summary.percentComplete, 100);
 });
 
+test('Essentials recent activity excludes additional-standard compliance records', async () => {
+  const { ActivityService } = await import('../services/activity.service.js');
+  const coreRecord = {
+    id: 'record-core',
+    status: 'COMPLIANT',
+    updatedAt: new Date('2026-01-02T10:00:00.000Z'),
+    standard: { code: '1.1' },
+    updatedBy: { id: 'user-1', name: 'Trustee One' },
+  };
+  const additionalRecord = {
+    id: 'record-additional',
+    status: 'COMPLIANT',
+    updatedAt: new Date('2026-01-03T10:00:00.000Z'),
+    standard: { code: '1.A' },
+    updatedBy: { id: 'user-2', name: 'Trustee Two' },
+  };
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({ id: 'org-1', complexity: 'COMPLEX' }),
+    },
+    subscription: {
+      findUnique: async () => ({ plan: 'ESSENTIALS' }),
+    },
+    complianceRecord: {
+      findMany: async (query: { where?: { standard?: { isCore?: boolean } } }) =>
+        query.where?.standard?.isCore ? [coreRecord] : [coreRecord, additionalRecord],
+    },
+    document: { findMany: async () => [] },
+    boardMember: { findMany: async () => [] },
+    deadline: { findMany: async () => [] },
+  };
+  const service = new ActivityService(prisma as never);
+
+  const activity = await service.getRecentActivity('org-1', 10);
+
+  assert.deepEqual(
+    activity.map((item) => item.description),
+    ['Marked standard 1.1 as compliant'],
+  );
+});
+
 test('Essentials organisations cannot write compliance records for additional standards', async () => {
   const { ComplianceService } = await import('../services/compliance.service.js');
   const { AppError } = await import('../utils/errors.js');

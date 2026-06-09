@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { SubscriptionPlan } from '@charitypilot/shared';
 
 export interface ActivityItem {
   id: string;
@@ -13,9 +14,23 @@ export class ActivityService {
   constructor(private prisma: PrismaClient) {}
 
   async getRecentActivity(organisationId: string, limit = 20): Promise<ActivityItem[]> {
+    const [organisation, subscription] = await Promise.all([
+      this.prisma.organisation.findUniqueOrThrow({
+        where: { id: organisationId },
+        select: { complexity: true },
+      }),
+      this.prisma.subscription.findUnique({
+        where: { organisationId },
+        select: { plan: true },
+      }),
+    ]);
+    const includeAdditionalStandards =
+      organisation.complexity === 'COMPLEX' && subscription?.plan === SubscriptionPlan.COMPLETE;
+    const standardScope = includeAdditionalStandards ? undefined : { isCore: true };
+
     const [complianceRecords, documents, boardMembers, deadlines] = await Promise.all([
       this.prisma.complianceRecord.findMany({
-        where: { organisationId },
+        where: { organisationId, standard: standardScope },
         orderBy: { updatedAt: 'desc' },
         take: limit,
         include: {
