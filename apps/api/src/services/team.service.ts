@@ -21,7 +21,83 @@ const SALT_ROUNDS = 12;
 const INVITE_EXPIRY_DAYS = 7;
 const INVALID_INVITE_MESSAGE = 'This invite is invalid or has expired';
 const TEAM_INVITE_ACCEPTED_MESSAGE = 'If the invite can be sent, we will email the recipient.';
+const TEAM_MEMBER_LIMITS = {
+  ESSENTIALS: 5,
+  COMPLETE: null,
+};
+
 type UserRole = 'OWNER' | 'ADMIN' | 'MEMBER';
+type SubscriptionPlanValue = keyof typeof TEAM_MEMBER_LIMITS;
+type QueryRaw = <T = unknown>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
+
+type TeamCapacityClient = {
+  subscription: {
+    findUnique(args: {
+      where: { organisationId: string };
+      select: { plan: true };
+    }): Promise<{ plan: string } | null>;
+  };
+  user: {
+    count(args: { where: { organisationId: string } }): Promise<number>;
+  };
+  teamInvite: {
+    count(args: {
+      where: {
+        organisationId: string;
+        acceptedAt: null;
+        revokedAt: null;
+        expiresAt: { gt: Date };
+      };
+    }): Promise<number>;
+  };
+  $queryRaw?: QueryRaw;
+};
+
+type TeamInviteClient = TeamCapacityClient & {
+  organisation: {
+    findUnique(args: { where: { id: string } }): Promise<{ name: string } | null>;
+  };
+  user: TeamCapacityClient['user'] & {
+    findUnique(args: { where: { id?: string; email?: string } }): Promise<{ id: string; name: string | null } | null>;
+  };
+  teamInvite: TeamCapacityClient['teamInvite'] & {
+    updateMany(args: {
+      where: {
+        organisationId: string;
+        email: string;
+        acceptedAt: null;
+        revokedAt: null;
+        expiresAt: { lte: Date };
+      };
+      data: { revokedAt: Date };
+    }): Promise<{ count: number }>;
+    findFirst(args: {
+      where: {
+        organisationId: string;
+        email: string;
+        acceptedAt: null;
+        revokedAt: null;
+        expiresAt: { gt: Date };
+      };
+    }): Promise<{ id: string } | null>;
+    create(args: {
+      data: {
+        organisationId: string;
+        email: string;
+        role: InviteTeamMemberData['role'];
+        token: string;
+        invitedById: string;
+        expiresAt: Date;
+      };
+    }): Promise<unknown>;
+  };
+  $transaction?: <T>(callback: (tx: TeamInviteClient) => Promise<T>) => Promise<T>;
+};
+
+type TeamAcceptClient = PrismaClient & {
+  $queryRaw?: QueryRaw;
+  $transaction: <T>(callback: (tx: TeamAcceptClient) => Promise<T>) => Promise<T>;
+};
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -63,6 +139,67 @@ export class TeamService {
     emailService?: EmailService,
   ) {
     this.emailService = emailService ?? new EmailService();
+  }
+
+  private async assertCanAddTeamMember(
+    client: TeamCapacityClient,
+    organisationId: string,
+    now: Date,
+    includePendingInvites: boolean,
+  ): Promise<void> {
+    if (client.$queryRaw) {
+      await client.$queryRaw`
+        SELECT "id"
+        FROM "Organisation"
+        WHERE "id" = ${organisationId}
+        FOR UPDATE
+      `;
+    }
+
+    const subscription = await client.subscription.findUnique({
+      where: { organisationId },
+      select: { plan: true },
+    });
+
+    if (!subscription) {
+      throw new AppError(403, 'NO_SUBSCRIPTION', 'No active subscription. Please subscribe to continue.');
+    }
+
+    const limit = TEAM_MEMBER_LIMITS[subscription.plan as SubscriptionPlanValue];
+    if (limit === undefined) {
+      throw new AppError(500, 'SUBSCRIPTION_PLAN_UNSUPPORTED', 'Subscription plan is not supported.');
+    }
+
+    if (limit === null) {
+      return;
+    }
+
+    const [memberCount, pendingInviteCount] = await Promise.all([
+      client.user.count({ where: { organisationId } }),
+      includePendingInvites
+        ? client.teamInvite.count({
+            where: {
+              organisationId,
+              acceptedAt: null,
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+          })
+        : Promise.resolve(0),
+    ]);
+
+    if (memberCount + pendingInviteCount >= limit) {
+      throw new AppError(
+        403,
+        'TEAM_MEMBER_LIMIT_EXCEEDED',
+        'Team member limit exceeded. Upgrade your plan or remove pending invites before adding more team members.',
+        {
+          limit,
+          memberCount,
+          pendingInviteCount,
+        },
+      );
+    }
   }
 
   async list(organisationId: string) {
@@ -116,54 +253,74 @@ export class TeamService {
 
     const email = normalizeEmail(data.email);
     const now = new Date();
-    const [organisation, inviter, existingUser, , existingInvite] = await Promise.all([
-      this.prisma.organisation.findUnique({ where: { id: organisationId } }),
-      this.prisma.user.findUnique({ where: { id: invitedById } }),
-      this.prisma.user.findUnique({ where: { email } }),
-      this.prisma.teamInvite.updateMany({
-        where: {
-          organisationId,
-          email,
-          acceptedAt: null,
-          revokedAt: null,
-          expiresAt: { lte: now },
-        },
-        data: { revokedAt: now },
-      }),
-      this.prisma.teamInvite.findFirst({
-        where: {
-          organisationId,
-          email,
-          acceptedAt: null,
-          revokedAt: null,
-          expiresAt: { gt: now },
-        },
-      }),
-    ]);
-
-    if (!organisation) {
-      throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
-    }
-
-    if (existingInvite) {
-      return inviteAccepted();
-    }
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
-
     const inviteToken = crypto.randomBytes(32).toString('base64url');
+    const client = this.prisma as unknown as TeamInviteClient;
+    let inviteEmailPayload: { organisationName: string; inviterName: string } | null;
     try {
-      await this.prisma.teamInvite.create({
-        data: {
-          organisationId,
-          email,
-          role: data.role,
-          token: hashOpaqueToken(inviteToken),
-          invitedById,
-          expiresAt,
-        },
-      });
+      const runInvite = async (tx: TeamInviteClient) => {
+        const [foundOrganisation, foundInviter, foundExistingUser, , existingInvite] = await Promise.all([
+          tx.organisation.findUnique({ where: { id: organisationId } }),
+          tx.user.findUnique({ where: { id: invitedById } }),
+          tx.user.findUnique({ where: { email } }),
+          tx.teamInvite.updateMany({
+            where: {
+              organisationId,
+              email,
+              acceptedAt: null,
+              revokedAt: null,
+              expiresAt: { lte: now },
+            },
+            data: { revokedAt: now },
+          }),
+          tx.teamInvite.findFirst({
+            where: {
+              organisationId,
+              email,
+              acceptedAt: null,
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+          }),
+        ]);
+
+        if (!foundOrganisation) {
+          throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
+        }
+
+        if (existingInvite) {
+          return null;
+        }
+
+        await this.assertCanAddTeamMember(tx, organisationId, now, true);
+
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
+
+        await tx.teamInvite.create({
+          data: {
+            organisationId,
+            email,
+            role: data.role,
+            token: hashOpaqueToken(inviteToken),
+            invitedById,
+            expiresAt,
+          },
+        });
+        if (foundExistingUser) {
+          return null;
+        }
+
+        return {
+          organisationName: foundOrganisation.name,
+          inviterName: foundInviter?.name ?? 'A CharityPilot admin',
+        };
+      };
+
+      if (client.$transaction) {
+        inviteEmailPayload = await client.$transaction(runInvite);
+      } else {
+        inviteEmailPayload = await runInvite(client);
+      }
     } catch (err) {
       if (isUniqueConstraintError(err)) {
         return inviteAccepted();
@@ -172,11 +329,11 @@ export class TeamService {
       throw err;
     }
 
-    if (!existingUser) {
+    if (inviteEmailPayload) {
       void this.emailService.sendTeamInvite(
         email,
-        organisation.name,
-        inviter?.name ?? 'A CharityPilot admin',
+        inviteEmailPayload.organisationName,
+        inviteEmailPayload.inviterName,
         inviteToken,
         data.role,
       );
@@ -273,6 +430,7 @@ export class TeamService {
     }
 
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
+    const client = this.prisma as unknown as TeamAcceptClient;
 
     let user: {
       id: string;
@@ -284,7 +442,9 @@ export class TeamService {
       organisation: PublicOrganisation;
     };
     try {
-      user = await this.prisma.$transaction(async (tx) => {
+      user = await client.$transaction(async (tx) => {
+        await this.assertCanAddTeamMember(tx, invite.organisationId, now, false);
+
         const consumed = await tx.teamInvite.updateMany({
           where: {
             id: invite.id,

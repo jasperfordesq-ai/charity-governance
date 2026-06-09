@@ -382,13 +382,16 @@ test('non-owner admins may invite members but not new admins', async () => {
   const createdRoles: string[] = [];
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     user: {
       findUnique: async (query: { where: { id?: string; email?: string } }) =>
         query.where.id ? { id: query.where.id, name: 'Inviting Admin', organisationId: 'org-1' } : null,
+      count: async () => 1,
     },
     teamInvite: {
       updateMany: async () => ({ count: 0 }),
       findFirst: async () => null,
+      count: async () => 0,
       create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => {
         createdRoles.push(data.role);
         return {
@@ -429,13 +432,16 @@ test('owners may invite admins', async () => {
   const sentInvites: Array<{ email: string; role: string }> = [];
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     user: {
       findUnique: async (query: { where: { id?: string; email?: string } }) =>
         query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : null,
+      count: async () => 1,
     },
     teamInvite: {
       updateMany: async () => ({ count: 0 }),
       findFirst: async () => null,
+      count: async () => 0,
       create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => ({
         id: 'invite-1',
         email: data.email,
@@ -465,6 +471,54 @@ test('owners may invite admins', async () => {
   assert.deepEqual(sentInvites, [{ email: 'admin@example.org', role: 'ADMIN' }]);
 });
 
+test('Essentials organisations cannot invite beyond the team member limit', async () => {
+  const { TeamService } = await import('../services/team.service.js');
+  const { AppError } = await import('../utils/errors.js');
+  let inviteCreated = false;
+  let emailSent = false;
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
+    user: {
+      findUnique: async (query: { where: { id?: string; email?: string } }) =>
+        query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : null,
+      count: async () => 4,
+    },
+    teamInvite: {
+      updateMany: async () => ({ count: 0 }),
+      findFirst: async () => null,
+      count: async () => 1,
+      create: async () => {
+        inviteCreated = true;
+        return {};
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const emailService = {
+    sendTeamInvite: async () => {
+      emailSent = true;
+      return true;
+    },
+  };
+  const service = new TeamService(prisma as never, emailService as never);
+
+  await assert.rejects(
+    () =>
+      service.invite('org-1', 'owner-1', 'OWNER', {
+        email: 'sixth@example.org',
+        role: 'MEMBER',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 403 &&
+      error.code === 'TEAM_MEMBER_LIMIT_EXCEEDED',
+  );
+
+  assert.equal(inviteCreated, false);
+  assert.equal(emailSent, false);
+});
+
 test('team invite route returns an accepted response without exposing invite details', async () => {
   const [{ default: Fastify }, { teamRoutes }, { signAccessToken }] = await Promise.all([
     import('fastify'),
@@ -482,6 +536,7 @@ test('team invite route returns an accepted response without exposing invite det
       findUnique: async () => ({
         status: 'TRIALING',
         trialEndsAt: new Date(Date.now() + 60_000),
+        plan: 'ESSENTIALS',
       }),
     },
     organisation: {
@@ -492,10 +547,12 @@ test('team invite route returns an accepted response without exposing invite det
         query.where.id
           ? { id: 'user-1', organisationId: 'org-1', role: 'OWNER', emailVerified: true, name: 'Owner One' }
           : null,
+      count: async () => 1,
     },
     teamInvite: {
       updateMany: async () => ({ count: 0 }),
       findFirst: async () => null,
+      count: async () => 0,
       create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => {
         createCalled = true;
         return {
@@ -561,13 +618,16 @@ test('team invites do not disclose why an invite recipient is unavailable', asyn
     let emailCalled = false;
     const prisma = {
       organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+      subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
       user: {
         findUnique: async (query: { where: { id?: string; email?: string } }) =>
           query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : scenario.existingUser,
+        count: async () => 1,
       },
       teamInvite: {
         updateMany: async () => ({ count: 0 }),
         findFirst: async () => scenario.existingInvite,
+        count: async () => 0,
         create: async ({ data }: { data: { email: string; role: string; expiresAt: Date } }) => {
           createCalled = true;
           return {
@@ -617,13 +677,16 @@ test('team invites flatten database-enforced duplicate active invite races', asy
   });
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-1', name: 'Org One' }) },
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     user: {
       findUnique: async (query: { where: { id?: string; email?: string } }) =>
         query.where.id ? { id: query.where.id, name: 'Owner', organisationId: 'org-1' } : null,
+      count: async () => 1,
     },
     teamInvite: {
       updateMany: async () => ({ count: 0 }),
       findFirst: async () => null,
+      count: async () => 0,
       create: async () => {
         createCalled = true;
         throw uniqueError;
@@ -648,6 +711,71 @@ test('team invites flatten database-enforced duplicate active invite races', asy
   assert.equal(emailCalled, false);
 });
 
+test('acceptInvite rejects stale invites when the Essentials member limit is already reached', async () => {
+  const { TeamService } = await import('../services/team.service.js');
+  const { AppError } = await import('../utils/errors.js');
+  const { hashOpaqueToken } = await import('../services/session-tokens.js');
+
+  let inviteConsumed = false;
+  let userCreated = false;
+  const prisma = {
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
+    teamInvite: {
+      findUnique: async () => ({
+        id: 'invite-1',
+        token: hashOpaqueToken('invite-token'),
+        email: 'invitee@example.org',
+        role: 'MEMBER',
+        organisationId: 'org-1',
+        organisation: { id: 'org-1', name: 'Org One' },
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      updateMany: async () => {
+        inviteConsumed = true;
+        return { count: 1 };
+      },
+    },
+    user: {
+      findUnique: async () => null,
+      count: async () => 5,
+      create: async () => {
+        userCreated = true;
+        return {
+          id: 'user-1',
+          email: 'invitee@example.org',
+          name: 'Invitee',
+          role: 'MEMBER',
+          organisationId: 'org-1',
+          organisation: { id: 'org-1', name: 'Org One' },
+        };
+      },
+    },
+    authSession: {
+      create: async () => ({ id: 'session-1' }),
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+  };
+  const service = new TeamService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () =>
+      service.acceptInvite({
+        token: 'invite-token',
+        name: 'Invitee',
+        password: 'NewPassword1',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 403 &&
+      error.code === 'TEAM_MEMBER_LIMIT_EXCEEDED',
+  );
+
+  assert.equal(inviteConsumed, false);
+  assert.equal(userCreated, false);
+});
+
 test('acceptInvite consumes the invite atomically before issuing a session', async () => {
   const { TeamService } = await import('../services/team.service.js');
   const { hashOpaqueToken } = await import('../services/session-tokens.js');
@@ -655,6 +783,7 @@ test('acceptInvite consumes the invite atomically before issuing a session', asy
   const future = new Date(Date.now() + 60_000);
   let inviteConsumed = false;
   const prisma = {
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     teamInvite: {
       findUnique: async () => ({
         id: 'invite-1',
@@ -687,6 +816,7 @@ test('acceptInvite consumes the invite atomically before issuing a session', asy
     },
     user: {
       findUnique: async () => null,
+      count: async () => 1,
       create: async () => ({
         id: 'user-1',
         email: 'invitee@example.org',
@@ -720,6 +850,7 @@ test('acceptInvite rejects invite reuse when another request already consumed it
 
   let userCreated = false;
   const prisma = {
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     teamInvite: {
       findUnique: async () => ({
         id: 'invite-1',
@@ -736,6 +867,7 @@ test('acceptInvite rejects invite reuse when another request already consumed it
     },
     user: {
       findUnique: async () => null,
+      count: async () => 1,
       create: async () => {
         userCreated = true;
         return {};
@@ -766,6 +898,7 @@ test('acceptInvite does not disclose that the invite email already belongs to an
   let inviteConsumed = false;
   let userCreated = false;
   const prisma = {
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     teamInvite: {
       findUnique: async () => ({
         id: 'invite-1',
@@ -827,6 +960,7 @@ test('acceptInvite maps raced user email uniqueness failures to invalid invite',
     meta: { target: 'User_email_key' },
   });
   const prisma = {
+    subscription: { findUnique: async () => ({ plan: 'ESSENTIALS' }) },
     teamInvite: {
       findUnique: async () => ({
         id: 'invite-1',
@@ -843,6 +977,7 @@ test('acceptInvite maps raced user email uniqueness failures to invalid invite',
     },
     user: {
       findUnique: async () => null,
+      count: async () => 1,
       create: async () => {
         throw uniqueError;
       },
