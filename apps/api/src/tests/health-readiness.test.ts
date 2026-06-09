@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 
 const [{ default: Fastify }, { healthRoutes }] = await Promise.all([
@@ -50,6 +52,13 @@ test('unauthenticated readiness does not expose detailed dependency checks', { c
     process.env.READINESS_API_KEY = originalReadinessKey;
     await app.close();
   }
+});
+
+test('readiness key comparison uses timing-safe equality', () => {
+  const routeSource = readFileSync(join(process.cwd(), 'src', 'routes', 'health', 'index.ts'), 'utf8');
+
+  assert.match(routeSource, /timingSafeEqual/);
+  assert.doesNotMatch(routeSource, /suppliedKey\s*===\s*configuredKey/);
 });
 
 test('authenticated readiness times out a stuck database check', { concurrency: false }, async () => {

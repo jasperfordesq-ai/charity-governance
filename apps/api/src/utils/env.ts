@@ -304,17 +304,16 @@ function hostMatchesCookieDomain(hostname: string, cookieDomain: string): boolea
   return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
 }
 
-function requireAuthCookieDomainForSplitHosts(issues: string[]) {
+function requireAuthCookieDomain(issues: string[]) {
   const frontendUrls = configuredUrls('FRONTEND_URL', { allowCommaSeparated: true });
   const apiUrls = configuredUrls('NEXT_PUBLIC_API_URL');
   if (!frontendUrls.length || !apiUrls.length) return;
 
   const apiHostname = normaliseHostname(apiUrls[0].hostname);
   const splitHostnames = frontendUrls.some((url) => normaliseHostname(url.hostname) !== apiHostname);
-  if (!splitHostnames) return;
-
   const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim() ?? '';
   if (!isConfiguredSecret(cookieDomain)) {
+    if (!splitHostnames) return;
     issues.push('AUTH_COOKIE_DOMAIN must be set when FRONTEND_URL and NEXT_PUBLIC_API_URL use different hostnames');
     return;
   }
@@ -418,7 +417,7 @@ export function validateProductionEnv(): void {
     requireOrigin: true,
     requireApprovedPublicHost: true,
   });
-  requireAuthCookieDomainForSplitHosts(issues);
+  requireAuthCookieDomain(issues);
 
   requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requirePrefix('STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);

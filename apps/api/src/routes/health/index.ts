@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BillingService } from '../../services/billing.service.js';
 import { EmailService } from '../../services/email.service.js';
@@ -6,12 +7,20 @@ import { isConfiguredSecret } from '../../utils/env.js';
 
 const READINESS_HEADER = 'x-charitypilot-readiness-key';
 
+function readinessKeyDigest(value: string): Buffer {
+  return createHash('sha256').update(value, 'utf8').digest();
+}
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  return timingSafeEqual(readinessKeyDigest(a), readinessKeyDigest(b));
+}
+
 function hasReadinessAccess(request: FastifyRequest): boolean {
   const configuredKey = process.env.READINESS_API_KEY;
   if (!isConfiguredSecret(configuredKey)) return false;
 
   const suppliedKey = request.headers[READINESS_HEADER];
-  return typeof suppliedKey === 'string' && suppliedKey === configuredKey;
+  return typeof suppliedKey === 'string' && timingSafeStringEqual(suppliedKey, configuredKey);
 }
 
 function readinessDependencyTimeoutMs(): number {

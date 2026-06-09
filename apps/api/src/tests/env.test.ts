@@ -683,6 +683,22 @@ test('validateProductionEnv rejects auth cookie domains that do not cover produc
   );
 });
 
+test('validateProductionEnv rejects invalid auth cookie domains even for same-host deployments', () => {
+  setCompleteProductionEnv({
+    FRONTEND_URL: 'https://charitypilot.ie',
+    NEXT_PUBLIC_API_URL: 'https://charitypilot.ie',
+    AUTH_COOKIE_DOMAIN: '.attacker.example',
+  });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname'),
+  );
+});
+
 test('validateProductionEnv rejects unapproved production public hostnames', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
