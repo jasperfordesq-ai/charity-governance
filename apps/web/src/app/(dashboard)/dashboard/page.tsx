@@ -44,6 +44,11 @@ function SkeletonList({ rows = 3 }: { rows?: number }) {
   );
 }
 
+function isPlanFeatureUnavailable(error: unknown) {
+  const response = (error as { response?: { status?: number; data?: { code?: unknown } } } | null)?.response;
+  return response?.status === 403 && response.data?.code === 'PLAN_FEATURE_UNAVAILABLE';
+}
+
 /* ------------------------------------------------------------------ */
 /*  Dashboard page                                                    */
 /* ------------------------------------------------------------------ */
@@ -65,18 +70,16 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDashboard() {
       try {
-        const [summaryRes, deadlinesRes, boardRes, signoffRes, registerRes] = await Promise.all([
+        const [summaryRes, deadlinesRes, boardRes, signoffRes] = await Promise.all([
           api.get(`/compliance/summary?year=${currentYear}`),
           api.get('/deadlines'),
           api.get('/board-members'),
           api.get(`/compliance/signoff?year=${currentYear}`),
-          api.get(`/governance-registers/summary?year=${currentYear}`),
         ]);
 
         setCompliance(summaryRes.data);
         setDeadlines(deadlinesRes.data?.data ?? deadlinesRes.data);
         setSignoff(signoffRes.data);
-        setRegisterSummary(registerRes.data);
 
         // Derive board alerts from board members
         const members = boardRes.data?.data ?? boardRes.data ?? [];
@@ -117,6 +120,16 @@ export default function DashboardPage() {
         }
 
         setBoardAlerts(alerts);
+
+        try {
+          const registerRes = await api.get(`/governance-registers/summary?year=${currentYear}`);
+          setRegisterSummary(registerRes.data);
+        } catch (registerErr) {
+          if (!isPlanFeatureUnavailable(registerErr)) {
+            logClientError('Failed to load governance register summary', registerErr);
+          }
+          setRegisterSummary(null);
+        }
       } catch (err) {
         logClientError('Failed to load dashboard data', err);
         setError(true);

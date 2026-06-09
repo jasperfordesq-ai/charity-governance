@@ -11,6 +11,9 @@ import {
   upsertComplianceSignoffSchema,
 } from '@charitypilot/shared';
 
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'governance-workflow-test-secret';
+process.env.JWT_EXPIRY = process.env.JWT_EXPIRY ?? '1h';
+
 test('risk register validation enforces 1-5 likelihood and impact scores', () => {
   const result = createRiskRecordSchema.safeParse({
     title: 'Late annual filing',
@@ -155,4 +158,63 @@ test('Essentials organisations cannot write compliance records for additional st
       error.code === 'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN',
   );
   assert.equal(upsertCalled, false);
+});
+
+test('Essentials organisations cannot access Complete-only governance register endpoints', async () => {
+  const [{ default: Fastify }, { governanceRegisterRoutes }, { signAccessToken }] = await Promise.all([
+    import('fastify'),
+    import('../routes/governance-registers/index.js'),
+    import('../utils/jwt.js'),
+  ]);
+
+  let registerSummaryRead = false;
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    authSession: {
+      findFirst: async () => ({ id: 'session-1' }),
+    },
+    user: {
+      findUnique: async () => ({
+        id: 'user-1',
+        organisationId: 'org-1',
+        role: 'OWNER',
+        emailVerified: true,
+      }),
+    },
+    subscription: {
+      findUnique: async () => ({ status: 'ACTIVE', trialEndsAt: null, plan: 'ESSENTIALS' }),
+    },
+    conflictRecord: {
+      count: async () => {
+        registerSummaryRead = true;
+        return 0;
+      },
+    },
+    riskRecord: { count: async () => 0 },
+    complaintRecord: { count: async () => 0 },
+    fundraisingRecord: { count: async () => 0 },
+    annualReportReadiness: { findUnique: async () => null },
+    financialControlReview: { findUnique: async () => null },
+  } as never);
+  await app.register(governanceRegisterRoutes, { prefix: '/governance-registers' });
+
+  try {
+    const token = signAccessToken({
+      userId: 'user-1',
+      organisationId: 'org-1',
+      role: 'OWNER',
+      sessionId: 'session-1',
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/governance-registers/summary?year=2026',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'PLAN_FEATURE_UNAVAILABLE');
+    assert.equal(registerSummaryRead, false);
+  } finally {
+    await app.close();
+  }
 });

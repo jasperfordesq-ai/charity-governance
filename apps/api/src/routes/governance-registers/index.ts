@@ -25,6 +25,7 @@ import {
 } from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
+import { requireCompletePlan } from '../../middleware/plan.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { GovernanceRegisterService } from '../../services/governance-register.service.js';
 import { handleError } from '../../utils/errors.js';
@@ -39,6 +40,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
+  app.addHook('preHandler', requireCompletePlan);
 
   app.get('/summary', async (request, reply) => {
     try {
