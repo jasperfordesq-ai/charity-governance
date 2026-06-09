@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 const ENV_FILE_FLAG = '--production-env-file=';
 const READINESS_PATH = '/api/v1/health/readiness';
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
+const DISALLOWED_CORS_PROBE_ORIGIN = 'https://not-charitypilot.example';
 
 function usage() {
   return 'Usage: node scripts/smoke-production-deploy.mjs --production-env-file <path> [--dry-run]\n';
@@ -172,6 +173,14 @@ async function runSmoke({ webOrigin, apiOrigin, readinessKey, fetchImpl }) {
     issues.push('API health must allow credentials for the configured production web Origin');
   }
 
+  const disallowedCorsResponse = await fetchImpl(healthUrl, {
+    headers: { origin: DISALLOWED_CORS_PROBE_ORIGIN },
+  });
+  const disallowedAllowOrigin = disallowedCorsResponse.headers.get('access-control-allow-origin');
+  if (disallowedAllowOrigin === DISALLOWED_CORS_PROBE_ORIGIN || disallowedAllowOrigin === '*') {
+    issues.push('API health must not allow an unapproved browser Origin');
+  }
+
   const unauthorizedReadinessResponse = await fetchImpl(readinessUrl);
   const unauthorizedBody = await safeJson(unauthorizedReadinessResponse);
   if (unauthorizedReadinessResponse.status !== 401 || unauthorizedBody?.code !== 'READINESS_UNAUTHORIZED' || 'checks' in (unauthorizedBody ?? {})) {
@@ -231,6 +240,7 @@ export async function runProductionDeploySmokeFromArgs(
       `API origin: ${config.apiOrigin}`,
       `GET ${config.webOrigin}/`,
       `GET ${config.apiOrigin}/api/v1/health with Origin ${config.webOrigin}`,
+      `GET ${config.apiOrigin}/api/v1/health with disallowed Origin ${DISALLOWED_CORS_PROBE_ORIGIN}`,
       `GET ${config.apiOrigin}${READINESS_PATH} without readiness key`,
       `GET ${config.apiOrigin}${READINESS_PATH} with readiness key`,
       '',

@@ -93,6 +93,7 @@ test('production deploy smoke dry-run lists public HTTPS checks without fetching
     assert.match(result.stdout, /Production deploy smoke dry-run/);
     assert.match(result.stdout, /Web origin: https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stdout, /API origin: https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stdout, /GET https:\/\/api\.charitypilot\.ie\/api\/v1\/health with disallowed Origin https:\/\/not-charitypilot\.example/);
     assert.match(result.stdout, /GET https:\/\/api\.charitypilot\.ie\/api\/v1\/health\/readiness with readiness key/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -122,6 +123,9 @@ test('production deploy smoke verifies public web, API, CORS, and keyed readines
           }
 
           if (url === 'https://api.charitypilot.ie/api/v1/health') {
+            if (options.headers?.origin === 'https://not-charitypilot.example') {
+              return response(200, { status: 'ok' }, baselineHeaders());
+            }
             return response(200, { status: 'ok' }, baselineHeaders({
               'access-control-allow-origin': 'https://app.charitypilot.ie',
               'access-control-allow-credentials': 'true',
@@ -151,11 +155,57 @@ test('production deploy smoke verifies public web, API, CORS, and keyed readines
     assert.deepEqual(calls.map((call) => call.url), [
       'https://app.charitypilot.ie/',
       'https://api.charitypilot.ie/api/v1/health',
+      'https://api.charitypilot.ie/api/v1/health',
       'https://api.charitypilot.ie/api/v1/health/readiness',
       'https://api.charitypilot.ie/api/v1/health/readiness',
     ]);
     assert.equal(calls[1].headers.origin, 'https://app.charitypilot.ie');
-    assert.equal(calls[3].headers['x-charitypilot-readiness-key'], 'configured-readiness-key-32-chars');
+    assert.equal(calls[2].headers.origin, 'https://not-charitypilot.example');
+    assert.equal(calls[4].headers['x-charitypilot-readiness-key'], 'configured-readiness-key-32-chars');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production deploy smoke fails when API CORS allows an unapproved origin', async () => {
+  const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-cors-deny-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeSmokeEnv());
+
+  try {
+    const result = await runProductionDeploySmokeFromArgs(
+      ['--production-env-file', envPath],
+      {
+        processEnv: cleanEnv(),
+        fetchImpl: async (url, options = {}) => {
+          if (url === 'https://app.charitypilot.ie/') return response(200, {}, baselineHeaders());
+          if (url === 'https://api.charitypilot.ie/api/v1/health') {
+            return response(200, { status: 'ok' }, baselineHeaders({
+              'access-control-allow-origin': options.headers?.origin ?? '*',
+              'access-control-allow-credentials': 'true',
+            }));
+          }
+          if (!options.headers?.['x-charitypilot-readiness-key']) {
+            return response(401, { code: 'READINESS_UNAUTHORIZED' }, baselineHeaders());
+          }
+          return response(200, {
+            status: 'ready',
+            checks: {
+              database: true,
+              billingConfigured: true,
+              emailConfigured: true,
+              storageConfigured: true,
+              storageBucketReachable: true,
+            },
+          }, baselineHeaders());
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /API health must not allow an unapproved browser Origin/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -176,6 +226,9 @@ test('production deploy smoke fails when keyed readiness is not ready', async ()
         fetchImpl: async (url, options = {}) => {
           if (url === 'https://app.charitypilot.ie/') return response(200, {}, baselineHeaders());
           if (url === 'https://api.charitypilot.ie/api/v1/health') {
+            if (options.headers?.origin === 'https://not-charitypilot.example') {
+              return response(200, { status: 'ok' }, baselineHeaders());
+            }
             return response(200, { status: 'ok' }, baselineHeaders({
               'access-control-allow-origin': 'https://app.charitypilot.ie',
               'access-control-allow-credentials': 'true',
