@@ -67,6 +67,20 @@ function isSupabaseSignedStorageUrl(url: URL): boolean {
   );
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1';
+}
+
+function isLocalApiDocumentDownloadUrl(url: URL): boolean {
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    url.protocol === 'http:' &&
+    isLoopbackHostname(url.hostname) &&
+    url.pathname === '/api/v1/documents/_local-download'
+  );
+}
+
 export function removeSensitiveSearchParams(rawUrl: string, paramNames: string[]): string {
   const isRelative = rawUrl.startsWith('/') && !rawUrl.startsWith('//');
   const url = new URL(rawUrl, 'https://charitypilot.local');
@@ -116,7 +130,13 @@ export function getTrustedDocumentDownloadUrl(
   options: DownloadUrlOptions = {},
 ): string | null {
   const url = parseUrl(value);
-  if (!url || url.protocol !== 'https:') return null;
+  if (!url) return null;
+
+  if (isLocalApiDocumentDownloadUrl(url)) {
+    return url.toString();
+  }
+
+  if (url.protocol !== 'https:') return null;
 
   const allowedOrigins = options.allowedOrigins
     ? normaliseHttpsOrigins(options.allowedOrigins)

@@ -38,10 +38,16 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /\n\s+web:/);
   assert.match(compose, /deps:[\s\S]*environment:[\s\S]*NODE_ENV:\s+development/);
   assert.match(compose, /deps:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
+  assert.match(compose, /deps:[\s\S]*Using existing node_modules volume/);
   assert.match(compose, /deps:[\s\S]*npm ci --include=dev/);
   assert.match(compose, /api:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /web:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /NODE_ENV:\s+development/);
+  assert.match(compose, /DOCUMENT_STORAGE_DRIVER:\s+local/);
+  assert.match(compose, /LOCAL_FILE_STORAGE_DIR:\s+\/app\/\.charitypilot-local-storage\/documents/);
+  assert.match(compose, /SEED_LOCAL_ADMIN:\s+"true"/);
+  assert.match(compose, /LOCAL_ADMIN_EMAIL:\s+admin@charitypilot\.local/);
+  assert.match(compose, /LOCAL_ADMIN_PASSWORD:\s+LocalAdmin123!/);
   assert.match(compose, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_dev@db:5432\/charitypilot/);
   assert.match(compose, /FRONTEND_URL:\s+http:\/\/localhost:3003/);
   assert.match(compose, /NEXT_PUBLIC_API_URL:\s+http:\/\/localhost:3002/);
@@ -49,7 +55,9 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /127\.0\.0\.1:3002:3002/);
   assert.match(compose, /127\.0\.0\.1:3003:3003/);
   assert.match(compose, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(compose, /npm run db:seed -w @charitypilot\/api/);
   assert.match(compose, /node --import tsx --watch src\/server\.ts/);
+  assert.match(compose, /web:[\s\S]*rm -rf apps\/web\/\.next\/\* && npm run dev -w @charitypilot\/web/);
   assert.doesNotMatch(compose, /tsx\/esm/);
   assert.equal(apiPackage.scripts.dev, 'node --env-file=.env --import tsx --watch src/server.ts');
   assert.match(compose, /\/api\/v1\/health/);
@@ -67,6 +75,23 @@ test('local development defaults use the documented API port', () => {
   assert.match(apiServer, /parsePort\(process\.env\.PORT,\s*3002\)/);
   assert.match(webApiConfig, /DEFAULT_DEVELOPMENT_API_URL\s*=\s*'http:\/\/localhost:3002'/);
   assert.match(rootEnvExample, /PORT=3002/);
+});
+
+test('local admin seed reports the configured admin account', () => {
+  const seedScript = readRepoFile('apps/api/prisma/seed.ts');
+
+  assert.match(seedScript, /return \{ email: config\.email, organisationName: organisation\.name \}/);
+  assert.doesNotMatch(seedScript, /DEMO_EMAIL/);
+  assert.doesNotMatch(seedScript, /DEMO_ORG_NAME/);
+});
+
+test('local admin seed stores starter documents in organisation-scoped local storage', () => {
+  const seedScript = readRepoFile('apps/api/prisma/seed.ts');
+
+  assert.doesNotMatch(seedScript, /fileUrl:\s*`\/demo\//);
+  assert.match(seedScript, /\$\{organisationId\}\/seeded-documents\/\$\{slugifyDocumentName\(name\)\}\.pdf/);
+  assert.match(seedScript, /DOCUMENT_STORAGE_DRIVER === 'local'/);
+  assert.match(seedScript, /writeFile\(filePath, seededDocumentPdf\(documentName\)\)/);
 });
 
 test('web local env example matches the development CSP API origin', () => {
@@ -146,7 +171,15 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/register/);
   assert.match(smokeScript, /NewPassword1/);
   assert.match(smokeScript, /If this registration can be completed, check your email for next steps\./);
+  assert.match(smokeScript, /admin@charitypilot\.local/);
+  assert.match(smokeScript, /LocalAdmin123!/);
+  assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/login/);
+  assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/documents/);
+  assert.match(smokeScript, /Seeded starter documents downloaded through local filesystem storage/);
+  assert.match(smokeScript, /Document uploaded and downloaded through local filesystem storage/);
   assert.match(smokeScript, /set-cookie/i);
+  assert.match(smokeScript, /await waitForCheck\('web root', smokeWeb, 300_000\)/);
+  assert.match(smokeScript, /fetchWithTimeout\('http:\/\/127\.0\.0\.1:3003\/', \{\}, 60_000\)/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3003\//);
   assert.match(smokeScript, /CharityPilot/);
   assert.doesNotMatch(smokeScript, /down', '-v'/);
@@ -167,7 +200,7 @@ test('local Docker migrations are a first-class command and are dry-runnable', (
 
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml up --wait --wait-timeout 180 -d db/);
-  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc "npm ci --include=dev && npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api"/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc "if \[ -d node_modules\/next \] && \[ -d node_modules\/@prisma\/client \]; then echo 'Using existing node_modules volume'; else npm ci --include=dev; fi && npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api"/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate status --schema apps\/api\/prisma\/schema\.prisma/);
 });

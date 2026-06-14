@@ -32,6 +32,7 @@ export async function OrganisationJsonLd() {
   return (
     <script
       nonce={nonce}
+      suppressHydrationWarning
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: serialiseJsonLdForScript(data) }}
     />
@@ -70,6 +71,7 @@ export async function BlogPostJsonLd({
   return (
     <script
       nonce={nonce}
+      suppressHydrationWarning
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: serialiseJsonLdForScript(data) }}
     />
@@ -91,6 +93,7 @@ export async function FaqJsonLd({ faqs }: { faqs: Array<{ question: string; answ
   return (
     <script
       nonce={nonce}
+      suppressHydrationWarning
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: serialiseJsonLdForScript(data) }}
     />

@@ -2244,6 +2244,23 @@ test('web executable inline scripts are nonce-bound for strict production CSP', 
   assert.match(proxy, /Content-Security-Policy/);
 });
 
+test('web nonce-bearing scripts suppress hydration comparison for browser-masked nonces', () => {
+  const layout = readRepoFile('apps/web/src/app/layout.tsx');
+  const jsonLd = readRepoFile('apps/web/src/components/json-ld.tsx');
+
+  assert.match(
+    layout,
+    /<script\s+nonce=\{nonce\}\s+suppressHydrationWarning\s+dangerouslySetInnerHTML=/,
+  );
+
+  const nonceJsonLdScripts = jsonLd.match(/<script[\s\S]*?nonce=\{nonce\}[\s\S]*?dangerouslySetInnerHTML=/g) ?? [];
+  assert.equal(nonceJsonLdScripts.length, 3);
+
+  for (const script of nonceJsonLdScripts) {
+    assert.match(script, /suppressHydrationWarning/);
+  }
+});
+
 test('web route protection uses the Next proxy convention instead of deprecated middleware', () => {
   assert.equal(existsSync(join(repoRoot, 'apps/web/src/middleware.ts')), false);
   assert.equal(existsSync(join(repoRoot, 'apps/web/src/proxy.ts')), true);

@@ -51,7 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           rel="stylesheet"
         />
         {/* Prevent FOUC for explicit dark mode without forcing public pages into OS dark mode */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var p=location.pathname;var app=/^\\/(dashboard|compliance|regulator|documents|board|registers|deadlines|organisation|team|billing|export)(\\/|$)/.test(p);if(app&&localStorage.theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}` }} />
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: `try{var p=location.pathname;var app=/^\\/(dashboard|compliance|regulator|documents|board|registers|deadlines|organisation|team|billing|export)(\\/|$)/.test(p);if(app&&localStorage.theme==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}` }} />
       </head>
       <body className="font-sans antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors" suppressHydrationWarning>
         <Providers>{children}</Providers>
