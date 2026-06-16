@@ -241,8 +241,8 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Document Vault</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Document Vault</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Upload and manage governance documents. Link them to compliance standards as evidence.
           </p>
         </div>
@@ -257,14 +257,14 @@ export default function DocumentsPage() {
         </Button>
       </div>
 
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-primary">
+            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-light dark:border-teal-light/20">
               Evidence pack
             </Chip>
-            <h2 className="text-lg font-semibold text-gray-900">Board-ready governance evidence</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Board-ready governance evidence</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
               Keep the core documents close to the standards they support: governing document,
               board conduct, policies, minutes, accounts, annual report, risk, insurance, and planning.
             </p>
@@ -277,23 +277,23 @@ export default function DocumentsPage() {
           {evidencePackItems.map((item) => {
             const count = documentCounts[item.category] ?? 0;
             return (
-              <div key={item.title} className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+              <div key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/60 p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
                   <Chip size="sm" color={count > 0 ? 'success' : 'default'} variant="flat">
                     {count > 0 ? `${count} file${count > 1 ? 's' : ''}` : 'Needed'}
                   </Chip>
                 </div>
-                <p className="mt-1 text-xs text-teal-primary">Standards {item.standards}</p>
+                <p className="mt-1 text-xs text-teal-dark dark:text-teal-light">Standards {item.standards}</p>
               </div>
             );
           })}
         </div>
-        <div className="mt-5 border-t border-gray-200 pt-4">
+        <div className="mt-5 border-t border-gray-200 dark:border-gray-800 pt-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Operational register signals</h3>
-              <p className="mt-0.5 text-xs leading-5 text-gray-500">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Operational register signals</h3>
+              <p className="mt-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400">
                 These checks look for named registers and policies in document titles or descriptions, so name uploads plainly.
               </p>
             </div>
@@ -303,12 +303,12 @@ export default function DocumentsPage() {
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
             {signalCoverage.map((item) => (
-              <div key={item.title} className="rounded-lg border border-gray-200 bg-white p-3">
+              <div key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{item.title}</p>
-                    <p className="mt-1 text-xs text-gray-500">{item.why}</p>
-                    <p className="mt-1 text-xs text-teal-primary">Standards {item.standards}</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.why}</p>
+                    <p className="mt-1 text-xs text-teal-dark dark:text-teal-light">Standards {item.standards}</p>
                   </div>
                   <Chip size="sm" color={item.covered ? 'success' : 'default'} variant="flat">
                     {item.covered ? 'Found' : 'Needed'}
@@ -322,29 +322,29 @@ export default function DocumentsPage() {
 
       {/* Documents table */}
       {loading ? (
-        <Card className="p-6 animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-5" />
+        <Card className="p-6 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-5" />
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex gap-4 mb-3">
-              <div className="h-3 bg-gray-200 rounded w-1/4" />
-              <div className="h-3 bg-gray-200 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 rounded w-1/4" />
-              <div className="h-3 bg-gray-200 rounded w-1/6" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
             </div>
           ))}
         </Card>
       ) : documents.length === 0 ? (
-        <Card className="p-12 border border-gray-200 text-center">
-          <div className="text-gray-400 mb-3">
+        <Card className="p-12 border border-gray-200 dark:border-gray-800 dark:bg-gray-900 text-center">
+          <div className="text-gray-400 dark:text-gray-500 mb-3">
             <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           </div>
-          <p className="text-gray-500 mb-2">No documents uploaded yet.</p>
-          <p className="text-sm text-gray-400">Upload your governance documents to link them as evidence for compliance standards.</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-2">No documents uploaded yet.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Upload your governance documents to link them as evidence for compliance standards.</p>
         </Card>
       ) : (
-        <Card className="border border-gray-200 shadow-sm overflow-hidden">
+        <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm overflow-hidden">
           <Table aria-label="Documents" removeWrapper>
             <TableHeader>
               <TableColumn>NAME</TableColumn>
@@ -362,12 +362,12 @@ export default function DocumentsPage() {
                       <button
                         type="button"
                         onClick={() => handleDownload(doc)}
-                        className="text-sm font-medium text-teal-primary hover:underline"
+                        className="text-sm font-medium text-teal-primary hover:text-teal-dark dark:text-teal-light hover:underline"
                       >
                         {doc.name}
                       </button>
                       {doc.description && (
-                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{doc.description}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{doc.description}</p>
                       )}
                     </div>
                   </TableCell>
@@ -377,7 +377,7 @@ export default function DocumentsPage() {
                     </Chip>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell">
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       <p>{doc.owner ? `Owner: ${doc.owner}` : 'No owner'}</p>
                       <p>
                         {doc.nextReviewDate
@@ -422,7 +422,7 @@ export default function DocumentsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
                       {new Date(doc.createdAt).toLocaleDateString('en-IE', {
                         day: 'numeric',
                         month: 'short',
@@ -455,7 +455,7 @@ export default function DocumentsPage() {
               <ModalHeader>Upload Document</ModalHeader>
               <ModalBody className="space-y-4">
                 {uploadError && (
-                  <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                  <div role="alert" className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-sm">
                     {uploadError}
                   </div>
                 )}
@@ -512,17 +512,17 @@ export default function DocumentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     File
                   </label>
                   <input
                     type="file"
                     onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-primary/10 file:text-teal-primary hover:file:bg-teal-primary/20"
+                    className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-primary/10 dark:file:bg-teal-light/10 file:text-teal-primary dark:file:text-teal-light hover:file:bg-teal-primary/20 dark:hover:file:bg-teal-light/20"
                     accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg"
                   />
                   {uploadFile && (
-                    <p className={`text-xs mt-1 ${uploadFile.size > MAX_FILE_SIZE ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                    <p className={`text-xs mt-1 ${uploadFile.size > MAX_FILE_SIZE ? 'text-red-500 dark:text-red-400 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
                       {uploadFile.name} ({uploadFile.size > 1024 * 1024 ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : `${(uploadFile.size / 1024).toFixed(1)} KB`})
                       {uploadFile.size > MAX_FILE_SIZE && ' — exceeds 10 MB limit'}
                     </p>
@@ -554,7 +554,7 @@ export default function DocumentsPage() {
             <>
               <ModalHeader>Delete Document</ModalHeader>
               <ModalBody>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   Are you sure you want to delete this document? This action cannot be undone.
                 </p>
               </ModalBody>
@@ -594,7 +594,7 @@ export default function DocumentsPage() {
                     <SelectItem key={s.id} textValue={`${s.code} - ${s.title}`}>
                       <div>
                         <span className="font-mono font-semibold text-sm">{s.code}</span>
-                        <span className="text-sm text-gray-600 ml-2 line-clamp-1">{s.title}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300 ml-2 line-clamp-1">{s.title}</span>
                       </div>
                     </SelectItem>
                   ))}

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { StorageService, withReadinessTimeout } from '../services/storage.service.js';
@@ -90,6 +93,65 @@ test('verifyBucket returns false when the configured document bucket is public',
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('local storage driver writes, reads, signs, and deletes files without Supabase', async () => {
+  const originalEnv = {
+    API_URL: process.env.API_URL,
+    DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+    LOCAL_FILE_STORAGE_DIR: process.env.LOCAL_FILE_STORAGE_DIR,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET,
+  };
+  const storageDir = await mkdtemp(join(tmpdir(), 'charitypilot-local-storage-'));
+
+  process.env.API_URL = 'http://localhost:3002';
+  process.env.DOCUMENT_STORAGE_DRIVER = 'local';
+  process.env.LOCAL_FILE_STORAGE_DIR = storageDir;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_STORAGE_BUCKET;
+
+  try {
+    const service = new StorageService();
+    assert.equal(service.isConfigured(), true);
+    assert.equal(await service.verifyBucket(), true);
+
+    const uploaded = await service.uploadFile(
+      'org-local',
+      'Board Minutes June 2026.PDF',
+      Buffer.from('%PDF-1.7\nlocal file'),
+      'application/pdf',
+    );
+
+    assert.match(uploaded.storagePath, /^org-local\/\d+-board-minutes-june-2026\.pdf$/);
+    assert.equal(
+      await readFile(join(storageDir, uploaded.storagePath), 'utf8'),
+      '%PDF-1.7\nlocal file',
+    );
+
+    const signedUrl = await service.getSignedUrl('org-local', uploaded.storagePath);
+    assert.match(
+      signedUrl,
+      /^http:\/\/localhost:3002\/api\/v1\/documents\/_local-download\?path=org-local%2F\d+-board-minutes-june-2026\.pdf$/,
+    );
+
+    const file = await service.readLocalFile('org-local', uploaded.storagePath);
+    assert.equal(file.toString('utf8'), '%PDF-1.7\nlocal file');
+
+    await service.deleteFile('org-local', uploaded.storagePath);
+    await assert.rejects(() => readFile(join(storageDir, uploaded.storagePath)));
+  } finally {
+    await rm(storageDir, { recursive: true, force: true });
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
         delete process.env[key];

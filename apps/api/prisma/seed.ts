@@ -1,19 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve, sep } from 'node:path';
 import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
+import { getLocalAdminSeedConfig, type LocalAdminSeedConfig } from '../src/services/local-admin-seed.js';
 
 const prisma = new PrismaClient();
+const DEFAULT_LOCAL_STORAGE_DIR = '.charitypilot-local-storage/documents';
 
-const DEMO_EMAIL = 'demo@charitypilot.ie';
-const DEMO_ORG_NAME = 'CharityPilot Demo Charity';
-
-function demoPassword(): string {
-  const password = process.env.DEMO_PASSWORD;
-  if (!password) {
-    throw new Error('DEMO_PASSWORD must be set when SEED_DEMO_WORKSPACE=true');
-  }
-  return password;
-}
+type EnabledLocalAdminSeedConfig = LocalAdminSeedConfig & { enabled: true };
 
 async function seedGovernanceCode() {
   let principleCount = 0;
@@ -68,6 +63,76 @@ function dateFromIso(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+function slugifyDocumentName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function seededDocumentStoragePath(organisationId: string, name: string): string {
+  return `${organisationId}/seeded-documents/${slugifyDocumentName(name)}.pdf`;
+}
+
+function escapePdfText(value: string): string {
+  return value.replace(/[\\()]/g, (match) => `\\${match}`);
+}
+
+function seededDocumentPdf(documentName: string): Buffer {
+  const content = `BT /F1 12 Tf 36 96 Td (CharityPilot local seed document: ${escapePdfText(documentName)}) Tj ET`;
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 144] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n',
+    `4 0 obj\n<< /Length ${Buffer.byteLength(content, 'utf8')} >>\nstream\n${content}\nendstream\nendobj\n`,
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+  ];
+  const offsets: number[] = [];
+  let output = '%PDF-1.4\n';
+
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(output, 'utf8'));
+    output += object;
+  }
+
+  const xrefOffset = Buffer.byteLength(output, 'utf8');
+  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    output += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  }
+  output += `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  return Buffer.from(output, 'utf8');
+}
+
+function localStorageRoot(): string {
+  return resolve(process.env.LOCAL_FILE_STORAGE_DIR ?? DEFAULT_LOCAL_STORAGE_DIR);
+}
+
+function isLocalStorageDriver(): boolean {
+  return process.env.DOCUMENT_STORAGE_DRIVER === 'local';
+}
+
+function localSeedFilePath(storagePath: string): string {
+  const root = localStorageRoot();
+  const filePath = resolve(root, storagePath);
+  const rootPrefix = root.endsWith(sep) ? root : `${root}${sep}`;
+
+  if (filePath !== root && !filePath.startsWith(rootPrefix)) {
+    throw new Error(`Seed document path escapes local storage: ${storagePath}`);
+  }
+
+  return filePath;
+}
+
+async function writeLocalSeedDocument(storagePath: string, documentName: string): Promise<void> {
+  if (!isLocalStorageDriver()) return;
+
+  const filePath = localSeedFilePath(storagePath);
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, seededDocumentPdf(documentName));
+}
+
 async function upsertBoardMember(organisationId: string, data: {
   name: string;
   role: string;
@@ -102,11 +167,13 @@ async function upsertDocument(organisationId: string, uploadedById: string, data
   const existing = await prisma.document.findFirst({
     where: { organisationId, name: data.name },
   });
+  const fileUrl = seededDocumentStoragePath(organisationId, data.name);
+  await writeLocalSeedDocument(fileUrl, data.name);
 
   const payload = {
     ...data,
-    fileUrl: `/demo/${data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`,
-    fileSize: 245_000,
+    fileUrl,
+    fileSize: seededDocumentPdf(data.name).byteLength,
     mimeType: 'application/pdf',
     uploadedById,
   };
@@ -136,17 +203,17 @@ async function upsertDeadline(organisationId: string, data: {
   return prisma.deadline.create({ data: { organisationId, ...data } });
 }
 
-async function seedDemoWorkspace() {
+async function seedDemoWorkspace(config: EnabledLocalAdminSeedConfig) {
   const financialYearEnd = dateFromIso('2025-12-31');
-  const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+  const currentPeriodStart = new Date();
+  const currentPeriodEnd = dateFromIso('2099-12-31');
 
-  let organisation = await prisma.organisation.findFirst({ where: { name: DEMO_ORG_NAME } });
+  let organisation = await prisma.organisation.findFirst({ where: { name: config.organisationName } });
 
   if (!organisation) {
     organisation = await prisma.organisation.create({
       data: {
-        name: DEMO_ORG_NAME,
+        name: config.organisationName,
         rcnNumber: '20000000',
         croNumber: '700000',
         legalForm: 'CLG',
@@ -181,19 +248,19 @@ async function seedDemoWorkspace() {
     });
   }
 
-  const passwordHash = await bcrypt.hash(demoPassword(), 12);
+  const passwordHash = await bcrypt.hash(config.password, 12);
   const user = await prisma.user.upsert({
-    where: { email: DEMO_EMAIL },
+    where: { email: config.email },
     update: {
-      name: 'Demo Owner',
+      name: config.name,
       passwordHash,
       role: 'OWNER',
       organisationId: organisation.id,
       emailVerified: true,
     },
     create: {
-      email: DEMO_EMAIL,
-      name: 'Demo Owner',
+      email: config.email,
+      name: config.name,
       passwordHash,
       role: 'OWNER',
       organisationId: organisation.id,
@@ -204,15 +271,19 @@ async function seedDemoWorkspace() {
   await prisma.subscription.upsert({
     where: { organisationId: organisation.id },
     update: {
-      plan: 'COMPLETE',
-      status: 'TRIALING',
-      trialEndsAt,
+      plan: config.subscriptionPlan,
+      status: config.subscriptionStatus,
+      trialEndsAt: null,
+      currentPeriodStart,
+      currentPeriodEnd,
     },
     create: {
       organisationId: organisation.id,
-      plan: 'COMPLETE',
-      status: 'TRIALING',
-      trialEndsAt,
+      plan: config.subscriptionPlan,
+      status: config.subscriptionStatus,
+      trialEndsAt: null,
+      currentPeriodStart,
+      currentPeriodEnd,
     },
   });
 
@@ -525,7 +596,7 @@ async function seedDemoWorkspace() {
     },
   });
 
-  return { email: DEMO_EMAIL, organisationName: organisation.name };
+  return { email: config.email, organisationName: organisation.name };
 }
 
 async function main() {
@@ -533,10 +604,11 @@ async function main() {
 
   console.log(`Seeded ${governance.principleCount} governance principles and ${governance.standardCount} governance standards.`);
 
-  if (process.env.SEED_DEMO_WORKSPACE === 'true') {
-    const demo = await seedDemoWorkspace();
-    console.log(`Demo workspace ready: ${demo.organisationName} (${demo.email}).`);
-    console.log('Use the local demo password configured in prisma/seed.ts only outside production.');
+  const localAdminSeed = getLocalAdminSeedConfig();
+  if (localAdminSeed.enabled) {
+    const demo = await seedDemoWorkspace(localAdminSeed);
+    console.log(`Local admin workspace ready: ${demo.organisationName} (${demo.email}).`);
+    console.log('Use the configured local admin password only outside production.');
   }
 }
 

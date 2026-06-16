@@ -34,7 +34,7 @@ export function MobileNav() {
       </button>
 
       {open && (
-        <div className="absolute top-16 inset-x-0 bg-white border-b border-gray-200 shadow-lg z-50">
+        <div className="absolute top-16 inset-x-0 bg-white border-y border-gray-200 shadow-lg z-50">
           <nav className="max-w-7xl mx-auto px-4 py-4 space-y-1" aria-label="Mobile navigation">
             {NAV_LINKS.map((link) => (
               <Link

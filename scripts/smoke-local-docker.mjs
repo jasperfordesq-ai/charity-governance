@@ -12,6 +12,14 @@ const nextEnvPath = join(repoRoot, 'apps', 'web', 'next-env.d.ts');
 const cleanup = process.argv.includes('--cleanup');
 const cleanupVolumes = process.argv.includes('--cleanup-volumes');
 const nextEnvSnapshot = existsSync(nextEnvPath) ? readFileSync(nextEnvPath, 'utf8') : null;
+const localAdminEmail = 'admin@charitypilot.local';
+const localAdminPassword = 'LocalAdmin123!';
+const seededStarterDocumentNames = new Set([
+  'Governing Document',
+  'Trustee Code of Conduct',
+  'Financial Controls Policy',
+  'Insurance Schedule',
+]);
 
 function runDocker(args) {
   const result = spawnSync('docker', args, {
@@ -41,6 +49,7 @@ function captureDocker(args) {
 }
 
 async function runLocalDockerMigrations() {
+  console.log('Applying local Docker migrations and dependency refresh...');
   const result = spawnSync(process.execPath, [migrationScriptPath], {
     cwd: repoRoot,
     env: process.env,
@@ -51,6 +60,7 @@ async function runLocalDockerMigrations() {
   if (result.status !== 0) {
     throw new Error(`node ${migrationScriptPath} failed with exit code ${result.status ?? 'unknown'}`);
   }
+  console.log('Local Docker migrations and dependency refresh completed.');
 }
 
 function localServicesAreRunning() {
@@ -70,9 +80,9 @@ function localServicesAreRunning() {
   return ['db', 'api', 'web'].every((service) => runningServices.has(service));
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5_000) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, { ...options, signal: controller.signal });
@@ -104,6 +114,47 @@ async function expectJson(url, options, validate) {
   validate(response, body);
 }
 
+function cookieHeaderFrom(response) {
+  const setCookieHeaders = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie')].filter(Boolean);
+
+  return setCookieHeaders
+    .map((cookie) => cookie.split(';')[0])
+    .filter(Boolean)
+    .join('; ');
+}
+
+async function assertLocalDocumentDownload(cookieHeader, documentId, expectedText) {
+  const downloadResponse = await fetchWithTimeout(`http://127.0.0.1:3002/api/v1/documents/${documentId}/download`, {
+    headers: {
+      cookie: cookieHeader,
+      origin: 'http://localhost:3003',
+    },
+  });
+  const downloadBody = await downloadResponse.json();
+
+  if (
+    downloadResponse.status !== 200 ||
+    typeof downloadBody.url !== 'string' ||
+    !downloadBody.url.startsWith('http://localhost:3002/api/v1/documents/_local-download?path=')
+  ) {
+    throw new Error(`local document download URL returned ${downloadResponse.status}: ${JSON.stringify(downloadBody)}`);
+  }
+
+  const fileResponse = await fetchWithTimeout(downloadBody.url, {
+    headers: {
+      cookie: cookieHeader,
+      origin: 'http://localhost:3003',
+    },
+  });
+  const fileBody = await fileResponse.text();
+
+  if (fileResponse.status !== 200 || !fileBody.includes(expectedText)) {
+    throw new Error(`local document file returned ${fileResponse.status}: ${fileBody}`);
+  }
+}
+
 async function smokeApiHealth() {
   await expectJson('http://127.0.0.1:3002/api/v1/health', {}, (response, body) => {
     if (response.status !== 200 || body.status !== 'ok') {
@@ -127,8 +178,9 @@ async function smokeApiReadiness() {
         response.status !== 503 ||
         body.status !== 'not_ready' ||
         body.checks?.database !== true ||
-        body.checks?.storageConfigured !== false ||
-        body.checks?.storageBucketReachable !== false
+        body.checks?.storageConfigured !== true ||
+        body.checks?.storageBucketReachable !== true ||
+        body.checks?.billingConfigured !== false
       ) {
         throw new Error(`local readiness returned unexpected body: ${JSON.stringify(body)}`);
       }
@@ -162,8 +214,95 @@ async function smokeApiRegistration() {
   }
 }
 
+async function smokeLocalAdminLoginAndDocumentStorage() {
+  const loginResponse = await fetchWithTimeout('http://127.0.0.1:3002/api/v1/auth/login', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'http://localhost:3003',
+    },
+    body: JSON.stringify({
+      email: localAdminEmail,
+      password: localAdminPassword,
+    }),
+  });
+  const loginBody = await loginResponse.json();
+
+  if (
+    loginResponse.status !== 200 ||
+    loginBody.user?.email !== localAdminEmail ||
+    loginBody.user?.role !== 'OWNER'
+  ) {
+    throw new Error(`local admin login returned ${loginResponse.status}: ${JSON.stringify(loginBody)}`);
+  }
+
+  const cookieHeader = cookieHeaderFrom(loginResponse);
+  if (!cookieHeader.includes('charitypilot_access=') || !cookieHeader.includes('charitypilot_refresh=')) {
+    throw new Error('local admin login did not issue auth cookies');
+  }
+
+  const documentsResponse = await fetchWithTimeout('http://127.0.0.1:3002/api/v1/documents', {
+    headers: {
+      cookie: cookieHeader,
+      origin: 'http://localhost:3003',
+    },
+  });
+  const documentsBody = await documentsResponse.json();
+  const documents = documentsBody.data ?? [];
+  const seededDocuments = documents.filter((document) => seededStarterDocumentNames.has(document.name));
+
+  if (documentsResponse.status !== 200 || seededDocuments.length !== seededStarterDocumentNames.size) {
+    throw new Error(`local seeded documents returned ${documentsResponse.status}: ${JSON.stringify(documentsBody)}`);
+  }
+
+  for (const document of seededDocuments) {
+    await assertLocalDocumentDownload(cookieHeader, document.id, document.name);
+  }
+
+  console.log('Seeded starter documents downloaded through local filesystem storage.');
+
+  const formData = new FormData();
+  formData.append('name', 'Local smoke document');
+  formData.append('category', 'OTHER');
+  formData.append('description', 'Uploaded by the local Docker smoke test.');
+  formData.append(
+    'file',
+    new Blob(['local filesystem storage smoke document'], { type: 'text/plain' }),
+    'local-smoke.txt',
+  );
+
+  const uploadResponse = await fetchWithTimeout('http://127.0.0.1:3002/api/v1/documents', {
+    method: 'POST',
+    headers: {
+      cookie: cookieHeader,
+      origin: 'http://localhost:3003',
+    },
+    body: formData,
+  });
+  const uploadBody = await uploadResponse.json();
+
+  if (uploadResponse.status !== 201 || !uploadBody.data?.id) {
+    throw new Error(`local document upload returned ${uploadResponse.status}: ${JSON.stringify(uploadBody)}`);
+  }
+
+  const documentId = uploadBody.data.id;
+  try {
+    await assertLocalDocumentDownload(cookieHeader, documentId, 'local filesystem storage smoke document');
+  } finally {
+    await fetchWithTimeout(`http://127.0.0.1:3002/api/v1/documents/${documentId}`, {
+      method: 'DELETE',
+      headers: {
+        cookie: cookieHeader,
+        origin: 'http://localhost:3003',
+      },
+    });
+  }
+
+  console.log('Document uploaded and downloaded through local filesystem storage.');
+}
+
 async function smokeWeb() {
-  const response = await fetchWithTimeout('http://127.0.0.1:3003/');
+  const response = await fetchWithTimeout('http://127.0.0.1:3003/', {}, 60_000);
   const body = await response.text();
 
   if (response.status !== 200 || !body.includes('CharityPilot')) {
@@ -185,15 +324,22 @@ try {
       runDocker([...composeArgs, 'restart', 'api', 'web']);
     }
   } else {
+    console.log('Starting local Docker app services...');
     runDocker([...composeArgs, 'up', '--wait', '--wait-timeout', '180', '-d']);
   }
 
+  console.log('Checking API health...');
   await waitForCheck('API health', smokeApiHealth);
+  console.log('Checking API readiness...');
   await waitForCheck('API readiness', smokeApiReadiness);
+  console.log('Checking public registration path...');
   await waitForCheck('API registration', smokeApiRegistration);
-  await waitForCheck('web root', smokeWeb);
+  console.log('Checking local admin login and document storage...');
+  await waitForCheck('local admin document storage', smokeLocalAdminLoginAndDocumentStorage);
+  console.log('Checking web root...');
+  await waitForCheck('web root', smokeWeb, 300_000);
 
-  console.log('Local Docker smoke passed: API health/readiness, registration, and web root responded over loopback.');
+  console.log('Local Docker smoke passed: API health/readiness, registration, local admin document storage, and web root responded over loopback.');
 } finally {
   if (cleanup) {
     const downArgs = [...composeArgs, 'down', '--remove-orphans'];

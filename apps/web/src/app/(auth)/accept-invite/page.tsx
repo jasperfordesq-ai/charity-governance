@@ -45,7 +45,7 @@ function AcceptInviteForm() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-100 shadow-lg">
+        <Card className="w-full border border-gray-200 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900">Accept your invite</h1>
@@ -68,6 +68,7 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="name"
                 variant="bordered"
+                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary' }}
               />
               <Input
                 label="Password"
@@ -77,6 +78,7 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="new-password"
                 variant="bordered"
+                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary' }}
                 description="Use at least 8 characters with uppercase, lowercase, and a number."
               />
               <Input
@@ -87,6 +89,7 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="new-password"
                 variant="bordered"
+                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary' }}
               />
 
               <button
@@ -123,10 +126,10 @@ function AcceptInviteForm() {
 function AcceptInviteFallback() {
   return (
     <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-100 shadow-lg">
+      <Card className="w-full border border-gray-200 shadow-lg">
         <CardBody className="p-8 sm:p-10">
-          <div className="h-7 w-44 rounded bg-gray-100 mx-auto mb-3" />
-          <div className="h-4 w-64 rounded bg-gray-100 mx-auto" />
+          <div className="h-7 w-44 rounded bg-gray-200 mx-auto mb-3" />
+          <div className="h-4 w-64 rounded bg-gray-200 mx-auto" />
         </CardBody>
       </Card>
     </div>

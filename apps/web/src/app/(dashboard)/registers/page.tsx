@@ -317,21 +317,21 @@ export default function RegistersPage() {
       <div className="space-y-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Governance Registers</h1>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Governance Registers</h1>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
               Structured trustee, risk, finance, fundraising, complaints, and annual reporting records for board review.
             </p>
           </div>
         </div>
 
-        <Card className="border border-teal-primary/20 bg-white p-6 shadow-sm">
+        <Card className="border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-primary">
+              <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-light dark:border-teal-light/20">
                 Complete plan
               </Chip>
-              <h2 className="text-lg font-semibold text-gray-900">Governance registers are available on Complete.</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Governance registers are available on Complete.</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
                 Upgrade to manage conflict, risk, complaints, fundraising, Annual Report readiness, and financial control registers.
               </p>
             </div>
@@ -348,8 +348,8 @@ export default function RegistersPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Governance Registers</h1>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Governance Registers</h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
             Structured trustee, risk, finance, fundraising, complaints, and annual reporting records for board review.
           </p>
         </div>
@@ -378,9 +378,9 @@ export default function RegistersPage() {
       </div>
 
       {loading ? (
-        <Card className="p-6 animate-pulse">
-          <div className="h-4 w-1/3 rounded bg-gray-200" />
-          <div className="mt-4 h-20 rounded bg-gray-100" />
+        <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 animate-pulse">
+          <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-800" />
+          <div className="mt-4 h-20 rounded bg-gray-100 dark:bg-gray-800" />
         </Card>
       ) : (
         <>
@@ -396,13 +396,13 @@ export default function RegistersPage() {
                 <RowCard key={item.id}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900">{item.trusteeName}</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.trusteeName}</p>
                       <Chip size="sm" variant="flat" color={item.status === ConflictStatus.CLOSED ? 'success' : 'warning'}>
                         {conflictStatusLabels[item.status]}
                       </Chip>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600">{item.matter}</p>
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{item.matter}</p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                       Declared {niceDate(item.dateDeclared)} · Minute {item.minuteReference || 'not linked'}
                     </p>
                   </div>
@@ -426,14 +426,14 @@ export default function RegistersPage() {
                 <RowCard key={item.id}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900">{item.title}</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</p>
                       <Chip size="sm" color={riskScore(item) >= 12 ? 'danger' : 'warning'} variant="flat">
                         Score {riskScore(item)}
                       </Chip>
                       <Chip size="sm" variant="flat">{riskCategoryLabels[item.category]}</Chip>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600 line-clamp-2">{item.mitigation}</p>
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{item.mitigation}</p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                       Owner {item.owner || 'not assigned'} · Review {niceDate(item.reviewDate)}
                     </p>
                   </div>
@@ -457,12 +457,12 @@ export default function RegistersPage() {
                 <RowCard key={item.id}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900">{item.summary}</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.summary}</p>
                       <Chip size="sm" color={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'} variant="flat">
                         {registerStatusLabels[item.status]}
                       </Chip>
                     </div>
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                       Received {niceDate(item.receivedDate)} · Board review {item.reviewedByBoard ? 'recorded' : 'pending'}
                     </p>
                   </div>
@@ -486,12 +486,12 @@ export default function RegistersPage() {
                 <RowCard key={item.id}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900">{item.name}</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
                       <Chip size="sm" variant="flat">{item.activityType}</Chip>
                       {item.thirdPartyFundraiser && <Chip size="sm" color="warning" variant="flat">Third party</Chip>}
                     </div>
-                    <p className="mt-1 text-sm text-gray-600 line-clamp-2">{item.controls || 'Controls not recorded yet.'}</p>
-                    <p className="mt-1 text-xs text-gray-400">Review outcome: {item.reviewOutcome || 'pending'}</p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{item.controls || 'Controls not recorded yet.'}</p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Review outcome: {item.reviewOutcome || 'pending'}</p>
                   </div>
                   {item.status !== RegisterStatus.CLOSED && (
                     <Button size="sm" variant="flat" onPress={() => closeRecord('fundraising', item.id)}>
@@ -532,10 +532,10 @@ export default function RegistersPage() {
 }
 
 function MetricCard({ label, value, tone }: { label: string; value: string | number; tone: 'success' | 'warning' | 'danger' }) {
-  const colour = tone === 'success' ? 'text-green-600' : tone === 'danger' ? 'text-red-600' : 'text-amber-600';
+  const colour = tone === 'success' ? 'text-green-600 dark:text-green-400' : tone === 'danger' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400';
   return (
-    <Card className="border border-gray-200 p-4 shadow-sm">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
+    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${colour}`}>{value}</p>
     </Card>
   );
@@ -557,25 +557,25 @@ function RegisterSection({
   children: React.ReactNode[];
 }) {
   return (
-    <Card className="border border-gray-200 p-5 shadow-sm">
+    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500">{subtitle}</p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p>
         </div>
         <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onAdd}>
           {buttonLabel}
         </Button>
       </div>
       <div className="mt-4 space-y-3">
-        {children.length ? children : <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-400">{empty}</p>}
+        {children.length ? children : <p className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-sm text-gray-400 dark:text-gray-500">{empty}</p>}
       </div>
     </Card>
   );
 }
 
 function RowCard({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-3">{children}</div>;
+  return <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">{children}</div>;
 }
 
 function AnnualReportCard({
@@ -609,11 +609,11 @@ function AnnualReportCard({
       100,
   );
   return (
-    <Card className="border border-gray-200 p-5 shadow-sm">
+    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Annual Report readiness</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500">Activities, public benefit, finance, trustee details, and filing status for the annual return.</p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Annual Report readiness</h2>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Activities, public benefit, finance, trustee details, and filing status for the annual return.</p>
         </div>
         <Chip size="sm" color={percent >= 80 ? 'success' : 'warning'} variant="flat">{percent}%</Chip>
       </div>
@@ -668,11 +668,11 @@ function FinancialControlsCard({
   ] as const;
   const percent = Math.round((checks.map(([key]) => financial[key]).filter(Boolean).length / checks.length) * 100);
   return (
-    <Card className="border border-gray-200 p-5 shadow-sm">
+    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Financial controls review</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500">Annual board evidence for banking, approvals, budgets, reserves, assets, payroll, and fundraising controls.</p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Financial controls review</h2>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Annual board evidence for banking, approvals, budgets, reserves, assets, payroll, and fundraising controls.</p>
         </div>
         <Chip size="sm" color={percent >= 80 ? 'success' : 'warning'} variant="flat">{percent}%</Chip>
       </div>
@@ -695,8 +695,8 @@ function FinancialControlsCard({
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2 text-sm text-gray-700">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary" />
+    <label className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary" />
       <span>{label}</span>
     </label>
   );

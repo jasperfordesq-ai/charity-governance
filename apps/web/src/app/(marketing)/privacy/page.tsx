@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           <p className="text-gray-500 text-sm">Effective date: 1 April 2026</p>
         </div>
 
-        <div className="prose prose-gray max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-600 prose-p:leading-relaxed prose-a:text-teal-primary prose-a:no-underline hover:prose-a:underline prose-li:text-gray-600">
+        <div className="prose prose-gray max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-teal-primary prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700">
 
           <p>
             This Privacy Policy describes how <strong>Project Nexus Ltd</strong> (&ldquo;we&rdquo;,
@@ -208,24 +208,24 @@ export default function PrivacyPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td className="p-3 border border-gray-200 text-gray-600">Stripe</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">Payment processing and subscription billing</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">USA/EU (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Stripe</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Payment processing and subscription billing</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">USA/EU (SCCs in place)</td>
                 </tr>
                 <tr className="bg-gray-50">
-                  <td className="p-3 border border-gray-200 text-gray-600">Supabase</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">Database hosting and authentication</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">EU (Ireland)</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Supabase</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Database hosting and authentication</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">EU (Ireland)</td>
                 </tr>
                 <tr>
-                  <td className="p-3 border border-gray-200 text-gray-600">Resend</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">Transactional email delivery</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">USA (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Resend</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Transactional email delivery</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">USA (SCCs in place)</td>
                 </tr>
                 <tr className="bg-gray-50">
-                  <td className="p-3 border border-gray-200 text-gray-600">Vercel</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">Application hosting and CDN</td>
-                  <td className="p-3 border border-gray-200 text-gray-600">EU/USA (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Vercel</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">Application hosting and CDN</td>
+                  <td className="p-3 border border-gray-200 text-gray-700">EU/USA (SCCs in place)</td>
                 </tr>
               </tbody>
             </table>

@@ -41,7 +41,7 @@ function PasswordStrengthMeter({ password }: { password: string }) {
           ['number', 'Number'],
           ['special', 'Special character'],
         ] as const).map(([key, text]) => (
-          <li key={key} className={`text-xs flex items-center gap-1.5 ${checks[key] ? 'text-green-600' : 'text-gray-400'}`}>
+          <li key={key} className={`text-xs flex items-center gap-1.5 ${checks[key] ? 'text-green-600' : 'text-gray-500'}`}>
             {checks[key] ? (
               <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
             ) : (
@@ -114,7 +114,7 @@ export default function RegisterPage() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-100 shadow-lg">
+        <Card className="w-full border border-gray-200 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
@@ -142,7 +142,7 @@ export default function RegisterPage() {
                 autoComplete="name"
                 variant="bordered"
                 classNames={{
-                  inputWrapper: 'border-gray-200 hover:border-teal-primary focus-within:!border-teal-primary',
+                  inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
                 }}
               />
 
@@ -158,7 +158,7 @@ export default function RegisterPage() {
                 autoComplete="email"
                 variant="bordered"
                 classNames={{
-                  inputWrapper: 'border-gray-200 hover:border-teal-primary focus-within:!border-teal-primary',
+                  inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
                 }}
               />
 
@@ -175,7 +175,7 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                   variant="bordered"
                   classNames={{
-                    inputWrapper: 'border-gray-200 hover:border-teal-primary focus-within:!border-teal-primary',
+                    inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
                   }}
                   endContent={eyeToggle}
                 />
@@ -195,7 +195,7 @@ export default function RegisterPage() {
                 autoComplete="new-password"
                 variant="bordered"
                 classNames={{
-                  inputWrapper: 'border-gray-200 hover:border-teal-primary focus-within:!border-teal-primary',
+                  inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
                 }}
                 endContent={
                   <div className="flex items-center gap-1">
@@ -227,7 +227,7 @@ export default function RegisterPage() {
                 placeholder="e.g. Dublin Community Trust"
                 variant="bordered"
                 classNames={{
-                  inputWrapper: 'border-gray-200 hover:border-teal-primary focus-within:!border-teal-primary',
+                  inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
                 }}
               />
 
@@ -241,13 +241,13 @@ export default function RegisterPage() {
                 Create account
               </Button>
 
-              <p className="text-xs text-gray-400 text-center leading-relaxed">
+              <p className="text-xs text-gray-500 text-center leading-relaxed">
                 By creating an account you agree to our{' '}
-                <Link href="/terms" className="text-teal-primary hover:underline text-xs">
+                <Link href="/terms" className="text-teal-primary hover:underline">
                   Terms of Service
                 </Link>{' '}
                 and{' '}
-                <Link href="/privacy" className="text-teal-primary hover:underline text-xs">
+                <Link href="/privacy" className="text-teal-primary hover:underline">
                   Privacy Policy
                 </Link>
                 .

@@ -82,3 +82,22 @@ test('trusts document downloads only from https expected origins or Supabase sto
     null,
   );
 });
+
+test('trusts local API document downloads only on loopback in development', () => {
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://localhost:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
+    'http://localhost:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf',
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://127.0.0.1:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
+    'http://127.0.0.1:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf',
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://localhost:3002/api/v1/billing/checkout'),
+    null,
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://evil.test/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
+    null,
+  );
+});

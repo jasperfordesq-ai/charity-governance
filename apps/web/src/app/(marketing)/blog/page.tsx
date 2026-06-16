@@ -14,7 +14,7 @@ export default function BlogPage() {
       {/* ── Header ── */}
       <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white py-20 md:py-28">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-teal-400 text-sm font-semibold uppercase tracking-wider mb-4">
+          <p className="text-teal-light text-sm font-semibold uppercase tracking-wider mb-4">
             Charity Governance Insights
           </p>
           <h1 className="text-4xl md:text-5xl font-extrabold leading-tight tracking-tight mb-5">

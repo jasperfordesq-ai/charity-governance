@@ -22,7 +22,7 @@ const commands = [
     'deps',
     'sh',
     '-lc',
-    'npm ci --include=dev && npm run build -w @charitypilot/shared && npm run db:generate -w @charitypilot/api',
+    "if [ -d node_modules/next ] && [ -d node_modules/@prisma/client ]; then echo 'Using existing node_modules volume'; else npm ci --include=dev; fi && npm run build -w @charitypilot/shared && npm run db:generate -w @charitypilot/api",
   ],
   [
     'docker',

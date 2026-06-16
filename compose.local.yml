@@ -22,7 +22,9 @@ services:
     environment:
       NODE_ENV: development
     command: >
-      sh -lc "npm ci --include=dev &&
+      sh -lc "if [ -d node_modules/next ] && [ -d node_modules/@prisma/client ]; then
+      echo 'Using existing node_modules volume';
+      else npm ci --include=dev; fi &&
       npm run build -w @charitypilot/shared &&
       npm run db:generate -w @charitypilot/api"
     volumes: *app-volumes
@@ -41,6 +43,7 @@ services:
         condition: service_completed_successfully
     command: >
       sh -lc "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma &&
+      npm run db:seed -w @charitypilot/api &&
       cd apps/api &&
       node --import tsx --watch src/server.ts"
     environment:
@@ -55,6 +58,8 @@ services:
       REFRESH_TOKEN_TTL_DAYS: 7
       FRONTEND_URL: http://localhost:3003
       API_URL: http://localhost:3002
+      DOCUMENT_STORAGE_DRIVER: local
+      LOCAL_FILE_STORAGE_DIR: /app/.charitypilot-local-storage/documents
       STRIPE_SECRET_KEY: sk_test_...
       STRIPE_WEBHOOK_SECRET: whsec_...
       STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: price_...
@@ -66,7 +71,11 @@ services:
       SUPABASE_URL: https://your-project.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: eyJ...
       SUPABASE_STORAGE_BUCKET: documents
-      SEED_DEMO_WORKSPACE: "false"
+      SEED_LOCAL_ADMIN: "true"
+      LOCAL_ADMIN_EMAIL: admin@charitypilot.local
+      LOCAL_ADMIN_PASSWORD: LocalAdmin123!
+      LOCAL_ADMIN_NAME: Local CharityPilot Admin
+      LOCAL_ADMIN_ORGANISATION: My Local Charity
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "127.0.0.1:3002:3002"
@@ -90,7 +99,7 @@ services:
         condition: service_healthy
       deps:
         condition: service_completed_successfully
-    command: npm run dev -w @charitypilot/web
+    command: sh -lc "rm -rf apps/web/.next/* && npm run dev -w @charitypilot/web"
     environment:
       NODE_ENV: development
       PORT: 3003

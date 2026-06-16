@@ -109,6 +109,25 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get('/_local-download', async (request, reply) => {
+    try {
+      const { path } = request.query as { path?: string };
+      if (!path) {
+        return reply.status(400).send({ error: 'Missing local storage path', code: 'LOCAL_STORAGE_PATH_REQUIRED' });
+      }
+
+      const file = await storageService.readLocalFile(request.user.organisationId, path);
+      const filename = path.split('/').pop()?.replace(/["\r\n]/g, '') || 'document';
+
+      return reply
+        .type('application/octet-stream')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(file);
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     try {
       return await service.getById(request.user.organisationId, request.params.id);

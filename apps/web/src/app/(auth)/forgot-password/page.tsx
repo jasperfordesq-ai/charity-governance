@@ -28,7 +28,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-100 shadow-lg">
+        <Card className="w-full border border-gray-200 shadow-lg">
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">
@@ -71,7 +71,7 @@ export default function ForgotPasswordPage() {
                     autoComplete="email"
                     variant="bordered"
                     classNames={{
-                      inputWrapper: 'border-gray-200 hover:border-teal-primary focus-within:!border-teal-primary',
+                      inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
                     }}
                   />
 

@@ -18,16 +18,16 @@ function PostCard({ post, featured = false }: { post: PostMeta; featured?: boole
       }`}
     >
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <span className="bg-teal-primary/10 text-teal-700 text-xs font-semibold px-3 py-1 rounded-full">
+        <span className="bg-teal-primary/10 text-teal-dark text-xs font-semibold px-3 py-1 rounded-full">
           {post.category}
         </span>
-        <span className="text-gray-400 text-sm">{formatDate(post.date)}</span>
+        <span className="text-gray-500 text-sm">{formatDate(post.date)}</span>
         <span className="text-gray-300 hidden sm:inline">&bull;</span>
-        <span className="text-gray-400 text-sm hidden sm:inline">{post.readTime}</span>
+        <span className="text-gray-500 text-sm hidden sm:inline">{post.readTime}</span>
       </div>
 
       <h2
-        className={`font-bold text-gray-900 group-hover:text-teal-700 transition-colors leading-snug mb-3 ${
+        className={`font-bold text-gray-900 group-hover:text-teal-dark transition-colors leading-snug mb-3 ${
           featured ? 'text-2xl md:text-3xl' : 'text-lg'
         }`}
       >
@@ -38,7 +38,7 @@ function PostCard({ post, featured = false }: { post: PostMeta; featured?: boole
         {post.excerpt}
       </p>
 
-      <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-600 group-hover:text-teal-800 transition-colors">
+      <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-primary group-hover:text-teal-dark transition-colors">
         Read article
         <svg
           className="w-4 h-4 group-hover:translate-x-0.5 transition-transform"
@@ -87,7 +87,7 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
             placeholder="Search articles..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-primary/20 focus:border-teal-primary transition-colors"
             aria-label="Search blog articles"
           />
         </div>
@@ -103,7 +103,7 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
             onClick={() => setActiveCategory(cat)}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
               activeCategory === cat
-                ? 'bg-teal-600 text-white'
+                ? 'bg-teal-primary text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -120,14 +120,14 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
             </svg>
           </div>
           <p className="text-gray-500 font-medium mb-1">No articles found</p>
-          <p className="text-sm text-gray-400">Try a different search term or browse all categories.</p>
+          <p className="text-sm text-gray-500">Try a different search term or browse all categories.</p>
         </div>
       ) : (
         <>
           {/* ── Featured post ── */}
           {featured && (
             <div className="mb-10">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
                 Latest article
               </p>
               <PostCard post={featured} featured />
@@ -137,7 +137,7 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
           {/* ── Remaining posts ── */}
           {rest.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
                 {activeCategory === 'All' ? 'More articles' : 'All articles'}
               </p>
               <div className="grid sm:grid-cols-2 gap-6">
@@ -164,7 +164,7 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
         </p>
         <Link
           href="/register"
-          className="inline-flex items-center bg-teal-600 text-white font-semibold text-sm px-6 py-3 rounded-full hover:bg-teal-700 transition-colors"
+          className="inline-flex items-center bg-teal-primary text-white font-semibold text-sm px-6 py-3 rounded-full hover:bg-teal-dark transition-colors"
         >
           Start free 14-day trial
         </Link>

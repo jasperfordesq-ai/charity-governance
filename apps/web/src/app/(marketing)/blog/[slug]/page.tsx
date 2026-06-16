@@ -158,7 +158,7 @@ export default async function BlogPostPage({
       {/* ── CTA ── */}
       <div className="bg-teal-50 border-t border-teal-100">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-14 text-center">
-          <p className="text-xs font-semibold text-teal-600 uppercase tracking-wider mb-3">
+          <p className="text-xs font-semibold text-teal-primary uppercase tracking-wider mb-3">
             CharityPilot
           </p>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
@@ -171,13 +171,13 @@ export default async function BlogPostPage({
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/register"
-              className="inline-flex items-center justify-center bg-teal-600 text-white font-semibold text-sm px-6 py-3 rounded-full hover:bg-teal-700 transition-colors"
+              className="inline-flex items-center justify-center bg-teal-primary text-white font-semibold text-sm px-6 py-3 rounded-full hover:bg-teal-dark transition-colors"
             >
               Start your 14-day free trial
             </Link>
             <Link
               href="/pricing"
-              className="inline-flex items-center justify-center border border-teal-600 text-teal-700 font-semibold text-sm px-6 py-3 rounded-full hover:bg-teal-50 transition-colors"
+              className="inline-flex items-center justify-center border border-teal-primary text-teal-dark font-semibold text-sm px-6 py-3 rounded-full hover:bg-teal-50 transition-colors"
             >
               View pricing
             </Link>
@@ -197,13 +197,13 @@ export default async function BlogPostPage({
                   href={`/blog/${r.slug}`}
                   className="group block border border-gray-100 rounded-2xl p-6 hover:border-teal-200 hover:shadow-md transition-all"
                 >
-                  <span className="inline-block bg-teal-primary/10 text-teal-700 text-xs font-semibold px-2.5 py-1 rounded-full mb-3">
+                  <span className="inline-block bg-teal-primary/10 text-teal-dark text-xs font-semibold px-2.5 py-1 rounded-full mb-3">
                     {r.category}
                   </span>
-                  <h3 className="text-base font-bold text-gray-900 group-hover:text-teal-700 transition-colors leading-snug mb-2">
+                  <h3 className="text-base font-bold text-gray-900 group-hover:text-teal-dark transition-colors leading-snug mb-2">
                     {r.title}
                   </h3>
-                  <p className="text-xs text-gray-400">{formatDate(r.date)} · {r.readTime}</p>
+                  <p className="text-xs text-gray-500">{formatDate(r.date)} · {r.readTime}</p>
                 </Link>
               ))}
             </div>

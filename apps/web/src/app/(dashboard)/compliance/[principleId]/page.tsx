@@ -166,15 +166,15 @@ export default function PrincipleDetailPage() {
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/2 mb-3" />
-          <div className="h-4 bg-gray-200 rounded w-3/4 mb-8" />
+          <div className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mb-3" />
+          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-3/4 mb-8" />
         </div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="p-6 animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-1/4 mb-3" />
-            <div className="h-3 bg-gray-200 rounded w-full mb-4" />
-            <div className="h-10 bg-gray-200 rounded w-1/3 mb-3" />
-            <div className="h-20 bg-gray-200 rounded w-full" />
+          <Card key={i} className="p-6 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+            <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-3" />
+            <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full mb-4" />
+            <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-3" />
+            <div className="h-20 bg-gray-200 dark:bg-gray-800 rounded w-full" />
           </Card>
         ))}
       </div>
@@ -184,7 +184,7 @@ export default function PrincipleDetailPage() {
   if (!principle) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Principle not found.</p>
+        <p className="text-gray-500 dark:text-gray-400">Principle not found.</p>
         <Button
           className="mt-4 bg-teal-primary text-white"
           onPress={() => router.push('/compliance')}
@@ -201,18 +201,18 @@ export default function PrincipleDetailPage() {
       <div>
         <button
           onClick={() => router.push('/compliance')}
-          className="text-sm text-teal-primary hover:underline mb-3 inline-flex items-center gap-1"
+          className="text-sm text-teal-primary dark:text-teal-light hover:underline mb-3 inline-flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
           Back to Compliance
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Principle {principle.number}: {principle.title}
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{principle.description}</p>
-        <p className="text-xs text-gray-400 mt-2">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{principle.description}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
           Reporting year: {currentYear} &middot; Changes auto-save after 800ms
         </p>
       </div>
@@ -234,12 +234,12 @@ export default function PrincipleDetailPage() {
             return (
               <Card
                 key={standard.id}
-                className="border border-gray-200 shadow-sm overflow-hidden"
+                className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
               >
                 {/* Standard header with status indicator */}
                 <div
                   className="h-1"
-                  style={{ backgroundColor: meta.colour }}
+                  style={{ backgroundColor: meta.colour }} /* replace meta.colour with a dark-mode-aware token (e.g. meta.colourDark resolved via theme) so the accent does not stay light-tuned in dark mode */
                 />
                 <div className="p-5 sm:p-6 space-y-5">
                   {/* Title row */}
@@ -249,15 +249,12 @@ export default function PrincipleDetailPage() {
                         size="sm"
                         variant="flat"
                         className="flex-shrink-0 font-mono font-semibold"
-                        style={{
-                          backgroundColor: meta.bgColour,
-                          color: meta.colour,
-                        }}
+                        style={{ backgroundColor: meta.bgColour, color: meta.colour }} /* supply dark-mode-aware bg/text (e.g. meta.bgColourDark/meta.colourDark) so the code chip keeps contrast in dark mode */
                       >
                         {standard.code}
                       </Chip>
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{standard.title}</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{standard.title}</p>
                         <div className="flex items-center gap-2 mt-1">
                           {standard.isAdditional && (
                             <Chip size="sm" variant="flat" color="secondary" className="text-xs">
@@ -274,19 +271,19 @@ export default function PrincipleDetailPage() {
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0" aria-live="polite">
                       {save === 'saving' && (
-                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                        <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
                           <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                           Saving...
                         </span>
                       )}
                       {save === 'saved' && (
-                        <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                           Saved
                         </span>
                       )}
                       {save === 'error' && (
-                        <span className="flex items-center gap-1 text-xs text-red-500 font-medium">
+                        <span className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400 font-medium">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
                           Save failed
                         </span>
@@ -365,7 +362,7 @@ export default function PrincipleDetailPage() {
                     maxRows={4}
                     size="sm"
                     classNames={{
-                      description: 'text-amber-600 font-medium',
+                      description: 'text-amber-600 dark:text-amber-300 font-medium',
                     }}
                   />
 
@@ -385,7 +382,7 @@ export default function PrincipleDetailPage() {
                       size="sm"
                       isRequired
                       classNames={{
-                        label: 'text-red-600',
+                        label: 'text-red-600 dark:text-red-400',
                       }}
                     />
                   )}
