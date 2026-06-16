@@ -54,7 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             the dashboard; marketing/auth are light-only). Honours explicit choice and 'system'. */}
         <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: `try{var p=location.pathname;var app=/^\\/(dashboard|compliance|regulator|documents|board|registers|deadlines|organisation|team|billing|export)(\\/|$)/.test(p);var t=localStorage.theme;var dark=app&&(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches));document.documentElement.classList[dark?'add':'remove']('dark')}catch(e){}` }} />
       </head>
-      <body className="font-sans antialiased bg-white text-gray-900 transition-colors" suppressHydrationWarning>
+      <body className="font-sans antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>
