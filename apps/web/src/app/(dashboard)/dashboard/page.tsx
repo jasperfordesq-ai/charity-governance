@@ -23,22 +23,22 @@ import { ComplianceSignoffStatus } from '@charitypilot/shared';
 
 function SkeletonCard({ className = '' }: { className?: string }) {
   return (
-    <Card className={`p-6 animate-pulse ${className}`}>
-      <div className="h-4 bg-gray-200 rounded w-1/3 mb-4" />
-      <div className="h-8 bg-gray-200 rounded w-1/2 mb-3" />
-      <div className="h-3 bg-gray-200 rounded w-full" />
+    <Card className={`p-6 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 ${className}`}>
+      <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-4" />
+      <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mb-3" />
+      <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full" />
     </Card>
   );
 }
 
 function SkeletonList({ rows = 3 }: { rows?: number }) {
   return (
-    <Card className="p-6 animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-1/3 mb-5" />
+    <Card className="p-6 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+      <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-5" />
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 mb-3">
-          <div className="h-3 bg-gray-200 rounded w-3/4" />
-          <div className="h-3 bg-gray-200 rounded w-1/4" />
+          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-3/4" />
+          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
         </div>
       ))}
     </Card>
@@ -168,24 +168,24 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Page heading */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Here is your governance compliance overview for {currentYear}.
         </p>
       </div>
 
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-primary">
+            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light">
               Annual regulator cycle
             </Chip>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Keep the board ready for Governance Code sign-off and Annual Report filing.
             </h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600">
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">
               Update the Compliance Record Form, check trustee conduct and induction,
               keep evidence linked to standards, and watch the 10-month Annual Report deadline.
             </p>
@@ -206,14 +206,14 @@ export default function DashboardPage() {
 
       {/* ── Error state ── */}
       {error && !loading && (
-        <Card className="p-6 border border-red-200 bg-red-50/50" role="alert">
+        <Card className="p-6 border border-red-200 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/10" role="alert">
           <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="w-5 h-5 text-red-400 dark:text-red-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
             <div>
-              <p className="text-sm font-medium text-red-800">Failed to load dashboard data</p>
-              <p className="text-xs text-red-600">Please check your connection and try refreshing the page.</p>
+              <p className="text-sm font-medium text-red-800 dark:text-red-300">Failed to load dashboard data</p>
+              <p className="text-xs text-red-600 dark:text-red-300">Please check your connection and try refreshing the page.</p>
             </div>
           </div>
         </Card>
@@ -223,18 +223,18 @@ export default function DashboardPage() {
       {loading ? (
         <SkeletonCard />
       ) : compliance ? (
-        <Card className="p-6 border border-gray-200 shadow-sm">
+        <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="flex-shrink-0 text-center sm:text-left">
-              <p className="text-sm font-medium text-gray-500 mb-1">Overall Compliance Score</p>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Overall Compliance Score</p>
               <p className={`text-5xl font-extrabold ${
-                compliance.percentComplete >= 80 ? 'text-green-600'
-                : compliance.percentComplete >= 50 ? 'text-amber-accent'
-                : 'text-red-500'
+                compliance.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
+                : compliance.percentComplete >= 50 ? 'text-amber-600 dark:text-amber-400'
+                : 'text-red-600 dark:text-red-400'
               }`}>
                 {Math.round(compliance.percentComplete)}%
               </p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {compliance.compliant} of {compliance.totalApplicable} standards compliant
               </p>
             </div>
@@ -246,7 +246,7 @@ export default function DashboardPage() {
                 className="w-full"
                 size="lg"
               />
-              <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500">
+              <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
                   Compliant: {compliance.compliant}
@@ -264,25 +264,25 @@ export default function DashboardPage() {
           </div>
         </Card>
       ) : (
-        <Card className="p-6 border border-gray-200 text-center text-gray-400">
+        <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center text-gray-500 dark:text-gray-400">
           No compliance data available. Start by reviewing your standards.
         </Card>
       )}
 
       {/* ── Principle progress cards ── */}
       {!loading && (
-        <Card className="p-5 border border-gray-200 shadow-sm">
+        <Card className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">Annual board sign-off</h2>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Annual board sign-off</h2>
                 <Chip size="sm" color={signoffMeta.color} variant="flat">
                   {signoffMeta.label}
                 </Chip>
               </div>
-              <p className="mt-1 text-sm text-gray-600">{signoffMeta.text}</p>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{signoffMeta.text}</p>
               {signoff?.minuteReference && (
-                <p className="mt-1 text-xs text-gray-400">Minute reference: {signoff.minuteReference}</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Minute reference: {signoff.minuteReference}</p>
               )}
             </div>
             <Button as={Link} href="/export" size="sm" variant="flat">
@@ -293,11 +293,11 @@ export default function DashboardPage() {
       )}
 
       {!loading && registerSummary && (
-        <Card className="p-5 border border-gray-200 shadow-sm">
+        <Card className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">Governance registers</h2>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Governance registers</h2>
                 <Chip
                   size="sm"
                   color={registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints > 0 ? 'warning' : 'success'}
@@ -306,7 +306,7 @@ export default function DashboardPage() {
                   {registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints} open items
                 </Chip>
               </div>
-              <p className="mt-1 text-sm text-gray-600">
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Annual Report readiness {registerSummary.annualReportReadinessPercent}% · Financial controls {registerSummary.financialControlsPercent}% · Active fundraising {registerSummary.activeFundraisingActivities}
               </p>
             </div>
@@ -318,7 +318,7 @@ export default function DashboardPage() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Progress by Principle</h2>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Progress by Principle</h2>
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -330,30 +330,30 @@ export default function DashboardPage() {
             {compliance.byPrinciple.map((p) => (
               <Link key={p.principleId} href={`/compliance/${p.principleId}`}>
                 <Card
-                  className="p-5 border border-gray-200 shadow-sm hover:border-teal-primary/40 hover:shadow-md transition-all cursor-pointer h-full"
+                  className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-teal-primary/40 dark:hover:border-teal-light/40 hover:shadow-md transition-all cursor-pointer h-full"
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-teal-primary/10 text-teal-primary flex items-center justify-center text-sm font-bold">
+                    <div className="w-8 h-8 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light flex items-center justify-center text-sm font-bold">
                       {p.principleNumber}
                     </div>
                     <div className="text-right">
                       <span className={`text-lg font-bold ${
-                        p.percentComplete >= 80 ? 'text-green-600'
-                        : p.percentComplete >= 50 ? 'text-amber-500'
-                        : 'text-gray-400'
+                        p.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
+                        : p.percentComplete >= 50 ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         {Math.round(p.percentComplete)}%
                       </span>
                       <span className={`block text-[10px] font-medium ${
-                        p.percentComplete >= 80 ? 'text-green-600'
-                        : p.percentComplete >= 50 ? 'text-amber-500'
-                        : 'text-gray-400'
+                        p.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
+                        : p.percentComplete >= 50 ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         {p.percentComplete >= 80 ? 'Compliant' : p.percentComplete >= 50 ? 'Working Towards' : p.percentComplete > 0 ? 'In Progress' : 'Not Started'}
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm font-semibold text-gray-800 mb-2 line-clamp-2">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2 line-clamp-2">
                     {p.principleTitle}
                   </p>
                   <Progress
@@ -363,7 +363,7 @@ export default function DashboardPage() {
                     size="sm"
                     className="w-full"
                   />
-                  <p className="text-xs text-gray-400 mt-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     {p.compliant} / {p.totalApplicable} standards
                   </p>
                 </Card>
@@ -371,7 +371,7 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">No principle data available yet.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">No principle data available yet.</p>
         )}
       </div>
 
@@ -379,11 +379,11 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming deadlines */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Upcoming Deadlines</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Upcoming Deadlines</h2>
           {loading ? (
             <SkeletonList rows={5} />
           ) : deadlines && deadlines.length > 0 ? (
-            <Card className="border border-gray-200 shadow-sm divide-y divide-gray-100">
+            <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm divide-y divide-gray-100 dark:divide-gray-800">
               {deadlines
                 .filter((d) => !d.isComplete)
                 .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -400,8 +400,8 @@ export default function DashboardPage() {
                   return (
                     <div key={d.id} className="flex items-center justify-between px-5 py-3.5">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{d.title}</p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{d.title}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {due.toLocaleDateString('en-IE', {
                             day: 'numeric',
                             month: 'short',
@@ -420,13 +420,13 @@ export default function DashboardPage() {
                   );
                 })}
               <div className="px-5 py-3">
-                <Link href="/deadlines" className="text-xs font-medium text-teal-primary hover:underline">
+                <Link href="/deadlines" className="text-xs font-medium text-teal-primary dark:text-teal-light hover:underline">
                   View all deadlines
                 </Link>
               </div>
             </Card>
           ) : (
-            <Card className="p-6 border border-gray-200 text-center text-sm text-gray-400">
+            <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center text-sm text-gray-500 dark:text-gray-400">
               No upcoming deadlines.
             </Card>
           )}
@@ -434,11 +434,11 @@ export default function DashboardPage() {
 
         {/* Board alerts */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Board Alerts</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Board Alerts</h2>
           {loading ? (
             <SkeletonList rows={4} />
           ) : boardAlerts && boardAlerts.length > 0 ? (
-            <Card className="border border-gray-200 shadow-sm divide-y divide-gray-100">
+            <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm divide-y divide-gray-100 dark:divide-gray-800">
               {boardAlerts.slice(0, 8).map((alert, idx) => {
                 const chipProps = {
                   conduct_unsigned: { color: 'warning' as const, label: 'Conduct' },
@@ -450,8 +450,8 @@ export default function DashboardPage() {
                 return (
                   <div key={`${alert.boardMemberId}-${alert.type}-${idx}`} className="flex items-center justify-between px-5 py-3.5">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{alert.memberName}</p>
-                      <p className="text-xs text-gray-400">{alert.message}</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{alert.memberName}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{alert.message}</p>
                     </div>
                     <Chip size="sm" color={meta.color} variant="flat">
                       {meta.label}
@@ -460,23 +460,23 @@ export default function DashboardPage() {
                 );
               })}
               <div className="px-5 py-3">
-                <Link href="/board" className="text-xs font-medium text-teal-primary hover:underline">
+                <Link href="/board" className="text-xs font-medium text-teal-primary dark:text-teal-light hover:underline">
                   View board register
                 </Link>
               </div>
             </Card>
           ) : boardMemberCount === 0 ? (
-            <Card className="p-6 border border-amber-200 bg-amber-50/50 text-sm text-amber-800">
+            <Card className="p-6 border border-amber-200 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-500/10 text-sm text-amber-800 dark:text-amber-200">
               <p className="font-medium">No charity trustees have been added yet.</p>
               <p className="mt-1 text-xs leading-5">
                 Add the board register so conduct, induction, and term-limit evidence is visible before the annual review.
               </p>
-              <Link href="/board" className="mt-3 inline-flex text-xs font-semibold text-teal-primary hover:underline">
+              <Link href="/board" className="mt-3 inline-flex text-xs font-semibold text-teal-primary dark:text-teal-light hover:underline">
                 Add board members
               </Link>
             </Card>
           ) : (
-            <Card className="p-6 border border-gray-200 text-center text-sm text-gray-400">
+            <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center text-sm text-gray-500 dark:text-gray-400">
               No board alerts. Everything looks good!
             </Card>
           )}

@@ -78,7 +78,7 @@ export function KeyboardShortcuts() {
                 <div className="flex items-center gap-1">
                   {s.keys.map((k, i) => (
                     <span key={i}>
-                      {i > 0 && <span className="text-xs text-gray-400 mx-0.5">then</span>}
+                      {i > 0 && <span className="text-xs text-gray-500 dark:text-gray-400 mx-0.5">then</span>}
                       <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono font-semibold text-gray-700 dark:text-gray-300">
                         {k === '?' ? '?' : k.toUpperCase()}
                       </kbd>
@@ -88,7 +88,7 @@ export function KeyboardShortcuts() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-400 mt-3">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border rounded text-xs">Esc</kbd> to close</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded text-xs">Esc</kbd> to close</p>
         </ModalBody>
       </ModalContent>
     </Modal>

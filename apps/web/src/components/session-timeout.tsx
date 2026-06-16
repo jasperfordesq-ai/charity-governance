@@ -72,8 +72,8 @@ export function SessionTimeout() {
         <ModalHeader>Session Expiring Soon</ModalHeader>
         <ModalBody>
           <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div className="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-amber-500 dark:text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
@@ -83,14 +83,14 @@ export function SessionTimeout() {
             <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
               {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}
             </p>
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
               Click below to stay signed in, or you will be redirected to the login page.
             </p>
           </div>
         </ModalBody>
         <ModalFooter className="justify-center">
           <Button
-            className="bg-teal-primary text-white font-semibold"
+            className="bg-teal-primary hover:bg-teal-dark dark:hover:bg-teal-light text-white font-semibold"
             onPress={handleExtend}
             radius="full"
           >

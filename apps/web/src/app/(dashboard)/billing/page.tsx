@@ -143,22 +143,22 @@ export default function BillingPage() {
     <div className="space-y-8 max-w-4xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Billing & Subscription</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Billing & Subscription</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Manage the plan that controls governance coverage, evidence storage, reminders, and team access.
         </p>
       </div>
 
       {billingError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           {billingError}
         </div>
       )}
 
       {!loading && !billingConfigured && (
-        <Card className="border border-amber-200 bg-amber-50 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-amber-900">Billing setup is temporarily unavailable</h2>
-          <p className="text-sm text-amber-800 mt-1">
+        <Card className="border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 shadow-sm p-5">
+          <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Billing setup is temporarily unavailable</h2>
+          <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
             Checkout is disabled while payment setup is unavailable. Please contact support to change your plan.
           </p>
         </Card>
@@ -167,29 +167,29 @@ export default function BillingPage() {
       {/* Current status */}
       {loading ? (
         <Card className="p-6 animate-pulse">
-          <div className="h-5 bg-gray-200 rounded w-1/3 mb-3" />
-          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
-          <div className="h-4 bg-gray-200 rounded w-1/3" />
+          <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-3" />
+          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mb-2" />
+          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3" />
         </Card>
       ) : (
-        <Card className="border border-gray-200 shadow-sm p-6">
+        <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <h2 className="text-lg font-semibold text-gray-800">Current Plan</h2>
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Current Plan</h2>
                 {statusChip()}
               </div>
 
               {billing?.plan ? (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   You are on the <strong>{billing.plan === SubscriptionPlan.ESSENTIALS ? 'Essentials' : 'Complete'}</strong> plan.
                 </p>
               ) : (
-                <p className="text-sm text-gray-600">No active subscription.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">No active subscription.</p>
               )}
 
               {isTrialing && billing?.trialEndsAt && (
-                <p className="text-sm text-amber-600 mt-1">
+                <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
                   Your trial ends on{' '}
                   <strong>
                     {new Date(billing.trialEndsAt).toLocaleDateString('en-IE', {
@@ -203,7 +203,7 @@ export default function BillingPage() {
               )}
 
               {isActive && billing?.currentPeriodEnd && (
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   Current period ends{' '}
                   {new Date(billing.currentPeriodEnd).toLocaleDateString('en-IE', {
                     day: 'numeric',
@@ -230,7 +230,7 @@ export default function BillingPage() {
 
       {/* Plan comparison cards */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
           {isActive ? 'Plans' : 'Choose a Plan'}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -241,8 +241,8 @@ export default function BillingPage() {
               <Card
                 key={plan.plan}
                 className={`
-                  border-2 shadow-sm p-6 sm:p-8 relative overflow-hidden
-                  ${isCurrent ? 'border-teal-primary' : 'border-gray-200'}
+                  border-2 shadow-sm p-6 sm:p-8 relative overflow-hidden dark:bg-gray-900
+                  ${isCurrent ? 'border-teal-primary' : 'border-gray-200 dark:border-gray-800'}
                 `}
               >
                 {isCurrent && (
@@ -251,24 +251,24 @@ export default function BillingPage() {
                   </div>
                 )}
 
-                <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{plan.name}</h3>
 
                 <div className="mt-3 mb-6">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-gray-900">
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-gray-100">
                       &euro;{plan.monthlyPrice}
                     </span>
-                    <span className="text-sm text-gray-500">/month</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">/month</span>
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                     or &euro;{plan.yearlyPrice}/year (save {Math.round((1 - plan.yearlyPrice / (plan.monthlyPrice * 12)) * 100)}%)
                   </p>
                 </div>
 
                 <ul className="space-y-2 mb-6">
                   {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <svg className="w-4 h-4 text-green-500 dark:text-green-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                       </svg>
                       {f}
@@ -309,23 +309,23 @@ export default function BillingPage() {
       </div>
 
       {/* FAQ / info */}
-      <Card className="border border-gray-200 shadow-sm p-6">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Frequently Asked Questions</h3>
-        <div className="space-y-1 text-sm text-gray-600">
+      <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-6">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">Frequently Asked Questions</h3>
+        <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
           {[
             { q: 'Can I cancel at any time?', a: 'Yes. You can cancel your subscription at any time from the Manage Subscription page. You will retain access until the end of your current billing period.' },
             { q: 'What payment methods do you accept?', a: 'We accept all major credit and debit cards through our secure payment partner, Stripe.' },
             { q: 'Is there a free trial?', a: 'Yes! Every new account gets a 14-day free trial with full access to all features.' },
             { q: 'Can I switch plans?', a: 'Yes. You can upgrade or downgrade at any time. Changes take effect at the start of your next billing period.' },
           ].map(({ q, a }) => (
-            <details key={q} className="group rounded-lg border border-gray-100 overflow-hidden">
-              <summary className="flex items-center justify-between cursor-pointer px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 transition-colors list-none">
+            <details key={q} className="group rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
+              <summary className="flex items-center justify-between cursor-pointer px-4 py-3 font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors list-none">
                 {q}
-                <svg className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform group-open:rotate-180 flex-shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
               </summary>
-              <p className="px-4 pb-3 text-gray-600">{a}</p>
+              <p className="px-4 pb-3 text-gray-600 dark:text-gray-300">{a}</p>
             </details>
           ))}
         </div>

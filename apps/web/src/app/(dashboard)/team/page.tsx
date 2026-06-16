@@ -129,8 +129,8 @@ export default function TeamPage() {
     <div className="space-y-6 max-w-6xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team & Permissions</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Team & Permissions</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Invite trustees, staff, and governance administrators with scoped access to this charity workspace.
           </p>
         </div>
@@ -143,7 +143,7 @@ export default function TeamPage() {
       {(message || error) && (
         <div
           className={`rounded-lg border px-4 py-3 text-sm ${
-            error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            error ? 'border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300' : 'border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-300'
           }`}
         >
           {error ?? message}
@@ -151,27 +151,27 @@ export default function TeamPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <Card className="border border-gray-200 shadow-sm p-5">
+        <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Members</h2>
-              <p className="text-sm text-gray-500">Owners control billing and roles. Admins can invite and manage governance work.</p>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Members</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Owners control billing and roles. Admins can invite and manage governance work.</p>
             </div>
           </div>
 
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((item) => (
-                <div key={item} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={item} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
               ))}
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {team?.members.map((member) => (
                 <div key={member.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-gray-900">{member.name}</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{member.name}</p>
                       <Chip size="sm" color={ROLE_META[member.role].color} variant="flat">
                         {ROLE_META[member.role].label}
                       </Chip>
@@ -179,8 +179,8 @@ export default function TeamPage() {
                         <Chip size="sm" color="warning" variant="flat">Email not verified</Chip>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">{member.email}</p>
-                    <p className="text-xs text-gray-400 mt-1">Joined {formatDate(member.createdAt)}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{member.email}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Joined {formatDate(member.createdAt)}</p>
                   </div>
 
                   {canChangeRoles && member.role !== UserRole.OWNER && member.id !== user?.id ? (
@@ -198,7 +198,7 @@ export default function TeamPage() {
                       <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
                     </Select>
                   ) : (
-                    <p className="text-xs text-gray-400 sm:text-right max-w-[220px]">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 sm:text-right max-w-[220px]">
                       {ROLE_META[member.role].description}
                     </p>
                   )}
@@ -209,9 +209,9 @@ export default function TeamPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card className="border border-gray-200 shadow-sm p-5">
-            <h2 className="text-lg font-semibold text-gray-900">Invite Someone</h2>
-            <p className="text-sm text-gray-500 mt-1">
+          <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-5">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Invite Someone</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Use admin for people who help run compliance. Use member for evidence and register maintenance.
             </p>
 
@@ -245,33 +245,33 @@ export default function TeamPage() {
                 Send Invite
               </Button>
               {!canInvite && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   Your role can view the team list, but only owners and admins can invite people.
                 </p>
               )}
             </form>
           </Card>
 
-          <Card className="border border-gray-200 shadow-sm p-5">
-            <h2 className="text-lg font-semibold text-gray-900">Pending Invites</h2>
+          <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-5">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Pending Invites</h2>
             <div className="mt-4 space-y-3">
               {team?.invites.length ? (
                 team.invites.map((invite) => {
                   const status = inviteStatus(invite);
                   const active = status.label === 'Pending';
                   return (
-                    <div key={invite.id} className="rounded-lg border border-gray-100 p-3">
+                    <div key={invite.id} className="rounded-lg border border-gray-100 dark:border-gray-800 dark:bg-gray-800/60 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-gray-900">{invite.email}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{invite.email}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             {ROLE_META[invite.role].label} invited by {invite.invitedByName ?? 'CharityPilot'}
                           </p>
                         </div>
                         <Chip size="sm" color={status.color} variant="flat">{status.label}</Chip>
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-gray-400">Expires {formatDate(invite.expiresAt)}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Expires {formatDate(invite.expiresAt)}</p>
                         {active && canInvite && (
                           <Button size="sm" variant="light" color="danger" onPress={() => revokeInvite(invite.id)}>
                             Revoke
@@ -282,7 +282,7 @@ export default function TeamPage() {
                   );
                 })
               ) : (
-                <p className="text-sm text-gray-500">No team invites have been sent yet.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No team invites have been sent yet.</p>
               )}
             </div>
           </Card>

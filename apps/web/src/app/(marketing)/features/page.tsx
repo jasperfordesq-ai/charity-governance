@@ -151,7 +151,7 @@ export default function FeaturesPage() {
                   {feature.icon}
                 </div>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">{feature.title}</h2>
-                <p className="text-lg text-amber-accent font-medium mb-4">{feature.tagline}</p>
+                <p className="text-lg text-teal-primary font-medium mb-4">{feature.tagline}</p>
                 <p className="text-gray-600 leading-relaxed mb-8">{feature.description}</p>
                 <ul className="space-y-3">
                   {feature.details.map((detail) => (
@@ -176,13 +176,13 @@ export default function FeaturesPage() {
                 <Card className="border border-gray-100 shadow-sm overflow-hidden">
                   <CardBody className="p-0">
                     <div
-                      className={`${feature.colour} bg-opacity-10 h-64 lg:h-80 flex items-center justify-center`}
+                      className={`${feature.colour}/10 h-64 lg:h-80 flex items-center justify-center`}
                     >
                       <div className="text-center">
                         <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl ${feature.colour} text-white mb-4 opacity-80`}>
                           {feature.icon}
                         </div>
-                        <p className="text-sm text-gray-500 font-medium">{feature.title} preview</p>
+                        <p className="text-sm text-gray-600 font-medium">{feature.title} preview</p>
                       </div>
                     </div>
                   </CardBody>

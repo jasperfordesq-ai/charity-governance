@@ -74,7 +74,7 @@ export function CookieConsent() {
             are ever used. See our{' '}
             <a
               href="/privacy"
-              className="underline underline-offset-2 text-amber-light hover:text-white transition-colors"
+              className="underline underline-offset-2 text-white font-medium hover:text-amber-light transition-colors"
             >
               Privacy Policy
             </a>{' '}

@@ -17,17 +17,15 @@ export function ThemeToggle() {
   useEffect(() => {
     if (!mounted) return;
 
-    const root = document.documentElement;
+    // Persist the choice; the dashboard layout resolves it to the .dark class (incl. 'system').
     if (theme === 'dark') {
-      root.classList.add('dark');
       localStorage.setItem('theme', 'dark');
     } else if (theme === 'light') {
-      root.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     } else {
       localStorage.removeItem('theme');
-      root.classList.remove('dark');
     }
+    window.dispatchEvent(new Event('themechange'));
   }, [theme, mounted]);
 
   if (!mounted) return null;

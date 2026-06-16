@@ -45,7 +45,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               animate-[slideIn_0.2s_ease-out]
               ${t.type === 'success' ? 'bg-green-600 text-white' : ''}
               ${t.type === 'error' ? 'bg-red-600 text-white' : ''}
-              ${t.type === 'info' ? 'bg-gray-800 text-white' : ''}
+              ${t.type === 'info' ? 'bg-gray-800 text-white border border-gray-700' : ''}
             `}
           >
             <div className="flex items-center gap-2">

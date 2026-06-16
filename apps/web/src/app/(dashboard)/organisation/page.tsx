@@ -141,14 +141,14 @@ export default function OrganisationPage() {
     <div className="space-y-8 max-w-3xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Organisation Profile</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Organisation Profile</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Keep your organisation details up to date. This information is used for compliance reporting.
         </p>
       </div>
 
       {/* Form */}
-      <Card className="border border-gray-200 shadow-sm p-6 sm:p-8">
+      <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6 sm:p-8">
         <div className="space-y-6">
           {/* Name & Registration */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -189,7 +189,7 @@ export default function OrganisationPage() {
 
           {/* Complexity */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Organisation Complexity</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Organisation Complexity</label>
             <div className="flex gap-3">
               {[OrganisationComplexity.SIMPLE, OrganisationComplexity.COMPLEX].map((c) => (
                 <button
@@ -199,15 +199,15 @@ export default function OrganisationPage() {
                   className={`
                     flex-1 p-4 rounded-xl border-2 text-left transition-all
                     ${complexity === c
-                      ? 'border-teal-primary bg-teal-primary/5'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-teal-primary bg-teal-primary/5 dark:bg-teal-light/10'
+                      : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
                     }
                   `}
                 >
-                  <p className={`text-sm font-semibold ${complexity === c ? 'text-teal-primary' : 'text-gray-700'}`}>
+                  <p className={`text-sm font-semibold ${complexity === c ? 'text-teal-primary dark:text-teal-light' : 'text-gray-700 dark:text-gray-300'}`}>
                     {c === OrganisationComplexity.SIMPLE ? 'Simple' : 'Complex'}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {c === OrganisationComplexity.SIMPLE
                       ? 'Core standards only (32 standards)'
                       : 'Core + additional standards (49 standards)'}
@@ -219,7 +219,7 @@ export default function OrganisationPage() {
 
           {/* Charitable purpose (multi-select) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Charitable Purpose(s)
             </label>
             <div className="space-y-2">
@@ -234,9 +234,9 @@ export default function OrganisationPage() {
                       else next.delete(key);
                       setCharitablePurpose(next);
                     }}
-                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary"
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary"
                   />
-                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
                 </label>
               ))}
             </div>
@@ -327,10 +327,10 @@ export default function OrganisationPage() {
               Save Changes
             </Button>
             {saved && (
-              <span className="text-sm text-green-600 font-medium">Changes saved successfully.</span>
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">Changes saved successfully.</span>
             )}
             {isDirty && !saved && !saving && (
-              <span className="text-sm text-amber-600 font-medium">Unsaved changes</span>
+              <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">Unsaved changes</span>
             )}
           </div>
         </div>
@@ -345,23 +345,23 @@ export default function OrganisationPage() {
               <ModalBody>
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-800 mb-1">Simple Organisations</h3>
-                    <p className="text-sm text-gray-600">
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Simple Organisations</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
                       Most charities fall into this category. Simple organisations need to comply with the
                       <strong> 32 core standards</strong> of the Charities Governance Code. This is the default for
                       charities with straightforward operations, smaller budgets, and fewer staff or volunteers.
                     </p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-800 mb-1">Complex Organisations</h3>
-                    <p className="text-sm text-gray-600">
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Complex Organisations</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
                       Larger charities or those with complex activities should comply with both the core standards
                       and the <strong>17 additional standards</strong> (49 total). Consider this where your
                       charity has paid staff, significant income, multiple activities, complex structures, or higher risk.
                     </p>
                   </div>
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    <p className="text-sm text-amber-800">
+                  <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
                       <strong>Note:</strong> Changing complexity will affect which standards appear in your compliance
                       tracking. Your existing records will not be deleted.
                     </p>

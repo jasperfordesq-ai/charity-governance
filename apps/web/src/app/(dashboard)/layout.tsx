@@ -127,6 +127,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Resolve and apply the theme as a .dark class — dark mode is scoped to app routes.
+  // Reacts to the ThemeToggle ('themechange') and OS changes (for 'system'), and removes
+  // .dark on unmount so light-only marketing/auth routes stay light after client nav.
+  useEffect(() => {
+    const root = document.documentElement;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      const stored = localStorage.getItem('theme');
+      const dark = stored === 'dark' || (stored !== 'light' && mq.matches);
+      root.classList.toggle('dark', dark);
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    window.addEventListener('themechange', apply);
+    return () => {
+      mq.removeEventListener('change', apply);
+      window.removeEventListener('themechange', apply);
+      root.classList.remove('dark');
+    };
+  }, []);
+
   // Redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && !user) {
@@ -142,13 +163,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
         <div className="flex flex-col items-center gap-3">
           <svg className="animate-spin h-10 w-10 text-teal-primary" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-sm text-gray-500">Loading CharityPilot...</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading CharityPilot...</p>
         </div>
       </div>
     );
@@ -221,7 +242,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Sidebar footer */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
-          <div className="text-xs text-gray-400 dark:text-gray-600 text-center space-y-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 text-center space-y-1">
             <p>CharityPilot v1.0</p>
             <p className="hidden lg:block">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-[10px] font-mono">?</kbd> for shortcuts</p>
           </div>
@@ -236,7 +257,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             type="button"
             aria-label="Open sidebar menu"
-            className="lg:hidden p-2 -ml-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            className="lg:hidden p-2 -ml-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             onClick={() => setSidebarOpen(true)}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -246,15 +267,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Organisation name */}
           <div className="hidden lg:block">
-            <h2 className="text-sm font-semibold text-gray-800">{user.organisation?.name ?? 'My Organisation'}</h2>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{user.organisation?.name ?? 'My Organisation'}</h2>
           </div>
 
           {/* User info + logout */}
           <div className="flex items-center gap-3 ml-auto">
             <ThemeToggle />
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-gray-800">{user.name}</p>
-              <p className="text-xs text-gray-500">{user.organisation?.name ?? ''}</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{user.name}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{user.organisation?.name ?? ''}</p>
             </div>
             <div className="w-8 h-8 rounded-full bg-teal-primary/10 text-teal-primary flex items-center justify-center text-sm font-semibold">
               {user.name?.charAt(0)?.toUpperCase() ?? 'U'}

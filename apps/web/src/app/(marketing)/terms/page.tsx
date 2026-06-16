@@ -18,7 +18,7 @@ export default function TermsPage() {
           <p className="text-gray-500 text-sm">Effective date: 1 April 2026</p>
         </div>
 
-        <div className="prose prose-gray max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-600 prose-p:leading-relaxed prose-a:text-teal-primary prose-a:no-underline hover:prose-a:underline prose-li:text-gray-600">
+        <div className="prose prose-gray max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-teal-primary prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700">
 
           <p>
             Please read these Terms of Service (&ldquo;Terms&rdquo;) carefully before using

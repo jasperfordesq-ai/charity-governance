@@ -122,8 +122,8 @@ export default function DeadlinesPage() {
   const getDeadlineStyle = (deadline: DeadlineResponse) => {
     if (deadline.isComplete) {
       return {
-        border: 'border-gray-200',
-        bg: 'bg-gray-50',
+        border: 'border-gray-200 dark:border-gray-800',
+        bg: 'bg-gray-50 dark:bg-gray-800/60',
         chipColor: 'default' as const,
         chipLabel: 'Complete',
       };
@@ -137,23 +137,23 @@ export default function DeadlinesPage() {
 
     if (daysUntil < 0) {
       return {
-        border: 'border-red-200',
-        bg: 'bg-red-50/50',
+        border: 'border-red-200 dark:border-red-500/20',
+        bg: 'bg-red-50/50 dark:bg-red-500/10',
         chipColor: 'danger' as const,
         chipLabel: `${Math.abs(daysUntil)} days overdue`,
       };
     }
     if (daysUntil <= 30) {
       return {
-        border: 'border-amber-200',
-        bg: 'bg-amber-50/50',
+        border: 'border-amber-200 dark:border-amber-500/20',
+        bg: 'bg-amber-50/50 dark:bg-amber-500/10',
         chipColor: 'warning' as const,
         chipLabel: daysUntil === 0 ? 'Due today' : `${daysUntil} days left`,
       };
     }
     return {
-      border: 'border-green-200',
-      bg: 'bg-white',
+      border: 'border-green-200 dark:border-green-500/20',
+      bg: 'bg-white dark:bg-gray-900',
       chipColor: 'success' as const,
       chipLabel: `${daysUntil} days left`,
     };
@@ -164,8 +164,8 @@ export default function DeadlinesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Deadline Tracker</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Deadline Tracker</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Keep track of Annual Returns, AGMs, and your custom deadlines.
           </p>
         </div>
@@ -177,22 +177,22 @@ export default function DeadlinesPage() {
         </Button>
       </div>
 
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-primary">
+            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light">
               Regulatory cadence
             </Chip>
-            <h2 className="text-lg font-semibold text-gray-900">Deadlines the board should see early</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Deadlines the board should see early</h2>
           </div>
-          <span className="text-xs font-medium text-gray-500">Add custom dates for funders, CRO, audits, and AGMs.</span>
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Add custom dates for funders, CRO, audits, and AGMs.</span>
         </div>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
           {regulatoryMilestones.map((item) => (
-            <div key={item.title} className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary">{item.cadence}</p>
-              <h3 className="mt-2 text-sm font-semibold text-gray-900">{item.title}</h3>
-              <p className="mt-2 text-xs leading-5 text-gray-600">{item.detail}</p>
+            <div key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary dark:text-teal-light">{item.cadence}</p>
+              <h3 className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</h3>
+              <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">{item.detail}</p>
             </div>
           ))}
         </div>
@@ -202,27 +202,27 @@ export default function DeadlinesPage() {
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Card key={i} className="p-5 animate-pulse">
+            <Card key={i} className="p-5 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-4">
-                <div className="w-5 h-5 bg-gray-200 rounded" />
+                <div className="w-5 h-5 bg-gray-200 dark:bg-gray-800 rounded" />
                 <div className="flex-1">
-                  <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-                  <div className="h-3 bg-gray-200 rounded w-1/4" />
+                  <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-2" />
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
                 </div>
-                <div className="h-6 bg-gray-200 rounded w-20" />
+                <div className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-20" />
               </div>
             </Card>
           ))}
         </div>
       ) : sortedDeadlines.length === 0 ? (
-        <Card className="p-12 border border-gray-200 text-center">
-          <div className="text-gray-400 mb-3">
+        <Card className="p-12 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center">
+          <div className="text-gray-400 dark:text-gray-600 mb-3">
             <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
             </svg>
           </div>
-          <p className="text-gray-500 mb-2">No deadlines yet.</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-gray-500 dark:text-gray-400 mb-2">No deadlines yet.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Auto-generated deadlines will appear once your organisation profile is set up.
           </p>
         </Card>
@@ -246,7 +246,7 @@ export default function DeadlinesPage() {
                       mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
                       ${d.isComplete
                         ? 'bg-green-500 border-green-500 text-white'
-                        : 'border-gray-300 hover:border-teal-primary'
+                        : 'border-gray-300 dark:border-gray-700 hover:border-teal-primary dark:hover:border-teal-light'
                       }
                     `}
                   >
@@ -261,16 +261,16 @@ export default function DeadlinesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className={`text-sm font-semibold ${d.isComplete ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                        <p className={`text-sm font-semibold ${d.isComplete ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-100'}`}>
                           {d.title}
                         </p>
                         {d.description && (
-                          <p className={`text-xs mt-0.5 ${d.isComplete ? 'text-gray-300' : 'text-gray-500'}`}>
+                          <p className={`text-xs mt-0.5 ${d.isComplete ? 'text-gray-400 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'}`}>
                             {d.description}
                           </p>
                         )}
                         <div className="flex items-center gap-2 mt-1.5">
-                          <span className={`text-xs ${d.isComplete ? 'text-gray-300' : 'text-gray-400'}`}>
+                          <span className={`text-xs ${d.isComplete ? 'text-gray-400 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'}`}>
                             {due.toLocaleDateString('en-IE', {
                               weekday: 'short',
                               day: 'numeric',

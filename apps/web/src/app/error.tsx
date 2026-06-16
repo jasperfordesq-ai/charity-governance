@@ -15,7 +15,7 @@ export default function Error({ error, reset }: ErrorProps) {
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center px-4">
       <div className="text-center max-w-lg">
         {/* Logo */}
         <div className="mb-10">
@@ -26,9 +26,9 @@ export default function Error({ error, reset }: ErrorProps) {
 
         {/* Error icon */}
         <div className="flex items-center justify-center mb-6">
-          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
             <svg
-              className="w-8 h-8 text-red-400"
+              className="w-8 h-8 text-red-400 dark:text-red-300"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -43,13 +43,13 @@ export default function Error({ error, reset }: ErrorProps) {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-3">Something went wrong</h1>
-        <p className="text-gray-500 leading-relaxed mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">Something went wrong</h1>
+        <p className="text-gray-500 dark:text-gray-400 leading-relaxed mb-8">
           We&apos;re sorry — an unexpected error occurred. Our team has been notified. Please
           try again, and if the problem persists contact{' '}
           <a
             href="mailto:support@charitypilot.ie"
-            className="text-teal-primary underline underline-offset-2 hover:text-teal-dark"
+            className="text-teal-primary hover:text-teal-dark dark:text-teal-light underline underline-offset-2"
           >
             support@charitypilot.ie
           </a>

@@ -113,7 +113,7 @@ export default function LandingPage() {
           <div className="max-w-3xl">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white leading-tight tracking-tight">
               Charity governance
-              <span className="block text-amber-light">made simple.</span>
+              <span className="block text-amber-accent">made simple.</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-teal-100 max-w-2xl leading-relaxed">
               Over 11,000 Irish charities must comply with the CRA Charities Governance Code.
@@ -141,13 +141,13 @@ export default function LandingPage() {
                 See how it works
               </Button>
             </div>
-            <p className="mt-4 text-sm text-teal-200">No credit card required. Cancel any time.</p>
+            <p className="mt-4 text-sm text-teal-100">No credit card required. Cancel any time.</p>
           </div>
         </div>
       </section>
 
       {/* Social proof bar */}
-      <section className="bg-gray-50 border-b border-gray-100 py-6">
+      <section className="bg-gray-50 border-b border-gray-200 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm text-gray-500 font-medium">
             Built for Irish charities, by people who understand Irish charity governance.
@@ -184,7 +184,7 @@ export default function LandingPage() {
             ].map((pain) => (
               <Card
                 key={pain.title}
-                className="border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+                className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
               >
                 <CardBody className="p-8">
                   <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mb-4">
@@ -218,7 +218,7 @@ export default function LandingPage() {
             {features.map((feature) => (
               <Card
                 key={feature.title}
-                className="border border-gray-100 shadow-sm hover:shadow-md transition-shadow bg-white"
+                className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow bg-white"
               >
                 <CardBody className="p-8">
                   <div className="w-12 h-12 rounded-xl bg-teal-primary/10 text-teal-primary flex items-center justify-center mb-5">
@@ -263,7 +263,7 @@ export default function LandingPage() {
             {principles.map((p) => (
               <div
                 key={p.number}
-                className="relative rounded-2xl p-6 bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+                className="relative rounded-2xl p-6 bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
               >
                 <div
                   className={`w-10 h-10 rounded-full ${p.colour} text-white flex items-center justify-center font-bold text-sm mb-4`}
@@ -347,7 +347,7 @@ export default function LandingPage() {
           </div>
           <div className="space-y-3">
             {faqs.map((faq) => (
-              <details key={faq.question} className="group border border-gray-100 rounded-xl overflow-hidden">
+              <details key={faq.question} className="group border border-gray-200 rounded-xl overflow-hidden">
                 <summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-lg font-semibold text-gray-900 hover:bg-gray-50 transition-colors list-none">
                   {faq.question}
                   <svg className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

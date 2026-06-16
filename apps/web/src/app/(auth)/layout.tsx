@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="light min-h-screen bg-white text-gray-900 flex flex-col" style={{ colorScheme: 'light' }}>
+    <div className="light min-h-screen bg-gray-50 text-gray-900 flex flex-col" style={{ colorScheme: 'light' }}>
       {/* Header */}
       <header className="py-5 px-4 sm:px-6">
         <div className="w-full max-w-md mx-auto flex items-center justify-between gap-4">
@@ -54,7 +54,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </main>
 
       {/* Minimal footer */}
-      <footer className="text-center py-6 px-4 text-xs text-gray-400">
+      <footer className="text-center py-6 px-4 text-xs text-gray-500">
         <p>
           &copy; 2026 Project Nexus Ltd &mdash;{' '}
           <Link href="/privacy" className="hover:text-teal-primary transition-colors">

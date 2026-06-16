@@ -176,8 +176,8 @@ export default function BoardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Board Members Register</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Board Members Register</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Manage your charity trustees. Track code of conduct, induction, and term limits.
           </p>
         </div>
@@ -199,7 +199,7 @@ export default function BoardPage() {
           onClick={() => setShowInactive(!showInactive)}
           className={`
             relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-            ${showInactive ? 'bg-teal-primary' : 'bg-gray-300'}
+            ${showInactive ? 'bg-teal-primary' : 'bg-gray-300 dark:bg-gray-700'}
           `}
         >
           <span
@@ -209,32 +209,32 @@ export default function BoardPage() {
             `}
           />
         </button>
-        <span className="text-sm text-gray-600">Show inactive members</span>
+        <span className="text-sm text-gray-600 dark:text-gray-400">Show inactive members</span>
       </div>
 
       {/* Members table */}
       {loading ? (
-        <Card className="p-6 animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-5" />
+        <Card className="p-6 animate-pulse dark:bg-gray-900 dark:border dark:border-gray-800">
+          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-5" />
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex gap-4 mb-3">
-              <div className="h-3 bg-gray-200 rounded w-1/5" />
-              <div className="h-3 bg-gray-200 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 rounded w-1/6" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/5" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
             </div>
           ))}
         </Card>
       ) : displayMembers.length === 0 ? (
-        <Card className="p-12 border border-gray-200 text-center">
-          <div className="text-gray-400 mb-3">
+        <Card className="p-12 border border-gray-200 dark:border-gray-800 dark:bg-gray-900 text-center">
+          <div className="text-gray-400 dark:text-gray-500 mb-3">
             <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
             </svg>
           </div>
-          <p className="text-gray-500 mb-2">No board members added yet.</p>
-          <p className="text-sm text-gray-400">Add your charity trustees to track their governance duties.</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-2">No board members added yet.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Add your charity trustees to track their governance duties.</p>
         </Card>
       ) : (
         <>
@@ -245,12 +245,12 @@ export default function BoardPage() {
             const nearNineYears = years >= 8;
             const overNineYears = years >= 9;
             return (
-              <Card key={m.id} className="border border-gray-200 shadow-sm p-4">
+              <Card key={m.id} className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{m.name}</p>
-                    <p className="text-xs text-gray-500">{m.role}</p>
-                    {m.email && <p className="text-xs text-gray-400">{m.email}</p>}
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{m.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{m.role}</p>
+                    {m.email && <p className="text-xs text-gray-400 dark:text-gray-500">{m.email}</p>}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     {m.isActive ? (
@@ -267,19 +267,19 @@ export default function BoardPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                   <div>
-                    <span className="text-gray-400">Appointed</span>
-                    <p className="text-gray-600">{new Date(m.appointedDate).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    <span className="text-gray-400 dark:text-gray-500">Appointed</span>
+                    <p className="text-gray-600 dark:text-gray-300">{new Date(m.appointedDate).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   </div>
                   <div>
-                    <span className="text-gray-400">Term End</span>
-                    <p className="text-gray-600">{m.termEndDate ? new Date(m.termEndDate).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'}</p>
+                    <span className="text-gray-400 dark:text-gray-500">Term End</span>
+                    <p className="text-gray-600 dark:text-gray-300">{m.termEndDate ? new Date(m.termEndDate).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'}</p>
                   </div>
                   <div>
-                    <span className="text-gray-400">Conduct</span>
+                    <span className="text-gray-400 dark:text-gray-500">Conduct</span>
                     <div className="mt-0.5">{m.conductSigned ? <Chip size="sm" color="success" variant="flat">Signed</Chip> : <Chip size="sm" color="warning" variant="flat">Unsigned</Chip>}</div>
                   </div>
                   <div>
-                    <span className="text-gray-400">Induction</span>
+                    <span className="text-gray-400 dark:text-gray-500">Induction</span>
                     <div className="mt-0.5">{m.inductionCompleted ? <Chip size="sm" color="success" variant="flat">Done</Chip> : <Chip size="sm" color="warning" variant="flat">Pending</Chip>}</div>
                   </div>
                 </div>
@@ -295,7 +295,7 @@ export default function BoardPage() {
         </div>
 
         {/* Desktop table layout */}
-        <Card className="border border-gray-200 shadow-sm overflow-hidden hidden sm:block">
+        <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
             <Table aria-label="Board members" removeWrapper>
               <TableHeader>
@@ -318,17 +318,17 @@ export default function BoardPage() {
                     <TableRow key={m.id}>
                       <TableCell>
                         <div>
-                          <p className="text-sm font-medium text-gray-800">{m.name}</p>
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{m.name}</p>
                           {m.email && (
-                            <p className="text-xs text-gray-400">{m.email}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">{m.email}</p>
                           )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm text-gray-600">{m.role}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300">{m.role}</span>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
                           {new Date(m.appointedDate).toLocaleDateString('en-IE', {
                             day: 'numeric',
                             month: 'short',
@@ -338,7 +338,7 @@ export default function BoardPage() {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {m.termEndDate ? (
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
                             {new Date(m.termEndDate).toLocaleDateString('en-IE', {
                               day: 'numeric',
                               month: 'short',
@@ -346,7 +346,7 @@ export default function BoardPage() {
                             })}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-300">Not set</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">Not set</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -458,9 +458,9 @@ export default function BoardPage() {
                         id="conductSigned"
                         checked={formConductSigned}
                         onChange={(e) => setFormConductSigned(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary"
+                        className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary"
                       />
-                      <label htmlFor="conductSigned" className="text-sm text-gray-700">
+                      <label htmlFor="conductSigned" className="text-sm text-gray-700 dark:text-gray-300">
                         Code of Conduct signed
                       </label>
                       {formConductSigned && (
@@ -482,9 +482,9 @@ export default function BoardPage() {
                         id="inductionCompleted"
                         checked={formInduction}
                         onChange={(e) => setFormInduction(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary"
+                        className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary"
                       />
-                      <label htmlFor="inductionCompleted" className="text-sm text-gray-700">
+                      <label htmlFor="inductionCompleted" className="text-sm text-gray-700 dark:text-gray-300">
                         Induction completed
                       </label>
                       {formInduction && (
