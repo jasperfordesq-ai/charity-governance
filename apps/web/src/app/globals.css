@@ -21,20 +21,12 @@
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Base surface defaults. Replaces the old blunt `.dark .bg-white {}` override hacks —
-   per-element dark: variants are now used at the component level everywhere else.
-   Marketing/auth default to light; app routes apply their own dark surface on the
-   (dashboard) layout container, and `.dark body` covers any uncovered region. */
-@layer base {
-  body {
-    background-color: #ffffff;       /* white */
-    color: rgb(17 24 39);            /* gray-900 */
-  }
-  .dark body {
-    background-color: rgb(3 7 18);   /* gray-950 */
-    color: rgb(243 244 246);         /* gray-100 */
-  }
-}
+/* Body surface is themed via utilities on the <body> element in app/layout.tsx
+   (bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100). Utilities must be
+   used here — a `.dark body {}` rule in @layer base would be overridden by the
+   body's own `bg-white` utility (later cascade layer wins). The old blunt
+   `.dark .bg-white {}` override hacks are gone; per-element dark: variants handle
+   the rest. Dark mode is applied (.dark class) only on app routes. */
 
 /* Smooth scroll for anchor navigation */
 html {
