@@ -36,7 +36,9 @@
     "db:migrate:local-docker": "node scripts/migrate-local-docker.mjs",
     "db:seed": "turbo db:seed",
     "db:backup": "node scripts/postgres-backup.mjs backup",
-    "db:restore:verify": "node scripts/postgres-backup.mjs verify-restore"
+    "db:restore:verify": "node scripts/postgres-backup.mjs verify-restore",
+    "test:e2e": "cd e2e && npm test",
+    "test:e2e:install": "cd e2e && npm install && npm run install:browsers"
   },
   "devDependencies": {
     "turbo": "^2.9.16",

@@ -115,6 +115,10 @@ The API runs on <http://localhost:3002> and the web app on
 - **Production-tooling tests** validate the launch scripts: `npm run test:production-check`.
 - **Local Docker smoke** boots the real containerised stack and exercises auth,
   document upload/download, and the web shell: `npm run test:local-docker:smoke`.
+- **End-to-end (Playwright)** drives a real browser against the local Docker stack —
+  register/verify/login, a compliance sign-off, document upload/download, deadlines,
+  team invite/accept, and billing tier gating. One-time `npm run test:e2e:install`,
+  then `npm run test:e2e` (stack must be up). See [`e2e/README.md`](e2e/README.md).
 
 ---
 

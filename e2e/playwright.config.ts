@@ -1,0 +1,49 @@
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * CharityPilot end-to-end tests.
+ *
+ * These drive a real Chromium browser against the LOCAL Docker stack:
+ *   docker compose -f compose.yml -f compose.local.yml up
+ *
+ * They use NO external providers — document storage is the local filesystem
+ * driver, Stripe/Resend are unconfigured (test mode / no-op), and one-time
+ * tokens are read or injected via the database rather than a real mailbox.
+ *
+ * Determinism: the suite runs single-worker and resets the database between
+ * tests (see fixtures.ts), preserving only the seeded governance reference
+ * data. Override endpoints/DSN with E2E_WEB_URL / E2E_API_URL / E2E_DATABASE_URL.
+ */
+
+export const WEB_BASE_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
+export const API_BASE_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
+
+export default defineConfig({
+  testDir: './tests',
+  globalSetup: require.resolve('./global-setup'),
+  // The suite shares one database and resets between tests, so it must not run
+  // tests concurrently.
+  fullyParallel: false,
+  workers: 1,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never' }], ['github']]
+    : [['list'], ['html', { open: 'never' }]],
+  use: {
+    baseURL: WEB_BASE_URL,
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+});
