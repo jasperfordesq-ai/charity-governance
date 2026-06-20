@@ -104,6 +104,12 @@ You need four external services. Create the **production/live** versions
 - **This is the step most worth getting a developer/DevOps person to pair on** if
   you're not comfortable — it's the highest-skill part.
 
+- **Preparing a fresh server is scripted.** On a new Ubuntu/Debian VPS, run
+  `sudo bash scripts/provision-server.sh` — it installs Docker + the Compose
+  plugin and opens the firewall for SSH, HTTP, and HTTPS (it allows SSH before
+  enabling the firewall, so you won't lock yourself out). Review it first; it
+  makes system-level changes.
+
 - **TLS is now turnkey.** You no longer have to hand-configure certificates. The
   repo ships an optional reverse proxy (`compose.production-tls.yml` +
   `caddy/Caddyfile`) that obtains and renews HTTPS certificates automatically via
