@@ -107,6 +107,7 @@ export default function DeadlinesPage() {
       fetchDeadlines();
     } catch (err) {
       logClientError('Toggle failed', err);
+      toast('Failed to update deadline', 'error');
     }
   };
 

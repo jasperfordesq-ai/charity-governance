@@ -159,6 +159,7 @@ export default function BoardPage() {
       fetchMembers();
     } catch (err) {
       logClientError('Toggle failed', err);
+      toast('Failed to update board member', 'error');
     }
   };
 
