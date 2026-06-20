@@ -83,6 +83,10 @@ path — is in [System Overview](architecture/01-system-overview.md)._
 | 9 | [Frontend Architecture](architecture/09-frontend.md) | App-router route groups, the API client and same-origin proxy, auth/session handling and single-flight refresh, and client-side plan gating. |
 | 10 | [Configuration, Environment & the Two-Gate Model](architecture/10-config-and-env.md) | The full env-var surface, what `validateProductionEnv` enforces, and the code-gate vs launch-gate model. |
 
+> **Dependency inventory:** [`docs/DEPENDENCIES.md`](DEPENDENCIES.md) lists the
+> production dependencies per workspace and the rationale behind each `overrides`
+> security pin.
+
 ## Running the stack and the tests
 
 - **Local stack (one command):** `docker compose -f compose.yml -f compose.local.yml up`
