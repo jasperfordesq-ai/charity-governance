@@ -2,6 +2,16 @@
 
 Status marks reflect completed repository hardening work. Open items require real external evidence before CharityPilot can handle production charity data.
 
+> **New here / not sure what to do next?** Read [`docs/LAUNCH-GUIDE.md`](docs/LAUNCH-GUIDE.md)
+> first — it explains, in plain English, what is already done and the exact
+> human steps (accounts, hosting, legal, security review) that remain.
+
+> **Code gate re-verified 2026-06-20:** build, lint, unit tests (API 159 / web /
+> shared), production-tooling tests (201), Prisma validate, secret + SAST scans,
+> reproducible `npm ci`, and full Docker stack smoke all pass. A high-severity
+> `form-data` dependency advisory (GHSA-hmw2-7cc7-3qxx) was remediated by pinning
+> `form-data` to `4.0.6`; production `npm audit` is now clean (0 findings).
+
 ## Security and Auth
 
 - [x] Move browser authentication away from `localStorage` and into HTTP-only cookies.
