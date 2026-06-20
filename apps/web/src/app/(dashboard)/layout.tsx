@@ -151,7 +151,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && !user) {
-      router.replace('/login');
+      // Preserve the intended destination so login can return the user here
+      // (safeNextPath validates it). Without this, deep links land on /dashboard.
+      const next = `${window.location.pathname}${window.location.search}`;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
       return;
     }
 

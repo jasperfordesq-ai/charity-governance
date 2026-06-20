@@ -200,6 +200,10 @@ export class EmailService {
       daysUntilDue <= 7 ? 'Urgent' : daysUntilDue <= 14 ? 'Coming up soon' : 'Reminder';
 
     const formattedDate = dueDate.toLocaleDateString('en-IE', {
+      // Deadline due dates are stored at UTC midnight and the day-count is
+      // computed in UTC, so format in UTC too — otherwise a server in a
+      // timezone behind UTC renders the date one day early.
+      timeZone: 'UTC',
       weekday: 'long',
       year: 'numeric',
       month: 'long',

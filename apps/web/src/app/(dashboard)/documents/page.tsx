@@ -164,6 +164,7 @@ export default function DocumentsPage() {
       toast('Document deleted');
     } catch (err) {
       logClientError('Delete failed', err);
+      toast('Failed to delete document', 'error');
     } finally {
       setDeleting(false);
     }
@@ -512,10 +513,11 @@ export default function DocumentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label htmlFor="document-upload-file" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     File
                   </label>
                   <input
+                    id="document-upload-file"
                     type="file"
                     onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                     className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-primary/10 dark:file:bg-teal-light/10 file:text-teal-primary dark:file:text-teal-light hover:file:bg-teal-primary/20 dark:hover:file:bg-teal-light/20"

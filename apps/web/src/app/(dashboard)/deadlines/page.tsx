@@ -107,6 +107,7 @@ export default function DeadlinesPage() {
       fetchDeadlines();
     } catch (err) {
       logClientError('Toggle failed', err);
+      toast('Failed to update deadline', 'error');
     }
   };
 
@@ -241,6 +242,9 @@ export default function DeadlinesPage() {
                   {/* Checkbox */}
                   <button
                     type="button"
+                    role="checkbox"
+                    aria-checked={d.isComplete}
+                    aria-label={`Mark "${d.title}" as ${d.isComplete ? 'incomplete' : 'complete'}`}
                     onClick={() => toggleComplete(d)}
                     className={`
                       mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
@@ -251,7 +255,7 @@ export default function DeadlinesPage() {
                     `}
                   >
                     {d.isComplete && (
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <svg aria-hidden="true" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                       </svg>
                     )}

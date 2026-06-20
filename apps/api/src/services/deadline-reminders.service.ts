@@ -111,8 +111,13 @@ export class DeadlineRemindersService {
 
   /**
    * Check all active (non-complete) deadlines and send reminder emails to org
-   * owners when today falls exactly N days before the due date, where N is one
-   * of the deadline's configured reminderDays.
+   * owners when the due date is within one of the deadline's configured
+   * reminderDays windows. Each configured window fires at most once (deduped via
+   * DeadlineReminderLog keyed on the window). Matching uses "days remaining <=
+   * window" against the most urgent reached window rather than exact equality,
+   * so a missed or delayed daily run (deploy, crash, restart, interval drift)
+   * still sends the most urgent not-yet-sent reminder on the next run instead of
+   * silently skipping it forever.
    *
    * Intended to be called once per day by a scheduler (see utils/cron.ts).
    */
@@ -179,9 +184,19 @@ export class DeadlineRemindersService {
         continue;
       }
 
-      const shouldRemind = (deadline.reminderDays as number[]).includes(daysUntilDue);
+      // The applicable window is the most urgent (smallest) configured window
+      // whose threshold has been reached (daysUntilDue <= window). Matching with
+      // "<=" rather than exact equality makes reminders resilient to a missed or
+      // delayed daily run: if the exact trigger day was skipped, the next run
+      // still sends the most urgent not-yet-sent window, and the per-window dedup
+      // log (keyed on the window, not the live day count) stops a stale earlier
+      // window from firing once a more urgent one has been sent.
+      const applicableWindow = (deadline.reminderDays as number[])
+        .filter((windowDays) => daysUntilDue <= windowDays)
+        .sort((a, b) => a - b)[0];
 
-      if (!shouldRemind) {
+      if (applicableWindow === undefined) {
+        // Too early — no configured reminder window has been reached yet.
         skipped++;
         continue;
       }
@@ -191,7 +206,7 @@ export class DeadlineRemindersService {
         deadlineId: deadline.id,
         userId: owner.id,
         email: owner.email,
-        reminderDays: daysUntilDue,
+        reminderDays: applicableWindow,
       });
 
       if (!reservation) {

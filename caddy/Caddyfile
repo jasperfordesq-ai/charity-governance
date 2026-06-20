@@ -1,0 +1,24 @@
+# CharityPilot production reverse proxy with automatic HTTPS (Let's Encrypt).
+#
+# Caddy terminates TLS for the public domains and proxies to the internal api
+# and web containers over the private compose network. It obtains and renews
+# certificates automatically — no certbot, no manual cert files.
+#
+# Domains and the ACME email are injected from the environment (see
+# compose.production-tls.yml). HTTP is auto-redirected to HTTPS by Caddy.
+
+{
+	email {$CADDY_ACME_EMAIL}
+}
+
+# Public web app (e.g. charitypilot.ie)
+{$CHARITYPILOT_WEB_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3003
+}
+
+# Public API (e.g. api.charitypilot.ie)
+{$CHARITYPILOT_API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:3002
+}

@@ -28,6 +28,26 @@ function redirectToLoginOnProtectedRoute() {
   window.location.href = `${loginUrl.pathname}${loginUrl.search}`;
 }
 
+// Single-flight token refresh. When several requests 401 at once (e.g. a page
+// firing parallel GETs after the access token expires) they must share ONE
+// refresh call — otherwise the concurrent calls present the same rotated,
+// single-use refresh token, trip the backend's reuse detection, and get the
+// whole session revoked (forced logout). Reused while a refresh is in flight,
+// then cleared so a later expiry starts a fresh one.
+let refreshPromise: Promise<void> | null = null;
+
+function refreshSession(): Promise<void> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_URL}/api/v1/auth/refresh`, {}, { withCredentials: true })
+      .then(() => undefined)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 export const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
   headers: { 'Content-Type': 'application/json' },
@@ -59,13 +79,20 @@ api.interceptors.response.use(
       original._retry = true;
 
       try {
-        await axios.post(`${API_URL}/api/v1/auth/refresh`, {}, { withCredentials: true });
+        await refreshSession();
         return api(original);
       } catch {
         if (!original.skipAuthRedirect) {
           redirectToLoginOnProtectedRoute();
         }
+        return Promise.reject(error);
       }
+    }
+
+    // A retried request that still 401s means the refreshed session is no longer
+    // valid — send the user to login rather than leaving a broken protected page.
+    if (error.response?.status === 401 && original?._retry && !original.skipAuthRedirect) {
+      redirectToLoginOnProtectedRoute();
     }
 
     return Promise.reject(error);

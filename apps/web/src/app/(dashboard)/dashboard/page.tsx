@@ -1,7 +1,7 @@
 'use client';
 
 import { logClientError } from '@/lib/client-logger';
-import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
+import { isPlanFeatureUnavailable, isSubscriptionLapseError } from '@/lib/plan-feature';
 import { useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Button, Card, Progress, Chip } from '@heroui/react';
@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [boardMemberCount, setBoardMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [subscriptionLapsed, setSubscriptionLapsed] = useState(false);
 
   const currentYear = new Date().getFullYear();
 
@@ -127,8 +128,12 @@ export default function DashboardPage() {
           setRegisterSummary(null);
         }
       } catch (err) {
-        logClientError('Failed to load dashboard data', err);
-        setError(true);
+        if (isSubscriptionLapseError(err)) {
+          setSubscriptionLapsed(true);
+        } else {
+          logClientError('Failed to load dashboard data', err);
+          setError(true);
+        }
       } finally {
         setLoading(false);
       }
@@ -203,6 +208,24 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Subscription lapsed state ── */}
+      {subscriptionLapsed && !loading && (
+        <Card className="p-6 border border-amber-200 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/10" role="alert">
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Your subscription or free trial has ended</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Reactivate your plan to regain access to your governance data.{' '}
+                <a href="/billing" className="font-semibold underline">Manage billing</a>
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ── Error state ── */}
       {error && !loading && (

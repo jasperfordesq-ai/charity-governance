@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
+import { useAuth } from '@/lib/auth-context';
 
 function AcceptInviteForm() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const { token } = useSensitiveQueryToken();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +37,9 @@ function AcceptInviteForm() {
 
     try {
       await api.post('/team/accept-invite', { token, name, password });
+      // The server has set the session cookies; load the new user into context
+      // before navigating, otherwise the dashboard guard bounces us to /login.
+      await refreshUser();
       router.push('/dashboard');
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'This invite could not be accepted. It may have expired.'));

@@ -24,6 +24,12 @@ interface LoginData {
 }
 
 const SALT_ROUNDS = 12;
+// A valid bcrypt hash (cost 12) of an unguessable value. It is never expected to
+// match; its only purpose is to spend the same hashing time on the no-user login
+// path as on the real path, so an attacker cannot enumerate accounts by comparing
+// response latency (timing-based user enumeration). Mirrors register()'s balanced
+// timing, which hashes before its existence check.
+const DUMMY_PASSWORD_HASH = '$2b$12$5x1wZg/1s7XL/AUM6hR6OeX6zHNP.H0FgxiRa5EDVKtm6RFwhiVdK';
 const TRIAL_DAYS = 14;
 const RESET_TOKEN_EXPIRY_HOURS = 1;
 const VERIFY_TOKEN_EXPIRY_HOURS = 24;
@@ -149,6 +155,9 @@ export class AuthService {
     });
 
     if (!user) {
+      // Spend the same bcrypt cost as the real path before failing, so the
+      // response timing does not reveal whether the account exists.
+      await bcrypt.compare(data.password, DUMMY_PASSWORD_HASH);
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
