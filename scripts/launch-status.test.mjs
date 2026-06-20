@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { assessLaunchState } from './launch-status.mjs';
+
+test('reports NO_ENV and points at the generator when .env.production is absent', () => {
+  const s = assessLaunchState({ envExists: false });
+  assert.equal(s.phase, 'NO_ENV');
+  assert.ok(s.nextActions.some((a) => a.includes('setup:production-env')));
+});
+
+test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
+  const env = [
+    'NODE_ENV=production',
+    'JWT_SECRET=already-generated-secret-value-1234567890',
+    'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+    'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
+    'EMAIL_FROM=noreply@charitypilot.ie',
+  ].join('\n');
+  const s = assessLaunchState({ envExists: true, envContent: env });
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.ok(s.nextActions.some((a) => a.includes('check:production')));
+});
+
+test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
+  const env = [
+    'NODE_ENV=production',
+    'JWT_SECRET=already-generated-secret-value-1234567890',
+    'DATABASE_URL=postgresql://u:p@db.example.com:5432/cp?sslmode=require',
+  ].join('\n');
+  const s = assessLaunchState({ envExists: true, envContent: env });
+  assert.equal(s.phase, 'ENV_COMPLETE');
+  assert.equal(s.remainingKeys.length, 0);
+  assert.ok(s.nextActions.some((a) => a.includes('check:production')));
+  assert.ok(
+    s.nextActions.some((a) => /penetration test|sign-off|checklist/i.test(a)),
+    'must remind the operator that external gates remain',
+  );
+});

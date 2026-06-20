@@ -97,6 +97,7 @@ The API runs on <http://localhost:3002> and the web app on
 | `npm run db:migrate -w @charitypilot/api` | Apply database migrations |
 | `npm run db:seed -w @charitypilot/api` | Seed reference/demo data |
 | `npm run security:scan` | Secret + static analysis scan |
+| `npm run launch:status` | Show where you are in the launch process and the next step |
 
 ---
 

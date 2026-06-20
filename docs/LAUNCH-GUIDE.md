@@ -3,6 +3,9 @@
 *Last updated: 2026-06-20. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
+> **Not sure where you are?** Run `npm run launch:status` any time — it inspects
+> your local setup and tells you the single next action to take.
+
 ---
 
 ## 1. Where the platform actually is right now
