@@ -79,6 +79,11 @@ You need four external services. Create the **production/live** versions
 
 - **Effort:** Half a day spread over a few days (Stripe verification + DNS
   records for Resend can take 24–72h to propagate).
+- **Step-by-step guides:** [`docs/billing-and-email-setup.md`](billing-and-email-setup.md)
+  (Stripe's four prices, keys, and webhook; Resend domain + key) and
+  [`docs/supabase-production-setup.md`](supabase-production-setup.md) (private
+  storage bucket). After filling the values, `npm run check:production:providers`
+  and `npm run check:production:supabase` verify them for you.
 
 ### Step 3 — Provision the production database
 - **What:** A managed PostgreSQL database (e.g. Supabase Postgres, Neon, RDS).
