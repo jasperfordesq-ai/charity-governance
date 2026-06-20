@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'route-guards-test-secret';
+// teamRoutes constructs an EmailService (new Resend(...)), which throws without a
+// key. Sibling tests default these too; CI has no ambient .env so they're required.
+process.env.RESEND_API_KEY = process.env.RESEND_API_KEY ?? 're_route_guards_test_key';
+process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? 'noreply@example.org';
 
 const [
   { default: Fastify },
