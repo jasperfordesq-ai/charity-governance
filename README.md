@@ -25,6 +25,13 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 - **Billing:** Stripe · **Email:** Resend · **Document storage:** Supabase (private bucket, signed URLs) or local filesystem for dev
 - **Default ports:** API `3002` · Web `3003` · PostgreSQL `5434`
 
+> **Full architecture map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the complete,
+> source-grounded system map — component diagram, the module/dependency graph (route
+> groups → services → Prisma models), the 22-model data model, the request lifecycle and
+> auth/session model, billing, document storage, the reminder scheduler, the governance
+> domain, the frontend, and the config/two-gate model. Every non-trivial claim carries a
+> `file:line` citation.
+
 ## Repository layout
 
 ```
