@@ -11,6 +11,15 @@ Status marks reflect completed repository hardening work. Open items require rea
 > reproducible `npm ci`, and full Docker stack smoke all pass. A high-severity
 > `form-data` dependency advisory (GHSA-hmw2-7cc7-3qxx) was remediated by pinning
 > `form-data` to `4.0.6`; production `npm audit` is now clean (0 findings).
+>
+> **Deployable artifacts verified 2026-06-20:** all three strict production
+> images build cleanly from `apps/api/Dockerfile` (runner + migration-runner) and
+> `apps/web/Dockerfile` (web build-arg origin validation passes), each via
+> `npm ci` against the fixed lockfile inside the Linux production image;
+> `compose.production.yml` renders successfully against the built images; and the
+> three CI workflows (`ci.yml`, `release-images.yml`, `production-launch-evidence.yml`)
+> parse cleanly. Everything verifiable without external accounts now passes — the
+> remaining open items below are external launch steps (see `docs/LAUNCH-GUIDE.md`).
 
 ## Security and Auth
 
