@@ -69,6 +69,10 @@ export default function OrganisationPage() {
   // Populate form from existing data
   useEffect(() => {
     if (!org) return;
+    // Re-populating from fresh server data (e.g. after a save calls refreshUser)
+    // must not count as a user edit — otherwise the dirty-tracking effect below
+    // re-arms "Unsaved changes" immediately after a successful save.
+    initialised.current = false;
     setName(org.name ?? '');
     setRcnNumber(org.rcnNumber ?? '');
     setCroNumber(org.croNumber ?? '');

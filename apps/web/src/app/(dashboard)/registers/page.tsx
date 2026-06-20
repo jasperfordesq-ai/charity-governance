@@ -271,8 +271,13 @@ export default function RegistersPage() {
       fundraising: `/governance-registers/fundraising/${id}`,
     }[type];
     const status = type === 'conflict' ? ConflictStatus.CLOSED : RegisterStatus.CLOSED;
-    await api.patch(endpoint, { status });
-    await fetchRegisters();
+    try {
+      await api.patch(endpoint, { status });
+      await fetchRegisters();
+    } catch (err) {
+      logClientError('Failed to close register record', err);
+      toast('Failed to close record', 'error');
+    }
   };
 
   const saveAnnual = async () => {

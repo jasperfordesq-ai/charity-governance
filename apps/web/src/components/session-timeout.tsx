@@ -12,15 +12,21 @@ export function SessionTimeout() {
   const [countdown, setCountdown] = useState(120);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mirrors showWarning for the activity listener so the main effect does not
+  // need showWarning as a dependency (which made it tear down its own countdown
+  // the moment the warning appeared, so it never counted down or logged out).
+  const showWarningRef = useRef(false);
 
   const resetTimer = useCallback(() => {
     setShowWarning(false);
+    showWarningRef.current = false;
     setCountdown(120);
     if (timer.current) clearTimeout(timer.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
 
     timer.current = setTimeout(() => {
       setShowWarning(true);
+      showWarningRef.current = true;
       setCountdown(120);
       countdownRef.current = setInterval(() => {
         setCountdown((prev) => {
@@ -42,7 +48,7 @@ export function SessionTimeout() {
 
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
     const handleActivity = () => {
-      if (!showWarning) resetTimer();
+      if (!showWarningRef.current) resetTimer();
     };
 
     events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
@@ -51,7 +57,7 @@ export function SessionTimeout() {
       if (timer.current) clearTimeout(timer.current);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [resetTimer, showWarning]);
+  }, [resetTimer]);
 
   const handleExtend = async () => {
     try {

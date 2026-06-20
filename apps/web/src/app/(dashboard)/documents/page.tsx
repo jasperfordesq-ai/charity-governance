@@ -164,6 +164,7 @@ export default function DocumentsPage() {
       toast('Document deleted');
     } catch (err) {
       logClientError('Delete failed', err);
+      toast('Failed to delete document', 'error');
     } finally {
       setDeleting(false);
     }
