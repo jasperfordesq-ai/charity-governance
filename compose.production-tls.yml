@@ -1,0 +1,50 @@
+# =============================================================================
+# CharityPilot - Optional TLS reverse proxy (Caddy, automatic Let's Encrypt)
+# =============================================================================
+# Use this overlay ON TOP OF compose.production.yml when you do NOT have a
+# separate load balancer / platform TLS in front of the stack. Caddy terminates
+# HTTPS for the public domains and proxies to the internal api/web containers,
+# obtaining and renewing certificates automatically.
+#
+# Prerequisites:
+#   1. A server with a public IP and ports 80 + 443 open to the internet.
+#   2. DNS A/AAAA records for your web + api domains pointing at that server.
+#   3. Set CADDY_ACME_EMAIL (and, if not using the defaults, the domain vars).
+#   4. Set TRUSTED_PROXY_ADDRESSES so the API trusts this proxy's forwarded IPs.
+#
+# Run:
+#   docker compose --env-file .env.production \
+#     -f compose.production.yml -f compose.production-tls.yml up -d
+# =============================================================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:?Set CADDY_ACME_EMAIL for Let's Encrypt certificate registration}
+      CHARITYPILOT_WEB_DOMAIN: ${CHARITYPILOT_WEB_DOMAIN:-charitypilot.ie}
+      CHARITYPILOT_API_DOMAIN: ${CHARITYPILOT_API_DOMAIN:-api.charitypilot.ie}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - charitypilot-production
+
+volumes:
+  caddy-data:
+    name: charitypilot-caddy-data
+  caddy-config:
+    name: charitypilot-caddy-config

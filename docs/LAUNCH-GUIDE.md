@@ -99,6 +99,24 @@ You need four external services. Create the **production/live** versions
 - **This is the step most worth getting a developer/DevOps person to pair on** if
   you're not comfortable — it's the highest-skill part.
 
+- **TLS is now turnkey.** You no longer have to hand-configure certificates. The
+  repo ships an optional reverse proxy (`compose.production-tls.yml` +
+  `caddy/Caddyfile`) that obtains and renews HTTPS certificates automatically via
+  Let's Encrypt. Once you have a server and DNS:
+  1. Point DNS `A` records for `charitypilot.ie` **and** `api.charitypilot.ie` at
+     your server's public IP; open ports 80 and 443.
+  2. In `.env.production`, set `CADDY_ACME_EMAIL` (for Let's Encrypt) and
+     `TRUSTED_PROXY_ADDRESSES` (so the API trusts the proxy's forwarded client IPs).
+  3. Bring up the stack with the proxy overlay:
+     ```bash
+     docker compose --env-file .env.production \
+       -f compose.production.yml -f compose.production-tls.yml up -d
+     ```
+  Caddy terminates HTTPS for both domains and proxies to the internal containers;
+  certificates are issued and renewed with no further action. You still need the
+  server and DNS, but the certificate/proxy complexity is handled for you. (If you
+  use a managed load balancer or platform TLS instead, skip this overlay.)
+
 ### Step 5 — Fill in the real secrets
 - **Start with one command** — it creates `.env.production` for you and
   auto-generates the random secrets you'd otherwise have to craft by hand
