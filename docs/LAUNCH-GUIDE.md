@@ -97,8 +97,16 @@ You need four external services. Create the **production/live** versions
   you're not comfortable — it's the highest-skill part.
 
 ### Step 5 — Fill in the real secrets
-- **What:** Copy `.env.production.example` → `.env.production` and replace every
-  placeholder with the real values from Steps 1–4. **Never commit this file.**
+- **Start with one command** — it creates `.env.production` for you and
+  auto-generates the random secrets you'd otherwise have to craft by hand
+  (`JWT_SECRET`, `READINESS_API_KEY`), leaving clearly-marked placeholders for
+  the values only you can provide:
+  ```bash
+  npm run setup:production-env
+  ```
+  It prints exactly which values you still need and where each comes from.
+- **Then** open `.env.production` and replace each remaining `REPLACE_ME` with the
+  real value from Steps 1–4. **Never commit this file** (it's already gitignored).
 - **Then verify it** (these commands check your config without launching):
   ```bash
   npm run check:production -- --production-env-file=.env.production
