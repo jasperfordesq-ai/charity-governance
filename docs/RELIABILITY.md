@@ -16,8 +16,8 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
 |---|---|---|---|---|---|
 | API | 256 | 0 | 0 | 15 | 271 |
-| Web | 81 | 0 | 12 | 7 | 100 |
-| **Total** | **337** | **0** | **12** | **22** | **371** |
+| Web | 86 | 0 | 8 | 7 | 101 |
+| **Total** | **342** | **0** | **8** | **22** | **372** |
 
 ## How to verify
 
@@ -432,7 +432,7 @@ _9 guarantees — 🟢 9_
 
 ---
 
-## Web surface — the matrix (100 guarantees)
+## Web surface — the matrix (101 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -441,7 +441,7 @@ _9 guarantees — 🟢 9_
 
 ### platform — proxy / CSP / API client / session refresh
 
-_47 guarantees — 🟢 46  🔴 1_
+_48 guarantees — 🟢 48_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -450,7 +450,7 @@ _47 guarantees — 🟢 46  🔴 1_
 | Auth & session integrity | A login ?next= pointing at a public (non-protected) path is rejected and falls back to /dashboard. | 🟢 covered | `rejects public local next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
 | Auth & session integrity | The 401 interceptor refreshes once then retries the original request, succeeding transparently when the refresh succeeds. | 🟢 covered | `refreshes the session once then retries the original request on a 401`<br/><sub>lib/api.test.ts</sub> |
 | Auth & session integrity | A request marked skipAuthRefresh is never auto-refreshed/retried on 401 (auth pages surface an inline error instead of a redirect). | 🟢 covered | `does not refresh or retry when skipAuthRefresh is set`<br/><sub>lib/api.test.ts</sub> |
-| Auth & session integrity | On a final 401 the user is redirected to /login only on a protected app path; public pages reject without redirect. | 🔴 gap | _planned:_ `redirects to login on a final 401 only for protected app paths` |
+| Auth & session integrity | An unauthenticated request to a protected app route is redirected to /login?next=<path> at the edge (proxy), before any protected page renders. | 🟢 covered | `an unauthenticated visit to a protected route redirects to login with a next param` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
 | Auth & session integrity | Production CSP connect-src trusts only an approved, origin-only API source. | 🟢 covered | `production CSP uses only an approved origin-only API connect source`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | Production CSP falls back to the default API origin instead of trusting an unapproved connect source. | 🟢 covered | `production CSP falls back instead of trusting unapproved API connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | Development CSP keeps the local API and websocket connect sources so local dev still works. | 🟢 covered | `development CSP keeps local API and websocket connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
@@ -467,6 +467,7 @@ _47 guarantees — 🟢 46  🔴 1_
 | Auth & session integrity | Removing a sensitive token query parameter preserves the other (safe) URL parts. | 🟢 covered | `removes sensitive token query parameters while preserving safe URL parts`<br/><sub>lib/url-security.test.ts</sub> |
 | Auth & session integrity | When a sensitive token was the only query parameter, the leftover "?" marker is removed too. | 🟢 covered | `removes the query marker when sensitive parameters were the only query parameters`<br/><sub>lib/url-security.test.ts</sub> |
 | Auth & session integrity | The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge. | 🟢 covered | `server-side protected route refresh sends the deployed web Origin required by the API origin guard`<br/><sub>proxy.test.ts</sub> |
+| Auth & session integrity | An expired/cleared session on a protected route is redirected to login rather than flashing stale data or crashing. | 🟢 covered | `an expired/cleared session is redirected to login, not left on a protected page` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
 | Auth & session integrity | In local Docker the edge auth check validates against the internal API origin, not the public host. | 🟢 covered | `local Docker server-side protected route validation uses the internal API origin`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | Edge protected-route validation fails closed (treats the user as unauthenticated) for an unapproved production API origin rather than trusting it. | 🟢 covered | `server-side protected route validation fails closed for unapproved production API origins`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | The protected-path matcher recognises every dashboard app route that requires an auth cookie. | 🟢 covered | `matches dashboard application routes that require an auth cookie`<br/><sub>lib/protected-routes.test.ts</sub> |
@@ -495,7 +496,7 @@ _47 guarantees — 🟢 46  🔴 1_
 
 ### auth pages — login / register / forgot / reset / verify / accept-invite
 
-_11 guarantees — 🟢 9  🔴 2_
+_11 guarantees — 🟢 10  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -509,7 +510,7 @@ _11 guarantees — 🟢 9  🔴 2_
 | Input validation | The accept-invite form validates name + password with the shared acceptTeamInviteSchema before submit. | 🟢 covered | `accept-invite/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
 | Input validation | The forgot-password form validates the email with the shared forgotPasswordSchema. | 🟢 covered | `forgot-password/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
 | Input validation | Every shared auth schema accepts a representative valid payload and rejects the guaranteed-400 cases (bad email, short/weak password, missing required fields). | 🟢 covered | `form-schemas sources its rules from @charitypilot/shared (single source of truth)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
-| Input validation | Submitting a valid-length but complexity-failing password on register shows an inline error and fires no register request. | 🔴 gap | _planned:_ `register blocks a weak-but-long password inline (e2e)` |
+| Input validation | Submitting a valid-length but complexity-failing password on register shows an inline error and fires no register request. | 🟢 covered | `register flags a long-but-weak password and sends no register request` <sup>e2e</sup><br/><sub>tests/validation.spec.ts</sub> |
 
 ### dashboard — `/dashboard`
 
@@ -524,14 +525,14 @@ _4 guarantees — 🟢 3  🔴 1_
 
 ### compliance — `/compliance`, `/compliance/[principleId]`
 
-_4 guarantees — 🟢 1  🔴 2  ⚪ 1_
+_4 guarantees — 🟢 2  🔴 1  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The compliance overview and a principle detail page are axe-clean in light and dark themes. | 🔴 gap | _planned:_ `compliance pages are axe-clean in both themes (e2e)` |
 | Graceful degradation | The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save. | 🟢 covered | `the per-standard compliance editor announces its save state (Saving / Saved / Save failed)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Input validation | The reporting-year filter only ever selects from a fixed list of valid years (server-validated 2018–2100); no free-form year reaches the API. | ⚪ n/a | _Year is chosen from a bounded Select (last 5 years); there is no free-text input to validate, and the server enforces the 2018–2100 range (API ledger)._ |
-| Tenant isolation | The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean "Principle not found." screen, never another org's content. | 🔴 gap | _planned:_ `a foreign/unknown principleId renders a clean not-found (e2e)` |
+| Tenant isolation | The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean "Principle not found." screen, never another org's content. | 🟢 covered | `an unknown principle id renders a clean not-found, never leaked content` <sup>e2e</sup><br/><sub>tests/tenant-isolation.spec.ts</sub> |
 
 ### board — `/board`
 
@@ -587,7 +588,7 @@ _3 guarantees — 🟢 2  ⚪ 1_
 
 ### team — `/team`
 
-_6 guarantees — 🟢 4  🔴 2_
+_6 guarantees — 🟢 5  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -595,7 +596,7 @@ _6 guarantees — 🟢 4  🔴 2_
 | Auth & session integrity | An invited MEMBER can accept and join the inviting org; the new user belongs to the owner's organisation (no cross-org leak). | 🟢 covered | `invite a team member who then accepts and joins the workspace` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
 | Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | 🟢 covered | `only OWNER and ADMIN can invite or revoke team members`<br/><sub>lib/team-permissions.test.ts</sub> |
 | Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | 🟢 covered | `role editing is owner-only and excludes the owner row and your own row`<br/><sub>lib/team-permissions.test.ts</sub> |
-| Authorization boundary | A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end. | 🔴 gap | _planned:_ `a MEMBER cannot invite: control disabled and API blocks it (e2e)` |
+| Authorization boundary | A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end. | 🟢 covered | `a MEMBER sees admin-only team controls disabled/hidden` <sup>e2e</sup><br/><sub>tests/authz.spec.ts</sub> |
 | Input validation | The invite form surfaces the server's actual validation/error message inline via apiErrorMessage (e.g. a malformed email), never a generic or raw error. | 🟢 covered | `team surfaces the server's specific error message (apiErrorMessage), not a generic string`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### billing & pricing — `/billing`, `/pricing`

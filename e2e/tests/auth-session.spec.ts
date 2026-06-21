@@ -28,8 +28,10 @@ test.describe('Auth & session integrity (UI)', () => {
 
       // Simulate the session expiring: drop the auth cookies, then hit a protected route.
       await context.clearCookies();
-      await page.goto('/organisation');
-      await expect(page).toHaveURL(/\/login/);
+      // The protected→login redirect can abort the in-flight navigation when leaving an
+      // already-loaded page; tolerate that and assert we landed on login.
+      await page.goto('/organisation', { waitUntil: 'commit' }).catch(() => {});
+      await page.waitForURL(/\/login/, { timeout: 30_000 });
       await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
     } finally {
       await context.close();

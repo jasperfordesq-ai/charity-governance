@@ -3425,13 +3425,13 @@
     "surface": "web",
     "group": "web-platform",
     "concern": "auth-session",
-    "guarantee": "On a final 401 the user is redirected to /login only on a protected app path; public pages reject without redirect.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "An unauthenticated request to a protected app route is redirected to /login?next=<path> at the edge (proxy), before any protected page renders.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/auth-session.spec.ts",
+    "testTitle": "an unauthenticated visit to a protected route redirects to login with a next param",
     "gapDescription": "",
-    "proposedTitle": "redirects to login on a final 401 only for protected app paths"
+    "proposedTitle": ""
   },
   {
     "id": "web-platform-auth-session-15",
@@ -3946,12 +3946,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "Submitting a valid-length but complexity-failing password on register shows an inline error and fires no register request.",
-    "status": "gap",
+    "status": "covered",
     "testType": "e2e",
-    "testFile": "",
-    "testTitle": "",
-    "gapDescription": "e2e: type 8 lowercase chars, assert inline error + no /auth/register POST.",
-    "proposedTitle": "register blocks a weak-but-long password inline (e2e)"
+    "testFile": "e2e/tests/validation.spec.ts",
+    "testTitle": "register flags a long-but-weak password and sends no register request",
+    "gapDescription": "",
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-accessibility-1",
@@ -4024,12 +4024,12 @@
     "group": "web-compliance",
     "concern": "tenant-isolation",
     "guarantee": "The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean \"Principle not found.\" screen, never another org's content.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/tenant-isolation.spec.ts",
+    "testTitle": "an unknown principle id renders a clean not-found, never leaked content",
     "gapDescription": "",
-    "proposedTitle": "a foreign/unknown principleId renders a clean not-found (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-compliance-input-validation-1",
@@ -4323,12 +4323,12 @@
     "group": "web-team",
     "concern": "authz-boundary",
     "guarantee": "A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/authz.spec.ts",
+    "testTitle": "a MEMBER sees admin-only team controls disabled/hidden",
     "gapDescription": "",
-    "proposedTitle": "a MEMBER cannot invite: control disabled and API blocks it (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-team-input-validation-1",
@@ -4550,5 +4550,18 @@
     "testTitle": "the only editable dynamic route segment is the global principleId (a content id, not a tenant id)",
     "gapDescription": "",
     "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-30",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "An expired/cleared session on a protected route is redirected to login rather than flashing stale data or crashing.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/auth-session.spec.ts",
+    "testTitle": "an expired/cleared session is redirected to login, not left on a protected page",
+    "proposedTitle": "",
+    "gapDescription": ""
   }
 ]

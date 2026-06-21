@@ -1,6 +1,6 @@
 import type { FullConfig } from '@playwright/test';
 import { API_BASE_URL, WEB_BASE_URL } from './playwright.config';
-import { resetDb, markEmailVerified } from './helpers/db';
+import { resetDb } from './helpers/db';
 
 const STARTUP_HINT =
   'CharityPilot E2E expects the local Docker stack to be running:\n' +
@@ -42,37 +42,13 @@ async function warmFetch(url: string, init: RequestInit = {}): Promise<void> {
 }
 
 async function warmRoutes(): Promise<void> {
-  // Public routes compile without a session.
+  // Compile the public routes the suite navigates to (login/register/etc.) without a
+  // session. Protected pages are left to compile on their first authenticated hit, under
+  // the generous per-navigation timeout — warming them here (an authenticated render of
+  // every dashboard page) proved to spike host load and destabilise the browser, so we
+  // keep warm-up light and lean on the navigation timeout instead.
   for (const route of ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/accept-invite', '/pricing']) {
     await warmFetch(`${WEB_BASE_URL}${route}`);
-  }
-
-  // Protected routes only compile under an authenticated render, so log a throwaway owner
-  // in and hit each once — moving the (slow, one-off) dev compile OUT of a per-test
-  // navigation, where host load can blow past the navigation timeout. Best-effort.
-  try {
-    const email = `e2e-warmup-${Date.now()}@example.com`;
-    const headers = { 'content-type': 'application/json', origin: WEB_BASE_URL };
-    await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ email, password: 'TestPass123', name: 'Warmup Owner', organisationName: 'Warmup Charity' }),
-    });
-    await markEmailVerified(email);
-    const login = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ email, password: 'TestPass123' }),
-    });
-    const setCookies = (login.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? [];
-    const cookie = setCookies.map((c) => c.split(';')[0]).join('; ');
-    if (cookie) {
-      for (const route of ['/dashboard', '/compliance', '/board', '/documents', '/deadlines', '/registers', '/organisation', '/team', '/billing', '/export', '/regulator']) {
-        await warmFetch(`${WEB_BASE_URL}${route}`, { headers: { Cookie: cookie } });
-      }
-    }
-  } catch {
-    // Ignore — the suite still gates correctness; this only avoids cold-compile flakes.
   }
 }
 
