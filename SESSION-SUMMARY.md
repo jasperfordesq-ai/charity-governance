@@ -23,10 +23,11 @@ One ledger, one report, two surfaces:
 
 ## Guarantee counts (proven)
 
-<!-- FINAL COUNTS FILLED IN AT WRAP-UP -->
-- **API:** 256 covered, 0 gap, 15 n/a (unchanged — the backend ledger was already green).
-- **Web:** NN covered, 0 gap, NN n/a.
-- **Total proven:** NNN guarantees, 0 broken links.
+- **API:** 256 covered, 0 gap, 15 n/a (271 rows — unchanged; the backend ledger was already green).
+- **Web:** 94 covered, 1 documented gap, 7 n/a (102 rows).
+- **Total proven:** 350 guarantees (256 api + 94 web), **0 broken links**. The single gap is
+  the dark-mode colour-contrast finding above (a documented human-decision item, not a
+  regression); every other row is 🟢 covered or a documented ⚪ n/a.
 
 ## How to run it
 

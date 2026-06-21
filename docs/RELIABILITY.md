@@ -19,6 +19,12 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Web | 94 | 0 | 1 | 7 | 102 |
 | **Total** | **350** | **0** | **1** | **22** | **373** |
 
+**API suite:** 382 passing, 0 failing. **Web suite:** 78 passing, 0 failing. **E2E:** 14 Playwright titles linked (executed by the CI E2E gate).
+
+**Linkage:** 350/350 covered guarantees verified against a passing/linked test.
+
+**Overall: ✅ GREEN**
+
 ## How to verify
 
 ```bash
