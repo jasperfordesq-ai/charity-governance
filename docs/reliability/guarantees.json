@@ -8,7 +8,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "authGuard rejects access tokens whose backing session has been revoked",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-2",
@@ -19,7 +20,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "authGuard uses current database role and organisation instead of stale JWT claims",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-3",
@@ -30,7 +32,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "refresh token rotation fails without creating a replacement session when revoke loses the race",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-4",
@@ -41,7 +44,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "refresh token replay revokes active sessions for the affected user",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-5",
@@ -52,7 +56,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "access tokens are signed and verified with the pinned HS256 algorithm",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-6",
@@ -63,7 +68,8 @@
     "testFile": "apps/api/src/tests/auth-service-flows.test.ts",
     "testTitle": "resetPassword consumes the token, sets the password, and revokes all sessions",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-7",
@@ -74,7 +80,8 @@
     "testFile": "apps/api/src/tests/auth-service-flows.test.ts",
     "testTitle": "verifyEmail marks the account verified when the token is valid",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-8",
@@ -85,7 +92,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "login route issues auth cookies and returns the public user without secrets",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-auth-session-9",
@@ -96,7 +104,8 @@
     "testFile": "apps/api/src/tests/logging-redaction.test.ts",
     "testTitle": "production logger redacts browser credentials, provider secrets, and auth tokens",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-10",
@@ -107,7 +116,8 @@
     "testFile": "apps/api/src/tests/auth-routes-reliability.test.ts",
     "testTitle": "auth endpoints reject malformed bodies with a 400 VALIDATION_ERROR and never 500",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-11",
@@ -118,7 +128,8 @@
     "testFile": "apps/api/src/tests/auth-routes-reliability.test.ts",
     "testTitle": "register rejects weak passwords without starting the creation transaction",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-graceful-degradation-12",
@@ -129,7 +140,8 @@
     "testFile": "apps/api/src/tests/auth-routes-reliability.test.ts",
     "testTitle": "resendEmailVerification surfaces a 503 when the verification email cannot be sent",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-13",
@@ -140,7 +152,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "register route does not disclose duplicate emails or issue session cookies",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-14",
@@ -151,7 +164,8 @@
     "testFile": "apps/api/src/tests/auth-routes-reliability.test.ts",
     "testTitle": "register flattens a raced duplicate-email unique-constraint failure to the neutral message",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-15",
@@ -162,7 +176,8 @@
     "testFile": "apps/api/src/tests/auth-service-flows.test.ts",
     "testTitle": "forgotPassword sends a reset link for a known account and returns the generic message",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-16",
@@ -173,7 +188,8 @@
     "testFile": "apps/api/src/tests/auth-login-timing.test.ts",
     "testTitle": "login returns the generic INVALID_CREDENTIALS error for unknown accounts",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-input-validation-17",
@@ -184,7 +200,8 @@
     "testFile": "apps/api/src/tests/auth-throttling.test.ts",
     "testTitle": "forgot-password has route-specific throttling below the global limit",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-authz-boundary-18",
@@ -195,7 +212,8 @@
     "testFile": "apps/api/src/tests/auth-routes-reliability.test.ts",
     "testTitle": "GET /me requires authentication and returns only the caller's public user",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "auth-tenant-isolation-19",
@@ -206,7 +224,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "The auth route group operates exclusively on the caller's own identity: getMe and resendEmailVerification key on request.user.userId (set by the guard from the verified session), while login/forgotPassword/resetPassword/verifyEmail key on a self-supplied email or an unguessable single-use sha256-hashed token. None of these endpoints take an org-scoped resource id from the client, so there is no sibling resource to leak across orgs. Cross-org guard behaviour (org derived from current DB row) is itself covered in auth-isolation.test.ts."
+    "gapDescription": "The auth route group operates exclusively on the caller's own identity: getMe and resendEmailVerification key on request.user.userId (set by the guard from the verified session), while login/forgotPassword/resetPassword/verifyEmail key on a self-supplied email or an unguessable single-use sha256-hashed token. None of these endpoints take an org-scoped resource id from the client, so there is no sibling resource to leak across orgs. Cross-org guard behaviour (org derived from current DB row) is itself covered in auth-isolation.test.ts.",
+    "surface": "api"
   },
   {
     "id": "auth-plan-gating-20",
@@ -217,7 +236,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "No auth endpoint registers subscriptionGuard or requireCompletePlan; /me and /resend-verification use only authIdentityGuard, and the remaining endpoints are public. register deliberately provisions a TRIALING ESSENTIALS subscription rather than gating on one. Plan-gating therefore does not apply to this route group."
+    "gapDescription": "No auth endpoint registers subscriptionGuard or requireCompletePlan; /me and /resend-verification use only authIdentityGuard, and the remaining endpoints are public. register deliberately provisions a TRIALING ESSENTIALS subscription rather than gating on one. Plan-gating therefore does not apply to this route group.",
+    "surface": "api"
   },
   {
     "id": "organisation-tenant-isolation-1",
@@ -228,7 +248,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "getOrganisation scopes the lookup to the caller's organisationId",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-tenant-isolation-2",
@@ -239,7 +260,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "updateOrganisation scopes the update to the caller's organisationId",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-tenant-isolation-3",
@@ -250,7 +272,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "GET / returns only the public organisation field allow-list",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-authz-boundary-4",
@@ -261,7 +284,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "a MEMBER cannot PATCH the organisation (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-authz-boundary-5",
@@ -272,7 +296,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "an ADMIN may PATCH the organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-authz-boundary-6",
@@ -283,7 +308,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "a MEMBER can read the organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-plan-gating-7",
@@ -294,7 +320,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "organisation routes require an active subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-plan-gating-8",
@@ -305,7 +332,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "organisation routes reject an expired trial",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-input-validation-9",
@@ -316,7 +344,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "PATCH / rejects malformed bodies with VALIDATION_ERROR and skips the write",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "organisation-auth-session-10",
@@ -327,7 +356,8 @@
     "testFile": "apps/api/src/tests/organisation-route.test.ts",
     "testTitle": "organisation routes require authentication",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-authz-boundary-1",
@@ -338,7 +368,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "a MEMBER cannot upsert a compliance record (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-authz-boundary-2",
@@ -349,7 +380,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "a MEMBER cannot update the board sign-off (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-authz-boundary-3",
@@ -360,7 +392,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "an ADMIN may upsert a compliance record and the board sign-off",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-auth-session-4",
@@ -371,7 +404,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "compliance routes require authentication",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-plan-gating-5",
@@ -382,7 +416,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "compliance writes are refused (and not persisted) without a subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-plan-gating-6",
@@ -393,7 +428,8 @@
     "testFile": "apps/api/src/tests/compliance-service.test.ts",
     "testTitle": "getRecords for an Essentials/Simple org restricts to core standards",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-plan-gating-7",
@@ -404,7 +440,8 @@
     "testFile": "apps/api/src/tests/compliance-service.test.ts",
     "testTitle": "upsertRecord blocks a non-core standard for an Essentials org (no billing bypass)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-plan-gating-8",
@@ -415,7 +452,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "getRecord refuses an out-of-plan standard for an Essentials org",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-tenant-isolation-9",
@@ -426,7 +464,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "upsertRecord scopes the composite key and create payload to the caller organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-tenant-isolation-10",
@@ -437,7 +476,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "compliance reads are scoped to the caller organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-tenant-isolation-11",
@@ -448,7 +488,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "upsertSignoff scopes the composite key to the caller organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-input-validation-12",
@@ -459,7 +500,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "PUT /records rejects an invalid body before writing",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-input-validation-13",
@@ -470,7 +512,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "PUT /signoff requires approval evidence when status is APPROVED",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-input-validation-14",
@@ -481,7 +524,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "compliance year-scoped reads reject a missing or invalid year",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-input-validation-15",
@@ -492,7 +536,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "GET /principles/:id returns 404 for an unknown principle",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-plan-gating-16",
@@ -503,7 +548,8 @@
     "testFile": "apps/api/src/tests/compliance-reliability.test.ts",
     "testTitle": "compliance routes are blocked when the subscription is not in good standing",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "compliance-graceful-degradation-17",
@@ -514,7 +560,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "ComplianceService and the route handlers depend solely on app.prisma; no Stripe/Supabase/Resend client is constructed or invoked anywhere in routes/compliance/index.ts or services/compliance.service.ts, so the graceful-degradation concern does not apply to this area."
+    "gapDescription": "ComplianceService and the route handlers depend solely on app.prisma; no Stripe/Supabase/Resend client is constructed or invoked anywhere in routes/compliance/index.ts or services/compliance.service.ts, so the graceful-degradation concern does not apply to this area.",
+    "surface": "api"
   },
   {
     "id": "compliance-idempotency-18",
@@ -525,7 +572,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "The idempotency concern targets StripeWebhookEvent / DeadlineReminderLog / document-deletion reconciliation, none of which exist in the compliance area. The upsert-by-composite-key design means repeated PUTs are inherently safe, so there is no separate dedupe mechanism to prove."
+    "gapDescription": "The idempotency concern targets StripeWebhookEvent / DeadlineReminderLog / document-deletion reconciliation, none of which exist in the compliance area. The upsert-by-composite-key design means repeated PUTs are inherently safe, so there is no separate dedupe mechanism to prove.",
+    "surface": "api"
   },
   {
     "id": "board-members-tenant-isolation-1",
@@ -536,7 +584,8 @@
     "testFile": "apps/api/src/tests/board-member-organisation-service.test.ts",
     "testTitle": "board member update rejects a member from another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-tenant-isolation-2",
@@ -547,7 +596,8 @@
     "testFile": "apps/api/src/tests/board-member-organisation-service.test.ts",
     "testTitle": "board member remove rejects a member from another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-tenant-isolation-3",
@@ -558,7 +608,8 @@
     "testFile": "apps/api/src/tests/board-member-organisation-service.test.ts",
     "testTitle": "board member create scopes to the organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-tenant-isolation-4",
@@ -569,7 +620,8 @@
     "testFile": "apps/api/src/tests/board-members-reliability.test.ts",
     "testTitle": "board member list scopes findMany and count to the organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-authz-boundary-5",
@@ -580,7 +632,8 @@
     "testFile": "apps/api/src/tests/route-guards.test.ts",
     "testTitle": "a MEMBER cannot create, update, or delete board members (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-authz-boundary-6",
@@ -591,7 +644,8 @@
     "testFile": "apps/api/src/tests/route-guards.test.ts",
     "testTitle": "a MEMBER can still read board members, and an ADMIN can create them",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-auth-session-7",
@@ -602,7 +656,8 @@
     "testFile": "apps/api/src/tests/board-members-reliability.test.ts",
     "testTitle": "board-member write routes reject unauthenticated requests",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-plan-gating-8",
@@ -613,7 +668,8 @@
     "testFile": "apps/api/src/tests/board-members-reliability.test.ts",
     "testTitle": "board-member routes reject an expired trial and inactive subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-input-validation-9",
@@ -624,7 +680,8 @@
     "testFile": "apps/api/src/tests/board-members-reliability.test.ts",
     "testTitle": "POST /board-members rejects malformed bodies with VALIDATION_ERROR and does not create",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-input-validation-10",
@@ -635,7 +692,8 @@
     "testFile": "apps/api/src/tests/board-members-reliability.test.ts",
     "testTitle": "PATCH /board-members/:id rejects an invalid email with VALIDATION_ERROR and does not update",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "board-members-graceful-degradation-11",
@@ -646,7 +704,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "Non-obvious because sibling route groups (team, billing, documents) take email/storage/Stripe clients; board-members deliberately does not, so the graceful-degradation concern has no applicable surface here."
+    "gapDescription": "Non-obvious because sibling route groups (team, billing, documents) take email/storage/Stripe clients; board-members deliberately does not, so the graceful-degradation concern has no applicable surface here.",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-1",
@@ -657,7 +716,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "GET /:id returns 404 for a document belonging to another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-2",
@@ -668,7 +728,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "GET /:id/download returns 404 and never signs a URL for a foreign-org document",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-3",
@@ -679,7 +740,8 @@
     "testFile": "apps/api/src/tests/storage.service.test.ts",
     "testTitle": "getSignedUrl rejects storage paths outside the organisation prefix before storage access",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-4",
@@ -690,7 +752,8 @@
     "testFile": "apps/api/src/tests/storage.service.test.ts",
     "testTitle": "deleteFile rejects storage paths outside the organisation prefix before storage access",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-5",
@@ -701,7 +764,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "readLocalFile rejects storage paths outside the organisation prefix before reading",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-6",
@@ -712,7 +776,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "POST /:id/standards rejects linking when the document belongs to another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-7",
@@ -723,7 +788,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "DELETE /:id/standards/:standardId rejects unlinking when the document belongs to another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-8",
@@ -734,7 +800,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "DELETE /:id rejects and performs no side effects for a document belonging to another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-tenant-isolation-9",
@@ -745,7 +812,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "document upload stores the object under the caller's organisation prefix",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-authz-boundary-10",
@@ -756,7 +824,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "a MEMBER cannot upload a document (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-authz-boundary-11",
@@ -767,7 +836,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "a MEMBER cannot delete a document (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-authz-boundary-12",
@@ -778,7 +848,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "a MEMBER cannot link or unlink a document to a governance standard (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-plan-gating-13",
@@ -789,7 +860,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "Essentials organisations cannot link documents to additional governance standards",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-plan-gating-14",
@@ -800,7 +872,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload rejects files that would exceed the plan storage quota and cleans up storage",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-plan-gating-15",
@@ -811,7 +884,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "document upload is blocked when the organisation has no subscription record",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-plan-gating-16",
@@ -822,7 +896,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "documents endpoints are blocked when the subscription trial has expired",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-17",
@@ -833,7 +908,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload rejects files whose signature does not match the claimed document type",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-18",
@@ -844,7 +920,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload rejects macro-capable legacy Office files before storage",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-19",
@@ -855,7 +932,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload translates multipart file size errors to 413",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-20",
@@ -866,7 +944,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload rejects requests with too many multipart fields before storage",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-21",
@@ -877,7 +956,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "document upload rejects malformed metadata with VALIDATION_ERROR before storage",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-22",
@@ -888,7 +968,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "POST /:id/standards rejects a missing standardId with VALIDATION_ERROR",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-input-validation-23",
@@ -899,7 +980,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "GET /_local-download requires a path query parameter",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-graceful-degradation-24",
@@ -910,7 +992,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload deletes the stored object when database creation fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-graceful-degradation-25",
@@ -921,7 +1004,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document upload preserves the database error when storage cleanup fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-graceful-degradation-26",
@@ -932,7 +1016,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "GET /:id/download returns 503 STORAGE_NOT_CONFIGURED when Supabase is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-graceful-degradation-27",
@@ -943,7 +1028,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "GET /_local-download returns 503 when the local storage driver is disabled",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-idempotency-28",
@@ -954,7 +1040,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document delete removes storage after deleting the database record",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-idempotency-29",
@@ -965,7 +1052,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document delete does not remove storage when database deletion fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-idempotency-30",
@@ -976,7 +1064,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document delete reports success when post-delete storage cleanup fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-idempotency-31",
@@ -987,7 +1076,8 @@
     "testFile": "apps/api/src/tests/document-storage-cleanup.test.ts",
     "testTitle": "retryPendingStorageDeletions processes pending cleanup records",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-observability-32",
@@ -998,7 +1088,8 @@
     "testFile": "apps/api/src/tests/production-scheduler.test.ts",
     "testTitle": "runDocumentStorageCleanup sends a sanitized operational alert when storage cleanup fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-observability-33",
@@ -1009,7 +1100,8 @@
     "testFile": "apps/api/src/tests/production-scheduler.test.ts",
     "testTitle": "runDocumentStorageCleanup alerts when cleanup records failed storage deletions without throwing",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "documents-observability-34",
@@ -1020,7 +1112,8 @@
     "testFile": "apps/api/src/tests/documents-reliability.test.ts",
     "testTitle": "readiness reports not_ready when the document storage bucket is unreachable",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-tenant-isolation-1",
@@ -1031,7 +1124,8 @@
     "testFile": "apps/api/src/tests/deadline-service.test.ts",
     "testTitle": "update rejects a deadline from another organisation (no cross-tenant write)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-tenant-isolation-2",
@@ -1042,7 +1136,8 @@
     "testFile": "apps/api/src/tests/deadline-service.test.ts",
     "testTitle": "remove rejects a deadline from another organisation (no cross-tenant delete)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-tenant-isolation-3",
@@ -1053,7 +1148,8 @@
     "testFile": "apps/api/src/tests/deadline-service.test.ts",
     "testTitle": "list reports hasMore based on total versus the returned page",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-tenant-isolation-4",
@@ -1064,7 +1160,8 @@
     "testFile": "apps/api/src/tests/deadline-service.test.ts",
     "testTitle": "create scopes to the organisation and defaults reminderDays",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-tenant-isolation-5",
@@ -1075,7 +1172,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "PATCH/DELETE /:id for a deadline owned by another organisation returns 404 DEADLINE_NOT_FOUND without writing",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-authz-boundary-6",
@@ -1086,7 +1184,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "a MEMBER cannot create, update, or delete deadlines (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-authz-boundary-7",
@@ -1097,7 +1196,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "an ADMIN may create, update, and delete deadlines",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-authz-boundary-8",
@@ -1108,7 +1208,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "a MEMBER can read the deadline list",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-auth-session-9",
@@ -1119,7 +1220,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "deadline routes require authentication",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-auth-session-10",
@@ -1130,7 +1232,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "deadline routes reject a user whose email is not verified",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-plan-gating-11",
@@ -1141,7 +1244,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "deadline routes require an active subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-plan-gating-12",
@@ -1152,7 +1256,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "routes/deadlines/index.ts wires only authGuard, subscriptionGuard and requireAdmin; it never imports or applies requireCompletePlan, so there is no COMPLETE-plan feature boundary to prove for this group (deadlines are available on every active plan)."
+    "gapDescription": "routes/deadlines/index.ts wires only authGuard, subscriptionGuard and requireAdmin; it never imports or applies requireCompletePlan, so there is no COMPLETE-plan feature boundary to prove for this group (deadlines are available on every active plan).",
+    "surface": "api"
   },
   {
     "id": "deadlines-input-validation-13",
@@ -1163,7 +1268,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "POST / rejects malformed create bodies with 400 VALIDATION_ERROR and does not write",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "deadlines-input-validation-14",
@@ -1174,7 +1280,8 @@
     "testFile": "apps/api/src/tests/deadlines-reliability.test.ts",
     "testTitle": "PATCH /:id rejects malformed update bodies with 400 VALIDATION_ERROR and does not write",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-idempotency-1",
@@ -1185,7 +1292,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "duplicate Stripe webhook event ids are ignored before subscription mutation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-idempotency-2",
@@ -1196,7 +1304,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "Stripe webhook unique errors outside the event ledger are rethrown",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-idempotency-3",
@@ -1207,7 +1316,8 @@
     "testFile": "apps/api/src/tests/idempotency-reliability.test.ts",
     "testTitle": "a failed subscription write rolls back the webhook ledger row so the event can be retried",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-input-validation-4",
@@ -1218,7 +1328,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "invalid Stripe webhook signatures return a client error",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-input-validation-5",
@@ -1229,7 +1340,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "missing Stripe webhook signatures return a client error",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-input-validation-6",
@@ -1240,7 +1352,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "POST /checkout with an invalid plan returns 400 VALIDATION_ERROR and never calls Stripe",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-input-validation-7",
@@ -1251,7 +1364,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "checkout.session.completed rejects metadata when the customer or price does not match the organisation plan",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-authz-boundary-8",
@@ -1262,7 +1376,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "checkout and portal require OWNER (MEMBER and ADMIN are rejected with FORBIDDEN)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-authz-boundary-9",
@@ -1273,7 +1388,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "checkout and portal require OWNER (MEMBER and ADMIN are rejected with FORBIDDEN)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-authz-boundary-10",
@@ -1284,7 +1400,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "authed billing routes reject unauthenticated requests with 401",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-tenant-isolation-11",
@@ -1295,7 +1412,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "GET /status scopes the subscription lookup to the caller's organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-tenant-isolation-12",
@@ -1306,7 +1424,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "checkout.session.completed rejects metadata when the customer or price does not match the organisation plan",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-tenant-isolation-13",
@@ -1317,7 +1436,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "subscription.updated and .deleted reject a customer that does not own the local subscription and ignore unknown subscription ids",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-graceful-degradation-14",
@@ -1328,7 +1448,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "checkout returns 503 BILLING_NOT_CONFIGURED when Stripe is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-graceful-degradation-15",
@@ -1339,7 +1460,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "billing status reports billingConfigured:false without erroring when Stripe is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-observability-16",
@@ -1350,7 +1472,8 @@
     "testFile": "apps/api/src/tests/billing-reliability.test.ts",
     "testTitle": "isConfigured returns false when any required Stripe price id is missing",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "billing-plan-gating-17",
@@ -1361,7 +1484,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "The billing endpoints are intentionally NOT behind subscriptionGuard or requireCompletePlan: checkout/portal/status must remain reachable precisely when a subscription is absent, expired, or past-due so an owner can pay or fix billing. Gating them would deadlock recovery. (The subscriptionGuard/grace-window tests in this file prove gating for OTHER route groups, not billing.) Webhook->plan correctness is covered separately by the checkout price/metadata mismatch test."
+    "gapDescription": "The billing endpoints are intentionally NOT behind subscriptionGuard or requireCompletePlan: checkout/portal/status must remain reachable precisely when a subscription is absent, expired, or past-due so an owner can pay or fix billing. Gating them would deadlock recovery. (The subscriptionGuard/grace-window tests in this file prove gating for OTHER route groups, not billing.) Webhook->plan correctness is covered separately by the checkout price/metadata mismatch test.",
+    "surface": "api"
   },
   {
     "id": "billing-auth-session-18",
@@ -1372,7 +1496,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "Refresh-token rotation/replay is owned by the auth route group, not billing. The only billing logging is app.log.warn({code,statusCode}) / app.log.error(err) in the webhook catch (index.ts lines 36-39), which logs the AppError code and status but not the raw body or stripe-signature, so there is no billing-specific secret-logging guarantee to prove here."
+    "gapDescription": "Refresh-token rotation/replay is owned by the auth route group, not billing. The only billing logging is app.log.warn({code,statusCode}) / app.log.error(err) in the webhook catch (index.ts lines 36-39), which logs the AppError code and status but not the raw body or stripe-signature, so there is no billing-specific secret-logging guarantee to prove here.",
+    "surface": "api"
   },
   {
     "id": "export-plan-gating-1",
@@ -1383,7 +1508,8 @@
     "testFile": "apps/api/src/tests/export-csp.test.ts",
     "testTitle": "Essentials exports do not include Complete-only governance registers",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-plan-gating-2",
@@ -1394,7 +1520,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "Complete plan exports include governance registers",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-plan-gating-3",
@@ -1405,7 +1532,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "export rejects organisation with no subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-plan-gating-4",
@@ -1416,7 +1544,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "export rejects organisation with expired trial",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-tenant-isolation-5",
@@ -1427,7 +1556,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "export scopes the organisation and compliance reads to the token organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-tenant-isolation-6",
@@ -1438,7 +1568,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "Complete plan governance registers are scoped to the token organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-authz-boundary-7",
@@ -1449,7 +1580,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "export rejects missing token, revoked session, and unverified email",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-input-validation-8",
@@ -1460,7 +1592,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "export rejects malformed year with 400 VALIDATION_ERROR",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-input-validation-9",
@@ -1471,7 +1604,8 @@
     "testFile": "apps/api/src/tests/export-reliability.test.ts",
     "testTitle": "export HTML-escapes stored record and register values",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "export-graceful-degradation-10",
@@ -1482,7 +1616,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The only error path is Prisma findUniqueOrThrow / unexpected errors, which handleError maps to a safe INTERNAL_ERROR 500 without exposing the message in production (covered conceptually by errors.ts behaviour). No export-specific external-degradation test is warranted."
+    "gapDescription": "The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The only error path is Prisma findUniqueOrThrow / unexpected errors, which handleError maps to a safe INTERNAL_ERROR 500 without exposing the message in production (covered conceptually by errors.ts behaviour). No export-specific external-degradation test is warranted.",
+    "surface": "api"
   },
   {
     "id": "dashboard-auth-session-1",
@@ -1493,7 +1628,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "dashboard route rejects unauthenticated requests",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-auth-session-2",
@@ -1504,7 +1640,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "dashboard route rejects users with an unverified email",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-plan-gating-3",
@@ -1515,7 +1652,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "dashboard route requires an active subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-tenant-isolation-4",
@@ -1526,7 +1664,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "dashboard scopes upcoming deadlines to the requesting organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-tenant-isolation-5",
@@ -1537,7 +1676,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "dashboard scopes board-alert source members to the requesting organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-tenant-isolation-6",
@@ -1548,7 +1688,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "getSummary scopes the compliance-record query to the requested organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-tenant-isolation-7",
@@ -1559,7 +1700,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "recent activity scopes every source query to the requested organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-plan-gating-8",
@@ -1570,7 +1712,8 @@
     "testFile": "apps/api/src/tests/governance-workflow.test.ts",
     "testTitle": "Essentials recent activity excludes additional-standard compliance records",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-graceful-degradation-9",
@@ -1581,7 +1724,8 @@
     "testFile": "apps/api/src/tests/dashboard-reliability.test.ts",
     "testTitle": "dashboard route returns a clean error when an aggregate read fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-input-validation-10",
@@ -1592,7 +1736,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "dashboard-authz-boundary-11",
@@ -1603,7 +1748,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-1",
@@ -1614,7 +1760,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "updateConflict rejects a record from another organisation (no cross-tenant write)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-2",
@@ -1625,7 +1772,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "removeConflict rejects a record from another organisation (no cross-tenant delete)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-3",
@@ -1636,7 +1784,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "updateRisk rejects a record from another organisation (no cross-tenant write)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-4",
@@ -1647,7 +1796,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "removeRisk rejects a record from another organisation (no cross-tenant delete)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-5",
@@ -1658,7 +1808,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "updateComplaint rejects a record from another organisation (no cross-tenant write)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-6",
@@ -1669,7 +1820,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "removeComplaint rejects a record from another organisation (no cross-tenant delete)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-7",
@@ -1680,7 +1832,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "updateFundraising rejects a record from another organisation (no cross-tenant write)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-8",
@@ -1691,7 +1844,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "removeFundraising rejects a record from another organisation (no cross-tenant delete)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-9",
@@ -1702,7 +1856,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "the org-scoped lookup keys on both id and organisationId",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-10",
@@ -1713,7 +1868,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "conflict records reject board members from another organisation on create",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-11",
@@ -1724,7 +1880,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "conflict records reject board members from another organisation on update",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-12",
@@ -1735,7 +1892,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "list register methods scope findMany to the caller organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-13",
@@ -1746,7 +1904,8 @@
     "testFile": "apps/api/src/tests/governance-register-service.test.ts",
     "testTitle": "summary counts only non-closed records scoped to the organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-14",
@@ -1757,7 +1916,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "annual report readiness reads and upserts are scoped to organisationId_reportingYear",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-tenant-isolation-15",
@@ -1768,7 +1928,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "financial control review reads and upserts are scoped to organisationId_reportingYear",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-16",
@@ -1779,7 +1940,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "a MEMBER cannot create conflict records (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-17",
@@ -1790,7 +1952,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "a MEMBER cannot update or delete conflict records (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-18",
@@ -1801,7 +1964,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "a MEMBER cannot write risk records (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-19",
@@ -1812,7 +1976,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "a MEMBER cannot write complaint records (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-20",
@@ -1823,7 +1988,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "a MEMBER cannot write fundraising records (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-21",
@@ -1834,7 +2000,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "a MEMBER cannot upsert annual report or financial controls (requireAdmin)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-authz-boundary-22",
@@ -1845,7 +2012,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "an ADMIN may create register records (requireAdmin allows ADMIN)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-plan-gating-23",
@@ -1856,7 +2024,8 @@
     "testFile": "apps/api/src/tests/governance-workflow.test.ts",
     "testTitle": "Essentials organisations cannot access Complete-only governance register endpoints",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-plan-gating-24",
@@ -1867,7 +2036,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "Essentials org is blocked from every governance register read endpoint",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-plan-gating-25",
@@ -1878,7 +2048,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "Essentials org is blocked from every governance register write endpoint",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-input-validation-26",
@@ -1889,7 +2060,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "POST /conflicts rejects malformed body with 400 VALIDATION_ERROR and no write",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-input-validation-27",
@@ -1900,7 +2072,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "POST /risks with out-of-range likelihood returns 400 VALIDATION_ERROR and no write",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-input-validation-28",
@@ -1911,7 +2084,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "GET /summary rejects a malformed year query with 400 VALIDATION_ERROR",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-input-validation-29",
@@ -1922,7 +2096,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "PUT /annual-report rejects an out-of-range reportingYear and never upserts",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-input-validation-30",
@@ -1933,7 +2108,8 @@
     "testFile": "apps/api/src/tests/governance-workflow.test.ts",
     "testTitle": "annual report readiness accepts the expected governance workflow fields",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-auth-session-31",
@@ -1944,7 +2120,8 @@
     "testFile": "apps/api/src/tests/governance-registers-reliability.test.ts",
     "testTitle": "governance register routes require authentication",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "governance-registers-graceful-degradation-32",
@@ -1955,7 +2132,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "No Stripe/Supabase/Resend usage in routes/governance-registers/index.ts or services/governance-register.service.ts; degradation/503 behaviour is owned by billing/storage/email route groups, not this one."
+    "gapDescription": "No Stripe/Supabase/Resend usage in routes/governance-registers/index.ts or services/governance-register.service.ts; degradation/503 behaviour is owned by billing/storage/email route groups, not this one.",
+    "surface": "api"
   },
   {
     "id": "team-tenant-isolation-1",
@@ -1966,7 +2144,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "updateMemberRole rejects a member from another organisation (cross-tenant guard)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-tenant-isolation-2",
@@ -1977,7 +2156,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "revoke rejects an invite from another organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-tenant-isolation-3",
@@ -1988,7 +2168,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "acceptInvite binds the new user to the role and organisation from the INVITE, not the request",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-tenant-isolation-4",
@@ -1999,7 +2180,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "list scopes members and invites to the caller's organisation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-authz-boundary-5",
@@ -2010,7 +2192,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "a MEMBER cannot invite anyone",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-authz-boundary-6",
@@ -2021,7 +2204,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "an ADMIN cannot invite another ADMIN (only the owner can)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-authz-boundary-7",
@@ -2032,7 +2216,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "a non-owner cannot change member roles",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-authz-boundary-8",
@@ -2043,7 +2228,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "the owner cannot promote a member to OWNER (no silent owner transfer)",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-authz-boundary-9",
@@ -2054,7 +2240,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "a MEMBER cannot revoke an invite",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-authz-boundary-10",
@@ -2065,7 +2252,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "revoke rejects an already-accepted invite",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-plan-gating-11",
@@ -2076,7 +2264,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "authenticated team routes require an active subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-plan-gating-12",
@@ -2087,7 +2276,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "Essentials organisations cannot invite beyond the team member limit",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-plan-gating-13",
@@ -2098,7 +2288,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "acceptInvite rejects stale invites when the Essentials member limit is already reached",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-plan-gating-14",
@@ -2109,7 +2300,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "acceptInvite rejects when the organisation has no subscription",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-input-validation-15",
@@ -2120,7 +2312,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "accept-invite rejects a weak password with VALIDATION_ERROR",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-input-validation-16",
@@ -2131,7 +2324,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "invite rejects an invalid email with VALIDATION_ERROR",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-input-validation-17",
@@ -2142,7 +2336,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "member role update rejects an invalid role with VALIDATION_ERROR",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-graceful-degradation-18",
@@ -2153,7 +2348,8 @@
     "testFile": "apps/api/src/tests/team-reliability.test.ts",
     "testTitle": "invite still succeeds when the email provider fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-auth-session-19",
@@ -2164,7 +2360,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "acceptInvite binds the new user to the role and organisation from the INVITE, not the request",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-auth-session-20",
@@ -2175,7 +2372,8 @@
     "testFile": "apps/api/src/tests/route-guards.test.ts",
     "testTitle": "authenticated team routes reject unauthenticated requests",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-auth-session-21",
@@ -2186,7 +2384,8 @@
     "testFile": "apps/api/src/tests/team-service.test.ts",
     "testTitle": "acceptInvite rejects a missing token",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "team-idempotency-22",
@@ -2197,7 +2396,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "team invites do not disclose why an invite recipient is unavailable",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-observability-1",
@@ -2208,7 +2408,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "authenticated readiness reports ready when every dependency is healthy",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-graceful-degradation-2",
@@ -2219,7 +2420,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "authenticated readiness times out a stuck database check",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-graceful-degradation-3",
@@ -2230,7 +2432,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "authenticated readiness reports not_ready when the database query throws",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-graceful-degradation-4",
@@ -2241,7 +2444,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "authenticated readiness reports not_ready when billing/email/storage are unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-authz-boundary-5",
@@ -2252,7 +2456,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "unauthenticated readiness does not expose detailed dependency checks",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-authz-boundary-6",
@@ -2263,7 +2468,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "readiness rejects a wrong readiness key without exposing checks",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-authz-boundary-7",
@@ -2274,7 +2480,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "readiness fails closed when no readiness key is configured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-auth-session-8",
@@ -2285,7 +2492,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "readiness key comparison uses timing-safe equality",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-auth-session-9",
@@ -2296,7 +2504,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "readiness never echoes the readiness key in the response body",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-input-validation-10",
@@ -2307,7 +2516,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "basic health stays public without exposing dependency checks",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-input-validation-11",
@@ -2318,7 +2528,8 @@
     "testFile": "apps/api/src/tests/health-reliability.test.ts",
     "testTitle": "readiness rejects a duplicated readiness key header without a 500",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-input-validation-12",
@@ -2329,7 +2540,8 @@
     "testFile": "apps/api/src/tests/env.test.ts",
     "testTitle": "validateProductionEnv rejects missing production readiness key",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "health-tenant-isolation-13",
@@ -2340,7 +2552,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "No request.user, no organisationId, and no Prisma model query that returns tenant data — the only DB call is prisma.$queryRaw`SELECT 1`. There is nothing for an org-A user to read of org B here."
+    "gapDescription": "No request.user, no organisationId, and no Prisma model query that returns tenant data — the only DB call is prisma.$queryRaw`SELECT 1`. There is nothing for an org-A user to read of org B here.",
+    "surface": "api"
   },
   {
     "id": "health-plan-gating-14",
@@ -2351,7 +2564,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "The routes are registered with no auth/subscription/plan guards (server.ts line 81 registers healthRoutes with only a prefix). Gating readiness behind a subscription would defeat its purpose, so plan-gating does not apply."
+    "gapDescription": "The routes are registered with no auth/subscription/plan guards (server.ts line 81 registers healthRoutes with only a prefix). Gating readiness behind a subscription would defeat its purpose, so plan-gating does not apply.",
+    "surface": "api"
   },
   {
     "id": "health-idempotency-15",
@@ -2362,7 +2576,8 @@
     "testFile": "",
     "testTitle": "",
     "linkResolved": false,
-    "gapDescription": "Readiness only reads (SELECT 1, getBucket, config flags). StorageService.verifyBucket may mkdir a local dir under the local driver, but that call is already idempotent (recursive:true) and unrelated to a once-only business operation."
+    "gapDescription": "Readiness only reads (SELECT 1, getBucket, config flags). StorageService.verifyBucket may mkdir a local dir under the local driver, but that call is already idempotent (recursive:true) and unrelated to a once-only business operation.",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-1",
@@ -2373,7 +2588,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "access tokens are signed and verified with the pinned HS256 algorithm",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-2",
@@ -2384,7 +2600,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "access tokens are bound to the CharityPilot issuer and API audience",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-3",
@@ -2395,7 +2612,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "authGuard rejects access tokens whose backing session has been revoked",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-4",
@@ -2406,7 +2624,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "authGuard uses current database role and organisation instead of stale JWT claims",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-5",
@@ -2417,7 +2636,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "authGuard rejects valid sessions for users whose email is not verified",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-6",
@@ -2428,7 +2648,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "authGuard rejects requests with no bearer token and no access cookie",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-7",
@@ -2439,7 +2660,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "authGuard authenticates from the access-token cookie when no bearer header is present",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-8",
@@ -2450,7 +2672,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "refresh token rotation revokes the old session and issues a new session with a fresh hash",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-9",
@@ -2461,7 +2684,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "refresh token replay revokes active sessions for the affected user",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-10",
@@ -2472,7 +2696,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "refresh rotation rejects unknown and expired refresh tokens without minting a session",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-11",
@@ -2483,7 +2708,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "login issues tokens and persists a session with the hashed refresh token on valid credentials",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-12",
@@ -2494,7 +2720,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "logout revokes only the session for the presented refresh token",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-13",
@@ -2505,7 +2732,8 @@
     "testFile": "apps/api/src/tests/auth-service-flows.test.ts",
     "testTitle": "resetPassword consumes the token, sets the password, and revokes all sessions",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-14",
@@ -2516,7 +2744,8 @@
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
     "testTitle": "verifyEmail consumes the verification token atomically",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-15",
@@ -2527,7 +2756,8 @@
     "testFile": "apps/api/src/tests/auth-login-timing.test.ts",
     "testTitle": "login spends bcrypt hashing time even when the email has no account",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-16",
@@ -2538,7 +2768,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "refresh route clears cookies and returns 401 when the refresh token is invalid",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-auth-session-17",
@@ -2549,7 +2780,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "auth cookies are HttpOnly, SameSite=lax, and Secure in production",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-observability-18",
@@ -2560,7 +2792,8 @@
     "testFile": "apps/api/src/tests/logging-redaction.test.ts",
     "testTitle": "production logger redacts browser credentials, provider secrets, and auth tokens",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-auth-session-observability-19",
@@ -2571,7 +2804,8 @@
     "testFile": "apps/api/src/tests/auth-session-reliability.test.ts",
     "testTitle": "production logger redacts the JWT signing secret env path",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-1",
@@ -2582,7 +2816,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "duplicate Stripe webhook event ids are ignored before subscription mutation",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-2",
@@ -2593,7 +2828,8 @@
     "testFile": "apps/api/src/tests/idempotency-reliability.test.ts",
     "testTitle": "concurrent delivery of the same Stripe event aborts the second transaction when the ledger insert collides",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-3",
@@ -2604,7 +2840,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "deadline reminders reserve the unique reminder log before sending email",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-4",
@@ -2615,7 +2852,8 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "deadline reminders skip sending when another worker already reserved the reminder log",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-5",
@@ -2626,7 +2864,8 @@
     "testFile": "apps/api/src/tests/idempotency-reliability.test.ts",
     "testTitle": "deadline reminders skip when a concurrent worker wins the reclaim race",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-6",
@@ -2637,7 +2876,8 @@
     "testFile": "apps/api/src/tests/deadline-reminder-catchup.test.ts",
     "testTitle": "reminder catches up to the most urgent window when the exact day was missed",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-7",
@@ -2648,7 +2888,8 @@
     "testFile": "apps/api/src/tests/documents-route.test.ts",
     "testTitle": "document delete removes storage after deleting the database record",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-8",
@@ -2659,7 +2900,8 @@
     "testFile": "apps/api/src/tests/document-storage-cleanup.test.ts",
     "testTitle": "retryPendingStorageDeletions processes pending cleanup records",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-9",
@@ -2670,7 +2912,8 @@
     "testFile": "apps/api/src/tests/idempotency-reliability.test.ts",
     "testTitle": "claim query reclaims rows whose claim is older than the stale window",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-idempotency-10",
@@ -2681,7 +2924,8 @@
     "testFile": "apps/api/src/tests/document-storage-cleanup.test.ts",
     "testTitle": "retryPendingStorageDeletions processes pending cleanup records",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-observability-11",
@@ -2692,7 +2936,8 @@
     "testFile": "apps/api/src/tests/production-scheduler.test.ts",
     "testTitle": "runDeadlineReminders sends a sanitized operational alert when the production reminder run fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-idempotency-graceful-degradation-12",
@@ -2703,7 +2948,8 @@
     "testFile": "apps/api/src/tests/idempotency-reliability.test.ts",
     "testTitle": "job failure alerting tolerates a throwing alert sender without crashing the run",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-1",
@@ -2714,7 +2960,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "basic health stays public without exposing dependency checks",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-2",
@@ -2725,7 +2972,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "unauthenticated readiness does not expose detailed dependency checks",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-3",
@@ -2736,7 +2984,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "readiness key comparison uses timing-safe equality",
     "linkResolved": true,
-    "gapDescription": "Proven by static source assertion (regex over routes/health/index.ts) rather than behaviorally, but the constant-time guarantee is structural and the source check is sufficient here."
+    "gapDescription": "Proven by static source assertion (regex over routes/health/index.ts) rather than behaviorally, but the constant-time guarantee is structural and the source check is sufficient here.",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-4",
@@ -2747,7 +2996,8 @@
     "testFile": "apps/api/src/tests/health-readiness.test.ts",
     "testTitle": "authenticated readiness times out a stuck database check",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-5",
@@ -2758,7 +3008,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "authenticated readiness reports database:false when the SELECT 1 probe rejects",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-6",
@@ -2769,7 +3020,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "authenticated readiness returns 200 ready when every dependency check passes",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-7",
@@ -2780,7 +3032,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "authenticated readiness returns 503 with storageBucketReachable false when the bucket is unreachable",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-8",
@@ -2791,7 +3044,8 @@
     "testFile": "apps/api/src/tests/error-alerts.test.ts",
     "testTitle": "production 5xx errors send a sanitized alert webhook payload",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-9",
@@ -2802,7 +3056,8 @@
     "testFile": "apps/api/src/tests/error-alerts.test.ts",
     "testTitle": "client errors do not send alert webhooks",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-10",
@@ -2813,7 +3068,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "5xx errors do not send alerts outside production or when the webhook is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-11",
@@ -2824,7 +3080,8 @@
     "testFile": "apps/api/src/tests/production-scheduler.test.ts",
     "testTitle": "runDeadlineReminders sends a sanitized operational alert when the production reminder run fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-12",
@@ -2835,7 +3092,8 @@
     "testFile": "apps/api/src/tests/production-scheduler.test.ts",
     "testTitle": "runDocumentStorageCleanup sends a sanitized operational alert when storage cleanup fails",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-13",
@@ -2846,7 +3104,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "runProductionSchedulerOnce fires no error alert when both jobs succeed",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-14",
@@ -2857,7 +3116,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "runDeadlineReminders still returns failed when the alert sender throws",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-15",
@@ -2868,7 +3128,8 @@
     "testFile": "apps/api/src/tests/error-alerts.test.ts",
     "testTitle": "alert webhook sends are capped during error storms",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-observability-observability-16",
@@ -2879,7 +3140,8 @@
     "testFile": "apps/api/src/tests/observability-reliability.test.ts",
     "testTitle": "alert webhook send aborts when the webhook hangs past the timeout",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-1",
@@ -2890,7 +3152,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "storage operations throw 503 STORAGE_NOT_CONFIGURED when Supabase is unconfigured and local driver is off",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-2",
@@ -2901,7 +3164,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "Supabase storage errors map to stable STORAGE_* AppErrors without leaking provider detail",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-3",
@@ -2912,7 +3176,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "verifyBucket returns false when Supabase getBucket errors or is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-4",
@@ -2923,7 +3188,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "_send returns false without throwing when Resend is unconfigured or the SDK rejects",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-5",
@@ -2934,7 +3200,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "billing webhook returns 503 BILLING_NOT_CONFIGURED when Stripe secret is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-6",
@@ -2945,7 +3212,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "document upload returns 503 STORAGE_NOT_CONFIGURED and persists nothing when storage is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-7",
@@ -2956,7 +3224,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "formatProviderError redacts emails, tokens, storage paths and caps length",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-observability-8",
@@ -2967,7 +3236,8 @@
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
     "testTitle": "readiness reports 503 not_ready with billingConfigured false when Stripe env is unconfigured",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
   },
   {
     "id": "x-degradation-graceful-degradation-9",
@@ -2978,6 +3248,1268 @@
     "testFile": "apps/api/src/tests/billing-reminders-hardening.test.ts",
     "testTitle": "invalid Stripe webhook signatures return a client error",
     "linkResolved": true,
-    "gapDescription": ""
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
+    "id": "web-platform-auth-session-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Concurrent 401s share ONE single-flight token refresh, so parallel requests never present the same rotated refresh token and trip backend reuse-revocation (forced logout).",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api.test.ts",
+    "testTitle": "concurrent 401s trigger exactly one token refresh (single-flight)",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-2",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A request that still 401s after a refresh is rejected and not retried again — no infinite refresh/retry loop.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api.test.ts",
+    "testTitle": "a request that still 401s after a refresh is rejected (no infinite retry loop)",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-3",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/proxy.test.ts",
+    "testTitle": "server-side protected route refresh sends the deployed web Origin required by the API origin guard",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-4",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "In local Docker the edge auth check validates against the internal API origin, not the public host.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/proxy.test.ts",
+    "testTitle": "local Docker server-side protected route validation uses the internal API origin",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-5",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Edge protected-route validation fails closed (treats the user as unauthenticated) for an unapproved production API origin rather than trusting it.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/proxy.test.ts",
+    "testTitle": "server-side protected route validation fails closed for unapproved production API origins",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-6",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "The protected-path matcher recognises every dashboard app route that requires an auth cookie.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/protected-routes.test.ts",
+    "testTitle": "matches dashboard application routes that require an auth cookie",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-7",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "The protected-path matcher catches percent-encoded variants before Next normalisation, so an encoded deep link cannot dodge the auth gate.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/protected-routes.test.ts",
+    "testTitle": "matches encoded dashboard application routes before Next normalisation",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-8",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "The protected-path matcher does not over-match public, auth, or similarly-named routes (no false redirects).",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/protected-routes.test.ts",
+    "testTitle": "does not match public, auth, or similarly named routes",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-9",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A login ?next= value is honoured only for a same-origin protected app path.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/safe-next-path.test.ts",
+    "testTitle": "allows same-origin protected app next paths",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-10",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A login ?next= open-redirect (cross-origin / network-path / encoded) is rejected and falls back to /dashboard.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/safe-next-path.test.ts",
+    "testTitle": "rejects cross-origin and encoded network-path next values",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-11",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A login ?next= pointing at a public (non-protected) path is rejected and falls back to /dashboard.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/safe-next-path.test.ts",
+    "testTitle": "rejects public local next paths",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-12",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "The 401 interceptor refreshes once then retries the original request, succeeding transparently when the refresh succeeds.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "New api-interceptor unit test using a mock adapter.",
+    "proposedTitle": "refreshes the session once then retries the original request on a 401"
+  },
+  {
+    "id": "web-platform-auth-session-13",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A request marked skipAuthRefresh is never auto-refreshed/retried on 401 (auth pages surface an inline error instead of a redirect).",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "does not refresh or retry when skipAuthRefresh is set"
+  },
+  {
+    "id": "web-platform-auth-session-14",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "On a final 401 the user is redirected to /login only on a protected app path; public pages reject without redirect.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "redirects to login on a final 401 only for protected app paths"
+  },
+  {
+    "id": "web-platform-auth-session-15",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Production CSP connect-src trusts only an approved, origin-only API source.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/content-security-policy.test.ts",
+    "testTitle": "production CSP uses only an approved origin-only API connect source",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-16",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Production CSP falls back to the default API origin instead of trusting an unapproved connect source.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/content-security-policy.test.ts",
+    "testTitle": "production CSP falls back instead of trusting unapproved API connect sources",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-17",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Development CSP keeps the local API and websocket connect sources so local dev still works.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/content-security-policy.test.ts",
+    "testTitle": "development CSP keeps local API and websocket connect sources",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-18",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "In production the API base URL must be explicitly set, https, origin-only and an approved charitypilot.ie host — otherwise it is rejected.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "requires an explicit API URL in production",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-19",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A non-production (http) API URL is rejected in production.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "rejects non-production API URLs in production",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-20",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "An unapproved API host is rejected in production (no talking to an attacker-controlled origin).",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "rejects unapproved API hosts in production",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-21",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "An API URL carrying a path is rejected in production (origin-only).",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "rejects API URLs with paths in production",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-22",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A trailing slash on the configured API URL is trimmed consistently.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "uses explicit API URL after trimming a trailing slash",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-23",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "The localhost API fallback is available only outside production.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "keeps the local Docker API fallback for local development only",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "A webpack chunk-load failure (stale deploy) is recognised as recoverable.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/chunk-load-recovery.test.ts",
+    "testTitle": "recognises webpack chunk load failures as recoverable",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-2",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "A dynamic-import failure is recognised as recoverable.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/chunk-load-recovery.test.ts",
+    "testTitle": "recognises dynamic import failures as recoverable",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-3",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "Unrelated runtime errors are NOT treated as chunk failures (no spurious reloads).",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/chunk-load-recovery.test.ts",
+    "testTitle": "ignores unrelated runtime errors",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-4",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "A recoverable chunk failure triggers at most ONE reload — never a reload loop.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/chunk-load-recovery.test.ts",
+    "testTitle": "attempts only one reload for a recoverable chunk failure",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-5",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "The single-reload marker is cleared once the page is stable, so a later genuine chunk failure can still recover once.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/chunk-load-recovery.test.ts",
+    "testTitle": "clears the reload attempt marker after a stable page mount",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-6",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "Server-rendered JSON-LD is serialised without allowing a </script> breakout (no injection via structured data).",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/json-ld.test.ts",
+    "testTitle": "serialises JSON-LD without allowing script tag breakouts",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-graceful-degradation-7",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "A thrown render error is caught by the error boundary and rendered as a clean \"Something went wrong\" screen with a recover action — never a blank page or unhandled exception.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Proven structurally + by an e2e that forces a client error.",
+    "proposedTitle": "the global and dashboard error boundaries render a recoverable error screen"
+  },
+  {
+    "id": "web-platform-graceful-degradation-8",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "graceful-degradation",
+    "guarantee": "The error boundary logs only a redacted summary (status/code/digest/name) in production — never the raw error message or stack.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "clientErrorSummary redacts the raw message and stack in production"
+  },
+  {
+    "id": "web-platform-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "tenant-isolation",
+    "guarantee": "A Stripe checkout/portal redirect is followed only for an https hosted-Stripe origin — an attacker-supplied redirect URL is rejected.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "trusts only hosted Stripe https redirect origins",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-tenant-isolation-2",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "tenant-isolation",
+    "guarantee": "A document download URL is trusted only from the https expected API origin(s) or a Supabase signed-storage path — never an arbitrary origin.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "trusts document downloads only from https expected origins or Supabase storage",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-tenant-isolation-3",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "tenant-isolation",
+    "guarantee": "The local API document-download exception is honoured only on loopback in development.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "trusts local API document downloads only on loopback in development",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-24",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Sensitive one-time tokens are scrubbed from URL fragments so they do not linger in the address bar/history.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "scrubs sensitive token parameters from URL fragments",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-25",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A sensitive token is read from the URL fragment before query strings, so it is never exposed in a logged query string.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "extracts sensitive tokens from URL fragments before query strings are logged",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-26",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Sensitive-auth links prefer the fragment token over a query token.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "prefers fragment tokens over query tokens for sensitive auth links",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-27",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Removing a sensitive token query parameter preserves the other (safe) URL parts.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "removes sensitive token query parameters while preserving safe URL parts",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-28",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "When a sensitive token was the only query parameter, the leftover \"?\" marker is removed too.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/url-security.test.ts",
+    "testTitle": "removes the query marker when sensitive parameters were the only query parameters",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-plan-gating-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "plan-gating",
+    "guarantee": "A COMPLETE-only feature denial (403 PLAN_FEATURE_UNAVAILABLE) is correctly identified so gated pages can show an upsell, not a broken error.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/plan-feature.test.ts",
+    "testTitle": "identifies Complete-plan feature denial API errors",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-plan-gating-2",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "plan-gating",
+    "guarantee": "Unrelated API errors are NOT mistaken for a plan-feature denial.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/plan-feature.test.ts",
+    "testTitle": "does not treat unrelated API errors as plan feature denials",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-plan-gating-3",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "plan-gating",
+    "guarantee": "A subscription/trial lapse (TRIAL_EXPIRED / NO_SUBSCRIPTION / PAST_DUE_GRACE_EXPIRED / SUBSCRIPTION_INACTIVE) is identified so the UI shows \"manage billing\", not a connection error.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/plan-feature.test.ts",
+    "testTitle": "identifies subscription/trial lapse API errors",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-plan-gating-4",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "plan-gating",
+    "guarantee": "Other errors are NOT mistaken for a subscription lapse.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/plan-feature.test.ts",
+    "testTitle": "does not treat other errors as subscription lapses",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-input-validation-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "input-validation",
+    "guarantee": "The error renderer surfaces the server's specific message (data.error ?? data.message ?? fallback) and never a raw exception/stack.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "apiErrorMessage returns a safe specific message and never throws"
+  },
+  {
+    "id": "web-auth-input-validation-1",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "The login form validates with the shared loginSchema (same rule as the server): a malformed email or empty password shows inline errors and is not submitted.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "login form shares loginSchema and blocks a guaranteed-400 submit"
+  },
+  {
+    "id": "web-auth-input-validation-2",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "The register form validates with the shared registerSchema: a weak-but-long password (no upper/lower/digit) is caught inline and not submitted as a guaranteed-400.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "register form shares registerSchema password rule (no client/server drift)"
+  },
+  {
+    "id": "web-auth-input-validation-3",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "The reset-password form validates with the shared resetPasswordSchema: the same password complexity rule as the server, surfaced inline.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "reset-password form shares resetPasswordSchema password rule"
+  },
+  {
+    "id": "web-auth-input-validation-4",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "The accept-invite form validates name + password with the shared acceptTeamInviteSchema before submit.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "accept-invite form shares acceptTeamInviteSchema"
+  },
+  {
+    "id": "web-auth-input-validation-5",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "The forgot-password form validates the email with the shared forgotPasswordSchema.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "forgot-password form shares forgotPasswordSchema"
+  },
+  {
+    "id": "web-auth-input-validation-6",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "Every shared auth schema accepts a representative valid payload and rejects the guaranteed-400 cases (bad email, short/weak password, missing required fields).",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "shared auth schemas accept valid and reject guaranteed-400 payloads"
+  },
+  {
+    "id": "web-auth-auth-session-1",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "auth-session",
+    "guarantee": "register → verify-email → login is a working journey; the dashboard is only reachable once the email is verified.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/auth.spec.ts",
+    "testTitle": "register, verify email, then log in to the dashboard",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-auth-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "graceful-degradation",
+    "guarantee": "An invalid/expired email-verification token shows a clean \"Verification failed\" state, not a crash.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/auth.spec.ts",
+    "testTitle": "an invalid verification token shows the failure state",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-auth-graceful-degradation-2",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "graceful-degradation",
+    "guarantee": "A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Covered via apiErrorMessage unit test + e2e weak-password path.",
+    "proposedTitle": "auth form server error renders a safe inline message"
+  },
+  {
+    "id": "web-auth-input-validation-7",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "input-validation",
+    "guarantee": "Submitting a valid-length but complexity-failing password on register shows an inline error and fires no register request.",
+    "status": "gap",
+    "testType": "e2e",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "e2e: type 8 lowercase chars, assert inline error + no /auth/register POST.",
+    "proposedTitle": "register blocks a weak-but-long password inline (e2e)"
+  },
+  {
+    "id": "web-auth-accessibility-1",
+    "surface": "web",
+    "group": "web-auth",
+    "concern": "accessibility",
+    "guarantee": "The login and register pages are axe-clean (0 serious/critical) in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "auth pages are axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-dashboard-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-dashboard",
+    "concern": "tenant-isolation",
+    "guarantee": "The dashboard fetches org-scoped data using only the session cookie (no org id in any URL); the only query param is the reporting year.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Covered by the source-scan tenant-isolation test + backend ledger.",
+    "proposedTitle": "dashboard derives org context from the session, never a URL param"
+  },
+  {
+    "id": "web-dashboard-plan-gating-1",
+    "surface": "web",
+    "group": "web-dashboard",
+    "concern": "plan-gating",
+    "guarantee": "On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber \"manage billing\" banner via isSubscriptionLapseError.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "dashboard hides the registers card / shows the lapse banner via plan-feature helpers"
+  },
+  {
+    "id": "web-dashboard-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-dashboard",
+    "concern": "graceful-degradation",
+    "guarantee": "A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "dashboard shows an error card on load failure and empty states otherwise"
+  },
+  {
+    "id": "web-dashboard-accessibility-1",
+    "surface": "web",
+    "group": "web-dashboard",
+    "concern": "accessibility",
+    "guarantee": "The dashboard is axe-clean (0 serious/critical) in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "dashboard is axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-compliance-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-compliance",
+    "concern": "tenant-isolation",
+    "guarantee": "The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean \"Principle not found.\" screen, never another org's content.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "a foreign/unknown principleId renders a clean not-found (e2e)"
+  },
+  {
+    "id": "web-compliance-input-validation-1",
+    "surface": "web",
+    "group": "web-compliance",
+    "concern": "input-validation",
+    "guarantee": "The reporting-year filter only ever selects from a fixed list of valid years (server-validated 2018–2100); no free-form year reaches the API.",
+    "status": "na",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Year is chosen from a bounded Select (last 5 years); there is no free-text input to validate, and the server enforces the 2018–2100 range (API ledger).",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-compliance-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-compliance",
+    "concern": "graceful-degradation",
+    "guarantee": "The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "compliance auto-save shows save state and preserves input on failure"
+  },
+  {
+    "id": "web-compliance-accessibility-1",
+    "surface": "web",
+    "group": "web-compliance",
+    "concern": "accessibility",
+    "guarantee": "The compliance overview and a principle detail page are axe-clean in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "compliance pages are axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-board-state-integrity-1",
+    "surface": "web",
+    "group": "web-board",
+    "concern": "state-integrity",
+    "guarantee": "The Add/Edit board-member submit is guarded against double-submit (isLoading + isDisabled until required fields present); the modal stays open with the data intact on a failed save.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "board member save guards double-submit and preserves the modal on failure"
+  },
+  {
+    "id": "web-board-input-validation-1",
+    "surface": "web",
+    "group": "web-board",
+    "concern": "input-validation",
+    "guarantee": "The shared createBoardMemberSchema/updateBoardMemberSchema reject malformed payloads (missing name/role/date, bad email) — the validation authority the server enforces.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "board member shared schemas reject malformed payloads"
+  },
+  {
+    "id": "web-board-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-board",
+    "concern": "graceful-degradation",
+    "guarantee": "A board-member mutation failure shows a toast and leaves the existing list intact (no partial/optimistic data loss).",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "board mutation failure keeps the list intact"
+  },
+  {
+    "id": "web-documents-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-documents",
+    "concern": "tenant-isolation",
+    "guarantee": "A document download URL returned by the API is passed through getTrustedDocumentDownloadUrl before navigation, so a tampered/foreign URL is rejected with a toast.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Logic proven by url-security tests; page wiring credited.",
+    "proposedTitle": "document download trusts only allow-listed URLs"
+  },
+  {
+    "id": "web-documents-state-integrity-1",
+    "surface": "web",
+    "group": "web-documents",
+    "concern": "state-integrity",
+    "guarantee": "Upload is guarded against double-submit (isLoading + isDisabled until a file and name are present) and a >10MB file is blocked inline before any request.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "document upload guards double-submit and blocks oversize files inline"
+  },
+  {
+    "id": "web-documents-state-integrity-2",
+    "surface": "web",
+    "group": "web-documents",
+    "concern": "state-integrity",
+    "guarantee": "Deleting a document requires an explicit confirmation modal (\"This action cannot be undone.\") before the DELETE fires.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/documents.spec.ts",
+    "testTitle": "upload a document then download it",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-documents-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-documents",
+    "concern": "graceful-degradation",
+    "guarantee": "Upload happy-path + download works end to end; a rejected download URL shows a toast rather than navigating.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/documents.spec.ts",
+    "testTitle": "upload a document then download it",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-documents-accessibility-1",
+    "surface": "web",
+    "group": "web-documents",
+    "concern": "accessibility",
+    "guarantee": "The documents page is axe-clean in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "documents page is axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-deadlines-state-integrity-1",
+    "surface": "web",
+    "group": "web-deadlines",
+    "concern": "state-integrity",
+    "guarantee": "Adding a deadline is guarded against double-submit (isLoading + isDisabled until title and due-date present).",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/deadlines-team.spec.ts",
+    "testTitle": "create a deadline then mark it complete",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-deadlines-input-validation-1",
+    "surface": "web",
+    "group": "web-deadlines",
+    "concern": "input-validation",
+    "guarantee": "The shared createDeadlineSchema rejects a missing title/date and out-of-range reminder days — the server-enforced authority.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "deadline shared schema rejects malformed payloads"
+  },
+  {
+    "id": "web-deadlines-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-deadlines",
+    "concern": "graceful-degradation",
+    "guarantee": "A create→complete deadline round-trip works; the completion toggle reflects server state.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/deadlines-team.spec.ts",
+    "testTitle": "create a deadline then mark it complete",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-registers-plan-gating-1",
+    "surface": "web",
+    "group": "web-registers",
+    "concern": "plan-gating",
+    "guarantee": "On ESSENTIALS the whole Governance Registers page renders an upsell card (\"available on Complete.\" + View billing) via isPlanFeatureUnavailable — never a broken error.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "registers shows the Complete upsell card on a plan-feature denial"
+  },
+  {
+    "id": "web-registers-input-validation-1",
+    "surface": "web",
+    "group": "web-registers",
+    "concern": "input-validation",
+    "guarantee": "The shared governance-registers schemas reject malformed conflict/risk/complaint/fundraising payloads — the server-enforced authority.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "governance-registers shared schemas reject malformed payloads"
+  },
+  {
+    "id": "web-registers-accessibility-1",
+    "surface": "web",
+    "group": "web-registers",
+    "concern": "accessibility",
+    "guarantee": "The registers page (and its upsell state) is axe-clean in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "registers page is axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-organisation-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-organisation",
+    "concern": "tenant-isolation",
+    "guarantee": "The organisation profile is read from useAuth().user.organisation and saved with PATCH /organisation carrying NO org id — a user can only ever edit their own org (server resolves the tenant from the cookie).",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "organisation edits never send an org id; tenant comes from the session"
+  },
+  {
+    "id": "web-organisation-state-integrity-1",
+    "surface": "web",
+    "group": "web-organisation",
+    "concern": "state-integrity",
+    "guarantee": "Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "organisation save guards double-submit and warns on unsaved changes"
+  },
+  {
+    "id": "web-organisation-input-validation-1",
+    "surface": "web",
+    "group": "web-organisation",
+    "concern": "input-validation",
+    "guarantee": "The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "organisation shared schema rejects malformed payloads"
+  },
+  {
+    "id": "web-team-authz-boundary-1",
+    "surface": "web",
+    "group": "web-team",
+    "concern": "authz-boundary",
+    "guarantee": "A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER||ADMIN).",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "team invite controls are gated to OWNER/ADMIN (unit predicate)"
+  },
+  {
+    "id": "web-team-authz-boundary-2",
+    "surface": "web",
+    "group": "web-team",
+    "concern": "authz-boundary",
+    "guarantee": "Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion).",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "team role-change controls are gated to OWNER and exclude self/owner (unit predicate)"
+  },
+  {
+    "id": "web-team-authz-boundary-3",
+    "surface": "web",
+    "group": "web-team",
+    "concern": "authz-boundary",
+    "guarantee": "A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "a MEMBER cannot invite: control disabled and API blocks it (e2e)"
+  },
+  {
+    "id": "web-team-input-validation-1",
+    "surface": "web",
+    "group": "web-team",
+    "concern": "input-validation",
+    "guarantee": "The invite form validates email with the shared inviteTeamMemberSchema and the server's actual error message is surfaced inline (apiErrorMessage), not a generic string.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "team invite shares inviteTeamMemberSchema and surfaces the server message"
+  },
+  {
+    "id": "web-team-auth-session-1",
+    "surface": "web",
+    "group": "web-team",
+    "concern": "auth-session",
+    "guarantee": "An invited MEMBER can accept and join the inviting org; the new user belongs to the owner's organisation (no cross-org leak).",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/deadlines-team.spec.ts",
+    "testTitle": "invite a team member who then accepts and joins the workspace",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-team-accessibility-1",
+    "surface": "web",
+    "group": "web-team",
+    "concern": "accessibility",
+    "guarantee": "The team page is axe-clean in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "team page is axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-billing-authz-boundary-1",
+    "surface": "web",
+    "group": "web-billing",
+    "concern": "authz-boundary",
+    "guarantee": "The Stripe portal (\"Manage Subscription\") button renders only for an org with an active subscription; a trialing org has no portal button.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/billing.spec.ts",
+    "testTitle": "renders the trial tier and Complete-plan feature gating (test mode)",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-billing-plan-gating-1",
+    "surface": "web",
+    "group": "web-billing",
+    "concern": "plan-gating",
+    "guarantee": "The billing page renders the current tier + trial state and the Complete-only feature comparison correctly (test mode).",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/billing.spec.ts",
+    "testTitle": "renders the trial tier and Complete-plan feature gating (test mode)",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-billing-graceful-degradation-1",
+    "surface": "web",
+    "group": "web-billing",
+    "concern": "graceful-degradation",
+    "guarantee": "When Stripe is unconfigured (503/degraded) the page shows a \"Billing setup is temporarily unavailable\" notice and disables all checkout/portal buttons — never a broken checkout.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/billing.spec.ts",
+    "testTitle": "renders the trial tier and Complete-plan feature gating (test mode)",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-billing-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-billing",
+    "concern": "tenant-isolation",
+    "guarantee": "A Stripe redirect URL returned by the API is validated with getTrustedStripeRedirectUrl before navigation; an unexpected origin shows an error instead of redirecting.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Logic proven by url-security tests; page wiring credited.",
+    "proposedTitle": "billing redirect trusts only hosted-Stripe origins"
+  },
+  {
+    "id": "web-billing-input-validation-1",
+    "surface": "web",
+    "group": "web-billing",
+    "concern": "input-validation",
+    "guarantee": "Checkout plan/interval are constrained to the shared createCheckoutSchema enum values (passed as fixed button literals — no free user input can produce an invalid checkout).",
+    "status": "na",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "plan/interval are hardcoded button literals matching createCheckoutSchema enums; there is no free-form input to validate client-side, and the server validates the payload (API ledger).",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-billing-accessibility-1",
+    "surface": "web",
+    "group": "web-billing",
+    "concern": "accessibility",
+    "guarantee": "The billing and public pricing pages are axe-clean in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "billing & pricing pages are axe-clean in both themes (e2e)"
+  },
+  {
+    "id": "web-export-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-export",
+    "concern": "tenant-isolation",
+    "guarantee": "Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "export sends only a year, never an org id"
+  },
+  {
+    "id": "web-export-state-integrity-1",
+    "surface": "web",
+    "group": "web-export",
+    "concern": "state-integrity",
+    "guarantee": "Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "export sign-off guards double-submit and enforces the APPROVED required-trio"
+  },
+  {
+    "id": "web-export-auth-session-1",
+    "surface": "web",
+    "group": "web-export",
+    "concern": "auth-session",
+    "guarantee": "Recording a standard then completing board sign-off works end to end.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/compliance.spec.ts",
+    "testTitle": "record a standard then complete board sign-off",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-regulator-tenant-isolation-1",
+    "surface": "web",
+    "group": "web-regulator",
+    "concern": "tenant-isolation",
+    "guarantee": "The regulator guidance page is static reference content with no data fetch and no tenant context, so it cannot leak any org data.",
+    "status": "na",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "Static page built from module constants (regulator-guidance.ts); no api calls, no session/org context, no URL params — no tenant-isolation surface exists.",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-regulator-accessibility-1",
+    "surface": "web",
+    "group": "web-regulator",
+    "concern": "accessibility",
+    "guarantee": "The regulator readiness page is axe-clean in light and dark themes.",
+    "status": "gap",
+    "testType": "unit",
+    "testFile": "",
+    "testTitle": "",
+    "gapDescription": "",
+    "proposedTitle": "regulator page is axe-clean in both themes (e2e)"
   }
 ]

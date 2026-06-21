@@ -1,32 +1,43 @@
 #!/usr/bin/env node
-// CharityPilot reliability report — the "trust ledger" verifier.
+// CharityPilot reliability report — the unified "trust ledger" verifier (API + Web).
 //
-// Reads the curated guarantee matrix (docs/reliability/guarantees.json), compiles and
-// runs the apps/api unit-test suite, and proves that every guarantee marked `covered`
-// is linked to a test that actually exists and passes. Prints guarantee counts and an
-// overall PASS/FAIL, and exits non-zero if the suite has any failure or any covered
-// guarantee's linked test is missing/failing (a broken link).
+// Reads the curated guarantee matrix (docs/reliability/guarantees.json), runs the
+// proving suites, and proves that every guarantee marked `covered` is linked to a
+// test that actually exists and passes:
+//   • surface "api"            -> apps/api  node:test unit suite (dist/tests/*.test.js)
+//   • surface "web", unit      -> apps/web  node:test unit suite (.test-dist/**/*.test.js)
+//   • surface "web", e2e       -> e2e/tests/*.spec.ts  (Playwright; linked statically by
+//                                 title, executed by `npm run test:e2e` / the CI E2E gate)
 //
-//   node scripts/reliability-report.mjs            # run + report
-//   node scripts/reliability-report.mjs --write     # also regenerate docs/RELIABILITY.md
-//   node scripts/reliability-report.mjs --no-run     # report from a previous run (skip tests)
+// Prints guarantee counts (split by surface) and an overall PASS/FAIL, and exits
+// non-zero if any executed suite has a failure or any covered guarantee's linked test
+// is missing/failing (a broken link).
+//
+//   node scripts/reliability-report.mjs              # run api+web suites + report
+//   node scripts/reliability-report.mjs --write      # also regenerate docs/RELIABILITY.md
+//   node scripts/reliability-report.mjs --no-run     # report from the matrix only (skip suites)
+//   node scripts/reliability-report.mjs --surface=web|api   # run only one surface's suite
 //
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const API_DIR = join(ROOT, 'apps', 'api');
+const WEB_DIR = join(ROOT, 'apps', 'web');
+const E2E_DIR = join(ROOT, 'e2e', 'tests');
 const GUARANTEES = join(ROOT, 'docs', 'reliability', 'guarantees.json');
 const LEDGER_MD = join(ROOT, 'docs', 'RELIABILITY.md');
 
 const args = process.argv.slice(2);
 const WRITE = args.includes('--write');
 const NO_RUN = args.includes('--no-run');
+const SURFACE_ARG = (args.find((a) => a.startsWith('--surface=')) || '').split('=')[1] || '';
 
-const GROUP_ORDER = [
+// ---- API surface groups (ordered) ----
+const API_GROUP_ORDER = [
   ['auth', 'auth — `/api/v1/auth`'],
   ['organisation', 'organisation — `/api/v1/organisation`'],
   ['compliance', 'compliance — `/api/v1/compliance`'],
@@ -44,6 +55,24 @@ const GROUP_ORDER = [
   ['x-observability', 'cross-cutting — observability'],
   ['x-degradation', 'cross-cutting — graceful degradation'],
 ];
+
+// ---- Web surface groups (ordered) ----
+const WEB_GROUP_ORDER = [
+  ['web-platform', 'platform — proxy / CSP / API client / session refresh'],
+  ['web-auth', 'auth pages — login / register / forgot / reset / verify / accept-invite'],
+  ['web-dashboard', 'dashboard — `/dashboard`'],
+  ['web-compliance', 'compliance — `/compliance`, `/compliance/[principleId]`'],
+  ['web-board', 'board — `/board`'],
+  ['web-documents', 'documents — `/documents`'],
+  ['web-deadlines', 'deadlines — `/deadlines`'],
+  ['web-registers', 'registers — `/registers`'],
+  ['web-organisation', 'organisation — `/organisation`'],
+  ['web-team', 'team — `/team`'],
+  ['web-billing', 'billing & pricing — `/billing`, `/pricing`'],
+  ['web-export', 'export — `/export`'],
+  ['web-regulator', 'regulator — `/regulator`'],
+];
+
 const CONCERN_LABEL = {
   'tenant-isolation': 'Tenant isolation',
   'authz-boundary': 'Authorization boundary',
@@ -53,19 +82,25 @@ const CONCERN_LABEL = {
   'auth-session': 'Auth & session integrity',
   'idempotency': 'At-least-once / idempotency',
   'observability': 'Observability',
+  'state-integrity': 'State integrity / no data loss',
+  'accessibility': 'Accessibility & resilience',
 };
 
 function readGuarantees() {
-  return JSON.parse(readFileSync(GUARANTEES, 'utf8'));
+  const raw = JSON.parse(readFileSync(GUARANTEES, 'utf8'));
+  // Normalise defaults: existing rows are the API surface; tests default to unit.
+  return raw.map((g) => ({ surface: 'api', testType: 'unit', ...g }));
 }
 
-function runSuite() {
-  // Compile then run with the spec reporter so we get deterministic ✔/✖ lines.
-  execSync('npx tsc -p tsconfig.json', { cwd: API_DIR, stdio: 'inherit' });
+function compile(dir, project) {
+  execSync(`npx tsc -p ${project}`, { cwd: dir, stdio: 'inherit' });
+}
+
+function runNodeTest(dir, glob) {
   let out = '';
   try {
-    out = execSync('node --test --test-reporter=spec "dist/tests/*.test.js"', {
-      cwd: API_DIR,
+    out = execSync(`node --test --test-reporter=spec "${glob}"`, {
+      cwd: dir,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
     });
@@ -76,20 +111,45 @@ function runSuite() {
   return out;
 }
 
+function runApiSuite() {
+  compile(API_DIR, 'tsconfig.json');
+  return runNodeTest(API_DIR, 'dist/tests/*.test.js');
+}
+
+function runWebSuite() {
+  compile(WEB_DIR, 'tsconfig.test.json');
+  return runNodeTest(WEB_DIR, '.test-dist/**/*.test.js');
+}
+
 function parseResults(out) {
   const pass = new Set();
   const fail = new Set();
   for (const raw of out.split(/\r?\n/)) {
-    const line = raw.replace(/\[[0-9;]*m/g, ''); // strip ANSI
+    const line = raw.replace(/\[[0-9;]*m/g, ''); // strip ANSI
     let m = line.match(/^\s*✔\s+(.*?)(?:\s+\(\d[\d.]*ms\))?\s*$/);
     if (m) { pass.add(m[1].trim()); continue; }
     m = line.match(/^\s*✖\s+(.*?)(?:\s+\(\d[\d.]*ms\))?\s*$/);
     if (m) { fail.add(m[1].trim()); continue; }
   }
-  // Summary counts from the spec footer (best-effort).
   const passN = (out.match(/# pass (\d+)/) || [])[1];
   const failN = (out.match(/# fail (\d+)/) || [])[1];
   return { pass, fail, passN: passN ? +passN : pass.size, failN: failN ? +failN : fail.size };
+}
+
+// Statically collect Playwright test titles from the e2e spec files. The E2E suite is
+// executed by `npm run test:e2e` / the CI E2E gate (it needs the local Docker stack);
+// the ledger links each e2e guarantee to a title that must exist in a spec file.
+function readE2eTitles() {
+  const titles = new Set();
+  let files = [];
+  try { files = readdirSync(E2E_DIR).filter((f) => f.endsWith('.spec.ts')); } catch { return titles; }
+  for (const f of files) {
+    const src = readFileSync(join(E2E_DIR, f), 'utf8');
+    const re = /(?:^|\s)test\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
+    let m;
+    while ((m = re.exec(src))) titles.add(m[2].trim());
+  }
+  return titles;
 }
 
 function statusBadge(s) {
@@ -100,17 +160,78 @@ function statusBadge(s) {
   return s;
 }
 
+function countByStatus(rows) {
+  return rows.reduce((m, r) => { m[r.status] = (m[r.status] || 0) + 1; return m; }, {});
+}
+
+function proofCell(r) {
+  if (r.testTitle) {
+    let file = '';
+    if (r.testFile) file = r.testFile.replace(/^apps\/(api|web)\/src\/tests?\//, '').replace(/^apps\/web\/src\//, '').replace(/^e2e\//, '');
+    const kind = r.testType === 'e2e' ? ' <sup>e2e</sup>' : '';
+    let proof = `\`${r.testTitle.replace(/\|/g, '\\|')}\`${kind}`;
+    if (file) proof += `<br/><sub>${file}</sub>`;
+    return proof;
+  }
+  if (r.status === 'na') {
+    return `_${(r.gapDescription || 'documented not applicable').replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 200)}_`;
+  }
+  if (r.proposedTitle) return `_planned:_ \`${r.proposedTitle.replace(/\|/g, '\\|')}\``;
+  return '—';
+}
+
+function renderMatrix(md, rows, groupOrder) {
+  const byGroup = {};
+  for (const g of rows) (byGroup[g.group] ||= []).push(g);
+  let out = md;
+  for (const [slug, label] of groupOrder) {
+    const grp = byGroup[slug];
+    if (!grp || !grp.length) continue;
+    const gc = countByStatus(grp);
+    out += `### ${label}\n\n`;
+    out += `_${grp.length} guarantees — `;
+    out += [['covered', '🟢'], ['partial', '🟡'], ['gap', '🔴'], ['na', '⚪']]
+      .filter(([k]) => gc[k]).map(([k, e]) => `${e} ${gc[k]}`).join('  ') + '_\n\n';
+    out += '| Concern | Guarantee | Status | Proven by |\n|---|---|---|---|\n';
+    grp.sort((a, b) => (a.concern.localeCompare(b.concern)) || a.id.localeCompare(b.id));
+    for (const r of grp) {
+      const concern = CONCERN_LABEL[r.concern] || r.concern;
+      const g = r.guarantee.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      out += `| ${concern} | ${g} | ${statusBadge(r.status)} | ${proofCell(r)} |\n`;
+    }
+    out += '\n';
+  }
+  // Any groups not in the declared order — surface them so nothing is silently dropped.
+  const known = new Set(groupOrder.map(([s]) => s));
+  for (const slug of Object.keys(byGroup)) {
+    if (known.has(slug)) continue;
+    const grp = byGroup[slug];
+    out += `### ${slug}\n\n`;
+    out += '| Concern | Guarantee | Status | Proven by |\n|---|---|---|---|\n';
+    for (const r of grp) {
+      const concern = CONCERN_LABEL[r.concern] || r.concern;
+      const g = r.guarantee.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      out += `| ${concern} | ${g} | ${statusBadge(r.status)} | ${proofCell(r)} |\n`;
+    }
+    out += '\n';
+  }
+  return out;
+}
+
 function buildMarkdown(guars, res) {
-  const counts = {};
-  for (const g of guars) counts[g.status] = (counts[g.status] || 0) + 1;
+  const apiRows = guars.filter((g) => g.surface === 'api');
+  const webRows = guars.filter((g) => g.surface === 'web');
+  const counts = countByStatus(guars);
+  const apiCounts = countByStatus(apiRows);
+  const webCounts = countByStatus(webRows);
   const total = guars.length;
   const date = process.env.RELIABILITY_DATE || new Date().toISOString().slice(0, 10);
 
   let md = '';
   md += '# CharityPilot Reliability Ledger\n\n';
-  md += '> **The trust ledger.** Every behaviour here is one whose failure would lose customer\n';
-  md += '> trust or generate support tickets. Each row is a concrete, falsifiable guarantee\n';
-  md += '> linked to the automated test that proves it holds today and will keep holding.\n\n';
+  md += '> **The trust ledger — API + Web.** Every behaviour here is one whose failure would\n';
+  md += '> lose customer trust or generate support tickets. Each row is a concrete, falsifiable\n';
+  md += '> guarantee linked to the automated test that proves it holds today and will keep holding.\n\n';
   md += 'This is **evidence, not an audit**. An audit asks "can I find a problem?" — an unbounded\n';
   md += 'question that always finds *something*. This ledger asks the bounded question: "is every\n';
   md += 'reliability-critical behaviour pinned by a test that is green?" When every row is 🟢 (or a\n';
@@ -118,80 +239,61 @@ function buildMarkdown(guars, res) {
 
   md += '## At a glance\n\n';
   md += `Generated: ${date} · Source of truth: [\`docs/reliability/guarantees.json\`](reliability/guarantees.json)\n\n`;
-  md += '| Status | Count |\n|---|---|\n';
-  md += `| 🟢 covered (proven by a passing test) | ${counts.covered || 0} |\n`;
-  if (counts.partial) md += `| 🟡 partial (some of the guarantee proven) | ${counts.partial} |\n`;
-  if (counts.gap) md += `| 🔴 gap (not yet proven) | ${counts.gap} |\n`;
-  md += `| ⚪ n/a (concern documented as not applicable) | ${counts.na || 0} |\n`;
-  md += `| **Total guarantees** | **${total}** |\n\n`;
+  md += '| Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |\n|---|---|---|---|---|---|\n';
+  const row = (label, c, rows) => `| ${label} | ${c.covered || 0} | ${c.partial || 0} | ${c.gap || 0} | ${c.na || 0} | ${rows.length} |\n`;
+  md += row('API', apiCounts, apiRows);
+  md += row('Web', webCounts, webRows);
+  md += `| **Total** | **${counts.covered || 0}** | **${counts.partial || 0}** | **${counts.gap || 0}** | **${counts.na || 0}** | **${total}** |\n\n`;
 
   if (res) {
     const ok = res.failN === 0 && res.brokenLinks.length === 0;
-    md += `**Suite:** ${res.passN} tests passing, ${res.failN} failing. `;
-    md += `**Linkage:** ${res.proven}/${counts.covered || 0} covered guarantees verified against a passing test`;
+    md += `**API suite:** ${res.api ? `${res.api.passN} passing, ${res.api.failN} failing` : 'not run'}. `;
+    md += `**Web suite:** ${res.web ? `${res.web.passN} passing, ${res.web.failN} failing` : 'not run'}. `;
+    md += `**E2E:** ${res.e2eCount} Playwright titles linked (executed by the CI E2E gate).\n\n`;
+    md += `**Linkage:** ${res.proven}/${counts.covered || 0} covered guarantees verified against a passing/linked test`;
     md += res.brokenLinks.length ? `, ${res.brokenLinks.length} broken link(s).` : '.';
     md += `\n\n**Overall: ${ok ? '✅ GREEN' : '❌ NOT GREEN'}**\n\n`;
   }
 
   md += '## How to verify\n\n';
   md += '```bash\n';
-  md += '# Compile + run the API suite and check every covered guarantee links to a passing test\n';
+  md += '# Compile + run the API and Web unit suites and check every covered guarantee\n';
+  md += '# links to a passing test (E2E rows are linked by title and run by the E2E gate).\n';
   md += 'npm run reliability:report\n';
+  md += '\n# Prove the WHOLE platform green in one command (every gate + this report):\n';
+  md += 'npm run release:ready\n';
   md += '```\n\n';
-  md += 'The report exits non-zero if any test fails or any 🟢 guarantee\'s linked test is missing.\n';
-  md += 'Regenerate this document from the source of truth with `npm run reliability:report -- --write`.\n\n';
+  md += 'The report exits non-zero if any executed suite fails or any 🟢 guarantee\'s linked test\n';
+  md += 'is missing. Regenerate this document with `npm run reliability:report -- --write`.\n\n';
 
-  md += '## The eight reliability concerns\n\n';
-  md += '1. **Tenant isolation** — a user in org A can never read or modify a resource of org B.\n';
-  md += '2. **Authorization boundary** — `requireAdmin` writes reject MEMBER; billing requires OWNER.\n';
-  md += '3. **Subscription / plan gating** — expired/cancelled blocked; ESSENTIALS cannot reach COMPLETE-only features.\n';
-  md += '4. **Input validation** — malformed/oversized input is a 4xx with a safe code, never a 500 or stack leak.\n';
-  md += '5. **Graceful degradation** — when Stripe/Supabase/Resend are absent or failing, a clean 503; the rest keeps working.\n';
-  md += '6. **Auth & session integrity** — refresh rotation works; revoked/replayed tokens rejected; secrets never logged.\n';
-  md += '7. **At-least-once / idempotency** — webhooks processed once; reminders dedupe; deletion reconciliation retries safely.\n';
-  md += '8. **Observability** — readiness reflects real dependency health; a job failure fires the error alert.\n\n';
+  md += '## The reliability concerns\n\n';
+  md += '**API surface (8):** tenant isolation · authorization boundary · subscription/plan gating ·\n';
+  md += 'input validation · graceful degradation · auth & session integrity · at-least-once/idempotency ·\n';
+  md += 'observability.\n\n';
+  md += '**Web surface (8):** tenant isolation (UI) · authorization (UI) · plan gating (UI) ·\n';
+  md += 'input-validation parity · graceful degradation · auth & session integrity · state integrity /\n';
+  md += 'no data loss · accessibility & resilience.\n\n';
 
-  md += '## The matrix\n\n';
-  const byGroup = {};
-  for (const g of guars) (byGroup[g.group] ||= []).push(g);
+  md += '---\n\n';
+  md += `## API surface — the matrix (${apiRows.length} guarantees)\n\n`;
+  md = renderMatrix(md, apiRows, API_GROUP_ORDER);
 
-  for (const [slug, label] of GROUP_ORDER) {
-    const rows = byGroup[slug];
-    if (!rows || !rows.length) continue;
-    const gc = rows.reduce((m, r) => { m[r.status] = (m[r.status] || 0) + 1; return m; }, {});
-    md += `### ${label}\n\n`;
-    md += `_${rows.length} guarantees — `;
-    md += [['covered', '🟢'], ['partial', '🟡'], ['gap', '🔴'], ['na', '⚪']]
-      .filter(([k]) => gc[k]).map(([k, e]) => `${e} ${gc[k]}`).join('  ') + '_\n\n';
-    md += '| Concern | Guarantee | Status | Proven by |\n|---|---|---|---|\n';
-    // Sort by concern then status.
-    rows.sort((a, b) => (a.concern.localeCompare(b.concern)) || a.id.localeCompare(b.id));
-    for (const r of rows) {
-      const concern = CONCERN_LABEL[r.concern] || r.concern;
-      const g = r.guarantee.replace(/\|/g, '\\|').replace(/\n/g, ' ');
-      let proof = '—';
-      if (r.testTitle) {
-        const file = r.testFile ? r.testFile.replace(/^apps\/api\/src\/tests\//, '') : '';
-        proof = `\`${r.testTitle.replace(/\|/g, '\\|')}\``;
-        if (file) proof += `<br/><sub>${file}</sub>`;
-      } else if (r.status === 'na') {
-        proof = `_${(r.gapDescription || 'documented not applicable').replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 160)}_`;
-      } else if (r.proposedTitle) {
-        proof = `_planned:_ \`${r.proposedTitle.replace(/\|/g, '\\|')}\``;
-      }
-      md += `| ${concern} | ${g} | ${statusBadge(r.status)} | ${proof} |\n`;
-    }
-    md += '\n';
-  }
+  md += '---\n\n';
+  md += `## Web surface — the matrix (${webRows.length} guarantees)\n\n`;
+  md += '> The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the\n';
+  md += '> extractable logic (auth/session, validation parity, plan/role decisions, redirect & download\n';
+  md += '> allow-listing, error redaction); Playwright E2E (<sup>e2e</sup>) proves rendered behaviour and\n';
+  md += '> accessibility against the local Docker stack.\n\n';
+  md = renderMatrix(md, webRows, WEB_GROUP_ORDER);
 
   // Fixed-while-proving section, driven by an optional sidecar file.
   let fixed = [];
   try { fixed = JSON.parse(readFileSync(join(ROOT, 'docs', 'reliability', 'fixed-while-proving.json'), 'utf8')); } catch {}
-  md += '## Fixed while proving\n\n';
+  md += '---\n\n## Fixed while proving\n\n';
   if (fixed.length) {
     md += 'Real defects found *by a test written here*, fixed minimally, and locked in:\n\n';
-    md += '| Defect | Minimal fix | Proven by |\n|---|---|---|\n';
-    for (const f of fixed) md += `| ${f.defect} | ${f.fix} | \`${f.test}\` |\n`;
+    md += '| Surface | Defect | Minimal fix | Proven by |\n|---|---|---|---|\n';
+    for (const f of fixed) md += `| ${f.surface || '—'} | ${f.defect} | ${f.fix} | \`${f.test}\` |\n`;
     md += '\n';
   } else {
     md += '_None. Every guarantee above was already correct; the work was to pin each one with a test._\n\n';
@@ -199,23 +301,37 @@ function buildMarkdown(guars, res) {
 
   md += '---\n\n';
   md += '<sub>Legend: 🟢 covered = a passing automated test proves the guarantee · 🟡 partial = part proven ·\n';
-  md += '🔴 gap = not yet proven · ⚪ n/a = concern considered and documented as not applicable to this group.</sub>\n';
+  md += '🔴 gap = not yet proven · ⚪ n/a = concern considered and documented as not applicable to this group.\n';
+  md += '<sup>e2e</sup> = proven by a Playwright journey, executed by the CI E2E gate.</sub>\n';
   return md;
 }
 
 // ---- main ----
 const guars = readGuarantees();
-const counts = {};
-for (const g of guars) counts[g.status] = (counts[g.status] || 0) + 1;
+const counts = countByStatus(guars);
+
+const apiCovered = guars.filter((g) => g.surface === 'api' && g.status === 'covered' && g.testTitle);
+const webUnitCovered = guars.filter((g) => g.surface === 'web' && g.testType === 'unit' && g.status === 'covered' && g.testTitle);
+const e2eCovered = guars.filter((g) => g.testType === 'e2e' && g.status === 'covered' && g.testTitle);
 
 let res = null;
 if (!NO_RUN) {
-  const out = runSuite();
-  const { pass, fail, passN, failN } = parseResults(out);
-  const covered = guars.filter(g => g.status === 'covered' && g.testTitle);
-  const brokenLinks = covered.filter(g => !pass.has(g.testTitle));
-  const proven = covered.length - brokenLinks.length;
-  res = { passN, failN, proven, brokenLinks, pass, fail };
+  const wantApi = (!SURFACE_ARG || SURFACE_ARG === 'api') && apiCovered.length > 0;
+  const wantWeb = (!SURFACE_ARG || SURFACE_ARG === 'web') && webUnitCovered.length > 0;
+
+  const api = wantApi ? parseResults(runApiSuite()) : null;
+  const web = wantWeb ? parseResults(runWebSuite()) : null;
+  const e2eTitles = readE2eTitles();
+
+  const brokenLinks = [];
+  if (api) for (const g of apiCovered) if (!api.pass.has(g.testTitle)) brokenLinks.push(g);
+  if (web) for (const g of webUnitCovered) if (!web.pass.has(g.testTitle)) brokenLinks.push(g);
+  for (const g of e2eCovered) if (!e2eTitles.has(g.testTitle)) brokenLinks.push(g);
+
+  const coveredChecked = (api ? apiCovered.length : 0) + (web ? webUnitCovered.length : 0) + e2eCovered.length;
+  const proven = coveredChecked - brokenLinks.length;
+  const failN = (api?.failN || 0) + (web?.failN || 0);
+  res = { api, web, e2eCount: e2eTitles.size, proven, brokenLinks, failN };
 }
 
 if (WRITE) {
@@ -224,23 +340,28 @@ if (WRITE) {
 }
 
 // ---- console report ----
-console.log('\n=== CharityPilot Reliability Report ===');
-console.log(`Guarantees: ${guars.length} total`);
+const apiRows = guars.filter((g) => g.surface === 'api');
+const webRows = guars.filter((g) => g.surface === 'web');
+console.log('\n=== CharityPilot Reliability Report (API + Web) ===');
+console.log(`Guarantees: ${guars.length} total  (api ${apiRows.length}, web ${webRows.length})`);
 console.log(`  🟢 covered : ${counts.covered || 0}`);
 console.log(`  🟡 partial : ${counts.partial || 0}`);
 console.log(`  🔴 gap     : ${counts.gap || 0}`);
 console.log(`  ⚪ n/a     : ${counts.na || 0}`);
 
 if (res) {
-  console.log(`\nSuite: ${res.passN} passing, ${res.failN} failing`);
-  console.log(`Covered-guarantee linkage: ${res.proven}/${(counts.covered || 0)} verified against a passing test`);
+  if (res.api) console.log(`\nAPI suite: ${res.api.passN} passing, ${res.api.failN} failing`);
+  if (res.web) console.log(`Web suite: ${res.web.passN} passing, ${res.web.failN} failing`);
+  console.log(`E2E: ${res.e2eCount} Playwright titles linked (run by the E2E gate)`);
+  const coveredChecked = (res.api ? apiCovered.length : 0) + (res.web ? webUnitCovered.length : 0) + e2eCovered.length;
+  console.log(`Covered-guarantee linkage: ${res.proven}/${coveredChecked} verified against a passing/linked test`);
   if (res.brokenLinks.length) {
-    console.log(`\n❌ ${res.brokenLinks.length} BROKEN LINK(S) — covered guarantee with no passing test of that title:`);
-    for (const b of res.brokenLinks.slice(0, 50)) console.log(`   - [${b.id}] expected test: "${b.testTitle}"`);
+    console.log(`\n❌ ${res.brokenLinks.length} BROKEN LINK(S) — covered guarantee with no passing/linked test of that title:`);
+    for (const b of res.brokenLinks.slice(0, 60)) console.log(`   - [${b.surface}/${b.testType}] [${b.id}] expected: "${b.testTitle}"`);
   }
   const green = res.failN === 0 && res.brokenLinks.length === 0;
   console.log(`\nOVERALL: ${green ? '✅ GREEN' : '❌ NOT GREEN'}`);
   process.exit(green ? 0 : 1);
 } else {
-  console.log('\n(--no-run: skipped executing the suite)');
+  console.log('\n(--no-run: skipped executing the suites)');
 }
