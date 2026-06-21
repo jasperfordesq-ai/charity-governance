@@ -208,7 +208,7 @@ export default function OrganisationPage() {
                     }
                   `}
                 >
-                  <p className={`text-sm font-semibold ${complexity === c ? 'text-teal-primary dark:text-teal-light' : 'text-gray-700 dark:text-gray-300'}`}>
+                  <p className={`text-sm font-semibold ${complexity === c ? 'text-teal-primary dark:text-teal-bright' : 'text-gray-700 dark:text-gray-300'}`}>
                     {c === OrganisationComplexity.SIMPLE ? 'Simple' : 'Complex'}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -334,7 +334,7 @@ export default function OrganisationPage() {
               <span className="text-sm text-green-600 dark:text-green-400 font-medium">Changes saved successfully.</span>
             )}
             {isDirty && !saved && !saving && (
-              <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">Unsaved changes</span>
+              <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">Unsaved changes</span>
             )}
           </div>
         </div>

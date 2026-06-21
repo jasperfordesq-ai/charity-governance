@@ -181,7 +181,7 @@ export default function DeadlinesPage() {
       <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light">
+            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright">
               Regulatory cadence
             </Chip>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Deadlines the board should see early</h2>
@@ -191,7 +191,7 @@ export default function DeadlinesPage() {
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
           {regulatoryMilestones.map((item) => (
             <div key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/60 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary dark:text-teal-light">{item.cadence}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary dark:text-teal-bright">{item.cadence}</p>
               <h3 className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</h3>
               <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-400">{item.detail}</p>
             </div>
@@ -265,7 +265,7 @@ export default function DeadlinesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className={`text-sm font-semibold ${d.isComplete ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-100'}`}>
+                        <p className={`text-sm font-semibold ${d.isComplete ? 'text-gray-400 dark:text-gray-400 line-through' : 'text-gray-800 dark:text-gray-100'}`}>
                           {d.title}
                         </p>
                         {d.description && (

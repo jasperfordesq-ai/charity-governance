@@ -10,5 +10,17 @@
     "defect": "The marketing footer copyright text used gray-500 on the dark footer surface (3.66:1), so /pricing failed the WCAG 2.1 AA contrast minimum (axe serious).",
     "fix": "Bumped the footer copyright text from gray-500 to gray-400 (~5.9:1) in the marketing layout.",
     "test": "/pricing is axe-clean (0 serious/critical)"
+  },
+  {
+    "surface": "web",
+    "defect": "Dark-theme colour contrast across the dashboard failed WCAG 2.1 AA: the brand teal as text (#0D7377 ~3.1:1; #10998E ~4.47:1), gray-500 secondary text (3.66:1), and the HeroUI danger-flat Logout label (4.34:1) — /compliance alone reported 23 serious contrast nodes.",
+    "fix": "Added dark-mode-accessible brand shades (--color-teal-bright #14B8A6 ~6.8:1, --color-amber-deep #8A6914) and dark text overrides (.dark .text-teal-primary, .dark .text-gray-500); replaced dark:text-gray-500 -> gray-400 and text-teal-light -> text-teal-bright across the dashboard; brightened the Logout label in dark; backgrounds keep the brand shade. Axe-clean in BOTH themes.",
+    "test": "${path} is axe-clean in light and dark themes"
+  },
+  {
+    "surface": "web",
+    "defect": "The marketing home hero eyebrow used text-amber-accent (#D4A843) on white (~2.2:1), below the WCAG 2.1 AA contrast minimum.",
+    "fix": "Used the darker --color-amber-deep (#8A6914, ~5.2:1) for the eyebrow text.",
+    "test": "/ is axe-clean (0 serious/critical)"
   }
 ]

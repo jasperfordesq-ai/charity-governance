@@ -186,7 +186,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div data-app="dashboard" className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Skip to content — a11y */}
       <a href="#dashboard-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-teal-primary focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold">
         Skip to content
@@ -245,7 +245,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Sidebar footer */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
-          <div className="text-xs text-gray-400 dark:text-gray-500 text-center space-y-1">
+          <div className="text-xs text-gray-400 dark:text-gray-400 text-center space-y-1">
             <p>CharityPilot v1.0</p>
             <p className="hidden lg:block">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-[10px] font-mono">?</kbd> for shortcuts</p>
           </div>
@@ -287,6 +287,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               size="sm"
               variant="flat"
               color="danger"
+              // Contrast: the default danger-flat label is just under WCAG AA in both themes
+              // (light 4.4:1 #c20e4d on the danger-100 tint, dark 4.34:1). Darken it in light
+              // and brighten it in dark to clear 4.5:1.
+              className="!text-[#a10b48] dark:!text-[#ff8fb3]"
               onPress={() => {
                 logout();
                 router.replace('/login');

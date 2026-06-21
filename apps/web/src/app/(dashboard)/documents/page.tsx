@@ -261,7 +261,7 @@ export default function DocumentsPage() {
       <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-light dark:border-teal-light/20">
+            <Chip size="sm" variant="flat" className="mb-2 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-bright dark:border-teal-light/20">
               Evidence pack
             </Chip>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Board-ready governance evidence</h2>
@@ -285,7 +285,7 @@ export default function DocumentsPage() {
                     {count > 0 ? `${count} file${count > 1 ? 's' : ''}` : 'Needed'}
                   </Chip>
                 </div>
-                <p className="mt-1 text-xs text-teal-dark dark:text-teal-light">Standards {item.standards}</p>
+                <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
               </div>
             );
           })}
@@ -309,7 +309,7 @@ export default function DocumentsPage() {
                   <div>
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.why}</p>
-                    <p className="mt-1 text-xs text-teal-dark dark:text-teal-light">Standards {item.standards}</p>
+                    <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
                   </div>
                   <Chip size="sm" color={item.covered ? 'success' : 'default'} variant="flat">
                     {item.covered ? 'Found' : 'Needed'}
@@ -336,13 +336,13 @@ export default function DocumentsPage() {
         </Card>
       ) : documents.length === 0 ? (
         <Card className="p-12 border border-gray-200 dark:border-gray-800 dark:bg-gray-900 text-center">
-          <div className="text-gray-400 dark:text-gray-500 mb-3">
+          <div className="text-gray-400 dark:text-gray-400 mb-3">
             <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           </div>
           <p className="text-gray-500 dark:text-gray-400 mb-2">No documents uploaded yet.</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">Upload your governance documents to link them as evidence for compliance standards.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-400">Upload your governance documents to link them as evidence for compliance standards.</p>
         </Card>
       ) : (
         <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm overflow-hidden">
@@ -363,12 +363,12 @@ export default function DocumentsPage() {
                       <button
                         type="button"
                         onClick={() => handleDownload(doc)}
-                        className="text-sm font-medium text-teal-primary hover:text-teal-dark dark:text-teal-light hover:underline"
+                        className="text-sm font-medium text-teal-primary hover:text-teal-dark dark:text-teal-bright hover:underline"
                       >
                         {doc.name}
                       </button>
                       {doc.description && (
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{doc.description}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5 line-clamp-1">{doc.description}</p>
                       )}
                     </div>
                   </TableCell>
@@ -520,11 +520,11 @@ export default function DocumentsPage() {
                     id="document-upload-file"
                     type="file"
                     onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-primary/10 dark:file:bg-teal-light/10 file:text-teal-primary dark:file:text-teal-light hover:file:bg-teal-primary/20 dark:hover:file:bg-teal-light/20"
+                    className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-primary/10 dark:file:bg-teal-light/10 file:text-teal-primary dark:file:text-teal-bright hover:file:bg-teal-primary/20 dark:hover:file:bg-teal-light/20"
                     accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg"
                   />
                   {uploadFile && (
-                    <p className={`text-xs mt-1 ${uploadFile.size > MAX_FILE_SIZE ? 'text-red-500 dark:text-red-400 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
+                    <p className={`text-xs mt-1 ${uploadFile.size > MAX_FILE_SIZE ? 'text-red-500 dark:text-red-400 font-medium' : 'text-gray-400 dark:text-gray-400'}`}>
                       {uploadFile.name} ({uploadFile.size > 1024 * 1024 ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : `${(uploadFile.size / 1024).toFixed(1)} KB`})
                       {uploadFile.size > MAX_FILE_SIZE && ' — exceeds 10 MB limit'}
                     </p>

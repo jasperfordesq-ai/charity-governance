@@ -18,7 +18,7 @@ export default function RegulatorGuidePage() {
       <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-6 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light">
+            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright">
               Irish charities governance
             </Chip>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Regulator Readiness Map</h1>
@@ -45,7 +45,7 @@ export default function RegulatorGuidePage() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         {regulatorOperatingModel.map((item) => (
           <Card key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary dark:text-teal-light">{item.cadence}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary dark:text-teal-bright">{item.cadence}</p>
             <h2 className="mt-2 text-base font-semibold text-gray-900 dark:text-gray-100">{item.title}</h2>
             <p className="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">{item.owner}</p>
             <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.evidence}</p>
@@ -74,7 +74,7 @@ export default function RegulatorGuidePage() {
                   {item.category.replace(/_/g, ' ')}
                 </Chip>
               </div>
-              <p className="mt-2 text-xs font-medium text-teal-primary dark:text-teal-light">Standards {item.standards}</p>
+              <p className="mt-2 text-xs font-medium text-teal-primary dark:text-teal-bright">Standards {item.standards}</p>
               <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.why}</p>
             </Card>
           ))}
@@ -128,7 +128,7 @@ export default function RegulatorGuidePage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</h3>
-                <span className="text-xs font-semibold text-teal-primary dark:text-teal-light">Open</span>
+                <span className="text-xs font-semibold text-teal-primary dark:text-teal-bright">Open</span>
               </div>
               <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.note}</p>
             </a>

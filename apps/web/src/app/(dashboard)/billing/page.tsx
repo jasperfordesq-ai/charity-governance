@@ -189,7 +189,7 @@ export default function BillingPage() {
               )}
 
               {isTrialing && billing?.trialEndsAt && (
-                <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+                <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
                   Your trial ends on{' '}
                   <strong>
                     {new Date(billing.trialEndsAt).toLocaleDateString('en-IE', {
@@ -260,7 +260,7 @@ export default function BillingPage() {
                     </span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">/month</span>
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  <p className="text-xs text-gray-400 dark:text-gray-400 mt-0.5">
                     or &euro;{plan.yearlyPrice}/year (save {Math.round((1 - plan.yearlyPrice / (plan.monthlyPrice * 12)) * 100)}%)
                   </p>
                 </div>
@@ -321,7 +321,7 @@ export default function BillingPage() {
             <details key={q} className="group rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
               <summary className="flex items-center justify-between cursor-pointer px-4 py-3 font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors list-none">
                 {q}
-                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform group-open:rotate-180 flex-shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
               </summary>

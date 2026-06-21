@@ -181,7 +181,7 @@ export default function CompliancePage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 min-w-0">
-                        <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light flex items-center justify-center text-sm font-bold">
+                        <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright flex items-center justify-center text-sm font-bold">
                           {principle.number}
                         </div>
                         <div className="min-w-0">
@@ -196,18 +196,18 @@ export default function CompliancePage() {
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <div className="text-right">
                           <span className={`text-lg font-bold ${
-                            pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-500 dark:text-amber-300' : 'text-gray-400 dark:text-gray-500'
+                            pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-500 dark:text-amber-300' : 'text-gray-400 dark:text-gray-400'
                           }`}>
                             {Math.round(pct)}%
                           </span>
                           <span className={`block text-[10px] font-medium ${
-                            pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-500 dark:text-amber-300' : 'text-gray-400 dark:text-gray-500'
+                            pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-500 dark:text-amber-300' : 'text-gray-400 dark:text-gray-400'
                           }`}>
                             {pct >= 80 ? 'Compliant' : pct >= 50 ? 'Working Towards' : pct > 0 ? 'In Progress' : 'Not Started'}
                           </span>
                         </div>
                         <svg
-                          className={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          className={`w-5 h-5 text-gray-400 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -225,7 +225,7 @@ export default function CompliancePage() {
                       className="mt-3"
                     />
                     {pSummary && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                      <p className="text-xs text-gray-400 dark:text-gray-400 mt-2">
                         {pSummary.compliant} / {pSummary.totalApplicable} standards compliant
                       </p>
                     )}

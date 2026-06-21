@@ -184,7 +184,7 @@ export default function DashboardPage() {
       <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light">
+            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright">
               Annual regulator cycle
             </Chip>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -252,7 +252,7 @@ export default function DashboardPage() {
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Overall Compliance Score</p>
               <p className={`text-5xl font-extrabold ${
                 compliance.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
-                : compliance.percentComplete >= 50 ? 'text-amber-600 dark:text-amber-400'
+                : compliance.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
                 : 'text-red-600 dark:text-red-400'
               }`}>
                 {Math.round(compliance.percentComplete)}%
@@ -356,20 +356,20 @@ export default function DashboardPage() {
                   className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-teal-primary/40 dark:hover:border-teal-light/40 hover:shadow-md transition-all cursor-pointer h-full"
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-light flex items-center justify-center text-sm font-bold">
+                    <div className="w-8 h-8 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright flex items-center justify-center text-sm font-bold">
                       {p.principleNumber}
                     </div>
                     <div className="text-right">
                       <span className={`text-lg font-bold ${
                         p.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
-                        : p.percentComplete >= 50 ? 'text-amber-600 dark:text-amber-400'
+                        : p.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
                         : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         {Math.round(p.percentComplete)}%
                       </span>
                       <span className={`block text-[10px] font-medium ${
                         p.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
-                        : p.percentComplete >= 50 ? 'text-amber-600 dark:text-amber-400'
+                        : p.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
                         : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         {p.percentComplete >= 80 ? 'Compliant' : p.percentComplete >= 50 ? 'Working Towards' : p.percentComplete > 0 ? 'In Progress' : 'Not Started'}
@@ -443,7 +443,7 @@ export default function DashboardPage() {
                   );
                 })}
               <div className="px-5 py-3">
-                <Link href="/deadlines" className="text-xs font-medium text-teal-primary dark:text-teal-light hover:underline">
+                <Link href="/deadlines" className="text-xs font-medium text-teal-primary dark:text-teal-bright hover:underline">
                   View all deadlines
                 </Link>
               </div>
@@ -483,7 +483,7 @@ export default function DashboardPage() {
                 );
               })}
               <div className="px-5 py-3">
-                <Link href="/board" className="text-xs font-medium text-teal-primary dark:text-teal-light hover:underline">
+                <Link href="/board" className="text-xs font-medium text-teal-primary dark:text-teal-bright hover:underline">
                   View board register
                 </Link>
               </div>
@@ -494,7 +494,7 @@ export default function DashboardPage() {
               <p className="mt-1 text-xs leading-5">
                 Add the board register so conduct, induction, and term-limit evidence is visible before the annual review.
               </p>
-              <Link href="/board" className="mt-3 inline-flex text-xs font-semibold text-teal-primary dark:text-teal-light hover:underline">
+              <Link href="/board" className="mt-3 inline-flex text-xs font-semibold text-teal-primary dark:text-teal-bright hover:underline">
                 Add board members
               </Link>
             </Card>

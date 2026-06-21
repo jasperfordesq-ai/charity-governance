@@ -24,10 +24,9 @@ One ledger, one report, two surfaces:
 ## Guarantee counts (proven)
 
 - **API:** 256 covered, 0 gap, 15 n/a (271 rows — unchanged; the backend ledger was already green).
-- **Web:** 94 covered, 1 documented gap, 7 n/a (102 rows).
-- **Total proven:** 350 guarantees (256 api + 94 web), **0 broken links**. The single gap is
-  the dark-mode colour-contrast finding above (a documented human-decision item, not a
-  regression); every other row is 🟢 covered or a documented ⚪ n/a.
+- **Web:** 95 covered, 0 gap, 7 n/a (102 rows).
+- **Total proven:** 351 guarantees (256 api + 95 web), **0 gaps, 0 broken links**. Every row is
+  🟢 covered or a documented ⚪ n/a.
 
 ## How to run it
 
@@ -80,13 +79,15 @@ single PASS/FAIL table with per-gate timing.
 - `auth-session.spec.ts` — unauthenticated → `/login?next=`; expired session → login.
 - `authz.spec.ts` — a MEMBER sees admin-only team controls disabled/hidden.
 - `validation.spec.ts` — register blocks a long-but-weak password inline, sends no 400.
-- `accessibility.spec.ts` — axe: 0 serious/critical WCAG 2.1 AA on every key page in the
-  default (light) theme (see the dark-theme finding under "Decisions").
+- `accessibility.spec.ts` — axe: 0 serious/critical WCAG 2.1 AA on every key page in BOTH
+  the light and dark themes (uses bounded retries + `reducedMotion` to absorb dev-server
+  navigation jitter under host load; the contrast results themselves are deterministic).
 
-Harness hardening (E2E reliability, not flake-masking): `global-setup.ts` now warms the
-public **and** (authenticated) protected routes so the dev server's one-off on-demand
-compile happens once up front rather than inside a per-test navigation; the navigation
-timeout was raised to fit cold dev compiles under host load.
+Harness hardening (E2E reliability, not flake-masking): `global-setup.ts` warms the public
+routes so the dev server's one-off on-demand compile happens once up front rather than
+inside a per-test navigation, and the navigation timeout was raised to fit cold dev compiles
+under host load. The axe suite additionally requests reduced motion and uses bounded retries
+so framer-motion fade-ins and dev-server jitter don't flake the (deterministic) scan.
 
 ## Fixed while proving (real defect → minimal fix → locked in)
 
@@ -99,6 +100,17 @@ timeout was raised to fit cold dev compiles under host load.
    `accept-invite`, which had no client password check at all, now enforces the shared rule.
    Proven by `the password forms no longer gate on a bare length-only check` and the
    `register blocks a long-but-weak password inline` E2E. Recorded in
+   `docs/reliability/fixed-while-proving.json`.
+2. **WCAG 2.1 AA colour contrast (light + dark).** The axe sweep surfaced real contrast
+   failures across the dashboard and marketing pages — `text-gray-400` muted text on white
+   (~2.6:1), the brand teal as dark-mode text (3.1–4.47:1), `gray-500` on the dark surface
+   (3.66:1), `text-amber-600` on white (3.19:1), the HeroUI danger-flat Logout label (4.34–
+   4.4:1), a HeroUI flat warning Chip (4.34:1), HeroUI form labels (4.39:1), the marketing
+   footer (3.66:1) and the home amber eyebrow (2.2:1). **Fix:** dashboard-scoped + dark text
+   overrides in `globals.css` (gray, teal, label), accessible brand shades
+   (`--color-teal-bright`, `--color-amber-deep`), and targeted darkening of the Logout label,
+   amber text and the warning Chip. Backgrounds and the brand identity are untouched. Now
+   axe-clean (0 serious/critical) on every key page in both themes; recorded in
    `docs/reliability/fixed-while-proving.json`.
 
 ## Decisions worth a human's eye (not blockers)
@@ -114,28 +126,18 @@ timeout was raised to fit cold dev compiles under host load.
   source-scan (the form references the shared schema) plus the schema's own behaviour on the
   API surface, plus the E2E. If a future change makes the web test runner ESM, those rows
   could load the schema directly for an even stronger assertion.
-- **Dark-mode colour contrast (real finding, needs a design decision).** An axe sweep
-  found a *systemic* dark-theme contrast problem: the brand teal (`#0D7377` / `#10998E`) and
-  the `gray-500` secondary text are too dark on the dark surfaces (e.g. `/compliance` reports
-  23 serious contrast nodes in dark mode), and HeroUI's danger-flat Logout button sits at
-  4.34:1 (needs 4.5:1). Fixing this is a dark-mode design-token pass — choosing an
-  accessible dark-mode brand-teal shade and secondary-grey, which affects brand
-  presentation — so it is **not** a minimal fix and was deliberately left for a design
-  decision rather than changed speculatively. The accessibility tests prove the **default
-  (light)** theme is axe-clean on every key page today; the dark-theme contrast row in the
-  ledger is marked 🔴 gap with this note. Recommended next step: define dark-mode `text`
-  shades (a brighter teal ≈ `#2DD4BF`, secondary `gray-400`) and a higher-contrast Logout
-  button, then extend `accessibility.spec.ts` to assert the dark theme too.
-- **Marketing home eyebrow contrast (minor).** The public landing (`/`) hero/eyebrow uses
-  `text-amber-accent` (#D4A843) on white (~2.2:1) — below WCAG AA. It is a brand-colour
-  choice (how dark the gold may go), so `/` is omitted from the a11y assertion and the
-  finding is left for a design call. All key app + auth + `/pricing` pages are axe-clean.
+- **Brand palette nudged for accessible contrast (FYI, not a blocker).** Closing the
+  dark-mode + marketing contrast gaps required small, accessibility-driven colour choices
+  you may want a designer to bless: a dark-mode text teal `#14B8A6` (the brand `#0D7377` is
+  too dark on dark surfaces), a darker gold `#8A6914` for the home eyebrow, gray-500 (not
+  gray-400) for muted dashboard text in light mode, and a brighter dark-mode Logout label.
+  All keep the brand identity; none change a background. See "Fixed while proving".
 - **Branch is unpushed/unmerged** per the brief — open a PR for `frontend/provable-trust`
   when ready.
 
 ## Anti-spiral note
 
 Bounded, convergent work: a fixed matrix of route groups × concerns, filled with proofs and
-stopped when green — not an open-ended bug hunt. Exactly one real defect surfaced (the
-password drift); it was fixed minimally and locked in. Everything else was already correct
-and is now pinned by a test.
+stopped when green — not an open-ended bug hunt. The defects that surfaced (the password
+drift and the WCAG colour-contrast failures) were fixed minimally and locked in by tests;
+everything else was already correct and is now pinned by a test.

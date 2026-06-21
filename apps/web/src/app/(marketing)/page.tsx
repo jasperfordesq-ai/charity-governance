@@ -248,7 +248,7 @@ export default function LandingPage() {
       <section className="py-20 md:py-28 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center mb-16">
-            <p className="text-sm font-semibold text-amber-accent uppercase tracking-wider mb-3">
+            <p className="text-sm font-semibold text-amber-deep uppercase tracking-wider mb-3">
               The 6 Principles
             </p>
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">

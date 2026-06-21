@@ -120,7 +120,7 @@ export default function ExportPage() {
 
   const scoreColour = (pct: number) => {
     if (pct >= 80) return 'text-green-600 dark:text-green-400';
-    if (pct >= 50) return 'text-amber-600 dark:text-amber-400';
+    if (pct >= 50) return 'text-amber-700 dark:text-amber-400';
     return 'text-red-600 dark:text-red-400';
   };
 

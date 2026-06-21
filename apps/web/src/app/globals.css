@@ -15,10 +15,45 @@
   --color-teal-primary: #0D7377;
   --color-teal-dark: #095456;
   --color-teal-light: #10998E;
+  /* Dark-mode-accessible brand shades. The primary teal (#0D7377) and amber (#D4A843)
+     are tuned for light surfaces; as TEXT they fall below WCAG 2.1 AA on the dark surfaces
+     (teal ≈ 3.1:1) and on white (amber ≈ 2.2:1). These passing shades are used for text in
+     the themes where the brand shade would fail (see the overrides below). */
+  --color-teal-bright: #14B8A6; /* teal text on dark surfaces — ~6.8:1 */
+  --color-amber-deep: #8A6914;  /* amber text on white — ~5.2:1 */
   --color-amber-accent: #D4A843;
   --color-amber-light: #F5D78E;
 
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dark-mode text-contrast overrides (WCAG 2.1 AA). The brand teal and the gray-500 muted
+   text are too dark on the dark app surfaces; brighten them for TEXT in dark mode only.
+   Backgrounds (bg-teal-primary, bg-teal-primary/10) keep the brand shade. */
+.dark .text-teal-primary {
+  color: var(--color-teal-bright);
+}
+.dark .text-gray-500 {
+  color: var(--color-gray-400);
+}
+/* Muted secondary text on the DASHBOARD surface (always light cards / dark app surface):
+   gray-400 (#99a1af) on white is only ~2.6:1, and gray-500 on the dark surface is ~3.66:1
+   — both below AA. Use gray-500 in light and gray-400 in dark, each clearing 4.5:1. Scoped
+   to [data-app='dashboard'] so the marketing pages (which use gray-400 on their own dark
+   sections in light mode) are untouched. Unlayered, so it beats the Tailwind utility. */
+[data-app='dashboard'] .text-gray-400 {
+  color: var(--color-gray-500);
+}
+.dark [data-app='dashboard'] .text-gray-400 {
+  color: var(--color-gray-400);
+}
+/* HeroUI form labels default to zinc-500 (~4.4:1 on the input surface) — darken in light
+   for AA; dark mode keeps a light label. */
+[data-slot='label'] {
+  color: var(--color-gray-600);
+}
+.dark [data-slot='label'] {
+  color: var(--color-gray-300);
 }
 
 /* Body surface is themed via utilities on the <body> element in app/layout.tsx
