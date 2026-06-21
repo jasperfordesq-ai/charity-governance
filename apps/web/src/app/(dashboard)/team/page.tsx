@@ -6,6 +6,7 @@ import { Button, Card, Chip, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
+import { canInviteMembers, canEditMemberRole } from '@/lib/team-permissions';
 import { useDocumentTitle } from '@/lib/use-title';
 import type { TeamResponse, TeamInviteResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
@@ -54,8 +55,7 @@ export default function TeamPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canInvite = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
-  const canChangeRoles = user?.role === UserRole.OWNER;
+  const canInvite = canInviteMembers(user?.role);
 
   const activeInviteCount = useMemo(
     () =>
@@ -183,7 +183,7 @@ export default function TeamPage() {
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Joined {formatDate(member.createdAt)}</p>
                   </div>
 
-                  {canChangeRoles && member.role !== UserRole.OWNER && member.id !== user?.id ? (
+                  {canEditMemberRole(user?.role, user?.id, member) ? (
                     <Select
                       aria-label={`Role for ${member.name}`}
                       size="sm"

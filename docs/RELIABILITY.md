@@ -16,8 +16,8 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
 |---|---|---|---|---|---|
 | API | 256 | 0 | 0 | 15 | 271 |
-| Web | 60 | 0 | 37 | 3 | 100 |
-| **Total** | **316** | **0** | **37** | **18** | **371** |
+| Web | 62 | 0 | 35 | 3 | 100 |
+| **Total** | **318** | **0** | **35** | **18** | **371** |
 
 ## How to verify
 
@@ -587,14 +587,14 @@ _3 guarantees — 🟢 1  🔴 2_
 
 ### team — `/team`
 
-_6 guarantees — 🟢 1  🔴 5_
+_6 guarantees — 🟢 3  🔴 3_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The team page is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `team page is axe-clean in both themes (e2e)` |
 | Auth & session integrity | An invited MEMBER can accept and join the inviting org; the new user belongs to the owner's organisation (no cross-org leak). | 🟢 covered | `invite a team member who then accepts and joins the workspace` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
-| Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | 🔴 gap | _planned:_ `team invite controls are gated to OWNER/ADMIN (unit predicate)` |
-| Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | 🔴 gap | _planned:_ `team role-change controls are gated to OWNER and exclude self/owner (unit predicate)` |
+| Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | 🟢 covered | `only OWNER and ADMIN can invite or revoke team members`<br/><sub>lib/team-permissions.test.ts</sub> |
+| Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | 🟢 covered | `role editing is owner-only and excludes the owner row and your own row`<br/><sub>lib/team-permissions.test.ts</sub> |
 | Authorization boundary | A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end. | 🔴 gap | _planned:_ `a MEMBER cannot invite: control disabled and API blocks it (e2e)` |
 | Input validation | The invite form validates email with the shared inviteTeamMemberSchema and the server's actual error message is surfaced inline (apiErrorMessage), not a generic string. | 🔴 gap | _planned:_ `team invite shares inviteTeamMemberSchema and surfaces the server message` |
 

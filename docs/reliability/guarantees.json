@@ -4297,12 +4297,12 @@
     "group": "web-team",
     "concern": "authz-boundary",
     "guarantee": "A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER||ADMIN).",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/team-permissions.test.ts",
+    "testTitle": "only OWNER and ADMIN can invite or revoke team members",
     "gapDescription": "",
-    "proposedTitle": "team invite controls are gated to OWNER/ADMIN (unit predicate)"
+    "proposedTitle": ""
   },
   {
     "id": "web-team-authz-boundary-2",
@@ -4310,12 +4310,12 @@
     "group": "web-team",
     "concern": "authz-boundary",
     "guarantee": "Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion).",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/team-permissions.test.ts",
+    "testTitle": "role editing is owner-only and excludes the owner row and your own row",
     "gapDescription": "",
-    "proposedTitle": "team role-change controls are gated to OWNER and exclude self/owner (unit predicate)"
+    "proposedTitle": ""
   },
   {
     "id": "web-team-authz-boundary-3",
