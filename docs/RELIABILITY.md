@@ -16,8 +16,8 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
 |---|---|---|---|---|---|
 | API | 256 | 0 | 0 | 15 | 271 |
-| Web | 49 | 0 | 45 | 3 | 97 |
-| **Total** | **305** | **0** | **45** | **18** | **368** |
+| Web | 60 | 0 | 37 | 3 | 100 |
+| **Total** | **316** | **0** | **37** | **18** | **371** |
 
 ## How to verify
 
@@ -432,7 +432,7 @@ _9 guarantees — 🟢 9_
 
 ---
 
-## Web surface — the matrix (97 guarantees)
+## Web surface — the matrix (100 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -441,15 +441,15 @@ _9 guarantees — 🟢 9_
 
 ### platform — proxy / CSP / API client / session refresh
 
-_44 guarantees — 🟢 38  🔴 6_
+_47 guarantees — 🟢 45  🔴 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Auth & session integrity | Concurrent 401s share ONE single-flight token refresh, so parallel requests never present the same rotated refresh token and trip backend reuse-revocation (forced logout). | 🟢 covered | `concurrent 401s trigger exactly one token refresh (single-flight)`<br/><sub>lib/api.test.ts</sub> |
 | Auth & session integrity | A login ?next= open-redirect (cross-origin / network-path / encoded) is rejected and falls back to /dashboard. | 🟢 covered | `rejects cross-origin and encoded network-path next values`<br/><sub>lib/safe-next-path.test.ts</sub> |
 | Auth & session integrity | A login ?next= pointing at a public (non-protected) path is rejected and falls back to /dashboard. | 🟢 covered | `rejects public local next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
-| Auth & session integrity | The 401 interceptor refreshes once then retries the original request, succeeding transparently when the refresh succeeds. | 🔴 gap | _planned:_ `refreshes the session once then retries the original request on a 401` |
-| Auth & session integrity | A request marked skipAuthRefresh is never auto-refreshed/retried on 401 (auth pages surface an inline error instead of a redirect). | 🔴 gap | _planned:_ `does not refresh or retry when skipAuthRefresh is set` |
+| Auth & session integrity | The 401 interceptor refreshes once then retries the original request, succeeding transparently when the refresh succeeds. | 🟢 covered | `refreshes the session once then retries the original request on a 401`<br/><sub>lib/api.test.ts</sub> |
+| Auth & session integrity | A request marked skipAuthRefresh is never auto-refreshed/retried on 401 (auth pages surface an inline error instead of a redirect). | 🟢 covered | `does not refresh or retry when skipAuthRefresh is set`<br/><sub>lib/api.test.ts</sub> |
 | Auth & session integrity | On a final 401 the user is redirected to /login only on a protected app path; public pages reject without redirect. | 🔴 gap | _planned:_ `redirects to login on a final 401 only for protected app paths` |
 | Auth & session integrity | Production CSP connect-src trusts only an approved, origin-only API source. | 🟢 covered | `production CSP uses only an approved origin-only API connect source`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | Production CSP falls back to the default API origin instead of trusting an unapproved connect source. | 🟢 covered | `production CSP falls back instead of trusting unapproved API connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
@@ -480,26 +480,29 @@ _44 guarantees — 🟢 38  🔴 6_
 | Graceful degradation | The single-reload marker is cleared once the page is stable, so a later genuine chunk failure can still recover once. | 🟢 covered | `clears the reload attempt marker after a stable page mount`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | Server-rendered JSON-LD is serialised without allowing a </script> breakout (no injection via structured data). | 🟢 covered | `serialises JSON-LD without allowing script tag breakouts`<br/><sub>lib/json-ld.test.ts</sub> |
 | Graceful degradation | A thrown render error is caught by the error boundary and rendered as a clean "Something went wrong" screen with a recover action — never a blank page or unhandled exception. | 🔴 gap | _planned:_ `the global and dashboard error boundaries render a recoverable error screen` |
-| Graceful degradation | The error boundary logs only a redacted summary (status/code/digest/name) in production — never the raw error message or stack. | 🔴 gap | _planned:_ `clientErrorSummary redacts the raw message and stack in production` |
-| Input validation | The error renderer surfaces the server's specific message (data.error ?? data.message ?? fallback) and never a raw exception/stack. | 🔴 gap | _planned:_ `apiErrorMessage returns a safe specific message and never throws` |
+| Graceful degradation | The error boundary logs only a redacted summary (status/code/digest/name) in production — never the raw error message or stack. | 🟢 covered | `in production logClientError records only a redacted summary, never the raw message or stack`<br/><sub>lib/client-logger.test.ts</sub> |
+| Input validation | The error renderer surfaces the server's specific message (data.error ?? data.message ?? fallback) and never a raw exception/stack. | 🟢 covered | `apiErrorMessage never throws or leaks on odd/hostile error shapes`<br/><sub>lib/errors.test.ts</sub> |
 | Subscription / plan gating | A COMPLETE-only feature denial (403 PLAN_FEATURE_UNAVAILABLE) is correctly identified so gated pages can show an upsell, not a broken error. | 🟢 covered | `identifies Complete-plan feature denial API errors`<br/><sub>lib/plan-feature.test.ts</sub> |
 | Subscription / plan gating | Unrelated API errors are NOT mistaken for a plan-feature denial. | 🟢 covered | `does not treat unrelated API errors as plan feature denials`<br/><sub>lib/plan-feature.test.ts</sub> |
 | Subscription / plan gating | A subscription/trial lapse (TRIAL_EXPIRED / NO_SUBSCRIPTION / PAST_DUE_GRACE_EXPIRED / SUBSCRIPTION_INACTIVE) is identified so the UI shows "manage billing", not a connection error. | 🟢 covered | `identifies subscription/trial lapse API errors`<br/><sub>lib/plan-feature.test.ts</sub> |
 | Subscription / plan gating | Other errors are NOT mistaken for a subscription lapse. | 🟢 covered | `does not treat other errors as subscription lapses`<br/><sub>lib/plan-feature.test.ts</sub> |
+| State integrity / no data loss | A non-paginated { data } API envelope is unwrapped to the resource so callers read it directly (no accidental data.data bugs). | 🟢 covered | `unwraps a single-resource { data } envelope so callers read the resource directly`<br/><sub>lib/api.test.ts</sub> |
+| State integrity / no data loss | A paginated { data, total, page } envelope is left intact so the UI keeps its pagination metadata (no silent loss of total/page). | 🟢 covered | `leaves a paginated { data, total, page } envelope intact`<br/><sub>lib/api.test.ts</sub> |
 | Tenant isolation | A Stripe checkout/portal redirect is followed only for an https hosted-Stripe origin — an attacker-supplied redirect URL is rejected. | 🟢 covered | `trusts only hosted Stripe https redirect origins`<br/><sub>lib/url-security.test.ts</sub> |
 | Tenant isolation | A document download URL is trusted only from the https expected API origin(s) or a Supabase signed-storage path — never an arbitrary origin. | 🟢 covered | `trusts document downloads only from https expected origins or Supabase storage`<br/><sub>lib/url-security.test.ts</sub> |
 | Tenant isolation | The local API document-download exception is honoured only on loopback in development. | 🟢 covered | `trusts local API document downloads only on loopback in development`<br/><sub>lib/url-security.test.ts</sub> |
+| Tenant isolation | The only editable dynamic route segments are the global principleId (governance reference) and the public blog slug — no [organisationId]/[orgId]/[id] addresses tenant data. | 🟢 covered | `the only editable dynamic route segment is the global principleId (a content id, not a tenant id)`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### auth pages — login / register / forgot / reset / verify / accept-invite
 
-_11 guarantees — 🟢 2  🔴 9_
+_11 guarantees — 🟢 3  🔴 8_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The login and register pages are axe-clean (0 serious/critical) in light and dark themes. | 🔴 gap | _planned:_ `auth pages are axe-clean in both themes (e2e)` |
 | Auth & session integrity | register → verify-email → login is a working journey; the dashboard is only reachable once the email is verified. | 🟢 covered | `register, verify email, then log in to the dashboard` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | An invalid/expired email-verification token shows a clean "Verification failed" state, not a crash. | 🟢 covered | `an invalid verification token shows the failure state` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
-| Graceful degradation | A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack. | 🔴 gap | _planned:_ `auth form server error renders a safe inline message` |
+| Graceful degradation | A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack. | 🟢 covered | `apiErrorMessage surfaces the server error field first`<br/><sub>lib/errors.test.ts</sub> |
 | Input validation | The login form validates with the shared loginSchema (same rule as the server): a malformed email or empty password shows inline errors and is not submitted. | 🔴 gap | _planned:_ `login form shares loginSchema and blocks a guaranteed-400 submit` |
 | Input validation | The register form validates with the shared registerSchema: a weak-but-long password (no upper/lower/digit) is caught inline and not submitted as a guaranteed-400. | 🔴 gap | _planned:_ `register form shares registerSchema password rule (no client/server drift)` |
 | Input validation | The reset-password form validates with the shared resetPasswordSchema: the same password complexity rule as the server, surfaced inline. | 🔴 gap | _planned:_ `reset-password form shares resetPasswordSchema password rule` |
@@ -510,14 +513,14 @@ _11 guarantees — 🟢 2  🔴 9_
 
 ### dashboard — `/dashboard`
 
-_4 guarantees — 🔴 4_
+_4 guarantees — 🟢 1  🔴 3_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The dashboard is axe-clean (0 serious/critical) in light and dark themes. | 🔴 gap | _planned:_ `dashboard is axe-clean in both themes (e2e)` |
 | Graceful degradation | A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states. | 🔴 gap | _planned:_ `dashboard shows an error card on load failure and empty states otherwise` |
 | Subscription / plan gating | On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber "manage billing" banner via isSubscriptionLapseError. | 🔴 gap | _planned:_ `dashboard hides the registers card / shows the lapse banner via plan-feature helpers` |
-| Tenant isolation | The dashboard fetches org-scoped data using only the session cookie (no org id in any URL); the only query param is the reporting year. | 🔴 gap | _planned:_ `dashboard derives org context from the session, never a URL param` |
+| Tenant isolation | The dashboard fetches org-scoped data using only the session cookie (no org id in any URL); the only query param is the reporting year. | 🟢 covered | `no page sources an organisation id from a URL param (useParams / useSearchParams / query)`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### compliance — `/compliance`, `/compliance/[principleId]`
 
@@ -574,13 +577,13 @@ _3 guarantees — 🔴 3_
 
 ### organisation — `/organisation`
 
-_3 guarantees — 🔴 3_
+_3 guarantees — 🟢 1  🔴 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Input validation | The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority. | 🔴 gap | _planned:_ `organisation shared schema rejects malformed payloads` |
 | State integrity / no data loss | Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits. | 🔴 gap | _planned:_ `organisation save guards double-submit and warns on unsaved changes` |
-| Tenant isolation | The organisation profile is read from useAuth().user.organisation and saved with PATCH /organisation carrying NO org id — a user can only ever edit their own org (server resolves the tenant from the cookie). | 🔴 gap | _planned:_ `organisation edits never send an org id; tenant comes from the session` |
+| Tenant isolation | The organisation profile is read from useAuth().user.organisation and saved with PATCH /organisation carrying NO org id — a user can only ever edit their own org (server resolves the tenant from the cookie). | 🟢 covered | `no API request carries an organisation id as a query or path parameter`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### team — `/team`
 
@@ -610,13 +613,13 @@ _6 guarantees — 🟢 3  🔴 2  ⚪ 1_
 
 ### export — `/export`
 
-_3 guarantees — 🟢 1  🔴 2_
+_3 guarantees — 🟢 2  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Auth & session integrity | Recording a standard then completing board sign-off works end to end. | 🟢 covered | `record a standard then complete board sign-off` <sup>e2e</sup><br/><sub>tests/compliance.spec.ts</sub> |
 | State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | 🔴 gap | _planned:_ `export sign-off guards double-submit and enforces the APPROVED required-trio` |
-| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side. | 🔴 gap | _planned:_ `export sends only a year, never an org id` |
+| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side. | 🟢 covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### regulator — `/regulator`
 
