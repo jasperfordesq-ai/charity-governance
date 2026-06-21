@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
+import { registerSchema, firstSchemaError, passwordIssue } from '@/lib/form-schemas';
 
 function PasswordStrengthMeter({ password }: { password: string }) {
   const checks = useMemo(() => {
@@ -74,8 +75,10 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    // Gate on the SAME shared schema the server validates with — no client/server drift.
+    const issue = firstSchemaError(registerSchema, { name, email, password, organisationName });
+    if (issue) {
+      setError(issue);
       return;
     }
     if (password !== confirmPassword) {
@@ -97,7 +100,8 @@ export default function RegisterPage() {
 
   const emailInvalid = touched.email && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
   const nameInvalid = touched.name && !name.trim();
-  const passwordInvalid = touched.password && password.length < 8;
+  const passwordIssueMessage = passwordIssue(password);
+  const passwordInvalid = touched.password && passwordIssueMessage !== null;
   const confirmInvalid = touched.confirmPassword && confirmPassword.length > 0 && password !== confirmPassword;
   const passwordsMatch = password.length >= 8 && confirmPassword.length > 0 && password === confirmPassword;
   const orgInvalid = touched.organisationName && !organisationName.trim();
@@ -171,7 +175,7 @@ export default function RegisterPage() {
                   onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                   isRequired
                   isInvalid={passwordInvalid}
-                  errorMessage={passwordInvalid ? 'Password must be at least 8 characters' : undefined}
+                  errorMessage={passwordInvalid ? (passwordIssueMessage ?? 'Password must be at least 8 characters') : undefined}
                   autoComplete="new-password"
                   variant="bordered"
                   classNames={{

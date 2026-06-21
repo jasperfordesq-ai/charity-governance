@@ -69,3 +69,56 @@ test('a request that still 401s after a refresh is rejected (no infinite retry l
   // Exactly one refresh attempt, then give up — no infinite refresh/retry loop.
   assert.equal(refreshCount, 1);
 });
+
+test('refreshes the session once then retries the original request on a 401', async () => {
+  let refreshCount = 0;
+  let attempts = 0;
+  axios.defaults.adapter = async (config) => { refreshCount += 1; return ok(config) as never; };
+  api.defaults.adapter = async (config) => {
+    attempts += 1;
+    const cfg = config as Cfg;
+    return cfg._retry ? (ok(cfg) as never) : fail401(cfg);
+  };
+
+  const res = await api.get('/auth/me');
+  assert.equal(res.status, 200, 'the retried request succeeds transparently after a refresh');
+  assert.equal(refreshCount, 1, 'exactly one refresh');
+  assert.equal(attempts, 2, 'the original request is attempted once, then retried once');
+});
+
+test('does not refresh or retry when skipAuthRefresh is set', async () => {
+  let refreshCount = 0;
+  let attempts = 0;
+  axios.defaults.adapter = async (config) => { refreshCount += 1; return ok(config) as never; };
+  api.defaults.adapter = async (config) => { attempts += 1; return fail401(config); };
+
+  await assert.rejects(
+    () => api.post('/auth/login', { email: 'a@b.com' }, { skipAuthRefresh: true, skipAuthRedirect: true }),
+    (err: unknown) => (err as { response?: { status?: number } })?.response?.status === 401,
+  );
+  // Auth endpoints opt out of the refresh dance so they surface an inline error,
+  // not a silent refresh/redirect.
+  assert.equal(refreshCount, 0, 'no refresh is attempted');
+  assert.equal(attempts, 1, 'the request is tried once and rejected, not retried');
+});
+
+test('unwraps a single-resource { data } envelope so callers read the resource directly', async () => {
+  api.defaults.adapter = async (config) => ({
+    data: { data: { id: 'org_1', name: 'Charity' } }, status: 200, statusText: 'OK', headers: {}, config,
+  }) as never;
+
+  const res = await api.get('/organisation');
+  assert.deepEqual(res.data, { id: 'org_1', name: 'Charity' });
+});
+
+test('leaves a paginated { data, total, page } envelope intact', async () => {
+  api.defaults.adapter = async (config) => ({
+    data: { data: [{ id: 1 }, { id: 2 }], total: 2, page: 1 }, status: 200, statusText: 'OK', headers: {}, config,
+  }) as never;
+
+  const res = await api.get('/documents');
+  // Pagination metadata must survive — unwrapping it would hide total/page from the UI.
+  assert.equal(res.data.total, 2);
+  assert.equal(res.data.page, 1);
+  assert.deepEqual(res.data.data, [{ id: 1 }, { id: 2 }]);
+});

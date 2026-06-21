@@ -1,8 +1,8 @@
 # CharityPilot Reliability Ledger
 
-> **The trust ledger.** Every behaviour here is one whose failure would lose customer
-> trust or generate support tickets. Each row is a concrete, falsifiable guarantee
-> linked to the automated test that proves it holds today and will keep holding.
+> **The trust ledger — API + Web.** Every behaviour here is one whose failure would
+> lose customer trust or generate support tickets. Each row is a concrete, falsifiable
+> guarantee linked to the automated test that proves it holds today and will keep holding.
 
 This is **evidence, not an audit**. An audit asks "can I find a problem?" — an unbounded
 question that always finds *something*. This ledger asks the bounded question: "is every
@@ -13,38 +13,45 @@ documented ⚪ n/a), the job is finished and stays finished.
 
 Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
-| Status | Count |
-|---|---|
-| 🟢 covered (proven by a passing test) | 256 |
-| ⚪ n/a (concern documented as not applicable) | 15 |
-| **Total guarantees** | **271** |
+| Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
+|---|---|---|---|---|---|
+| API | 256 | 0 | 0 | 15 | 271 |
+| Web | 95 | 0 | 0 | 7 | 102 |
+| **Total** | **351** | **0** | **0** | **22** | **373** |
 
-**Suite:** 382 tests passing, 0 failing. **Linkage:** 256/256 covered guarantees verified against a passing test.
+**API suite:** 382 passing, 0 failing. **Web suite:** 78 passing, 0 failing. **E2E:** 14 Playwright titles linked (executed by the CI E2E gate).
+
+**Linkage:** 351/351 covered guarantees verified against a passing/linked test.
 
 **Overall: ✅ GREEN**
 
 ## How to verify
 
 ```bash
-# Compile + run the API suite and check every covered guarantee links to a passing test
+# Compile + run the API and Web unit suites and check every covered guarantee
+# links to a passing test (E2E rows are linked by title and run by the E2E gate).
 npm run reliability:report
+
+# Prove the WHOLE platform green in one command (every gate + this report):
+npm run release:ready
 ```
 
-The report exits non-zero if any test fails or any 🟢 guarantee's linked test is missing.
-Regenerate this document from the source of truth with `npm run reliability:report -- --write`.
+The report exits non-zero if any executed suite fails or any 🟢 guarantee's linked test
+is missing. Regenerate this document with `npm run reliability:report -- --write`.
 
-## The eight reliability concerns
+## The reliability concerns
 
-1. **Tenant isolation** — a user in org A can never read or modify a resource of org B.
-2. **Authorization boundary** — `requireAdmin` writes reject MEMBER; billing requires OWNER.
-3. **Subscription / plan gating** — expired/cancelled blocked; ESSENTIALS cannot reach COMPLETE-only features.
-4. **Input validation** — malformed/oversized input is a 4xx with a safe code, never a 500 or stack leak.
-5. **Graceful degradation** — when Stripe/Supabase/Resend are absent or failing, a clean 503; the rest keeps working.
-6. **Auth & session integrity** — refresh rotation works; revoked/replayed tokens rejected; secrets never logged.
-7. **At-least-once / idempotency** — webhooks processed once; reminders dedupe; deletion reconciliation retries safely.
-8. **Observability** — readiness reflects real dependency health; a job failure fires the error alert.
+**API surface (8):** tenant isolation · authorization boundary · subscription/plan gating ·
+input validation · graceful degradation · auth & session integrity · at-least-once/idempotency ·
+observability.
 
-## The matrix
+**Web surface (8):** tenant isolation (UI) · authorization (UI) · plan gating (UI) ·
+input-validation parity · graceful degradation · auth & session integrity · state integrity /
+no data loss · accessibility & resilience.
+
+---
+
+## API surface — the matrix (271 guarantees)
 
 ### auth — `/api/v1/auth`
 
@@ -70,8 +77,8 @@ _20 guarantees — 🟢 18  ⚪ 2_
 | Input validation | forgot-password is enumeration-safe: it returns the same generic message for both known and unknown accounts, storing a hashed (sha256) reset token only for a known account and sending nothing for an unknown one. | 🟢 covered | `forgotPassword sends a reset link for a known account and returns the generic message`<br/><sub>auth-service-flows.test.ts</sub> |
 | Input validation | login is enumeration-safe: an unknown email returns the generic 401 INVALID_CREDENTIALS ('Invalid email or password') and the no-user path still spends a full bcrypt comparison so latency does not reveal account existence. | 🟢 covered | `login returns the generic INVALID_CREDENTIALS error for unknown accounts`<br/><sub>auth-login-timing.test.ts</sub> |
 | Input validation | Sensitive auth endpoints (forgot-password, reset-password, verify-email, resend-verification) enforce per-route throttling stricter than the global limit, returning 429 on the 6th request within the window. | 🟢 covered | `forgot-password has route-specific throttling below the global limit`<br/><sub>auth-throttling.test.ts</sub> |
-| Subscription / plan gating | Subscription/plan gating (subscriptionGuard, requireCompletePlan) on auth endpoints. | ⚪ n/a | _No auth endpoint registers subscriptionGuard or requireCompletePlan; /me and /resend-verification use only authIdentityGuard, and the remaining endpoints are pu_ |
-| Tenant isolation | Cross-organisation resource isolation: a user in org A cannot read or mutate an org-B resource through any auth endpoint. | ⚪ n/a | _The auth route group operates exclusively on the caller's own identity: getMe and resendEmailVerification key on request.user.userId (set by the guard from the _ |
+| Subscription / plan gating | Subscription/plan gating (subscriptionGuard, requireCompletePlan) on auth endpoints. | ⚪ n/a | _No auth endpoint registers subscriptionGuard or requireCompletePlan; /me and /resend-verification use only authIdentityGuard, and the remaining endpoints are public. register deliberately provisions a_ |
+| Tenant isolation | Cross-organisation resource isolation: a user in org A cannot read or mutate an org-B resource through any auth endpoint. | ⚪ n/a | _The auth route group operates exclusively on the caller's own identity: getMe and resendEmailVerification key on request.user.userId (set by the guard from the verified session), while login/forgotPas_ |
 
 ### organisation — `/api/v1/organisation`
 
@@ -100,8 +107,8 @@ _18 guarantees — 🟢 16  ⚪ 2_
 | Authorization boundary | PUT /records/:standardId with a MEMBER token returns 403 {code:'FORBIDDEN'} and the complianceRecord.upsert mock is NOT called. | 🟢 covered | `a MEMBER cannot upsert a compliance record (requireAdmin)`<br/><sub>compliance-reliability.test.ts</sub> |
 | Authorization boundary | PUT /signoff with a MEMBER token returns 403 {code:'FORBIDDEN'} and the complianceSignoff.upsert mock is NOT called. | 🟢 covered | `a MEMBER cannot update the board sign-off (requireAdmin)`<br/><sub>compliance-reliability.test.ts</sub> |
 | Authorization boundary | An ADMIN (and OWNER) token is accepted by requireAdmin on both PUT /records/:standardId and PUT /signoff (reaches the service and returns 2xx). | 🟢 covered | `an ADMIN may upsert a compliance record and the board sign-off`<br/><sub>compliance-reliability.test.ts</sub> |
-| Graceful degradation | Not applicable: the compliance route group calls no external provider (Stripe/Supabase/Resend) — it only reads/writes Prisma — so there is no provider-unconfigured 503 path to prove. | ⚪ n/a | _ComplianceService and the route handlers depend solely on app.prisma; no Stripe/Supabase/Resend client is constructed or invoked anywhere in routes/compliance/i_ |
-| At-least-once / idempotency | Not applicable: compliance writes are upserts keyed on (organisationId, standardId, reportingYear) for records and (organisationId, reportingYear) for sign-off, which are naturally idempotent; there are no webhooks, reminder dedupe logs, or reconciliation retries in this route group. | ⚪ n/a | _The idempotency concern targets StripeWebhookEvent / DeadlineReminderLog / document-deletion reconciliation, none of which exist in the compliance area. The ups_ |
+| Graceful degradation | Not applicable: the compliance route group calls no external provider (Stripe/Supabase/Resend) — it only reads/writes Prisma — so there is no provider-unconfigured 503 path to prove. | ⚪ n/a | _ComplianceService and the route handlers depend solely on app.prisma; no Stripe/Supabase/Resend client is constructed or invoked anywhere in routes/compliance/index.ts or services/compliance.service.t_ |
+| At-least-once / idempotency | Not applicable: compliance writes are upserts keyed on (organisationId, standardId, reportingYear) for records and (organisationId, reportingYear) for sign-off, which are naturally idempotent; there are no webhooks, reminder dedupe logs, or reconciliation retries in this route group. | ⚪ n/a | _The idempotency concern targets StripeWebhookEvent / DeadlineReminderLog / document-deletion reconciliation, none of which exist in the compliance area. The upsert-by-composite-key design means repeat_ |
 | Input validation | PUT /records/:standardId rejects a malformed body (e.g. reportingYear out of [2018,2100], a non-enum status, or an over-5000-char text field) with 400 {code:'VALIDATION_ERROR'} and does NOT call complianceRecord.upsert. | 🟢 covered | `PUT /records rejects an invalid body before writing`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | PUT /signoff enforces the superRefine rule: status 'APPROVED' without boardMeetingDate/minuteReference/approvedByName returns 400 {code:'VALIDATION_ERROR'} and does NOT call complianceSignoff.upsert; an invalid status enum or a non-ISO boardMeetingDate is also 400. | 🟢 covered | `PUT /signoff requires approval evidence when status is APPROVED`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | GET endpoints that require ?year reject a missing or non-numeric/out-of-range year with 400 {code:'VALIDATION_ERROR'} (complianceQuerySchema), not a 500. | 🟢 covered | `compliance year-scoped reads reject a missing or invalid year`<br/><sub>compliance-reliability.test.ts</sub> |
@@ -124,7 +131,7 @@ _11 guarantees — 🟢 10  ⚪ 1_
 | Auth & session integrity | Every board-member endpoint rejects an unauthenticated request with 401 {code:'UNAUTHORIZED'} (authGuard onRequest hook applies to the whole group). | 🟢 covered | `board-member write routes reject unauthenticated requests`<br/><sub>board-members-reliability.test.ts</sub> |
 | Authorization boundary | A MEMBER token is rejected with 403 {code:'FORBIDDEN'} on POST /, PATCH /:id and DELETE /:id (requireAdmin blocks writes), while an ADMIN is allowed (POST / returns 201). | 🟢 covered | `a MEMBER cannot create, update, or delete board members (requireAdmin)`<br/><sub>route-guards.test.ts</sub> |
 | Authorization boundary | GET / (list) is readable by a non-admin MEMBER (read is intentionally not requireAdmin-gated) and returns 200. | 🟢 covered | `a MEMBER can still read board members, and an ADMIN can create them`<br/><sub>route-guards.test.ts</sub> |
-| Graceful degradation | Board-member endpoints do not integrate with Stripe/Supabase/Resend (the service is constructed with only prisma), so there is no external-dependency 503 path to prove for this route group. | ⚪ n/a | _Non-obvious because sibling route groups (team, billing, documents) take email/storage/Stripe clients; board-members deliberately does not, so the graceful-degr_ |
+| Graceful degradation | Board-member endpoints do not integrate with Stripe/Supabase/Resend (the service is constructed with only prisma), so there is no external-dependency 503 path to prove for this route group. | ⚪ n/a | _Non-obvious because sibling route groups (team, billing, documents) take email/storage/Stripe clients; board-members deliberately does not, so the graceful-degradation concern has no applicable surfac_ |
 | Input validation | PATCH /:id with a malformed body (e.g. email not an email, or appointedDate not ISO) is rejected with 400 {code:'VALIDATION_ERROR'} and never calls prisma.boardMember.update or findFirst (no foreign lookup or write on invalid input). | 🟢 covered | `PATCH /board-members/:id rejects an invalid email with VALIDATION_ERROR and does not update`<br/><sub>board-members-reliability.test.ts</sub> |
 | Input validation | POST / with a malformed body (e.g. missing required name/role/appointedDate, or appointedDate not an ISO date) is rejected with 400 {code:'VALIDATION_ERROR'} and never calls prisma.boardMember.create (no partial record written, no 500/stack leak). | 🟢 covered | `POST /board-members rejects malformed bodies with VALIDATION_ERROR and does not create`<br/><sub>board-members-reliability.test.ts</sub> |
 | Subscription / plan gating | Board-member endpoints require an active subscription: subscriptionGuard rejects a missing subscription with 403 {code:'NO_SUBSCRIPTION'}. | 🟢 covered | `board-member routes reject an expired trial and inactive subscription`<br/><sub>board-members-reliability.test.ts</sub> |
@@ -188,7 +195,7 @@ _14 guarantees — 🟢 13  ⚪ 1_
 | Input validation | POST / rejects a malformed/oversized create body (missing title, title>300 chars, missing/invalid dueDate, description>1000 chars, reminderDays element out of 1..365 or non-integer) with 400 {code:'VALIDATION_ERROR'} and never calls prisma.deadline.create. | 🟢 covered | `POST / rejects malformed create bodies with 400 VALIDATION_ERROR and does not write`<br/><sub>deadlines-reliability.test.ts</sub> |
 | Input validation | PATCH /:id rejects a malformed update body (e.g. title>300, invalid dueDate string, isComplete non-boolean, reminderDays out of range) with 400 {code:'VALIDATION_ERROR'} and never calls prisma.deadline.update. | 🟢 covered | `PATCH /:id rejects malformed update bodies with 400 VALIDATION_ERROR and does not write`<br/><sub>deadlines-reliability.test.ts</sub> |
 | Subscription / plan gating | All deadline routes are blocked by subscriptionGuard when the organisation has no subscription (403 NO_SUBSCRIPTION), an expired trial (403 TRIAL_EXPIRED), a past-due grace-expired sub (403 PAST_DUE_GRACE_EXPIRED), or an inactive sub (403 SUBSCRIPTION_INACTIVE), before the handler runs. | 🟢 covered | `deadline routes require an active subscription`<br/><sub>deadlines-reliability.test.ts</sub> |
-| Subscription / plan gating | COMPLETE-only (requireCompletePlan) gating does not apply to the deadlines route group. | ⚪ n/a | _routes/deadlines/index.ts wires only authGuard, subscriptionGuard and requireAdmin; it never imports or applies requireCompletePlan, so there is no COMPLETE-pla_ |
+| Subscription / plan gating | COMPLETE-only (requireCompletePlan) gating does not apply to the deadlines route group. | ⚪ n/a | _routes/deadlines/index.ts wires only authGuard, subscriptionGuard and requireAdmin; it never imports or applies requireCompletePlan, so there is no COMPLETE-plan feature boundary to prove for this gro_ |
 | Tenant isolation | DeadlineService.update(orgA, idOwnedByOrgB, data) performs findFirst({where:{id, organisationId:orgA}}), gets null, throws AppError 404 DEADLINE_NOT_FOUND, and never calls prisma.deadline.update. | 🟢 covered | `update rejects a deadline from another organisation (no cross-tenant write)`<br/><sub>deadline-service.test.ts</sub> |
 | Tenant isolation | DeadlineService.remove(orgA, idOwnedByOrgB) performs findFirst({where:{id, organisationId:orgA}}), gets null, throws AppError 404 DEADLINE_NOT_FOUND, and never calls prisma.deadline.delete. | 🟢 covered | `remove rejects a deadline from another organisation (no cross-tenant delete)`<br/><sub>deadline-service.test.ts</sub> |
 | Tenant isolation | DeadlineService.list(orgId, ...) issues findMany and count whose where clause is exactly {organisationId: orgId}, so a caller can only ever read deadlines of their own organisation. | 🟢 covered | `list reports hasMore based on total versus the returned page`<br/><sub>deadline-service.test.ts</sub> |
@@ -201,7 +208,7 @@ _18 guarantees — 🟢 16  ⚪ 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Auth & session integrity | auth-session rotation/replay does not apply to the billing group; the webhook route is unauthenticated (signature-verified) and the authed routes rely on the shared authGuard with no billing-specific token handling, and the service logs neither raw bodies, signatures, nor secrets. | ⚪ n/a | _Refresh-token rotation/replay is owned by the auth route group, not billing. The only billing logging is app.log.warn({code,statusCode}) / app.log.error(err) in_ |
+| Auth & session integrity | auth-session rotation/replay does not apply to the billing group; the webhook route is unauthenticated (signature-verified) and the authed routes rely on the shared authGuard with no billing-specific token handling, and the service logs neither raw bodies, signatures, nor secrets. | ⚪ n/a | _Refresh-token rotation/replay is owned by the auth route group, not billing. The only billing logging is app.log.warn({code,statusCode}) / app.log.error(err) in the webhook catch (index.ts lines 36-39_ |
 | Authorization boundary | All authed billing routes (/checkout, /create-checkout, /portal, /create-portal, /status) reject an unauthenticated request with 401 {code:'UNAUTHORIZED'} via the authGuard onRequest hook, before any service call. | 🟢 covered | `authed billing routes reject unauthenticated requests with 401`<br/><sub>billing-reliability.test.ts</sub> |
 | Authorization boundary | POST /billing/checkout (and /create-checkout) reject a MEMBER and an ADMIN with 403 {code:'FORBIDDEN'} via requireOwner, and the BillingService createCheckoutSession (organisation.findUniqueOrThrow / Stripe) is never invoked. | 🟢 covered | `checkout and portal require OWNER (MEMBER and ADMIN are rejected with FORBIDDEN)`<br/><sub>billing-reliability.test.ts</sub> |
 | Authorization boundary | POST /billing/portal (and /create-portal) reject a MEMBER and an ADMIN with 403 FORBIDDEN via requireOwner before createPortalSession runs. | 🟢 covered | `checkout and portal require OWNER (MEMBER and ADMIN are rejected with FORBIDDEN)`<br/><sub>billing-reliability.test.ts</sub> |
@@ -215,7 +222,7 @@ _18 guarantees — 🟢 16  ⚪ 2_
 | Input validation | createCheckoutSchema accepts only plan in {ESSENTIALS,COMPLETE} and interval in {monthly,yearly}; an unsupported interval/plan is rejected by the schema. | 🟢 covered | `POST /checkout with an invalid plan returns 400 VALIDATION_ERROR and never calls Stripe`<br/><sub>billing-reliability.test.ts</sub> |
 | Input validation | A webhook event whose checkout metadata is missing/invalid (no organisationId, unrecognised plan, or no subscription id) is rejected with 400 STRIPE_WEBHOOK_MISMATCH and performs no subscription write. | 🟢 covered | `checkout.session.completed rejects metadata when the customer or price does not match the organisation plan`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Observability | BillingService.isConfigured() truthfully reflects Stripe readiness (all of secret key, webhook secret, and every plan price id configured) and feeds the readiness endpoint's billingConfigured check, so readiness reports not_ready when billing secrets are missing. | 🟢 covered | `isConfigured returns false when any required Stripe price id is missing`<br/><sub>billing-reliability.test.ts</sub> |
-| Subscription / plan gating | plan-gating (requireCompletePlan / subscriptionGuard blocking expired tenants) does not apply to the billing route group itself. | ⚪ n/a | _The billing endpoints are intentionally NOT behind subscriptionGuard or requireCompletePlan: checkout/portal/status must remain reachable precisely when a subsc_ |
+| Subscription / plan gating | plan-gating (requireCompletePlan / subscriptionGuard blocking expired tenants) does not apply to the billing route group itself. | ⚪ n/a | _The billing endpoints are intentionally NOT behind subscriptionGuard or requireCompletePlan: checkout/portal/status must remain reachable precisely when a subscription is absent, expired, or past-due _ |
 | Tenant isolation | GET /billing/status returns the subscription for the caller's own organisationId only: getStatus queries subscription.findUnique({where:{organisationId: request.user.organisationId}}), so an OWNER of org A can never observe org B's plan/status/access. | 🟢 covered | `GET /status scopes the subscription lookup to the caller's organisation`<br/><sub>billing-reliability.test.ts</sub> |
 | Tenant isolation | A checkout.session.completed webhook can only attach a subscription to the organisation that owns the matching stripeCustomerId: if the session/subscription customer id does not equal organisation.stripeCustomerId, the handler throws 400 STRIPE_WEBHOOK_MISMATCH and performs no subscription.upsert (preventing an attacker-controlled session from binding a subscription to a foreign org). | 🟢 covered | `checkout.session.completed rejects metadata when the customer or price does not match the organisation plan`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Tenant isolation | customer.subscription.updated and .deleted only mutate the local subscription whose stripeSubscriptionId matches and whose organisation.stripeCustomerId matches the event's customer; a mismatched customer id throws 400 STRIPE_WEBHOOK_MISMATCH (via verifyExistingSubscription) and an unknown stripeSubscriptionId returns without writing. | 🟢 covered | `subscription.updated and .deleted reject a customer that does not own the local subscription and ignore unknown subscription ids`<br/><sub>billing-reliability.test.ts</sub> |
@@ -227,7 +234,7 @@ _10 guarantees — 🟢 9  ⚪ 1_
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Authorization boundary | A request with no/invalid/expired token, a revoked session, or a missing user is rejected by authGuard with 401 {code:'UNAUTHORIZED'} before the export handler runs; an authenticated but email-unverified user is rejected with 403 {code:'EMAIL_NOT_VERIFIED'}. | 🟢 covered | `export rejects missing token, revoked session, and unverified email`<br/><sub>export-reliability.test.ts</sub> |
-| Graceful degradation | The export does not depend on Stripe/Supabase/Resend at request time (no checkout, storage, or email call), so it stays available when those externals are down; conversely if the org row is missing, organisation.findUniqueOrThrow surfaces a clean error via handleError (404/500) rather than leaking a stack. | ⚪ n/a | _The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The_ |
+| Graceful degradation | The export does not depend on Stripe/Supabase/Resend at request time (no checkout, storage, or email call), so it stays available when those externals are down; conversely if the org row is missing, organisation.findUniqueOrThrow surfaces a clean error via handleError (404/500) rather than leaking a stack. | ⚪ n/a | _The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The only error path is Prisma findUniqueOrT_ |
 | Input validation | GET /compliance-record with a malformed, missing, out-of-range, or oversized year (e.g. year=abc, year omitted, year=1999, year=99999) returns 400 {code:'VALIDATION_ERROR'} (never a 500 or stack leak) and the report HTML / organisation lookup is never reached for the invalid value. | 🟢 covered | `export rejects malformed year with 400 VALIDATION_ERROR`<br/><sub>export-reliability.test.ts</sub> |
 | Input validation | User-supplied compliance/register text (e.g. standard titles, actionTaken, evidence, explanationIfNA, trusteeName, matter, mitigation, complaint summary, controls) is HTML-escaped via escapeHtml/simpleTable before being embedded in the exported report, so a stored '<script>' or '"' in a record cannot break out of its cell or inject markup into the generated HTML. | 🟢 covered | `export HTML-escapes stored record and register values`<br/><sub>export-reliability.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is ESSENTIALS (or anything other than COMPLETE) never invokes loadGovernanceRegisters: none of conflictRecord/riskRecord/complaintRecord/fundraisingRecord/annualReportReadiness/financialControlReview findMany/findUnique are called, and the response body contains no 'Governance registers' heading nor any register data. | 🟢 covered | `Essentials exports do not include Complete-only governance registers`<br/><sub>export-csp.test.ts</sub> |
@@ -269,7 +276,7 @@ _32 guarantees — 🟢 31  ⚪ 1_
 | Authorization boundary | POST /fundraising, PATCH /fundraising/:id, DELETE /fundraising/:id by a MEMBER are rejected 403 FORBIDDEN by requireAdmin without any fundraisingRecord write. | 🟢 covered | `a MEMBER cannot write fundraising records (requireAdmin)`<br/><sub>governance-registers-reliability.test.ts</sub> |
 | Authorization boundary | PUT /annual-report and PUT /financial-controls by a MEMBER are rejected 403 FORBIDDEN by requireAdmin without reaching annualReportReadiness.upsert / financialControlReview.upsert. | 🟢 covered | `a MEMBER cannot upsert annual report or financial controls (requireAdmin)`<br/><sub>governance-registers-reliability.test.ts</sub> |
 | Authorization boundary | An ADMIN (the minimum allowed write role) is permitted through requireAdmin on a register write (e.g. POST /risks returns 201), confirming the guard is not over-restrictive. | 🟢 covered | `an ADMIN may create register records (requireAdmin allows ADMIN)`<br/><sub>governance-registers-reliability.test.ts</sub> |
-| Graceful degradation | Concern does not apply: this route group performs no Stripe/Supabase/Resend calls; all six registers read/write only Prisma models. There is no external dependency whose outage would require a 503 here. | ⚪ n/a | _No Stripe/Supabase/Resend usage in routes/governance-registers/index.ts or services/governance-register.service.ts; degradation/503 behaviour is owned by billin_ |
+| Graceful degradation | Concern does not apply: this route group performs no Stripe/Supabase/Resend calls; all six registers read/write only Prisma models. There is no external dependency whose outage would require a 503 here. | ⚪ n/a | _No Stripe/Supabase/Resend usage in routes/governance-registers/index.ts or services/governance-register.service.ts; degradation/503 behaviour is owned by billing/storage/email route groups, not this o_ |
 | Input validation | POST /conflicts with a malformed body (missing required trusteeName/matter/nature/dateDeclared/actionTaken, or a non-ISO dateDeclared, or oversized text >max) returns 400 VALIDATION_ERROR and conflictRecord.create is never called. | 🟢 covered | `POST /conflicts rejects malformed body with 400 VALIDATION_ERROR and no write`<br/><sub>governance-registers-reliability.test.ts</sub> |
 | Input validation | POST /risks with likelihood/impact outside 1-5 (or a non-enum category) returns 400 VALIDATION_ERROR and riskRecord.create is never called. | 🟢 covered | `POST /risks with out-of-range likelihood returns 400 VALIDATION_ERROR and no write`<br/><sub>governance-registers-reliability.test.ts</sub> |
 | Input validation | GET /summary, GET /annual-report and GET /financial-controls with a non-numeric/out-of-range ?year reject with 400 VALIDATION_ERROR (complianceQuerySchema) rather than a 500. | 🟢 covered | `GET /summary rejects a malformed year query with 400 VALIDATION_ERROR`<br/><sub>governance-registers-reliability.test.ts</sub> |
@@ -337,13 +344,13 @@ _15 guarantees — 🟢 12  ⚪ 3_
 | Graceful degradation | When the database probe fails (prisma.$queryRaw throws or hangs past READINESS_DEPENDENCY_TIMEOUT_MS), readiness returns 503 {status:'not_ready', checks.database:false} rather than a 500 or a hang, and the error is logged without crashing the request. | 🟢 covered | `authenticated readiness times out a stuck database check`<br/><sub>health-readiness.test.ts</sub> |
 | Graceful degradation | When the database probe REJECTS (prisma.$queryRaw throws synchronously/asynchronously, e.g. connection refused) rather than hanging, readiness still returns 503 with checks.database:false and never propagates the error as a 500/stack leak. | 🟢 covered | `authenticated readiness reports not_ready when the database query throws`<br/><sub>health-reliability.test.ts</sub> |
 | Graceful degradation | When Stripe (billing), Resend (email), or Supabase (storage) are unconfigured/unreachable, readiness reports the corresponding check as false and returns 503 not_ready, while the public liveness probe GET /api/v1/health continues to return 200 (the app keeps serving). | 🟢 covered | `authenticated readiness reports not_ready when billing/email/storage are unconfigured`<br/><sub>health-reliability.test.ts</sub> |
-| At-least-once / idempotency | N/A — both endpoints are side-effect-free GET probes (no writes, no webhook ingestion, no reminder/dedupe logic), so there is no operation that must be processed exactly once. | ⚪ n/a | _Readiness only reads (SELECT 1, getBucket, config flags). StorageService.verifyBucket may mkdir a local dir under the local driver, but that call is already ide_ |
+| At-least-once / idempotency | N/A — both endpoints are side-effect-free GET probes (no writes, no webhook ingestion, no reminder/dedupe logic), so there is no operation that must be processed exactly once. | ⚪ n/a | _Readiness only reads (SELECT 1, getBucket, config flags). StorageService.verifyBucket may mkdir a local dir under the local driver, but that call is already idempotent (recursive:true) and unrelated t_ |
 | Input validation | GET /api/v1/health (liveness) is public, takes no input, returns 200 {status:'ok', timestamp:string} and never includes a `checks` field, so it leaks no dependency detail to anonymous callers. | 🟢 covered | `basic health stays public without exposing dependency checks`<br/><sub>health-readiness.test.ts</sub> |
 | Input validation | A malformed/duplicated x-charitypilot-readiness-key header (e.g. sent as an array of values, which Fastify exposes as a non-string) is rejected with 401 {code:'READINESS_UNAUTHORIZED'} rather than throwing a 500, because hasReadinessAccess requires typeof suppliedKey === 'string' before the timing-safe compare. | 🟢 covered | `readiness rejects a duplicated readiness key header without a 500`<br/><sub>health-reliability.test.ts</sub> |
 | Input validation | Production env validation rejects a missing or too-short READINESS_API_KEY (must be >=32 chars and configured) so a weak/absent readiness gate can never reach production. | 🟢 covered | `validateProductionEnv rejects missing production readiness key`<br/><sub>env.test.ts</sub> |
 | Observability | GET /api/v1/health/readiness with a valid x-charitypilot-readiness-key returns 200 {status:'ready'} and checks={database:true, billingConfigured:true, emailConfigured:true, storageConfigured:true, storageBucketReachable:true} ONLY when every one of the five dependency probes resolves truthy. | 🟢 covered | `authenticated readiness reports ready when every dependency is healthy`<br/><sub>health-reliability.test.ts</sub> |
-| Subscription / plan gating | N/A — health and readiness are infrastructure probes deliberately outside the subscription/plan model; they carry no requireCompletePlan or subscriptionGuard and must remain reachable regardless of any tenant's plan state. | ⚪ n/a | _The routes are registered with no auth/subscription/plan guards (server.ts line 81 registers healthRoutes with only a prefix). Gating readiness behind a subscri_ |
-| Tenant isolation | N/A — neither health endpoint reads or mutates any organisation-scoped resource; the readiness probe only runs an unparameterised SELECT 1 and config/reachability checks, so there is no organisationId surface and no cross-org leak is possible. | ⚪ n/a | _No request.user, no organisationId, and no Prisma model query that returns tenant data — the only DB call is prisma.$queryRaw`SELECT 1`. There is nothing for an_ |
+| Subscription / plan gating | N/A — health and readiness are infrastructure probes deliberately outside the subscription/plan model; they carry no requireCompletePlan or subscriptionGuard and must remain reachable regardless of any tenant's plan state. | ⚪ n/a | _The routes are registered with no auth/subscription/plan guards (server.ts line 81 registers healthRoutes with only a prefix). Gating readiness behind a subscription would defeat its purpose, so plan-_ |
+| Tenant isolation | N/A — neither health endpoint reads or mutates any organisation-scoped resource; the readiness probe only runs an unparameterised SELECT 1 and config/reachability checks, so there is no organisationId surface and no cross-org leak is possible. | ⚪ n/a | _No request.user, no organisationId, and no Prisma model query that returns tenant data — the only DB call is prisma.$queryRaw`SELECT 1`. There is nothing for an org-A user to read of org B here._ |
 
 ### cross-cutting — auth & session integrity
 
@@ -429,11 +436,223 @@ _9 guarantees — 🟢 9_
 | Graceful degradation | Invalid or missing Stripe webhook signatures are rejected with a 4xx client error (400 INVALID_STRIPE_SIGNATURE / MISSING_STRIPE_SIGNATURE) and never a 500, so a malformed/forged webhook degrades cleanly without mutating subscriptions. | 🟢 covered | `invalid Stripe webhook signatures return a client error`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Observability | The authenticated /readiness endpoint reflects real per-dependency health: it returns 503 not_ready (with the offending check flag false) when any single dependency — database, billing config, email config, storage config, or storage bucket reachability — is unhealthy, and 200 ready only when all pass. | 🟢 covered | `readiness reports 503 not_ready with billingConfigured false when Stripe env is unconfigured`<br/><sub>degradation-reliability.test.ts</sub> |
 
+---
+
+## Web surface — the matrix (102 guarantees)
+
+> The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
+> extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
+> allow-listing, error redaction); Playwright E2E (<sup>e2e</sup>) proves rendered behaviour and
+> accessibility against the local Docker stack.
+
+### platform — proxy / CSP / API client / session refresh
+
+_49 guarantees — 🟢 49_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | Dark-theme colour contrast across the dashboard meets WCAG 2.1 AA — the dual-theme axe sweep asserts the dark theme on every dashboard page. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Auth & session integrity | Concurrent 401s share ONE single-flight token refresh, so parallel requests never present the same rotated refresh token and trip backend reuse-revocation (forced logout). | 🟢 covered | `concurrent 401s trigger exactly one token refresh (single-flight)`<br/><sub>lib/api.test.ts</sub> |
+| Auth & session integrity | A login ?next= open-redirect (cross-origin / network-path / encoded) is rejected and falls back to /dashboard. | 🟢 covered | `rejects cross-origin and encoded network-path next values`<br/><sub>lib/safe-next-path.test.ts</sub> |
+| Auth & session integrity | A login ?next= pointing at a public (non-protected) path is rejected and falls back to /dashboard. | 🟢 covered | `rejects public local next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
+| Auth & session integrity | The 401 interceptor refreshes once then retries the original request, succeeding transparently when the refresh succeeds. | 🟢 covered | `refreshes the session once then retries the original request on a 401`<br/><sub>lib/api.test.ts</sub> |
+| Auth & session integrity | A request marked skipAuthRefresh is never auto-refreshed/retried on 401 (auth pages surface an inline error instead of a redirect). | 🟢 covered | `does not refresh or retry when skipAuthRefresh is set`<br/><sub>lib/api.test.ts</sub> |
+| Auth & session integrity | An unauthenticated request to a protected app route is redirected to /login?next=<path> at the edge (proxy), before any protected page renders. | 🟢 covered | `an unauthenticated visit to a protected route redirects to login with a next param` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
+| Auth & session integrity | Production CSP connect-src trusts only an approved, origin-only API source. | 🟢 covered | `production CSP uses only an approved origin-only API connect source`<br/><sub>lib/content-security-policy.test.ts</sub> |
+| Auth & session integrity | Production CSP falls back to the default API origin instead of trusting an unapproved connect source. | 🟢 covered | `production CSP falls back instead of trusting unapproved API connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
+| Auth & session integrity | Development CSP keeps the local API and websocket connect sources so local dev still works. | 🟢 covered | `development CSP keeps local API and websocket connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
+| Auth & session integrity | In production the API base URL must be explicitly set, https, origin-only and an approved charitypilot.ie host — otherwise it is rejected. | 🟢 covered | `requires an explicit API URL in production`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A non-production (http) API URL is rejected in production. | 🟢 covered | `rejects non-production API URLs in production`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A request that still 401s after a refresh is rejected and not retried again — no infinite refresh/retry loop. | 🟢 covered | `a request that still 401s after a refresh is rejected (no infinite retry loop)`<br/><sub>lib/api.test.ts</sub> |
+| Auth & session integrity | An unapproved API host is rejected in production (no talking to an attacker-controlled origin). | 🟢 covered | `rejects unapproved API hosts in production`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | An API URL carrying a path is rejected in production (origin-only). | 🟢 covered | `rejects API URLs with paths in production`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A trailing slash on the configured API URL is trimmed consistently. | 🟢 covered | `uses explicit API URL after trimming a trailing slash`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | The localhost API fallback is available only outside production. | 🟢 covered | `keeps the local Docker API fallback for local development only`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | Sensitive one-time tokens are scrubbed from URL fragments so they do not linger in the address bar/history. | 🟢 covered | `scrubs sensitive token parameters from URL fragments`<br/><sub>lib/url-security.test.ts</sub> |
+| Auth & session integrity | A sensitive token is read from the URL fragment before query strings, so it is never exposed in a logged query string. | 🟢 covered | `extracts sensitive tokens from URL fragments before query strings are logged`<br/><sub>lib/url-security.test.ts</sub> |
+| Auth & session integrity | Sensitive-auth links prefer the fragment token over a query token. | 🟢 covered | `prefers fragment tokens over query tokens for sensitive auth links`<br/><sub>lib/url-security.test.ts</sub> |
+| Auth & session integrity | Removing a sensitive token query parameter preserves the other (safe) URL parts. | 🟢 covered | `removes sensitive token query parameters while preserving safe URL parts`<br/><sub>lib/url-security.test.ts</sub> |
+| Auth & session integrity | When a sensitive token was the only query parameter, the leftover "?" marker is removed too. | 🟢 covered | `removes the query marker when sensitive parameters were the only query parameters`<br/><sub>lib/url-security.test.ts</sub> |
+| Auth & session integrity | The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge. | 🟢 covered | `server-side protected route refresh sends the deployed web Origin required by the API origin guard`<br/><sub>proxy.test.ts</sub> |
+| Auth & session integrity | An expired/cleared session on a protected route is redirected to login rather than flashing stale data or crashing. | 🟢 covered | `an expired/cleared session is redirected to login, not left on a protected page` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
+| Auth & session integrity | In local Docker the edge auth check validates against the internal API origin, not the public host. | 🟢 covered | `local Docker server-side protected route validation uses the internal API origin`<br/><sub>proxy.test.ts</sub> |
+| Auth & session integrity | Edge protected-route validation fails closed (treats the user as unauthenticated) for an unapproved production API origin rather than trusting it. | 🟢 covered | `server-side protected route validation fails closed for unapproved production API origins`<br/><sub>proxy.test.ts</sub> |
+| Auth & session integrity | The protected-path matcher recognises every dashboard app route that requires an auth cookie. | 🟢 covered | `matches dashboard application routes that require an auth cookie`<br/><sub>lib/protected-routes.test.ts</sub> |
+| Auth & session integrity | The protected-path matcher catches percent-encoded variants before Next normalisation, so an encoded deep link cannot dodge the auth gate. | 🟢 covered | `matches encoded dashboard application routes before Next normalisation`<br/><sub>lib/protected-routes.test.ts</sub> |
+| Auth & session integrity | The protected-path matcher does not over-match public, auth, or similarly-named routes (no false redirects). | 🟢 covered | `does not match public, auth, or similarly named routes`<br/><sub>lib/protected-routes.test.ts</sub> |
+| Auth & session integrity | A login ?next= value is honoured only for a same-origin protected app path. | 🟢 covered | `allows same-origin protected app next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
+| Graceful degradation | A webpack chunk-load failure (stale deploy) is recognised as recoverable. | 🟢 covered | `recognises webpack chunk load failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
+| Graceful degradation | A dynamic-import failure is recognised as recoverable. | 🟢 covered | `recognises dynamic import failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
+| Graceful degradation | Unrelated runtime errors are NOT treated as chunk failures (no spurious reloads). | 🟢 covered | `ignores unrelated runtime errors`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
+| Graceful degradation | A recoverable chunk failure triggers at most ONE reload — never a reload loop. | 🟢 covered | `attempts only one reload for a recoverable chunk failure`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
+| Graceful degradation | The single-reload marker is cleared once the page is stable, so a later genuine chunk failure can still recover once. | 🟢 covered | `clears the reload attempt marker after a stable page mount`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
+| Graceful degradation | Server-rendered JSON-LD is serialised without allowing a </script> breakout (no injection via structured data). | 🟢 covered | `serialises JSON-LD without allowing script tag breakouts`<br/><sub>lib/json-ld.test.ts</sub> |
+| Graceful degradation | A thrown render error is caught by the error boundary and rendered as a clean "Something went wrong" screen with a recover action — never a blank page or unhandled exception. | 🟢 covered | `the global and dashboard error boundaries render a recoverable screen`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Graceful degradation | The error boundary logs only a redacted summary (status/code/digest/name) in production — never the raw error message or stack. | 🟢 covered | `in production logClientError records only a redacted summary, never the raw message or stack`<br/><sub>lib/client-logger.test.ts</sub> |
+| Input validation | The error renderer surfaces the server's specific message (data.error ?? data.message ?? fallback) and never a raw exception/stack. | 🟢 covered | `apiErrorMessage never throws or leaks on odd/hostile error shapes`<br/><sub>lib/errors.test.ts</sub> |
+| Subscription / plan gating | A COMPLETE-only feature denial (403 PLAN_FEATURE_UNAVAILABLE) is correctly identified so gated pages can show an upsell, not a broken error. | 🟢 covered | `identifies Complete-plan feature denial API errors`<br/><sub>lib/plan-feature.test.ts</sub> |
+| Subscription / plan gating | Unrelated API errors are NOT mistaken for a plan-feature denial. | 🟢 covered | `does not treat unrelated API errors as plan feature denials`<br/><sub>lib/plan-feature.test.ts</sub> |
+| Subscription / plan gating | A subscription/trial lapse (TRIAL_EXPIRED / NO_SUBSCRIPTION / PAST_DUE_GRACE_EXPIRED / SUBSCRIPTION_INACTIVE) is identified so the UI shows "manage billing", not a connection error. | 🟢 covered | `identifies subscription/trial lapse API errors`<br/><sub>lib/plan-feature.test.ts</sub> |
+| Subscription / plan gating | Other errors are NOT mistaken for a subscription lapse. | 🟢 covered | `does not treat other errors as subscription lapses`<br/><sub>lib/plan-feature.test.ts</sub> |
+| State integrity / no data loss | A non-paginated { data } API envelope is unwrapped to the resource so callers read it directly (no accidental data.data bugs). | 🟢 covered | `unwraps a single-resource { data } envelope so callers read the resource directly`<br/><sub>lib/api.test.ts</sub> |
+| State integrity / no data loss | A paginated { data, total, page } envelope is left intact so the UI keeps its pagination metadata (no silent loss of total/page). | 🟢 covered | `leaves a paginated { data, total, page } envelope intact`<br/><sub>lib/api.test.ts</sub> |
+| Tenant isolation | A Stripe checkout/portal redirect is followed only for an https hosted-Stripe origin — an attacker-supplied redirect URL is rejected. | 🟢 covered | `trusts only hosted Stripe https redirect origins`<br/><sub>lib/url-security.test.ts</sub> |
+| Tenant isolation | A document download URL is trusted only from the https expected API origin(s) or a Supabase signed-storage path — never an arbitrary origin. | 🟢 covered | `trusts document downloads only from https expected origins or Supabase storage`<br/><sub>lib/url-security.test.ts</sub> |
+| Tenant isolation | The local API document-download exception is honoured only on loopback in development. | 🟢 covered | `trusts local API document downloads only on loopback in development`<br/><sub>lib/url-security.test.ts</sub> |
+| Tenant isolation | The only editable dynamic route segments are the global principleId (governance reference) and the public blog slug — no [organisationId]/[orgId]/[id] addresses tenant data. | 🟢 covered | `the only editable dynamic route segment is the global principleId (a content id, not a tenant id)`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+
+### auth pages — login / register / forgot / reset / verify / accept-invite
+
+_11 guarantees — 🟢 11_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The login/register/forgot-password pages are axe-clean (0 serious/critical). | 🟢 covered | `${path} is axe-clean (0 serious/critical)` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Auth & session integrity | register → verify-email → login is a working journey; the dashboard is only reachable once the email is verified. | 🟢 covered | `register, verify email, then log in to the dashboard` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
+| Graceful degradation | An invalid/expired email-verification token shows a clean "Verification failed" state, not a crash. | 🟢 covered | `an invalid verification token shows the failure state` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
+| Graceful degradation | A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack. | 🟢 covered | `apiErrorMessage surfaces the server error field first`<br/><sub>lib/errors.test.ts</sub> |
+| Input validation | The login form validates with the shared loginSchema (same rule as the server): a malformed email or empty password shows inline errors and is not submitted. | 🟢 covered | `login/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The register form validates with the shared registerSchema: a weak-but-long password (no upper/lower/digit) is caught inline and not submitted as a guaranteed-400. | 🟢 covered | `register/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The reset-password form validates with the shared resetPasswordSchema: the same password complexity rule as the server, surfaced inline. | 🟢 covered | `reset-password/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The accept-invite form validates name + password with the shared acceptTeamInviteSchema before submit. | 🟢 covered | `accept-invite/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The forgot-password form validates the email with the shared forgotPasswordSchema. | 🟢 covered | `forgot-password/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | Every shared auth schema accepts a representative valid payload and rejects the guaranteed-400 cases (bad email, short/weak password, missing required fields). | 🟢 covered | `form-schemas sources its rules from @charitypilot/shared (single source of truth)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | Submitting a valid-length but complexity-failing password on register shows an inline error and fires no register request. | 🟢 covered | `register flags a long-but-weak password and sends no register request` <sup>e2e</sup><br/><sub>tests/validation.spec.ts</sub> |
+
+### dashboard — `/dashboard`
+
+_4 guarantees — 🟢 4_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The dashboard is axe-clean (0 serious/critical WCAG 2.1 AA) in BOTH the light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Graceful degradation | A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states. | 🟢 covered | `the dashboard renders an explicit error card on a load failure (not a blank/empty screen)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Subscription / plan gating | On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber "manage billing" banner via isSubscriptionLapseError. | 🟢 covered | `dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Tenant isolation | The dashboard fetches org-scoped data using only the session cookie (no org id in any URL); the only query param is the reporting year. | 🟢 covered | `no page sources an organisation id from a URL param (useParams / useSearchParams / query)`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+
+### compliance — `/compliance`, `/compliance/[principleId]`
+
+_4 guarantees — 🟢 3  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The compliance overview and principle pages are axe-clean in both light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Graceful degradation | The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save. | 🟢 covered | `the per-standard compliance editor announces its save state (Saving / Saved / Save failed)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Input validation | The reporting-year filter only ever selects from a fixed list of valid years (server-validated 2018–2100); no free-form year reaches the API. | ⚪ n/a | _Year is chosen from a bounded Select (last 5 years); there is no free-text input to validate, and the server enforces the 2018–2100 range (API ledger)._ |
+| Tenant isolation | The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean "Principle not found." screen, never another org's content. | 🟢 covered | `an unknown principle id renders a clean not-found, never leaked content` <sup>e2e</sup><br/><sub>tests/tenant-isolation.spec.ts</sub> |
+
+### board — `/board`
+
+_3 guarantees — 🟢 2  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Graceful degradation | A board-member mutation failure shows a toast and leaves the existing list intact (no partial/optimistic data loss). | 🟢 covered | `a board mutation failure shows a toast and keeps the existing list (no partial data loss)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Input validation | The shared createBoardMemberSchema/updateBoardMemberSchema reject malformed payloads (missing name/role/date, bad email) — the validation authority the server enforces. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| State integrity / no data loss | The Add/Edit board-member submit is guarded against double-submit (isLoading + isDisabled until required fields present); the modal stays open with the data intact on a failed save. | 🟢 covered | `board/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
+
+### documents — `/documents`
+
+_5 guarantees — 🟢 5_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The documents page is axe-clean in both light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Graceful degradation | Upload happy-path + download works end to end; a rejected download URL shows a toast rather than navigating. | 🟢 covered | `upload a document then download it` <sup>e2e</sup><br/><sub>tests/documents.spec.ts</sub> |
+| State integrity / no data loss | Upload is guarded against double-submit (isLoading + isDisabled until a file and name are present) and a >10MB file is blocked inline before any request. | 🟢 covered | `documents blocks an oversize upload inline before any request (no wasted 4xx round-trip)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| State integrity / no data loss | Deleting a document requires an explicit confirmation modal ("This action cannot be undone.") before the DELETE fires. | 🟢 covered | `upload a document then download it` <sup>e2e</sup><br/><sub>tests/documents.spec.ts</sub> |
+| Tenant isolation | A document download URL returned by the API is passed through getTrustedDocumentDownloadUrl before navigation, so a tampered/foreign URL is rejected with a toast. | 🟢 covered | `documents routes every download URL through the trusted-download allow-list`<br/><sub>lib/web-wiring.test.ts</sub> |
+
+### deadlines — `/deadlines`
+
+_3 guarantees — 🟢 2  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Graceful degradation | A create→complete deadline round-trip works; the completion toggle reflects server state. | 🟢 covered | `create a deadline then mark it complete` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
+| Input validation | The shared createDeadlineSchema rejects a missing title/date and out-of-range reminder days — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| State integrity / no data loss | Adding a deadline is guarded against double-submit (isLoading + isDisabled until title and due-date present). | 🟢 covered | `create a deadline then mark it complete` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
+
+### registers — `/registers`
+
+_3 guarantees — 🟢 2  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The registers page is axe-clean in both light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Input validation | The shared governance-registers schemas reject malformed conflict/risk/complaint/fundraising payloads — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| Subscription / plan gating | On ESSENTIALS the whole Governance Registers page renders an upsell card ("available on Complete." + View billing) via isPlanFeatureUnavailable — never a broken error. | 🟢 covered | `registers gates the whole page behind a Complete upsell on a plan-feature denial`<br/><sub>lib/web-wiring.test.ts</sub> |
+
+### organisation — `/organisation`
+
+_3 guarantees — 🟢 2  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Input validation | The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| State integrity / no data loss | Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits. | 🟢 covered | `organisation warns before discarding unsaved edits (no silent data loss)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Tenant isolation | The organisation profile is read from useAuth().user.organisation and saved with PATCH /organisation carrying NO org id — a user can only ever edit their own org (server resolves the tenant from the cookie). | 🟢 covered | `no API request carries an organisation id as a query or path parameter`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+
+### team — `/team`
+
+_6 guarantees — 🟢 6_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The team page is axe-clean in both light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Auth & session integrity | An invited MEMBER can accept and join the inviting org; the new user belongs to the owner's organisation (no cross-org leak). | 🟢 covered | `invite a team member who then accepts and joins the workspace` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
+| Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | 🟢 covered | `only OWNER and ADMIN can invite or revoke team members`<br/><sub>lib/team-permissions.test.ts</sub> |
+| Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | 🟢 covered | `role editing is owner-only and excludes the owner row and your own row`<br/><sub>lib/team-permissions.test.ts</sub> |
+| Authorization boundary | A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end. | 🟢 covered | `a MEMBER sees admin-only team controls disabled/hidden` <sup>e2e</sup><br/><sub>tests/authz.spec.ts</sub> |
+| Input validation | The invite form surfaces the server's actual validation/error message inline via apiErrorMessage (e.g. a malformed email), never a generic or raw error. | 🟢 covered | `team surfaces the server's specific error message (apiErrorMessage), not a generic string`<br/><sub>lib/web-wiring.test.ts</sub> |
+
+### billing & pricing — `/billing`, `/pricing`
+
+_6 guarantees — 🟢 5  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The billing page (and the public /pricing page) are axe-clean in both light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Authorization boundary | The Stripe portal ("Manage Subscription") button renders only for an org with an active subscription; a trialing org has no portal button. | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
+| Graceful degradation | When Stripe is unconfigured (503/degraded) the page shows a "Billing setup is temporarily unavailable" notice and disables all checkout/portal buttons — never a broken checkout. | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
+| Input validation | Checkout plan/interval are constrained to the shared createCheckoutSchema enum values (passed as fixed button literals — no free user input can produce an invalid checkout). | ⚪ n/a | _plan/interval are hardcoded button literals matching createCheckoutSchema enums; there is no free-form input to validate client-side, and the server validates the payload (API ledger)._ |
+| Subscription / plan gating | The billing page renders the current tier + trial state and the Complete-only feature comparison correctly (test mode). | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
+| Tenant isolation | A Stripe redirect URL returned by the API is validated with getTrustedStripeRedirectUrl before navigation; an unexpected origin shows an error instead of redirecting. | 🟢 covered | `billing routes Stripe redirects through the trusted-redirect allow-list`<br/><sub>lib/web-wiring.test.ts</sub> |
+
+### export — `/export`
+
+_3 guarantees — 🟢 3_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Auth & session integrity | Recording a standard then completing board sign-off works end to end. | 🟢 covered | `record a standard then complete board sign-off` <sup>e2e</sup><br/><sub>tests/compliance.spec.ts</sub> |
+| State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | 🟢 covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side. | 🟢 covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+
+### regulator — `/regulator`
+
+_2 guarantees — 🟢 1  ⚪ 1_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Accessibility & resilience | The regulator page is axe-clean in both light and dark themes. | 🟢 covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Tenant isolation | The regulator guidance page is static reference content with no data fetch and no tenant context, so it cannot leak any org data. | ⚪ n/a | _Static page built from module constants (regulator-guidance.ts); no api calls, no session/org context, no URL params — no tenant-isolation surface exists._ |
+
+---
+
 ## Fixed while proving
 
-_None. Every guarantee above was already correct; the work was to pin each one with a test._
+Real defects found *by a test written here*, fixed minimally, and locked in:
+
+| Surface | Defect | Minimal fix | Proven by |
+|---|---|---|---|
+| web | Auth forms validated passwords with a client-only length>=8 check, while the server (shared registerSchema / resetPasswordSchema / acceptTeamInviteSchema) also requires an uppercase letter, a lowercase letter and a digit. A long-but-weak password (e.g. 8 lowercase letters) therefore passed the client gate and was submitted as a guaranteed-400 — bounced by the server instead of caught inline. Client/server validation drift. | Added apps/web/src/lib/form-schemas.ts, which re-exports the shared @charitypilot/shared Zod schemas and derives the shared password rule, and gated every auth form's submit (login, register, forgot-password, reset-password, accept-invite) with the SAME schema via firstSchemaError() / passwordIssue(). The accept-invite form, which previously had no client password check at all, now enforces the shared rule too. No client/server drift is possible. | `the password forms no longer gate on a bare length-only check` |
+| web | The marketing footer copyright text used gray-500 on the dark footer surface (3.66:1), so /pricing failed the WCAG 2.1 AA contrast minimum (axe serious). | Bumped the footer copyright text from gray-500 to gray-400 (~5.9:1) in the marketing layout. | `/pricing is axe-clean (0 serious/critical)` |
+| web | Dark-theme colour contrast across the dashboard failed WCAG 2.1 AA: the brand teal as text (#0D7377 ~3.1:1; #10998E ~4.47:1), gray-500 secondary text (3.66:1), and the HeroUI danger-flat Logout label (4.34:1) — /compliance alone reported 23 serious contrast nodes. | Added dark-mode-accessible brand shades (--color-teal-bright #14B8A6 ~6.8:1, --color-amber-deep #8A6914) and dark text overrides (.dark .text-teal-primary, .dark .text-gray-500); replaced dark:text-gray-500 -> gray-400 and text-teal-light -> text-teal-bright across the dashboard; brightened the Logout label in dark; backgrounds keep the brand shade. Axe-clean in BOTH themes. | `${path} is axe-clean in light and dark themes` |
+| web | The marketing home hero eyebrow used text-amber-accent (#D4A843) on white (~2.2:1), below the WCAG 2.1 AA contrast minimum. | Used the darker --color-amber-deep (#8A6914, ~5.2:1) for the eyebrow text. | `/ is axe-clean (0 serious/critical)` |
 
 ---
 
 <sub>Legend: 🟢 covered = a passing automated test proves the guarantee · 🟡 partial = part proven ·
-🔴 gap = not yet proven · ⚪ n/a = concern considered and documented as not applicable to this group.</sub>
+🔴 gap = not yet proven · ⚪ n/a = concern considered and documented as not applicable to this group.
+<sup>e2e</sup> = proven by a Playwright journey, executed by the CI E2E gate.</sub>

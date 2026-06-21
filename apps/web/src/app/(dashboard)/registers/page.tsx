@@ -332,7 +332,7 @@ export default function RegistersPage() {
         <Card className="border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-light dark:border-teal-light/20">
+              <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-bright dark:border-teal-light/20">
                 Complete plan
               </Chip>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Governance registers are available on Complete.</h2>
@@ -407,7 +407,7 @@ export default function RegistersPage() {
                       </Chip>
                     </div>
                     <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{item.matter}</p>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">
                       Declared {niceDate(item.dateDeclared)} · Minute {item.minuteReference || 'not linked'}
                     </p>
                   </div>
@@ -438,7 +438,7 @@ export default function RegistersPage() {
                       <Chip size="sm" variant="flat">{riskCategoryLabels[item.category]}</Chip>
                     </div>
                     <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{item.mitigation}</p>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">
                       Owner {item.owner || 'not assigned'} · Review {niceDate(item.reviewDate)}
                     </p>
                   </div>
@@ -467,7 +467,7 @@ export default function RegistersPage() {
                         {registerStatusLabels[item.status]}
                       </Chip>
                     </div>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">
                       Received {niceDate(item.receivedDate)} · Board review {item.reviewedByBoard ? 'recorded' : 'pending'}
                     </p>
                   </div>
@@ -496,7 +496,7 @@ export default function RegistersPage() {
                       {item.thirdPartyFundraiser && <Chip size="sm" color="warning" variant="flat">Third party</Chip>}
                     </div>
                     <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{item.controls || 'Controls not recorded yet.'}</p>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Review outcome: {item.reviewOutcome || 'pending'}</p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">Review outcome: {item.reviewOutcome || 'pending'}</p>
                   </div>
                   {item.status !== RegisterStatus.CLOSED && (
                     <Button size="sm" variant="flat" onPress={() => closeRecord('fundraising', item.id)}>
@@ -537,7 +537,7 @@ export default function RegistersPage() {
 }
 
 function MetricCard({ label, value, tone }: { label: string; value: string | number; tone: 'success' | 'warning' | 'danger' }) {
-  const colour = tone === 'success' ? 'text-green-600 dark:text-green-400' : tone === 'danger' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400';
+  const colour = tone === 'success' ? 'text-green-600 dark:text-green-400' : tone === 'danger' ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400';
   return (
     <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
       <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
@@ -573,7 +573,7 @@ function RegisterSection({
         </Button>
       </div>
       <div className="mt-4 space-y-3">
-        {children.length ? children : <p className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-sm text-gray-400 dark:text-gray-500">{empty}</p>}
+        {children.length ? children : <p className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-sm text-gray-400 dark:text-gray-400">{empty}</p>}
       </div>
     </Card>
   );

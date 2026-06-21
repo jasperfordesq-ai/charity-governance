@@ -6,6 +6,7 @@ import { Button, Card, Chip, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
+import { canInviteMembers, canEditMemberRole } from '@/lib/team-permissions';
 import { useDocumentTitle } from '@/lib/use-title';
 import type { TeamResponse, TeamInviteResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
@@ -54,8 +55,7 @@ export default function TeamPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canInvite = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
-  const canChangeRoles = user?.role === UserRole.OWNER;
+  const canInvite = canInviteMembers(user?.role);
 
   const activeInviteCount = useMemo(
     () =>
@@ -136,7 +136,7 @@ export default function TeamPage() {
         </div>
         <div className="flex gap-2">
           <Chip variant="flat" color="primary">{team?.members.length ?? 0} members</Chip>
-          <Chip variant="flat" color="warning">{activeInviteCount} pending invites</Chip>
+          <Chip variant="flat" color="warning" classNames={{ content: '!text-[#7a5200] dark:!text-amber-300' }}>{activeInviteCount} pending invites</Chip>
         </div>
       </div>
 
@@ -180,10 +180,10 @@ export default function TeamPage() {
                       )}
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{member.email}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Joined {formatDate(member.createdAt)}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">Joined {formatDate(member.createdAt)}</p>
                   </div>
 
-                  {canChangeRoles && member.role !== UserRole.OWNER && member.id !== user?.id ? (
+                  {canEditMemberRole(user?.role, user?.id, member) ? (
                     <Select
                       aria-label={`Role for ${member.name}`}
                       size="sm"
@@ -198,7 +198,7 @@ export default function TeamPage() {
                       <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
                     </Select>
                   ) : (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 sm:text-right max-w-[220px]">
+                    <p className="text-xs text-gray-400 dark:text-gray-400 sm:text-right max-w-[220px]">
                       {ROLE_META[member.role].description}
                     </p>
                   )}
@@ -271,7 +271,7 @@ export default function TeamPage() {
                         <Chip size="sm" color={status.color} variant="flat">{status.label}</Chip>
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-gray-400 dark:text-gray-500">Expires {formatDate(invite.expiresAt)}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-400">Expires {formatDate(invite.expiresAt)}</p>
                         {active && canInvite && (
                           <Button size="sm" variant="light" color="danger" onPress={() => revokeInvite(invite.id)}>
                             Revoke

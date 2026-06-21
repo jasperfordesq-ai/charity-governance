@@ -201,7 +201,7 @@ export default function PrincipleDetailPage() {
       <div>
         <button
           onClick={() => router.push('/compliance')}
-          className="text-sm text-teal-primary dark:text-teal-light hover:underline mb-3 inline-flex items-center gap-1"
+          className="text-sm text-teal-primary dark:text-teal-bright hover:underline mb-3 inline-flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -212,7 +212,7 @@ export default function PrincipleDetailPage() {
           Principle {principle.number}: {principle.title}
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{principle.description}</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+        <p className="text-xs text-gray-400 dark:text-gray-400 mt-2">
           Reporting year: {currentYear} &middot; Changes auto-save after 800ms
         </p>
       </div>
@@ -271,7 +271,7 @@ export default function PrincipleDetailPage() {
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0" aria-live="polite">
                       {save === 'saving' && (
-                        <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+                        <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-400">
                           <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                           Saving...
                         </span>
@@ -362,7 +362,7 @@ export default function PrincipleDetailPage() {
                     maxRows={4}
                     size="sm"
                     classNames={{
-                      description: 'text-amber-600 dark:text-amber-300 font-medium',
+                      description: 'text-amber-700 dark:text-amber-300 font-medium',
                     }}
                   />
 

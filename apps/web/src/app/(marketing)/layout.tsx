@@ -152,7 +152,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="pt-8 border-t border-gray-800 text-sm text-center text-gray-500">
+          <div className="pt-8 border-t border-gray-800 text-sm text-center text-gray-400">
             <p>&copy; 2026 Project Nexus Ltd. All rights reserved.</p>
           </div>
         </div>

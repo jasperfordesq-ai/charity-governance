@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { useAuth } from '@/lib/auth-context';
 
@@ -30,6 +31,13 @@ function AcceptInviteForm() {
 
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
+      return;
+    }
+
+    // Enforce the shared password rule client-side (uppercase + lowercase + digit).
+    const pwIssue = passwordIssue(password);
+    if (pwIssue) {
+      setError(pwIssue);
       return;
     }
 

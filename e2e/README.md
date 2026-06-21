@@ -17,6 +17,11 @@ monorepo, so Playwright never enters the API/web production installs or images.
 | `tests/documents.spec.ts` | upload a document → download it and verify the bytes |
 | `tests/deadlines-team.spec.ts` | create a deadline → mark it complete; team invite → accept → join the workspace |
 | `tests/billing.spec.ts` | billing page renders tier + trial + Complete-plan feature gating (Stripe test mode) |
+| `tests/tenant-isolation.spec.ts` | an unknown/foreign principle id renders a clean not-found, never leaked content |
+| `tests/auth-session.spec.ts` | an unauthenticated visit to a protected route → `/login?next=`; an expired/cleared session → login |
+| `tests/authz.spec.ts` | a MEMBER sees admin-only team controls disabled/hidden (affordance; the API enforces it too) |
+| `tests/validation.spec.ts` | register blocks a long-but-weak password inline and sends no guaranteed-400 request |
+| `tests/accessibility.spec.ts` | axe — 0 serious/critical WCAG 2.1 AA violations on every key page, light + dark |
 
 ## Prerequisites
 

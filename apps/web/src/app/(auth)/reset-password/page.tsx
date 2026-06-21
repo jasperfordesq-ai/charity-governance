@@ -4,6 +4,7 @@ import { Suspense, useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 
 function ResetPasswordForm() {
@@ -22,8 +23,10 @@ function ResetPasswordForm() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    // Same shared password rule the server enforces (uppercase + lowercase + digit).
+    const pwIssue = passwordIssue(password);
+    if (pwIssue) {
+      setError(pwIssue);
       return;
     }
 
@@ -49,7 +52,7 @@ function ResetPasswordForm() {
     }
   }
 
-  const passwordInvalid = touched.password && password.length > 0 && password.length < 8;
+  const passwordInvalid = touched.password && password.length > 0 && passwordIssue(password) !== null;
   const confirmInvalid = touched.confirmPassword && confirmPassword.length > 0 && password !== confirmPassword;
   const passwordsMatch = password.length >= 8 && confirmPassword.length > 0 && password === confirmPassword;
 
@@ -110,9 +113,9 @@ function ResetPasswordForm() {
                     onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                     isRequired
                     isInvalid={passwordInvalid}
-                    errorMessage={passwordInvalid ? 'Password must be at least 8 characters' : undefined}
+                    errorMessage={passwordInvalid ? (passwordIssue(password) ?? 'Password must be at least 8 characters') : undefined}
                     autoComplete="new-password"
-                    description="At least 8 characters"
+                    description="At least 8 characters, with an uppercase letter, a lowercase letter, and a number"
                     variant="bordered"
                     classNames={{
                       inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',

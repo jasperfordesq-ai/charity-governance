@@ -72,6 +72,13 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Reliability ledger (API + Web)
+        # Runs the apps/api and apps/web unit suites and fails the build if any covered
+        # guarantee in docs/reliability/guarantees.json is not linked to a passing test
+        # (a regression in the trust ledger). The Playwright E2E gate (.github/workflows/
+        # e2e.yml) proves the e2e-linked rows against the live Docker stack.
+        run: npm run reliability:report
+
       - name: Smoke local Docker app stack
         run: npm run test:local-docker:smoke -- --cleanup --cleanup-volumes
 
