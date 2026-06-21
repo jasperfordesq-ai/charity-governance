@@ -1,0 +1,5 @@
+CharityPilot E2E sample document.
+
+This plain-text file is uploaded and downloaded by the documents end-to-end
+test. text/plain with no NUL bytes and a .txt extension passes the API's MIME,
+extension and content-signature checks (apps/api/src/routes/documents/index.ts).

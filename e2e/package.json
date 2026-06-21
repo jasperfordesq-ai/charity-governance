@@ -1,0 +1,20 @@
+{
+  "name": "charitypilot-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end Playwright tests for CharityPilot, driven against the local Docker stack. Intentionally NOT a root workspace, so Playwright never enters the API/web production installs or images.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium",
+    "install:browsers:ci": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0",
+    "@types/node": "^22.15.0",
+    "@types/pg": "^8.11.10",
+    "pg": "^8.13.1"
+  }
+}

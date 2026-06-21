@@ -25,6 +25,13 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 - **Billing:** Stripe · **Email:** Resend · **Document storage:** Supabase (private bucket, signed URLs) or local filesystem for dev
 - **Default ports:** API `3002` · Web `3003` · PostgreSQL `5434`
 
+> **Full architecture map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the complete,
+> source-grounded system map — component diagram, the module/dependency graph (route
+> groups → services → Prisma models), the 22-model data model, the request lifecycle and
+> auth/session model, billing, document storage, the reminder scheduler, the governance
+> domain, the frontend, and the config/two-gate model. Every non-trivial claim carries a
+> `file:line` citation.
+
 ## Repository layout
 
 ```
@@ -108,6 +115,10 @@ The API runs on <http://localhost:3002> and the web app on
 - **Production-tooling tests** validate the launch scripts: `npm run test:production-check`.
 - **Local Docker smoke** boots the real containerised stack and exercises auth,
   document upload/download, and the web shell: `npm run test:local-docker:smoke`.
+- **End-to-end (Playwright)** drives a real browser against the local Docker stack —
+  register/verify/login, a compliance sign-off, document upload/download, deadlines,
+  team invite/accept, and billing tier gating. One-time `npm run test:e2e:install`,
+  then `npm run test:e2e` (stack must be up). See [`e2e/README.md`](e2e/README.md).
 
 ---
 
