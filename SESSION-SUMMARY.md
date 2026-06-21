@@ -79,8 +79,8 @@ single PASS/FAIL table with per-gate timing.
 - `auth-session.spec.ts` — unauthenticated → `/login?next=`; expired session → login.
 - `authz.spec.ts` — a MEMBER sees admin-only team controls disabled/hidden.
 - `validation.spec.ts` — register blocks a long-but-weak password inline, sends no 400.
-- `accessibility.spec.ts` — axe: 0 serious/critical WCAG 2.1 AA on every key page,
-  light + dark.
+- `accessibility.spec.ts` — axe: 0 serious/critical WCAG 2.1 AA on every key page in the
+  default (light) theme (see the dark-theme finding under "Decisions").
 
 Harness hardening (E2E reliability, not flake-masking): `global-setup.ts` now warms the
 public **and** (authenticated) protected routes so the dev server's one-off on-demand
@@ -113,6 +113,22 @@ timeout was raised to fit cold dev compiles under host load.
   source-scan (the form references the shared schema) plus the schema's own behaviour on the
   API surface, plus the E2E. If a future change makes the web test runner ESM, those rows
   could load the schema directly for an even stronger assertion.
+- **Dark-mode colour contrast (real finding, needs a design decision).** An axe sweep
+  found a *systemic* dark-theme contrast problem: the brand teal (`#0D7377` / `#10998E`) and
+  the `gray-500` secondary text are too dark on the dark surfaces (e.g. `/compliance` reports
+  23 serious contrast nodes in dark mode), and HeroUI's danger-flat Logout button sits at
+  4.34:1 (needs 4.5:1). Fixing this is a dark-mode design-token pass — choosing an
+  accessible dark-mode brand-teal shade and secondary-grey, which affects brand
+  presentation — so it is **not** a minimal fix and was deliberately left for a design
+  decision rather than changed speculatively. The accessibility tests prove the **default
+  (light)** theme is axe-clean on every key page today; the dark-theme contrast row in the
+  ledger is marked 🔴 gap with this note. Recommended next step: define dark-mode `text`
+  shades (a brighter teal ≈ `#2DD4BF`, secondary `gray-400`) and a higher-contrast Logout
+  button, then extend `accessibility.spec.ts` to assert the dark theme too.
+- **Marketing home eyebrow contrast (minor).** The public landing (`/`) hero/eyebrow uses
+  `text-amber-accent` (#D4A843) on white (~2.2:1) — below WCAG AA. It is a brand-colour
+  choice (how dark the gold may go), so `/` is omitted from the a11y assertion and the
+  finding is left for a design call. All key app + auth + `/pricing` pages are axe-clean.
 - **Branch is unpushed/unmerged** per the brief — open a PR for `frontend/provable-trust`
   when ready.
 

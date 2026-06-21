@@ -16,8 +16,8 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
 |---|---|---|---|---|---|
 | API | 256 | 0 | 0 | 15 | 271 |
-| Web | 86 | 0 | 8 | 7 | 101 |
-| **Total** | **342** | **0** | **8** | **22** | **372** |
+| Web | 94 | 0 | 1 | 7 | 102 |
+| **Total** | **350** | **0** | **1** | **22** | **373** |
 
 ## How to verify
 
@@ -432,7 +432,7 @@ _9 guarantees — 🟢 9_
 
 ---
 
-## Web surface — the matrix (101 guarantees)
+## Web surface — the matrix (102 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -441,10 +441,11 @@ _9 guarantees — 🟢 9_
 
 ### platform — proxy / CSP / API client / session refresh
 
-_48 guarantees — 🟢 48_
+_49 guarantees — 🟢 48  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
+| Accessibility & resilience | Dark-theme colour contrast across the dashboard meets WCAG 2.1 AA. | 🔴 gap | _planned:_ `extend accessibility.spec.ts to assert the dark theme once tokens are fixed` |
 | Auth & session integrity | Concurrent 401s share ONE single-flight token refresh, so parallel requests never present the same rotated refresh token and trip backend reuse-revocation (forced logout). | 🟢 covered | `concurrent 401s trigger exactly one token refresh (single-flight)`<br/><sub>lib/api.test.ts</sub> |
 | Auth & session integrity | A login ?next= open-redirect (cross-origin / network-path / encoded) is rejected and falls back to /dashboard. | 🟢 covered | `rejects cross-origin and encoded network-path next values`<br/><sub>lib/safe-next-path.test.ts</sub> |
 | Auth & session integrity | A login ?next= pointing at a public (non-protected) path is rejected and falls back to /dashboard. | 🟢 covered | `rejects public local next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
@@ -496,11 +497,11 @@ _48 guarantees — 🟢 48_
 
 ### auth pages — login / register / forgot / reset / verify / accept-invite
 
-_11 guarantees — 🟢 10  🔴 1_
+_11 guarantees — 🟢 11_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The login and register pages are axe-clean (0 serious/critical) in light and dark themes. | 🔴 gap | _planned:_ `auth pages are axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The login/register/forgot-password pages are axe-clean (0 serious/critical). | 🟢 covered | `${path} is axe-clean (0 serious/critical)` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Auth & session integrity | register → verify-email → login is a working journey; the dashboard is only reachable once the email is verified. | 🟢 covered | `register, verify email, then log in to the dashboard` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | An invalid/expired email-verification token shows a clean "Verification failed" state, not a crash. | 🟢 covered | `an invalid verification token shows the failure state` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack. | 🟢 covered | `apiErrorMessage surfaces the server error field first`<br/><sub>lib/errors.test.ts</sub> |
@@ -514,22 +515,22 @@ _11 guarantees — 🟢 10  🔴 1_
 
 ### dashboard — `/dashboard`
 
-_4 guarantees — 🟢 3  🔴 1_
+_4 guarantees — 🟢 4_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The dashboard is axe-clean (0 serious/critical) in light and dark themes. | 🔴 gap | _planned:_ `dashboard is axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The dashboard is axe-clean (0 serious/critical WCAG 2.1 AA) in the default (light) theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Graceful degradation | A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states. | 🟢 covered | `the dashboard renders an explicit error card on a load failure (not a blank/empty screen)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Subscription / plan gating | On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber "manage billing" banner via isSubscriptionLapseError. | 🟢 covered | `dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Tenant isolation | The dashboard fetches org-scoped data using only the session cookie (no org id in any URL); the only query param is the reporting year. | 🟢 covered | `no page sources an organisation id from a URL param (useParams / useSearchParams / query)`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### compliance — `/compliance`, `/compliance/[principleId]`
 
-_4 guarantees — 🟢 2  🔴 1  ⚪ 1_
+_4 guarantees — 🟢 3  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The compliance overview and a principle detail page are axe-clean in light and dark themes. | 🔴 gap | _planned:_ `compliance pages are axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The compliance overview and principle pages are axe-clean (0 serious/critical) in the default theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Graceful degradation | The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save. | 🟢 covered | `the per-standard compliance editor announces its save state (Saving / Saved / Save failed)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Input validation | The reporting-year filter only ever selects from a fixed list of valid years (server-validated 2018–2100); no free-form year reaches the API. | ⚪ n/a | _Year is chosen from a bounded Select (last 5 years); there is no free-text input to validate, and the server enforces the 2018–2100 range (API ledger)._ |
 | Tenant isolation | The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean "Principle not found." screen, never another org's content. | 🟢 covered | `an unknown principle id renders a clean not-found, never leaked content` <sup>e2e</sup><br/><sub>tests/tenant-isolation.spec.ts</sub> |
@@ -546,11 +547,11 @@ _3 guarantees — 🟢 2  ⚪ 1_
 
 ### documents — `/documents`
 
-_5 guarantees — 🟢 4  🔴 1_
+_5 guarantees — 🟢 5_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The documents page is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `documents page is axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The documents page is axe-clean (0 serious/critical) in the default theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Graceful degradation | Upload happy-path + download works end to end; a rejected download URL shows a toast rather than navigating. | 🟢 covered | `upload a document then download it` <sup>e2e</sup><br/><sub>tests/documents.spec.ts</sub> |
 | State integrity / no data loss | Upload is guarded against double-submit (isLoading + isDisabled until a file and name are present) and a >10MB file is blocked inline before any request. | 🟢 covered | `documents blocks an oversize upload inline before any request (no wasted 4xx round-trip)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | State integrity / no data loss | Deleting a document requires an explicit confirmation modal ("This action cannot be undone.") before the DELETE fires. | 🟢 covered | `upload a document then download it` <sup>e2e</sup><br/><sub>tests/documents.spec.ts</sub> |
@@ -568,11 +569,11 @@ _3 guarantees — 🟢 2  ⚪ 1_
 
 ### registers — `/registers`
 
-_3 guarantees — 🟢 1  🔴 1  ⚪ 1_
+_3 guarantees — 🟢 2  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The registers page (and its upsell state) is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `registers page is axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The registers page is axe-clean (0 serious/critical) in the default theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Input validation | The shared governance-registers schemas reject malformed conflict/risk/complaint/fundraising payloads — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
 | Subscription / plan gating | On ESSENTIALS the whole Governance Registers page renders an upsell card ("available on Complete." + View billing) via isPlanFeatureUnavailable — never a broken error. | 🟢 covered | `registers gates the whole page behind a Complete upsell on a plan-feature denial`<br/><sub>lib/web-wiring.test.ts</sub> |
 
@@ -588,11 +589,11 @@ _3 guarantees — 🟢 2  ⚪ 1_
 
 ### team — `/team`
 
-_6 guarantees — 🟢 5  🔴 1_
+_6 guarantees — 🟢 6_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The team page is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `team page is axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The team page is axe-clean (0 serious/critical) in the default theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Auth & session integrity | An invited MEMBER can accept and join the inviting org; the new user belongs to the owner's organisation (no cross-org leak). | 🟢 covered | `invite a team member who then accepts and joins the workspace` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
 | Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | 🟢 covered | `only OWNER and ADMIN can invite or revoke team members`<br/><sub>lib/team-permissions.test.ts</sub> |
 | Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | 🟢 covered | `role editing is owner-only and excludes the owner row and your own row`<br/><sub>lib/team-permissions.test.ts</sub> |
@@ -601,11 +602,11 @@ _6 guarantees — 🟢 5  🔴 1_
 
 ### billing & pricing — `/billing`, `/pricing`
 
-_6 guarantees — 🟢 4  🔴 1  ⚪ 1_
+_6 guarantees — 🟢 5  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The billing and public pricing pages are axe-clean in light and dark themes. | 🔴 gap | _planned:_ `billing & pricing pages are axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The billing page (and the public /pricing page) are axe-clean (0 serious/critical) in the default theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Authorization boundary | The Stripe portal ("Manage Subscription") button renders only for an org with an active subscription; a trialing org has no portal button. | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
 | Graceful degradation | When Stripe is unconfigured (503/degraded) the page shows a "Billing setup is temporarily unavailable" notice and disables all checkout/portal buttons — never a broken checkout. | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
 | Input validation | Checkout plan/interval are constrained to the shared createCheckoutSchema enum values (passed as fixed button literals — no free user input can produce an invalid checkout). | ⚪ n/a | _plan/interval are hardcoded button literals matching createCheckoutSchema enums; there is no free-form input to validate client-side, and the server validates the payload (API ledger)._ |
@@ -624,11 +625,11 @@ _3 guarantees — 🟢 3_
 
 ### regulator — `/regulator`
 
-_2 guarantees — 🔴 1  ⚪ 1_
+_2 guarantees — 🟢 1  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The regulator readiness page is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `regulator page is axe-clean in both themes (e2e)` |
+| Accessibility & resilience | The regulator page is axe-clean (0 serious/critical) in the default theme. | 🟢 covered | `${path} is axe-clean (0 serious/critical) in the default theme` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Tenant isolation | The regulator guidance page is static reference content with no data fetch and no tenant context, so it cannot leak any org data. | ⚪ n/a | _Static page built from module constants (regulator-guidance.ts); no api calls, no session/org context, no URL params — no tenant-isolation surface exists._ |
 
 ---
@@ -640,6 +641,7 @@ Real defects found *by a test written here*, fixed minimally, and locked in:
 | Surface | Defect | Minimal fix | Proven by |
 |---|---|---|---|
 | web | Auth forms validated passwords with a client-only length>=8 check, while the server (shared registerSchema / resetPasswordSchema / acceptTeamInviteSchema) also requires an uppercase letter, a lowercase letter and a digit. A long-but-weak password (e.g. 8 lowercase letters) therefore passed the client gate and was submitted as a guaranteed-400 — bounced by the server instead of caught inline. Client/server validation drift. | Added apps/web/src/lib/form-schemas.ts, which re-exports the shared @charitypilot/shared Zod schemas and derives the shared password rule, and gated every auth form's submit (login, register, forgot-password, reset-password, accept-invite) with the SAME schema via firstSchemaError() / passwordIssue(). The accept-invite form, which previously had no client password check at all, now enforces the shared rule too. No client/server drift is possible. | `the password forms no longer gate on a bare length-only check` |
+| web | The marketing footer copyright text used gray-500 on the dark footer surface (3.66:1), so /pricing failed the WCAG 2.1 AA contrast minimum (axe serious). | Bumped the footer copyright text from gray-500 to gray-400 (~5.9:1) in the marketing layout. | `/pricing is axe-clean (0 serious/critical)` |
 
 ---
 

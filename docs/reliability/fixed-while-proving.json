@@ -4,5 +4,11 @@
     "defect": "Auth forms validated passwords with a client-only length>=8 check, while the server (shared registerSchema / resetPasswordSchema / acceptTeamInviteSchema) also requires an uppercase letter, a lowercase letter and a digit. A long-but-weak password (e.g. 8 lowercase letters) therefore passed the client gate and was submitted as a guaranteed-400 — bounced by the server instead of caught inline. Client/server validation drift.",
     "fix": "Added apps/web/src/lib/form-schemas.ts, which re-exports the shared @charitypilot/shared Zod schemas and derives the shared password rule, and gated every auth form's submit (login, register, forgot-password, reset-password, accept-invite) with the SAME schema via firstSchemaError() / passwordIssue(). The accept-invite form, which previously had no client password check at all, now enforces the shared rule too. No client/server drift is possible.",
     "test": "the password forms no longer gate on a bare length-only check"
+  },
+  {
+    "surface": "web",
+    "defect": "The marketing footer copyright text used gray-500 on the dark footer surface (3.66:1), so /pricing failed the WCAG 2.1 AA contrast minimum (axe serious).",
+    "fix": "Bumped the footer copyright text from gray-500 to gray-400 (~5.9:1) in the marketing layout.",
+    "test": "/pricing is axe-clean (0 serious/critical)"
   }
 ]

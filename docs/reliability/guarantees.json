@@ -3958,13 +3958,13 @@
     "surface": "web",
     "group": "web-auth",
     "concern": "accessibility",
-    "guarantee": "The login and register pages are axe-clean (0 serious/critical) in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The login/register/forgot-password pages are axe-clean (0 serious/critical).",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical)",
     "gapDescription": "",
-    "proposedTitle": "auth pages are axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-dashboard-tenant-isolation-1",
@@ -4010,13 +4010,13 @@
     "surface": "web",
     "group": "web-dashboard",
     "concern": "accessibility",
-    "guarantee": "The dashboard is axe-clean (0 serious/critical) in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The dashboard is axe-clean (0 serious/critical WCAG 2.1 AA) in the default (light) theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "dashboard is axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-compliance-tenant-isolation-1",
@@ -4062,13 +4062,13 @@
     "surface": "web",
     "group": "web-compliance",
     "concern": "accessibility",
-    "guarantee": "The compliance overview and a principle detail page are axe-clean in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The compliance overview and principle pages are axe-clean (0 serious/critical) in the default theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "compliance pages are axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-board-state-integrity-1",
@@ -4166,13 +4166,13 @@
     "surface": "web",
     "group": "web-documents",
     "concern": "accessibility",
-    "guarantee": "The documents page is axe-clean in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The documents page is axe-clean (0 serious/critical) in the default theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "documents page is axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-deadlines-state-integrity-1",
@@ -4244,13 +4244,13 @@
     "surface": "web",
     "group": "web-registers",
     "concern": "accessibility",
-    "guarantee": "The registers page (and its upsell state) is axe-clean in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The registers page is axe-clean (0 serious/critical) in the default theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "registers page is axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-organisation-tenant-isolation-1",
@@ -4361,13 +4361,13 @@
     "surface": "web",
     "group": "web-team",
     "concern": "accessibility",
-    "guarantee": "The team page is axe-clean in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The team page is axe-clean (0 serious/critical) in the default theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "team page is axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-billing-authz-boundary-1",
@@ -4439,13 +4439,13 @@
     "surface": "web",
     "group": "web-billing",
     "concern": "accessibility",
-    "guarantee": "The billing and public pricing pages are axe-clean in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The billing page (and the public /pricing page) are axe-clean (0 serious/critical) in the default theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "billing & pricing pages are axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-export-tenant-isolation-1",
@@ -4504,13 +4504,13 @@
     "surface": "web",
     "group": "web-regulator",
     "concern": "accessibility",
-    "guarantee": "The regulator readiness page is axe-clean in light and dark themes.",
-    "status": "gap",
-    "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "guarantee": "The regulator page is axe-clean (0 serious/critical) in the default theme.",
+    "status": "covered",
+    "testType": "e2e",
+    "testFile": "e2e/tests/accessibility.spec.ts",
+    "testTitle": "${path} is axe-clean (0 serious/critical) in the default theme",
     "gapDescription": "",
-    "proposedTitle": "regulator page is axe-clean in both themes (e2e)"
+    "proposedTitle": ""
   },
   {
     "id": "web-platform-state-integrity-1",
@@ -4563,5 +4563,18 @@
     "testTitle": "an expired/cleared session is redirected to login, not left on a protected page",
     "proposedTitle": "",
     "gapDescription": ""
+  },
+  {
+    "id": "web-platform-accessibility-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "accessibility",
+    "guarantee": "Dark-theme colour contrast across the dashboard meets WCAG 2.1 AA.",
+    "status": "gap",
+    "testType": "e2e",
+    "testFile": "",
+    "testTitle": "",
+    "proposedTitle": "extend accessibility.spec.ts to assert the dark theme once tokens are fixed",
+    "gapDescription": "OPEN FINDING (needs a design decision). Axe found a systemic dark-mode contrast problem: the brand teal (#0D7377/#10998E) and gray-500 secondary text are too dark on the dark surfaces (e.g. /compliance reports 23 serious contrast nodes), and the HeroUI danger-flat Logout button is 4.34:1. Fixing it is a dark-mode design-token pass (accessible brand-teal shade + secondary grey + Logout contrast), so it is surfaced as a human-decision item in SESSION-SUMMARY rather than changed speculatively. The default (light) theme IS proven axe-clean on every key page."
   }
 ]
