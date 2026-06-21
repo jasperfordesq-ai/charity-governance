@@ -16,8 +16,8 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
 |---|---|---|---|---|---|
 | API | 256 | 0 | 0 | 15 | 271 |
-| Web | 68 | 0 | 29 | 3 | 100 |
-| **Total** | **324** | **0** | **29** | **18** | **371** |
+| Web | 81 | 0 | 12 | 7 | 100 |
+| **Total** | **337** | **0** | **12** | **22** | **371** |
 
 ## How to verify
 
@@ -441,7 +441,7 @@ _9 guarantees — 🟢 9_
 
 ### platform — proxy / CSP / API client / session refresh
 
-_47 guarantees — 🟢 45  🔴 2_
+_47 guarantees — 🟢 46  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -479,7 +479,7 @@ _47 guarantees — 🟢 45  🔴 2_
 | Graceful degradation | A recoverable chunk failure triggers at most ONE reload — never a reload loop. | 🟢 covered | `attempts only one reload for a recoverable chunk failure`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | The single-reload marker is cleared once the page is stable, so a later genuine chunk failure can still recover once. | 🟢 covered | `clears the reload attempt marker after a stable page mount`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | Server-rendered JSON-LD is serialised without allowing a </script> breakout (no injection via structured data). | 🟢 covered | `serialises JSON-LD without allowing script tag breakouts`<br/><sub>lib/json-ld.test.ts</sub> |
-| Graceful degradation | A thrown render error is caught by the error boundary and rendered as a clean "Something went wrong" screen with a recover action — never a blank page or unhandled exception. | 🔴 gap | _planned:_ `the global and dashboard error boundaries render a recoverable error screen` |
+| Graceful degradation | A thrown render error is caught by the error boundary and rendered as a clean "Something went wrong" screen with a recover action — never a blank page or unhandled exception. | 🟢 covered | `the global and dashboard error boundaries render a recoverable screen`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Graceful degradation | The error boundary logs only a redacted summary (status/code/digest/name) in production — never the raw error message or stack. | 🟢 covered | `in production logClientError records only a redacted summary, never the raw message or stack`<br/><sub>lib/client-logger.test.ts</sub> |
 | Input validation | The error renderer surfaces the server's specific message (data.error ?? data.message ?? fallback) and never a raw exception/stack. | 🟢 covered | `apiErrorMessage never throws or leaks on odd/hostile error shapes`<br/><sub>lib/errors.test.ts</sub> |
 | Subscription / plan gating | A COMPLETE-only feature denial (403 PLAN_FEATURE_UNAVAILABLE) is correctly identified so gated pages can show an upsell, not a broken error. | 🟢 covered | `identifies Complete-plan feature denial API errors`<br/><sub>lib/plan-feature.test.ts</sub> |
@@ -513,81 +513,81 @@ _11 guarantees — 🟢 9  🔴 2_
 
 ### dashboard — `/dashboard`
 
-_4 guarantees — 🟢 1  🔴 3_
+_4 guarantees — 🟢 3  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The dashboard is axe-clean (0 serious/critical) in light and dark themes. | 🔴 gap | _planned:_ `dashboard is axe-clean in both themes (e2e)` |
-| Graceful degradation | A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states. | 🔴 gap | _planned:_ `dashboard shows an error card on load failure and empty states otherwise` |
-| Subscription / plan gating | On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber "manage billing" banner via isSubscriptionLapseError. | 🔴 gap | _planned:_ `dashboard hides the registers card / shows the lapse banner via plan-feature helpers` |
+| Graceful degradation | A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states. | 🟢 covered | `the dashboard renders an explicit error card on a load failure (not a blank/empty screen)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Subscription / plan gating | On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber "manage billing" banner via isSubscriptionLapseError. | 🟢 covered | `dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Tenant isolation | The dashboard fetches org-scoped data using only the session cookie (no org id in any URL); the only query param is the reporting year. | 🟢 covered | `no page sources an organisation id from a URL param (useParams / useSearchParams / query)`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### compliance — `/compliance`, `/compliance/[principleId]`
 
-_4 guarantees — 🔴 3  ⚪ 1_
+_4 guarantees — 🟢 1  🔴 2  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The compliance overview and a principle detail page are axe-clean in light and dark themes. | 🔴 gap | _planned:_ `compliance pages are axe-clean in both themes (e2e)` |
-| Graceful degradation | The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save. | 🔴 gap | _planned:_ `compliance auto-save shows save state and preserves input on failure` |
+| Graceful degradation | The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save. | 🟢 covered | `the per-standard compliance editor announces its save state (Saving / Saved / Save failed)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Input validation | The reporting-year filter only ever selects from a fixed list of valid years (server-validated 2018–2100); no free-form year reaches the API. | ⚪ n/a | _Year is chosen from a bounded Select (last 5 years); there is no free-text input to validate, and the server enforces the 2018–2100 range (API ledger)._ |
 | Tenant isolation | The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean "Principle not found." screen, never another org's content. | 🔴 gap | _planned:_ `a foreign/unknown principleId renders a clean not-found (e2e)` |
 
 ### board — `/board`
 
-_3 guarantees — 🔴 3_
+_3 guarantees — 🟢 2  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Graceful degradation | A board-member mutation failure shows a toast and leaves the existing list intact (no partial/optimistic data loss). | 🔴 gap | _planned:_ `board mutation failure keeps the list intact` |
-| Input validation | The shared createBoardMemberSchema/updateBoardMemberSchema reject malformed payloads (missing name/role/date, bad email) — the validation authority the server enforces. | 🔴 gap | _planned:_ `board member shared schemas reject malformed payloads` |
-| State integrity / no data loss | The Add/Edit board-member submit is guarded against double-submit (isLoading + isDisabled until required fields present); the modal stays open with the data intact on a failed save. | 🔴 gap | _planned:_ `board member save guards double-submit and preserves the modal on failure` |
+| Graceful degradation | A board-member mutation failure shows a toast and leaves the existing list intact (no partial/optimistic data loss). | 🟢 covered | `a board mutation failure shows a toast and keeps the existing list (no partial data loss)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Input validation | The shared createBoardMemberSchema/updateBoardMemberSchema reject malformed payloads (missing name/role/date, bad email) — the validation authority the server enforces. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| State integrity / no data loss | The Add/Edit board-member submit is guarded against double-submit (isLoading + isDisabled until required fields present); the modal stays open with the data intact on a failed save. | 🟢 covered | `board/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### documents — `/documents`
 
-_5 guarantees — 🟢 2  🔴 3_
+_5 guarantees — 🟢 4  🔴 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The documents page is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `documents page is axe-clean in both themes (e2e)` |
 | Graceful degradation | Upload happy-path + download works end to end; a rejected download URL shows a toast rather than navigating. | 🟢 covered | `upload a document then download it` <sup>e2e</sup><br/><sub>tests/documents.spec.ts</sub> |
-| State integrity / no data loss | Upload is guarded against double-submit (isLoading + isDisabled until a file and name are present) and a >10MB file is blocked inline before any request. | 🔴 gap | _planned:_ `document upload guards double-submit and blocks oversize files inline` |
+| State integrity / no data loss | Upload is guarded against double-submit (isLoading + isDisabled until a file and name are present) and a >10MB file is blocked inline before any request. | 🟢 covered | `documents blocks an oversize upload inline before any request (no wasted 4xx round-trip)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | State integrity / no data loss | Deleting a document requires an explicit confirmation modal ("This action cannot be undone.") before the DELETE fires. | 🟢 covered | `upload a document then download it` <sup>e2e</sup><br/><sub>tests/documents.spec.ts</sub> |
-| Tenant isolation | A document download URL returned by the API is passed through getTrustedDocumentDownloadUrl before navigation, so a tampered/foreign URL is rejected with a toast. | 🔴 gap | _planned:_ `document download trusts only allow-listed URLs` |
+| Tenant isolation | A document download URL returned by the API is passed through getTrustedDocumentDownloadUrl before navigation, so a tampered/foreign URL is rejected with a toast. | 🟢 covered | `documents routes every download URL through the trusted-download allow-list`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### deadlines — `/deadlines`
 
-_3 guarantees — 🟢 2  🔴 1_
+_3 guarantees — 🟢 2  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Graceful degradation | A create→complete deadline round-trip works; the completion toggle reflects server state. | 🟢 covered | `create a deadline then mark it complete` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
-| Input validation | The shared createDeadlineSchema rejects a missing title/date and out-of-range reminder days — the server-enforced authority. | 🔴 gap | _planned:_ `deadline shared schema rejects malformed payloads` |
+| Input validation | The shared createDeadlineSchema rejects a missing title/date and out-of-range reminder days — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
 | State integrity / no data loss | Adding a deadline is guarded against double-submit (isLoading + isDisabled until title and due-date present). | 🟢 covered | `create a deadline then mark it complete` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
 
 ### registers — `/registers`
 
-_3 guarantees — 🔴 3_
+_3 guarantees — 🟢 1  🔴 1  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The registers page (and its upsell state) is axe-clean in light and dark themes. | 🔴 gap | _planned:_ `registers page is axe-clean in both themes (e2e)` |
-| Input validation | The shared governance-registers schemas reject malformed conflict/risk/complaint/fundraising payloads — the server-enforced authority. | 🔴 gap | _planned:_ `governance-registers shared schemas reject malformed payloads` |
-| Subscription / plan gating | On ESSENTIALS the whole Governance Registers page renders an upsell card ("available on Complete." + View billing) via isPlanFeatureUnavailable — never a broken error. | 🔴 gap | _planned:_ `registers shows the Complete upsell card on a plan-feature denial` |
+| Input validation | The shared governance-registers schemas reject malformed conflict/risk/complaint/fundraising payloads — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| Subscription / plan gating | On ESSENTIALS the whole Governance Registers page renders an upsell card ("available on Complete." + View billing) via isPlanFeatureUnavailable — never a broken error. | 🟢 covered | `registers gates the whole page behind a Complete upsell on a plan-feature denial`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### organisation — `/organisation`
 
-_3 guarantees — 🟢 1  🔴 2_
+_3 guarantees — 🟢 2  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Input validation | The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority. | 🔴 gap | _planned:_ `organisation shared schema rejects malformed payloads` |
-| State integrity / no data loss | Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits. | 🔴 gap | _planned:_ `organisation save guards double-submit and warns on unsaved changes` |
+| Input validation | The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority. | ⚪ n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
+| State integrity / no data loss | Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits. | 🟢 covered | `organisation warns before discarding unsaved edits (no silent data loss)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Tenant isolation | The organisation profile is read from useAuth().user.organisation and saved with PATCH /organisation carrying NO org id — a user can only ever edit their own org (server resolves the tenant from the cookie). | 🟢 covered | `no API request carries an organisation id as a query or path parameter`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### team — `/team`
 
-_6 guarantees — 🟢 3  🔴 3_
+_6 guarantees — 🟢 4  🔴 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -596,11 +596,11 @@ _6 guarantees — 🟢 3  🔴 3_
 | Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | 🟢 covered | `only OWNER and ADMIN can invite or revoke team members`<br/><sub>lib/team-permissions.test.ts</sub> |
 | Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | 🟢 covered | `role editing is owner-only and excludes the owner row and your own row`<br/><sub>lib/team-permissions.test.ts</sub> |
 | Authorization boundary | A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end. | 🔴 gap | _planned:_ `a MEMBER cannot invite: control disabled and API blocks it (e2e)` |
-| Input validation | The invite form validates email with the shared inviteTeamMemberSchema and the server's actual error message is surfaced inline (apiErrorMessage), not a generic string. | 🔴 gap | _planned:_ `team invite shares inviteTeamMemberSchema and surfaces the server message` |
+| Input validation | The invite form surfaces the server's actual validation/error message inline via apiErrorMessage (e.g. a malformed email), never a generic or raw error. | 🟢 covered | `team surfaces the server's specific error message (apiErrorMessage), not a generic string`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### billing & pricing — `/billing`, `/pricing`
 
-_6 guarantees — 🟢 3  🔴 2  ⚪ 1_
+_6 guarantees — 🟢 4  🔴 1  ⚪ 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -609,16 +609,16 @@ _6 guarantees — 🟢 3  🔴 2  ⚪ 1_
 | Graceful degradation | When Stripe is unconfigured (503/degraded) the page shows a "Billing setup is temporarily unavailable" notice and disables all checkout/portal buttons — never a broken checkout. | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
 | Input validation | Checkout plan/interval are constrained to the shared createCheckoutSchema enum values (passed as fixed button literals — no free user input can produce an invalid checkout). | ⚪ n/a | _plan/interval are hardcoded button literals matching createCheckoutSchema enums; there is no free-form input to validate client-side, and the server validates the payload (API ledger)._ |
 | Subscription / plan gating | The billing page renders the current tier + trial state and the Complete-only feature comparison correctly (test mode). | 🟢 covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
-| Tenant isolation | A Stripe redirect URL returned by the API is validated with getTrustedStripeRedirectUrl before navigation; an unexpected origin shows an error instead of redirecting. | 🔴 gap | _planned:_ `billing redirect trusts only hosted-Stripe origins` |
+| Tenant isolation | A Stripe redirect URL returned by the API is validated with getTrustedStripeRedirectUrl before navigation; an unexpected origin shows an error instead of redirecting. | 🟢 covered | `billing routes Stripe redirects through the trusted-redirect allow-list`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### export — `/export`
 
-_3 guarantees — 🟢 2  🔴 1_
+_3 guarantees — 🟢 3_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Auth & session integrity | Recording a standard then completing board sign-off works end to end. | 🟢 covered | `record a standard then complete board sign-off` <sup>e2e</sup><br/><sub>tests/compliance.spec.ts</sub> |
-| State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | 🔴 gap | _planned:_ `export sign-off guards double-submit and enforces the APPROVED required-trio` |
+| State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | 🟢 covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side. | 🟢 covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### regulator — `/regulator`

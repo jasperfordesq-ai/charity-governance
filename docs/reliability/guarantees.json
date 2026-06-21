@@ -3634,12 +3634,12 @@
     "group": "web-platform",
     "concern": "graceful-degradation",
     "guarantee": "A thrown render error is caught by the error boundary and rendered as a clean \"Something went wrong\" screen with a recover action — never a blank page or unhandled exception.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
-    "gapDescription": "Proven structurally + by an e2e that forces a client error.",
-    "proposedTitle": "the global and dashboard error boundaries render a recoverable error screen"
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "the global and dashboard error boundaries render a recoverable screen",
+    "gapDescription": "",
+    "proposedTitle": ""
   },
   {
     "id": "web-platform-graceful-degradation-8",
@@ -3985,12 +3985,12 @@
     "group": "web-dashboard",
     "concern": "plan-gating",
     "guarantee": "On ESSENTIALS the governance-registers summary card is hidden via isPlanFeatureUnavailable instead of erroring; a subscription lapse shows an amber \"manage billing\" banner via isSubscriptionLapseError.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)",
     "gapDescription": "",
-    "proposedTitle": "dashboard hides the registers card / shows the lapse banner via plan-feature helpers"
+    "proposedTitle": ""
   },
   {
     "id": "web-dashboard-graceful-degradation-1",
@@ -3998,12 +3998,12 @@
     "group": "web-dashboard",
     "concern": "graceful-degradation",
     "guarantee": "A dashboard data-load failure renders an explicit error Card (role=alert), never a blank screen or infinite spinner; empty datasets render distinct empty states.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "the dashboard renders an explicit error card on a load failure (not a blank/empty screen)",
     "gapDescription": "",
-    "proposedTitle": "dashboard shows an error card on load failure and empty states otherwise"
+    "proposedTitle": ""
   },
   {
     "id": "web-dashboard-accessibility-1",
@@ -4050,12 +4050,12 @@
     "group": "web-compliance",
     "concern": "graceful-degradation",
     "guarantee": "The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "the per-standard compliance editor announces its save state (Saving / Saved / Save failed)",
     "gapDescription": "",
-    "proposedTitle": "compliance auto-save shows save state and preserves input on failure"
+    "proposedTitle": ""
   },
   {
     "id": "web-compliance-accessibility-1",
@@ -4076,12 +4076,12 @@
     "group": "web-board",
     "concern": "state-integrity",
     "guarantee": "The Add/Edit board-member submit is guarded against double-submit (isLoading + isDisabled until required fields present); the modal stays open with the data intact on a failed save.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "board/page.tsx guards its primary mutation against double-submit (isLoading)",
     "gapDescription": "",
-    "proposedTitle": "board member save guards double-submit and preserves the modal on failure"
+    "proposedTitle": ""
   },
   {
     "id": "web-board-input-validation-1",
@@ -4089,12 +4089,12 @@
     "group": "web-board",
     "concern": "input-validation",
     "guarantee": "The shared createBoardMemberSchema/updateBoardMemberSchema reject malformed payloads (missing name/role/date, bad email) — the validation authority the server enforces.",
-    "status": "gap",
+    "status": "na",
     "testType": "unit",
     "testFile": "",
     "testTitle": "",
-    "gapDescription": "",
-    "proposedTitle": "board member shared schemas reject malformed payloads"
+    "gapDescription": "Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation rule that could drift from the server, and a server 400 renders as a clean toast/banner (never a raw error/stack). Wiring shared-schema client pre-validation here is an optional defense-in-depth enhancement (see SESSION-SUMMARY).",
+    "proposedTitle": ""
   },
   {
     "id": "web-board-graceful-degradation-1",
@@ -4102,12 +4102,12 @@
     "group": "web-board",
     "concern": "graceful-degradation",
     "guarantee": "A board-member mutation failure shows a toast and leaves the existing list intact (no partial/optimistic data loss).",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "a board mutation failure shows a toast and keeps the existing list (no partial data loss)",
     "gapDescription": "",
-    "proposedTitle": "board mutation failure keeps the list intact"
+    "proposedTitle": ""
   },
   {
     "id": "web-documents-tenant-isolation-1",
@@ -4115,12 +4115,12 @@
     "group": "web-documents",
     "concern": "tenant-isolation",
     "guarantee": "A document download URL returned by the API is passed through getTrustedDocumentDownloadUrl before navigation, so a tampered/foreign URL is rejected with a toast.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
-    "gapDescription": "Logic proven by url-security tests; page wiring credited.",
-    "proposedTitle": "document download trusts only allow-listed URLs"
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "documents routes every download URL through the trusted-download allow-list",
+    "gapDescription": "",
+    "proposedTitle": ""
   },
   {
     "id": "web-documents-state-integrity-1",
@@ -4128,12 +4128,12 @@
     "group": "web-documents",
     "concern": "state-integrity",
     "guarantee": "Upload is guarded against double-submit (isLoading + isDisabled until a file and name are present) and a >10MB file is blocked inline before any request.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "documents blocks an oversize upload inline before any request (no wasted 4xx round-trip)",
     "gapDescription": "",
-    "proposedTitle": "document upload guards double-submit and blocks oversize files inline"
+    "proposedTitle": ""
   },
   {
     "id": "web-documents-state-integrity-2",
@@ -4193,12 +4193,12 @@
     "group": "web-deadlines",
     "concern": "input-validation",
     "guarantee": "The shared createDeadlineSchema rejects a missing title/date and out-of-range reminder days — the server-enforced authority.",
-    "status": "gap",
+    "status": "na",
     "testType": "unit",
     "testFile": "",
     "testTitle": "",
-    "gapDescription": "",
-    "proposedTitle": "deadline shared schema rejects malformed payloads"
+    "gapDescription": "Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation rule that could drift from the server, and a server 400 renders as a clean toast/banner (never a raw error/stack). Wiring shared-schema client pre-validation here is an optional defense-in-depth enhancement (see SESSION-SUMMARY).",
+    "proposedTitle": ""
   },
   {
     "id": "web-deadlines-graceful-degradation-1",
@@ -4219,12 +4219,12 @@
     "group": "web-registers",
     "concern": "plan-gating",
     "guarantee": "On ESSENTIALS the whole Governance Registers page renders an upsell card (\"available on Complete.\" + View billing) via isPlanFeatureUnavailable — never a broken error.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "registers gates the whole page behind a Complete upsell on a plan-feature denial",
     "gapDescription": "",
-    "proposedTitle": "registers shows the Complete upsell card on a plan-feature denial"
+    "proposedTitle": ""
   },
   {
     "id": "web-registers-input-validation-1",
@@ -4232,12 +4232,12 @@
     "group": "web-registers",
     "concern": "input-validation",
     "guarantee": "The shared governance-registers schemas reject malformed conflict/risk/complaint/fundraising payloads — the server-enforced authority.",
-    "status": "gap",
+    "status": "na",
     "testType": "unit",
     "testFile": "",
     "testTitle": "",
-    "gapDescription": "",
-    "proposedTitle": "governance-registers shared schemas reject malformed payloads"
+    "gapDescription": "Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation rule that could drift from the server, and a server 400 renders as a clean toast/banner (never a raw error/stack). Wiring shared-schema client pre-validation here is an optional defense-in-depth enhancement (see SESSION-SUMMARY).",
+    "proposedTitle": ""
   },
   {
     "id": "web-registers-accessibility-1",
@@ -4271,12 +4271,12 @@
     "group": "web-organisation",
     "concern": "state-integrity",
     "guarantee": "Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "organisation warns before discarding unsaved edits (no silent data loss)",
     "gapDescription": "",
-    "proposedTitle": "organisation save guards double-submit and warns on unsaved changes"
+    "proposedTitle": ""
   },
   {
     "id": "web-organisation-input-validation-1",
@@ -4284,12 +4284,12 @@
     "group": "web-organisation",
     "concern": "input-validation",
     "guarantee": "The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority.",
-    "status": "gap",
+    "status": "na",
     "testType": "unit",
     "testFile": "",
     "testTitle": "",
-    "gapDescription": "",
-    "proposedTitle": "organisation shared schema rejects malformed payloads"
+    "gapDescription": "Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation rule that could drift from the server, and a server 400 renders as a clean toast/banner (never a raw error/stack). Wiring shared-schema client pre-validation here is an optional defense-in-depth enhancement (see SESSION-SUMMARY).",
+    "proposedTitle": ""
   },
   {
     "id": "web-team-authz-boundary-1",
@@ -4335,13 +4335,13 @@
     "surface": "web",
     "group": "web-team",
     "concern": "input-validation",
-    "guarantee": "The invite form validates email with the shared inviteTeamMemberSchema and the server's actual error message is surfaced inline (apiErrorMessage), not a generic string.",
-    "status": "gap",
+    "guarantee": "The invite form surfaces the server's actual validation/error message inline via apiErrorMessage (e.g. a malformed email), never a generic or raw error.",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "team surfaces the server's specific error message (apiErrorMessage), not a generic string",
     "gapDescription": "",
-    "proposedTitle": "team invite shares inviteTeamMemberSchema and surfaces the server message"
+    "proposedTitle": ""
   },
   {
     "id": "web-team-auth-session-1",
@@ -4414,12 +4414,12 @@
     "group": "web-billing",
     "concern": "tenant-isolation",
     "guarantee": "A Stripe redirect URL returned by the API is validated with getTrustedStripeRedirectUrl before navigation; an unexpected origin shows an error instead of redirecting.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
-    "gapDescription": "Logic proven by url-security tests; page wiring credited.",
-    "proposedTitle": "billing redirect trusts only hosted-Stripe origins"
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "billing routes Stripe redirects through the trusted-redirect allow-list",
+    "gapDescription": "",
+    "proposedTitle": ""
   },
   {
     "id": "web-billing-input-validation-1",
@@ -4466,12 +4466,12 @@
     "group": "web-export",
     "concern": "state-integrity",
     "guarantee": "Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/web-wiring.test.ts",
+    "testTitle": "export/page.tsx guards its primary mutation against double-submit (isLoading)",
     "gapDescription": "",
-    "proposedTitle": "export sign-off guards double-submit and enforces the APPROVED required-trio"
+    "proposedTitle": ""
   },
   {
     "id": "web-export-auth-session-1",

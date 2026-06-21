@@ -37,8 +37,11 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    actionTimeout: 20_000,
+    // The local stack runs Next in DEV mode and compiles each route on first hit, which
+    // can exceed 30s for protected pages when the host is under container load. Give cold
+    // compiles generous headroom; warm hits are still fast (see global-setup warm-up).
+    navigationTimeout: 90_000,
   },
   projects: [
     {

@@ -25,8 +25,10 @@ test.describe('Input-validation parity (UI)', () => {
       await reliableFill(page.getByLabel('Confirm password'), 'testpass');
       await reliableFill(page.getByLabel('Organisation name'), 'Weak PW Charity');
       await page.getByRole('button', { name: 'Create account' }).click();
-      await expect(page.getByRole('alert')).toContainText(/uppercase/i, { timeout: 2500 });
-    }).toPass({ timeout: 25000 });
+      // Target the FORM's error banner specifically — Next renders an empty
+      // role=alert route-announcer at the document root that would otherwise match.
+      await expect(page.locator('form [role="alert"]')).toContainText(/uppercase/i, { timeout: 3000 });
+    }).toPass({ timeout: 30000 });
 
     // We never left the form and no guaranteed-400 register payload was sent.
     await expect(page).toHaveURL(/\/register/);
