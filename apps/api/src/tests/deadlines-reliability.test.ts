@@ -1,0 +1,332 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+// deadlineRoutes only need JWT_SECRET at import/construction time (no EmailService).
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'deadlines-reliability-test-secret';
+
+const [{ default: Fastify }, { deadlineRoutes }, { signAccessToken }] = await Promise.all([
+  import('fastify'),
+  import('../routes/deadlines/index.js'),
+  import('../utils/jwt.js'),
+]);
+
+type Role = 'OWNER' | 'ADMIN' | 'MEMBER';
+
+function tokenFor(role: Role) {
+  return `Bearer ${signAccessToken({ userId: 'u1', organisationId: 'org-1', role, sessionId: 'sess-1' })}`;
+}
+
+function activeSubscription() {
+  return { status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: new Date(Date.now() + 1_000_000_000) };
+}
+
+function authModels(role: Role, subscription: unknown, emailVerified = true) {
+  return {
+    authSession: { findFirst: async () => ({ id: 'sess-1' }) },
+    user: { findUnique: async () => ({ id: 'u1', organisationId: 'org-1', role, emailVerified }) },
+    subscription: { findUnique: async () => subscription },
+  };
+}
+
+type Call = { name: string; args: unknown };
+
+/**
+ * Builds the deadline app with a spying deadline prisma mock so we can assert
+ * which write methods were (not) reached. `deadlineFound` controls findFirst:
+ * true => returns an org-1-owned deadline, false => returns null (foreign/missing).
+ */
+function buildApp(opts: {
+  role?: Role;
+  subscription?: unknown;
+  emailVerified?: boolean;
+  deadlineFound?: boolean;
+} = {}) {
+  const role = opts.role ?? 'ADMIN';
+  const subscription = 'subscription' in opts ? opts.subscription : activeSubscription();
+  const emailVerified = opts.emailVerified ?? true;
+  const found = opts.deadlineFound ?? true;
+  const calls: Call[] = [];
+
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    ...authModels(role, subscription, emailVerified),
+    deadline: {
+      findMany: async (args: unknown) => {
+        calls.push({ name: 'deadline.findMany', args });
+        return [];
+      },
+      count: async (args: unknown) => {
+        calls.push({ name: 'deadline.count', args });
+        return 0;
+      },
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'deadline.create', args });
+        return { id: 'new-id', ...args.data };
+      },
+      findFirst: async (args: { where: { id?: string; organisationId: string } }) => {
+        calls.push({ name: 'deadline.findFirst', args });
+        return found ? { id: args.where.id, organisationId: args.where.organisationId } : null;
+      },
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        calls.push({ name: 'deadline.update', args });
+        return { id: args.where.id, ...args.data };
+      },
+      delete: async (args: unknown) => {
+        calls.push({ name: 'deadline.delete', args });
+        return {};
+      },
+    },
+  } as never);
+
+  return { app, calls };
+}
+
+async function withApp(
+  opts: Parameters<typeof buildApp>[0],
+  fn: (ctx: { app: Awaited<ReturnType<typeof buildApp>>['app']; calls: Call[] }) => Promise<void>,
+) {
+  const { app, calls } = buildApp(opts);
+  await app.register(deadlineRoutes);
+  try {
+    await fn({ app, calls });
+  } finally {
+    await app.close();
+  }
+}
+
+// ── deadlines-tenant-isolation-5 ──
+test('PATCH/DELETE /:id for a deadline owned by another organisation returns 404 DEADLINE_NOT_FOUND without writing', async () => {
+  await withApp({ role: 'ADMIN', deadlineFound: false }, async ({ app, calls }) => {
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: '/d-other',
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { title: 'Hijacked' },
+    });
+    assert.equal(patch.statusCode, 404);
+    assert.equal(patch.json().code, 'DEADLINE_NOT_FOUND');
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/d-other',
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(del.statusCode, 404);
+    assert.equal(del.json().code, 'DEADLINE_NOT_FOUND');
+
+    // The lookup must be scoped to the caller's organisation.
+    const lookup = calls.find((c) => c.name === 'deadline.findFirst');
+    assert.deepEqual((lookup?.args as { where: unknown }).where, {
+      id: 'd-other',
+      organisationId: 'org-1',
+    });
+    assert.equal(calls.some((c) => c.name === 'deadline.update'), false);
+    assert.equal(calls.some((c) => c.name === 'deadline.delete'), false);
+  });
+});
+
+// ── deadlines-authz-boundary-6 ──
+test('a MEMBER cannot create, update, or delete deadlines (requireAdmin)', async () => {
+  await withApp({ role: 'MEMBER' }, async ({ app, calls }) => {
+    const create = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { authorization: tokenFor('MEMBER') },
+      payload: { title: 'x', dueDate: '2026-09-30' },
+    });
+    assert.equal(create.statusCode, 403, 'MEMBER must not create deadlines');
+    assert.equal(create.json().code, 'FORBIDDEN');
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: '/d1',
+      headers: { authorization: tokenFor('MEMBER') },
+      payload: { title: 'y' },
+    });
+    assert.equal(patch.statusCode, 403, 'MEMBER must not update deadlines');
+    assert.equal(patch.json().code, 'FORBIDDEN');
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/d1',
+      headers: { authorization: tokenFor('MEMBER') },
+    });
+    assert.equal(del.statusCode, 403, 'MEMBER must not delete deadlines');
+    assert.equal(del.json().code, 'FORBIDDEN');
+
+    assert.equal(calls.some((c) => c.name === 'deadline.create'), false);
+    assert.equal(calls.some((c) => c.name === 'deadline.update'), false);
+    assert.equal(calls.some((c) => c.name === 'deadline.delete'), false);
+  });
+});
+
+// ── deadlines-authz-boundary-7 ──
+test('an ADMIN may create, update, and delete deadlines', async () => {
+  await withApp({ role: 'ADMIN', deadlineFound: true }, async ({ app }) => {
+    const create = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { title: 'File CRO return', dueDate: '2026-09-30' },
+    });
+    assert.equal(create.statusCode, 201, 'ADMIN may create deadlines');
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: '/d1',
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { title: 'Renamed' },
+    });
+    assert.equal(patch.statusCode, 200, 'ADMIN may update deadlines');
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/d1',
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(del.statusCode, 204, 'ADMIN may delete deadlines');
+  });
+});
+
+// ── deadlines-authz-boundary-8 ──
+test('a MEMBER can read the deadline list', async () => {
+  await withApp({ role: 'MEMBER' }, async ({ app }) => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/',
+      headers: { authorization: tokenFor('MEMBER') },
+    });
+    assert.equal(res.statusCode, 200);
+  });
+});
+
+// ── deadlines-auth-session-9 ──
+test('deadline routes require authentication', async () => {
+  // Case 1: no Authorization header at all.
+  await withApp({}, async ({ app, calls }) => {
+    const res = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.json().code, 'UNAUTHORIZED');
+    assert.equal(calls.some((c) => c.name.startsWith('deadline.')), false);
+  });
+
+  // Case 2: a valid token whose session was revoked (authSession.findFirst => null).
+  const revokedApp = Fastify({ logger: false });
+  const revokedCalls: Call[] = [];
+  revokedApp.decorate('prisma', {
+    authSession: { findFirst: async () => null },
+    user: { findUnique: async () => ({ id: 'u1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
+    subscription: { findUnique: async () => activeSubscription() },
+    deadline: {
+      findMany: async () => {
+        revokedCalls.push({ name: 'deadline.findMany', args: {} });
+        return [];
+      },
+    },
+  } as never);
+  await revokedApp.register(deadlineRoutes);
+  try {
+    const res = await revokedApp.inject({
+      method: 'GET',
+      url: '/',
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.json().code, 'UNAUTHORIZED');
+    assert.equal(revokedCalls.length, 0, 'revoked session must not reach the handler');
+  } finally {
+    await revokedApp.close();
+  }
+});
+
+// ── deadlines-auth-session-10 ──
+test('deadline routes reject a user whose email is not verified', async () => {
+  await withApp({ role: 'ADMIN', emailVerified: false }, async ({ app, calls }) => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/',
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.json().code, 'EMAIL_NOT_VERIFIED');
+    assert.equal(calls.some((c) => c.name.startsWith('deadline.')), false);
+  });
+});
+
+// ── deadlines-plan-gating-11 ──
+test('deadline routes require an active subscription', async () => {
+  const cases: Array<{ subscription: unknown; code: string }> = [
+    { subscription: null, code: 'NO_SUBSCRIPTION' },
+    {
+      subscription: { status: 'TRIALING', trialEndsAt: new Date(Date.now() - 1_000_000), currentPeriodEnd: null },
+      code: 'TRIAL_EXPIRED',
+    },
+    {
+      // PAST_DUE with an old currentPeriodEnd => beyond grace => PAST_DUE_GRACE_EXPIRED.
+      subscription: { status: 'PAST_DUE', trialEndsAt: null, currentPeriodEnd: new Date(Date.now() - 1_000_000_000) },
+      code: 'PAST_DUE_GRACE_EXPIRED',
+    },
+    {
+      subscription: { status: 'CANCELLED', trialEndsAt: null, currentPeriodEnd: null },
+      code: 'SUBSCRIPTION_INACTIVE',
+    },
+  ];
+
+  for (const { subscription, code } of cases) {
+    await withApp({ role: 'ADMIN', subscription }, async ({ app, calls }) => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/',
+        headers: { authorization: tokenFor('ADMIN') },
+      });
+      assert.equal(res.statusCode, 403, `expected 403 for ${code}`);
+      assert.equal(res.json().code, code);
+      assert.equal(calls.some((c) => c.name.startsWith('deadline.')), false, `no handler work for ${code}`);
+    });
+  }
+});
+
+// ── deadlines-input-validation-13 ──
+test('POST / rejects malformed create bodies with 400 VALIDATION_ERROR and does not write', async () => {
+  await withApp({ role: 'ADMIN' }, async ({ app, calls }) => {
+    const bodies: Record<string, unknown>[] = [
+      {}, // missing title and dueDate
+      { title: '', dueDate: '2026-09-30' }, // empty title
+      { title: 'x', dueDate: 'not-a-date' }, // invalid dueDate
+      { title: 'x', dueDate: '2026-09-30', reminderDays: [0] }, // reminderDays element below 1
+    ];
+    for (const payload of bodies) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/',
+        headers: { authorization: tokenFor('ADMIN') },
+        payload,
+      });
+      assert.equal(res.statusCode, 400, `expected 400 for ${JSON.stringify(payload)}`);
+      assert.equal(res.json().code, 'VALIDATION_ERROR');
+    }
+    assert.equal(calls.some((c) => c.name === 'deadline.create'), false);
+  });
+});
+
+// ── deadlines-input-validation-14 ──
+test('PATCH /:id rejects malformed update bodies with 400 VALIDATION_ERROR and does not write', async () => {
+  await withApp({ role: 'ADMIN', deadlineFound: true }, async ({ app, calls }) => {
+    const bodies: Record<string, unknown>[] = [
+      { dueDate: 'nope' }, // invalid dueDate
+      { isComplete: 'yes' }, // non-boolean
+      { reminderDays: [400] }, // element above 365
+    ];
+    for (const payload of bodies) {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/d1',
+        headers: { authorization: tokenFor('ADMIN') },
+        payload,
+      });
+      assert.equal(res.statusCode, 400, `expected 400 for ${JSON.stringify(payload)}`);
+      assert.equal(res.json().code, 'VALIDATION_ERROR');
+    }
+    assert.equal(calls.some((c) => c.name === 'deadline.update'), false);
+  });
+});
