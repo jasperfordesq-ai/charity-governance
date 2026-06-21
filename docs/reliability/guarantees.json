@@ -3829,12 +3829,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "The login form validates with the shared loginSchema (same rule as the server): a malformed email or empty password shows inline errors and is not submitted.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/form-schema-parity.test.ts",
+    "testTitle": "login/page.tsx validates with the shared schema (no client/server drift)",
     "gapDescription": "",
-    "proposedTitle": "login form shares loginSchema and blocks a guaranteed-400 submit"
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-input-validation-2",
@@ -3842,12 +3842,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "The register form validates with the shared registerSchema: a weak-but-long password (no upper/lower/digit) is caught inline and not submitted as a guaranteed-400.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/form-schema-parity.test.ts",
+    "testTitle": "register/page.tsx validates with the shared schema (no client/server drift)",
     "gapDescription": "",
-    "proposedTitle": "register form shares registerSchema password rule (no client/server drift)"
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-input-validation-3",
@@ -3855,12 +3855,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "The reset-password form validates with the shared resetPasswordSchema: the same password complexity rule as the server, surfaced inline.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/form-schema-parity.test.ts",
+    "testTitle": "reset-password/page.tsx validates with the shared schema (no client/server drift)",
     "gapDescription": "",
-    "proposedTitle": "reset-password form shares resetPasswordSchema password rule"
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-input-validation-4",
@@ -3868,12 +3868,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "The accept-invite form validates name + password with the shared acceptTeamInviteSchema before submit.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/form-schema-parity.test.ts",
+    "testTitle": "accept-invite/page.tsx validates with the shared schema (no client/server drift)",
     "gapDescription": "",
-    "proposedTitle": "accept-invite form shares acceptTeamInviteSchema"
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-input-validation-5",
@@ -3881,12 +3881,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "The forgot-password form validates the email with the shared forgotPasswordSchema.",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/form-schema-parity.test.ts",
+    "testTitle": "forgot-password/page.tsx validates with the shared schema (no client/server drift)",
     "gapDescription": "",
-    "proposedTitle": "forgot-password form shares forgotPasswordSchema"
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-input-validation-6",
@@ -3894,12 +3894,12 @@
     "group": "web-auth",
     "concern": "input-validation",
     "guarantee": "Every shared auth schema accepts a representative valid payload and rejects the guaranteed-400 cases (bad email, short/weak password, missing required fields).",
-    "status": "gap",
+    "status": "covered",
     "testType": "unit",
-    "testFile": "",
-    "testTitle": "",
+    "testFile": "apps/web/src/lib/form-schema-parity.test.ts",
+    "testTitle": "form-schemas sources its rules from @charitypilot/shared (single source of truth)",
     "gapDescription": "",
-    "proposedTitle": "shared auth schemas accept valid and reject guaranteed-400 payloads"
+    "proposedTitle": ""
   },
   {
     "id": "web-auth-auth-session-1",

@@ -1,0 +1,8 @@
+[
+  {
+    "surface": "web",
+    "defect": "Auth forms validated passwords with a client-only length>=8 check, while the server (shared registerSchema / resetPasswordSchema / acceptTeamInviteSchema) also requires an uppercase letter, a lowercase letter and a digit. A long-but-weak password (e.g. 8 lowercase letters) therefore passed the client gate and was submitted as a guaranteed-400 — bounced by the server instead of caught inline. Client/server validation drift.",
+    "fix": "Added apps/web/src/lib/form-schemas.ts, which re-exports the shared @charitypilot/shared Zod schemas and derives the shared password rule, and gated every auth form's submit (login, register, forgot-password, reset-password, accept-invite) with the SAME schema via firstSchemaError() / passwordIssue(). The accept-invite form, which previously had no client password check at all, now enforces the shared rule too. No client/server drift is possible.",
+    "test": "the password forms no longer gate on a bare length-only check"
+  }
+]

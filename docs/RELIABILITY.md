@@ -16,8 +16,8 @@ Generated: 2026-06-21 · Source of truth: [`docs/reliability/guarantees.json`](r
 | Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |
 |---|---|---|---|---|---|
 | API | 256 | 0 | 0 | 15 | 271 |
-| Web | 62 | 0 | 35 | 3 | 100 |
-| **Total** | **318** | **0** | **35** | **18** | **371** |
+| Web | 68 | 0 | 29 | 3 | 100 |
+| **Total** | **324** | **0** | **29** | **18** | **371** |
 
 ## How to verify
 
@@ -495,7 +495,7 @@ _47 guarantees — 🟢 45  🔴 2_
 
 ### auth pages — login / register / forgot / reset / verify / accept-invite
 
-_11 guarantees — 🟢 3  🔴 8_
+_11 guarantees — 🟢 9  🔴 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -503,12 +503,12 @@ _11 guarantees — 🟢 3  🔴 8_
 | Auth & session integrity | register → verify-email → login is a working journey; the dashboard is only reachable once the email is verified. | 🟢 covered | `register, verify email, then log in to the dashboard` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | An invalid/expired email-verification token shows a clean "Verification failed" state, not a crash. | 🟢 covered | `an invalid verification token shows the failure state` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack. | 🟢 covered | `apiErrorMessage surfaces the server error field first`<br/><sub>lib/errors.test.ts</sub> |
-| Input validation | The login form validates with the shared loginSchema (same rule as the server): a malformed email or empty password shows inline errors and is not submitted. | 🔴 gap | _planned:_ `login form shares loginSchema and blocks a guaranteed-400 submit` |
-| Input validation | The register form validates with the shared registerSchema: a weak-but-long password (no upper/lower/digit) is caught inline and not submitted as a guaranteed-400. | 🔴 gap | _planned:_ `register form shares registerSchema password rule (no client/server drift)` |
-| Input validation | The reset-password form validates with the shared resetPasswordSchema: the same password complexity rule as the server, surfaced inline. | 🔴 gap | _planned:_ `reset-password form shares resetPasswordSchema password rule` |
-| Input validation | The accept-invite form validates name + password with the shared acceptTeamInviteSchema before submit. | 🔴 gap | _planned:_ `accept-invite form shares acceptTeamInviteSchema` |
-| Input validation | The forgot-password form validates the email with the shared forgotPasswordSchema. | 🔴 gap | _planned:_ `forgot-password form shares forgotPasswordSchema` |
-| Input validation | Every shared auth schema accepts a representative valid payload and rejects the guaranteed-400 cases (bad email, short/weak password, missing required fields). | 🔴 gap | _planned:_ `shared auth schemas accept valid and reject guaranteed-400 payloads` |
+| Input validation | The login form validates with the shared loginSchema (same rule as the server): a malformed email or empty password shows inline errors and is not submitted. | 🟢 covered | `login/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The register form validates with the shared registerSchema: a weak-but-long password (no upper/lower/digit) is caught inline and not submitted as a guaranteed-400. | 🟢 covered | `register/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The reset-password form validates with the shared resetPasswordSchema: the same password complexity rule as the server, surfaced inline. | 🟢 covered | `reset-password/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The accept-invite form validates name + password with the shared acceptTeamInviteSchema before submit. | 🟢 covered | `accept-invite/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | The forgot-password form validates the email with the shared forgotPasswordSchema. | 🟢 covered | `forgot-password/page.tsx validates with the shared schema (no client/server drift)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
+| Input validation | Every shared auth schema accepts a representative valid payload and rejects the guaranteed-400 cases (bad email, short/weak password, missing required fields). | 🟢 covered | `form-schemas sources its rules from @charitypilot/shared (single source of truth)`<br/><sub>lib/form-schema-parity.test.ts</sub> |
 | Input validation | Submitting a valid-length but complexity-failing password on register shows an inline error and fires no register request. | 🔴 gap | _planned:_ `register blocks a weak-but-long password inline (e2e)` |
 
 ### dashboard — `/dashboard`
@@ -634,7 +634,11 @@ _2 guarantees — 🔴 1  ⚪ 1_
 
 ## Fixed while proving
 
-_None. Every guarantee above was already correct; the work was to pin each one with a test._
+Real defects found *by a test written here*, fixed minimally, and locked in:
+
+| Surface | Defect | Minimal fix | Proven by |
+|---|---|---|---|
+| web | Auth forms validated passwords with a client-only length>=8 check, while the server (shared registerSchema / resetPasswordSchema / acceptTeamInviteSchema) also requires an uppercase letter, a lowercase letter and a digit. A long-but-weak password (e.g. 8 lowercase letters) therefore passed the client gate and was submitted as a guaranteed-400 — bounced by the server instead of caught inline. Client/server validation drift. | Added apps/web/src/lib/form-schemas.ts, which re-exports the shared @charitypilot/shared Zod schemas and derives the shared password rule, and gated every auth form's submit (login, register, forgot-password, reset-password, accept-invite) with the SAME schema via firstSchemaError() / passwordIssue(). The accept-invite form, which previously had no client password check at all, now enforces the shared rule too. No client/server drift is possible. | `the password forms no longer gate on a bare length-only check` |
 
 ---
 

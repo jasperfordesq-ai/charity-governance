@@ -38,6 +38,7 @@
     "src/lib/team-permissions.ts",
     "src/lib/team-permissions.test.ts",
     "src/lib/tenant-isolation.test.ts",
+    "src/lib/form-schema-parity.test.ts",
     "src/proxy.ts",
     "src/proxy.test.ts"
   ]

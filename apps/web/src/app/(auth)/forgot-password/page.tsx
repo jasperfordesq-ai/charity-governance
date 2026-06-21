@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { forgotPasswordSchema, firstSchemaError } from '@/lib/form-schemas';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -14,6 +15,12 @@ export default function ForgotPasswordPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+
+    const issue = firstSchemaError(forgotPasswordSchema, { email });
+    if (issue) {
+      setError(issue);
+      return;
+    }
     setIsLoading(true);
 
     try {

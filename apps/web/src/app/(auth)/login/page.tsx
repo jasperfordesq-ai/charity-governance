@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
+import { loginSchema, firstSchemaError } from '@/lib/form-schemas';
 import { safeNextPath } from '@/lib/safe-next-path';
 
 function loginDestination(user: { emailVerified: boolean }): string {
@@ -26,6 +27,12 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+
+    const issue = firstSchemaError(loginSchema, { email, password });
+    if (issue) {
+      setError(issue);
+      return;
+    }
     setIsLoading(true);
 
     try {
