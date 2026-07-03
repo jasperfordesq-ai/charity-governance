@@ -352,6 +352,32 @@ test('documents workflow surfaces conditional obligation evidence prompts from t
   }
 });
 
+test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
+  const src = dash('deadlines/page.tsx');
+  for (const term of [
+    'OrganisationResponse',
+    'CONDITIONAL_OBLIGATION_REVIEW_RULES',
+    'getMatrixEntriesForStandard',
+    "api.get('/organisations')",
+    'conditionalDeadlinePrompts',
+    'deadlineSearchText',
+    'organisation?.conditionalObligationProfile',
+    'profile?.[rule.profileKey]',
+    'scheduleConditionalDeadline',
+    'Profile-triggered review dates',
+    'profile-triggered obligations',
+    'professional review',
+    'sourceRefs',
+    'reviewDateAlreadyScheduled',
+  ]) {
+    assert.match(
+      src,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+      `deadlines page must include ${term}`,
+    );
+  }
+});
+
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
   const src = dash('registers/page.tsx');
   const imports: Array<[string, string[]]> = [

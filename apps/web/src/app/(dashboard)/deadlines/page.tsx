@@ -22,7 +22,8 @@ import { DataList, DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { DeadlineBadge, ReviewFlag, StatusChip } from '@/components/ui/status';
-import type { CreateDeadlineRequest, DeadlineResponse, UpdateDeadlineRequest } from '@charitypilot/shared';
+import type { CreateDeadlineRequest, DeadlineResponse, OrganisationResponse, UpdateDeadlineRequest } from '@charitypilot/shared';
+import { CONDITIONAL_OBLIGATION_REVIEW_RULES, getMatrixEntriesForStandard } from '@charitypilot/shared';
 
 type DeadlineDueState = 'complete' | 'overdue' | 'due-soon' | 'upcoming';
 
@@ -48,6 +49,17 @@ const regulatoryMilestones = [
     detail: 'Refresh the risk register and confirm insurance cover remains appropriate for activities.',
   },
 ];
+
+const formatReviewFlag = (value: string) =>
+  value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const dateInDays = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
 
 const formatDate = (value: string) => {
   return new Date(value).toLocaleDateString('en-IE', {
@@ -110,8 +122,10 @@ const classifyDeadline = (deadline: DeadlineResponse) => {
 export default function DeadlinesPage() {
   useDocumentTitle('Deadlines');
   const [deadlines, setDeadlines] = useState<DeadlineResponse[]>([]);
+  const [organisation, setOrganisation] = useState<OrganisationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [organisationProfileError, setOrganisationProfileError] = useState('');
   const [toggleDeadlineId, setToggleDeadlineId] = useState<string | null>(null);
   const [deleteDeadlineId, setDeleteDeadlineId] = useState<string | null>(null);
   const [deletingDeadlineId, setDeletingDeadlineId] = useState<string | null>(null);
@@ -141,9 +155,22 @@ export default function DeadlinesPage() {
     }
   }, []);
 
+  const fetchOrganisationProfile = useCallback(async () => {
+    setOrganisationProfileError('');
+    try {
+      const res = await api.get('/organisations');
+      setOrganisation(res.data?.data ?? res.data ?? null);
+    } catch (err) {
+      const message = apiErrorMessage(err, 'Organisation profile could not be loaded for conditional review dates.');
+      logClientError('Failed to load organisation profile for deadline prompts', err);
+      setOrganisationProfileError(message);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDeadlines(true);
-  }, [fetchDeadlines]);
+    fetchOrganisationProfile();
+  }, [fetchDeadlines, fetchOrganisationProfile]);
 
   const sortedDeadlines = useMemo(() => {
     return [...deadlines].sort((a, b) => {
@@ -166,6 +193,47 @@ export default function DeadlinesPage() {
     );
   }, [sortedDeadlines]);
 
+  const deadlineSearchText = useMemo(() => {
+    return deadlines
+      .map((deadline) => `${deadline.title} ${deadline.description ?? ''}`.toLowerCase())
+      .join(' ');
+  }, [deadlines]);
+
+  const conditionalProfile = organisation?.conditionalObligationProfile ?? null;
+
+  const conditionalDeadlinePrompts = useMemo(() => {
+    const profile = organisation?.conditionalObligationProfile;
+    if (!profile) return [];
+
+    return CONDITIONAL_OBLIGATION_REVIEW_RULES
+      .filter((rule) => profile?.[rule.profileKey])
+      .map((rule) => {
+        const matrixEntries = rule.standardCodes.flatMap((code) => getMatrixEntriesForStandard(code));
+        const sourceRefs = Array.from(
+          new Map(
+            matrixEntries
+              .flatMap((entry) => entry.sourceRefs)
+              .map((source) => [source.url, source]),
+          ).values(),
+        );
+        const professionalReview = Array.from(
+          new Set(matrixEntries.flatMap((entry) => entry.professionalReview)),
+        );
+        const reviewDateAlreadyScheduled =
+          deadlineSearchText.includes(rule.label.toLowerCase()) ||
+          rule.standardCodes.some((code) => deadlineSearchText.includes(code.toLowerCase()));
+
+        return {
+          ...rule,
+          sourceRefs,
+          professionalReview,
+          reviewDateAlreadyScheduled,
+        };
+      });
+  }, [deadlineSearchText, organisation?.conditionalObligationProfile]);
+
+  const missingConditionalDeadlineCount = conditionalDeadlinePrompts.filter((item) => !item.reviewDateAlreadyScheduled).length;
+
   const formDisabledReason = useMemo(() => {
     if (!formTitle.trim()) return 'Add a title before saving.';
     if (!formDueDate) return 'Choose the due date before saving.';
@@ -186,6 +254,15 @@ export default function DeadlinesPage() {
 
   const openAdd = () => {
     resetForm();
+    deadlineModal.onOpen();
+  };
+
+  const scheduleConditionalDeadline = (item: (typeof conditionalDeadlinePrompts)[number]) => {
+    setEditingDeadline(null);
+    setFormTitle(`${item.label} review`);
+    setFormDescription(`${item.recommendedAction}\n\nStandards: ${item.standardCodes.join(', ')}`);
+    setFormDueDate(dateInDays(30));
+    setFormError('');
     deadlineModal.onOpen();
   };
 
@@ -337,6 +414,83 @@ export default function DeadlinesPage() {
             </div>
           ))}
         </div>
+      </AppSection>
+
+      <AppSection
+        title="Profile-triggered review dates"
+        description="These prompts come from the organisation setup profile and the Irish compliance matrix. Add dates for profile-triggered obligations so board and professional review work is not missed."
+        actions={(
+          <StatusChip tone={!conditionalProfile ? 'warning' : missingConditionalDeadlineCount === 0 ? 'success' : 'warning'}>
+            {!conditionalProfile
+              ? 'Profile needed'
+              : conditionalDeadlinePrompts.length === 0
+                ? 'No triggers selected'
+                : `${missingConditionalDeadlineCount} review date${missingConditionalDeadlineCount === 1 ? '' : 's'} to schedule`}
+          </StatusChip>
+        )}
+      >
+        {organisationProfileError ? (
+          <ErrorState
+            title="Profile-triggered dates could not be loaded"
+            description={organisationProfileError}
+            action={(
+              <Button size="sm" variant="flat" onPress={fetchOrganisationProfile}>
+                Try again
+              </Button>
+            )}
+          />
+        ) : !conditionalProfile ? (
+          <EmptyState
+            title="Complete the organisation profile"
+            description="Answer the conditional obligation questions in Organisation before relying on deadline prompts."
+          />
+        ) : conditionalDeadlinePrompts.length === 0 ? (
+          <EmptyState
+            title="No conditional triggers selected"
+            description="The current organisation profile has not selected staff, volunteers, public fundraising, safeguarding, data, premises, public-sector, or processor triggers."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {conditionalDeadlinePrompts.map((item) => {
+              const professionalReviewLabel = item.professionalReview.length
+                ? item.professionalReview.map(formatReviewFlag).join(', ')
+                : 'Board judgement';
+              const sourceLabel = item.sourceRefs.length
+                ? item.sourceRefs.slice(0, 2).map((source) => source.owner).join(', ')
+                : 'Irish compliance matrix';
+
+              return (
+                <div key={item.profileKey} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.label}</h3>
+                      <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.recommendedAction}</p>
+                    </div>
+                    <StatusChip tone={item.reviewDateAlreadyScheduled ? 'success' : 'warning'}>
+                      {item.reviewDateAlreadyScheduled ? 'Scheduled' : 'Needs date'}
+                    </StatusChip>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusChip tone="brand">Standards {item.standardCodes.join(', ')}</StatusChip>
+                    <ReviewFlag tone="needs-review">Professional review: {professionalReviewLabel}</ReviewFlag>
+                    <ReviewFlag tone="draft">Sources: {sourceLabel}</ReviewFlag>
+                  </div>
+                  {!item.reviewDateAlreadyScheduled ? (
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      className="mt-4"
+                      onPress={() => scheduleConditionalDeadline(item)}
+                      isDisabled={saving}
+                    >
+                      Schedule review
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </AppSection>
 
       <DataList
