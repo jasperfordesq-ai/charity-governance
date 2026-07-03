@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Concern: plan gating / tenant isolation / state integrity (UI). These guarantees are
@@ -10,7 +10,9 @@ import { join } from 'node:path';
 // stops applying the guard. CJS-safe (reads source; loads no ESM/React modules).
 
 const WEB = process.cwd(); // apps/web
-const dash = (p: string) => readFileSync(join(WEB, 'src', 'app', '(dashboard)', p), 'utf8');
+const dashPath = (p: string) => join(WEB, 'src', 'app', '(dashboard)', p);
+const dash = (p: string) => readFileSync(dashPath(p), 'utf8');
+const optionalDash = (p: string) => (existsSync(dashPath(p)) ? readFileSync(dashPath(p), 'utf8') : '');
 const app = (p: string) => readFileSync(join(WEB, 'src', 'app', p), 'utf8');
 const component = (p: string) => readFileSync(join(WEB, 'src', 'components', p), 'utf8');
 
@@ -491,7 +493,10 @@ test('regulator guide prioritises profile-triggered obligations without legal ce
 });
 
 test('registers workflow prioritises conditional obligation register work from the organisation profile', () => {
-  const src = dash('registers/page.tsx');
+  const src = [
+    dash('registers/page.tsx'),
+    optionalDash('registers/register-priority-panel.tsx'),
+  ].join('\n');
   for (const term of [
     'OrganisationResponse',
     'CONDITIONAL_OBLIGATION_REVIEW_RULES',
@@ -513,6 +518,20 @@ test('registers workflow prioritises conditional obligation register work from t
       `registers page must include ${term}`,
     );
   }
+});
+
+test('registers profile-priority UX is extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const panelPath = dashPath('registers/register-priority-panel.tsx');
+  assert.ok(existsSync(panelPath), 'register priority panel/model should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /RegisterPriorityPanel/);
+  assert.match(pageSrc, /buildRegisterPriorities/);
+  assert.match(pageSrc, /buildRegisterSearchText/);
+  assert.doesNotMatch(pageSrc, /registerPriorityEvidence/);
+  assert.match(panelSrc, /registerPriorityEvidence/);
+  assert.match(panelSrc, /Profile-triggered register priorities/);
 });
 
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
