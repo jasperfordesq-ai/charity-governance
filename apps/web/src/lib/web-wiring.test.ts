@@ -204,6 +204,8 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
       ],
       sourceTerms: [
         'toggleDeadlineId',
+        'deleteDeadlineId',
+        'deletingDeadlineId',
         'dueState',
         'priorityLabel',
         'aria-live="polite"',
@@ -211,6 +213,8 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
       ],
       patterns: [
         /isDisabled=\{[^}]*toggleDeadlineId/,
+        /api\.delete\(`\/deadlines\/\$\{deleteDeadlineId\}`\)/,
+        /Delete deadline/,
         /role="checkbox"/,
       ],
     },
@@ -232,6 +236,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
       ],
       patterns: [
         /isDisabled=\{[^}]*mutatingMemberId/,
+        /<TableCell>\s*<div className="space-y-2">[\s\S]*?renderEvidenceChips\(member\)[\s\S]*?conductSignedDate[\s\S]*?inductionDate[\s\S]*?<\/div>\s*<\/TableCell>/,
         /apiErrorMessage/,
       ],
     },

@@ -113,8 +113,11 @@ export default function DeadlinesPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [toggleDeadlineId, setToggleDeadlineId] = useState<string | null>(null);
+  const [deleteDeadlineId, setDeleteDeadlineId] = useState<string | null>(null);
+  const [deletingDeadlineId, setDeletingDeadlineId] = useState<string | null>(null);
 
   const deadlineModal = useDisclosure();
+  const deleteModal = useDisclosure();
   const [editingDeadline, setEditingDeadline] = useState<DeadlineResponse | null>(null);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -168,6 +171,10 @@ export default function DeadlinesPage() {
     if (!formDueDate) return 'Choose the due date before saving.';
     return '';
   }, [formDueDate, formTitle]);
+  const selectedDeleteDeadline = useMemo(
+    () => deadlines.find((deadline) => deadline.id === deleteDeadlineId) ?? null,
+    [deadlines, deleteDeadlineId],
+  );
 
   const resetForm = () => {
     setEditingDeadline(null);
@@ -189,6 +196,11 @@ export default function DeadlinesPage() {
     setFormDueDate(deadline.dueDate.slice(0, 10));
     setFormError('');
     deadlineModal.onOpen();
+  };
+
+  const openDelete = (deadline: DeadlineResponse) => {
+    setDeleteDeadlineId(deadline.id);
+    deleteModal.onOpen();
   };
 
   const handleSaveDeadline = async () => {
@@ -245,6 +257,24 @@ export default function DeadlinesPage() {
       toast(apiErrorMessage(err, 'Failed to update deadline'), 'error');
     } finally {
       setToggleDeadlineId(null);
+    }
+  };
+
+  const handleDeleteDeadline = async () => {
+    if (!deleteDeadlineId) return;
+
+    setDeletingDeadlineId(deleteDeadlineId);
+    try {
+      await api.delete(`/deadlines/${deleteDeadlineId}`);
+      await fetchDeadlines();
+      deleteModal.onClose();
+      setDeleteDeadlineId(null);
+      toast('Deadline deleted');
+    } catch (err) {
+      logClientError('Delete deadline failed', err);
+      toast(apiErrorMessage(err, 'Failed to delete deadline'), 'error');
+    } finally {
+      setDeletingDeadlineId(null);
     }
   };
 
@@ -349,7 +379,7 @@ export default function DeadlinesPage() {
               />
             ) : null}
             <div aria-live="polite" className="sr-only">
-              {toggleDeadlineId ? 'Updating deadline status' : 'Deadline list ready'}
+              {toggleDeadlineId ? 'Updating deadline status' : deletingDeadlineId ? 'Deleting deadline' : 'Deadline list ready'}
             </div>
             <DataListItems divided={false}>
               <div className="space-y-3 p-3">
@@ -368,7 +398,10 @@ export default function DeadlinesPage() {
                             variant={deadline.isComplete ? 'solid' : 'bordered'}
                             color={deadline.isComplete ? 'success' : 'default'}
                             isLoading={toggleDeadlineId === deadline.id}
-                            isDisabled={Boolean(toggleDeadlineId) && toggleDeadlineId !== deadline.id}
+                            isDisabled={
+                              (Boolean(toggleDeadlineId) && toggleDeadlineId !== deadline.id) ||
+                              Boolean(deletingDeadlineId)
+                            }
                             onPress={() => toggleComplete(deadline)}
                             className="mt-0.5 shrink-0"
                           >
@@ -412,9 +445,23 @@ export default function DeadlinesPage() {
                             size="sm"
                             variant="flat"
                             onPress={() => openEdit(deadline)}
-                            isDisabled={Boolean(toggleDeadlineId) || saving}
+                            isDisabled={Boolean(toggleDeadlineId) || Boolean(deletingDeadlineId) || saving}
                           >
                             Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            color="danger"
+                            onPress={() => openDelete(deadline)}
+                            isLoading={deletingDeadlineId === deadline.id}
+                            isDisabled={
+                              Boolean(toggleDeadlineId) ||
+                              (Boolean(deletingDeadlineId) && deletingDeadlineId !== deadline.id) ||
+                              saving
+                            }
+                          >
+                            Delete
                           </Button>
                         </div>
                       </div>
@@ -476,6 +523,42 @@ export default function DeadlinesPage() {
                   aria-describedby="deadline-disabled-hint"
                 >
                   {editingDeadline ? 'Save deadline' : 'Add deadline'}
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={deleteModal.isOpen} onOpenChange={deleteModal.onOpenChange} size="sm">
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>Delete deadline</ModalHeader>
+              <ModalBody>
+                <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
+                  Remove {selectedDeleteDeadline ? <strong>{selectedDeleteDeadline.title}</strong> : 'this deadline'} from the governance calendar?
+                  This cannot be undone.
+                </p>
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  variant="flat"
+                  onPress={() => {
+                    setDeleteDeadlineId(null);
+                    onClose();
+                  }}
+                  isDisabled={Boolean(deletingDeadlineId)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="danger"
+                  onPress={handleDeleteDeadline}
+                  isLoading={deletingDeadlineId === deleteDeadlineId}
+                  isDisabled={!deleteDeadlineId || Boolean(deletingDeadlineId)}
+                >
+                  Delete deadline
                 </Button>
               </ModalFooter>
             </>

@@ -474,7 +474,21 @@ export default function BoardPage() {
                         <TableCell className="hidden lg:table-cell">
                           <span className="text-sm text-gray-600 dark:text-gray-300">{formatDate(member.termEndDate)}</span>
                         </TableCell>
-                        <TableCell>{renderEvidenceChips(member)}</TableCell>
+                        <TableCell>
+                          <div className="space-y-2">
+                            {renderEvidenceChips(member)}
+                            <dl className="grid min-w-48 grid-cols-1 gap-1 text-xs text-gray-600 dark:text-gray-300 xl:grid-cols-2">
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Conduct date</dt>
+                                <dd>{formatDate(member.conductSignedDate)}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium text-gray-500 dark:text-gray-400">Induction date</dt>
+                                <dd>{formatDate(member.inductionDate)}</dd>
+                              </div>
+                            </dl>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <StatusChip tone={member.isActive ? 'success' : 'neutral'}>
                             {member.isActive ? 'Active' : 'Inactive'}
