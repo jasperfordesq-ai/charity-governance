@@ -16,7 +16,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 function parseEnv(content) {
   const map = {};
   for (const line of content.split('\n')) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    const m = line.match(/^([A-Z0-9_]+)=(.*?)(\r?)$/);
     if (m) map[m[1]] = m[2];
   }
   return map;

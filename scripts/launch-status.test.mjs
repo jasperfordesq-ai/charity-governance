@@ -23,6 +23,18 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
 });
 
+test('reports ENV_INCOMPLETE for CRLF production env files', () => {
+  const env = [
+    'NODE_ENV=production',
+    'JWT_SECRET=already-generated-secret-value-1234567890',
+    'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+    'READINESS_API_KEY=already-generated-readiness-key-1234567890',
+  ].join('\r\n');
+  const s = assessLaunchState({ envExists: true, envContent: env });
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, ['DATABASE_URL']);
+});
+
 test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   const env = [
     'NODE_ENV=production',

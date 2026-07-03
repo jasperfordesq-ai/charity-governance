@@ -16,7 +16,7 @@ const repoRoot = resolve(scriptsDir, '..');
 function placeholderKeys(envContent) {
   const keys = [];
   for (const line of envContent.split('\n')) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    const m = line.match(/^([A-Z0-9_]+)=(.*?)(\r?)$/);
     if (m && /REPLACE_ME/.test(m[2])) keys.push(m[1]);
   }
   return keys;

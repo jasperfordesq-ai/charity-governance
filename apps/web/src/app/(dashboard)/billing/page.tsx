@@ -163,7 +163,7 @@ export default function BillingPage() {
         <div id="provider-degraded">
           <ReviewWarningState
             title="Billing setup is temporarily unavailable"
-            description="Checkout and portal actions are disabled while the payment provider is not configured. Existing access is shown from the current billing status."
+            description="Checkout and portal actions are disabled while the payment provider is not configured. Existing access is shown from the current billing status. Please contact support to change your plan."
           />
         </div>
       ) : null}

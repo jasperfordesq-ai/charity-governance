@@ -52,11 +52,12 @@ export function generateSecret() {
 export function buildProductionEnv(exampleContent, makeSecret = generateSecret) {
   const lines = exampleContent.split('\n');
   const out = lines.map((line) => {
-    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    const match = line.match(/^([A-Z0-9_]+)=(.*?)(\r?)$/);
     if (!match) return line; // comment, blank, or non-assignment line
     const key = match[1];
-    if (AUTO_GENERATED_KEYS.includes(key)) return `${key}=${makeSecret()}`;
-    if (Object.prototype.hasOwnProperty.call(FIXED_VALUES, key)) return `${key}=${FIXED_VALUES[key]}`;
+    const lineEnding = match[3];
+    if (AUTO_GENERATED_KEYS.includes(key)) return `${key}=${makeSecret()}${lineEnding}`;
+    if (Object.prototype.hasOwnProperty.call(FIXED_VALUES, key)) return `${key}=${FIXED_VALUES[key]}${lineEnding}`;
     return line; // leave everything else (incl. REPLACE_ME placeholders) untouched
   });
   return out.join('\n');

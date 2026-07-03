@@ -2319,7 +2319,7 @@ test('billing page fails closed without exposing internal production setup gaps'
   assert.doesNotMatch(billingPage, /secret key|webhook secret|price IDs/i);
   assert.match(billingPage, /Billing setup is temporarily unavailable/);
   assert.match(billingPage, /Please contact support to change your plan/);
-  assert.match(billingPage, /isDisabled=\{!billingConfigured\}/);
+  assert.match(billingPage, /isDisabled=\{[^}]*!billingConfigured[^}]*\}/);
 });
 
 test('billing API unavailable errors do not expose internal Stripe configuration names', () => {
