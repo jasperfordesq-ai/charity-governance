@@ -139,3 +139,43 @@ test('theme prepaint and client layout handling support dark mode beyond protect
     assert.doesNotMatch(src, routeScopedDarkModeTerms, `${file} must not force light mode`);
   }
 });
+
+test('shared form/list/status primitives avoid accessibility regressions called out in Phase 4 review', () => {
+  const forms = component('ui/forms.tsx');
+  assert.doesNotMatch(forms, /<fieldset[^>]*>\s*\{\(title \|\| description\)[\s\S]*?<div[^>]*>\s*\{title \? <legend/);
+  assert.match(forms, /<fieldset[^>]*>[\s\S]*\{title \? <legend/);
+
+  const dataList = component('ui/data-list.tsx');
+  const fixedScrollHintId = 'data-list-scroll-' + 'hint';
+  assert.doesNotMatch(dataList, new RegExp(`id="${fixedScrollHintId}"`));
+  assert.doesNotMatch(dataList, new RegExp(`aria-describedby="${fixedScrollHintId}"`));
+  assert.match(dataList, /scrollHintId\?/);
+
+  const status = component('ui/status.tsx');
+  assert.doesNotMatch(status, /String\(children\)/);
+  assert.match(status, /ariaLabel\?/);
+});
+
+test('marketing and auth layout chrome includes dark variants for muted text and surfaces', () => {
+  const classNames = (src: string) => [...src.matchAll(/className="([^"]+)"/g)].map((match) => match[1]);
+
+  for (const file of ['(marketing)/layout.tsx', '(auth)/layout.tsx']) {
+    const src = app(file);
+    const mutedChromeClasses = classNames(src).filter((value) => /text-gray-(500|600)/.test(value));
+    assert.ok(mutedChromeClasses.length > 0, `${file} should still use muted chrome text classes`);
+    for (const className of mutedChromeClasses) {
+      assert.match(className, /dark:text-/, `${file} muted chrome class must include a dark text variant: ${className}`);
+    }
+  }
+
+  const marketing = app('(marketing)/layout.tsx');
+  assert.match(marketing, /dark:bg-gray-950\/90/);
+  assert.match(marketing, /dark:border-gray-800/);
+  assert.match(marketing, /dark:bg-gray-950/);
+  assert.match(marketing, /dark:\[&_button\]:text-gray-300/);
+  assert.match(marketing, /dark:\[&_nav>a\]:text-gray-200/);
+
+  const auth = app('(auth)/layout.tsx');
+  assert.match(auth, /dark:bg-gray-950/);
+  assert.match(auth, /dark:text-gray-100/);
+});

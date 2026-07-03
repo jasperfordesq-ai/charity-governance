@@ -36,20 +36,22 @@ export function DataList({
 export function DataListTable({
   children,
   label = 'Data table',
+  scrollHintId,
 }: {
   children: ReactNode;
   label?: string;
+  scrollHintId?: string;
 }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-      <div className="sr-only" id="data-list-scroll-hint">
+      <div className="sr-only" id={scrollHintId}>
         {label}. On small screens, scroll horizontally to view all columns.
       </div>
       <div
         className="overflow-x-auto"
         role="region"
         aria-label={label}
-        aria-describedby="data-list-scroll-hint"
+        aria-describedby={scrollHintId}
         tabIndex={0}
       >
         {children}

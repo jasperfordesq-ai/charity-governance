@@ -39,7 +39,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                   strokeWidth={2}
                 />
               </svg>
-              <span className="text-xl font-extrabold text-teal-primary tracking-tight group-hover:text-teal-dark transition-colors">
+              <span className="text-xl font-extrabold text-teal-primary dark:text-teal-bright tracking-tight group-hover:text-teal-dark dark:group-hover:text-teal-light transition-colors">
                 CharityPilot
               </span>
             </Link>
@@ -48,25 +48,25 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <nav className="hidden md:flex items-center gap-8" aria-label="Main navigation">
               <Link
                 href="/features"
-                className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium"
+                className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
               >
                 Features
               </Link>
               <Link
                 href="/pricing"
-                className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium"
+                className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
               >
                 Pricing
               </Link>
               <Link
                 href="/blog"
-                className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium"
+                className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
               >
                 Blog
               </Link>
               <Link
                 href="/login"
-                className="text-gray-600 hover:text-teal-primary transition-colors text-sm font-medium"
+                className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
               >
                 Sign in
               </Link>
@@ -81,7 +81,9 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             </Link>
 
             {/* Mobile hamburger */}
-            <MobileNav />
+            <div className="dark:[&_button]:text-gray-300 dark:[&_button:hover]:bg-gray-800 dark:[&_button:hover]:text-gray-100 dark:[&_.absolute]:bg-gray-950 dark:[&_.absolute]:border-gray-800 dark:[&_nav>a]:text-gray-200 dark:[&_nav>a:hover]:bg-gray-900">
+              <MobileNav />
+            </div>
           </div>
         </div>
       </header>
@@ -91,13 +93,13 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <BackToTop />
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-14">
+      <footer className="bg-gray-900 text-gray-400 dark:bg-gray-950 dark:text-gray-300 py-14">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-10 mb-10">
             {/* Brand */}
             <div className="md:col-span-2">
               <p className="text-xl font-bold text-white mb-3">CharityPilot</p>
-              <p className="text-sm leading-relaxed max-w-sm text-gray-400">
+              <p className="text-sm leading-relaxed max-w-sm text-gray-400 dark:text-gray-300">
                 The affordable, Ireland-specific governance compliance tool for registered
                 charities. A product of Project Nexus Ltd, Skibbereen, Co. Cork.
               </p>
@@ -110,17 +112,17 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </p>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <Link href="/features" className="hover:text-white transition-colors">
+                  <Link href="/features" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Features
                   </Link>
                 </li>
                 <li>
-                  <Link href="/pricing" className="hover:text-white transition-colors">
+                  <Link href="/pricing" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Pricing
                   </Link>
                 </li>
                 <li>
-                  <Link href="/blog" className="hover:text-white transition-colors">
+                  <Link href="/blog" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Blog
                   </Link>
                 </li>
@@ -134,17 +136,17 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </p>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <Link href="/privacy" className="hover:text-white transition-colors">
+                  <Link href="/privacy" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Privacy Policy
                   </Link>
                 </li>
                 <li>
-                  <Link href="/terms" className="hover:text-white transition-colors">
+                  <Link href="/terms" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Terms of Service
                   </Link>
                 </li>
                 <li>
-                  <a href="mailto:hello@charitypilot.ie" className="hover:text-white transition-colors">
+                  <a href="mailto:hello@charitypilot.ie" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     hello@charitypilot.ie
                   </a>
                 </li>
@@ -152,7 +154,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="pt-8 border-t border-gray-800 text-sm text-center text-gray-400">
+          <div className="pt-8 border-t border-gray-800 dark:border-gray-700 text-sm text-center text-gray-400 dark:text-gray-300">
             <p>&copy; 2026 Project Nexus Ltd. All rights reserved.</p>
           </div>
         </div>

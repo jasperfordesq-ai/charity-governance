@@ -31,7 +31,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </Link>
           <Link
             href="/"
-            className="shrink-0 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-teal-primary transition-colors font-medium"
+            className="shrink-0 inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors font-medium"
           >
             <svg
               className="w-3.5 h-3.5"
@@ -54,14 +54,14 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </main>
 
       {/* Minimal footer */}
-      <footer className="text-center py-6 px-4 text-xs text-gray-500">
+      <footer className="text-center py-6 px-4 text-xs text-gray-500 dark:text-gray-300">
         <p>
           &copy; 2026 Project Nexus Ltd &mdash;{' '}
-          <Link href="/privacy" className="hover:text-teal-primary transition-colors">
+          <Link href="/privacy" className="hover:text-teal-primary dark:hover:text-teal-bright transition-colors">
             Privacy Policy
           </Link>{' '}
           &middot;{' '}
-          <Link href="/terms" className="hover:text-teal-primary transition-colors">
+          <Link href="/terms" className="hover:text-teal-primary dark:hover:text-teal-bright transition-colors">
             Terms of Service
           </Link>
         </p>

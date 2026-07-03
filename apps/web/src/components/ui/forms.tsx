@@ -17,11 +17,11 @@ export function FieldGroup({
 }) {
   return (
     <fieldset className={classes('space-y-4', className)}>
-      {(title || description) ? (
-        <div className="space-y-1">
-          {title ? <legend className="text-base font-semibold text-gray-950 dark:text-gray-50">{title}</legend> : null}
-          {description ? <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p> : null}
-        </div>
+      {title ? <legend className="text-base font-semibold text-gray-950 dark:text-gray-50">{title}</legend> : null}
+      {description ? (
+        <p className={classes('text-sm leading-6 text-gray-600 dark:text-gray-300', title ? '-mt-3' : false)}>
+          {description}
+        </p>
       ) : null}
       <div className="grid gap-4">{children}</div>
     </fieldset>

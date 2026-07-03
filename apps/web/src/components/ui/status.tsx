@@ -97,12 +97,14 @@ const reviewTone: Record<ReviewFlagTone, Tone> = {
 export function ReviewFlag({
   tone,
   children,
+  ariaLabel,
 }: {
   tone: ReviewFlagTone;
   children: ReactNode;
+  ariaLabel?: string;
 }) {
   return (
-    <StatusChip tone={reviewTone[tone]} ariaLabel={`Review status: ${String(children)}`}>
+    <StatusChip tone={reviewTone[tone]} ariaLabel={ariaLabel}>
       {children}
     </StatusChip>
   );
@@ -120,12 +122,14 @@ const deadlineTone: Record<DeadlineBadgeTone, Tone> = {
 export function DeadlineBadge({
   tone,
   children,
+  ariaLabel,
 }: {
   tone: DeadlineBadgeTone;
   children: ReactNode;
+  ariaLabel?: string;
 }) {
   return (
-    <StatusChip tone={deadlineTone[tone]} ariaLabel={`Deadline status: ${String(children)}`}>
+    <StatusChip tone={deadlineTone[tone]} ariaLabel={ariaLabel}>
       {children}
     </StatusChip>
   );
