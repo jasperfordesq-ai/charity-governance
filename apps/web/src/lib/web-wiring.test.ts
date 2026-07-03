@@ -164,6 +164,118 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
   }
 });
 
+test('phase 6B operational workflows use shared primitives and review-ready safeguards', () => {
+  const expectations: Array<{
+    file: string;
+    imports: Array<[string, string[]]>;
+    sourceTerms: string[];
+    patterns?: RegExp[];
+  }> = [
+    {
+      file: 'documents/page.tsx',
+      imports: [
+        ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+        ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
+        ['@/components/ui/data-list', ['DataList', 'DataListItems']],
+        ['@/components/ui/status', ['EvidenceChip', 'StatusChip']],
+        ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary']],
+      ],
+      sourceTerms: [
+        'private evidence storage',
+        'downloadDocId',
+        'linkingStandard',
+        'unlinkingStandard',
+        'aria-live="polite"',
+        'review-ready',
+      ],
+      patterns: [
+        /isLoading=\{downloadDocId === doc\.id\}/,
+        /isDisabled=\{[^}]*linkingStandard/,
+      ],
+    },
+    {
+      file: 'deadlines/page.tsx',
+      imports: [
+        ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+        ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
+        ['@/components/ui/data-list', ['DataList', 'DataListItems']],
+        ['@/components/ui/status', ['DeadlineBadge', 'ReviewFlag', 'StatusChip']],
+        ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary']],
+      ],
+      sourceTerms: [
+        'toggleDeadlineId',
+        'dueState',
+        'priorityLabel',
+        'aria-live="polite"',
+        'review-ready',
+      ],
+      patterns: [
+        /isDisabled=\{[^}]*toggleDeadlineId/,
+        /role="checkbox"/,
+      ],
+    },
+    {
+      file: 'board/page.tsx',
+      imports: [
+        ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+        ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
+        ['@/components/ui/data-list', ['DataListTable', 'DataListItems']],
+        ['@/components/ui/status', ['EvidenceChip', 'ReviewFlag', 'StatusChip']],
+        ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary']],
+      ],
+      sourceTerms: [
+        'mutatingMemberId',
+        'Trustee evidence prompts',
+        'table and mobile card views',
+        'aria-live="polite"',
+        'review-ready',
+      ],
+      patterns: [
+        /isDisabled=\{[^}]*mutatingMemberId/,
+        /apiErrorMessage/,
+      ],
+    },
+    {
+      file: 'organisation/page.tsx',
+      imports: [
+        ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+        ['@/components/ui/states', ['ErrorState']],
+        ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+        ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
+      ],
+      sourceTerms: [
+        'saveError',
+        'dirtyStateLabel',
+        'financial year end',
+        'Registered Charity Number',
+        'review-ready',
+        'not legal advice',
+        'aria-live="polite"',
+      ],
+      patterns: [
+        /isDisabled=\{[^}]*!isDirty/,
+        /ValidationSummary/,
+      ],
+    },
+  ];
+
+  for (const { file, imports, sourceTerms, patterns = [] } of expectations) {
+    const src = dash(file);
+    for (const [moduleName, importedNames] of imports) {
+      assert.match(src, new RegExp(`from '${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`), `${file} must import ${moduleName}`);
+      for (const importedName of importedNames) {
+        assert.match(src, new RegExp(`\\b${importedName}\\b`), `${file} must use ${importedName}`);
+      }
+    }
+    for (const term of sourceTerms) {
+      assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `${file} must include ${term}`);
+    }
+    for (const pattern of patterns) {
+      assert.match(src, pattern, `${file} must satisfy ${pattern}`);
+    }
+  }
+});
+
 test('theme prepaint and client layout handling support dark mode beyond protected app routes', () => {
   const routeScopedDarkModeTerms = new RegExp(
     ['var app=', 'app&&', 'app routes ' + 'only', 'light' + '-only'].join('|'),

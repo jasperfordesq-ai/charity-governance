@@ -1,57 +1,50 @@
 'use client';
 
 import { logClientError } from '@/lib/client-logger';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
-  Card,
   Button,
   Input,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
   Select,
   SelectItem,
-  Chip,
-  Modal,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { useAuth } from '@/lib/auth-context';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { FieldGroup, FormHint, StickyFormActions, ValidationSummary } from '@/components/ui/forms';
+import { ErrorState, LoadingState } from '@/components/ui/states';
+import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import type { UpdateOrganisationRequest } from '@charitypilot/shared';
 import {
-  LegalForm,
-  OrganisationComplexity,
+  CHARITABLE_PURPOSE_LABELS,
   CharitablePurpose,
   LEGAL_FORM_LABELS,
-  CHARITABLE_PURPOSE_LABELS,
+  LegalForm,
+  OrganisationComplexity,
 } from '@charitypilot/shared';
 
 export default function OrganisationPage() {
   useDocumentTitle('Organisation');
-  const { user, refreshUser } = useAuth();
+  const { user, isLoading, refreshUser } = useAuth();
   const org = user?.organisation;
 
   const { toast } = useToast();
   const complexityModal = useDisclosure();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const initialised = useRef(false);
 
-  // Track unsaved changes — warn on navigation
-  useEffect(() => {
-    if (!isDirty) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty]);
-
-  // Form state
   const [name, setName] = useState('');
   const [rcnNumber, setRcnNumber] = useState('');
   const [croNumber, setCroNumber] = useState('');
@@ -66,12 +59,19 @@ export default function OrganisationPage() {
   const [dateRegistered, setDateRegistered] = useState('');
   const [lastAgmDate, setLastAgmDate] = useState('');
 
-  // Populate form from existing data
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
   useEffect(() => {
     if (!org) return;
-    // Re-populating from fresh server data (e.g. after a save calls refreshUser)
-    // must not count as a user edit — otherwise the dirty-tracking effect below
-    // re-arms "Unsaved changes" immediately after a successful save.
+
     initialised.current = false;
     setName(org.name ?? '');
     setRcnNumber(org.rcnNumber ?? '');
@@ -86,16 +86,62 @@ export default function OrganisationPage() {
     setWebsite(org.website ?? '');
     setDateRegistered(org.dateRegistered ? org.dateRegistered.slice(0, 10) : '');
     setLastAgmDate(org.lastAgmDate ? org.lastAgmDate.slice(0, 10) : '');
-    // Mark initialised so subsequent changes count as dirty
-    setTimeout(() => { initialised.current = true; }, 0);
+    setIsDirty(false);
+    setSaveError('');
+    setTimeout(() => {
+      initialised.current = true;
+    }, 0);
   }, [org]);
 
-  // Track dirty state on any field change after init
   useEffect(() => {
-    if (initialised.current) setIsDirty(true);
-  }, [name, rcnNumber, croNumber, legalForm, complexity, charitablePurpose, financialYearEnd, registeredAddress, contactEmail, contactPhone, website, dateRegistered, lastAgmDate]);
+    if (initialised.current) {
+      setIsDirty(true);
+      setSaved(false);
+      setSaveError('');
+    }
+  }, [
+    charitablePurpose,
+    complexity,
+    contactEmail,
+    contactPhone,
+    croNumber,
+    dateRegistered,
+    financialYearEnd,
+    lastAgmDate,
+    legalForm,
+    name,
+    rcnNumber,
+    registeredAddress,
+    website,
+  ]);
 
-  /* ── Complexity change handler ── */
+  const legalFormOptions = Object.entries(LEGAL_FORM_LABELS);
+  const purposeOptions = Object.entries(CHARITABLE_PURPOSE_LABELS);
+  const selectedPurposes = Array.from(charitablePurpose);
+
+  const validationErrors = useMemo(() => {
+    const errors: string[] = [];
+    if (!name.trim()) errors.push('Organisation name is required.');
+    if (saveError) errors.push(saveError);
+    return errors;
+  }, [name, saveError]);
+
+  const dirtyStateLabel = saving
+    ? 'Saving changes'
+    : saved
+      ? 'Changes saved'
+      : isDirty
+        ? 'Unsaved changes'
+        : 'Up to date';
+
+  const completionItems = [
+    { label: 'Registered Charity Number', ready: Boolean(rcnNumber.trim()) },
+    { label: 'Legal form', ready: Boolean(legalForm) },
+    { label: 'Charitable purpose', ready: charitablePurpose.size > 0 },
+    { label: 'Financial year end', ready: Boolean(financialYearEnd) },
+  ];
+  const readyCount = completionItems.filter((item) => item.ready).length;
+
   const handleComplexityChange = (newComplexity: OrganisationComplexity) => {
     if (newComplexity !== complexity) {
       setComplexity(newComplexity);
@@ -103,10 +149,24 @@ export default function OrganisationPage() {
     }
   };
 
-  /* ── Save ── */
+  const handlePurposeChange = (key: string, checked: boolean) => {
+    setCharitablePurpose((current) => {
+      const next = new Set(current);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
   const handleSave = async () => {
+    if (!name.trim()) {
+      setSaveError('Organisation name is required.');
+      return;
+    }
+
     setSaving(true);
     setSaved(false);
+    setSaveError('');
     try {
       const body: UpdateOrganisationRequest = {
         name: name.trim(),
@@ -114,7 +174,7 @@ export default function OrganisationPage() {
         croNumber: croNumber.trim() || null,
         legalForm,
         complexity,
-        charitablePurpose: Array.from(charitablePurpose) as CharitablePurpose[],
+        charitablePurpose: selectedPurposes as CharitablePurpose[],
         financialYearEnd: financialYearEnd || null,
         registeredAddress: registeredAddress.trim() || null,
         contactEmail: contactEmail.trim() || null,
@@ -131,252 +191,292 @@ export default function OrganisationPage() {
       toast('Organisation profile saved');
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
+      const message = apiErrorMessage(err, 'Failed to save changes');
       logClientError('Save failed', err);
-      toast('Failed to save changes', 'error');
+      setSaveError(message);
+      toast(message, 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const legalFormOptions = Object.entries(LEGAL_FORM_LABELS);
-  const purposeOptions = Object.entries(CHARITABLE_PURPOSE_LABELS);
+  if (isLoading) {
+    return (
+      <AppPage
+        eyebrow="Operational setup"
+        title="Organisation Profile"
+        description="Loading the organisation profile used across compliance reporting and deadline generation."
+      >
+        <LoadingState title="Loading organisation profile" description="Hydrating your secure session." variant="page" />
+      </AppPage>
+    );
+  }
+
+  if (!org) {
+    return (
+      <AppPage
+        eyebrow="Operational setup"
+        title="Organisation Profile"
+        description="The organisation profile could not be hydrated from the current session."
+      >
+        <ErrorState
+          title="Organisation profile unavailable"
+          description="Please refresh the page or sign in again before editing setup details."
+          action={(
+            <Button size="sm" variant="flat" onPress={() => refreshUser()}>
+              Refresh session
+            </Button>
+          )}
+          variant="page"
+        />
+      </AppPage>
+    );
+  }
 
   return (
-    <div className="space-y-8 max-w-3xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Organisation Profile</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Keep your organisation details up to date. This information is used for compliance reporting.
-        </p>
-      </div>
-
-      {/* Form */}
-      <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6 sm:p-8">
-        <div className="space-y-6">
-          {/* Name & Registration */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Organisation Name"
-              value={name}
-              onValueChange={setName}
-              isRequired
-            />
-            <Input
-              label="Registered Charity Number (RCN)"
-              placeholder="e.g. 20012345"
-              value={rcnNumber}
-              onValueChange={setRcnNumber}
-            />
+    <AppPage
+      eyebrow="Operational setup"
+      title="Organisation Profile"
+      description="Start here: these details drive review-ready reports, annual deadlines, and the standards shown across CharityPilot. This is workflow support, not legal advice."
+    >
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <ReviewFlag tone="draft">First setup step</ReviewFlag>
+            <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
+              Make the charity profile easy to review before annual reporting.
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              Clear RCN, CRO, legal form, purpose, and financial year end details help trustees understand what the system is using.
+            </p>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="CRO Number (if CLG)"
-              placeholder="e.g. 123456"
-              value={croNumber}
-              onValueChange={setCroNumber}
-            />
-            <Select
-              label="Legal Form"
-              selectedKeys={new Set([legalForm])}
-              onSelectionChange={(keys) => {
-                const val = Array.from(keys)[0] as LegalForm;
-                if (val) setLegalForm(val);
-              }}
-            >
-              {legalFormOptions.map(([key, label]) => (
-                <SelectItem key={key}>{label}</SelectItem>
-              ))}
-            </Select>
-          </div>
-
-          {/* Complexity */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Organisation Complexity</label>
-            <div className="flex gap-3">
-              {[OrganisationComplexity.SIMPLE, OrganisationComplexity.COMPLEX].map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => handleComplexityChange(c)}
-                  className={`
-                    flex-1 p-4 rounded-xl border-2 text-left transition-all
-                    ${complexity === c
-                      ? 'border-teal-primary bg-teal-primary/5 dark:bg-teal-light/10'
-                      : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
-                    }
-                  `}
-                >
-                  <p className={`text-sm font-semibold ${complexity === c ? 'text-teal-primary dark:text-teal-bright' : 'text-gray-700 dark:text-gray-300'}`}>
-                    {c === OrganisationComplexity.SIMPLE ? 'Simple' : 'Complex'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {c === OrganisationComplexity.SIMPLE
-                      ? 'Core standards only (32 standards)'
-                      : 'Core + additional standards (49 standards)'}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Charitable purpose (multi-select) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Charitable Purpose(s)
-            </label>
-            <div className="space-y-2">
-              {purposeOptions.map(([key, label]) => (
-                <label key={key} className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={charitablePurpose.has(key)}
-                    onChange={(e) => {
-                      const next = new Set(charitablePurpose);
-                      if (e.target.checked) next.add(key);
-                      else next.delete(key);
-                      setCharitablePurpose(next);
-                    }}
-                    className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
-                </label>
-              ))}
-            </div>
-            {charitablePurpose.size > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {Array.from(charitablePurpose).map((key) => (
-                  <Chip
-                    key={key}
-                    size="sm"
-                    variant="flat"
-                    color="primary"
-                    onClose={() => {
-                      const next = new Set(charitablePurpose);
-                      next.delete(key);
-                      setCharitablePurpose(next);
-                    }}
-                  >
-                    {CHARITABLE_PURPOSE_LABELS[key] ?? key}
-                  </Chip>
-                ))}
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[28rem]">
+            {completionItems.map((item) => (
+              <div key={item.label} className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+                <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+                <StatusChip tone={item.ready ? 'success' : 'warning'}>{item.ready ? 'Set' : 'Review'}</StatusChip>
               </div>
-            )}
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <AppSection
+        title="Profile fields"
+        description={`${readyCount} of ${completionItems.length} setup fields are ready for operational review.`}
+      >
+        <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <div className="space-y-7 p-4 sm:p-6">
+            <ValidationSummary errors={validationErrors} />
+
+            <FieldGroup
+              title="Legal identity"
+              description="Use the charity's registered name and identifiers exactly as trustees expect to see them in reports."
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label="Organisation name"
+                  value={name}
+                  onValueChange={setName}
+                  isRequired
+                />
+                <div>
+                  <Input
+                    label="Registered Charity Number (RCN)"
+                    placeholder="20012345"
+                    value={rcnNumber}
+                    onValueChange={setRcnNumber}
+                    aria-describedby="rcn-hint"
+                  />
+                  <FormHint id="rcn-hint">Enter the Registered Charity Number used in public charity materials.</FormHint>
+                </div>
+                <div>
+                  <Input
+                    label="CRO number"
+                    placeholder="123456"
+                    value={croNumber}
+                    onValueChange={setCroNumber}
+                    aria-describedby="cro-hint"
+                  />
+                  <FormHint id="cro-hint">Use this where the charity is a company limited by guarantee or otherwise has a CRO number.</FormHint>
+                </div>
+                <Select
+                  label="Legal form"
+                  selectedKeys={new Set([legalForm])}
+                  onSelectionChange={(keys) => {
+                    const value = Array.from(keys)[0] as LegalForm | undefined;
+                    if (value) setLegalForm(value);
+                  }}
+                >
+                  {legalFormOptions.map(([key, label]) => (
+                    <SelectItem key={key}>{label}</SelectItem>
+                  ))}
+                </Select>
+              </div>
+            </FieldGroup>
+
+            <FieldGroup
+              title="Governance scope"
+              description="Complexity controls whether the additional Governance Code standards appear in compliance workflows."
+            >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[OrganisationComplexity.SIMPLE, OrganisationComplexity.COMPLEX].map((value) => {
+                  const selected = complexity === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleComplexityChange(value)}
+                      className={`rounded-lg border p-4 text-left transition-colors ${selected ? 'border-teal-primary bg-teal-primary/10 dark:border-teal-bright dark:bg-teal-bright/10' : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-gray-700'}`}
+                      aria-pressed={selected}
+                    >
+                      <span className={`text-sm font-semibold ${selected ? 'text-teal-dark dark:text-teal-bright' : 'text-gray-950 dark:text-gray-50'}`}>
+                        {value === OrganisationComplexity.SIMPLE ? 'Simple' : 'Complex'}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-gray-600 dark:text-gray-300">
+                        {value === OrganisationComplexity.SIMPLE
+                          ? 'Core standards only. This is suitable for many smaller or straightforward charities.'
+                          : 'Core plus additional standards for charities with larger, higher-risk, or more complex operations.'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Charitable purpose</p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {purposeOptions.map(([key, label]) => (
+                    <label key={key} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={charitablePurpose.has(key)}
+                        onChange={(event) => handlePurposeChange(key, event.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                {selectedPurposes.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedPurposes.map((key) => (
+                      <StatusChip key={key} tone="brand">
+                        {CHARITABLE_PURPOSE_LABELS[key] ?? key}
+                      </StatusChip>
+                    ))}
+                  </div>
+                ) : (
+                  <FormHint tone="warning">Choose at least one purpose so reports can describe the charity clearly.</FormHint>
+                )}
+              </div>
+            </FieldGroup>
+
+            <FieldGroup
+              title="Reporting calendar"
+              description="The financial year end is used to support annual reporting and deadline generation."
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <Input
+                    label="Financial year end"
+                    type="date"
+                    value={financialYearEnd}
+                    onValueChange={setFinancialYearEnd}
+                    aria-describedby="financial-year-hint"
+                  />
+                  <FormHint id="financial-year-hint">Use the financial year end that drives Annual Report timing and board review planning.</FormHint>
+                </div>
+                <Input
+                  label="Date registered with CRA"
+                  type="date"
+                  value={dateRegistered}
+                  onValueChange={setDateRegistered}
+                />
+                <Input
+                  label="Last AGM date"
+                  type="date"
+                  value={lastAgmDate}
+                  onValueChange={setLastAgmDate}
+                />
+              </div>
+            </FieldGroup>
+
+            <FieldGroup
+              title="Contact details"
+              description="These details help exported records remain understandable to trustees and administrators."
+            >
+              <Input
+                label="Registered address"
+                placeholder="Full registered address"
+                value={registeredAddress}
+                onValueChange={setRegisteredAddress}
+              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label="Contact email"
+                  type="email"
+                  placeholder="info@mycharity.ie"
+                  value={contactEmail}
+                  onValueChange={setContactEmail}
+                />
+                <Input
+                  label="Phone"
+                  placeholder="+353 1 234 5678"
+                  value={contactPhone}
+                  onValueChange={setContactPhone}
+                />
+              </div>
+              <Input
+                label="Website"
+                placeholder="https://www.mycharity.ie"
+                value={website}
+                onValueChange={setWebsite}
+              />
+            </FieldGroup>
           </div>
 
-          {/* Financial year end */}
-          <Input
-            label="Financial Year End Date"
-            type="date"
-            value={financialYearEnd}
-            onValueChange={setFinancialYearEnd}
-          />
-
-          {/* Address & contact */}
-          <Input
-            label="Registered Address"
-            placeholder="Full address..."
-            value={registeredAddress}
-            onValueChange={setRegisteredAddress}
-          />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Contact Email"
-              type="email"
-              placeholder="info@mycharity.ie"
-              value={contactEmail}
-              onValueChange={setContactEmail}
-            />
-            <Input
-              label="Phone"
-              placeholder="+353 1 234 5678"
-              value={contactPhone}
-              onValueChange={setContactPhone}
-            />
-          </div>
-
-          <Input
-            label="Website"
-            placeholder="https://www.mycharity.ie"
-            value={website}
-            onValueChange={setWebsite}
-          />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Date Registered with CRA"
-              type="date"
-              value={dateRegistered}
-              onValueChange={setDateRegistered}
-            />
-            <Input
-              label="Last AGM Date"
-              type="date"
-              value={lastAgmDate}
-              onValueChange={setLastAgmDate}
-            />
-          </div>
-
-          {/* Save button */}
-          <div className="flex items-center gap-3 pt-2">
+          <StickyFormActions align="between">
+            <div aria-live="polite" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {dirtyStateLabel}
+            </div>
             <Button
               className="bg-teal-primary text-white hover:bg-teal-dark"
               onPress={handleSave}
               isLoading={saving}
-              isDisabled={!name.trim()}
-              size="lg"
+              isDisabled={saving || !isDirty || !name.trim()}
             >
-              Save Changes
+              Save profile
             </Button>
-            {saved && (
-              <span className="text-sm text-green-600 dark:text-green-400 font-medium">Changes saved successfully.</span>
-            )}
-            {isDirty && !saved && !saving && (
-              <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">Unsaved changes</span>
-            )}
-          </div>
+          </StickyFormActions>
         </div>
-      </Card>
+      </AppSection>
 
-      {/* ── Complexity Explanation Modal ── */}
       <Modal isOpen={complexityModal.isOpen} onOpenChange={complexityModal.onOpenChange}>
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>Organisation Complexity</ModalHeader>
-              <ModalBody>
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Simple Organisations</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      Most charities fall into this category. Simple organisations need to comply with the
-                      <strong> 32 core standards</strong> of the Charities Governance Code. This is the default for
-                      charities with straightforward operations, smaller budgets, and fewer staff or volunteers.
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Complex Organisations</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      Larger charities or those with complex activities should comply with both the core standards
-                      and the <strong>17 additional standards</strong> (49 total). Consider this where your
-                      charity has paid staff, significant income, multiple activities, complex structures, or higher risk.
-                    </p>
-                  </div>
-                  <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-3">
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
-                      <strong>Note:</strong> Changing complexity will affect which standards appear in your compliance
-                      tracking. Your existing records will not be deleted.
-                    </p>
-                  </div>
+              <ModalHeader>Organisation complexity</ModalHeader>
+              <ModalBody className="gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">Simple organisations</h3>
+                  <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                    Simple organisations usually track the 32 core standards. This is often appropriate for smaller charities with straightforward operations.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">Complex organisations</h3>
+                  <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                    Complex organisations track the core standards plus the 17 additional standards. Consider this for larger, higher-risk, staffed, or multi-activity charities.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+                  <p className="text-sm leading-6 text-amber-900 dark:text-amber-100">
+                    Changing this setting affects which standards appear. Existing records are retained. Treat this as a governance setup choice, not legal advice.
+                  </p>
                 </div>
               </ModalBody>
               <ModalFooter>
-                <Button
-                  className="bg-teal-primary text-white hover:bg-teal-dark"
-                  onPress={onClose}
-                >
+                <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onClose}>
                   Got it
                 </Button>
               </ModalFooter>
@@ -384,6 +484,6 @@ export default function OrganisationPage() {
           )}
         </ModalContent>
       </Modal>
-    </div>
+    </AppPage>
   );
 }

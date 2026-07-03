@@ -1,47 +1,82 @@
 'use client';
 
 import { logClientError } from '@/lib/client-logger';
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
-  Card,
   Button,
   Input,
-  Chip,
-  Table,
-  TableHeader,
-  TableColumn,
-  TableBody,
-  TableRow,
-  TableCell,
   Modal,
-  ModalContent,
-  ModalHeader,
   ModalBody,
+  ModalContent,
   ModalFooter,
+  ModalHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
+import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
 import type {
   BoardMemberResponse,
   CreateBoardMemberRequest,
   UpdateBoardMemberRequest,
 } from '@charitypilot/shared';
 
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return 'Not set';
+  return new Date(value).toLocaleDateString('en-IE', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const yearsServed = (appointedDate: string) => {
+  const appointed = new Date(appointedDate);
+  const now = new Date();
+  return (now.getTime() - appointed.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+};
+
+const trusteeEvidencePrompts = [
+  {
+    title: 'Code of conduct',
+    detail: 'Signed conduct records support standards 2.3 and 5.7.',
+  },
+  {
+    title: 'Induction',
+    detail: 'Induction dates support standards 5.6, 5.7, and succession evidence.',
+  },
+  {
+    title: 'Term review',
+    detail: 'Appointment and term dates help trustees review the suggested nine-year limit.',
+  },
+];
+
 export default function BoardPage() {
   useDocumentTitle('Board Members');
   const [members, setMembers] = useState<BoardMemberResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [mutatingMemberId, setMutatingMemberId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Add / Edit modal
   const memberModal = useDisclosure();
   const [editing, setEditing] = useState<BoardMemberResponse | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  // Form fields
   const [formName, setFormName] = useState('');
   const [formRole, setFormRole] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -52,22 +87,52 @@ export default function BoardPage() {
   const [formInduction, setFormInduction] = useState(false);
   const [formInductionDate, setFormInductionDate] = useState('');
 
-  const fetchMembers = useCallback(async () => {
+  const fetchMembers = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setLoadError('');
     try {
       const res = await api.get('/board-members');
       setMembers(res.data?.data ?? res.data ?? []);
     } catch (err) {
+      const message = apiErrorMessage(err, 'Board members could not be loaded. Please try again.');
       logClientError('Failed to load board members', err);
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMembers();
+    fetchMembers(true);
   }, [fetchMembers]);
 
-  /* ── Reset form ── */
+  const displayMembers = useMemo(() => {
+    return members
+      .filter((member) => showInactive || member.isActive)
+      .sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name));
+  }, [members, showInactive]);
+
+  const summary = useMemo(() => {
+    return members.reduce(
+      (acc, member) => {
+        if (member.isActive) acc.active += 1;
+        else acc.inactive += 1;
+        if (member.isActive && !member.conductSigned) acc.conductMissing += 1;
+        if (member.isActive && !member.inductionCompleted) acc.inductionMissing += 1;
+        if (member.isActive && yearsServed(member.appointedDate) >= 8) acc.termReview += 1;
+        return acc;
+      },
+      { active: 0, inactive: 0, conductMissing: 0, inductionMissing: 0, termReview: 0 },
+    );
+  }, [members]);
+
+  const formDisabledReason = useMemo(() => {
+    if (!formName.trim()) return 'Add the trustee name before saving.';
+    if (!formRole.trim()) return 'Add the trustee role before saving.';
+    if (!formAppointed) return 'Add the appointment date before saving.';
+    return '';
+  }, [formAppointed, formName, formRole]);
+
   const resetForm = () => {
     setFormName('');
     setFormRole('');
@@ -78,16 +143,15 @@ export default function BoardPage() {
     setFormConductDate('');
     setFormInduction(false);
     setFormInductionDate('');
+    setFormError('');
     setEditing(null);
   };
 
-  /* ── Open add modal ── */
   const openAdd = () => {
     resetForm();
     memberModal.onOpen();
   };
 
-  /* ── Open edit modal ── */
   const openEdit = (member: BoardMemberResponse) => {
     setEditing(member);
     setFormName(member.name);
@@ -99,17 +163,20 @@ export default function BoardPage() {
     setFormConductDate(member.conductSignedDate ? member.conductSignedDate.slice(0, 10) : '');
     setFormInduction(member.inductionCompleted);
     setFormInductionDate(member.inductionDate ? member.inductionDate.slice(0, 10) : '');
+    setFormError('');
     memberModal.onOpen();
   };
 
-  /* ── Save handler ── */
   const handleSave = async () => {
-    if (!formName.trim() || !formRole.trim() || !formAppointed) return;
+    if (formDisabledReason) {
+      setFormError(formDisabledReason);
+      return;
+    }
 
     setSaving(true);
+    setFormError('');
     try {
       if (editing) {
-        // Update
         const body: UpdateBoardMemberRequest = {
           name: formName.trim(),
           role: formRole.trim(),
@@ -123,7 +190,6 @@ export default function BoardPage() {
         };
         await api.patch(`/board-members/${editing.id}`, body);
       } else {
-        // Create
         const body: CreateBoardMemberRequest = {
           name: formName.trim(),
           role: formRole.trim(),
@@ -140,385 +206,434 @@ export default function BoardPage() {
 
       resetForm();
       memberModal.onClose();
-      fetchMembers();
+      await fetchMembers();
       toast(editing ? 'Board member updated' : 'Board member added');
     } catch (err) {
+      const message = apiErrorMessage(err, 'Failed to save board member');
       logClientError('Save failed', err);
-      toast('Failed to save board member', 'error');
+      setFormError(message);
+      toast(message, 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  /* ── Toggle active / inactive ── */
   const toggleActive = async (member: BoardMemberResponse) => {
+    setMutatingMemberId(member.id);
     try {
       await api.patch(`/board-members/${member.id}`, {
         isActive: !member.isActive,
       });
-      fetchMembers();
+      await fetchMembers();
+      toast(member.isActive ? 'Board member marked inactive' : 'Board member reactivated');
     } catch (err) {
+      const message = apiErrorMessage(err, 'Failed to update board member');
       logClientError('Toggle failed', err);
-      toast('Failed to update board member', 'error');
+      toast(message, 'error');
+    } finally {
+      setMutatingMemberId(null);
     }
   };
 
-  /* ── Derived data ── */
-  const now = new Date();
-  const displayMembers = members.filter((m) => showInactive || m.isActive);
+  const memberEvidence = (member: BoardMemberResponse) => {
+    const years = yearsServed(member.appointedDate);
+    return {
+      years,
+      nearNineYears: years >= 8,
+      overNineYears: years >= 9,
+    };
+  };
 
-  const yearsServed = (appointedDate: string) => {
-    const d = new Date(appointedDate);
-    return (now.getTime() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  const renderEvidenceChips = (member: BoardMemberResponse) => {
+    const evidence = memberEvidence(member);
+    return (
+      <div className="flex flex-wrap gap-2">
+        <EvidenceChip status={member.conductSigned ? 'ready' : 'missing'}>
+          {member.conductSigned ? 'Conduct signed' : 'Conduct missing'}
+        </EvidenceChip>
+        <EvidenceChip status={member.inductionCompleted ? 'ready' : 'missing'}>
+          {member.inductionCompleted ? 'Induction done' : 'Induction pending'}
+        </EvidenceChip>
+        {evidence.nearNineYears ? (
+          <ReviewFlag tone={evidence.overNineYears ? 'blocked' : 'needs-review'}>
+            {Math.floor(evidence.years)}y term review
+          </ReviewFlag>
+        ) : null}
+      </div>
+    );
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Board Members Register</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Manage your charity trustees. Track code of conduct, induction, and term limits.
-          </p>
-        </div>
+    <AppPage
+      eyebrow="Trustee register"
+      title="Board Members Register"
+      description="Maintain a review-ready trustee register with conduct, induction, appointment, and term evidence for Irish charity governance workflows."
+      actions={(
         <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={openAdd}>
-          <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          Add Member
+          Add trustee
         </Button>
-      </div>
+      )}
+    >
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <ReviewFlag tone="draft">Review-ready register</ReviewFlag>
+            <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
+              Keep trustee evidence visible before annual review.
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              Track who is active, when each trustee was appointed, and whether conduct and induction evidence is ready for board review.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[28rem]">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Active</p>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{summary.active}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Conduct gaps</p>
+              <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{summary.conductMissing}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Induction gaps</p>
+              <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{summary.inductionMissing}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Term review</p>
+              <p className="text-xl font-bold text-rose-700 dark:text-rose-300">{summary.termReview}</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      {/* Active/Inactive toggle */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showInactive}
-          aria-label="Show inactive members"
-          onClick={() => setShowInactive(!showInactive)}
-          className={`
-            relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-            ${showInactive ? 'bg-teal-primary' : 'bg-gray-300 dark:bg-gray-700'}
-          `}
-        >
-          <span
-            className={`
-              inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-              ${showInactive ? 'translate-x-6' : 'translate-x-1'}
-            `}
-          />
-        </button>
-        <span className="text-sm text-gray-600 dark:text-gray-400">Show inactive members</span>
-      </div>
-
-      {/* Members table */}
-      {loading ? (
-        <Card className="p-6 animate-pulse dark:bg-gray-900 dark:border dark:border-gray-800">
-          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-5" />
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex gap-4 mb-3">
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/5" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/6" />
+      <AppSection
+        title="Trustee evidence prompts"
+        description="Use these prompts to keep conduct, induction, and trustee term evidence ready for board review."
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {trusteeEvidencePrompts.map((prompt) => (
+            <div key={prompt.title} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{prompt.title}</h3>
+              <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{prompt.detail}</p>
             </div>
           ))}
-        </Card>
-      ) : displayMembers.length === 0 ? (
-        <Card className="p-12 border border-gray-200 dark:border-gray-800 dark:bg-gray-900 text-center">
-          <div className="text-gray-400 dark:text-gray-400 mb-3">
-            <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-            </svg>
-          </div>
-          <p className="text-gray-500 dark:text-gray-400 mb-2">No board members added yet.</p>
-          <p className="text-sm text-gray-400 dark:text-gray-400">Add your charity trustees to track their governance duties.</p>
-        </Card>
-      ) : (
-        <>
-        {/* Mobile card layout */}
-        <div className="sm:hidden space-y-3">
-          {displayMembers.map((m) => {
-            const years = yearsServed(m.appointedDate);
-            const nearNineYears = years >= 8;
-            const overNineYears = years >= 9;
-            return (
-              <Card key={m.id} className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{m.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{m.role}</p>
-                    {m.email && <p className="text-xs text-gray-400 dark:text-gray-400">{m.email}</p>}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {m.isActive ? (
-                      <Chip size="sm" color="success" variant="dot">Active</Chip>
-                    ) : (
-                      <Chip size="sm" color="default" variant="dot">Inactive</Chip>
-                    )}
-                    {nearNineYears && m.isActive && (
-                      <Chip size="sm" color={overNineYears ? 'danger' : 'warning'} variant="flat">
-                        {Math.floor(years)}y served
-                      </Chip>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                  <div>
-                    <span className="text-gray-400 dark:text-gray-400">Appointed</span>
-                    <p className="text-gray-600 dark:text-gray-300">{new Date(m.appointedDate).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 dark:text-gray-400">Term End</span>
-                    <p className="text-gray-600 dark:text-gray-300">{m.termEndDate ? new Date(m.termEndDate).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 dark:text-gray-400">Conduct</span>
-                    <div className="mt-0.5">{m.conductSigned ? <Chip size="sm" color="success" variant="flat">Signed</Chip> : <Chip size="sm" color="warning" variant="flat">Unsigned</Chip>}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 dark:text-gray-400">Induction</span>
-                    <div className="mt-0.5">{m.inductionCompleted ? <Chip size="sm" color="success" variant="flat">Done</Chip> : <Chip size="sm" color="warning" variant="flat">Pending</Chip>}</div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="flat" className="flex-1" onPress={() => openEdit(m)}>Edit</Button>
-                  <Button size="sm" variant="flat" color={m.isActive ? 'warning' : 'success'} className="flex-1" onPress={() => toggleActive(m)}>
-                    {m.isActive ? 'Deactivate' : 'Activate'}
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
         </div>
+      </AppSection>
 
-        {/* Desktop table layout */}
-        <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm overflow-hidden hidden sm:block">
-          <div className="overflow-x-auto">
-            <Table aria-label="Board members" removeWrapper>
-              <TableHeader>
-                <TableColumn>NAME</TableColumn>
-                <TableColumn>ROLE</TableColumn>
-                <TableColumn className="hidden md:table-cell">APPOINTED</TableColumn>
-                <TableColumn className="hidden lg:table-cell">TERM END</TableColumn>
-                <TableColumn>CONDUCT</TableColumn>
-                <TableColumn>INDUCTION</TableColumn>
-                <TableColumn>STATUS</TableColumn>
-                <TableColumn>ACTIONS</TableColumn>
-              </TableHeader>
-              <TableBody>
-                {displayMembers.map((m) => {
-                  const years = yearsServed(m.appointedDate);
-                  const nearNineYears = years >= 8;
-                  const overNineYears = years >= 9;
+      <DataList
+        title="Trustees"
+        description="The active view is the default register. Toggle inactive members when you need historic appointment evidence."
+        actions={(
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showInactive}
+              aria-label="Show inactive members"
+              onClick={() => setShowInactive((value) => !value)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showInactive ? 'bg-teal-primary' : 'bg-gray-300 dark:bg-gray-700'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showInactive ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+            <span className="text-sm text-gray-600 dark:text-gray-300">Show inactive</span>
+          </div>
+        )}
+      >
+        {loading ? (
+          <LoadingState title="Loading board register" description="Checking trustee appointment and evidence records." />
+        ) : loadError && displayMembers.length === 0 ? (
+          <ErrorState
+            title="Board register could not be loaded"
+            description={loadError}
+            action={(
+              <Button size="sm" variant="flat" onPress={() => fetchMembers(true)}>
+                Try again
+              </Button>
+            )}
+          />
+        ) : displayMembers.length === 0 ? (
+          <EmptyState
+            title={showInactive ? 'No trustees in this view' : 'No active trustees added yet'}
+            description={showInactive ? 'No active or inactive trustees are available.' : 'Add trustees so conduct, induction, appointment, and term evidence can be reviewed before annual sign-off.'}
+            action={(
+              <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={openAdd}>
+                Add first trustee
+              </Button>
+            )}
+          />
+        ) : (
+          <div className="space-y-3">
+            {loadError ? (
+              <ErrorState
+                title="Some trustee data may be out of date"
+                description={loadError}
+                action={(
+                  <Button size="sm" variant="flat" onPress={() => fetchMembers(true)}>
+                    Refresh
+                  </Button>
+                )}
+              />
+            ) : null}
+            <div aria-live="polite" className="sr-only">
+              {mutatingMemberId ? 'Updating trustee status' : 'Board register ready'}
+            </div>
 
-                  return (
-                    <TableRow key={m.id}>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{m.name}</p>
-                          {m.email && (
-                            <p className="text-xs text-gray-400 dark:text-gray-400">{m.email}</p>
-                          )}
+            {/* Keep table and mobile card views at field parity for trustee evidence review. */}
+            <div className="sm:hidden">
+              <DataListItems divided={false}>
+                <div className="space-y-3 p-3">
+                  {displayMembers.map((member) => (
+                    <article key={member.id} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{member.name}</h3>
+                            <p className="text-xs text-gray-600 dark:text-gray-300">{member.role}</p>
+                            {member.email ? <p className="break-words text-xs text-gray-500 dark:text-gray-400">{member.email}</p> : null}
+                          </div>
+                          <StatusChip tone={member.isActive ? 'success' : 'neutral'}>
+                            {member.isActive ? 'Active' : 'Inactive'}
+                          </StatusChip>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-600 dark:text-gray-300">{m.role}</span>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                          {new Date(m.appointedDate).toLocaleDateString('en-IE', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </span>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {m.termEndDate ? (
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
-                            {new Date(m.termEndDate).toLocaleDateString('en-IE', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400 dark:text-gray-400">Not set</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {m.conductSigned ? (
-                          <Chip size="sm" color="success" variant="flat">Signed</Chip>
-                        ) : (
-                          <Chip size="sm" color="warning" variant="flat">Unsigned</Chip>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {m.inductionCompleted ? (
-                          <Chip size="sm" color="success" variant="flat">Done</Chip>
-                        ) : (
-                          <Chip size="sm" color="warning" variant="flat">Pending</Chip>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {m.isActive ? (
-                            <Chip size="sm" color="success" variant="dot">Active</Chip>
-                          ) : (
-                            <Chip size="sm" color="default" variant="dot">Inactive</Chip>
-                          )}
-                          {nearNineYears && m.isActive && (
-                            <Chip size="sm" color={overNineYears ? 'danger' : 'warning'} variant="flat">
-                              {Math.floor(years)}y served
-                            </Chip>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
+                        <dl className="grid grid-cols-2 gap-3 text-xs text-gray-600 dark:text-gray-300">
+                          <div>
+                            <dt className="font-medium text-gray-500 dark:text-gray-400">Appointed</dt>
+                            <dd>{formatDate(member.appointedDate)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-medium text-gray-500 dark:text-gray-400">Term end</dt>
+                            <dd>{formatDate(member.termEndDate)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-medium text-gray-500 dark:text-gray-400">Conduct date</dt>
+                            <dd>{formatDate(member.conductSignedDate)}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-medium text-gray-500 dark:text-gray-400">Induction date</dt>
+                            <dd>{formatDate(member.inductionDate)}</dd>
+                          </div>
+                        </dl>
+                        {renderEvidenceChips(member)}
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             size="sm"
                             variant="flat"
-                            onPress={() => openEdit(m)}
+                            onPress={() => openEdit(member)}
+                            isDisabled={Boolean(mutatingMemberId) || saving}
                           >
                             Edit
                           </Button>
                           <Button
                             size="sm"
                             variant="flat"
-                            color={m.isActive ? 'warning' : 'success'}
-                            onPress={() => toggleActive(m)}
+                            color={member.isActive ? 'warning' : 'success'}
+                            onPress={() => toggleActive(member)}
+                            isLoading={mutatingMemberId === member.id}
+                            isDisabled={Boolean(mutatingMemberId) && mutatingMemberId !== member.id}
                           >
-                            {m.isActive ? 'Deactivate' : 'Activate'}
+                            {member.isActive ? 'Deactivate' : 'Activate'}
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
-        </>
-      )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </DataListItems>
+            </div>
 
-      {/* ── Add / Edit Modal ── */}
-      <Modal isOpen={memberModal.isOpen} onOpenChange={memberModal.onOpenChange} size="2xl">
+            <div className="hidden sm:block">
+              <DataListTable label="Board members" scrollHintId="board-register-scroll-hint">
+                <Table aria-label="Board members" removeWrapper>
+                  <TableHeader>
+                    <TableColumn>Name</TableColumn>
+                    <TableColumn>Role</TableColumn>
+                    <TableColumn className="hidden md:table-cell">Appointed</TableColumn>
+                    <TableColumn className="hidden lg:table-cell">Term end</TableColumn>
+                    <TableColumn>Evidence</TableColumn>
+                    <TableColumn>Status</TableColumn>
+                    <TableColumn>Actions</TableColumn>
+                  </TableHeader>
+                  <TableBody>
+                    {displayMembers.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="min-w-44">
+                            <p className="text-sm font-medium text-gray-950 dark:text-gray-50">{member.name}</p>
+                            {member.email ? <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p> : null}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{member.role}</span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <span className="text-sm text-gray-600 dark:text-gray-300">{formatDate(member.appointedDate)}</span>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-sm text-gray-600 dark:text-gray-300">{formatDate(member.termEndDate)}</span>
+                        </TableCell>
+                        <TableCell>{renderEvidenceChips(member)}</TableCell>
+                        <TableCell>
+                          <StatusChip tone={member.isActive ? 'success' : 'neutral'}>
+                            {member.isActive ? 'Active' : 'Inactive'}
+                          </StatusChip>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              onPress={() => openEdit(member)}
+                              isDisabled={Boolean(mutatingMemberId) || saving}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              color={member.isActive ? 'warning' : 'success'}
+                              onPress={() => toggleActive(member)}
+                              isLoading={mutatingMemberId === member.id}
+                              isDisabled={Boolean(mutatingMemberId) && mutatingMemberId !== member.id}
+                            >
+                              {member.isActive ? 'Deactivate' : 'Activate'}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </DataListTable>
+            </div>
+          </div>
+        )}
+      </DataList>
+
+      <Modal isOpen={memberModal.isOpen} onOpenChange={memberModal.onOpenChange} size="2xl" scrollBehavior="inside">
         <ModalContent>
           {(onClose) => (
             <>
-              <ModalHeader>{editing ? 'Edit Board Member' : 'Add Board Member'}</ModalHeader>
-              <ModalBody>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label="Full Name"
-                    placeholder="e.g. Mary O'Brien"
-                    value={formName}
-                    onValueChange={setFormName}
-                    isRequired
-                  />
-                  <Input
-                    label="Role"
-                    placeholder="e.g. Chairperson, Secretary, Treasurer, Trustee"
-                    value={formRole}
-                    onValueChange={setFormRole}
-                    isRequired
-                  />
-                  <Input
-                    label="Email (optional)"
-                    placeholder="mary@example.com"
-                    type="email"
-                    value={formEmail}
-                    onValueChange={setFormEmail}
-                  />
-                  <Input
-                    label="Date Appointed"
-                    type="date"
-                    value={formAppointed}
-                    onValueChange={setFormAppointed}
-                    isRequired
-                  />
-                  <Input
-                    label="Term End Date (optional)"
-                    type="date"
-                    value={formTermEnd}
-                    onValueChange={setFormTermEnd}
-                  />
-                  <div />
+              <ModalHeader>{editing ? 'Edit trustee' : 'Add trustee'}</ModalHeader>
+              <ModalBody className="gap-5">
+                <ValidationSummary errors={formError ? [formError] : []} />
+                <FieldGroup
+                  title="Trustee details"
+                  description="Record the name, role, contact, and appointment dates that should appear in the trustee register."
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Full name"
+                      placeholder="Mary O'Brien"
+                      value={formName}
+                      onValueChange={setFormName}
+                      isRequired
+                    />
+                    <Input
+                      label="Role"
+                      placeholder="Chairperson, secretary, treasurer, trustee"
+                      value={formRole}
+                      onValueChange={setFormRole}
+                      isRequired
+                    />
+                    <Input
+                      label="Email"
+                      placeholder="mary@example.com"
+                      type="email"
+                      value={formEmail}
+                      onValueChange={setFormEmail}
+                    />
+                    <Input
+                      label="Date appointed"
+                      type="date"
+                      value={formAppointed}
+                      onValueChange={setFormAppointed}
+                      isRequired
+                    />
+                    <Input
+                      label="Term end date"
+                      type="date"
+                      value={formTermEnd}
+                      onValueChange={setFormTermEnd}
+                    />
+                  </div>
+                </FieldGroup>
 
-                  {/* Conduct signed */}
-                  <div className="sm:col-span-2 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        id="conductSigned"
-                        checked={formConductSigned}
-                        onChange={(e) => setFormConductSigned(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary"
-                      />
-                      <label htmlFor="conductSigned" className="text-sm text-gray-700 dark:text-gray-300">
-                        Code of Conduct signed
+                <FieldGroup
+                  title="Conduct and induction evidence"
+                  description="Use these fields to make trustee evidence prompts clear before annual review."
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+                      <label className="flex items-start gap-3 text-sm font-medium text-gray-800 dark:text-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={formConductSigned}
+                          onChange={(event) => setFormConductSigned(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
+                        />
+                        Code of conduct signed
                       </label>
-                      {formConductSigned && (
+                      {formConductSigned ? (
                         <Input
-                          label="Date Signed"
+                          label="Date signed"
                           type="date"
                           value={formConductDate}
                           onValueChange={setFormConductDate}
-                          className="w-48"
-                          size="sm"
+                          className="mt-3"
                         />
+                      ) : (
+                        <FormHint tone="warning">Add the signing date once the trustee conduct record is ready.</FormHint>
                       )}
                     </div>
-
-                    {/* Induction */}
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        id="inductionCompleted"
-                        checked={formInduction}
-                        onChange={(e) => setFormInduction(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary"
-                      />
-                      <label htmlFor="inductionCompleted" className="text-sm text-gray-700 dark:text-gray-300">
+                    <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+                      <label className="flex items-start gap-3 text-sm font-medium text-gray-800 dark:text-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={formInduction}
+                          onChange={(event) => setFormInduction(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
+                        />
                         Induction completed
                       </label>
-                      {formInduction && (
+                      {formInduction ? (
                         <Input
-                          label="Induction Date"
+                          label="Induction date"
                           type="date"
                           value={formInductionDate}
                           onValueChange={setFormInductionDate}
-                          className="w-48"
-                          size="sm"
+                          className="mt-3"
                         />
+                      ) : (
+                        <FormHint tone="warning">Add the induction date once the trustee has completed onboarding.</FormHint>
                       )}
                     </div>
                   </div>
-                </div>
+                  <FormHint id="board-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
+                    {formDisabledReason || 'Saving updates the trustee register after the API confirms the change.'}
+                  </FormHint>
+                </FieldGroup>
               </ModalBody>
               <ModalFooter>
-                <Button variant="flat" onPress={() => { resetForm(); onClose(); }}>
+                <Button variant="flat" onPress={() => { resetForm(); onClose(); }} isDisabled={saving}>
                   Cancel
                 </Button>
                 <Button
                   className="bg-teal-primary text-white hover:bg-teal-dark"
                   onPress={handleSave}
                   isLoading={saving}
-                  isDisabled={!formName.trim() || !formRole.trim() || !formAppointed}
+                  isDisabled={Boolean(formDisabledReason) || saving}
+                  aria-describedby="board-disabled-hint"
                 >
-                  {editing ? 'Update' : 'Add Member'}
+                  {editing ? 'Save trustee' : 'Add trustee'}
                 </Button>
               </ModalFooter>
             </>
           )}
         </ModalContent>
       </Modal>
-    </div>
+    </AppPage>
   );
 }
