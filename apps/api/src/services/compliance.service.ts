@@ -15,6 +15,17 @@ type OrganisationComplianceScope = {
   plan: string;
 };
 
+type MissingComplianceExplanationStatus = 'NOT_APPLICABLE' | 'EXPLAIN';
+
+export type ComplianceApprovalReadiness = {
+  ready: boolean;
+  missingExplanations: Array<{
+    standardId: string;
+    standardCode: string;
+    status: MissingComplianceExplanationStatus;
+  }>;
+};
+
 function includesAdditionalStandards(scope: OrganisationComplianceScope): boolean {
   return scope.complexity === 'COMPLEX' && scope.plan === SubscriptionPlan.COMPLETE;
 }
@@ -138,6 +149,27 @@ export class ComplianceService {
     return records;
   }
 
+  async getApprovalReadiness(organisationId: string, reportingYear: number): Promise<ComplianceApprovalReadiness> {
+    const records = await this.getRecords(organisationId, reportingYear);
+    const missingExplanations = records
+      .filter((record): record is typeof record & { status: MissingComplianceExplanationStatus } => {
+        return (
+          (record.status === 'NOT_APPLICABLE' || record.status === 'EXPLAIN') &&
+          !record.explanationIfNA?.trim()
+        );
+      })
+      .map((record) => ({
+        standardId: record.standardId,
+        standardCode: record.standard.code,
+        status: record.status,
+      }));
+
+    return {
+      ready: missingExplanations.length === 0,
+      missingExplanations,
+    };
+  }
+
   async getRecord(organisationId: string, standardId: string, year: number) {
     await this.ensureStandardIncludedInPlan(organisationId, standardId);
 
@@ -249,6 +281,17 @@ export class ComplianceService {
     data: UpsertComplianceSignoffRequest,
   ): Promise<ComplianceSignoffResponse> {
     const isApproved = data.status === 'APPROVED';
+    if (isApproved) {
+      const readiness = await this.getApprovalReadiness(organisationId, data.reportingYear);
+      if (!readiness.ready) {
+        throw new AppError(
+          400,
+          'COMPLIANCE_APPROVAL_INCOMPLETE',
+          'Resolve compliance explanations before board approval.',
+        );
+      }
+    }
+
     const saved = await this.prisma.complianceSignoff.upsert({
       where: {
         organisationId_reportingYear: {

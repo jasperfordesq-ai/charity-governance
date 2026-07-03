@@ -69,6 +69,12 @@ function buildService(opts: {
   plan?: string | null; // null => no subscription
   complexity?: string;
   standard?: { id: string; isCore: boolean } | null; // for findUnique
+  records?: Array<{
+    standardId: string;
+    status: string;
+    explanationIfNA?: string | null;
+    standard?: { id: string; code: string };
+  }>;
 } = {}) {
   const calls: Call[] = [];
   const prisma = {
@@ -83,7 +89,7 @@ function buildService(opts: {
       findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return []; },
     },
     complianceRecord: {
-      findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return []; },
+      findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return opts.records ?? []; },
       findUnique: async (args: unknown) => { calls.push({ name: 'complianceRecord.findUnique', args }); return null; },
       upsert: async (args: unknown) => { calls.push({ name: 'complianceRecord.upsert', args }); return { id: 'rec_1', standard: {}, updatedBy: {} }; },
     },
@@ -185,6 +191,47 @@ test('an ADMIN may upsert a compliance record and the board sign-off', async () 
       payload: { reportingYear: 2026, status: 'DRAFT' },
     });
     assert.equal(signoff.statusCode, 200, 'ADMIN may upsert the board sign-off');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /approval-readiness returns readiness for authenticated subscribed members and validates year', async () => {
+  const records = [
+    {
+      standardId: 's1',
+      status: 'EXPLAIN',
+      explanationIfNA: '',
+      standard: { id: 's1', code: '1.1', principle: {} },
+      updatedBy: null,
+    },
+  ];
+  const app = await buildComplianceApp(
+    {
+      complianceRecord: { findMany: async () => records },
+    },
+    'MEMBER',
+    activeSubscription('COMPLETE'),
+  );
+  try {
+    const ok = await app.inject({
+      method: 'GET',
+      url: '/approval-readiness?year=2026',
+      headers: { authorization: tokenFor('MEMBER') },
+    });
+    assert.equal(ok.statusCode, 200);
+    assert.deepEqual(ok.json().data, {
+      ready: false,
+      missingExplanations: [{ standardId: 's1', standardCode: '1.1', status: 'EXPLAIN' }],
+    });
+
+    const badYear = await app.inject({
+      method: 'GET',
+      url: '/approval-readiness?year=not-a-year',
+      headers: { authorization: tokenFor('MEMBER') },
+    });
+    assert.equal(badYear.statusCode, 400);
+    assert.equal(badYear.json().code, 'VALIDATION_ERROR');
   } finally {
     await app.close();
   }
@@ -316,6 +363,57 @@ test('upsertSignoff scopes the composite key to the caller organisation', async 
   assert.equal(args.where.organisationId_reportingYear.organisationId, 'org_A');
   assert.equal(args.create.organisationId, 'org_A');
   assert.equal(args.create.updatedById, 'u1');
+});
+
+test('upsertSignoff rejects APPROVED when approval readiness is incomplete and does not write', async () => {
+  const { service, calls } = buildService({
+    plan: 'COMPLETE',
+    complexity: 'COMPLEX',
+    records: [
+      { standardId: 's1', status: 'NOT_APPLICABLE', explanationIfNA: ' ', standard: { id: 's1', code: '1.1' } },
+    ],
+  });
+
+  await assert.rejects(
+    () =>
+      service.upsertSignoff('org_A', 'u1', {
+        reportingYear: 2026,
+        status: 'APPROVED',
+        boardMeetingDate: '2026-02-01',
+        minuteReference: 'BM-2026-02',
+        approvedByName: 'Chair',
+      } as never),
+    (e: unknown) => codeOf(e) === 'COMPLIANCE_APPROVAL_INCOMPLETE',
+  );
+  assert.equal(
+    calls.some((c) => c.name === 'complianceSignoff.upsert'),
+    false,
+    'incomplete readiness must not write the signoff',
+  );
+});
+
+test('upsertSignoff allows DRAFT and BOARD_REVIEW when approval readiness is incomplete', async () => {
+  for (const status of ['DRAFT', 'BOARD_REVIEW'] as const) {
+    const { service, calls } = buildService({
+      plan: 'COMPLETE',
+      complexity: 'COMPLEX',
+      records: [
+        { standardId: 's1', status: 'EXPLAIN', explanationIfNA: '', standard: { id: 's1', code: '1.1' } },
+      ],
+    });
+
+    await service.upsertSignoff('org_A', 'u1', { reportingYear: 2026, status } as never);
+
+    assert.ok(
+      calls.find((c) => c.name === 'complianceSignoff.upsert'),
+      `${status} should remain editable without readiness completeness`,
+    );
+    assert.equal(
+      calls.some((c) => c.name === 'complianceRecord.findMany'),
+      false,
+      `${status} should not evaluate approval readiness`,
+    );
+  }
 });
 
 // ── compliance-input-validation-12 ──

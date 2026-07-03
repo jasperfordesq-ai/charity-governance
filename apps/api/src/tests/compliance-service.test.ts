@@ -13,7 +13,12 @@ function buildService(opts: {
   complexity?: string;
   standard?: { id: string; isCore: boolean } | null; // for findUnique
   standards?: Array<{ id: string; principleId: string; principle: { number: number; title: string } }>;
-  records?: Array<{ standardId: string; status: string }>;
+  records?: Array<{
+    standardId: string;
+    status: string;
+    explanationIfNA?: string | null;
+    standard?: { id: string; code: string };
+  }>;
   signoff?: Record<string, unknown> | null;
 } = {}) {
   const calls: Call[] = [];
@@ -64,6 +69,43 @@ test('getRecords for a Complete/Complex org includes additional standards', asyn
   await service.getRecords('org_1', 2026);
   const find = calls.find((c) => c.name === 'complianceRecord.findMany');
   assert.equal((find?.args as { where: { standard: unknown } }).where.standard, undefined);
+});
+
+test('getApprovalReadiness reports missing NOT_APPLICABLE and EXPLAIN explanations', async () => {
+  const records = [
+    { standardId: 's1', status: 'NOT_APPLICABLE', explanationIfNA: null, standard: { id: 's1', code: '1.1' } },
+    { standardId: 's2', status: 'NOT_APPLICABLE', explanationIfNA: '', standard: { id: 's2', code: '1.2' } },
+    { standardId: 's3', status: 'EXPLAIN', explanationIfNA: '   ', standard: { id: 's3', code: '2.1' } },
+  ];
+  const { service, calls } = buildService({ plan: 'COMPLETE', complexity: 'COMPLEX', records });
+
+  const readiness = await service.getApprovalReadiness('org_1', 2026);
+
+  assert.equal(readiness.ready, false);
+  assert.deepEqual(readiness.missingExplanations, [
+    { standardId: 's1', standardCode: '1.1', status: 'NOT_APPLICABLE' },
+    { standardId: 's2', standardCode: '1.2', status: 'NOT_APPLICABLE' },
+    { standardId: 's3', standardCode: '2.1', status: 'EXPLAIN' },
+  ]);
+  const find = calls.find((c) => c.name === 'complianceRecord.findMany');
+  assert.equal((find?.args as { where: { organisationId: string; reportingYear: number } }).where.organisationId, 'org_1');
+  assert.equal((find?.args as { where: { organisationId: string; reportingYear: number } }).where.reportingYear, 2026);
+});
+
+test('getApprovalReadiness ignores complete, irrelevant, and out-of-scope records for Essentials/Simple', async () => {
+  const records = [
+    { standardId: 's1', status: 'NOT_APPLICABLE', explanationIfNA: 'Explained', standard: { id: 's1', code: '1.1' } },
+    { standardId: 's2', status: 'EXPLAIN', explanationIfNA: 'Because this standard does not fit', standard: { id: 's2', code: '1.2' } },
+    { standardId: 's3', status: 'COMPLIANT', explanationIfNA: null, standard: { id: 's3', code: '2.1' } },
+  ];
+  const { service, calls } = buildService({ plan: 'ESSENTIALS', complexity: 'SIMPLE', records });
+
+  const readiness = await service.getApprovalReadiness('org_1', 2026);
+
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(readiness.missingExplanations, []);
+  const find = calls.find((c) => c.name === 'complianceRecord.findMany');
+  assert.deepEqual((find?.args as { where: { standard: unknown } }).where.standard, { isCore: true });
 });
 
 test('upsertRecord blocks a non-core standard for an Essentials org (no billing bypass)', async () => {

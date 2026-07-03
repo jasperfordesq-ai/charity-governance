@@ -106,6 +106,19 @@ export async function complianceRoutes(app: FastifyInstance) {
     }
   });
 
+  // GET /approval-readiness?year=2026 - missing explanations that block board approval
+  app.get('/approval-readiness', async (request, reply) => {
+    try {
+      const { year } = complianceQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.getApprovalReadiness(request.user.organisationId, year));
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
+      }
+      handleError(reply, err);
+    }
+  });
+
   // GET /signoff?year=2026 - board approval status for the annual Compliance Record
   app.get('/signoff', async (request, reply) => {
     try {

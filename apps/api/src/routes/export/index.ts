@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { ComplianceService } from '../../services/compliance.service.js';
+import { ComplianceService, type ComplianceApprovalReadiness } from '../../services/compliance.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { SubscriptionPlan, complianceQuerySchema } from '@charitypilot/shared';
@@ -22,6 +22,7 @@ export async function exportRoutes(app: FastifyInstance) {
       const principles = await complianceService.getPrinciplesForOrganisation(request.user.organisationId);
       const records = await complianceService.getRecords(request.user.organisationId, year);
       const signoff = await complianceService.getSignoff(request.user.organisationId, year);
+      const approvalReadiness = await complianceService.getApprovalReadiness(request.user.organisationId, year);
       const subscription = await app.prisma.subscription.findUnique({
         where: { organisationId: request.user.organisationId },
         select: { plan: true },
@@ -38,6 +39,7 @@ export async function exportRoutes(app: FastifyInstance) {
         principles,
         recordMap,
         signoff,
+        approvalReadiness,
         registers,
         year,
       );
@@ -131,6 +133,7 @@ function buildComplianceReportHtml(
     approvalNotes: string | null;
     approvedAt: string | null;
   },
+  approvalReadiness: ComplianceApprovalReadiness,
   registers: GovernanceRegistersForExport | null,
   year: number,
 ): string {
@@ -257,6 +260,21 @@ function buildComplianceReportHtml(
         <p><strong>Signed by Chairperson:</strong> ____________________</p>
         <p><strong>Date:</strong> ____________________</p>`;
 
+  const readinessWarningHtml = approvalReadiness.ready
+    ? ''
+    : `
+      <section style="margin-top: 40px; border: 1px solid #f59e0b; background: #fffbeb; padding: 14px 16px;">
+        <h2 style="margin-top: 0; color: #92400e;">Approval readiness warning</h2>
+        <p style="font-size: 13px; color: #78350f;">This report is review-ready but not board-approval-ready until explanations are completed for all standards marked not applicable or explain.</p>
+        ${simpleTable(
+          ['Standard', 'Status'],
+          approvalReadiness.missingExplanations.map((item) => [
+            item.standardCode,
+            item.status.replace(/_/g, ' '),
+          ]),
+        )}
+      </section>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -284,6 +302,7 @@ function buildComplianceReportHtml(
   </div>
   ${standardRows}
   ${governanceRegisterRows}
+  ${readinessWarningHtml}
   <div style="margin-top: 48px; border-top: 2px solid #0D7377; padding-top: 16px;">
     <h2>Board approval</h2>
     <p style="font-size: 13px; color: #4b5563;">The Charities Governance Code says the Compliance Record Form should be approved at a board meeting before reporting compliance to the Charities Regulator.</p>

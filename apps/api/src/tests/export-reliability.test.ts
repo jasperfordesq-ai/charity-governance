@@ -460,3 +460,110 @@ test('export HTML-escapes stored record and register values', async () => {
     await app.close();
   }
 });
+
+test('export includes an escaped approval-readiness warning when explanations are incomplete', async () => {
+  const unsafeCode = '1.1 <script>alert(1)</script>';
+  const app = await buildApp({
+    ...authModels(),
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: emptyOrganisation(),
+    governancePrinciple: {
+      findMany: async () => [
+        {
+          id: 'p1',
+          number: 1,
+          title: 'Principle One',
+          standards: [{ id: 's1', code: '1.1', title: 'Standard one', isCore: true }],
+        },
+      ],
+    },
+    complianceRecord: {
+      findMany: async () => [
+        {
+          standardId: 's1',
+          status: 'NOT_APPLICABLE',
+          actionTaken: null,
+          evidence: null,
+          explanationIfNA: '   ',
+          standard: { id: 's1', code: unsafeCode, principle: {} },
+          updatedBy: null,
+        },
+      ],
+    },
+    complianceSignoff: { findUnique: async () => null },
+    conflictRecord: { findMany: async () => [] },
+    riskRecord: { findMany: async () => [] },
+    complaintRecord: { findMany: async () => [] },
+    fundraisingRecord: { findMany: async () => [] },
+    annualReportReadiness: { findUnique: async () => null },
+    financialControlReview: { findUnique: async () => null },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-record?year=2026',
+      headers: { authorization: tokenFor() },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /review-ready/);
+    assert.match(response.body, /not board-approval-ready/);
+    assert.match(response.body, /NOT APPLICABLE/);
+    assert.match(response.body, /1\.1 &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.ok(!response.body.includes(unsafeCode), 'missing standard code must be escaped in the warning');
+  } finally {
+    await app.close();
+  }
+});
+
+test('export omits the approval-readiness warning when explanations are complete', async () => {
+  const app = await buildApp({
+    ...authModels(),
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: emptyOrganisation(),
+    governancePrinciple: {
+      findMany: async () => [
+        {
+          id: 'p1',
+          number: 1,
+          title: 'Principle One',
+          standards: [{ id: 's1', code: '1.1', title: 'Standard one', isCore: true }],
+        },
+      ],
+    },
+    complianceRecord: {
+      findMany: async () => [
+        {
+          standardId: 's1',
+          status: 'EXPLAIN',
+          actionTaken: null,
+          evidence: null,
+          explanationIfNA: 'Explained for the trustees',
+          standard: { id: 's1', code: '1.1', principle: {} },
+          updatedBy: null,
+        },
+      ],
+    },
+    complianceSignoff: { findUnique: async () => null },
+    conflictRecord: { findMany: async () => [] },
+    riskRecord: { findMany: async () => [] },
+    complaintRecord: { findMany: async () => [] },
+    fundraisingRecord: { findMany: async () => [] },
+    annualReportReadiness: { findUnique: async () => null },
+    financialControlReview: { findUnique: async () => null },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-record?year=2026',
+      headers: { authorization: tokenFor() },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.doesNotMatch(response.body, /not board-approval-ready/);
+  } finally {
+    await app.close();
+  }
+});
