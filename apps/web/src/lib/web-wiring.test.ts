@@ -496,6 +496,7 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   const src = [
     dash('registers/page.tsx'),
     optionalDash('registers/register-compliance-cards.tsx'),
+    optionalDash('registers/register-record-forms.tsx'),
   ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -662,6 +663,25 @@ test('registers annual report and financial control cards are extracted from the
   assert.match(cardsSrc, /Annual Report source check/);
   assert.match(cardsSrc, /Financial controls source check/);
   assert.match(cardsSrc, /isDisabled=\{saving \|\| saveDisabled\}/);
+});
+
+test('registers modal record forms are extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const formsPath = dashPath('registers/register-record-forms.tsx');
+  assert.ok(existsSync(formsPath), 'register record forms should be split out of page.tsx');
+  const formsSrc = readFileSync(formsPath, 'utf8');
+
+  assert.match(pageSrc, /ConflictForm/);
+  assert.match(pageSrc, /RiskForm/);
+  assert.match(pageSrc, /ComplaintForm/);
+  assert.match(pageSrc, /FundraisingForm/);
+  assert.match(pageSrc, /normalizeRegisterForm/);
+  assert.doesNotMatch(pageSrc, /Conflict record/);
+  assert.doesNotMatch(pageSrc, /Fundraising activity/);
+  assert.doesNotMatch(pageSrc, /function normalizeForm/);
+  assert.match(formsSrc, /Conflict record/);
+  assert.match(formsSrc, /Fundraising activity/);
+  assert.match(formsSrc, /export function normalizeRegisterForm/);
 });
 
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
