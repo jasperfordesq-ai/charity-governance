@@ -76,7 +76,10 @@ test('organisation warns before discarding unsaved edits (no silent data loss)',
 });
 
 test('organisation captures conditional obligation facts for review-ready workflows', () => {
-  const src = dash('organisation/page.tsx');
+  const src = [
+    dash('organisation/page.tsx'),
+    optionalDash('organisation/organisation-conditional-profile.tsx'),
+  ].join('\n');
   for (const term of [
     'conditionalObligationProfile',
     'Conditional obligation triggers',
@@ -89,6 +92,20 @@ test('organisation captures conditional obligation facts for review-ready workfl
   ]) {
     assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `organisation page must include ${term}`);
   }
+});
+
+test('organisation conditional obligation UX is extracted from the oversized route file', () => {
+  const pageSrc = dash('organisation/page.tsx');
+  const profilePath = dashPath('organisation/organisation-conditional-profile.tsx');
+  assert.ok(existsSync(profilePath), 'organisation conditional profile UI should be split out of page.tsx');
+  const profileSrc = readFileSync(profilePath, 'utf8');
+
+  assert.match(pageSrc, /OrganisationConditionalProfileFields/);
+  assert.match(pageSrc, /normaliseConditionalObligationProfile/);
+  assert.doesNotMatch(pageSrc, /CONDITIONAL_OBLIGATION_FIELDS/);
+  assert.match(profileSrc, /CONDITIONAL_OBLIGATION_FIELDS/);
+  assert.match(profileSrc, /Professional review/);
+  assert.match(profileSrc, /usesDataProcessors/);
 });
 
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,
