@@ -305,7 +305,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         ['@/components/ui/app-page', ['AppPage']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
         ['@/components/ui/data-list', ['DataListTable', 'DataListItems']],
-        ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+        ['@/components/ui/status', ['StatusChip']],
         ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary']],
       ],
       sourceTerms: [
@@ -378,6 +378,19 @@ test('board trustee evidence UX is extracted from the oversized route file', () 
   assert.match(evidenceSrc, /ReviewFlag/);
   assert.match(evidenceSrc, /trusteeEvidencePrompts/);
   assert.match(evidenceSrc, /Trustee evidence prompts/);
+});
+
+test('board summary UX is extracted from the oversized route file', () => {
+  const pageSrc = dash('board/page.tsx');
+  const summaryPath = dashPath('board/board-summary-panel.tsx');
+  assert.ok(existsSync(summaryPath), 'board summary panel should be split out of page.tsx');
+  const summarySrc = readFileSync(summaryPath, 'utf8');
+
+  assert.match(pageSrc, /BoardSummaryPanel/);
+  assert.doesNotMatch(pageSrc, /Keep trustee evidence visible before annual review/);
+  assert.match(summarySrc, /Review-ready register/);
+  assert.match(summarySrc, /Conduct gaps/);
+  assert.match(summarySrc, /ReviewFlag/);
 });
 
 test('export report preview UI is extracted from the oversized route file', () => {
