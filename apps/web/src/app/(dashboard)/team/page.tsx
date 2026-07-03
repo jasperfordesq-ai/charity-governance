@@ -65,9 +65,20 @@ export default function TeamPage() {
   const [error, setError] = useState<string | null>(null);
 
   const canInvite = canInviteMembers(user?.role);
+  const allowedInviteRoles = useMemo<Array<UserRole.ADMIN | UserRole.MEMBER>>(() => {
+    if (user?.role === UserRole.OWNER) return [UserRole.MEMBER, UserRole.ADMIN];
+    if (canInvite) return [UserRole.MEMBER];
+    return [];
+  }, [canInvite, user?.role]);
+  const canInviteAdmin = allowedInviteRoles.includes(UserRole.ADMIN);
   const permissionDisabledReason = canInvite
     ? ''
     : 'Your role can view this team, but only owners and admins can send or revoke invites.';
+  const inviteRoleHint = canInviteAdmin
+    ? 'Owners may invite Admins or Members. Use Admin for people helping run compliance.'
+    : canInvite
+      ? 'Admins can invite Members only. Ask an owner if this person needs Admin access.'
+      : permissionDisabledReason;
 
   const activeInviteCount = useMemo(
     () =>
@@ -94,11 +105,18 @@ export default function TeamPage() {
     fetchTeam();
   }, [fetchTeam]);
 
+  useEffect(() => {
+    if (!allowedInviteRoles.includes(role)) {
+      setRole(UserRole.MEMBER);
+    }
+  }, [allowedInviteRoles, role]);
+
   const inviteDisabledReason = useMemo(() => {
     if (permissionDisabledReason) return permissionDisabledReason;
+    if (!allowedInviteRoles.includes(role)) return 'Choose an invite role available to your account.';
     if (!email.trim()) return 'Add an email address before sending an invite.';
     return '';
-  }, [email, permissionDisabledReason]);
+  }, [allowedInviteRoles, email, permissionDisabledReason, role]);
 
   const inviteMember = async (event: FormEvent) => {
     event.preventDefault();
@@ -291,7 +309,7 @@ export default function TeamPage() {
           >
             <FieldGroup
               title="Invite someone"
-              description="Use admin for people helping run compliance. Use member for evidence and register maintenance."
+              description={inviteRoleHint}
             >
               <Input
                 label="Email"
@@ -307,11 +325,11 @@ export default function TeamPage() {
                 isDisabled={!canInvite}
                 onSelectionChange={(keys) => {
                   const next = Array.from(keys)[0] as UserRole.ADMIN | UserRole.MEMBER | undefined;
-                  if (next) setRole(next);
+                  if (next && allowedInviteRoles.includes(next)) setRole(next);
                 }}
               >
                 <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
-                <SelectItem key={UserRole.ADMIN}>Admin</SelectItem>
+                <SelectItem key={UserRole.ADMIN} isDisabled={!canInviteAdmin}>Admin</SelectItem>
               </Select>
               <FormHint id="team-invite-disabled-hint" tone={inviteDisabledReason ? 'warning' : 'neutral'}>
                 {inviteDisabledReason || 'The invite will be created with a pending status until accepted, revoked, or expired.'}

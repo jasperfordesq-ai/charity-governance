@@ -293,7 +293,7 @@ export default function BillingPage() {
                         isLoading={checkoutLoading === monthlyKey}
                         isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
                       >
-                        {isCurrent ? 'Current plan' : `Monthly (&euro;${plan.monthlyPrice}/mo)`}
+                        {isCurrent ? 'Current plan' : `Monthly (\u20ac${plan.monthlyPrice}/mo)`}
                       </Button>
                     </div>
 

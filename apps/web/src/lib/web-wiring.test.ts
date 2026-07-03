@@ -301,6 +301,9 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   for (const term of [
     'isPlanFeatureUnavailable',
     'Complete plan',
+    'registersRequestSeq',
+    'requestedYear',
+    'isLatestRegistersRequest',
     'registerSavingLabel',
     'Annual Report source check',
     'Financial controls source check',
@@ -313,6 +316,16 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   }
 
   assert.match(src, /isDisabled=\{[^}]*saving/);
+  assert.match(src, /const requestSeq = \+\+registersRequestSeq\.current/);
+  assert.match(src, /governance-registers\/summary\?year=\$\{requestedYear\}/);
+  assert.match(src, /governance-registers\/annual-report\?year=\$\{requestedYear\}/);
+  assert.match(src, /governance-registers\/financial-controls\?year=\$\{requestedYear\}/);
+  assert.match(src, /setAnnual\(annualRes\.data \?\? emptyAnnual\(requestedYear\)\)/);
+  assert.match(src, /setFinancial\(financialRes\.data \?\? emptyFinancial\(requestedYear\)\)/);
+  assert.match(src, /\]\);[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setSummary\(summaryRes\.data\)/);
+  assert.match(src, /if \(isPlanFeatureUnavailable\(err\)\) \{[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setPlanUnavailable\(true\)/);
+  assert.match(src, /\}[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*logClientError\('Failed to load governance registers', err\);[\r\n\s]*setLoadError\('Governance registers could not be loaded/);
+  assert.match(src, /finally \{[\r\n\s]*if \(isLatestRegistersRequest\(requestSeq\)\) \{[\r\n\s]*setLoading\(false\);[\r\n\s]*\}[\r\n\s]*\}/);
   assert.match(src, /LockedFeatureState/);
 });
 
@@ -363,17 +376,26 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
 
   for (const term of [
     'permissionDisabledReason',
+    'allowedInviteRoles',
+    'canInviteAdmin',
     'canInviteMembers',
     'canEditMemberRole',
     'aria-live="polite"',
     'Invite sent',
     'Invite revoked',
     'role guidance',
+    'Admins can invite Members only',
     'isDisabled={!canInvite',
   ]) {
     assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `team must include ${term}`);
   }
 
+  assert.match(src, /user\?\.role === UserRole\.OWNER[\s\S]*?UserRole\.ADMIN/);
+  assert.match(src, /if \(canInvite\) return \[UserRole\.MEMBER\];/);
+  assert.match(src, /useEffect\(\(\) => \{[\s\S]*?!allowedInviteRoles\.includes\(role\)[\s\S]*?setRole\(UserRole\.MEMBER\)/);
+  assert.match(src, /if \(!allowedInviteRoles\.includes\(role\)\) return 'Choose an invite role available to your account\.'/);
+  assert.match(src, /<SelectItem key=\{UserRole\.ADMIN\} isDisabled=\{!canInviteAdmin\}>Admin<\/SelectItem>/);
+  assert.match(src, /if \(next && allowedInviteRoles\.includes\(next\)\) setRole\(next\);/);
   assert.match(src, /isLoading=\{revokeInviteId === invite\.id\}/);
 });
 
@@ -406,6 +428,8 @@ test('phase 6C billing preserves Stripe redirect validation while clarifying pla
 
   assert.match(src, /window\.location\.assign\(redirectUrl\)/);
   assert.match(src, /Checkout returned an unexpected redirect URL/);
+  assert.doesNotMatch(src, /Monthly \(&euro;\$\{plan\.monthlyPrice\}\/mo\)/);
+  assert.match(src, /Monthly \(\\u20ac\$\{plan\.monthlyPrice\}\/mo\)/);
 });
 
 test('theme prepaint and client layout handling support dark mode beyond protected app routes', () => {

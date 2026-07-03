@@ -2,7 +2,7 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Button,
@@ -123,6 +123,8 @@ export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
   const { toast } = useToast();
   const currentYear = new Date().getFullYear();
+  const registersRequestSeq = useRef(0);
+  const latestYearRef = useRef(currentYear);
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -140,50 +142,59 @@ export default function RegistersPage() {
   const [modalType, setModalType] = useState<RegisterType | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean>>({});
 
-  const fetchRegisters = useCallback(async () => {
+  const isLatestRegistersRequest = useCallback((requestSeq: number) => requestSeq === registersRequestSeq.current, []);
+
+  const fetchRegisters = useCallback(async (requestedYear = latestYearRef.current) => {
+    const requestSeq = ++registersRequestSeq.current;
     setLoading(true);
     setPlanUnavailable(false);
     setLoadError('');
     try {
       const [summaryRes, conflictsRes, risksRes, complaintsRes, fundraisingRes, annualRes, financialRes] = await Promise.all([
-        api.get(`/governance-registers/summary?year=${year}`),
+        api.get(`/governance-registers/summary?year=${requestedYear}`),
         api.get('/governance-registers/conflicts'),
         api.get('/governance-registers/risks'),
         api.get('/governance-registers/complaints'),
         api.get('/governance-registers/fundraising'),
-        api.get(`/governance-registers/annual-report?year=${year}`),
-        api.get(`/governance-registers/financial-controls?year=${year}`),
+        api.get(`/governance-registers/annual-report?year=${requestedYear}`),
+        api.get(`/governance-registers/financial-controls?year=${requestedYear}`),
       ]);
+      if (!isLatestRegistersRequest(requestSeq)) return;
       setSummary(summaryRes.data);
       setConflicts(conflictsRes.data ?? []);
       setRisks(risksRes.data ?? []);
       setComplaints(complaintsRes.data ?? []);
       setFundraising(fundraisingRes.data ?? []);
-      setAnnual(annualRes.data ?? emptyAnnual(year));
-      setFinancial(financialRes.data ?? emptyFinancial(year));
+      setAnnual(annualRes.data ?? emptyAnnual(requestedYear));
+      setFinancial(financialRes.data ?? emptyFinancial(requestedYear));
     } catch (err) {
       if (isPlanFeatureUnavailable(err)) {
+        if (!isLatestRegistersRequest(requestSeq)) return;
         setPlanUnavailable(true);
         setSummary(null);
         setConflicts([]);
         setRisks([]);
         setComplaints([]);
         setFundraising([]);
-        setAnnual(emptyAnnual(year));
-        setFinancial(emptyFinancial(year));
+        setAnnual(emptyAnnual(requestedYear));
+        setFinancial(emptyFinancial(requestedYear));
         return;
       }
+      if (!isLatestRegistersRequest(requestSeq)) return;
       logClientError('Failed to load governance registers', err);
       setLoadError('Governance registers could not be loaded. Please try again.');
       toast('Failed to load governance registers', 'error');
     } finally {
-      setLoading(false);
+      if (isLatestRegistersRequest(requestSeq)) {
+        setLoading(false);
+      }
     }
-  }, [toast, year]);
+  }, [isLatestRegistersRequest, toast]);
 
   useEffect(() => {
-    fetchRegisters();
-  }, [fetchRegisters]);
+    latestYearRef.current = year;
+    fetchRegisters(year);
+  }, [fetchRegisters, year]);
 
   const openModal = (type: RegisterType) => {
     setModalType(type);
@@ -447,7 +458,7 @@ export default function RegistersPage() {
           title="Governance registers could not be loaded"
           description={loadError}
           action={(
-            <Button size="sm" variant="flat" onPress={fetchRegisters}>
+            <Button size="sm" variant="flat" onPress={() => fetchRegisters()}>
               Try again
             </Button>
           )}
@@ -459,7 +470,7 @@ export default function RegistersPage() {
               title="Some register data may be out of date"
               description={loadError}
               action={(
-                <Button size="sm" variant="flat" onPress={fetchRegisters}>
+                <Button size="sm" variant="flat" onPress={() => fetchRegisters()}>
                   Refresh
                 </Button>
               )}
