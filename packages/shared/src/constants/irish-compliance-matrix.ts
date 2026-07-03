@@ -22,7 +22,12 @@ export interface ComplianceSourceRef {
 export interface IrishComplianceMatrixEntry {
   id: string;
   sourceRefs: ComplianceSourceRef[];
+  /**
+   * Describes the matrix prompt or obligation bundle. It is not a legal conclusion
+   * that every cited source or specialist obligation applies to every charity.
+   */
   commencementStatus: CommencementStatus;
+  applicabilityNote: string;
   principleNumbers: number[];
   standardCodes: string[];
   featureArea:
@@ -45,7 +50,7 @@ export interface IrishComplianceMatrixEntry {
   testExpectation: string;
 }
 
-const LAST_CHECKED = '2026-07-03';
+export const IRISH_COMPLIANCE_MATRIX_LAST_CHECKED = '2026-07-03';
 
 const sourceRef = (
   name: string,
@@ -56,7 +61,7 @@ const sourceRef = (
   name,
   owner,
   url,
-  lastChecked: LAST_CHECKED,
+  lastChecked: IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
   note,
 });
 
@@ -75,10 +80,17 @@ const complianceRecordFormSource = sourceRef(
 );
 
 const charitiesActSource = sourceRef(
-  'Charities Act 2009',
+  'Charities Act 2009 Revised',
+  'Law Reform Commission',
+  'https://revisedacts.lawreform.ie/eli/2009/act/6/revised/en/pdf?annotations=false',
+  'Administrative consolidation of current Charities Act 2009 text.',
+);
+
+const charitiesAmendmentAct2024Source = sourceRef(
+  'Charities (Amendment) Act 2024 commencement and effects',
   'Irish Statute Book',
-  'https://www.irishstatutebook.ie/eli/2009/act/6/enacted/en/html',
-  'Primary statute for Irish charity regulation and trustee obligations.',
+  'https://www.irishstatutebook.ie/eli/isbc/2024_21.html',
+  'Commencement and legislative-effects table for 2024 charity amendments.',
 );
 
 const annualReportingSource = sourceRef(
@@ -156,6 +168,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'purpose-planning-and-public-benefit',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, charitiesActSource],
     commencementStatus: 'guidance',
+    applicabilityNote:
+      'Applies as a Governance Code planning prompt for every charity; legal-form and public-benefit conclusions require trustee and professional review where needed.',
     principleNumbers: [1],
     standardCodes: ['1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8'],
     featureArea: 'organisation',
@@ -175,6 +189,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'values-conflicts-and-conduct',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, conflictSource],
     commencementStatus: 'guidance',
+    applicabilityNote:
+      'Applies to every charity as governance evidence; the specific conflict-management procedure should fit the charity size and decision context.',
     principleNumbers: [2],
     standardCodes: ['2.1', '2.2', '2.3'],
     featureArea: 'registers',
@@ -194,6 +210,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'people-volunteers-employment-and-policy-controls',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, employmentSource, equalitySource],
     commencementStatus: 'conditional',
+    applicabilityNote:
+      'Role clarity applies to every charity; employment-law prompts apply only where the charity has paid staff, and equality review depends on activities and workforce context.',
     principleNumbers: [3],
     standardCodes: ['3.1', '3.2', '3.3', '3.4', '3.5', '3.6', '3.7'],
     featureArea: 'team',
@@ -215,12 +233,15 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
       governanceCodeSource,
       complianceRecordFormSource,
       charitiesActSource,
+      charitiesAmendmentAct2024Source,
       dataProtectionSource,
       healthAndSafetySource,
       safeguardingSource,
       protectedDisclosuresSource,
     ],
     commencementStatus: 'conditional',
+    applicabilityNote:
+      'Applies as a legal-obligations register prompt for every charity; specialist topics apply only where the charity profile triggers them, such as personal data, staff, child-facing services, insurance risks or reporting-channel thresholds.',
     principleNumbers: [4],
     standardCodes: ['4.1', '4.2', '4.6', '4.7', '4.9'],
     featureArea: 'regulator',
@@ -248,6 +269,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'fundraising-from-the-public',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, fundraisingSource],
     commencementStatus: 'conditional',
+    applicabilityNote:
+      'Applies only where the charity raises funds from the public or uses fundraising partners; otherwise record why the prompt is not applicable.',
     principleNumbers: [4],
     standardCodes: ['4.3'],
     featureArea: 'registers',
@@ -267,6 +290,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'financial-controls-and-risk-management',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, financialControlsSource],
     commencementStatus: 'guidance',
+    applicabilityNote:
+      'Applies to every charity as controls and risk evidence; accounting review depth should scale with income, assets, restricted funds and transaction complexity.',
     principleNumbers: [4],
     standardCodes: ['4.4', '4.5', '4.8'],
     featureArea: 'compliance',
@@ -286,6 +311,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'board-meetings-decisions-and-induction',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource],
     commencementStatus: 'guidance',
+    applicabilityNote:
+      'Applies to every charity with proportionate evidence for its board size, meeting cadence and trustee turnover.',
     principleNumbers: [5],
     standardCodes: ['5.1', '5.2', '5.3', '5.4', '5.6', '5.7', '5.8', '5.10', '5.12'],
     featureArea: 'board',
@@ -306,6 +333,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'trustee-succession-review-and-development',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, equalitySource],
     commencementStatus: 'guidance',
+    applicabilityNote:
+      'Core trustee review prompts apply to every charity; additional succession, diversity and formal review prompts are most relevant to complex charities or those with board turnover.',
     principleNumbers: [5],
     standardCodes: ['5.5', '5.9', '5.11', '5.13', '5.14'],
     featureArea: 'team',
@@ -326,6 +355,8 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     id: 'public-communications-and-stakeholders',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, charitiesActSource],
     commencementStatus: 'guidance',
+    applicabilityNote:
+      'Applies to every charity for public identity and stakeholder accountability; funder-reporting and subscribed-standard prompts apply where those relationships exist.',
     principleNumbers: [6],
     standardCodes: ['6.1', '6.2', '6.3', '6.4', '6.5', '6.7', '6.8'],
     featureArea: 'documents',
@@ -344,8 +375,16 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
   },
   {
     id: 'annual-report-and-accounts-publication',
-    sourceRefs: [governanceCodeSource, complianceRecordFormSource, annualReportingSource, charitiesActSource],
+    sourceRefs: [
+      governanceCodeSource,
+      complianceRecordFormSource,
+      annualReportingSource,
+      charitiesActSource,
+      charitiesAmendmentAct2024Source,
+    ],
     commencementStatus: 'in_force',
+    applicabilityNote:
+      'Applies to registered charities for annual reporting readiness; accounts format, audit or examination requirements depend on legal form, income and current statutory thresholds.',
     principleNumbers: [6],
     standardCodes: ['6.6'],
     featureArea: 'deadlines',
