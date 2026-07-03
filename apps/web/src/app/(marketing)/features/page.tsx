@@ -117,15 +117,15 @@ const features = [
 
 export default function FeaturesPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-white text-gray-950 dark:bg-gray-950 dark:text-gray-50">
       {/* Hero */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-gray-50 to-white">
+      <section className="border-b border-gray-200 bg-white py-16 dark:border-gray-800 dark:bg-gray-950 md:py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-950 dark:text-white tracking-normal">
             Features built for
-            <span className="text-teal-primary"> Irish charities</span>
+            <span className="text-teal-primary dark:text-teal-bright"> Irish charities</span>
           </h1>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-4 text-lg text-gray-700 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
             Every feature in CharityPilot is designed around the CRA Charities Governance Code.
             No generic project management -- just the tools you actually need to stay compliant.
           </p>
@@ -133,7 +133,7 @@ export default function FeaturesPage() {
       </section>
 
       {/* Feature Deep Dives */}
-      <section className="pb-20">
+      <section className="bg-white pb-20 pt-16 dark:bg-gray-950">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-24">
           {features.map((feature, index) => (
             <div
@@ -150,14 +150,14 @@ export default function FeaturesPage() {
                 >
                   {feature.icon}
                 </div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">{feature.title}</h2>
-                <p className="text-lg text-teal-primary font-medium mb-4">{feature.tagline}</p>
-                <p className="text-gray-600 leading-relaxed mb-8">{feature.description}</p>
+                <h2 className="text-3xl font-bold text-gray-950 dark:text-white mb-2">{feature.title}</h2>
+                <p className="text-lg text-teal-primary dark:text-teal-bright font-medium mb-4">{feature.tagline}</p>
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-8">{feature.description}</p>
                 <ul className="space-y-3">
                   {feature.details.map((detail) => (
-                    <li key={detail} className="flex items-start gap-3 text-sm text-gray-700">
+                    <li key={detail} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                       <svg
-                        className="w-5 h-5 text-teal-primary flex-shrink-0 mt-0.5"
+                        className="w-5 h-5 text-teal-primary dark:text-teal-bright flex-shrink-0 mt-0.5"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -173,16 +173,14 @@ export default function FeaturesPage() {
 
               {/* Feature preview */}
               <div className="flex-1 w-full">
-                <Card className="border border-gray-100 shadow-sm overflow-hidden">
+                <Card className="border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
                   <CardBody className="p-0">
-                    <div
-                      className={`${feature.colour}/10 h-64 lg:h-80 flex items-center justify-center`}
-                    >
+                    <div className="h-64 lg:h-80 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                       <div className="text-center">
                         <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl ${feature.colour} text-white mb-4 opacity-80`}>
                           {feature.icon}
                         </div>
-                        <p className="text-sm text-gray-600 font-medium">{feature.title} preview</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{feature.title} workflow</p>
                       </div>
                     </div>
                   </CardBody>
@@ -194,9 +192,9 @@ export default function FeaturesPage() {
       </section>
 
       {/* Additional Capabilities */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 text-center mb-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-950 dark:text-white text-center mb-12">
             And everything else you need
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -220,10 +218,10 @@ export default function FeaturesPage() {
                 text: 'Priced for charity budgets, not enterprise IT departments. Starting at just EUR 19/month.',
               },
             ].map((item) => (
-              <Card key={item.title} className="border border-gray-100 shadow-sm bg-white">
+              <Card key={item.title} className="border border-gray-200 shadow-sm bg-white dark:border-gray-800 dark:bg-gray-950">
                 <CardBody className="p-6">
-                  <h3 className="text-base font-semibold text-gray-900 mb-2">{item.title}</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{item.text}</p>
+                  <h3 className="text-base font-semibold text-gray-950 dark:text-white mb-2">{item.title}</h3>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{item.text}</p>
                 </CardBody>
               </Card>
             ))}

@@ -78,7 +78,7 @@ function CheckIcon() {
 
 function CrossIcon() {
   return (
-    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-5 h-5 text-gray-400 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
@@ -88,19 +88,19 @@ function renderCell(value: boolean | string) {
   if (typeof value === 'boolean') {
     return value ? <CheckIcon /> : <CrossIcon />;
   }
-  return <span className="text-sm text-gray-700">{value}</span>;
+  return <span className="text-sm text-gray-700 dark:text-gray-300">{value}</span>;
 }
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-white text-gray-950 dark:bg-gray-950 dark:text-gray-50">
       {/* Hero */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-gray-50 to-white">
+      <section className="border-b border-gray-200 bg-white py-16 dark:border-gray-800 dark:bg-gray-950 md:py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-950 dark:text-white tracking-normal">
             Simple, honest pricing
           </h1>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-4 text-lg text-gray-700 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
             Choose the plan that fits your charity. Both include a 14-day free trial -- no credit
             card required.
           </p>
@@ -116,31 +116,31 @@ export default function PricingPage() {
                 key={plan.name}
                 className={`relative overflow-visible ${
                   plan.highlight
-                    ? 'border-2 border-teal-primary shadow-lg'
-                    : 'border-2 border-gray-200 shadow-sm'
+                    ? 'border-2 border-teal-primary bg-white shadow-lg dark:border-teal-bright dark:bg-gray-900'
+                    : 'border-2 border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'
                 }`}
               >
                 {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-accent text-gray-900 text-xs font-bold px-4 py-1 rounded-full">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-accent text-gray-950 text-xs font-bold px-4 py-1 rounded-lg">
                     Most Popular
                   </div>
                 )}
                 <CardHeader className="flex flex-col items-center pt-10 pb-4 px-8">
-                  <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider">
+                  <p className="text-sm font-semibold text-teal-primary dark:text-teal-bright uppercase tracking-wider">
                     {plan.name}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">{plan.audience}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{plan.audience}</p>
                   <div className="mt-4">
-                    <span className="text-5xl font-bold text-gray-900">&euro;{plan.monthlyPrice}</span>
-                    <span className="text-lg text-gray-500">/month</span>
+                    <span className="text-5xl font-bold text-gray-950 dark:text-white">&euro;{plan.monthlyPrice}</span>
+                    <span className="text-lg text-gray-600 dark:text-gray-300">/month</span>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                     or &euro;{plan.annualPrice}/year{' '}
-                    <span className="text-teal-primary font-medium">(save &euro;{plan.annualSaving})</span>
+                    <span className="text-teal-primary dark:text-teal-bright font-medium">(save &euro;{plan.annualSaving})</span>
                   </p>
                 </CardHeader>
                 <CardBody className="px-8 pb-10">
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6 text-center">
+                  <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mb-6 text-center">
                     {plan.description}
                   </p>
                   <Button
@@ -149,16 +149,16 @@ export default function PricingPage() {
                     className={`w-full font-semibold ${
                       plan.highlight
                         ? 'bg-teal-primary text-white'
-                        : 'bg-white border-2 border-teal-primary text-teal-primary hover:bg-teal-primary hover:text-white'
+                        : 'bg-white border-2 border-teal-primary text-teal-primary hover:bg-teal-primary hover:text-white dark:bg-gray-950 dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950'
                     }`}
-                    radius="full"
+                    radius="lg"
                     size="lg"
                   >
                     Start 14-day free trial
                   </Button>
                   <ul className="mt-8 space-y-3">
                     {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-3 text-sm text-gray-700">
+                      <li key={feature} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
                         <CheckIcon />
                         <span>{feature}</span>
                       </li>
@@ -172,30 +172,30 @@ export default function PricingPage() {
       </section>
 
       {/* Feature Comparison Table */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 text-center mb-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-950 dark:text-white text-center mb-12">
             Feature comparison
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b-2 border-gray-200">
-                  <th className="text-left py-4 pr-4 text-sm font-semibold text-gray-900 w-1/2">
+                <tr className="border-b-2 border-gray-200 dark:border-gray-800">
+                  <th className="text-left py-4 pr-4 text-sm font-semibold text-gray-950 dark:text-white w-1/2">
                     Feature
                   </th>
-                  <th className="text-center py-4 px-4 text-sm font-semibold text-gray-900">
+                  <th className="text-center py-4 px-4 text-sm font-semibold text-gray-950 dark:text-white">
                     Essentials
                   </th>
-                  <th className="text-center py-4 pl-4 text-sm font-semibold text-teal-primary">
+                  <th className="text-center py-4 pl-4 text-sm font-semibold text-teal-primary dark:text-teal-bright">
                     Complete
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {comparisonRows.map((row) => (
-                  <tr key={row.feature} className="border-b border-gray-100">
-                    <td className="py-4 pr-4 text-sm text-gray-700">{row.feature}</td>
+                  <tr key={row.feature} className="border-b border-gray-200 dark:border-gray-800">
+                    <td className="py-4 pr-4 text-sm text-gray-700 dark:text-gray-300">{row.feature}</td>
                     <td className="py-4 px-4">
                       <div className="flex justify-center">{renderCell(row.essentials)}</div>
                     </td>
@@ -211,9 +211,9 @@ export default function PricingPage() {
       </section>
 
       {/* FAQ */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-white dark:bg-gray-950">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 text-center mb-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-950 dark:text-white text-center mb-12">
             Pricing questions
           </h2>
           <div className="space-y-3">
@@ -223,14 +223,14 @@ export default function PricingPage() {
               { q: 'What happens when my trial ends?', a: 'At the end of your 14-day free trial, you will be prompted to choose a plan and add payment details. Your data is safe \u2014 nothing is deleted if you need a few extra days to decide.' },
               { q: 'Can I cancel any time?', a: 'Yes. You can cancel from your account settings at any time. If you cancel an annual plan, you will retain access until the end of your billing period.' },
             ].map(({ q, a }) => (
-              <details key={q} className="group border border-gray-100 rounded-xl overflow-hidden">
-                <summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-lg font-semibold text-gray-900 hover:bg-gray-50 transition-colors list-none">
+              <details key={q} className="group border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                <summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-lg font-semibold text-gray-950 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors list-none">
                   {q}
-                  <svg className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-5 h-5 text-gray-400 dark:text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </summary>
-                <p className="px-6 pb-5 text-gray-600 leading-relaxed">{a}</p>
+                <p className="px-6 pb-5 text-gray-700 dark:text-gray-300 leading-relaxed">{a}</p>
               </details>
             ))}
           </div>
@@ -251,7 +251,7 @@ export default function PricingPage() {
             href="/register"
             size="lg"
             className="bg-amber-accent text-gray-900 font-bold text-base px-10 hover:bg-amber-light"
-            radius="full"
+            radius="lg"
           >
             Start your 14-day free trial
           </Button>

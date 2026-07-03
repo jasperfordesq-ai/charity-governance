@@ -8,17 +8,17 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <div className="bg-white py-16 md:py-24">
+    <div className="bg-white py-16 text-gray-950 dark:bg-gray-950 dark:text-gray-50 md:py-24">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-12">
           <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider mb-3">
             Legal
           </p>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Terms of Service</h1>
-          <p className="text-gray-500 text-sm">Effective date: 1 April 2026</p>
+          <h1 className="text-4xl font-bold text-gray-950 dark:text-white mb-4">Terms of Service</h1>
+          <p className="text-gray-600 dark:text-gray-300 text-sm">Effective date: 1 April 2026</p>
         </div>
 
-        <div className="prose prose-gray max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-teal-primary prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700">
+        <div className="prose prose-gray max-w-none dark:prose-invert prose-headings:font-bold prose-headings:text-gray-950 dark:prose-headings:text-white prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-relaxed prose-a:text-teal-primary dark:prose-a:text-teal-bright prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700 dark:prose-li:text-gray-300 dark:prose-strong:text-white">
 
           <p>
             Please read these Terms of Service (&ldquo;Terms&rdquo;) carefully before using
@@ -239,8 +239,8 @@ export default function TermsPage() {
           <p>
             If you have any questions about these Terms, please contact us at:
           </p>
-          <address className="not-italic bg-gray-50 rounded-xl p-5 border border-gray-100 my-4 text-gray-600 text-sm leading-relaxed">
-            <strong className="text-gray-900">Project Nexus Ltd</strong><br />
+          <address className="not-italic bg-gray-50 dark:bg-gray-900 rounded-lg p-5 border border-gray-200 dark:border-gray-800 my-4 text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
+            <strong className="text-gray-950 dark:text-white">Project Nexus Ltd</strong><br />
             Skibbereen<br />
             Co. Cork<br />
             Ireland<br />

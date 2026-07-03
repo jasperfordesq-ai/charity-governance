@@ -84,25 +84,25 @@ function VerifyEmailContent() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-200 shadow-lg">
+        <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
           <CardBody className="p-8 sm:p-10">
             {status === 'loading' && (
               <div className="text-center py-8" role="status" aria-live="polite">
                 <Spinner size="lg" color="primary" classNames={{ circle1: 'border-b-teal-primary', circle2: 'border-b-teal-primary' }} />
-                <p className="mt-4 text-gray-600 font-medium">Verifying your email...</p>
-                <p className="mt-1 text-sm text-gray-500">This should only take a moment.</p>
+                <p className="mt-4 text-gray-700 dark:text-gray-200 font-medium">Verifying your email...</p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">This should only take a moment.</p>
               </div>
             )}
 
             {status === 'pending' && (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-full bg-teal-primary/10 flex items-center justify-center mx-auto mb-5">
+                <div className="w-14 h-14 rounded-lg bg-teal-primary/10 dark:bg-teal-bright/10 flex items-center justify-center mx-auto mb-5">
                   <svg className="w-7 h-7 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-15A2.25 2.25 0 012.25 16.5v-9m19.5 0A2.25 2.25 0 0019.5 5.25h-15A2.25 2.25 0 002.25 7.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 9.66A2.25 2.25 0 012.25 7.743V7.5" />
                   </svg>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h1>
-                <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
+                <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Check your email</h1>
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
                 <div className="flex flex-col items-center gap-3">
                   {user && (
                     <Button
@@ -115,14 +115,14 @@ function VerifyEmailContent() {
                     </Button>
                   )}
                   {resendMessage && (
-                    <p role="status" className="text-sm text-green-600">{resendMessage}</p>
+                    <p role="status" className="text-sm text-green-600 dark:text-green-400">{resendMessage}</p>
                   )}
                   {resendError && (
-                    <p role="alert" className="text-sm text-red-600">{resendError}</p>
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-300">{resendError}</p>
                   )}
                   <Link
                     href="/login"
-                    className="text-teal-primary font-semibold hover:underline text-sm"
+                    className="text-teal-primary dark:text-teal-bright font-semibold hover:underline text-sm"
                   >
                     Back to sign in
                   </Link>
@@ -132,16 +132,16 @@ function VerifyEmailContent() {
 
             {status === 'success' && (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-5">
+                <div className="w-14 h-14 rounded-lg bg-green-50 dark:bg-green-950/40 flex items-center justify-center mx-auto mb-5">
                   <svg className="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Email verified</h1>
-                <p className="text-gray-600 leading-relaxed mb-6">{message}</p>
+                <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Email verified</h1>
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
                 <Link
                   href={user ? '/dashboard' : '/login'}
-                  className="inline-flex items-center justify-center rounded-full bg-teal-primary text-white font-semibold px-8 py-2.5 hover:opacity-90 transition-opacity"
+                  className="inline-flex items-center justify-center rounded-lg bg-teal-primary text-white font-semibold px-8 py-2.5 hover:opacity-90 transition-opacity"
                 >
                   {user ? 'Continue to dashboard' : 'Go to sign in'}
                 </Link>
@@ -150,24 +150,24 @@ function VerifyEmailContent() {
 
             {status === 'error' && (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5">
+                <div className="w-14 h-14 rounded-lg bg-red-50 dark:bg-red-950/40 flex items-center justify-center mx-auto mb-5">
                   <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                   </svg>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Verification failed</h1>
-                <p role="alert" className="text-gray-600 leading-relaxed mb-6">{message}</p>
+                <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Verification failed</h1>
+                <p role="alert" className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
                 <div className="flex flex-col items-center gap-3">
                   <Button
                     onPress={handleRetry}
                     className="bg-teal-primary text-white font-semibold"
-                    radius="full"
+                    radius="lg"
                   >
                     Try again
                   </Button>
                   <Link
                     href="/login"
-                    className="text-teal-primary font-semibold hover:underline text-sm"
+                    className="text-teal-primary dark:text-teal-bright font-semibold hover:underline text-sm"
                   >
                     Go to sign in
                   </Link>
@@ -183,11 +183,11 @@ function VerifyEmailContent() {
 function VerifyEmailFallback() {
   return (
     <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-200 shadow-lg">
+      <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
         <CardBody className="p-8 sm:p-10">
           <div className="text-center py-8" role="status" aria-live="polite">
             <Spinner size="lg" color="primary" classNames={{ circle1: 'border-b-teal-primary', circle2: 'border-b-teal-primary' }} />
-            <p className="mt-4 text-gray-600 font-medium">Verifying your email...</p>
+            <p className="mt-4 text-gray-700 dark:text-gray-200 font-medium">Verifying your email...</p>
           </div>
         </CardBody>
       </Card>

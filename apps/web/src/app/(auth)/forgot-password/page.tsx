@@ -35,36 +35,36 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-200 shadow-lg">
+        <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-full bg-teal-primary/10 flex items-center justify-center mx-auto mb-5">
+                <div className="w-14 h-14 rounded-lg bg-teal-primary/10 dark:bg-teal-bright/10 flex items-center justify-center mx-auto mb-5">
                   <svg className="w-7 h-7 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                   </svg>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h1>
-                <p className="text-gray-600 leading-relaxed mb-6">
-                  If an account exists for <span className="font-medium text-gray-900">{email}</span>,
+                <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Check your email</h1>
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
+                  If an account exists for <span className="font-medium text-gray-950 dark:text-white">{email}</span>,
                   we have sent a password reset link. Please check your inbox and spam folder.
                 </p>
-                <Link href="/login" className="text-teal-primary font-semibold hover:underline text-sm">
+                <Link href="/login" className="text-teal-primary dark:text-teal-bright font-semibold hover:underline text-sm">
                   Back to sign in
                 </Link>
               </div>
             ) : (
               <>
                 <div className="text-center mb-8">
-                  <h1 className="text-2xl font-bold text-gray-900">Forgot your password?</h1>
-                  <p className="mt-2 text-sm text-gray-500">
+                  <h1 className="text-2xl font-bold text-gray-950 dark:text-white">Forgot your password?</h1>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                     Enter your email address and we will send you a link to reset your password.
                   </p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
-                    <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                    <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm dark:bg-red-950/40 dark:border-red-800 dark:text-red-100">
                       {error}
                     </div>
                   )}
@@ -78,7 +78,7 @@ export default function ForgotPasswordPage() {
                     autoComplete="email"
                     variant="bordered"
                     classNames={{
-                      inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary',
+                      inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright',
                     }}
                   />
 
@@ -86,16 +86,16 @@ export default function ForgotPasswordPage() {
                     type="submit"
                     isLoading={isLoading}
                     className="w-full bg-teal-primary text-white font-semibold"
-                    radius="full"
+                    radius="lg"
                     size="lg"
                   >
                     Send reset link
                   </Button>
                 </form>
 
-                <p className="mt-8 text-center text-sm text-gray-500">
+                <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-300">
                   Remember your password?{' '}
-                  <Link href="/login" className="text-teal-primary font-semibold hover:underline">
+                  <Link href="/login" className="text-teal-primary dark:text-teal-bright font-semibold hover:underline">
                     Sign in
                   </Link>
                 </p>

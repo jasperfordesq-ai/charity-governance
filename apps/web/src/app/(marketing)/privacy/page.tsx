@@ -8,17 +8,17 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="bg-white py-16 md:py-24">
+    <div className="bg-white py-16 text-gray-950 dark:bg-gray-950 dark:text-gray-50 md:py-24">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-12">
           <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider mb-3">
             Legal
           </p>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
-          <p className="text-gray-500 text-sm">Effective date: 1 April 2026</p>
+          <h1 className="text-4xl font-bold text-gray-950 dark:text-white mb-4">Privacy Policy</h1>
+          <p className="text-gray-600 dark:text-gray-300 text-sm">Effective date: 1 April 2026</p>
         </div>
 
-        <div className="prose prose-gray max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-teal-primary prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700">
+        <div className="prose prose-gray max-w-none dark:prose-invert prose-headings:font-bold prose-headings:text-gray-950 dark:prose-headings:text-white prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-relaxed prose-a:text-teal-primary dark:prose-a:text-teal-bright prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700 dark:prose-li:text-gray-300 dark:prose-strong:text-white">
 
           <p>
             This Privacy Policy describes how <strong>Project Nexus Ltd</strong> (&ldquo;we&rdquo;,
@@ -32,8 +32,8 @@ export default function PrivacyPage() {
           <p>
             The data controller for personal data processed through CharityPilot.ie is:
           </p>
-          <address className="not-italic bg-gray-50 rounded-xl p-5 border border-gray-100 my-4 text-gray-600 text-sm leading-relaxed">
-            <strong className="text-gray-900">Project Nexus Ltd</strong><br />
+          <address className="not-italic bg-gray-50 dark:bg-gray-900 rounded-lg p-5 border border-gray-200 dark:border-gray-800 my-4 text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
+            <strong className="text-gray-950 dark:text-white">Project Nexus Ltd</strong><br />
             Skibbereen<br />
             Co. Cork<br />
             Ireland<br />
@@ -198,34 +198,34 @@ export default function PrivacyPage() {
             the Service. Each is bound by a data processing agreement and complies with GDPR:
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse border border-gray-200 rounded-xl overflow-hidden my-4">
+            <table className="w-full text-sm border-collapse border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden my-4">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left p-3 border border-gray-200 font-semibold text-gray-900">Processor</th>
-                  <th className="text-left p-3 border border-gray-200 font-semibold text-gray-900">Purpose</th>
-                  <th className="text-left p-3 border border-gray-200 font-semibold text-gray-900">Location</th>
+                <tr className="bg-gray-50 dark:bg-gray-900">
+                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Processor</th>
+                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Purpose</th>
+                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Location</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td className="p-3 border border-gray-200 text-gray-700">Stripe</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">Payment processing and subscription billing</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">USA/EU (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Stripe</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Payment processing and subscription billing</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">USA/EU (SCCs in place)</td>
                 </tr>
-                <tr className="bg-gray-50">
-                  <td className="p-3 border border-gray-200 text-gray-700">Supabase</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">Database hosting and authentication</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">EU (Ireland)</td>
+                <tr className="bg-gray-50 dark:bg-gray-900">
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Supabase</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Database hosting and authentication</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">EU (Ireland)</td>
                 </tr>
                 <tr>
-                  <td className="p-3 border border-gray-200 text-gray-700">Resend</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">Transactional email delivery</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">USA (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Resend</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Transactional email delivery</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">USA (SCCs in place)</td>
                 </tr>
-                <tr className="bg-gray-50">
-                  <td className="p-3 border border-gray-200 text-gray-700">Vercel</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">Application hosting and CDN</td>
-                  <td className="p-3 border border-gray-200 text-gray-700">EU/USA (SCCs in place)</td>
+                <tr className="bg-gray-50 dark:bg-gray-900">
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Vercel</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Application hosting and CDN</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">EU/USA (SCCs in place)</td>
                 </tr>
               </tbody>
             </table>

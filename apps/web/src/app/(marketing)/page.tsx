@@ -3,12 +3,13 @@ import type { Metadata } from 'next';
 import { OrganisationJsonLd, FaqJsonLd } from '@/components/json-ld';
 
 export const metadata: Metadata = {
-  title: 'CharityPilot — Charity Governance Made Simple',
+  title: 'CharityPilot | Irish Charity Governance Software',
   description:
-    'The affordable, Ireland-specific governance compliance tool for registered charities. Track your CRA Charities Governance Code compliance, manage documents, and file with confidence.',
+    'Ireland-specific governance compliance software for registered charities. Track CRA Governance Code readiness, evidence, registers, deadlines, and board signoff.',
   openGraph: {
-    title: 'CharityPilot — Charity Governance Made Simple',
-    description: 'Over 11,000 Irish charities must comply with the CRA Governance Code. CharityPilot makes it simple.',
+    title: 'CharityPilot | Irish Charity Governance Software',
+    description:
+      'CharityPilot helps Irish charities keep CRA Governance Code evidence, registers, deadlines, and board signoff review-ready.',
     type: 'website',
   },
 };
@@ -17,19 +18,19 @@ const features = [
   {
     title: 'Compliance Tracker',
     description:
-      'Map your charity against all 6 principles and up to 49 standards of the CRA Charities Governance Code. See at a glance which standards you meet, which need work, and what evidence you have on file.',
+      'Map your charity against all 6 principles and up to 49 standards of the CRA Charities Governance Code, with status, evidence, actions, and explanations in one place.',
     icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
   {
-    title: 'Document Vault',
+    title: 'Evidence Vault',
     description:
-      'Upload and organise your governing documents, policies, minutes, and evidence in one secure place. Tag documents to specific standards so auditors (and your board) can find everything instantly.',
+      'Organise governing documents, policies, minutes, and supporting evidence by standard so trustees can see what is ready for annual review.',
     icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
       </svg>
     ),
@@ -37,9 +38,9 @@ const features = [
   {
     title: 'Board Register',
     description:
-      'Maintain an up-to-date register of your board of directors. Track appointment dates, term limits, skill categories, and ensure your board composition meets Governance Code expectations.',
+      'Keep trustee appointment dates, terms, induction, conduct, conflicts, and board composition signals visible before governance reviews.',
     icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
       </svg>
     ),
@@ -47,19 +48,19 @@ const features = [
   {
     title: 'Deadline Tracker',
     description:
-      'Never miss an annual return, CRO filing date, or board meeting. Get advance reminders for every key governance deadline so your charity stays on the right side of the regulator.',
+      'Track annual returns, CRO filings, policy reviews, board meetings, and custom governance dates with reminders and completion history.',
     icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
       </svg>
     ),
   },
   {
-    title: 'Compliance Report',
+    title: 'Board-Ready Reports',
     description:
-      'Generate professional, printable compliance reports with one click. Perfect for board meetings, regulator queries, and demonstrating governance to funders and stakeholders.',
+      'Generate printable compliance reports with standards, evidence summaries, approval notes, and minute references for trustee review.',
     icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
       </svg>
     ),
@@ -67,66 +68,70 @@ const features = [
 ];
 
 const principles = [
-  { number: 1, title: 'Advancing Charitable Purpose', colour: 'bg-teal-primary' },
-  { number: 2, title: 'Behaving with Integrity', colour: 'bg-teal-dark' },
-  { number: 3, title: 'Leading People', colour: 'bg-teal-light' },
-  { number: 4, title: 'Exercising Control', colour: 'bg-amber-accent' },
-  { number: 5, title: 'Working Effectively', colour: 'bg-teal-primary' },
-  { number: 6, title: 'Being Accountable & Transparent', colour: 'bg-teal-dark' },
+  { number: 1, title: 'Advancing Charitable Purpose' },
+  { number: 2, title: 'Behaving with Integrity' },
+  { number: 3, title: 'Leading People' },
+  { number: 4, title: 'Exercising Control' },
+  { number: 5, title: 'Working Effectively' },
+  { number: 6, title: 'Being Accountable & Transparent' },
+];
+
+const workflowSignals = [
+  { label: 'Standards mapped', value: '32 or 49' },
+  { label: 'Evidence linked', value: 'By standard' },
+  { label: 'Board signoff', value: 'Minutes ready' },
+  { label: 'Deadline view', value: 'CRA, CRO, custom' },
 ];
 
 const faqs = [
   {
     question: 'Who is CharityPilot for?',
     answer:
-      'CharityPilot is built for Irish registered charities of every size -- from small volunteer-run organisations to larger complex charities with paid staff. If you are on the CRA Register of Charities and need to comply with the Charities Governance Code, CharityPilot is for you.',
+      'CharityPilot is built for Irish registered charities of every size, from small volunteer-run organisations to larger charities with staff. If your charity needs to evidence its Charities Governance Code work, CharityPilot is designed for that workflow.',
   },
   {
     question: 'What is the Charities Governance Code?',
     answer:
-      'The Charities Governance Code is a framework from the Charities Regulator in Ireland. It sets out minimum standards of governance that every registered charity must meet. There are 6 principles and either 32 core standards for non-complex charities or all 49 standards for charities applying the additional standards.',
+      'The Charities Governance Code is a framework from the Charities Regulator in Ireland. It sets out minimum standards of governance that every registered charity must meet. CharityPilot helps organise the records, evidence, and review notes that support that work.',
   },
   {
     question: 'How does billing work?',
     answer:
-      'We offer monthly and annual billing. Annual plans save you roughly two months compared to paying monthly. Every plan starts with a free 14-day trial -- no credit card required. You can cancel any time from your account settings.',
+      'We offer monthly and annual billing. Annual plans save roughly two months compared to paying monthly. Every plan starts with a free 14-day trial, no credit card required. You can cancel from your account settings.',
   },
   {
-    question: 'Do I need to be a "Complex" charity?',
+    question: 'Is CharityPilot legal advice?',
     answer:
-      'The Charities Regulator asks charities to consider their size, income, staffing, activities, structure, and risk profile when deciding whether the additional standards apply. If your governance is more complex, you should use the Complete plan; Essentials covers the 32 core standards that apply to all registered charities.',
+      'No. CharityPilot is administrative software for tracking governance work and evidence. It is not a substitute for legal or regulatory advice, and trustees remain responsible for reviewing their charity position.',
   },
 ];
 
 export default function LandingPage() {
   return (
-    <div>
+    <div className="bg-white text-gray-950 dark:bg-gray-950 dark:text-gray-50">
       <OrganisationJsonLd />
       <FaqJsonLd faqs={faqs} />
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-teal-primary via-teal-dark to-teal-primary">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-amber-accent rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-10 w-96 h-96 bg-teal-light rounded-full blur-3xl" />
-        </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-36">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white leading-tight tracking-tight">
-              Charity governance
-              <span className="block text-amber-accent">made simple.</span>
-            </h1>
-            <p className="mt-6 text-lg md:text-xl text-teal-100 max-w-2xl leading-relaxed">
-              Over 11,000 Irish charities must comply with the CRA Charities Governance Code.
-              CharityPilot gives you a clear, affordable path to compliance -- so you can focus on
-              the work that matters.
+
+      <section className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-28 lg:px-8">
+          <div className="max-w-4xl">
+            <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-teal-primary dark:text-teal-bright">
+              Irish charity governance compliance
             </p>
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
+            <h1 className="text-4xl font-extrabold leading-tight tracking-normal text-gray-950 dark:text-white sm:text-5xl md:text-6xl">
+              CharityPilot keeps your Governance Code evidence review-ready.
+            </h1>
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-700 dark:text-gray-200 md:text-xl">
+              Bring standards, evidence, board signoff, registers, and annual reporting deadlines
+              into one calm workspace built for Irish registered charities.
+            </p>
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <Button
                 as={Link}
                 href="/register"
                 size="lg"
-                className="bg-amber-accent text-gray-900 font-bold text-base px-8 hover:bg-amber-light"
-                radius="full"
+                className="bg-teal-primary px-8 text-base font-bold text-white hover:bg-teal-dark"
+                radius="lg"
               >
                 Start your 14-day free trial
               </Button>
@@ -135,65 +140,73 @@ export default function LandingPage() {
                 href="/features"
                 size="lg"
                 variant="bordered"
-                className="border-white/30 text-white font-semibold text-base px-8 hover:bg-white/10"
-                radius="full"
+                className="border-gray-300 px-8 text-base font-semibold text-gray-900 hover:border-teal-primary hover:text-teal-primary dark:border-gray-700 dark:text-gray-100 dark:hover:border-teal-bright dark:hover:text-teal-bright"
+                radius="lg"
               >
-                See how it works
+                See the workflow
               </Button>
             </div>
-            <p className="mt-4 text-sm text-teal-100">No credit card required. Cancel any time.</p>
+            <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+              No credit card required. Built for trustees, charity administrators, and governance leads.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-3 border-t border-gray-200 pt-6 dark:border-gray-800 sm:grid-cols-2 lg:grid-cols-4">
+            {workflowSignals.map((item) => (
+              <div key={item.label} className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {item.label}
+                </p>
+                <p className="mt-2 text-base font-semibold text-gray-950 dark:text-white">{item.value}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Social proof bar */}
-      <section className="bg-gray-50 border-b border-gray-200 py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm text-gray-500 font-medium">
-            Built for Irish charities, by people who understand Irish charity governance.
+      <section className="border-b border-gray-200 bg-gray-50 py-6 dark:border-gray-800 dark:bg-gray-900">
+        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Evidence-led software for Irish charities preparing board reviews, annual returns, and regulator queries.
           </p>
         </div>
       </section>
 
-      {/* Pain Points Section */}
-      <section className="py-20 md:py-28 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Governance compliance shouldn&apos;t be this hard
+      <section className="bg-white py-20 dark:bg-gray-950 md:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mb-14 max-w-3xl text-center">
+            <h2 className="text-3xl font-bold text-gray-950 dark:text-white md:text-4xl">
+              Governance work is easier when the evidence has a home
             </h2>
-            <p className="mt-4 text-lg text-gray-600 leading-relaxed">
-              Most Irish charities are run by dedicated volunteers with limited time and
-              resources. But the Charities Governance Code demands real administrative effort.
+            <p className="mt-4 text-lg leading-8 text-gray-700 dark:text-gray-300">
+              Many charities are run by committed trustees and administrators with limited time.
+              CharityPilot turns governance admin into a visible, reviewable workflow.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-6 md:grid-cols-3">
             {[
               {
-                title: 'Scattered documents',
-                body: 'Policies, minutes, and evidence stored across email threads, shared drives, and filing cabinets. Nobody knows where anything is when the auditor calls.',
+                title: 'Find evidence quickly',
+                body: 'Keep policies, minutes, approvals, and notes linked to the standards they support instead of buried in email threads and shared folders.',
               },
               {
-                title: 'Confusing standards',
-                body: 'The Governance Code has 6 principles, 49 standards, and pages of guidance notes. Working out which apply to your charity -- and what "compliance" actually looks like -- takes real effort.',
+                title: 'Know what needs review',
+                body: 'See which standards are ready, which need action, and which need an explanation before your annual board review.',
               },
               {
-                title: 'Missed deadlines',
-                body: 'Annual returns, CRO filings, board reviews, policy renewals. With no central system, it is too easy for deadlines to slip -- and for the regulator to notice.',
+                title: 'Keep deadlines visible',
+                body: 'Track annual returns, CRO filings, policy reviews, meetings, and custom governance dates in one place.',
               },
             ].map((pain) => (
-              <Card
-                key={pain.title}
-                className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <CardBody className="p-8">
-                  <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mb-4">
-                    <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              <Card key={pain.title} className="border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <CardBody className="p-7">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{pain.title}</h3>
-                  <p className="text-gray-600 leading-relaxed">{pain.body}</p>
+                  <h3 className="mb-2 text-lg font-semibold text-gray-950 dark:text-white">{pain.title}</h3>
+                  <p className="leading-7 text-gray-700 dark:text-gray-300">{pain.body}</p>
                 </CardBody>
               </Card>
             ))}
@@ -201,42 +214,37 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-20 md:py-28 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center mb-16">
-            <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider mb-3">Features</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Everything you need to stay compliant
+      <section className="bg-gray-50 py-20 dark:bg-gray-900 md:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mb-14 max-w-3xl text-center">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-teal-primary dark:text-teal-bright">Product workflow</p>
+            <h2 className="text-3xl font-bold text-gray-950 dark:text-white md:text-4xl">
+              Everything trustees expect to see in a governance review
             </h2>
-            <p className="mt-4 text-lg text-gray-600 leading-relaxed">
-              CharityPilot brings all your governance work into one place -- structured around the
-              Charities Governance Code so nothing falls through the cracks.
+            <p className="mt-4 text-lg leading-8 text-gray-700 dark:text-gray-300">
+              CharityPilot is structured around the Charities Governance Code, not generic task management.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
-              <Card
-                key={feature.title}
-                className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow bg-white"
-              >
-                <CardBody className="p-8">
-                  <div className="w-12 h-12 rounded-xl bg-teal-primary/10 text-teal-primary flex items-center justify-center mb-5">
+              <Card key={feature.title} className="border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+                <CardBody className="p-7">
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-teal-primary/10 text-teal-primary dark:bg-teal-bright/10 dark:text-teal-bright">
                     {feature.icon}
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                  <p className="text-gray-600 leading-relaxed text-sm">{feature.description}</p>
+                  <h3 className="mb-2 text-lg font-semibold text-gray-950 dark:text-white">{feature.title}</h3>
+                  <p className="text-sm leading-7 text-gray-700 dark:text-gray-300">{feature.description}</p>
                 </CardBody>
               </Card>
             ))}
           </div>
-          <div className="text-center mt-12">
+          <div className="mt-12 text-center">
             <Button
               as={Link}
               href="/features"
               variant="bordered"
-              className="border-teal-primary text-teal-primary font-semibold hover:bg-teal-primary hover:text-white transition-colors"
-              radius="full"
+              className="border-teal-primary font-semibold text-teal-primary hover:bg-teal-primary hover:text-white dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950"
+              radius="lg"
             >
               Explore all features
             </Button>
@@ -244,91 +252,80 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 6 Principles Section */}
-      <section className="py-20 md:py-28 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center mb-16">
-            <p className="text-sm font-semibold text-amber-deep uppercase tracking-wider mb-3">
-              The 6 Principles
+      <section className="bg-white py-20 dark:bg-gray-950 md:py-28">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mb-14 max-w-3xl text-center">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              The 6 principles
             </p>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Structured around the Charities Governance Code
+            <h2 className="text-3xl font-bold text-gray-950 dark:text-white md:text-4xl">
+              A workspace shaped by the Charities Governance Code
             </h2>
-            <p className="mt-4 text-lg text-gray-600 leading-relaxed">
-              CharityPilot organises your entire compliance journey around the six core
-              principles of the CRA Charities Governance Code.
+            <p className="mt-4 text-lg leading-8 text-gray-700 dark:text-gray-300">
+              Standards, evidence, actions, and explanations stay tied to the principle they support.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {principles.map((p) => (
               <div
                 key={p.number}
-                className="relative rounded-2xl p-6 bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
               >
-                <div
-                  className={`w-10 h-10 rounded-full ${p.colour} text-white flex items-center justify-center font-bold text-sm mb-4`}
-                >
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-teal-primary text-sm font-bold text-white">
                   {p.number}
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900">{p.title}</h3>
+                <h3 className="text-lg font-semibold text-gray-950 dark:text-white">{p.title}</h3>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Pricing Preview */}
-      <section className="py-20 md:py-28 bg-gradient-to-br from-gray-50 to-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider mb-3">Pricing</p>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Simple, honest pricing
+      <section className="bg-gray-50 py-20 dark:bg-gray-900 md:py-28">
+        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-teal-primary dark:text-teal-bright">Pricing</p>
+          <h2 className="mb-4 text-3xl font-bold text-gray-950 dark:text-white md:text-4xl">
+            Simple pricing for charity budgets
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed mb-8">
-            Two plans. No hidden fees. Choose the one that fits your charity -- and start with a
-            free 14-day trial, no credit card required.
+          <p className="mx-auto mb-8 max-w-2xl text-lg leading-8 text-gray-700 dark:text-gray-300">
+            Two plans. No hidden fees. Start with a free 14-day trial and choose the coverage your charity needs.
           </p>
-          <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-            <Card className="border-2 border-gray-200 shadow-sm">
-              <CardHeader className="flex flex-col items-center pt-8 pb-2">
-                <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider">Essentials</p>
-                <p className="mt-2 text-4xl font-bold text-gray-900">
-                  &euro;19<span className="text-lg font-normal text-gray-500">/month</span>
+          <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
+            <Card className="border-2 border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+              <CardHeader className="flex flex-col items-center px-8 pb-2 pt-8">
+                <p className="text-sm font-semibold uppercase tracking-wider text-teal-primary dark:text-teal-bright">Essentials</p>
+                <p className="mt-2 text-4xl font-bold text-gray-950 dark:text-white">
+                  &euro;19<span className="text-lg font-normal text-gray-600 dark:text-gray-300">/month</span>
                 </p>
-                <p className="text-sm text-gray-500">or &euro;190/year (save &euro;38)</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">or &euro;190/year (save &euro;38)</p>
               </CardHeader>
               <CardBody className="px-8 pb-8 text-center">
-                <p className="text-gray-600 mb-6">For non-complex charities. Covers the 32 core standards.</p>
+                <p className="mb-6 text-gray-700 dark:text-gray-300">For non-complex charities. Covers the 32 core standards.</p>
                 <Button
                   as={Link}
                   href="/pricing"
                   variant="bordered"
-                  className="border-teal-primary text-teal-primary font-semibold w-full"
-                  radius="full"
+                  className="w-full border-teal-primary font-semibold text-teal-primary dark:border-teal-bright dark:text-teal-bright"
+                  radius="lg"
                 >
                   View details
                 </Button>
               </CardBody>
             </Card>
-            <Card className="border-2 border-teal-primary shadow-md relative overflow-visible">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-accent text-gray-900 text-xs font-bold px-4 py-1 rounded-full">
-                Most Popular
+            <Card className="relative overflow-visible border-2 border-teal-primary bg-white shadow-md dark:border-teal-bright dark:bg-gray-950">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-lg bg-amber-accent px-4 py-1 text-xs font-bold text-gray-950">
+                Most popular
               </div>
-              <CardHeader className="flex flex-col items-center pt-8 pb-2">
-                <p className="text-sm font-semibold text-teal-primary uppercase tracking-wider">Complete</p>
-                <p className="mt-2 text-4xl font-bold text-gray-900">
-                  &euro;39<span className="text-lg font-normal text-gray-500">/month</span>
+              <CardHeader className="flex flex-col items-center px-8 pb-2 pt-8">
+                <p className="text-sm font-semibold uppercase tracking-wider text-teal-primary dark:text-teal-bright">Complete</p>
+                <p className="mt-2 text-4xl font-bold text-gray-950 dark:text-white">
+                  &euro;39<span className="text-lg font-normal text-gray-600 dark:text-gray-300">/month</span>
                 </p>
-                <p className="text-sm text-gray-500">or &euro;390/year (save &euro;78)</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">or &euro;390/year (save &euro;78)</p>
               </CardHeader>
               <CardBody className="px-8 pb-8 text-center">
-                <p className="text-gray-600 mb-6">For complex charities. All 49 standards covered.</p>
-                <Button
-                  as={Link}
-                  href="/pricing"
-                  className="bg-teal-primary text-white font-semibold w-full"
-                  radius="full"
-                >
+                <p className="mb-6 text-gray-700 dark:text-gray-300">For charities applying all 49 standards and broader governance registers.</p>
+                <Button as={Link} href="/pricing" className="w-full bg-teal-primary font-semibold text-white" radius="lg">
                   View details
                 </Button>
               </CardBody>
@@ -337,52 +334,43 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="py-20 md:py-28 bg-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
+      <section className="bg-white py-20 dark:bg-gray-950 md:py-28">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold text-gray-950 dark:text-white md:text-4xl">
               Frequently asked questions
             </h2>
           </div>
           <div className="space-y-3">
             {faqs.map((faq) => (
-              <details key={faq.question} className="group border border-gray-200 rounded-xl overflow-hidden">
-                <summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-lg font-semibold text-gray-900 hover:bg-gray-50 transition-colors list-none">
+              <details key={faq.question} className="group overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-5 text-lg font-semibold text-gray-950 transition-colors hover:bg-gray-50 dark:text-white dark:hover:bg-gray-900">
                   {faq.question}
-                  <svg className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-180 flex-shrink-0 ml-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="ml-3 h-5 w-5 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </summary>
-                <p className="px-6 pb-5 text-gray-600 leading-relaxed">{faq.answer}</p>
+                <p className="px-6 pb-5 leading-7 text-gray-700 dark:text-gray-300">{faq.answer}</p>
               </details>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="py-20 md:py-28 bg-teal-primary">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Ready to simplify your governance?
+      <section className="bg-teal-primary py-20 dark:bg-teal-dark md:py-28">
+        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
+          <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">
+            Start with your real governance workflow
           </h2>
-          <p className="text-teal-100 text-lg mb-8 leading-relaxed">
-            Start your 14-day free trial -- no credit card required. See how CharityPilot can help
-            your charity stay compliant, organised, and confident.
+          <p className="mb-8 text-lg leading-8 text-teal-50">
+            Try CharityPilot for 14 days with no credit card required. Bring standards, evidence,
+            registers, deadlines, and board signoff into one place.
           </p>
-          <Button
-            as={Link}
-            href="/register"
-            size="lg"
-            className="bg-amber-accent text-gray-900 font-bold text-base px-10 hover:bg-amber-light"
-            radius="full"
-          >
+          <Button as={Link} href="/register" size="lg" className="bg-amber-accent px-10 text-base font-bold text-gray-950 hover:bg-amber-light" radius="lg">
             Start your 14-day free trial
           </Button>
         </div>
       </section>
-
     </div>
   );
 }

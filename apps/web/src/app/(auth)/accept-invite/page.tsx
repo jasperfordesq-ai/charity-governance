@@ -58,18 +58,18 @@ function AcceptInviteForm() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-200 shadow-lg">
+        <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
           <CardBody className="p-8 sm:p-10">
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold text-gray-900">Accept your invite</h1>
-              <p className="mt-2 text-sm text-gray-500">
+              <h1 className="text-2xl font-bold text-gray-950 dark:text-white">Accept your invite</h1>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                 Create your account to join this charity&apos;s governance workspace.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm dark:bg-red-950/40 dark:border-red-800 dark:text-red-100">
                   {error}
                 </div>
               )}
@@ -81,7 +81,7 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="name"
                 variant="bordered"
-                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary' }}
+                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright' }}
               />
               <Input
                 label="Password"
@@ -91,7 +91,7 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="new-password"
                 variant="bordered"
-                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary' }}
+                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright' }}
                 description="Use at least 8 characters with uppercase, lowercase, and a number."
               />
               <Input
@@ -102,12 +102,12 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="new-password"
                 variant="bordered"
-                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary' }}
+                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright' }}
               />
 
               <button
                 type="button"
-                className="text-sm text-teal-primary font-medium hover:underline"
+                className="text-sm text-teal-primary dark:text-teal-bright font-medium hover:underline"
                 onClick={() => setShowPassword((current) => !current)}
               >
                 {showPassword ? 'Hide passwords' : 'Show passwords'}
@@ -117,16 +117,16 @@ function AcceptInviteForm() {
                 type="submit"
                 isLoading={isLoading}
                 className="w-full bg-teal-primary text-white font-semibold"
-                radius="full"
+                radius="lg"
                 size="lg"
               >
                 Join Workspace
               </Button>
             </form>
 
-            <p className="mt-8 text-center text-sm text-gray-500">
+            <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-300">
               Already have an account?{' '}
-              <Link href="/login" className="text-teal-primary font-semibold hover:underline">
+              <Link href="/login" className="text-teal-primary dark:text-teal-bright font-semibold hover:underline">
                 Sign in
               </Link>
             </p>
@@ -139,10 +139,10 @@ function AcceptInviteForm() {
 function AcceptInviteFallback() {
   return (
     <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-200 shadow-lg">
+      <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
         <CardBody className="p-8 sm:p-10">
-          <div className="h-7 w-44 rounded bg-gray-200 mx-auto mb-3" />
-          <div className="h-4 w-64 rounded bg-gray-200 mx-auto" />
+          <div className="h-7 w-44 rounded bg-gray-200 dark:bg-gray-800 mx-auto mb-3" />
+          <div className="h-4 w-64 rounded bg-gray-200 dark:bg-gray-800 mx-auto" />
         </CardBody>
       </Card>
     </div>
