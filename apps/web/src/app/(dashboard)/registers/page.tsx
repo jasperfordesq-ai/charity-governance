@@ -139,6 +139,7 @@ export default function RegistersPage() {
   const [fundraising, setFundraising] = useState<FundraisingRecordResponse[]>([]);
   const [annual, setAnnual] = useState<AnnualReportReadinessResponse>(emptyAnnual(currentYear));
   const [financial, setFinancial] = useState<FinancialControlReviewResponse>(emptyFinancial(currentYear));
+  const [loadedRegistersYear, setLoadedRegistersYear] = useState<number | null>(null);
   const [modalType, setModalType] = useState<RegisterType | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean>>({});
 
@@ -149,6 +150,7 @@ export default function RegistersPage() {
     setLoading(true);
     setPlanUnavailable(false);
     setLoadError('');
+    setLoadedRegistersYear(null);
     try {
       const [summaryRes, conflictsRes, risksRes, complaintsRes, fundraisingRes, annualRes, financialRes] = await Promise.all([
         api.get(`/governance-registers/summary?year=${requestedYear}`),
@@ -167,9 +169,11 @@ export default function RegistersPage() {
       setFundraising(fundraisingRes.data ?? []);
       setAnnual(annualRes.data ?? emptyAnnual(requestedYear));
       setFinancial(financialRes.data ?? emptyFinancial(requestedYear));
+      setLoadedRegistersYear(requestedYear);
     } catch (err) {
       if (isPlanFeatureUnavailable(err)) {
         if (!isLatestRegistersRequest(requestSeq)) return;
+        setLoadedRegistersYear(null);
         setPlanUnavailable(true);
         setSummary(null);
         setConflicts([]);
@@ -181,6 +185,14 @@ export default function RegistersPage() {
         return;
       }
       if (!isLatestRegistersRequest(requestSeq)) return;
+      setLoadedRegistersYear(null);
+      setSummary(null);
+      setConflicts([]);
+      setRisks([]);
+      setComplaints([]);
+      setFundraising([]);
+      setAnnual(emptyAnnual(requestedYear));
+      setFinancial(emptyFinancial(requestedYear));
       logClientError('Failed to load governance registers', err);
       setLoadError('Governance registers could not be loaded. Please try again.');
       toast('Failed to load governance registers', 'error');
@@ -195,6 +207,10 @@ export default function RegistersPage() {
     latestYearRef.current = year;
     fetchRegisters(year);
   }, [fetchRegisters, year]);
+
+  const hasLoadedSelectedYear = loadedRegistersYear === year && !loadError;
+  const canSaveAnnual = hasLoadedSelectedYear && annual.reportingYear === year;
+  const canSaveFinancial = hasLoadedSelectedYear && financial.reportingYear === year;
 
   const openModal = (type: RegisterType) => {
     setModalType(type);
@@ -340,6 +356,10 @@ export default function RegistersPage() {
   };
 
   const saveAnnual = async () => {
+    if (!canSaveAnnual) {
+      toast('Refresh this reporting year before saving Annual Report readiness.', 'error');
+      return;
+    }
     setSaving(true);
     try {
       await api.put('/governance-registers/annual-report', {
@@ -357,6 +377,10 @@ export default function RegistersPage() {
   };
 
   const saveFinancial = async () => {
+    if (!canSaveFinancial) {
+      toast('Refresh this reporting year before saving financial controls.', 'error');
+      return;
+    }
     setSaving(true);
     try {
       await api.put('/governance-registers/financial-controls', {
@@ -373,12 +397,17 @@ export default function RegistersPage() {
     }
   };
 
-  const highRisks = useMemo(() => risks.filter((risk) => risk.status !== RegisterStatus.CLOSED && riskScore(risk) >= 12), [risks]);
+  const summaryForSelectedYear = hasLoadedSelectedYear ? summary : null;
+  const conflictsForSelectedYear = hasLoadedSelectedYear ? conflicts : [];
+  const risksForSelectedYear = hasLoadedSelectedYear ? risks : [];
+  const complaintsForSelectedYear = hasLoadedSelectedYear ? complaints : [];
+  const fundraisingForSelectedYear = hasLoadedSelectedYear ? fundraising : [];
+  const highRisks = risksForSelectedYear.filter((risk) => risk.status !== RegisterStatus.CLOSED && riskScore(risk) >= 12);
   const openRegisterCount =
-    (summary?.openConflicts ?? 0) +
-    (summary?.openRisks ?? 0) +
-    (summary?.openComplaints ?? 0) +
-    fundraising.filter((item) => item.status !== RegisterStatus.CLOSED).length;
+    (summaryForSelectedYear?.openConflicts ?? 0) +
+    (summaryForSelectedYear?.openRisks ?? 0) +
+    (summaryForSelectedYear?.openComplaints ?? 0) +
+    fundraisingForSelectedYear.filter((item) => item.status !== RegisterStatus.CLOSED).length;
   const registerSavingLabel = saving
     ? 'Saving register record'
     : closingRecordId
@@ -445,18 +474,18 @@ export default function RegistersPage() {
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[34rem]">
             <SummaryTile label="Open records" value={openRegisterCount} tone={openRegisterCount > 0 ? 'warning' : 'success'} />
             <SummaryTile label="High risks" value={highRisks.length} tone={highRisks.length > 0 ? 'danger' : 'success'} />
-            <SummaryTile label="Annual Report" value={`${summary?.annualReportReadinessPercent ?? 0}%`} tone={(summary?.annualReportReadinessPercent ?? 0) >= 80 ? 'success' : 'warning'} />
-            <SummaryTile label="Financial controls" value={`${summary?.financialControlsPercent ?? 0}%`} tone={(summary?.financialControlsPercent ?? 0) >= 80 ? 'success' : 'warning'} />
+            <SummaryTile label="Annual Report" value={`${summaryForSelectedYear?.annualReportReadinessPercent ?? 0}%`} tone={(summaryForSelectedYear?.annualReportReadinessPercent ?? 0) >= 80 ? 'success' : 'warning'} />
+            <SummaryTile label="Financial controls" value={`${summaryForSelectedYear?.financialControlsPercent ?? 0}%`} tone={(summaryForSelectedYear?.financialControlsPercent ?? 0) >= 80 ? 'success' : 'warning'} />
           </div>
         </div>
       </section>
 
       {loading ? (
         <LoadingState title="Loading governance registers" description="Checking Complete-plan register records for this reporting year." />
-      ) : loadError && !summary ? (
+      ) : loadError || !hasLoadedSelectedYear ? (
         <ErrorState
           title="Governance registers could not be loaded"
-          description={loadError}
+          description={loadError || 'Governance registers are not loaded for this reporting year. Refresh to try again.'}
           action={(
             <Button size="sm" variant="flat" onPress={() => fetchRegisters()}>
               Try again
@@ -465,18 +494,6 @@ export default function RegistersPage() {
         />
       ) : (
         <>
-          {loadError ? (
-            <ErrorState
-              title="Some register data may be out of date"
-              description={loadError}
-              action={(
-                <Button size="sm" variant="flat" onPress={() => fetchRegisters()}>
-                  Refresh
-                </Button>
-              )}
-            />
-          ) : null}
-
           <AppSection
             title="Operational registers"
             description="Use each register for one decision trail: what happened, what was done, where the board minute sits, and what needs review next."
@@ -485,13 +502,13 @@ export default function RegistersPage() {
               <RegisterSection
                 title="Conflicts register"
                 description="Declared interests, meeting handling, decisions, and review dates."
-                count={conflicts.length}
+                count={conflictsForSelectedYear.length}
                 actionLabel="Add conflict"
                 onAdd={() => openModal('conflict')}
                 emptyTitle="No conflicts recorded"
                 emptyDescription="Add declared trustee interests so decisions and minute references stay visible."
               >
-                {conflicts.map((item) => (
+                {conflictsForSelectedYear.map((item) => (
                   <RegisterRow
                     key={item.id}
                     title={item.trusteeName}
@@ -525,13 +542,13 @@ export default function RegistersPage() {
               <RegisterSection
                 title="Risk register"
                 description="Board-level risk, score, mitigation, owner, and review evidence."
-                count={risks.length}
+                count={risksForSelectedYear.length}
                 actionLabel="Add risk"
                 onAdd={() => openModal('risk')}
                 emptyTitle="No risks recorded"
                 emptyDescription="Add key risks so mitigation, owner, and review dates are ready for trustee oversight."
               >
-                {risks.map((item) => (
+                {risksForSelectedYear.map((item) => (
                   <RegisterRow
                     key={item.id}
                     title={item.title}
@@ -564,13 +581,13 @@ export default function RegistersPage() {
               <RegisterSection
                 title="Complaints register"
                 description="Complaints, action taken, outcomes, and board review references."
-                count={complaints.length}
+                count={complaintsForSelectedYear.length}
                 actionLabel="Add complaint"
                 onAdd={() => openModal('complaint')}
                 emptyTitle="No complaints recorded"
                 emptyDescription="Record complaints and board review status so improvement actions do not disappear."
               >
-                {complaints.map((item) => (
+                {complaintsForSelectedYear.map((item) => (
                   <RegisterRow
                     key={item.id}
                     title={item.summary}
@@ -604,13 +621,13 @@ export default function RegistersPage() {
               <RegisterSection
                 title="Fundraising register"
                 description="Public fundraising activities, controls, complaints, and review outcomes."
-                count={fundraising.length}
+                count={fundraisingForSelectedYear.length}
                 actionLabel="Add activity"
                 onAdd={() => openModal('fundraising')}
                 emptyTitle="No fundraising activities recorded"
                 emptyDescription="Add public-facing campaigns, controls, and third-party fundraiser checks where relevant."
               >
-                {fundraising.map((item) => (
+                {fundraisingForSelectedYear.map((item) => (
                   <RegisterRow
                     key={item.id}
                     title={item.name}
@@ -648,8 +665,8 @@ export default function RegistersPage() {
             description="Use these source/review flags as prompts for the board pack. They do not replace trustee judgement or professional review where needed."
           >
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} />
-              <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} />
+              <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} saveDisabled={!canSaveAnnual} />
+              <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} saveDisabled={!canSaveFinancial} />
             </div>
           </AppSection>
         </>
@@ -785,11 +802,13 @@ function AnnualReportCard({
   setAnnual,
   onSave,
   saving,
+  saveDisabled,
 }: {
   annual: AnnualReportReadinessResponse;
   setAnnual: (value: AnnualReportReadinessResponse) => void;
   onSave: () => void;
   saving: boolean;
+  saveDisabled: boolean;
 }) {
   const checks = [
     ['financialStatementsApproved', 'Financial statements/accounts approved'],
@@ -849,7 +868,7 @@ function AnnualReportCard({
             <Input label="Notes" value={annual.notes ?? ''} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
           </div>
         </FieldGroup>
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving}>
+        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
           Save Annual Report readiness
         </Button>
       </div>
@@ -862,11 +881,13 @@ function FinancialControlsCard({
   setFinancial,
   onSave,
   saving,
+  saveDisabled,
 }: {
   financial: FinancialControlReviewResponse;
   setFinancial: (value: FinancialControlReviewResponse) => void;
   onSave: () => void;
   saving: boolean;
+  saveDisabled: boolean;
 }) {
   const checks = [
     ['bankReconciliationsReviewed', 'Bank reconciliations reviewed'],
@@ -914,7 +935,7 @@ function FinancialControlsCard({
             <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
           </div>
         </FieldGroup>
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving}>
+        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
           Save controls review
         </Button>
       </div>

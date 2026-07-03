@@ -304,6 +304,10 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
     'registersRequestSeq',
     'requestedYear',
     'isLatestRegistersRequest',
+    'loadedRegistersYear',
+    'hasLoadedSelectedYear',
+    'canSaveAnnual',
+    'canSaveFinancial',
     'registerSavingLabel',
     'Annual Report source check',
     'Financial controls source check',
@@ -322,10 +326,19 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   assert.match(src, /governance-registers\/financial-controls\?year=\$\{requestedYear\}/);
   assert.match(src, /setAnnual\(annualRes\.data \?\? emptyAnnual\(requestedYear\)\)/);
   assert.match(src, /setFinancial\(financialRes\.data \?\? emptyFinancial\(requestedYear\)\)/);
+  assert.match(src, /const \[loadedRegistersYear, setLoadedRegistersYear\] = useState<number \| null>\(null\)/);
+  assert.match(src, /const hasLoadedSelectedYear = loadedRegistersYear === year && !loadError;/);
+  assert.match(src, /const canSaveAnnual = hasLoadedSelectedYear && annual\.reportingYear === year;/);
+  assert.match(src, /const canSaveFinancial = hasLoadedSelectedYear && financial\.reportingYear === year;/);
+  assert.match(src, /setFinancial\(financialRes\.data \?\? emptyFinancial\(requestedYear\)\);[\r\n\s]*setLoadedRegistersYear\(requestedYear\);/);
   assert.match(src, /\]\);[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setSummary\(summaryRes\.data\)/);
-  assert.match(src, /if \(isPlanFeatureUnavailable\(err\)\) \{[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setPlanUnavailable\(true\)/);
-  assert.match(src, /\}[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*logClientError\('Failed to load governance registers', err\);[\r\n\s]*setLoadError\('Governance registers could not be loaded/);
+  assert.match(src, /if \(isPlanFeatureUnavailable\(err\)\) \{[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setLoadedRegistersYear\(null\);[\r\n\s]*setPlanUnavailable\(true\)/);
+  assert.match(src, /\}[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setLoadedRegistersYear\(null\);[\r\n\s]*setSummary\(null\);[\r\n\s]*setConflicts\(\[\]\);[\r\n\s]*setRisks\(\[\]\);[\r\n\s]*setComplaints\(\[\]\);[\r\n\s]*setFundraising\(\[\]\);[\r\n\s]*setAnnual\(emptyAnnual\(requestedYear\)\);[\r\n\s]*setFinancial\(emptyFinancial\(requestedYear\)\);[\r\n\s]*logClientError\('Failed to load governance registers', err\);[\r\n\s]*setLoadError\('Governance registers could not be loaded/);
   assert.match(src, /finally \{[\r\n\s]*if \(isLatestRegistersRequest\(requestSeq\)\) \{[\r\n\s]*setLoading\(false\);[\r\n\s]*\}[\r\n\s]*\}/);
+  assert.match(src, /loadError \|\| !hasLoadedSelectedYear \? \(/);
+  assert.match(src, /<AnnualReportCard[\s\S]*?saveDisabled=\{!canSaveAnnual\}/);
+  assert.match(src, /<FinancialControlsCard[\s\S]*?saveDisabled=\{!canSaveFinancial\}/);
+  assert.match(src, /isDisabled=\{saving \|\| saveDisabled\}/);
   assert.match(src, /LockedFeatureState/);
 });
 
