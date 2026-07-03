@@ -10,7 +10,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const outputPath = join(repoRoot, 'docs', 'platform-completion-audit.md');
 
-const auditDate = '2026-07-03';
+const auditDate = '2026-07-04';
 
 const routePriorities = new Map([
   ['/', 'P0'],
@@ -70,6 +70,7 @@ const fixedInThisAuditBranch = [
   'The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.',
   'Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.',
   'The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.',
+  'The register Annual Report readiness and financial control review cards are split out of the oversized registers route behind a wiring regression test.',
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
   'The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.',
@@ -81,7 +82,7 @@ const fixedInThisAuditBranch = [
 
 const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish.'],
+  ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, deadlines, compliance detail, board, and organisation; split route-local forms/cards/hooks before broader visual polish.'],
 ];
 
 const officialSources = [

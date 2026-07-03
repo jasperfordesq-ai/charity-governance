@@ -493,7 +493,10 @@ test('deadlines profile-triggered review-date UX is extracted from the oversized
 });
 
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
-  const src = dash('registers/page.tsx');
+  const src = [
+    dash('registers/page.tsx'),
+    optionalDash('registers/register-compliance-cards.tsx'),
+  ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
     ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState']],
@@ -644,6 +647,21 @@ test('registers profile-priority UX is extracted from the oversized route file',
   assert.doesNotMatch(pageSrc, /registerPriorityEvidence/);
   assert.match(panelSrc, /registerPriorityEvidence/);
   assert.match(panelSrc, /Profile-triggered register priorities/);
+});
+
+test('registers annual report and financial control cards are extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const cardsPath = dashPath('registers/register-compliance-cards.tsx');
+  assert.ok(existsSync(cardsPath), 'register compliance cards should be split out of page.tsx');
+  const cardsSrc = readFileSync(cardsPath, 'utf8');
+
+  assert.match(pageSrc, /AnnualReportCard/);
+  assert.match(pageSrc, /FinancialControlsCard/);
+  assert.doesNotMatch(pageSrc, /Annual Report source check/);
+  assert.doesNotMatch(pageSrc, /Financial controls source check/);
+  assert.match(cardsSrc, /Annual Report source check/);
+  assert.match(cardsSrc, /Financial controls source check/);
+  assert.match(cardsSrc, /isDisabled=\{saving \|\| saveDisabled\}/);
 });
 
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
