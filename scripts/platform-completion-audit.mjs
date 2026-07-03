@@ -58,7 +58,7 @@ const fixedInThisAuditBranch = [
   'Optional in-process cron logging now serializes errors through the redacted logger helper.',
   'Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.',
   'API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.',
-  'Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, and exposes a retry action for failed saves.',
+  'Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, confirms in-app navigation while saves are pending, and exposes a retry action for failed saves.',
   'Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.',
   'Production hostname defaults now consistently use app.charitypilot.ie for the web app and api.charitypilot.ie for the API.',
   'The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.',
@@ -68,7 +68,6 @@ const fixedInThisAuditBranch = [
 ];
 
 const independentAuditFindings = [
-  ['P1', 'Frontend workflow', 'Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits.'],
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
   ['P1', 'Product compliance', 'Conditional obligation facts now drive export/readiness prompts; next wire those facts into deadline, register, evidence, and regulator prioritisation.'],
   ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish.'],

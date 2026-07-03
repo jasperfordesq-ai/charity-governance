@@ -4,7 +4,7 @@ Generated: 2026-07-03
 
 Branch: `master`
 
-Working-tree base commit when generated: `23a8278`
+Working-tree base commit when generated: `62d270d`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /organisation (602), /export (576), /deadlines (571). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /organisation (602), /export (576), /compliance/[principleId] (573). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -31,7 +31,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Optional in-process cron logging now serializes errors through the redacted logger helper.
 - Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
 - API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
-- Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, and exposes a retry action for failed saves.
+- Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, confirms in-app navigation while saves are pending, and exposes a retry action for failed saves.
 - Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.
 - Production hostname defaults now consistently use app.charitypilot.ie for the web app and api.charitypilot.ie for the API.
 - The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.
@@ -43,7 +43,6 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Priority | Area | Finding |
 | --- | --- | --- |
-| P1 | Frontend workflow | Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits. |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
 | P1 | Product compliance | Conditional obligation facts now drive export/readiness prompts; next wire those facts into deadline, register, evidence, and regulator prioritisation. |
 | P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
@@ -59,7 +58,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 654 | yes | large route file; refactor soon; 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 528 | yes | large route file; refactor soon; 4 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 573 | yes | large route file; refactor soon; 4 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 550 | yes | large route file; refactor soon; 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 571 | yes | large route file; refactor soon; 2 inline svg icon(s) |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 742 | yes | oversized route file; split first; 2 inline svg icon(s) |

@@ -221,11 +221,49 @@ export default function PrincipleDetailPage() {
     };
   }, [saveStandardNow]);
 
+  const hasPendingComplianceSaves = useCallback(() => {
+    const hasPending = Object.keys(pendingSaveData.current).length > 0;
+    const hasSaving = Object.values(saveState).includes('saving');
+    return hasPending || hasSaving;
+  }, [saveState]);
+
+  const confirmComplianceNavigation = useCallback(() => {
+    if (!hasPendingComplianceSaves()) return true;
+    return window.confirm('CharityPilot is still saving compliance edits. Leave this page only if you are happy to rely on the last saved state.');
+  }, [hasPendingComplianceSaves]);
+
+  useEffect(() => {
+    const handleInAppNavigationClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      const target = event.target;
+      const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+      const anchor = element?.closest('a[href]') as HTMLAnchorElement | null;
+      if (!anchor || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) return;
+
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+
+      const current = new URL(window.location.href);
+      const isSamePageHash =
+        destination.pathname === current.pathname &&
+        destination.search === current.search &&
+        destination.hash.length > 0;
+      if (isSamePageHash || confirmComplianceNavigation()) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    document.addEventListener('click', handleInAppNavigationClick, true);
+    return () => document.removeEventListener('click', handleInAppNavigationClick, true);
+  }, [confirmComplianceNavigation]);
+
   useEffect(() => {
     const warnIfUnsaved = (event: BeforeUnloadEvent) => {
-      const hasPending = Object.keys(pendingSaveData.current).length > 0;
-      const hasSaving = Object.values(saveState).includes('saving');
-      if (!hasPending && !hasSaving) return;
+      if (!hasPendingComplianceSaves()) return;
 
       event.preventDefault();
       event.returnValue = '';
@@ -233,7 +271,14 @@ export default function PrincipleDetailPage() {
 
     window.addEventListener('beforeunload', warnIfUnsaved);
     return () => window.removeEventListener('beforeunload', warnIfUnsaved);
-  }, [saveState]);
+  }, [hasPendingComplianceSaves]);
+
+  const navigateBackToCompliance = useCallback(() => {
+    if (confirmComplianceNavigation()) {
+      router.push('/compliance');
+    }
+  }, [confirmComplianceNavigation, router]);
+
 
   const statusOptions = [
     { key: ComplianceStatus.COMPLIANT, label: 'Compliant' },
@@ -281,7 +326,7 @@ export default function PrincipleDetailPage() {
         <p className="text-gray-500 dark:text-gray-400">Principle not found.</p>
         <Button
           className="mt-4 bg-teal-primary text-white"
-          onPress={() => router.push('/compliance')}
+          onPress={navigateBackToCompliance}
         >
           Back to Compliance
         </Button>
@@ -301,7 +346,7 @@ export default function PrincipleDetailPage() {
       )}
       actions={(
         <button
-          onClick={() => router.push('/compliance')}
+          onClick={navigateBackToCompliance}
           className="text-sm text-teal-primary dark:text-teal-bright hover:underline mb-3 inline-flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

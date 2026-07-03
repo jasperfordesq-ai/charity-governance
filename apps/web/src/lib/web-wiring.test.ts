@@ -162,6 +162,31 @@ test('principle detail refreshes approval-readiness after successful autosave', 
   );
 });
 
+test('principle detail confirms in-app navigation while saves are pending', () => {
+  const src = dash('compliance/[principleId]/page.tsx');
+  for (const term of [
+    'hasPendingComplianceSaves',
+    'confirmComplianceNavigation',
+    'handleInAppNavigationClick',
+    "closest('a[href]')",
+    "window.confirm('CharityPilot is still saving compliance edits. Leave this page only if you are happy to rely on the last saved state.')",
+    "document.addEventListener('click', handleInAppNavigationClick, true)",
+    "document.removeEventListener('click', handleInAppNavigationClick, true)",
+    'event.preventDefault()',
+    'event.stopPropagation()',
+    'navigateBackToCompliance',
+    "router.push('/compliance')",
+  ]) {
+    assert.match(
+      src,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `principle detail must include ${term}`,
+    );
+  }
+  assert.doesNotMatch(src, /onPress=\{\(\) => router\.push\('\/compliance'\)\}/);
+  assert.doesNotMatch(src, /onClick=\{\(\) => router\.push\('\/compliance'\)\}/);
+});
+
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {
   const src = dash('board/page.tsx');
   assert.match(src, /toast\(/);
