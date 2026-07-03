@@ -348,6 +348,21 @@ test('board trustee evidence UX is extracted from the oversized route file', () 
   assert.match(evidenceSrc, /Trustee evidence prompts/);
 });
 
+test('export report preview UI is extracted from the oversized route file', () => {
+  const pageSrc = dash('export/page.tsx');
+  const previewPath = dashPath('export/export-report-preview.tsx');
+  assert.ok(existsSync(previewPath), 'export report preview cards should be split out of page.tsx');
+  const previewSrc = readFileSync(previewPath, 'utf8');
+
+  assert.match(pageSrc, /ExportReportPreview/);
+  assert.doesNotMatch(pageSrc, /scoreColour/);
+  assert.doesNotMatch(pageSrc, /GOVERNANCE_PRINCIPLES\.map/);
+  assert.match(previewSrc, /scoreColour/);
+  assert.match(previewSrc, /GOVERNANCE_PRINCIPLES\.map/);
+  assert.match(previewSrc, /Report Preview/);
+  assert.match(previewSrc, /Board Approval Record/);
+});
+
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {
   const src = [
     dash('documents/page.tsx'),
