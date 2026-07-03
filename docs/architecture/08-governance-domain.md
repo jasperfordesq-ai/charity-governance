@@ -115,7 +115,7 @@ The annual board approval is a single `ComplianceSignoff` per organisation per y
 
 (Source: `apps/api/prisma/schema.prisma:243-264`.)
 
-`getSignoff()` returns a synthetic default object with `status: DRAFT` and null fields when no row exists yet, so the client always has a shape to render (`apps/api/src/services/compliance.service.ts:203-228`). `upsertSignoff()` writes the row and derives `approvedAt`: when `data.status === 'APPROVED'` it stamps `new Date()`, otherwise sets it to `null` (`apps/api/src/services/compliance.service.ts:246-281`). Date fields are serialised to ISO strings in the response (`apps/api/src/services/compliance.service.ts:283-297`).
+`getSignoff()` returns a synthetic default object with `status: DRAFT` and null fields when no row exists yet, so the client always has a shape to render (`apps/api/src/services/compliance.service.ts:235-274`). `getApprovalReadiness()` reports any in-scope `NOT_APPLICABLE` or `EXPLAIN` records whose `explanationIfNA` is blank after trimming (`apps/api/src/services/compliance.service.ts:152-170`). `upsertSignoff()` checks that readiness only when `data.status === 'APPROVED'`: incomplete readiness raises `400 COMPLIANCE_APPROVAL_INCOMPLETE` before writing; otherwise it writes the row and stamps `approvedAt` for `APPROVED`, clearing it for non-approved states (`apps/api/src/services/compliance.service.ts:278-336`).
 
 `ComplianceSignoffStatus` has three states (`apps/api/prisma/schema.prisma:37-41`):
 
@@ -134,7 +134,13 @@ stateDiagram-v2
   end note
 ```
 
-> Note: the transition arrows above reflect the meaning of the three enum states. The service does not enforce a specific transition order — `upsertSignoff()` accepts whatever validated `status` is supplied (`apps/api/src/services/compliance.service.ts:251-281`); the only status-driven behaviour is the `approvedAt` derivation.
+> Note: the transition arrows above reflect the meaning of the three enum states. The service does not enforce a specific transition order. `DRAFT` and `BOARD_REVIEW` remain flexible; `APPROVED` is the only state with the approval-readiness gate and `approvedAt` derivation.
+
+### Approval-readiness enforcement
+
+Approval readiness is a service-level check, not a schema-only validation rule, because it depends on the organisation's records for a reporting year. The HTTP route `GET /approval-readiness?year=` calls `getApprovalReadiness()` and returns `{ ready, missingExplanations }` for authenticated subscribed users (`apps/api/src/routes/compliance/index.ts:109-119`). A missing explanation means an in-scope record is marked `NOT_APPLICABLE` or `EXPLAIN` and has no non-whitespace `explanationIfNA`.
+
+Draft editing remains deliberately flexible: admins can autosave records without explanations and can move the annual signoff to `BOARD_REVIEW`. The hard gate is limited to `APPROVED`, where `upsertSignoff()` raises `COMPLIANCE_APPROVAL_INCOMPLETE` before the database upsert if readiness is incomplete. This makes the product review-ready for the mechanical comply-or-explain completeness check without certifying the legal sufficiency of the explanations or evidence.
 
 ### Linking standards to evidence documents
 
@@ -153,9 +159,10 @@ All compliance routes register `authGuard` then `subscriptionGuard` as `onReques
 | `PUT /records/:standardId` | `upsertRecord` (auto-save) | `requireAdmin` |
 | `GET /summary?year=` | `getSummary` | auth + subscription |
 | `GET /signoff?year=` | `getSignoff` | auth + subscription |
+| `GET /approval-readiness?year=` | `getApprovalReadiness` | auth + subscription |
 | `PUT /signoff` | `upsertSignoff` | `requireAdmin` |
 
-(Source: `apps/api/src/routes/compliance/index.ts:24-133`.)
+(Source: `apps/api/src/routes/compliance/index.ts:24-145`.)
 
 ## Governance registers
 
