@@ -53,23 +53,25 @@ const fixedInThisAuditBranch = [
   'Organisation profile date changes and derived auto-deadline regeneration now run inside one Prisma transaction.',
   'Document storage paths now include a UUID segment to avoid same-millisecond same-filename collisions.',
   'Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.',
+  'Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.',
+  'Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.',
   'Optional in-process cron logging now serializes errors through the redacted logger helper.',
   'Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.',
   'API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.',
   'Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, and exposes a retry action for failed saves.',
+  'Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.',
+  'Production hostname defaults now consistently use app.charitypilot.ie for the web app and api.charitypilot.ie for the API.',
+  'The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.',
+  'Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.',
 ];
 
 const independentAuditFindings = [
   ['P1', 'Frontend workflow', 'Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits.'],
   ['P0', 'Compliance export', 'Export posture was less cautious than app UI; branch adds a source/review appendix, but future work should broaden readiness beyond missing explanations.'],
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Operations', 'Deploy script defaults to compose.production.yml while TLS runbook uses compose.production-tls.yml; align deployment paths and evidence commands.'],
-  ['P1', 'Operations', 'Canonical hostnames drift between charitypilot.ie and app.charitypilot.ie; pick one production web origin and align env, Caddy, release, smoke, and evidence validators.'],
-  ['P1', 'Compliance model', 'The model supports not_commenced but currently has no explicit not_commenced 2024 Act monitoring rows; add future-law monitoring entries after legal review.'],
-  ['P1', 'Product onboarding', 'Conditional obligations need profile facts for staff/workers, public fundraising, child-facing services, personal-data processing, premises/events, public-sector status, and processors.'],
+  ['P1', 'Product compliance', 'Conditional obligation facts are now captured on the organisation profile; next wire those facts into deadline, register, evidence, export, and regulator prompt prioritisation.'],
   ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish.'],
   ['P2', 'Accessibility/navigation', 'Breadcrumb labels and mobile nav/sidebar focus management need another pass, including dynamic principle labels and Escape/focus behavior.'],
-  ['P2', 'Security hardening', 'Identifier-aware auth throttles and Stripe customer reconciliation remain good next hardening tasks.'],
 ];
 
 const officialSources = [
@@ -275,7 +277,7 @@ function render() {
   md += `| Irish compliance model | ${compliance.entries} matrix entries; last checked ${compliance.lastChecked}; statuses ${Object.entries(compliance.statuses).map(([k, v]) => `${k}:${v}`).join(', ')}. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |\n`;
   md += `| Verification surface | ${tests.webTests} web unit test files, ${tests.apiTests} API test files, ${tests.e2eTests} Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |\n\n`;
 
-  md += `## Fixed During This Audit Branch\n\n`;
+  md += `## Fixed During This Audit Pass\n\n`;
   md += `${markdownList(fixedInThisAuditBranch)}\n\n`;
 
   md += `## Independent Audit Findings Still Driving Next Work\n\n`;
@@ -320,7 +322,7 @@ function render() {
   md += `1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.\n`;
   md += `2. Decompose and polish the largest P0 workflows: registers, documents, board, dashboard, export, organisation, deadlines, and compliance detail.\n`;
   md += `3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.\n`;
-  md += `4. Wire compliance source metadata, professional-review flags, and conditional obligations into user-visible review flows without creating legal-certainty claims.\n`;
+  md += `4. Extend compliance source metadata, professional-review flags, and conditional obligation facts into deadline, register, evidence, export, and regulator prioritisation without creating legal-certainty claims.\n`;
   md += `5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.\n`;
 
   return md;

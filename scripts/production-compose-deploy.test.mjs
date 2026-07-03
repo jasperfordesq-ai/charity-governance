@@ -147,18 +147,20 @@ test('production deploy runs preflight before compose up with the selected env f
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(calls.map((call) => call.type), ['preflight', 'command', 'smoke']);
   assert.deepEqual(calls[0].args, ['--production-env-file', envPath]);
-  assert.deepEqual(calls[1].command, [
-    'docker',
-    'compose',
-    '--env-file',
-    envPath,
-    '-f',
-    'compose.production.yml',
-    'up',
-    '--wait',
-    '--wait-timeout',
-    '240',
-    '-d',
+    assert.deepEqual(calls[1].command, [
+      'docker',
+      'compose',
+      '--env-file',
+      envPath,
+      '-f',
+      'compose.production.yml',
+      '-f',
+      'compose.production-tls.yml',
+      'up',
+      '--wait',
+      '--wait-timeout',
+      '240',
+      '-d',
   ]);
   assert.equal(calls[1].env.CHARITYPILOT_PRODUCTION_ENV_FILE, envPath);
   assert.deepEqual(calls[2].args, ['--production-env-file', envPath]);
@@ -216,4 +218,43 @@ test('production deploy rejects invalid wait timeouts before preflight', async (
   assert.equal(result.status, 2);
   assert.equal(preflightCalled, false);
   assert.match(result.stderr, /--wait-timeout must be a positive integer number of seconds/);
+});
+
+test('production deploy can opt out of the TLS overlay when a managed load balancer terminates HTTPS', async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  const envPath = join(tmpdir(), 'charitypilot-managed-lb-production.env');
+  const calls = [];
+
+  const result = runProductionComposeDeployFromArgs(
+    ['--production-env-file', envPath, '--no-tls-proxy'],
+    {
+      processEnv: cleanEnv(),
+      runPreflight: (args, env) => {
+        calls.push({ type: 'preflight', args, env });
+        return { status: 0, stdout: 'preflight ok\n', stderr: '' };
+      },
+      runCommand: (command, env) => {
+        calls.push({ type: 'command', command, env });
+      },
+      runSmoke: (args, env) => {
+        calls.push({ type: 'smoke', args, env });
+        return { status: 0, stdout: 'smoke ok\n', stderr: '' };
+      },
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls[1].command, [
+    'docker',
+    'compose',
+    '--env-file',
+    envPath,
+    '-f',
+    'compose.production.yml',
+    'up',
+    '--wait',
+    '--wait-timeout',
+    '180',
+    '-d',
+  ]);
 });

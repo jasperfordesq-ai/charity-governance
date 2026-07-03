@@ -32,7 +32,7 @@ services:
       - "443:443/udp"
     environment:
       CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:?Set CADDY_ACME_EMAIL for Let's Encrypt certificate registration}
-      CHARITYPILOT_WEB_DOMAIN: ${CHARITYPILOT_WEB_DOMAIN:-charitypilot.ie}
+      CHARITYPILOT_WEB_DOMAIN: ${CHARITYPILOT_WEB_DOMAIN:-app.charitypilot.ie}
       CHARITYPILOT_API_DOMAIN: ${CHARITYPILOT_API_DOMAIN:-api.charitypilot.ie}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

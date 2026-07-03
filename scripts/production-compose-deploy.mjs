@@ -9,7 +9,7 @@ const DEFAULT_WAIT_TIMEOUT_SECONDS = 180;
 
 function usage() {
   return [
-    'Usage: node scripts/production-compose-deploy.mjs --production-env-file <path> [--dry-run] [--wait-timeout <seconds>]',
+    'Usage: node scripts/production-compose-deploy.mjs --production-env-file <path> [--dry-run] [--wait-timeout <seconds>] [--no-tls-proxy]',
     '',
   ].join('\n');
 }
@@ -25,6 +25,7 @@ function parsePositiveInteger(value, flagName) {
 function parseArgs(argv) {
   const options = {
     dryRun: false,
+    tlsProxy: true,
     productionEnvFile: '.env.production',
     waitTimeoutSeconds: DEFAULT_WAIT_TIMEOUT_SECONDS,
   };
@@ -33,6 +34,10 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--dry-run') {
       options.dryRun = true;
+      continue;
+    }
+    if (arg === '--no-tls-proxy') {
+      options.tlsProxy = false;
       continue;
     }
     if (arg === '--production-env-file') {
@@ -103,14 +108,19 @@ function defaultRunSmoke(args, env) {
   };
 }
 
-function composeUpCommand({ productionEnvFile, waitTimeoutSeconds }) {
+function composeUpCommand({ productionEnvFile, tlsProxy, waitTimeoutSeconds }) {
+  const composeFiles = [
+    '-f',
+    'compose.production.yml',
+    ...(tlsProxy ? ['-f', 'compose.production-tls.yml'] : []),
+  ];
+
   return [
     'docker',
     'compose',
     '--env-file',
     productionEnvFile,
-    '-f',
-    'compose.production.yml',
+    ...composeFiles,
     'up',
     '--wait',
     '--wait-timeout',

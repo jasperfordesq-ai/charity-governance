@@ -266,6 +266,26 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     testExpectation: 'Standard 4.2 returns this regulator-area entry and includes solicitor plus conditional specialist flags.',
   },
   {
+    id: 'charities-amendment-2024-commencement-monitoring',
+    sourceRefs: [charitiesAmendmentAct2024Source, charitiesActSource],
+    commencementStatus: 'not_commenced',
+    applicabilityNote:
+      'Monitor the Irish Statute Book commencement table for Charities (Amendment) Act 2024 provisions that are not yet commenced; do not treat those provisions as current live duties until a commencement order brings them into force.',
+    principleNumbers: [4],
+    standardCodes: ['4.1', '4.2'],
+    featureArea: 'regulator',
+    userTask: 'Keep a board-visible watch item for uncommenced 2024 Act provisions and record the date, source and reviewer for each status check.',
+    evidenceRequired: [
+      'Commencement-status review log',
+      'Board note or action item confirming the status check',
+      'Solicitor or governance-review note before changing product wording or user duties',
+    ],
+    boardApproval: 'conditional',
+    professionalReview: ['solicitor', 'governance_expert'],
+    copyTone: 'Use monitoring language only; this is not a current live compliance duty until the relevant provision is commenced.',
+    testExpectation: 'The matrix includes explicit not-yet-commenced 2024 Act monitoring prompts with solicitor review.',
+  },
+  {
     id: 'fundraising-from-the-public',
     sourceRefs: [governanceCodeSource, complianceRecordFormSource, fundraisingSource],
     commencementStatus: 'conditional',
@@ -399,6 +419,26 @@ export const IRISH_COMPLIANCE_MATRIX: IrishComplianceMatrixEntry[] = [
     professionalReview: ['accountant', 'governance_expert'],
     copyTone: 'State filing and publication tasks as compliance workflow prompts, with accounting review where appropriate.',
     testExpectation: 'Annual reporting standard 6.6 is covered with annual-report and Charities Act citations.',
+  },
+  {
+    id: 'charities-amendment-2024-reporting-accounts-monitoring',
+    sourceRefs: [charitiesAmendmentAct2024Source, annualReportingSource, charitiesActSource],
+    commencementStatus: 'not_commenced',
+    applicabilityNote:
+      'Monitor not yet commenced 2024 Act changes that may affect annual reporting, accounts, regulator filing, publication or related statutory wording; keep current annual-report workflows tied to provisions actually in force.',
+    principleNumbers: [6],
+    standardCodes: ['6.6'],
+    featureArea: 'deadlines',
+    userTask: 'Track future reporting/accounting commencement updates separately from the current annual report filing workflow.',
+    evidenceRequired: [
+      'Annual reporting law-change watch note',
+      'Source-cited commencement table extract or link',
+      'Accountant/solicitor review before changing reporting prompts or deadline logic',
+    ],
+    boardApproval: 'conditional',
+    professionalReview: ['solicitor', 'accountant', 'governance_expert'],
+    copyTone: 'Keep this as a future-law monitoring item, not a current reporting duty or live filing deadline.',
+    testExpectation: 'Annual reporting readiness includes an explicit 2024 Act not-yet-commenced monitoring item.',
   },
 ];
 

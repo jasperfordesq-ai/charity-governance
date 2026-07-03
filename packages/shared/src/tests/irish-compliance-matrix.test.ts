@@ -70,6 +70,21 @@ test('conditional professional review flags exist for specialist obligations', (
   assert.ok(flags.has('protected_disclosures'));
 });
 
+test('Irish compliance matrix includes not-yet-commenced 2024 Act monitoring prompts', () => {
+  const monitoringEntries = IRISH_COMPLIANCE_MATRIX.filter((entry) => entry.commencementStatus === 'not_commenced');
+
+  assert.ok(monitoringEntries.length >= 2, 'Expected explicit 2024 Act monitoring entries');
+  for (const entry of monitoringEntries) {
+    assert.ok(
+      entry.sourceRefs.some((sourceRef) => sourceRef.url.includes('irishstatutebook.ie/eli/isbc/2024_21.html')),
+      `${entry.id} must cite the Irish Statute Book commencement table`,
+    );
+    assert.match(entry.applicabilityNote, /not yet commenced|monitor/i);
+    assert.match(entry.copyTone, /not.*current|not.*live|monitor/i);
+    assert.ok(entry.professionalReview.includes('solicitor'), `${entry.id} must require solicitor review`);
+  }
+});
+
 test('Irish compliance matrix entries have unique IDs and non-empty review fields', () => {
   const ids = IRISH_COMPLIANCE_MATRIX.map((entry) => entry.id);
 

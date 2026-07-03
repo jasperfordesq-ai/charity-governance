@@ -124,6 +124,7 @@ model Organisation {
   website           String?
   dateRegistered    DateTime?
   lastAgmDate       DateTime?
+  conditionalObligationProfile Json?
 
   stripeCustomerId String? @unique
 

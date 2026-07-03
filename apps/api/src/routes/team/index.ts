@@ -11,6 +11,7 @@ import {
 } from '@charitypilot/shared';
 import { handleError } from '../../utils/errors.js';
 import { publicUser } from '../../utils/public-dtos.js';
+import { bodyIdentifierRateLimit } from '../../utils/identifier-rate-limit.js';
 
 function formatZodError(error: ZodError) {
   return {
@@ -28,7 +29,7 @@ export async function teamRoutes(app: FastifyInstance) {
 
   app.post(
     '/accept-invite',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: bodyIdentifierRateLimit(['token']) } },
     async (request, reply) => {
       try {
         const body = acceptTeamInviteSchema.parse(request.body);

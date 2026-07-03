@@ -53,3 +53,32 @@ test('shared date schemas accept real ISO dates and datetimes', () => {
     approvedDate: '2026-06-06T12:00:00.000Z',
   }).success, true);
 });
+
+test('updateOrganisationSchema accepts conditional obligation profile facts', () => {
+  const result = updateOrganisationSchema.safeParse({
+    conditionalObligationProfile: {
+      hasPaidStaff: true,
+      hasVolunteers: true,
+      raisesFundsFromPublic: true,
+      worksWithChildrenOrVulnerableAdults: false,
+      processesPersonalData: true,
+      operatesPremisesOrEvents: true,
+      isPublicSectorBody: false,
+      usesDataProcessors: true,
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
+test('updateOrganisationSchema rejects invalid conditional obligation profile facts', () => {
+  const result = updateOrganisationSchema.safeParse({
+    conditionalObligationProfile: {
+      hasPaidStaff: 'yes',
+      raisesFundsFromPublic: true,
+      unknownTrigger: true,
+    },
+  });
+
+  assert.equal(result.success, false);
+});

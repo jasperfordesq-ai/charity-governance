@@ -73,6 +73,22 @@ test('organisation warns before discarding unsaved edits (no silent data loss)',
   assert.match(src, /beforeunload/);
 });
 
+test('organisation captures conditional obligation facts for review-ready workflows', () => {
+  const src = dash('organisation/page.tsx');
+  for (const term of [
+    'conditionalObligationProfile',
+    'Conditional obligation triggers',
+    'hasPaidStaff',
+    'raisesFundsFromPublic',
+    'worksWithChildrenOrVulnerableAdults',
+    'processesPersonalData',
+    'usesDataProcessors',
+    'professional review',
+  ]) {
+    assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `organisation page must include ${term}`);
+  }
+});
+
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,
 // never a blank screen / infinite spinner / unhandled exception).
 test('the global and dashboard error boundaries render a recoverable screen', () => {

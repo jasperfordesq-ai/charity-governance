@@ -151,6 +151,7 @@ export interface OrganisationResponse {
   website: string | null;
   dateRegistered: string | null;
   lastAgmDate: string | null;
+  conditionalObligationProfile: ConditionalObligationProfile | null;
 }
 
 export interface UpdateOrganisationRequest {
@@ -167,6 +168,18 @@ export interface UpdateOrganisationRequest {
   website?: string | null;
   dateRegistered?: string | null;
   lastAgmDate?: string | null;
+  conditionalObligationProfile?: ConditionalObligationProfile | null;
+}
+
+export interface ConditionalObligationProfile {
+  hasPaidStaff: boolean;
+  hasVolunteers: boolean;
+  raisesFundsFromPublic: boolean;
+  worksWithChildrenOrVulnerableAdults: boolean;
+  processesPersonalData: boolean;
+  operatesPremisesOrEvents: boolean;
+  isPublicSectorBody: boolean;
+  usesDataProcessors: boolean;
 }
 
 // ── Governance ──

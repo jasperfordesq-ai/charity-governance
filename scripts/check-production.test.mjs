@@ -1539,6 +1539,16 @@ test('production env template documents the compose runtime web public origins',
   assert.match(template, /Docker Compose/);
 });
 
+test('production TLS defaults use the canonical app and API hostnames', () => {
+  const template = readRepoFile('.env.production.example');
+  const tlsOverlay = readRepoFile('compose.production-tls.yml');
+
+  assert.match(template, /^CHARITYPILOT_WEB_DOMAIN=app\.charitypilot\.ie$/m);
+  assert.match(template, /^CHARITYPILOT_API_DOMAIN=api\.charitypilot\.ie$/m);
+  assert.match(tlsOverlay, /CHARITYPILOT_WEB_DOMAIN: \$\{CHARITYPILOT_WEB_DOMAIN:-app\.charitypilot\.ie\}/);
+  assert.match(tlsOverlay, /CHARITYPILOT_API_DOMAIN: \$\{CHARITYPILOT_API_DOMAIN:-api\.charitypilot\.ie\}/);
+});
+
 test('Docker build context excludes generated caches and build metadata', () => {
   const dockerignore = readRepoFile('.dockerignore');
 
@@ -2072,7 +2082,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(runbook, /node dist\/jobs\/cleanup-document-storage\.js/);
   assert.match(runbook, /failure-alert evidence/);
-  assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml up --wait --wait-timeout 180 -d/);
+  assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml -f compose\.production-tls\.yml up --wait --wait-timeout 180 -d/);
+  assert.match(runbook, /--no-tls-proxy/);
   assert.match(runbook, /post-deploy public HTTPS smoke/);
   assert.match(runbook, /Rollback reuses the production deploy path/);
   assert.match(runbook, /CHARITYPILOT_API_IMAGE=.*@sha256:/);

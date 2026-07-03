@@ -25,7 +25,7 @@ const FIXED_VALUES = { NODE_ENV: 'production' };
 // for the human-facing summary — they are left as placeholders in the file.
 export const OPERATOR_SUPPLIED_KEYS = [
   ['DATABASE_URL', 'Managed production PostgreSQL URL with sslmode=require (Step 3)'],
-  ['FRONTEND_URL', 'Public HTTPS web origin, e.g. https://charitypilot.ie (Step 1/4)'],
+  ['FRONTEND_URL', 'Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)'],
   ['NEXT_PUBLIC_API_URL', 'Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)'],
   ['NEXT_PUBLIC_SUPABASE_URL', 'Supabase project URL, https://<ref>.supabase.co (Step 2)'],
   ['SUPABASE_URL', 'Same Supabase project URL (Step 2)'],

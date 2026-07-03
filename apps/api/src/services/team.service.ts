@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
 import { hashOpaqueToken, issueSessionTokens } from './session-tokens.js';
-import { publicOrganisationSelect, type PublicOrganisation } from '../utils/public-dtos.js';
+import { publicOrganisationSelect, type PublicOrganisationSource } from '../utils/public-dtos.js';
 
 interface InviteTeamMemberData {
   email: string;
@@ -435,7 +435,7 @@ export class TeamService {
       role: UserRole;
       emailVerified: boolean;
       organisationId: string;
-      organisation: PublicOrganisation;
+      organisation: PublicOrganisationSource;
     };
     try {
       user = await client.$transaction(async (tx) => {

@@ -57,6 +57,10 @@ function isStripeSignatureVerificationError(error: unknown): boolean {
     stripeError.name === 'StripeSignatureVerificationError';
 }
 
+function stripeSearchValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function mapStripeSubscriptionStatus(status: string): SubscriptionStatus {
   switch (status) {
     case 'active':
@@ -158,6 +162,19 @@ export class BillingService {
   ): Promise<Stripe.Subscription> {
     const { subscriptionId } = this.getCheckoutSubscriptionContext(session);
     return stripe.subscriptions.retrieve(subscriptionId);
+  }
+
+  private async findStripeCustomerForOrganisation(stripe: Stripe, organisationId: string): Promise<string | null> {
+    if (typeof stripe.customers.search !== 'function') {
+      return null;
+    }
+
+    const result = await stripe.customers.search({
+      query: `metadata['organisationId']:'${stripeSearchValue(organisationId)}'`,
+      limit: 1,
+    });
+
+    return result.data[0]?.id ?? null;
   }
 
   private async hasProcessedWebhookEvent(eventId: string): Promise<boolean> {
@@ -334,15 +351,19 @@ export class BillingService {
     let customerId = org.stripeCustomerId;
 
     if (!customerId) {
-      const customer = await stripe.customers.create(
-        {
-          metadata: { organisationId },
-          name: org.name,
-          email: org.contactEmail ?? undefined,
-        },
-        { idempotencyKey: `charitypilot-customer-${organisationId}` },
-      );
-      customerId = customer.id;
+      customerId = await this.findStripeCustomerForOrganisation(stripe, organisationId);
+
+      if (!customerId) {
+        const customer = await stripe.customers.create(
+          {
+            metadata: { organisationId },
+            name: org.name,
+            email: org.contactEmail ?? undefined,
+          },
+          { idempotencyKey: `charitypilot-customer-${organisationId}` },
+        );
+        customerId = customer.id;
+      }
 
       await this.prisma.organisation.update({
         where: { id: organisationId },

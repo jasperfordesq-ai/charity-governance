@@ -1,4 +1,8 @@
 import type { Organisation, UserRole } from '@prisma/client';
+import {
+  conditionalObligationProfileSchema,
+  type ConditionalObligationProfile,
+} from '@charitypilot/shared';
 
 export type PublicOrganisation = Pick<
   Organisation,
@@ -16,7 +20,13 @@ export type PublicOrganisation = Pick<
   | 'website'
   | 'dateRegistered'
   | 'lastAgmDate'
->;
+> & {
+  conditionalObligationProfile: ConditionalObligationProfile | null;
+};
+
+export type PublicOrganisationSource = Omit<PublicOrganisation, 'conditionalObligationProfile'> & {
+  conditionalObligationProfile: unknown;
+};
 
 export const publicOrganisationSelect = {
   id: true,
@@ -33,7 +43,8 @@ export const publicOrganisationSelect = {
   website: true,
   dateRegistered: true,
   lastAgmDate: true,
-} satisfies Record<keyof PublicOrganisation, true>;
+  conditionalObligationProfile: true,
+} satisfies Record<keyof PublicOrganisationSource, true>;
 
 export type PublicUserSource = {
   id: string;
@@ -42,10 +53,18 @@ export type PublicUserSource = {
   role: UserRole;
   emailVerified: boolean;
   organisationId: string;
-  organisation: PublicOrganisation;
+  organisation: PublicOrganisationSource;
 };
 
-export function publicOrganisation(organisation: PublicOrganisation): PublicOrganisation {
+function publicConditionalObligationProfile(value: unknown): ConditionalObligationProfile | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const result = conditionalObligationProfileSchema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
+export function publicOrganisation(organisation: PublicOrganisationSource): PublicOrganisation {
   return {
     id: organisation.id,
     name: organisation.name,
@@ -61,6 +80,7 @@ export function publicOrganisation(organisation: PublicOrganisation): PublicOrga
     website: organisation.website,
     dateRegistered: organisation.dateRegistered,
     lastAgmDate: organisation.lastAgmDate,
+    conditionalObligationProfile: publicConditionalObligationProfile(organisation.conditionalObligationProfile),
   };
 }
 

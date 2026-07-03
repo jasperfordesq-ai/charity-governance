@@ -102,3 +102,37 @@ for (const routeCase of sensitiveAuthCases) {
     }
   });
 }
+
+test('login throttling is keyed by caller and normalized email identifier', { concurrency: false }, async () => {
+  const app = await buildSensitiveRoutesApp();
+
+  try {
+    const firstEmailPayload = { email: 'Trustee@Example.ORG', password: 'WrongPassword1' };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: firstEmailPayload,
+      });
+      assert.equal(res.statusCode, 401, res.body);
+      assert.equal(res.json().code, 'INVALID_CREDENTIALS');
+    }
+
+    const sameEmailRes = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'trustee@example.org', password: 'WrongPassword1' },
+    });
+    assert.equal(sameEmailRes.statusCode, 429, sameEmailRes.body);
+
+    const otherEmailRes = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'another@example.org', password: 'WrongPassword1' },
+    });
+    assert.equal(otherEmailRes.statusCode, 401, otherEmailRes.body);
+    assert.equal(otherEmailRes.json().code, 'INVALID_CREDENTIALS');
+  } finally {
+    await app.close();
+  }
+});

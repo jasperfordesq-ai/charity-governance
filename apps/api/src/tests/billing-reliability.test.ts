@@ -392,6 +392,57 @@ test('createCheckoutSession uses an organisation-scoped Stripe idempotency key w
   });
 });
 
+test('createCheckoutSession reconciles an existing Stripe customer by organisation metadata before creating one', async () => {
+  const calls: Array<{ name: string; args: unknown[] }> = [];
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org-1',
+        name: 'Acme Charity',
+        contactEmail: 'billing@example.org',
+        stripeCustomerId: null,
+      }),
+      update: async (args: unknown) => {
+        calls.push({ name: 'organisation.update', args: [args] });
+        return {};
+      },
+    },
+  };
+  const service = new BillingService(prisma as never);
+  (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    customers: {
+      search: async (...args: unknown[]) => {
+        calls.push({ name: 'stripe.customers.search', args });
+        return { data: [{ id: 'cus_reconciled' }] };
+      },
+      create: async (...args: unknown[]) => {
+        calls.push({ name: 'stripe.customers.create', args });
+        return { id: 'cus_created' };
+      },
+    },
+    checkout: {
+      sessions: {
+        create: async (...args: unknown[]) => {
+          calls.push({ name: 'stripe.checkout.sessions.create', args });
+          return { url: 'https://checkout.stripe.test/session' };
+        },
+      },
+    },
+  });
+
+  await service.createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
+
+  assert.ok(calls.some((call) => call.name === 'stripe.customers.search'), 'expected Stripe customer search first');
+  assert.equal(calls.some((call) => call.name === 'stripe.customers.create'), false, 'must not create a duplicate customer');
+  const updateCall = calls.find((call) => call.name === 'organisation.update');
+  assert.deepEqual(updateCall?.args[0], {
+    where: { id: 'org-1' },
+    data: { stripeCustomerId: 'cus_reconciled' },
+  });
+  const checkoutCall = calls.find((call) => call.name === 'stripe.checkout.sessions.create');
+  assert.equal((checkoutCall?.args[0] as { customer?: string }).customer, 'cus_reconciled');
+});
+
 // ── billing-graceful-degradation-15 ──
 
 test('billing status reports billingConfigured:false without erroring when Stripe is unconfigured', async () => {

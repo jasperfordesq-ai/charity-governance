@@ -18,9 +18,21 @@ function fullOrgRecord(overrides: Record<string, unknown> = {}) {
     website: null,
     dateRegistered: null,
     lastAgmDate: null,
+    conditionalObligationProfile: null,
     ...overrides,
   };
 }
+
+const conditionalProfile = {
+  hasPaidStaff: true,
+  hasVolunteers: true,
+  raisesFundsFromPublic: true,
+  worksWithChildrenOrVulnerableAdults: false,
+  processesPersonalData: true,
+  operatesPremisesOrEvents: true,
+  isPublicSectorBody: false,
+  usesDataProcessors: true,
+};
 
 test('updateOrganisation regenerates derived deadlines inside the same Prisma transaction', async () => {
   const calls: string[] = [];
@@ -101,4 +113,37 @@ test('updateOrganisation skips deadline regeneration for non-date profile edits'
   await service.updateOrganisation('org-1', { name: 'Renamed Charity' });
 
   assert.deepEqual(calls, ['prisma.$transaction', 'tx.organisation.update']);
+});
+
+test('updateOrganisation persists conditional obligation facts without regenerating deadlines', async () => {
+  const calls: string[] = [];
+  let updateData: unknown;
+  const tx = {
+    organisation: {
+      update: async (args: { data: unknown }) => {
+        calls.push('tx.organisation.update');
+        updateData = args.data;
+        return fullOrgRecord({ conditionalObligationProfile: conditionalProfile });
+      },
+    },
+    deadline: {
+      findFirst: async () => {
+        calls.push('tx.deadline.findFirst');
+        return null;
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => {
+      calls.push('prisma.$transaction');
+      return callback(tx);
+    },
+  };
+  const service = new OrganisationService(prisma as never);
+
+  const result = await service.updateOrganisation('org-1', { conditionalObligationProfile: conditionalProfile });
+
+  assert.deepEqual(calls, ['prisma.$transaction', 'tx.organisation.update']);
+  assert.deepEqual(updateData, { conditionalObligationProfile: conditionalProfile });
+  assert.deepEqual(result.conditionalObligationProfile, conditionalProfile);
 });

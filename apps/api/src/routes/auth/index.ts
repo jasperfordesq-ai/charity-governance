@@ -17,6 +17,7 @@ import {
   setAuthCookies,
 } from '../../utils/auth-cookies.js';
 import { publicUser } from '../../utils/public-dtos.js';
+import { bodyIdentifierRateLimit } from '../../utils/identifier-rate-limit.js';
 
 function formatZodError(error: ZodError) {
   return {
@@ -34,7 +35,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/register',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: bodyIdentifierRateLimit(['email']) } },
     async (request, reply) => {
       try {
         const body = registerSchema.parse(request.body);
@@ -53,7 +54,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/login',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: bodyIdentifierRateLimit(['email']) } },
     async (request, reply) => {
       try {
         const body = loginSchema.parse(request.body);
@@ -134,7 +135,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/forgot-password',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: bodyIdentifierRateLimit(['email']) } },
     async (request, reply) => {
       try {
         const body = forgotPasswordSchema.parse(request.body);
@@ -170,7 +171,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/reset-password',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: bodyIdentifierRateLimit(['token']) } },
     async (request, reply) => {
       try {
         const body = resetPasswordSchema.parse(request.body);
@@ -190,7 +191,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/verify-email',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: bodyIdentifierRateLimit(['token']) } },
     async (request, reply) => {
       try {
         const body = verifyEmailSchema.parse(request.body);

@@ -25,8 +25,7 @@ The **code is finished and hardened**. This is not a half-built project. As of
 | `npm ci` reproducible install | ✅ passes |
 | Full app boots in Docker (db + API + web), migrates, seeds, serves | ✅ passes |
 
-There is **no remaining code work** required to make the platform itself
-production-ready. The security model is already in place: HTTP-only cookie auth,
+The core security model is already in place: HTTP-only cookie auth,
 hashed rotating refresh sessions, role guards, private document storage with
 signed URLs, security headers + CSP, rate limiting, browser-origin protection,
 and strict production environment validation that refuses to start with
@@ -98,7 +97,7 @@ You need four external services. Create the **production/live** versions
   `compose.production.yml`, plus a GitHub Actions workflow that builds signed
   images.
 - **Why:** Somewhere for the API, web app, and the scheduled-jobs service to live.
-- **You need:** A server/host + DNS pointing `charitypilot.ie` (web) and
+- **You need:** A server/host + DNS pointing `app.charitypilot.ie` (web app) and
   `api.charitypilot.ie` (API) at it, with valid TLS certificates.
 - **Effort/cost:** Half a day to a day; ~€10–40/month for a small VPS to start.
 - **This is the step most worth getting a developer/DevOps person to pair on** if
@@ -114,19 +113,19 @@ You need four external services. Create the **production/live** versions
   repo ships an optional reverse proxy (`compose.production-tls.yml` +
   `caddy/Caddyfile`) that obtains and renews HTTPS certificates automatically via
   Let's Encrypt. Once you have a server and DNS:
-  1. Point DNS `A` records for `charitypilot.ie` **and** `api.charitypilot.ie` at
+  1. Point DNS `A` records for `app.charitypilot.ie` **and** `api.charitypilot.ie` at
      your server's public IP; open ports 80 and 443.
   2. In `.env.production`, set `CADDY_ACME_EMAIL` (for Let's Encrypt) and
      `TRUSTED_PROXY_ADDRESSES` (so the API trusts the proxy's forwarded client IPs).
   3. Bring up the stack with the proxy overlay:
      ```bash
-     docker compose --env-file .env.production \
-       -f compose.production.yml -f compose.production-tls.yml up -d
+     npm run deploy:production -- --production-env-file=.env.production
      ```
   Caddy terminates HTTPS for both domains and proxies to the internal containers;
   certificates are issued and renewed with no further action. You still need the
   server and DNS, but the certificate/proxy complexity is handled for you. (If you
-  use a managed load balancer or platform TLS instead, skip this overlay.)
+  use a managed load balancer or platform TLS instead, run the deploy command
+  with `--no-tls-proxy` and keep equivalent TLS evidence in the launch ledger.)
 
 ### Step 5 — Fill in the real secrets
 - **Start with one command** — it creates `.env.production` for you and
@@ -175,7 +174,7 @@ You need four external services. Create the **production/live** versions
 
 ### Step 8 — Browser QA on the live site
 - **What:** Walk through `docs/production-browser-qa.md` against the **deployed**
-  `https://charitypilot.ie` on desktop and mobile: sign up, log in, upload a
+  `https://app.charitypilot.ie` on desktop and mobile: sign up, log in, upload a
   document, download it, log out, trigger an error.
 - **Why:** Proves real DNS/TLS/cookies/CORS/storage work — localhost can't prove this.
 - **Effort:** ~half a day.

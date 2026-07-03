@@ -2,9 +2,9 @@
 
 Generated: 2026-07-03
 
-Branch: `codex/platform-completion-audit`
+Branch: `master`
 
-Working-tree base commit when generated: `dfb2b5d`
+Working-tree base commit when generated: `668c7e0`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,22 +14,28 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /deadlines (571), /dashboard (550), /compliance/[principleId] (528). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /organisation (602), /deadlines (571), /dashboard (550). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
-| Irish compliance model | 10 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
+| Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
 | Verification surface | 16 web unit test files, 44 API test files, 10 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
-## Fixed During This Audit Branch
+## Fixed During This Audit Pass
 
 - Strict shared ISO date validation now rejects impossible calendar dates before they can normalize into filing, board, document, register, or deadline records.
 - Organisation profile date changes and derived auto-deadline regeneration now run inside one Prisma transaction.
 - Document storage paths now include a UUID segment to avoid same-millisecond same-filename collisions.
 - Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.
+- Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.
+- Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.
 - Optional in-process cron logging now serializes errors through the redacted logger helper.
 - Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
 - API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
 - Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, and exposes a retry action for failed saves.
+- Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.
+- Production hostname defaults now consistently use app.charitypilot.ie for the web app and api.charitypilot.ie for the API.
+- The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.
+- Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -38,13 +44,9 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | Frontend workflow | Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits. |
 | P0 | Compliance export | Export posture was less cautious than app UI; branch adds a source/review appendix, but future work should broaden readiness beyond missing explanations. |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Operations | Deploy script defaults to compose.production.yml while TLS runbook uses compose.production-tls.yml; align deployment paths and evidence commands. |
-| P1 | Operations | Canonical hostnames drift between charitypilot.ie and app.charitypilot.ie; pick one production web origin and align env, Caddy, release, smoke, and evidence validators. |
-| P1 | Compliance model | The model supports not_commenced but currently has no explicit not_commenced 2024 Act monitoring rows; add future-law monitoring entries after legal review. |
-| P1 | Product onboarding | Conditional obligations need profile facts for staff/workers, public fundraising, child-facing services, personal-data processing, premises/events, public-sector status, and processors. |
+| P1 | Product compliance | Conditional obligation facts are now captured on the organisation profile; next wire those facts into deadline, register, evidence, export, and regulator prompt prioritisation. |
 | P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
 | P2 | Accessibility/navigation | Breadcrumb labels and mobile nav/sidebar focus management need another pass, including dynamic principle labels and Escape/focus behavior. |
-| P2 | Security hardening | Identifier-aware auth throttles and Stripe customer reconciliation remain good next hardening tasks. |
 
 ## Route Audit
 
@@ -65,7 +67,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 109 | yes | 1 inline svg icon(s) |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | 2 inline svg icon(s) |
-| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 490 | yes | large route file; refactor soon |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 602 | yes | large route file; refactor soon |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 264 | no | 3 inline svg icon(s) |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 272 | yes | 7 inline svg icon(s) |
@@ -80,7 +82,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 210 | public/partial by design | 6 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 211 | public/partial by design | 6 | preserve current guard and tenant boundary |
 | `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 2 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
@@ -91,7 +93,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `team` | `apps/api/src/routes/team/index.ts` | 112 | auth, subscription | 2 | preserve current guard and tenant boundary |
+| `team` | `apps/api/src/routes/team/index.ts` | 113 | auth, subscription | 2 | preserve current guard and tenant boundary |
 
 ## Launch Evidence Blockers
 
@@ -154,5 +156,5 @@ The matrix must stay source-cited and review-ready. The following official sourc
 1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
 2. Decompose and polish the largest P0 workflows: registers, documents, board, dashboard, export, organisation, deadlines, and compliance detail.
 3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
-4. Wire compliance source metadata, professional-review flags, and conditional obligations into user-visible review flows without creating legal-certainty claims.
+4. Extend compliance source metadata, professional-review flags, and conditional obligation facts into deadline, register, evidence, export, and regulator prioritisation without creating legal-certainty claims.
 5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.

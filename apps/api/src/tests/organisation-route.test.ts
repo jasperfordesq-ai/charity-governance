@@ -29,7 +29,19 @@ const PUBLIC_ORG_KEYS = [
   'website',
   'dateRegistered',
   'lastAgmDate',
+  'conditionalObligationProfile',
 ] as const;
+
+const conditionalProfile = {
+  hasPaidStaff: true,
+  hasVolunteers: true,
+  raisesFundsFromPublic: true,
+  worksWithChildrenOrVulnerableAdults: false,
+  processesPersonalData: true,
+  operatesPremisesOrEvents: true,
+  isPublicSectorBody: false,
+  usesDataProcessors: true,
+};
 
 // A full organisation record as returned by prisma — includes a forbidden column
 // (stripeCustomerId) to prove it never leaks through the public DTO.
@@ -49,6 +61,7 @@ function fullOrgRecord() {
     website: null,
     dateRegistered: null,
     lastAgmDate: null,
+    conditionalObligationProfile: null,
     // forbidden / internal columns that must NOT appear in the response:
     stripeCustomerId: 'cus_secret_123',
     createdAt: new Date(0),
@@ -165,6 +178,35 @@ test('an ADMIN may PATCH the organisation', async () => {
   }
 });
 
+test('PATCH / accepts and returns conditional obligation profile facts', async () => {
+  let updateData: unknown;
+  const app = await buildApp(
+    {
+      organisation: {
+        findUnique: async () => fullOrgRecord(),
+        update: async (args: { data: unknown }) => {
+          updateData = args.data;
+          return { ...fullOrgRecord(), conditionalObligationProfile: conditionalProfile };
+        },
+      },
+    },
+    'ADMIN',
+  );
+  try {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/',
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { conditionalObligationProfile: conditionalProfile },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(updateData, { conditionalObligationProfile: conditionalProfile });
+    assert.deepEqual(res.json().data.conditionalObligationProfile, conditionalProfile);
+  } finally {
+    await app.close();
+  }
+});
+
 test('a MEMBER can read the organisation', async () => {
   const app = await buildApp(
     { organisation: { findUnique: async () => fullOrgRecord() } },
@@ -225,7 +267,11 @@ test('organisation routes reject an expired trial', async () => {
 // ── input validation ──
 
 test('PATCH / rejects malformed bodies with VALIDATION_ERROR and skips the write', async () => {
-  for (const payload of [{ contactEmail: 'not-an-email' }, { financialYearEnd: '31-12-2026' }]) {
+  for (const payload of [
+    { contactEmail: 'not-an-email' },
+    { financialYearEnd: '31-12-2026' },
+    { conditionalObligationProfile: { hasPaidStaff: 'yes', unknownTrigger: true } },
+  ]) {
     let updateCalled = false;
     const app = await buildApp(
       {
