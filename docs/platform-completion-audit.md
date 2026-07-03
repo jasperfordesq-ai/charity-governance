@@ -4,7 +4,7 @@ Generated: 2026-07-03
 
 Branch: `master`
 
-Working-tree base commit when generated: `2ce82b2`
+Working-tree base commit when generated: `8fdc285`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -40,13 +40,14 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Dashboard navigation now gives the mobile sidebar explicit ARIA controls, Escape-to-close focus recovery, non-tabbable closed mobile links, and source-backed principle breadcrumb labels.
 - Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.
 - Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.
+- The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.
 
 ## Independent Audit Findings Still Driving Next Work
 
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Product compliance | Conditional obligation facts now drive export/readiness, document-evidence, and deadline-review prompts; next wire those facts into register and regulator prioritisation. |
+| P1 | Product compliance | Conditional obligation facts now drive export/readiness, document-evidence, deadline-review, and regulator-priority prompts; next wire those facts into register prioritisation. |
 | P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
 
 ## Route Audit
@@ -73,7 +74,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 272 | yes | 7 inline svg icon(s) |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 1063 | yes | oversized route file; split first |
-| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 256 | yes | decorative or pill-heavy styling needs visual QA; client flow has weak visible error-state signal |
+| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 392 | yes | decorative or pill-heavy styling needs visual QA |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 198 | yes | 4 inline svg icon(s) |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 401 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |

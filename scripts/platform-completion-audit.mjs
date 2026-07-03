@@ -67,11 +67,12 @@ const fixedInThisAuditBranch = [
   'Dashboard navigation now gives the mobile sidebar explicit ARIA controls, Escape-to-close focus recovery, non-tabbable closed mobile links, and source-backed principle breadcrumb labels.',
   'Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.',
   'Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.',
+  'The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.',
 ];
 
 const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Product compliance', 'Conditional obligation facts now drive export/readiness, document-evidence, and deadline-review prompts; next wire those facts into register and regulator prioritisation.'],
+  ['P1', 'Product compliance', 'Conditional obligation facts now drive export/readiness, document-evidence, deadline-review, and regulator-priority prompts; next wire those facts into register prioritisation.'],
   ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish.'],
 ];
 

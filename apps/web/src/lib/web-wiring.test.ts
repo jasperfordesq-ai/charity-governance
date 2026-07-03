@@ -467,6 +467,29 @@ test('phase 6C regulator page presents source-cited readiness without legal cert
   }
 });
 
+test('regulator guide prioritises profile-triggered obligations without legal certainty claims', () => {
+  const src = dash('regulator/page.tsx');
+  for (const term of [
+    'OrganisationResponse',
+    'CONDITIONAL_OBLIGATION_REVIEW_RULES',
+    'api.get(\'/organisations\')',
+    'profileTriggeredRegulatorPriorities',
+    'organisation?.conditionalObligationProfile',
+    'profile?.[rule.profileKey]',
+    'Profile-triggered regulator priorities',
+    'conditional obligation profile',
+    'not legal advice',
+    'professional review',
+    'sourceRefs',
+  ]) {
+    assert.match(
+      src,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+      `regulator page must include ${term}`,
+    );
+  }
+});
+
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
   const src = dash('team/page.tsx');
   const imports: Array<[string, string[]]> = [

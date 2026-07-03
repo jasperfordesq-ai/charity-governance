@@ -1,10 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@heroui/react';
+import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
+import { logClientError } from '@/lib/client-logger';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataListItems } from '@/components/ui/data-list';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import {
   evidencePackItems,
@@ -13,9 +18,11 @@ import {
   regulatorOperatingModel,
 } from '@/lib/regulator-guidance';
 import {
+  CONDITIONAL_OBLIGATION_REVIEW_RULES,
   IRISH_COMPLIANCE_MATRIX,
   IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
   type CommencementStatus,
+  type OrganisationResponse,
   type ProfessionalReviewFlag,
 } from '@charitypilot/shared';
 
@@ -40,6 +47,24 @@ const reviewFlagLabels: Record<ProfessionalReviewFlag, string> = {
 
 export default function RegulatorGuidePage() {
   useDocumentTitle('Regulator Guide');
+  const [organisation, setOrganisation] = useState<OrganisationResponse | null>(null);
+  const [organisationProfileError, setOrganisationProfileError] = useState('');
+
+  const fetchOrganisationProfile = useCallback(async () => {
+    setOrganisationProfileError('');
+    try {
+      const res = await api.get('/organisations');
+      setOrganisation(res.data?.data ?? res.data ?? null);
+    } catch (err) {
+      const message = apiErrorMessage(err, 'Organisation profile could not be loaded for regulator priorities.');
+      logClientError('Failed to load organisation profile for regulator priorities', err);
+      setOrganisationProfileError(message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOrganisationProfile();
+  }, [fetchOrganisationProfile]);
 
   const currentGuidanceCount = IRISH_COMPLIANCE_MATRIX.filter((item) =>
     item.commencementStatus === 'guidance' || item.commencementStatus === 'in_force'
@@ -50,6 +75,36 @@ export default function RegulatorGuidePage() {
   const regulatorMatrixEntries = IRISH_COMPLIANCE_MATRIX.filter((item) =>
     ['regulator', 'registers', 'deadlines', 'documents', 'compliance'].includes(item.featureArea)
   );
+  const conditionalProfile = organisation?.conditionalObligationProfile ?? null;
+  const profileTriggeredRegulatorPriorities = useMemo(() => {
+    const profile = organisation?.conditionalObligationProfile;
+    if (!profile) return [];
+
+    return CONDITIONAL_OBLIGATION_REVIEW_RULES
+      .filter((rule) => profile?.[rule.profileKey])
+      .map((rule) => {
+        const matrixEntries = IRISH_COMPLIANCE_MATRIX.filter((entry) =>
+          entry.standardCodes.some((code) => rule.standardCodes.includes(code)),
+        );
+        const sourceRefs = Array.from(
+          new Map(
+            matrixEntries
+              .flatMap((entry) => entry.sourceRefs)
+              .map((source) => [source.url, source]),
+          ).values(),
+        );
+        const professionalReview = Array.from(
+          new Set(matrixEntries.flatMap((entry) => entry.professionalReview)),
+        );
+
+        return {
+          ...rule,
+          sourceRefs,
+          professionalReview,
+          featureAreas: [...new Set(matrixEntries.map((entry) => entry.featureArea))],
+        };
+      });
+  }, [organisation?.conditionalObligationProfile]);
 
   return (
     <AppPage
@@ -104,6 +159,87 @@ export default function RegulatorGuidePage() {
             </article>
           ))}
         </div>
+      </AppSection>
+
+      <AppSection
+        title="Profile-triggered regulator priorities"
+        description="These items are prioritised from the conditional obligation profile. They are review prompts for trustees and advisers, not legal advice or a legal-compliance certificate."
+        actions={(
+          <StatusChip tone={!conditionalProfile ? 'warning' : profileTriggeredRegulatorPriorities.length > 0 ? 'warning' : 'success'}>
+            {!conditionalProfile
+              ? 'Profile needed'
+              : profileTriggeredRegulatorPriorities.length > 0
+                ? `${profileTriggeredRegulatorPriorities.length} triggered`
+                : 'No triggers selected'}
+          </StatusChip>
+        )}
+      >
+        {organisationProfileError ? (
+          <ErrorState
+            title="Regulator priorities could not be loaded"
+            description={organisationProfileError}
+            action={(
+              <Button size="sm" variant="flat" onPress={fetchOrganisationProfile}>
+                Try again
+              </Button>
+            )}
+          />
+        ) : !conditionalProfile ? (
+          <EmptyState
+            title="Complete the conditional obligation profile"
+            description="Answer the organisation profile questions before relying on profile-triggered obligations in regulator readiness work."
+          />
+        ) : profileTriggeredRegulatorPriorities.length === 0 ? (
+          <EmptyState
+            title="No profile-triggered priorities selected"
+            description="The current profile has no staff, volunteer, fundraising, safeguarding, data, premises, public-sector, or processor triggers selected."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {profileTriggeredRegulatorPriorities.map((item) => (
+              <article key={item.profileKey} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusChip tone="warning">Profile-triggered</StatusChip>
+                  <StatusChip tone="neutral">Standards {item.standardCodes.join(', ')}</StatusChip>
+                </div>
+                <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.label}</h3>
+                <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.recommendedAction}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.professionalReview.length ? (
+                    item.professionalReview.map((flag) => (
+                      <ReviewFlag key={flag} tone="needs-review">
+                        Professional review: {reviewFlagLabels[flag]}
+                      </ReviewFlag>
+                    ))
+                  ) : (
+                    <ReviewFlag tone="draft">Professional review: Board judgement</ReviewFlag>
+                  )}
+                  {item.featureAreas.map((area) => (
+                    <ReviewFlag key={area} tone="draft">
+                      Workflow: {area}
+                    </ReviewFlag>
+                  ))}
+                </div>
+                <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-800">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Source references</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.sourceRefs.slice(0, 3).map((source) => (
+                      <a
+                        key={`${item.profileKey}-${source.url}`}
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
+                      >
+                        {source.name}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </AppSection>
 
       <AppSection
