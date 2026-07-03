@@ -22,11 +22,12 @@ import {
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
-import { AppPage, AppSection } from '@/components/ui/app-page';
+import { AppPage } from '@/components/ui/app-page';
 import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
-import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { BoardEvidenceChips, TrusteeEvidencePromptCards, getTrusteeEvidence } from './board-evidence';
 import type {
   BoardMemberResponse,
   CreateBoardMemberRequest,
@@ -41,27 +42,6 @@ const formatDate = (value: string | null | undefined) => {
     year: 'numeric',
   });
 };
-
-const yearsServed = (appointedDate: string) => {
-  const appointed = new Date(appointedDate);
-  const now = new Date();
-  return (now.getTime() - appointed.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-};
-
-const trusteeEvidencePrompts = [
-  {
-    title: 'Code of conduct',
-    detail: 'Signed conduct records support standards 2.3 and 5.7.',
-  },
-  {
-    title: 'Induction',
-    detail: 'Induction dates support standards 5.6, 5.7, and succession evidence.',
-  },
-  {
-    title: 'Term review',
-    detail: 'Appointment and term dates help trustees review the suggested nine-year limit.',
-  },
-];
 
 export default function BoardPage() {
   useDocumentTitle('Board Members');
@@ -119,7 +99,7 @@ export default function BoardPage() {
         else acc.inactive += 1;
         if (member.isActive && !member.conductSigned) acc.conductMissing += 1;
         if (member.isActive && !member.inductionCompleted) acc.inductionMissing += 1;
-        if (member.isActive && yearsServed(member.appointedDate) >= 8) acc.termReview += 1;
+        if (member.isActive && getTrusteeEvidence(member).nearNineYears) acc.termReview += 1;
         return acc;
       },
       { active: 0, inactive: 0, conductMissing: 0, inductionMissing: 0, termReview: 0 },
@@ -235,34 +215,6 @@ export default function BoardPage() {
     }
   };
 
-  const memberEvidence = (member: BoardMemberResponse) => {
-    const years = yearsServed(member.appointedDate);
-    return {
-      years,
-      nearNineYears: years >= 8,
-      overNineYears: years >= 9,
-    };
-  };
-
-  const renderEvidenceChips = (member: BoardMemberResponse) => {
-    const evidence = memberEvidence(member);
-    return (
-      <div className="flex flex-wrap gap-2">
-        <EvidenceChip status={member.conductSigned ? 'ready' : 'missing'}>
-          {member.conductSigned ? 'Conduct signed' : 'Conduct missing'}
-        </EvidenceChip>
-        <EvidenceChip status={member.inductionCompleted ? 'ready' : 'missing'}>
-          {member.inductionCompleted ? 'Induction done' : 'Induction pending'}
-        </EvidenceChip>
-        {evidence.nearNineYears ? (
-          <ReviewFlag tone={evidence.overNineYears ? 'blocked' : 'needs-review'}>
-            {Math.floor(evidence.years)}y term review
-          </ReviewFlag>
-        ) : null}
-      </div>
-    );
-  };
-
   return (
     <AppPage
       eyebrow="Trustee register"
@@ -309,19 +261,7 @@ export default function BoardPage() {
         </div>
       </section>
 
-      <AppSection
-        title="Trustee evidence prompts"
-        description="Use these prompts to keep conduct, induction, and trustee term evidence ready for board review."
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {trusteeEvidencePrompts.map((prompt) => (
-            <div key={prompt.title} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-              <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{prompt.title}</h3>
-              <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{prompt.detail}</p>
-            </div>
-          ))}
-        </div>
-      </AppSection>
+      <TrusteeEvidencePromptCards />
 
       <DataList
         title="Trustees"
@@ -416,7 +356,7 @@ export default function BoardPage() {
                             <dd>{formatDate(member.inductionDate)}</dd>
                           </div>
                         </dl>
-                        {renderEvidenceChips(member)}
+                        <BoardEvidenceChips member={member} />
                         <div className="flex flex-wrap gap-2">
                           <Button
                             size="sm"
@@ -476,7 +416,7 @@ export default function BoardPage() {
                         </TableCell>
                         <TableCell>
                           <div className="space-y-2">
-                            {renderEvidenceChips(member)}
+                            <BoardEvidenceChips member={member} />
                             <dl className="grid min-w-48 grid-cols-1 gap-1 text-xs text-gray-600 dark:text-gray-300 xl:grid-cols-2">
                               <div>
                                 <dt className="font-medium text-gray-500 dark:text-gray-400">Conduct date</dt>

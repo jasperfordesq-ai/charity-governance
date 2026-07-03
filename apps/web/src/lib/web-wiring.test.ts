@@ -270,22 +270,23 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     {
       file: 'board/page.tsx',
       imports: [
-        ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+        ['@/components/ui/app-page', ['AppPage']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
         ['@/components/ui/data-list', ['DataListTable', 'DataListItems']],
-        ['@/components/ui/status', ['EvidenceChip', 'ReviewFlag', 'StatusChip']],
+        ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
         ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary']],
       ],
       sourceTerms: [
         'mutatingMemberId',
-        'Trustee evidence prompts',
+        'TrusteeEvidencePromptCards',
+        'BoardEvidenceChips',
         'table and mobile card views',
         'aria-live="polite"',
         'review-ready',
       ],
       patterns: [
         /isDisabled=\{[^}]*mutatingMemberId/,
-        /<TableCell>\s*<div className="space-y-2">[\s\S]*?renderEvidenceChips\(member\)[\s\S]*?conductSignedDate[\s\S]*?inductionDate[\s\S]*?<\/div>\s*<\/TableCell>/,
+        /<TableCell>\s*<div className="space-y-2">[\s\S]*?<BoardEvidenceChips member=\{member\} \/>[\s\S]*?conductSignedDate[\s\S]*?inductionDate[\s\S]*?<\/div>\s*<\/TableCell>/,
         /apiErrorMessage/,
       ],
     },
@@ -328,6 +329,23 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
       assert.match(src, pattern, `${file} must satisfy ${pattern}`);
     }
   }
+});
+
+test('board trustee evidence UX is extracted from the oversized route file', () => {
+  const pageSrc = dash('board/page.tsx');
+  const evidencePath = dashPath('board/board-evidence.tsx');
+  assert.ok(existsSync(evidencePath), 'board trustee evidence helpers should be split out of page.tsx');
+  const evidenceSrc = readFileSync(evidencePath, 'utf8');
+
+  assert.match(pageSrc, /TrusteeEvidencePromptCards/);
+  assert.match(pageSrc, /BoardEvidenceChips/);
+  assert.match(pageSrc, /getTrusteeEvidence/);
+  assert.doesNotMatch(pageSrc, /trusteeEvidencePrompts/);
+  assert.match(evidenceSrc, /AppSection/);
+  assert.match(evidenceSrc, /EvidenceChip/);
+  assert.match(evidenceSrc, /ReviewFlag/);
+  assert.match(evidenceSrc, /trusteeEvidencePrompts/);
+  assert.match(evidenceSrc, /Trustee evidence prompts/);
 });
 
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {

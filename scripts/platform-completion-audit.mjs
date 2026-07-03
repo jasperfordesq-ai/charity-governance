@@ -72,6 +72,7 @@ const fixedInThisAuditBranch = [
   'The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.',
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
+  'The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.',
 ];
 
 const independentAuditFindings = [
