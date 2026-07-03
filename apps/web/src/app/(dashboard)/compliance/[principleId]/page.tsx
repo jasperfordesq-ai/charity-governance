@@ -5,11 +5,14 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Chip, Select, SelectItem, Textarea, Button } from '@heroui/react';
 import { api } from '@/lib/api';
+import { AppPage } from '@/components/ui/app-page';
+import { ReviewWarningState } from '@/components/ui/states';
+import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import type {
   GovernancePrincipleResponse,
   ComplianceRecordResponse,
 } from '@charitypilot/shared';
-import { ComplianceStatus, COMPLIANCE_STATUS_META } from '@charitypilot/shared';
+import { ComplianceStatus, COMPLIANCE_STATUS_META, getMatrixEntriesForStandard } from '@charitypilot/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -27,6 +30,15 @@ interface SaveState {
   [standardId: string]: 'idle' | 'saving' | 'saved' | 'error';
 }
 
+type ApprovalReadiness = {
+  ready: boolean;
+  missingExplanations: Array<{
+    standardId: string;
+    standardCode: string;
+    status: 'NOT_APPLICABLE' | 'EXPLAIN';
+  }>;
+};
+
 /* ------------------------------------------------------------------ */
 /*  Page component                                                    */
 /* ------------------------------------------------------------------ */
@@ -40,6 +52,7 @@ export default function PrincipleDetailPage() {
   const [principle, setPrinciple] = useState<GovernancePrincipleResponse | null>(null);
   const [formState, setFormState] = useState<Record<string, StandardFormState>>({});
   const [saveState, setSaveState] = useState<SaveState>({});
+  const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Debounce timers
@@ -85,6 +98,14 @@ export default function PrincipleDetailPage() {
         }
 
         setFormState(initialForm);
+
+        try {
+          const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
+          setApprovalReadiness(readinessRes.data);
+        } catch (readinessErr) {
+          logClientError('Failed to load approval readiness', readinessErr);
+          setApprovalReadiness(null);
+        }
       } catch (err) {
         logClientError('Failed to load principle data', err);
       } finally {
@@ -160,7 +181,20 @@ export default function PrincipleDetailPage() {
     { key: ComplianceStatus.NOT_STARTED, label: 'Not Yet Started' },
     { key: ComplianceStatus.NOT_APPLICABLE, label: 'Not Applicable' },
     { key: ComplianceStatus.EXPLAIN, label: 'Explain Non-Compliance' },
-  ];
+    ];
+
+  const principleMatrixEntries = principle
+    ? Array.from(
+      new Map(
+        principle.standards
+          .flatMap((standard) => getMatrixEntriesForStandard(standard.code))
+          .map((entry) => [entry.id, entry]),
+      ).values(),
+    )
+    : [];
+  const principleMissingExplanations = (approvalReadiness?.missingExplanations ?? []).filter((item) =>
+    principle?.standards.some((standard) => standard.id === item.standardId || standard.code === item.standardCode),
+  );
 
   if (loading) {
     return (
@@ -196,9 +230,16 @@ export default function PrincipleDetailPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Breadcrumb & header */}
-      <div>
+    <AppPage
+      eyebrow={`Reporting year ${currentYear}`}
+      title={`Principle ${principle.number}: ${principle.title}`}
+      description={(
+        <>
+          {principle.description}{' '}
+          Changes auto-save after 800ms. Evidence prompts are review aids and not legal advice.
+        </>
+      )}
+      actions={(
         <button
           onClick={() => router.push('/compliance')}
           className="text-sm text-teal-primary dark:text-teal-bright hover:underline mb-3 inline-flex items-center gap-1"
@@ -208,14 +249,29 @@ export default function PrincipleDetailPage() {
           </svg>
           Back to Compliance
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          Principle {principle.number}: {principle.title}
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{principle.description}</p>
-        <p className="text-xs text-gray-400 dark:text-gray-400 mt-2">
-          Reporting year: {currentYear} &middot; Changes auto-save after 800ms
-        </p>
-      </div>
+      )}
+    >
+
+      {principleMissingExplanations.length > 0 && (
+        <ReviewWarningState
+          title="This principle has approval blockers"
+          description={`${principleMissingExplanations.length} standard${principleMissingExplanations.length === 1 ? '' : 's'} in this principle need explanations before annual board approval can be saved.`}
+        />
+      )}
+
+      <EvidenceReadiness
+        title="Principle evidence prompts"
+        description="Use these prompts to decide what trustee evidence should be recorded for this principle. Applicability depends on your charity profile and trustee judgement."
+        prompts={principleMatrixEntries.map((entry) => ({
+          label: entry.userTask,
+          status: 'review' as const,
+          note: entry.evidenceRequired.join(', '),
+        }))}
+        flags={[
+          { label: 'Evidence-led review aid', tone: 'needs-review' },
+          { label: 'Not legal advice', tone: 'draft' },
+        ]}
+      />
 
       {/* Standards */}
       <div className="space-y-6">
@@ -391,6 +447,6 @@ export default function PrincipleDetailPage() {
             );
           })}
       </div>
-    </div>
+    </AppPage>
   );
 }

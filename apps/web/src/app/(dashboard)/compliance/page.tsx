@@ -6,10 +6,23 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Progress, Select, SelectItem, Chip, Button } from '@heroui/react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { ReviewWarningState } from '@/components/ui/states';
+import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import type {
   GovernancePrincipleResponse,
   ComplianceSummary,
 } from '@charitypilot/shared';
+import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
+
+type ApprovalReadiness = {
+  ready: boolean;
+  missingExplanations: Array<{
+    standardId: string;
+    standardCode: string;
+    status: 'NOT_APPLICABLE' | 'EXPLAIN';
+  }>;
+};
 
 export default function CompliancePage() {
   useDocumentTitle('Compliance');
@@ -17,6 +30,7 @@ export default function CompliancePage() {
   const [year, setYear] = useState<number>(currentYear);
   const [principles, setPrinciples] = useState<GovernancePrincipleResponse[]>([]);
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
+  const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [showAdditional, setShowAdditional] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -32,6 +46,14 @@ export default function CompliancePage() {
       ]);
       setPrinciples(principlesRes.data?.data ?? principlesRes.data ?? []);
       setSummary(summaryRes.data);
+
+      try {
+        const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
+        setApprovalReadiness(readinessRes.data);
+      } catch (readinessErr) {
+        logClientError('Failed to load approval readiness', readinessErr);
+        setApprovalReadiness(null);
+      }
     } catch (err) {
       logClientError('Failed to load compliance data', err);
     } finally {
@@ -53,17 +75,22 @@ export default function CompliancePage() {
     return 'danger';
   };
 
-  return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Compliance Overview</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Track your progress against the CRA Charities Governance Code.
-          </p>
-        </div>
+  const missingExplanations = approvalReadiness?.missingExplanations ?? [];
+  const evidencePrompts = IRISH_COMPLIANCE_MATRIX
+    .filter((entry) => entry.featureArea === 'compliance' || entry.featureArea === 'export' || entry.featureArea === 'deadlines')
+    .slice(0, 4)
+    .map((entry) => ({
+      label: entry.userTask,
+      status: 'review' as const,
+      note: entry.applicabilityNote,
+    }));
 
+  return (
+    <AppPage
+      eyebrow={`Reporting year ${year}`}
+      title="Compliance Overview"
+      description="Track Governance Code records, explanation gaps, and evidence prompts for a review-ready trustee workspace. This is workflow support, not legal advice."
+      actions={(
         <div className="flex items-center gap-3">
           <Select
             label="Reporting Year"
@@ -80,7 +107,30 @@ export default function CompliancePage() {
             ))}
           </Select>
         </div>
-      </div>
+      )}
+    >
+
+      {missingExplanations.length > 0 && (
+        <ReviewWarningState
+          title="Approval explanations are incomplete"
+          description={`${missingExplanations.length} standard${missingExplanations.length === 1 ? '' : 's'} marked not applicable or explain need an explanation before annual board approval can be saved.`}
+          action={(
+            <Button as={Link} href="/export" size="sm" variant="flat">
+              Review sign-off
+            </Button>
+          )}
+        />
+      )}
+
+      <EvidenceReadiness
+        title="Evidence-led review prompts"
+        description="Use these matrix prompts to decide what evidence trustees should review for this year; applicability still depends on the charity profile and professional judgement where needed."
+        prompts={evidencePrompts}
+        flags={[
+          { label: 'Review-ready, not legal advice', tone: 'needs-review' },
+          { label: `${IRISH_COMPLIANCE_MATRIX.length} Irish governance prompts mapped`, tone: 'draft' },
+        ]}
+      />
 
       {/* Overall summary bar */}
       {summary && (
@@ -145,19 +195,19 @@ export default function CompliancePage() {
         </span>
       </div>
 
-      {/* Principles */}
-      {loading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="p-6 animate-pulse border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-              <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-2/3 mb-3" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full mb-2" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/2" />
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4">
+      <AppSection title="Principles" description="Open a principle to edit standards, evidence, and explanations.">
+        {loading ? (
+          <div className="space-y-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="p-6 animate-pulse border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+                <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-2/3 mb-3" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full mb-2" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/2" />
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
           {principles
             .sort((a, b) => a.sortOrder - b.sortOrder)
             .map((principle) => {
@@ -292,8 +342,9 @@ export default function CompliancePage() {
                 </Card>
               );
             })}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </AppSection>
+    </AppPage>
   );
 }

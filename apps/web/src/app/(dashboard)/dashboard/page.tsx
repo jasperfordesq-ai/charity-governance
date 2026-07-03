@@ -8,6 +8,8 @@ import { Button, Card, Progress, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { ReviewWarningState } from '@/components/ui/states';
 import type {
   ComplianceSummary,
   DeadlineResponse,
@@ -16,6 +18,15 @@ import type {
   GovernanceRegistersSummary,
 } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
+
+type ApprovalReadiness = {
+  ready: boolean;
+  missingExplanations: Array<{
+    standardId: string;
+    standardCode: string;
+    status: 'NOT_APPLICABLE' | 'EXPLAIN';
+  }>;
+};
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton components                                               */
@@ -56,6 +67,7 @@ export default function DashboardPage() {
   const [deadlines, setDeadlines] = useState<DeadlineResponse[] | null>(null);
   const [boardAlerts, setBoardAlerts] = useState<BoardAlert[] | null>(null);
   const [signoff, setSignoff] = useState<ComplianceSignoffResponse | null>(null);
+  const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [registerSummary, setRegisterSummary] = useState<GovernanceRegistersSummary | null>(null);
   const [boardMemberCount, setBoardMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -77,6 +89,14 @@ export default function DashboardPage() {
         setCompliance(summaryRes.data);
         setDeadlines(deadlinesRes.data?.data ?? deadlinesRes.data);
         setSignoff(signoffRes.data);
+
+        try {
+          const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
+          setApprovalReadiness(readinessRes.data);
+        } catch (readinessErr) {
+          logClientError('Failed to load approval readiness', readinessErr);
+          setApprovalReadiness(null);
+        }
 
         // Derive board alerts from board members
         const members = boardRes.data?.data ?? boardRes.data ?? [];
@@ -149,6 +169,7 @@ export default function DashboardPage() {
   };
 
   const signoffStatus = signoff?.status ?? ComplianceSignoffStatus.DRAFT;
+  const missingExplanations = approvalReadiness?.missingExplanations ?? [];
   const signoffMeta = {
     [ComplianceSignoffStatus.APPROVED]: {
       color: 'success' as const,
@@ -170,17 +191,21 @@ export default function DashboardPage() {
   }[signoffStatus];
 
   return (
-    <div className="space-y-8">
-      {/* Page heading */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Here is your governance compliance overview for {currentYear}.
-        </p>
-      </div>
-
+    <AppPage
+      eyebrow={`Compliance year ${currentYear}`}
+      title={<>Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</>}
+      description="Trustee next actions for sign-off, evidence gaps, deadlines, registers, and annual return readiness."
+      actions={(
+        <>
+          <Button as={Link} href="/compliance" size="sm" variant="flat">
+            Compliance workspace
+          </Button>
+          <Button as={Link} href="/export" size="sm" className="bg-teal-primary text-white hover:bg-teal-dark">
+            Export report
+          </Button>
+        </>
+      )}
+    >
       <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -208,6 +233,18 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {!loading && missingExplanations.length > 0 && (
+        <ReviewWarningState
+          title="Annual approval is waiting on explanations"
+          description={`${missingExplanations.length} standard${missingExplanations.length === 1 ? '' : 's'} marked not applicable or explain need trustee-ready explanations before the board sign-off can be approved.`}
+          action={(
+            <Button as={Link} href="/compliance" size="sm" variant="flat">
+              Review explanations
+            </Button>
+          )}
+        />
+      )}
 
       {/* ── Subscription lapsed state ── */}
       {subscriptionLapsed && !loading && (
@@ -340,8 +377,10 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Progress by Principle</h2>
+      <AppSection
+        title="Progress by Principle"
+        description="Open a principle to close evidence gaps and prepare the annual Compliance Record."
+      >
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -396,7 +435,7 @@ export default function DashboardPage() {
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400">No principle data available yet.</p>
         )}
-      </div>
+      </AppSection>
 
       {/* ── Two-column: Deadlines + Board alerts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -505,6 +544,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-    </div>
+    </AppPage>
   );
 }

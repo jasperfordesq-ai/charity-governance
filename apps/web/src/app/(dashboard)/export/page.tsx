@@ -6,6 +6,8 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { ReviewWarningState } from '@/components/ui/states';
 import type { ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus, GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 
@@ -17,6 +19,15 @@ const signoffStatusLabels = {
 
 const toDateInput = (value: string | null | undefined) => value?.slice(0, 10) ?? '';
 
+type ApprovalReadiness = {
+  ready: boolean;
+  missingExplanations: Array<{
+    standardId: string;
+    standardCode: string;
+    status: 'NOT_APPLICABLE' | 'EXPLAIN';
+  }>;
+};
+
 export default function ExportPage() {
   useDocumentTitle('Export Report');
   const { toast } = useToast();
@@ -24,6 +35,7 @@ export default function ExportPage() {
   const [year, setYear] = useState<number>(currentYear);
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
   const [signoff, setSignoff] = useState<ComplianceSignoffResponse | null>(null);
+  const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [signoffForm, setSignoffForm] = useState({
     status: ComplianceSignoffStatus.DRAFT,
     boardMeetingDate: '',
@@ -45,6 +57,13 @@ export default function ExportPage() {
         api.get(`/compliance/summary?year=${year}`),
         api.get(`/compliance/signoff?year=${year}`),
       ]);
+      try {
+        const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
+        setApprovalReadiness(readinessRes.data);
+      } catch (readinessErr) {
+        logClientError('Failed to load approval readiness', readinessErr);
+        setApprovalReadiness(null);
+      }
       const nextSignoff = signoffRes.data as ComplianceSignoffResponse;
       setSummary(summaryRes.data);
       setSignoff(nextSignoff);
@@ -73,12 +92,18 @@ export default function ExportPage() {
 
   const handleSaveSignoff = async () => {
     setSignoffError('');
+    const missingExplanations = approvalReadiness?.missingExplanations ?? [];
 
     if (
       signoffForm.status === ComplianceSignoffStatus.APPROVED &&
       (!signoffForm.boardMeetingDate || !signoffForm.minuteReference.trim() || !signoffForm.approvedByName.trim())
     ) {
       setSignoffError('Board meeting date, minute reference, and approver name are required before marking the record as approved.');
+      return;
+    }
+
+    if (signoffForm.status === ComplianceSignoffStatus.APPROVED && missingExplanations.length > 0) {
+      setSignoffError('Annual approval cannot be saved until every not applicable or explain standard has an explanation.');
       return;
     }
 
@@ -137,16 +162,14 @@ export default function ExportPage() {
       : signoffForm.status === ComplianceSignoffStatus.BOARD_REVIEW
         ? 'warning'
         : 'default';
+  const missingExplanations = approvalReadiness?.missingExplanations ?? [];
 
   return (
-    <div className="space-y-8 max-w-4xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Export Compliance Report</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Generate a printable compliance report for your CRA submission. The report opens in a new tab where you can print to PDF.
-        </p>
-      </div>
+    <AppPage
+      eyebrow={`Reporting year ${year}`}
+      title="Export Compliance Report"
+      description="Generate a review-ready, evidence-led report for trustee review and filing records. CharityPilot supports workflow preparation; it is not legal advice."
+    >
 
       {/* Year selector and export button */}
       <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
@@ -177,7 +200,19 @@ export default function ExportPage() {
             Generate Compliance Report
           </Button>
         </div>
+        {missingExplanations.length > 0 && (
+          <p className="mt-4 text-sm leading-6 text-amber-700 dark:text-amber-300">
+            This export can still be opened for review, but it is not board-approval-ready until explanations are added for {missingExplanations.length} standard{missingExplanations.length === 1 ? '' : 's'}.
+          </p>
+        )}
       </Card>
+
+      {missingExplanations.length > 0 && (
+        <ReviewWarningState
+          title="Missing explanations block board approval"
+          description={`Complete explanations for ${missingExplanations.map((item) => item.standardCode).join(', ')} before saving an approved sign-off. The export remains available as a review-ready working report.`}
+        />
+      )}
 
       <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -267,11 +302,10 @@ export default function ExportPage() {
       </Card>
 
       {/* Preview of what will be included */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Report Preview</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          The exported report will include the following sections:
-        </p>
+      <AppSection
+        title="Report Preview"
+        description="The exported report will include the following sections:"
+      >
 
         {loading ? (
           <div className="space-y-4">
@@ -426,7 +460,7 @@ export default function ExportPage() {
             </Card>
           </div>
         )}
-      </div>
+      </AppSection>
 
       {/* Additional info */}
       <Card className="border border-amber-200 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-500/10 p-5">
@@ -445,6 +479,6 @@ export default function ExportPage() {
           </div>
         </div>
       </Card>
-    </div>
+    </AppPage>
   );
 }

@@ -95,6 +95,31 @@ test('the per-standard compliance editor announces its save state (Saving / Save
   assert.match(src, /Save failed/i);
 });
 
+test('phase 6A workflows surface approval-readiness and evidence-led review guidance', () => {
+  const dashboard = dash('dashboard/page.tsx');
+  assert.match(dashboard, /approval-readiness\?year=\$\{currentYear\}/);
+  assert.match(dashboard, /AppPage/);
+  assert.match(dashboard, /AppSection/);
+  assert.match(dashboard, /missingExplanations/);
+
+  const compliance = dash('compliance/page.tsx');
+  assert.match(compliance, /approval-readiness\?year=\$\{year\}/);
+  assert.match(compliance, /EvidenceReadiness/);
+  assert.match(compliance, /IRISH_COMPLIANCE_MATRIX/);
+  assert.match(compliance, /review-ready/i);
+
+  const principleDetail = dash('compliance/[principleId]/page.tsx');
+  assert.match(principleDetail, /EvidenceReadiness/);
+  assert.match(principleDetail, /getMatrixEntriesForStandard/);
+  assert.match(principleDetail, /legal advice/i);
+
+  const exportPage = dash('export/page.tsx');
+  assert.match(exportPage, /approval-readiness\?year=\$\{year\}/);
+  assert.match(exportPage, /missingExplanations/);
+  assert.match(exportPage, /review-ready/i);
+  assert.match(exportPage, /legal advice/i);
+});
+
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {
   const src = dash('board/page.tsx');
   assert.match(src, /toast\(/);
