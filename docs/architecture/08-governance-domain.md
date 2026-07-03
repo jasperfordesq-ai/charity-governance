@@ -45,6 +45,14 @@ Each standard carries two booleans, `isCore` and `isAdditional` (`apps/api/prism
 
 When a record for a non-core standard is read or written, `ensureStandardIncludedInPlan()` re-checks the scope and raises `403 COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN` if the standard is additional and the organisation is not on the qualifying profile (`apps/api/src/services/compliance.service.ts:48-68`). An unknown standard id raises `404 STANDARD_NOT_FOUND` (`apps/api/src/services/compliance.service.ts:57-59`).
 
+### Irish compliance matrix
+
+`packages/shared/src/constants/irish-compliance-matrix.ts` adds a source-cited Irish compliance matrix over the canonical Governance Code catalogue. The matrix is domain reference data, not runtime UI or API behaviour: each entry links one or more Governance Code standards to a product feature area, user task, expected evidence, board-approval treatment, source references and professional-review flags. The matrix covers all 49 canonical standards from `GOVERNANCE_PRINCIPLES` / `GOVERNANCE_TOTALS` and is exported from `packages/shared/src/constants/index.ts`.
+
+Every source reference stores a source name, owner, HTTPS URL, concise note and `lastChecked` date so the matrix is review-ready and can be audited back to official or specialist guidance. Governance Code entries include the Charities Regulator Code and Compliance Record Form sources; specialist topics also cite relevant Irish sources such as the Charities Act, annual reporting guidance, financial controls, fundraising, data protection, health and safety, safeguarding and protected disclosures.
+
+The professional-review flags are deliberately conservative prompts for human review: `solicitor`, `accountant`, `data_protection`, `employment`, `equality`, `health_and_safety`, `safeguarding`, `protected_disclosures` and `governance_expert`. They do not decide whether an obligation applies to a charity. Conditional entries use `conditional` or `guidance` commencement status where applicability depends on the organisation profile, such as paid staff, public fundraising, child-facing services or employer thresholds. The matrix is not legal advice and must not be presented as a substitute for professional advice.
+
 ## The compliance chain
 
 ```mermaid
