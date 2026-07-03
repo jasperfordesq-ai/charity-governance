@@ -281,6 +281,133 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
   }
 });
 
+test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
+  const src = dash('registers/page.tsx');
+  const imports: Array<[string, string[]]> = [
+    ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+    ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState']],
+    ['@/components/ui/data-list', ['DataList', 'DataListItems']],
+    ['@/components/ui/status', ['EvidenceChip', 'ReviewFlag', 'StatusChip']],
+    ['@/components/ui/forms', ['FieldGroup', 'FormHint', 'ValidationSummary']],
+  ];
+
+  for (const [moduleName, importedNames] of imports) {
+    assert.match(src, new RegExp(`from '${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+    for (const importedName of importedNames) {
+      assert.match(src, new RegExp(`\\b${importedName}\\b`), `registers must use ${importedName}`);
+    }
+  }
+
+  for (const term of [
+    'isPlanFeatureUnavailable',
+    'Complete plan',
+    'registerSavingLabel',
+    'Annual Report source check',
+    'Financial controls source check',
+    'review-ready',
+    'aria-live="polite"',
+    'governance-registers/annual-report',
+    'governance-registers/financial-controls',
+  ]) {
+    assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `registers must include ${term}`);
+  }
+
+  assert.match(src, /isDisabled=\{[^}]*saving/);
+  assert.match(src, /LockedFeatureState/);
+});
+
+test('phase 6C regulator page presents source-cited readiness without legal certainty claims', () => {
+  const src = dash('regulator/page.tsx');
+  const imports: Array<[string, string[]]> = [
+    ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+    ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+  ];
+
+  for (const [moduleName, importedNames] of imports) {
+    assert.match(src, new RegExp(`from '${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+    for (const importedName of importedNames) {
+      assert.match(src, new RegExp(`\\b${importedName}\\b`), `regulator must use ${importedName}`);
+    }
+  }
+
+  for (const term of [
+    'IRISH_COMPLIANCE_MATRIX',
+    'current guidance',
+    'not-yet-commenced',
+    'professional review',
+    'official source',
+    'review-ready',
+    'not legal advice',
+    'rel="noreferrer"',
+  ]) {
+    assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `regulator must include ${term}`);
+  }
+});
+
+test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
+  const src = dash('team/page.tsx');
+  const imports: Array<[string, string[]]> = [
+    ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+    ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
+    ['@/components/ui/data-list', ['DataList', 'DataListItems']],
+    ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+    ['@/components/ui/forms', ['FieldGroup', 'FormHint']],
+  ];
+
+  for (const [moduleName, importedNames] of imports) {
+    assert.match(src, new RegExp(`from '${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+    for (const importedName of importedNames) {
+      assert.match(src, new RegExp(`\\b${importedName}\\b`), `team must use ${importedName}`);
+    }
+  }
+
+  for (const term of [
+    'permissionDisabledReason',
+    'canInviteMembers',
+    'canEditMemberRole',
+    'aria-live="polite"',
+    'Invite sent',
+    'Invite revoked',
+    'role guidance',
+    'isDisabled={!canInvite',
+  ]) {
+    assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `team must include ${term}`);
+  }
+
+  assert.match(src, /isLoading=\{revokeInviteId === invite\.id\}/);
+});
+
+test('phase 6C billing preserves Stripe redirect validation while clarifying plan gates', () => {
+  const src = dash('billing/page.tsx');
+  const imports: Array<[string, string[]]> = [
+    ['@/components/ui/app-page', ['AppPage', 'AppSection']],
+    ['@/components/ui/states', ['LoadingState', 'ErrorState', 'ReviewWarningState']],
+    ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+  ];
+
+  for (const [moduleName, importedNames] of imports) {
+    assert.match(src, new RegExp(`from '${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+    for (const importedName of importedNames) {
+      assert.match(src, new RegExp(`\\b${importedName}\\b`), `billing must use ${importedName}`);
+    }
+  }
+
+  for (const term of [
+    'getTrustedStripeRedirectUrl',
+    'billingConfigured',
+    'provider-degraded',
+    'Complete-only register gates',
+    'Current plan',
+    'isDisabled={isCurrent',
+    'aria-live="polite"',
+  ]) {
+    assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `billing must include ${term}`);
+  }
+
+  assert.match(src, /window\.location\.assign\(redirectUrl\)/);
+  assert.match(src, /Checkout returned an unexpected redirect URL/);
+});
+
 test('theme prepaint and client layout handling support dark mode beyond protected app routes', () => {
   const routeScopedDarkModeTerms = new RegExp(
     ['var app=', 'app&&', 'app routes ' + 'only', 'light' + '-only'].join('|'),

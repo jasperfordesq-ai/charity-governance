@@ -1,122 +1,211 @@
 'use client';
 
 import Link from 'next/link';
-import { Button, Card, Chip } from '@heroui/react';
+import { Button } from '@heroui/react';
 import { useDocumentTitle } from '@/lib/use-title';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { DataListItems } from '@/components/ui/data-list';
+import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import {
   evidencePackItems,
   officialGuidanceLinks,
   productAuditMap,
   regulatorOperatingModel,
 } from '@/lib/regulator-guidance';
+import {
+  IRISH_COMPLIANCE_MATRIX,
+  IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
+  type CommencementStatus,
+  type ProfessionalReviewFlag,
+} from '@charitypilot/shared';
+
+const statusMeta: Record<CommencementStatus, { label: string; tone: 'success' | 'warning' | 'info' | 'neutral' }> = {
+  in_force: { label: 'Current guidance', tone: 'success' },
+  guidance: { label: 'Current guidance', tone: 'info' },
+  conditional: { label: 'Conditional', tone: 'warning' },
+  not_commenced: { label: 'Not-yet-commenced', tone: 'neutral' },
+};
+
+const reviewFlagLabels: Record<ProfessionalReviewFlag, string> = {
+  solicitor: 'Solicitor',
+  accountant: 'Accountant',
+  data_protection: 'Data protection',
+  employment: 'Employment',
+  equality: 'Equality',
+  health_and_safety: 'Health and safety',
+  safeguarding: 'Safeguarding',
+  protected_disclosures: 'Protected disclosures',
+  governance_expert: 'Governance review',
+};
 
 export default function RegulatorGuidePage() {
   useDocumentTitle('Regulator Guide');
 
+  const currentGuidanceCount = IRISH_COMPLIANCE_MATRIX.filter((item) =>
+    item.commencementStatus === 'guidance' || item.commencementStatus === 'in_force'
+  ).length;
+  const conditionalCount = IRISH_COMPLIANCE_MATRIX.filter((item) => item.commencementStatus === 'conditional').length;
+  const notCommencedCount = IRISH_COMPLIANCE_MATRIX.filter((item) => item.commencementStatus === 'not_commenced').length;
+  const professionalReviewAreas = [...new Set(IRISH_COMPLIANCE_MATRIX.flatMap((item) => item.professionalReview))];
+  const regulatorMatrixEntries = IRISH_COMPLIANCE_MATRIX.filter((item) =>
+    ['regulator', 'registers', 'deadlines', 'documents', 'compliance'].includes(item.featureArea)
+  );
+
   return (
-    <div className="space-y-8">
-      <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-6 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright">
-              Irish charities governance
-            </Chip>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Regulator Readiness Map</h1>
-            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
-              A working map of what CharityPilot needs to cover for Irish charity trustees:
-              Governance Code evidence, Annual Report timing, trustee duties, financial controls,
-              fundraising practice, conflicts, risk, and the 2024 Act change watch.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button as={Link} href="/compliance" className="bg-teal-primary text-white hover:bg-teal-dark">
-              Open Compliance
-            </Button>
-            <Button as={Link} href="/documents" variant="flat">
-              Evidence Vault
-            </Button>
-            <Button as={Link} href="/export" variant="flat">
-              Export Pack
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        {regulatorOperatingModel.map((item) => (
-          <Card key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-primary dark:text-teal-bright">{item.cadence}</p>
-            <h2 className="mt-2 text-base font-semibold text-gray-900 dark:text-gray-100">{item.title}</h2>
-            <p className="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">{item.owner}</p>
-            <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.evidence}</p>
-          </Card>
-        ))}
-      </section>
-
-      <section>
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Evidence Pack</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              The practical file set the board should be able to find before signing off the annual compliance position.
-            </p>
-          </div>
-          <Button as={Link} href="/documents" size="sm" variant="flat">
-            Upload evidence
+    <AppPage
+      eyebrow="Irish charities governance"
+      title="Regulator Readiness"
+      description="A source-cited working dashboard for trustee workflows, official guidance, conditional prompts, and professional-review areas. It is not legal advice."
+      actions={(
+        <>
+          <Button as={Link} href="/compliance" className="bg-teal-primary text-white hover:bg-teal-dark">
+            Open Compliance
           </Button>
+          <Button as={Link} href="/documents" variant="flat">
+            Evidence Vault
+          </Button>
+          <Button as={Link} href="/export" variant="flat">
+            Export Pack
+          </Button>
+        </>
+      )}
+    >
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <ReviewFlag tone="draft">Review-ready guidance map</ReviewFlag>
+            <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
+              Separate current guidance from conditional and specialist review prompts.
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              Matrix entries cite official source material checked on {IRISH_COMPLIANCE_MATRIX_LAST_CHECKED}. Conditional, not-yet-commenced, and professional review items are prompts for board follow-up rather than legal certainty claims.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[34rem]">
+            <ReadinessTile label="Current guidance" value={currentGuidanceCount} tone="success" />
+            <ReadinessTile label="Conditional prompts" value={conditionalCount} tone="warning" />
+            <ReadinessTile label="Not-yet-commenced" value={notCommencedCount} tone="neutral" />
+            <ReadinessTile label="Professional review" value={professionalReviewAreas.length} tone="info" />
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {evidencePackItems.map((item) => (
-            <Card key={item.title} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</h3>
-                <Chip size="sm" variant="flat" className="font-mono">
-                  {item.category.replace(/_/g, ' ')}
-                </Chip>
-              </div>
-              <p className="mt-2 text-xs font-medium text-teal-primary dark:text-teal-bright">Standards {item.standards}</p>
-              <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.why}</p>
-            </Card>
+      </section>
+
+      <AppSection
+        title="Readiness operating model"
+        description="The operational cycle trustees should be able to evidence before annual approval and filing."
+      >
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
+          {regulatorOperatingModel.map((item) => (
+            <article key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <StatusChip tone="brand">{item.cadence}</StatusChip>
+              <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
+              <p className="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">{item.owner}</p>
+              <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.evidence}</p>
+            </article>
           ))}
         </div>
-      </section>
+      </AppSection>
 
-      <section>
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Product Audit</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Where the day-one app is already useful, and where the next build should go deeper.
-          </p>
+      <AppSection
+        title="Source-cited readiness matrix"
+        description="Current guidance is shown separately from conditional or professional-review areas. Applicability still depends on the charity profile and trustee judgement."
+      >
+        <DataListItems divided={false}>
+          <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
+            {regulatorMatrixEntries.map((item) => {
+              const meta = statusMeta[item.commencementStatus];
+              return (
+                <article key={item.id} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                        <StatusChip tone="neutral">Standards {item.standardCodes.join(', ')}</StatusChip>
+                        <StatusChip tone="brand">{item.featureArea}</StatusChip>
+                      </div>
+                      <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.userTask}</h3>
+                      <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.applicabilityNote}</p>
+                      <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.copyTone}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {item.professionalReview.length ? (
+                      item.professionalReview.map((flag) => (
+                        <ReviewFlag key={flag} tone="needs-review">
+                          {reviewFlagLabels[flag]}
+                        </ReviewFlag>
+                      ))
+                    ) : (
+                      <ReviewFlag tone="approved">No specialist flag</ReviewFlag>
+                    )}
+                  </div>
+                  <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-800">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Official source</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.sourceRefs.map((source) => (
+                        <a
+                          key={`${item.id}-${source.url}`}
+                          href={source.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
+                        >
+                          {source.name}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </DataListItems>
+      </AppSection>
+
+      <AppSection
+        title="Evidence pack prompts"
+        description="The practical file set trustees should be able to find before signing off the annual governance position."
+      >
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {evidencePackItems.map((item) => (
+            <article key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
+                <StatusChip tone="neutral">{item.category.replace(/_/g, ' ')}</StatusChip>
+              </div>
+              <p className="mt-2 text-xs font-medium text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
+              <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.why}</p>
+            </article>
+          ))}
         </div>
+      </AppSection>
+
+      <AppSection
+        title="Product coverage watch"
+        description="Where the app is already useful and where product work should remain cautious or source-led."
+      >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {productAuditMap.map((item) => (
-            <Card key={item.area} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm">
+            <article key={item.area} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{item.area}</h3>
-                <Chip
-                  size="sm"
-                  variant="flat"
-                  color={item.status === 'Missing' || item.status === 'Thin' ? 'warning' : 'primary'}
-                >
+                <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.area}</h3>
+                <StatusChip tone={item.status === 'Missing' || item.status === 'Thin' ? 'warning' : 'success'}>
                   {item.status}
-                </Chip>
+                </StatusChip>
               </div>
               <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.now}</p>
               <p className="mt-2 text-sm leading-6 text-gray-800 dark:text-gray-200">
                 <span className="font-semibold">Next:</span> {item.next}
               </p>
-            </Card>
+            </article>
           ))}
         </div>
-      </section>
+      </AppSection>
 
-      <section>
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Official Guidance</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Primary sources to keep beside product decisions and board workflows.
-          </p>
-        </div>
+      <AppSection
+        title="Official guidance links"
+        description="Primary source links should open in a new tab and be used beside board workflows, not as a substitute for professional advice."
+      >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {officialGuidanceLinks.map((item) => (
             <a
@@ -124,17 +213,43 @@ export default function RegulatorGuidePage() {
               href={item.href}
               target="_blank"
               rel="noreferrer"
-              className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm transition-colors hover:border-teal-primary/50 dark:hover:border-teal-light/50"
+              className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:border-teal-primary/50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-teal-light/50"
             >
               <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</h3>
-                <span className="text-xs font-semibold text-teal-primary dark:text-teal-bright">Open</span>
+                <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
+                <StatusChip tone="brand">Official source</StatusChip>
               </div>
               <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.note}</p>
             </a>
           ))}
         </div>
-      </section>
+      </AppSection>
+    </AppPage>
+  );
+}
+
+function ReadinessTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  tone: 'success' | 'warning' | 'neutral' | 'info';
+}) {
+  const colour =
+    tone === 'success'
+      ? 'text-emerald-700 dark:text-emerald-300'
+      : tone === 'warning'
+        ? 'text-amber-700 dark:text-amber-300'
+        : tone === 'info'
+          ? 'text-sky-700 dark:text-sky-300'
+          : 'text-gray-950 dark:text-gray-50';
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`mt-1 text-xl font-bold ${colour}`}>{value}</p>
     </div>
   );
 }

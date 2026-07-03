@@ -2,12 +2,10 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Button,
-  Card,
-  Chip,
   Input,
   Modal,
   ModalBody,
@@ -22,6 +20,11 @@ import {
 import { api } from '@/lib/api';
 import { useDocumentTitle } from '@/lib/use-title';
 import { useToast } from '@/components/toast';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { DataList, DataListItems } from '@/components/ui/data-list';
+import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
+import { EmptyState, ErrorState, LoadingState, LockedFeatureState } from '@/components/ui/states';
+import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
 import {
   AnnualReportFilingStatus,
   ConflictStatus,
@@ -37,6 +40,7 @@ import {
 } from '@charitypilot/shared';
 
 type RegisterType = 'conflict' | 'risk' | 'complaint' | 'fundraising';
+type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'info' | 'brand';
 
 const registerStatusLabels = {
   [RegisterStatus.OPEN]: 'Open',
@@ -112,6 +116,9 @@ const dateInput = (value: string | null | undefined) => value?.slice(0, 10) ?? '
 const niceDate = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set';
 
+const compactValue = (value: string | null | undefined, fallback = 'Not recorded') => value?.trim() || fallback;
+const riskScore = (risk: RiskRecordResponse) => risk.likelihood * risk.impact;
+
 export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
   const { toast } = useToast();
@@ -119,6 +126,9 @@ export default function RegistersPage() {
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [closingRecordId, setClosingRecordId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [formError, setFormError] = useState('');
   const [planUnavailable, setPlanUnavailable] = useState(false);
   const [summary, setSummary] = useState<GovernanceRegistersSummary | null>(null);
   const [conflicts, setConflicts] = useState<ConflictRecordResponse[]>([]);
@@ -133,6 +143,7 @@ export default function RegistersPage() {
   const fetchRegisters = useCallback(async () => {
     setLoading(true);
     setPlanUnavailable(false);
+    setLoadError('');
     try {
       const [summaryRes, conflictsRes, risksRes, complaintsRes, fundraisingRes, annualRes, financialRes] = await Promise.all([
         api.get(`/governance-registers/summary?year=${year}`),
@@ -163,6 +174,7 @@ export default function RegistersPage() {
         return;
       }
       logClientError('Failed to load governance registers', err);
+      setLoadError('Governance registers could not be loaded. Please try again.');
       toast('Failed to load governance registers', 'error');
     } finally {
       setLoading(false);
@@ -175,6 +187,7 @@ export default function RegistersPage() {
 
   const openModal = (type: RegisterType) => {
     setModalType(type);
+    setFormError('');
     if (type === 'conflict') {
       setForm({
         trusteeName: '',
@@ -239,11 +252,41 @@ export default function RegistersPage() {
   const closeModal = () => {
     setModalType(null);
     setForm({});
+    setFormError('');
   };
+
+  const formDisabledReason = useMemo(() => {
+    if (!modalType) return '';
+    if (modalType === 'conflict') {
+      if (!String(form.trusteeName ?? '').trim()) return 'Add the trustee or connected person before saving.';
+      if (!String(form.matter ?? '').trim()) return 'Add the matter before saving.';
+      if (!String(form.nature ?? '').trim()) return 'Add the nature of the conflict before saving.';
+      if (!String(form.actionTaken ?? '').trim()) return 'Record the action taken before saving.';
+    }
+    if (modalType === 'risk') {
+      if (!String(form.title ?? '').trim()) return 'Add a risk title before saving.';
+      if (!String(form.description ?? '').trim()) return 'Add a short risk description before saving.';
+      if (!String(form.mitigation ?? '').trim()) return 'Record the mitigation or controls before saving.';
+    }
+    if (modalType === 'complaint' && !String(form.summary ?? '').trim()) {
+      return 'Add a complaint summary before saving.';
+    }
+    if (modalType === 'fundraising') {
+      if (!String(form.name ?? '').trim()) return 'Add the fundraising activity name before saving.';
+      if (!String(form.activityType ?? '').trim()) return 'Add the activity type before saving.';
+    }
+    return '';
+  }, [form, modalType]);
 
   const handleCreate = async () => {
     if (!modalType) return;
+    if (formDisabledReason) {
+      setFormError(formDisabledReason);
+      return;
+    }
+
     setSaving(true);
+    setFormError('');
     try {
       const endpoint = {
         conflict: '/governance-registers/conflicts',
@@ -257,6 +300,7 @@ export default function RegistersPage() {
       toast('Register record added');
     } catch (err) {
       logClientError('Failed to save register record', err);
+      setFormError('Register record could not be saved. Please review the fields and try again.');
       toast('Failed to save register record', 'error');
     } finally {
       setSaving(false);
@@ -271,12 +315,16 @@ export default function RegistersPage() {
       fundraising: `/governance-registers/fundraising/${id}`,
     }[type];
     const status = type === 'conflict' ? ConflictStatus.CLOSED : RegisterStatus.CLOSED;
+    setClosingRecordId(id);
     try {
       await api.patch(endpoint, { status });
       await fetchRegisters();
+      toast('Register record closed');
     } catch (err) {
       logClientError('Failed to close register record', err);
       toast('Failed to close record', 'error');
+    } finally {
+      setClosingRecordId(null);
     }
   };
 
@@ -314,50 +362,45 @@ export default function RegistersPage() {
     }
   };
 
-  const riskScore = (risk: RiskRecordResponse) => risk.likelihood * risk.impact;
   const highRisks = useMemo(() => risks.filter((risk) => risk.status !== RegisterStatus.CLOSED && riskScore(risk) >= 12), [risks]);
+  const openRegisterCount =
+    (summary?.openConflicts ?? 0) +
+    (summary?.openRisks ?? 0) +
+    (summary?.openComplaints ?? 0) +
+    fundraising.filter((item) => item.status !== RegisterStatus.CLOSED).length;
+  const registerSavingLabel = saving
+    ? 'Saving register record'
+    : closingRecordId
+      ? 'Closing register record'
+      : 'Register records ready';
 
   if (!loading && planUnavailable) {
     return (
-      <div className="space-y-8">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Governance Registers</h1>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
-              Structured trustee, risk, finance, fundraising, complaints, and annual reporting records for board review.
-            </p>
-          </div>
-        </div>
-
-        <Card className="border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <Chip size="sm" variant="flat" className="mb-3 bg-teal-primary/10 text-teal-dark border border-teal-primary/20 dark:bg-teal-light/10 dark:text-teal-bright dark:border-teal-light/20">
-                Complete plan
-              </Chip>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Governance registers are available on Complete.</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
-                Upgrade to manage conflict, risk, complaints, fundraising, Annual Report readiness, and financial control registers.
-              </p>
-            </div>
+      <AppPage
+        eyebrow="Complete plan"
+        title="Governance Registers"
+        description="Structured conflicts, risks, complaints, fundraising, Annual Report readiness, and financial controls are available on Complete."
+      >
+        <LockedFeatureState
+          variant="page"
+          title="Governance registers are available on Complete"
+          description="Upgrade when the charity needs dense operational registers, Annual Report readiness, and financial-control review evidence in one place."
+          action={(
             <Button as={Link} href="/billing" color="primary" className="bg-teal-primary text-white">
               View billing
             </Button>
-          </div>
-        </Card>
-      </div>
+          )}
+        />
+      </AppPage>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Governance Registers</h1>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-500 dark:text-gray-400">
-            Structured trustee, risk, finance, fundraising, complaints, and annual reporting records for board review.
-          </p>
-        </div>
+    <AppPage
+      eyebrow="Complete plan governance registers"
+      title="Governance Registers"
+      description="Maintain review-ready operational records for conflicts, risk, complaints, fundraising, Annual Report readiness, and financial controls."
+      actions={(
         <Select
           label="Reporting year"
           className="w-44"
@@ -371,216 +414,359 @@ export default function RegistersPage() {
             <SelectItem key={String(option)}>{String(option)}</SelectItem>
           ))}
         </Select>
+      )}
+    >
+      <div aria-live="polite" className="sr-only">
+        {registerSavingLabel}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="Open conflicts" value={summary?.openConflicts ?? 0} tone={(summary?.openConflicts ?? 0) > 0 ? 'warning' : 'success'} />
-        <MetricCard label="Open risks" value={summary?.openRisks ?? 0} tone={(summary?.openRisks ?? 0) > 0 ? 'warning' : 'success'} />
-        <MetricCard label="High risks" value={highRisks.length} tone={highRisks.length > 0 ? 'danger' : 'success'} />
-        <MetricCard label="Open complaints" value={summary?.openComplaints ?? 0} tone={(summary?.openComplaints ?? 0) > 0 ? 'warning' : 'success'} />
-        <MetricCard label="Annual Report" value={`${summary?.annualReportReadinessPercent ?? 0}%`} tone={(summary?.annualReportReadinessPercent ?? 0) >= 80 ? 'success' : 'warning'} />
-        <MetricCard label="Financial controls" value={`${summary?.financialControlsPercent ?? 0}%`} tone={(summary?.financialControlsPercent ?? 0) >= 80 ? 'success' : 'warning'} />
-      </div>
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <ReviewFlag tone="draft">Review-ready register set</ReviewFlag>
+            <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
+              Scan open governance work before board review.
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              The register set keeps operational records separate from legal conclusions. Use source and review flags to decide what needs trustee or professional follow-up.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[34rem]">
+            <SummaryTile label="Open records" value={openRegisterCount} tone={openRegisterCount > 0 ? 'warning' : 'success'} />
+            <SummaryTile label="High risks" value={highRisks.length} tone={highRisks.length > 0 ? 'danger' : 'success'} />
+            <SummaryTile label="Annual Report" value={`${summary?.annualReportReadinessPercent ?? 0}%`} tone={(summary?.annualReportReadinessPercent ?? 0) >= 80 ? 'success' : 'warning'} />
+            <SummaryTile label="Financial controls" value={`${summary?.financialControlsPercent ?? 0}%`} tone={(summary?.financialControlsPercent ?? 0) >= 80 ? 'success' : 'warning'} />
+          </div>
+        </div>
+      </section>
 
       {loading ? (
-        <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 animate-pulse">
-          <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-800" />
-          <div className="mt-4 h-20 rounded bg-gray-100 dark:bg-gray-800" />
-        </Card>
+        <LoadingState title="Loading governance registers" description="Checking Complete-plan register records for this reporting year." />
+      ) : loadError && !summary ? (
+        <ErrorState
+          title="Governance registers could not be loaded"
+          description={loadError}
+          action={(
+            <Button size="sm" variant="flat" onPress={fetchRegisters}>
+              Try again
+            </Button>
+          )}
+        />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <RegisterSection
-              title="Conflicts register"
-              subtitle="Declared trustee interests, meeting handling, decisions, and review dates."
-              buttonLabel="Add conflict"
-              onAdd={() => openModal('conflict')}
-              empty="No conflicts recorded."
-            >
-              {conflicts.map((item) => (
-                <RowCard key={item.id}>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.trusteeName}</p>
-                      <Chip size="sm" variant="flat" color={item.status === ConflictStatus.CLOSED ? 'success' : 'warning'}>
-                        {conflictStatusLabels[item.status]}
-                      </Chip>
-                    </div>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{item.matter}</p>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">
-                      Declared {niceDate(item.dateDeclared)} · Minute {item.minuteReference || 'not linked'}
-                    </p>
-                  </div>
-                  {item.status !== ConflictStatus.CLOSED && (
-                    <Button size="sm" variant="flat" onPress={() => closeRecord('conflict', item.id)}>
-                      Close
-                    </Button>
-                  )}
-                </RowCard>
-              ))}
-            </RegisterSection>
+          {loadError ? (
+            <ErrorState
+              title="Some register data may be out of date"
+              description={loadError}
+              action={(
+                <Button size="sm" variant="flat" onPress={fetchRegisters}>
+                  Refresh
+                </Button>
+              )}
+            />
+          ) : null}
 
-            <RegisterSection
-              title="Risk register"
-              subtitle="Board-level risk, score, mitigation, owner, and review evidence."
-              buttonLabel="Add risk"
-              onAdd={() => openModal('risk')}
-              empty="No risks recorded."
-            >
-              {risks.map((item) => (
-                <RowCard key={item.id}>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</p>
-                      <Chip size="sm" color={riskScore(item) >= 12 ? 'danger' : 'warning'} variant="flat">
-                        Score {riskScore(item)}
-                      </Chip>
-                      <Chip size="sm" variant="flat">{riskCategoryLabels[item.category]}</Chip>
-                    </div>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{item.mitigation}</p>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">
-                      Owner {item.owner || 'not assigned'} · Review {niceDate(item.reviewDate)}
-                    </p>
-                  </div>
-                  {item.status !== RegisterStatus.CLOSED && (
-                    <Button size="sm" variant="flat" onPress={() => closeRecord('risk', item.id)}>
-                      Close
-                    </Button>
-                  )}
-                </RowCard>
-              ))}
-            </RegisterSection>
+          <AppSection
+            title="Operational registers"
+            description="Use each register for one decision trail: what happened, what was done, where the board minute sits, and what needs review next."
+          >
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <RegisterSection
+                title="Conflicts register"
+                description="Declared interests, meeting handling, decisions, and review dates."
+                count={conflicts.length}
+                actionLabel="Add conflict"
+                onAdd={() => openModal('conflict')}
+                emptyTitle="No conflicts recorded"
+                emptyDescription="Add declared trustee interests so decisions and minute references stay visible."
+              >
+                {conflicts.map((item) => (
+                  <RegisterRow
+                    key={item.id}
+                    title={item.trusteeName}
+                    description={item.matter}
+                    meta={`Declared ${niceDate(item.dateDeclared)} - Minute ${compactValue(item.minuteReference, 'not linked')}`}
+                    chips={(
+                      <>
+                        <StatusChip tone={item.status === ConflictStatus.CLOSED ? 'success' : 'warning'}>
+                          {conflictStatusLabels[item.status]}
+                        </StatusChip>
+                        <EvidenceChip status={item.minuteReference ? 'ready' : 'partial'}>
+                          {item.minuteReference ? 'Minute linked' : 'Minute pending'}
+                        </EvidenceChip>
+                      </>
+                    )}
+                    action={item.status !== ConflictStatus.CLOSED ? (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        onPress={() => closeRecord('conflict', item.id)}
+                        isLoading={closingRecordId === item.id}
+                        isDisabled={Boolean(closingRecordId) || saving}
+                      >
+                        Close
+                      </Button>
+                    ) : null}
+                  />
+                ))}
+              </RegisterSection>
 
-            <RegisterSection
-              title="Complaints register"
-              subtitle="Complaints, action taken, outcomes, and board review references."
-              buttonLabel="Add complaint"
-              onAdd={() => openModal('complaint')}
-              empty="No complaints recorded."
-            >
-              {complaints.map((item) => (
-                <RowCard key={item.id}>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.summary}</p>
-                      <Chip size="sm" color={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'} variant="flat">
-                        {registerStatusLabels[item.status]}
-                      </Chip>
-                    </div>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">
-                      Received {niceDate(item.receivedDate)} · Board review {item.reviewedByBoard ? 'recorded' : 'pending'}
-                    </p>
-                  </div>
-                  {item.status !== RegisterStatus.CLOSED && (
-                    <Button size="sm" variant="flat" onPress={() => closeRecord('complaint', item.id)}>
-                      Close
-                    </Button>
-                  )}
-                </RowCard>
-              ))}
-            </RegisterSection>
+              <RegisterSection
+                title="Risk register"
+                description="Board-level risk, score, mitigation, owner, and review evidence."
+                count={risks.length}
+                actionLabel="Add risk"
+                onAdd={() => openModal('risk')}
+                emptyTitle="No risks recorded"
+                emptyDescription="Add key risks so mitigation, owner, and review dates are ready for trustee oversight."
+              >
+                {risks.map((item) => (
+                  <RegisterRow
+                    key={item.id}
+                    title={item.title}
+                    description={item.mitigation || item.description}
+                    meta={`Owner ${compactValue(item.owner, 'not assigned')} - Review ${niceDate(item.reviewDate)}`}
+                    chips={(
+                      <>
+                        <StatusChip tone={riskScore(item) >= 12 ? 'danger' : 'warning'}>Score {riskScore(item)}</StatusChip>
+                        <StatusChip tone="neutral">{riskCategoryLabels[item.category]}</StatusChip>
+                        <EvidenceChip status={item.boardMinuteReference ? 'ready' : 'review'}>
+                          {item.boardMinuteReference ? 'Board minute' : 'Review flag'}
+                        </EvidenceChip>
+                      </>
+                    )}
+                    action={item.status !== RegisterStatus.CLOSED ? (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        onPress={() => closeRecord('risk', item.id)}
+                        isLoading={closingRecordId === item.id}
+                        isDisabled={Boolean(closingRecordId) || saving}
+                      >
+                        Close
+                      </Button>
+                    ) : null}
+                  />
+                ))}
+              </RegisterSection>
 
-            <RegisterSection
-              title="Fundraising register"
-              subtitle="Public fundraising activities, controls, complaints, and review outcomes."
-              buttonLabel="Add activity"
-              onAdd={() => openModal('fundraising')}
-              empty="No fundraising activities recorded."
-            >
-              {fundraising.map((item) => (
-                <RowCard key={item.id}>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.name}</p>
-                      <Chip size="sm" variant="flat">{item.activityType}</Chip>
-                      {item.thirdPartyFundraiser && <Chip size="sm" color="warning" variant="flat">Third party</Chip>}
-                    </div>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{item.controls || 'Controls not recorded yet.'}</p>
-                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-400">Review outcome: {item.reviewOutcome || 'pending'}</p>
-                  </div>
-                  {item.status !== RegisterStatus.CLOSED && (
-                    <Button size="sm" variant="flat" onPress={() => closeRecord('fundraising', item.id)}>
-                      Close
-                    </Button>
-                  )}
-                </RowCard>
-              ))}
-            </RegisterSection>
-          </div>
+              <RegisterSection
+                title="Complaints register"
+                description="Complaints, action taken, outcomes, and board review references."
+                count={complaints.length}
+                actionLabel="Add complaint"
+                onAdd={() => openModal('complaint')}
+                emptyTitle="No complaints recorded"
+                emptyDescription="Record complaints and board review status so improvement actions do not disappear."
+              >
+                {complaints.map((item) => (
+                  <RegisterRow
+                    key={item.id}
+                    title={item.summary}
+                    description={item.outcome || item.actionTaken || 'Outcome not recorded yet.'}
+                    meta={`Received ${niceDate(item.receivedDate)} - Source ${compactValue(item.source, 'not recorded')}`}
+                    chips={(
+                      <>
+                        <StatusChip tone={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'}>
+                          {registerStatusLabels[item.status]}
+                        </StatusChip>
+                        <EvidenceChip status={item.reviewedByBoard ? 'ready' : 'review'}>
+                          {item.reviewedByBoard ? 'Board reviewed' : 'Board review pending'}
+                        </EvidenceChip>
+                      </>
+                    )}
+                    action={item.status !== RegisterStatus.CLOSED ? (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        onPress={() => closeRecord('complaint', item.id)}
+                        isLoading={closingRecordId === item.id}
+                        isDisabled={Boolean(closingRecordId) || saving}
+                      >
+                        Close
+                      </Button>
+                    ) : null}
+                  />
+                ))}
+              </RegisterSection>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} />
-            <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} />
-          </div>
+              <RegisterSection
+                title="Fundraising register"
+                description="Public fundraising activities, controls, complaints, and review outcomes."
+                count={fundraising.length}
+                actionLabel="Add activity"
+                onAdd={() => openModal('fundraising')}
+                emptyTitle="No fundraising activities recorded"
+                emptyDescription="Add public-facing campaigns, controls, and third-party fundraiser checks where relevant."
+              >
+                {fundraising.map((item) => (
+                  <RegisterRow
+                    key={item.id}
+                    title={item.name}
+                    description={item.controls || 'Controls not recorded yet.'}
+                    meta={`Review outcome: ${compactValue(item.reviewOutcome, 'pending')}`}
+                    chips={(
+                      <>
+                        <StatusChip tone={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'}>
+                          {registerStatusLabels[item.status]}
+                        </StatusChip>
+                        <StatusChip tone="neutral">{item.activityType}</StatusChip>
+                        {item.thirdPartyFundraiser ? <ReviewFlag tone="needs-review">Third party</ReviewFlag> : null}
+                        {item.complaintsReceived ? <ReviewFlag tone="needs-review">Complaint linked</ReviewFlag> : null}
+                      </>
+                    )}
+                    action={item.status !== RegisterStatus.CLOSED ? (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        onPress={() => closeRecord('fundraising', item.id)}
+                        isLoading={closingRecordId === item.id}
+                        isDisabled={Boolean(closingRecordId) || saving}
+                      >
+                        Close
+                      </Button>
+                    ) : null}
+                  />
+                ))}
+              </RegisterSection>
+            </div>
+          </AppSection>
+
+          <AppSection
+            title="Annual readiness and controls"
+            description="Use these source/review flags as prompts for the board pack. They do not replace trustee judgement or professional review where needed."
+          >
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} />
+              <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} />
+            </div>
+          </AppSection>
         </>
       )}
 
-      <Modal isOpen={Boolean(modalType)} onOpenChange={(open) => !open && closeModal()} size="2xl">
+      <Modal isOpen={Boolean(modalType)} onOpenChange={(open) => !open && closeModal()} size="2xl" scrollBehavior="inside">
         <ModalContent>
           <ModalHeader>{modalType ? modalTitle(modalType) : 'Add register record'}</ModalHeader>
-          <ModalBody className="space-y-4">
+          <ModalBody className="gap-5">
+            <ValidationSummary errors={formError ? [formError] : []} />
             {modalType === 'conflict' && <ConflictForm form={form} updateForm={updateForm} />}
             {modalType === 'risk' && <RiskForm form={form} updateForm={updateForm} />}
             {modalType === 'complaint' && <ComplaintForm form={form} updateForm={updateForm} />}
             {modalType === 'fundraising' && <FundraisingForm form={form} updateForm={updateForm} />}
+            <FormHint id="register-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
+              {formDisabledReason || 'Saving updates the register after the API confirms the record.'}
+            </FormHint>
           </ModalBody>
           <ModalFooter>
-            <Button variant="flat" onPress={closeModal}>Cancel</Button>
-            <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={handleCreate} isLoading={saving}>
+            <Button variant="flat" onPress={closeModal} isDisabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-teal-primary text-white hover:bg-teal-dark"
+              onPress={handleCreate}
+              isLoading={saving}
+              isDisabled={Boolean(formDisabledReason) || saving}
+              aria-describedby="register-disabled-hint"
+            >
               Save record
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </div>
+    </AppPage>
   );
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: string | number; tone: 'success' | 'warning' | 'danger' }) {
-  const colour = tone === 'success' ? 'text-green-600 dark:text-green-400' : tone === 'danger' ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400';
+function SummaryTile({ label, value, tone }: { label: string; value: string | number; tone: Tone }) {
+  const colour =
+    tone === 'success'
+      ? 'text-emerald-700 dark:text-emerald-300'
+      : tone === 'danger'
+        ? 'text-rose-700 dark:text-rose-300'
+        : tone === 'warning'
+          ? 'text-amber-700 dark:text-amber-300'
+          : 'text-gray-950 dark:text-gray-50';
   return (
-    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-4 shadow-sm">
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${colour}`}>{value}</p>
-    </Card>
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`mt-1 text-xl font-bold ${colour}`}>{value}</p>
+    </div>
   );
 }
 
 function RegisterSection({
   title,
-  subtitle,
-  buttonLabel,
+  description,
+  actionLabel,
   onAdd,
-  empty,
+  count,
+  emptyTitle,
+  emptyDescription,
   children,
 }: {
   title: string;
-  subtitle: string;
-  buttonLabel: string;
+  description: string;
+  actionLabel: string;
   onAdd: () => void;
-  empty: string;
-  children: React.ReactNode[];
+  count: number;
+  emptyTitle: string;
+  emptyDescription: string;
+  children: ReactNode;
 }) {
   return (
-    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p>
-        </div>
+    <DataList
+      title={(
+        <span className="flex flex-wrap items-center gap-2">
+          {title}
+          <StatusChip tone="neutral">{count}</StatusChip>
+        </span>
+      )}
+      description={description}
+      actions={(
         <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onAdd}>
-          {buttonLabel}
+          {actionLabel}
         </Button>
-      </div>
-      <div className="mt-4 space-y-3">
-        {children.length ? children : <p className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4 text-sm text-gray-400 dark:text-gray-400">{empty}</p>}
-      </div>
-    </Card>
+      )}
+    >
+      {count === 0 ? (
+        <EmptyState title={emptyTitle} description={emptyDescription} />
+      ) : (
+        <DataListItems divided={false}>
+          <div className="space-y-3 p-3">{children}</div>
+        </DataListItems>
+      )}
+    </DataList>
   );
 }
 
-function RowCard({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">{children}</div>;
+function RegisterRow({
+  title,
+  description,
+  meta,
+  chips,
+  action,
+}: {
+  title: ReactNode;
+  description: ReactNode;
+  meta: ReactNode;
+  chips: ReactNode;
+  action: ReactNode;
+}) {
+  return (
+    <article className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{title}</h3>
+            {chips}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{meta}</p>
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+    </article>
+  );
 }
 
 function AnnualReportCard({
@@ -601,51 +787,62 @@ function AnnualReportCard({
     ['fundraisingReviewed', 'Fundraising activity reviewed'],
     ['complaintsReviewed', 'Complaints reviewed by board'],
   ] as const;
-  const percent = Math.round(
-    ([
-      Boolean(annual.activitiesNarrative),
-      Boolean(annual.publicBenefitStatement),
-      Boolean(annual.beneficiariesSummary),
-      ...checks.map(([key]) => annual[key]),
-      Boolean(annual.boardApprovalDate),
-      annual.filingStatus === AnnualReportFilingStatus.FILED,
-    ].filter(Boolean).length /
-      10) *
-      100,
-  );
+  const completed = [
+    Boolean(annual.activitiesNarrative),
+    Boolean(annual.publicBenefitStatement),
+    Boolean(annual.beneficiariesSummary),
+    ...checks.map(([key]) => annual[key]),
+    Boolean(annual.boardApprovalDate),
+    annual.filingStatus === AnnualReportFilingStatus.FILED,
+  ].filter(Boolean).length;
+  const percent = Math.round((completed / 10) * 100);
   return (
-    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Annual Report readiness</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Activities, public benefit, finance, trustee details, and filing status for the annual return.</p>
+          <div className="flex flex-wrap gap-2">
+            <ReviewFlag tone="draft">Annual Report source check</ReviewFlag>
+            <EvidenceChip status={percent >= 80 ? 'ready' : 'review'}>{percent >= 80 ? 'Mostly ready' : 'Needs review'}</EvidenceChip>
+          </div>
+          <h3 className="mt-3 text-base font-semibold text-gray-950 dark:text-gray-50">Annual Report readiness</h3>
+          <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            Activities, public benefit, finance, trustee details, and filing status for the annual return.
+          </p>
         </div>
-        <Chip size="sm" color={percent >= 80 ? 'success' : 'warning'} variant="flat">{percent}%</Chip>
+        <StatusChip tone={percent >= 80 ? 'success' : 'warning'} size="md">{percent}%</StatusChip>
       </div>
       <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Annual Report readiness" />
-      <div className="mt-4 space-y-3">
-        <Textarea label="Activities narrative" value={annual.activitiesNarrative ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, activitiesNarrative: value })} />
-        <Textarea label="Public benefit statement" value={annual.publicBenefitStatement ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, publicBenefitStatement: value })} />
-        <Textarea label="Beneficiaries / stakeholders" value={annual.beneficiariesSummary ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, beneficiariesSummary: value })} />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {checks.map(([key, label]) => (
-            <ToggleRow key={key} label={label} checked={annual[key]} onChange={(checked) => setAnnual({ ...annual, [key]: checked })} />
-          ))}
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Input type="date" label="Board approval date" value={dateInput(annual.boardApprovalDate)} onValueChange={(value) => setAnnual({ ...annual, boardApprovalDate: value || null })} />
-          <Select label="Filing status" selectedKeys={new Set([annual.filingStatus])} onSelectionChange={(keys) => {
-            const value = Array.from(keys)[0] as AnnualReportFilingStatus | undefined;
-            if (value) setAnnual({ ...annual, filingStatus: value });
-          }}>
-            {Object.entries(filingLabels).map(([value, label]) => <SelectItem key={value}>{label}</SelectItem>)}
-          </Select>
-          <Input type="date" label="Filed date" value={dateInput(annual.filedDate)} onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })} />
-          <Input label="Notes" value={annual.notes ?? ''} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
-        </div>
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving}>Save Annual Report readiness</Button>
+      <div className="mt-5 space-y-5">
+        <FieldGroup title="Narrative sources" description="Short, board-readable notes are enough here; keep the source file in the evidence vault.">
+          <Textarea label="Activities narrative" value={annual.activitiesNarrative ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, activitiesNarrative: value })} />
+          <Textarea label="Public benefit statement" value={annual.publicBenefitStatement ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, publicBenefitStatement: value })} />
+          <Textarea label="Beneficiaries / stakeholders" value={annual.beneficiariesSummary ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, beneficiariesSummary: value })} />
+        </FieldGroup>
+        <FieldGroup title="Board review flags">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {checks.map(([key, label]) => (
+              <ToggleRow key={key} label={label} checked={annual[key]} onChange={(checked) => setAnnual({ ...annual, [key]: checked })} />
+            ))}
+          </div>
+        </FieldGroup>
+        <FieldGroup title="Filing evidence">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input type="date" label="Board approval date" value={dateInput(annual.boardApprovalDate)} onValueChange={(value) => setAnnual({ ...annual, boardApprovalDate: value || null })} />
+            <Select label="Filing status" selectedKeys={new Set([annual.filingStatus])} onSelectionChange={(keys) => {
+              const value = Array.from(keys)[0] as AnnualReportFilingStatus | undefined;
+              if (value) setAnnual({ ...annual, filingStatus: value });
+            }}>
+              {Object.entries(filingLabels).map(([value, label]) => <SelectItem key={value}>{label}</SelectItem>)}
+            </Select>
+            <Input type="date" label="Filed date" value={dateInput(annual.filedDate)} onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })} />
+            <Input label="Notes" value={annual.notes ?? ''} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
+          </div>
+        </FieldGroup>
+        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving}>
+          Save Annual Report readiness
+        </Button>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -673,36 +870,57 @@ function FinancialControlsCard({
   ] as const;
   const percent = Math.round((checks.map(([key]) => financial[key]).filter(Boolean).length / checks.length) * 100);
   return (
-    <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Financial controls review</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Annual board evidence for banking, approvals, budgets, reserves, assets, payroll, and fundraising controls.</p>
+          <div className="flex flex-wrap gap-2">
+            <ReviewFlag tone="draft">Financial controls source check</ReviewFlag>
+            <EvidenceChip status={financial.minuteReference ? 'ready' : 'review'}>
+              {financial.minuteReference ? 'Minute linked' : 'Minute pending'}
+            </EvidenceChip>
+          </div>
+          <h3 className="mt-3 text-base font-semibold text-gray-950 dark:text-gray-50">Financial controls review</h3>
+          <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            Annual board evidence for banking, approvals, budgets, reserves, assets, payroll, and fundraising controls.
+          </p>
         </div>
-        <Chip size="sm" color={percent >= 80 ? 'success' : 'warning'} variant="flat">{percent}%</Chip>
+        <StatusChip tone={percent >= 80 ? 'success' : 'warning'} size="md">{percent}%</StatusChip>
       </div>
       <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Financial controls readiness" />
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {checks.map(([key, label]) => (
-          <ToggleRow key={key} label={label} checked={financial[key]} onChange={(checked) => setFinancial({ ...financial, [key]: checked })} />
-        ))}
+      <div className="mt-5 space-y-5">
+        <FieldGroup title="Control checks" description="Tick only the controls the board has actually reviewed for this reporting year.">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {checks.map(([key, label]) => (
+              <ToggleRow key={key} label={label} checked={financial[key]} onChange={(checked) => setFinancial({ ...financial, [key]: checked })} />
+            ))}
+          </div>
+        </FieldGroup>
+        <FieldGroup title="Review evidence">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input label="Reviewed by" value={financial.reviewedBy ?? ''} onValueChange={(value) => setFinancial({ ...financial, reviewedBy: value })} />
+            <Input type="date" label="Review date" value={dateInput(financial.reviewDate)} onValueChange={(value) => setFinancial({ ...financial, reviewDate: value || null })} />
+            <Input label="Minute reference" value={financial.minuteReference ?? ''} onValueChange={(value) => setFinancial({ ...financial, minuteReference: value })} />
+            <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
+          </div>
+        </FieldGroup>
+        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving}>
+          Save controls review
+        </Button>
       </div>
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Input label="Reviewed by" value={financial.reviewedBy ?? ''} onValueChange={(value) => setFinancial({ ...financial, reviewedBy: value })} />
-        <Input type="date" label="Review date" value={dateInput(financial.reviewDate)} onValueChange={(value) => setFinancial({ ...financial, reviewDate: value || null })} />
-        <Input label="Minute reference" value={financial.minuteReference ?? ''} onValueChange={(value) => setFinancial({ ...financial, minuteReference: value })} />
-        <Input label="Actions / follow-up" value={financial.actions ?? ''} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
-      </div>
-      <Button className="mt-4 bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving}>Save controls review</Button>
-    </Card>
+    </div>
   );
 }
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/60 px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-teal-primary focus:ring-teal-primary" />
-      <span>{label}</span>
+    <label className="flex min-h-12 items-start gap-3 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-2 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
+      />
+      <span className="leading-5">{label}</span>
     </label>
   );
 }
@@ -718,24 +936,28 @@ function modalTitle(type: RegisterType) {
 
 function ConflictForm({ form, updateForm }: FormProps) {
   return (
-    <>
+    <FieldGroup title="Conflict record" description="Record the declared interest, handling steps, and the board evidence trail.">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Input label="Trustee / connected person" value={String(form.trusteeName ?? '')} onValueChange={(value) => updateForm('trusteeName', value)} />
-        <Input label="Matter" value={String(form.matter ?? '')} onValueChange={(value) => updateForm('matter', value)} />
+        <Input label="Trustee / connected person" value={String(form.trusteeName ?? '')} onValueChange={(value) => updateForm('trusteeName', value)} isRequired />
+        <Input label="Matter" value={String(form.matter ?? '')} onValueChange={(value) => updateForm('matter', value)} isRequired />
         <Input type="date" label="Date declared" value={String(form.dateDeclared ?? '')} onValueChange={(value) => updateForm('dateDeclared', value)} />
         <Input type="date" label="Meeting date" value={String(form.meetingDate ?? '')} onValueChange={(value) => updateForm('meetingDate', value)} />
       </div>
-      <Textarea label="Nature of conflict" value={String(form.nature ?? '')} onValueChange={(value) => updateForm('nature', value)} />
-      <Textarea label="Action taken" value={String(form.actionTaken ?? '')} onValueChange={(value) => updateForm('actionTaken', value)} />
-      <Input label="Minute reference" value={String(form.minuteReference ?? '')} onValueChange={(value) => updateForm('minuteReference', value)} />
-    </>
+      <Textarea label="Nature of conflict" value={String(form.nature ?? '')} onValueChange={(value) => updateForm('nature', value)} isRequired />
+      <Textarea label="Action taken" value={String(form.actionTaken ?? '')} onValueChange={(value) => updateForm('actionTaken', value)} isRequired />
+      <Input label="Decision" value={String(form.decision ?? '')} onValueChange={(value) => updateForm('decision', value)} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Input label="Minute reference" value={String(form.minuteReference ?? '')} onValueChange={(value) => updateForm('minuteReference', value)} />
+        <Input type="date" label="Next review date" value={String(form.nextReviewDate ?? '')} onValueChange={(value) => updateForm('nextReviewDate', value)} />
+      </div>
+    </FieldGroup>
   );
 }
 
 function RiskForm({ form, updateForm }: FormProps) {
   return (
-    <>
-      <Input label="Risk title" value={String(form.title ?? '')} onValueChange={(value) => updateForm('title', value)} />
+    <FieldGroup title="Risk record" description="Score likelihood and impact from 1 to 5, then record mitigation and owner.">
+      <Input label="Risk title" value={String(form.title ?? '')} onValueChange={(value) => updateForm('title', value)} isRequired />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Select label="Category" selectedKeys={new Set([String(form.category ?? RiskCategory.GOVERNANCE)])} onSelectionChange={(keys) => {
           const value = Array.from(keys)[0] as string | undefined;
@@ -746,48 +968,53 @@ function RiskForm({ form, updateForm }: FormProps) {
         <Input type="number" min={1} max={5} label="Likelihood" value={String(form.likelihood ?? 3)} onValueChange={(value) => updateForm('likelihood', Number(value || 1))} />
         <Input type="number" min={1} max={5} label="Impact" value={String(form.impact ?? 3)} onValueChange={(value) => updateForm('impact', Number(value || 1))} />
       </div>
-      <Textarea label="Description" value={String(form.description ?? '')} onValueChange={(value) => updateForm('description', value)} />
-      <Textarea label="Mitigation / controls" value={String(form.mitigation ?? '')} onValueChange={(value) => updateForm('mitigation', value)} />
+      <Textarea label="Description" value={String(form.description ?? '')} onValueChange={(value) => updateForm('description', value)} isRequired />
+      <Textarea label="Mitigation / controls" value={String(form.mitigation ?? '')} onValueChange={(value) => updateForm('mitigation', value)} isRequired />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input label="Owner" value={String(form.owner ?? '')} onValueChange={(value) => updateForm('owner', value)} />
         <Input type="date" label="Review date" value={String(form.reviewDate ?? '')} onValueChange={(value) => updateForm('reviewDate', value)} />
+        <Input label="Board minute reference" value={String(form.boardMinuteReference ?? '')} onValueChange={(value) => updateForm('boardMinuteReference', value)} />
       </div>
-    </>
+    </FieldGroup>
   );
 }
 
 function ComplaintForm({ form, updateForm }: FormProps) {
   return (
-    <>
+    <FieldGroup title="Complaint record" description="Keep the complaint, action, outcome, and board review evidence together.">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input type="date" label="Received date" value={String(form.receivedDate ?? '')} onValueChange={(value) => updateForm('receivedDate', value)} />
         <Input label="Source" value={String(form.source ?? '')} onValueChange={(value) => updateForm('source', value)} />
       </div>
-      <Textarea label="Summary" value={String(form.summary ?? '')} onValueChange={(value) => updateForm('summary', value)} />
+      <Textarea label="Summary" value={String(form.summary ?? '')} onValueChange={(value) => updateForm('summary', value)} isRequired />
       <Textarea label="Action taken" value={String(form.actionTaken ?? '')} onValueChange={(value) => updateForm('actionTaken', value)} />
       <Textarea label="Outcome" value={String(form.outcome ?? '')} onValueChange={(value) => updateForm('outcome', value)} />
-      <ToggleRow label="Reviewed by board" checked={Boolean(form.reviewedByBoard)} onChange={(checked) => updateForm('reviewedByBoard', checked)} />
-    </>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ToggleRow label="Reviewed by board" checked={Boolean(form.reviewedByBoard)} onChange={(checked) => updateForm('reviewedByBoard', checked)} />
+        <Input label="Board minute reference" value={String(form.boardMinuteReference ?? '')} onValueChange={(value) => updateForm('boardMinuteReference', value)} />
+      </div>
+    </FieldGroup>
   );
 }
 
 function FundraisingForm({ form, updateForm }: FormProps) {
   return (
-    <>
+    <FieldGroup title="Fundraising activity" description="Record public-facing controls, third parties, complaints, and review outcomes.">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Input label="Activity name" value={String(form.name ?? '')} onValueChange={(value) => updateForm('name', value)} />
-        <Input label="Activity type" value={String(form.activityType ?? '')} onValueChange={(value) => updateForm('activityType', value)} />
+        <Input label="Activity name" value={String(form.name ?? '')} onValueChange={(value) => updateForm('name', value)} isRequired />
+        <Input label="Activity type" value={String(form.activityType ?? '')} onValueChange={(value) => updateForm('activityType', value)} isRequired />
         <Input type="date" label="Start date" value={String(form.startDate ?? '')} onValueChange={(value) => updateForm('startDate', value)} />
         <Input type="date" label="End date" value={String(form.endDate ?? '')} onValueChange={(value) => updateForm('endDate', value)} />
       </div>
       <Input label="Third-party fundraiser" value={String(form.thirdPartyFundraiser ?? '')} onValueChange={(value) => updateForm('thirdPartyFundraiser', value)} />
       <Textarea label="Controls" value={String(form.controls ?? '')} onValueChange={(value) => updateForm('controls', value)} />
       <Textarea label="Review outcome" value={String(form.reviewOutcome ?? '')} onValueChange={(value) => updateForm('reviewOutcome', value)} />
+      <Input label="Board minute reference" value={String(form.boardMinuteReference ?? '')} onValueChange={(value) => updateForm('boardMinuteReference', value)} />
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <ToggleRow label="Public-facing activity" checked={Boolean(form.publicFacing)} onChange={(checked) => updateForm('publicFacing', checked)} />
         <ToggleRow label="Complaints received" checked={Boolean(form.complaintsReceived)} onChange={(checked) => updateForm('complaintsReceived', checked)} />
       </div>
-    </>
+    </FieldGroup>
   );
 }
 

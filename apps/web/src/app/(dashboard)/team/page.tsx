@@ -2,38 +2,45 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Chip, Input, Select, SelectItem } from '@heroui/react';
+import { Button, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
 import { canInviteMembers, canEditMemberRole } from '@/lib/team-permissions';
 import { useDocumentTitle } from '@/lib/use-title';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { DataList, DataListItems } from '@/components/ui/data-list';
+import { FieldGroup, FormHint } from '@/components/ui/forms';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import type { TeamResponse, TeamInviteResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
 
-const ROLE_META: Record<UserRole, { label: string; description: string; color: 'success' | 'primary' | 'default' }> = {
+type RoleTone = 'success' | 'brand' | 'neutral';
+
+const ROLE_META: Record<UserRole, { label: string; description: string; tone: RoleTone }> = {
   [UserRole.OWNER]: {
     label: 'Owner',
-    description: 'Full account control, billing, and team administration.',
-    color: 'success',
+    description: 'Full account control, billing, team administration, and owner-only role changes.',
+    tone: 'success',
   },
   [UserRole.ADMIN]: {
     label: 'Admin',
-    description: 'Can manage governance records and invite team members.',
-    color: 'primary',
+    description: 'Can invite people and manage governance work, but cannot change member roles or billing.',
+    tone: 'brand',
   },
   [UserRole.MEMBER]: {
     label: 'Member',
     description: 'Can maintain compliance records, documents, registers, and deadlines.',
-    color: 'default',
+    tone: 'neutral',
   },
 };
 
 function inviteStatus(invite: TeamInviteResponse) {
-  if (invite.acceptedAt) return { label: 'Accepted', color: 'success' as const };
-  if (invite.revokedAt) return { label: 'Revoked', color: 'default' as const };
-  if (new Date(invite.expiresAt) < new Date()) return { label: 'Expired', color: 'danger' as const };
-  return { label: 'Pending', color: 'warning' as const };
+  if (invite.acceptedAt) return { label: 'Accepted', tone: 'success' as const };
+  if (invite.revokedAt) return { label: 'Revoked', tone: 'neutral' as const };
+  if (new Date(invite.expiresAt) < new Date()) return { label: 'Expired', tone: 'danger' as const };
+  return { label: 'Pending', tone: 'warning' as const };
 }
 
 function formatDate(value: string) {
@@ -52,10 +59,15 @@ export default function TeamPage() {
   const [role, setRole] = useState<UserRole.ADMIN | UserRole.MEMBER>(UserRole.MEMBER);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [revokeInviteId, setRevokeInviteId] = useState<string | null>(null);
+  const [roleUpdateMemberId, setRoleUpdateMemberId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canInvite = canInviteMembers(user?.role);
+  const permissionDisabledReason = canInvite
+    ? ''
+    : 'Your role can view this team, but only owners and admins can send or revoke invites.';
 
   const activeInviteCount = useMemo(
     () =>
@@ -82,8 +94,20 @@ export default function TeamPage() {
     fetchTeam();
   }, [fetchTeam]);
 
+  const inviteDisabledReason = useMemo(() => {
+    if (permissionDisabledReason) return permissionDisabledReason;
+    if (!email.trim()) return 'Add an email address before sending an invite.';
+    return '';
+  }, [email, permissionDisabledReason]);
+
   const inviteMember = async (event: FormEvent) => {
     event.preventDefault();
+    if (inviteDisabledReason) {
+      setError(inviteDisabledReason);
+      setMessage(null);
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     setError(null);
@@ -104,118 +128,171 @@ export default function TeamPage() {
   const revokeInvite = async (inviteId: string) => {
     setError(null);
     setMessage(null);
+    setRevokeInviteId(inviteId);
     try {
       await api.delete(`/team/invites/${inviteId}`);
       setMessage('Invite revoked.');
       await fetchTeam();
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Invite could not be revoked.'));
+    } finally {
+      setRevokeInviteId(null);
     }
   };
 
   const updateRole = async (member: TeamMemberResponse, nextRole: UserRole) => {
     setError(null);
     setMessage(null);
+    setRoleUpdateMemberId(member.id);
     try {
       await api.patch(`/team/members/${member.id}/role`, { role: nextRole });
       setMessage(`${member.name}'s role was updated.`);
       await fetchTeam();
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Role could not be updated.'));
+    } finally {
+      setRoleUpdateMemberId(null);
     }
   };
 
+  const roleEditDisabledReason = (member: TeamMemberResponse) => {
+    if (member.role === UserRole.OWNER) return 'Owner role changes are protected.';
+    if (member.id === user?.id) return 'You cannot change your own role.';
+    if (!canEditMemberRole(user?.role, user?.id, member)) return 'Only owners can change member roles.';
+    return '';
+  };
+
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Team & Permissions</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Invite trustees, staff, and governance administrators with scoped access to this charity workspace.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Chip variant="flat" color="primary">{team?.members.length ?? 0} members</Chip>
-          <Chip variant="flat" color="warning" classNames={{ content: '!text-[#7a5200] dark:!text-amber-300' }}>{activeInviteCount} pending invites</Chip>
-        </div>
+    <AppPage
+      eyebrow="Team permissions"
+      title="Team & Permissions"
+      description="Invite trustees, staff, and governance administrators with clear access levels for this charity workspace."
+      actions={(
+        <>
+          <StatusChip tone="brand">{team?.members.length ?? 0} members</StatusChip>
+          <StatusChip tone={activeInviteCount > 0 ? 'warning' : 'neutral'}>{activeInviteCount} pending invites</StatusChip>
+        </>
+      )}
+    >
+      <div aria-live="polite" role={error ? 'alert' : 'status'} className="sr-only">
+        {error ?? message ?? 'Team permissions ready'}
       </div>
 
-      {(message || error) && (
+      {(message || error) ? (
         <div
+          role={error ? 'alert' : 'status'}
+          aria-live="polite"
           className={`rounded-lg border px-4 py-3 text-sm ${
-            error ? 'border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300' : 'border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-300'
+            error
+              ? 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100'
           }`}
         >
           {error ?? message}
         </div>
-      )}
+      ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-5">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Members</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Owners control billing and roles. Admins can invite and manage governance work.</p>
-            </div>
+      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <ReviewFlag tone="draft">Role guidance</ReviewFlag>
+            <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
+              Keep invite authority separate from owner-only role control.
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+              Owners can manage billing and role changes. Admins can invite collaborators and help run governance workflows. Members can maintain records without team administration rights.
+            </p>
           </div>
+          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3 lg:min-w-[34rem]">
+            {Object.values(UserRole).map((item) => (
+              <div key={item} className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+                <StatusChip tone={ROLE_META[item].tone}>{ROLE_META[item].label}</StatusChip>
+                <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{ROLE_META[item].description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
+      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
+        <DataList
+          title="Members"
+          description="Owners are protected from in-page demotion. Role changes mirror the API role guard and remain owner-only."
+        >
           {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((item) => (
-                <div key={item} className="h-16 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
-              ))}
-            </div>
+            <LoadingState title="Loading team" description="Checking members and pending invites." />
+          ) : error && !team ? (
+            <ErrorState
+              title="Team settings could not be loaded"
+              description={error}
+              action={(
+                <Button size="sm" variant="flat" onPress={fetchTeam}>
+                  Try again
+                </Button>
+              )}
+            />
+          ) : !team?.members.length ? (
+            <EmptyState
+              title="No members found"
+              description="The organisation owner should appear here once the team endpoint returns member data."
+            />
           ) : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {team?.members.map((member) => (
-                <div key={member.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{member.name}</p>
-                      <Chip size="sm" color={ROLE_META[member.role].color} variant="flat">
-                        {ROLE_META[member.role].label}
-                      </Chip>
-                      {!member.emailVerified && (
-                        <Chip size="sm" color="warning" variant="flat">Email not verified</Chip>
+            <DataListItems>
+              {team.members.map((member) => {
+                const roleDisabledReason = roleEditDisabledReason(member);
+                return (
+                  <article key={member.id} className="p-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{member.name}</h3>
+                          <StatusChip tone={ROLE_META[member.role].tone}>{ROLE_META[member.role].label}</StatusChip>
+                          {!member.emailVerified ? <ReviewFlag tone="needs-review">Email not verified</ReviewFlag> : null}
+                        </div>
+                        <p className="mt-1 break-words text-sm text-gray-600 dark:text-gray-300">{member.email}</p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Joined {formatDate(member.createdAt)}</p>
+                        <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500 dark:text-gray-400">
+                          {ROLE_META[member.role].description}
+                        </p>
+                      </div>
+
+                      {canEditMemberRole(user?.role, user?.id, member) ? (
+                        <Select
+                          aria-label={`Role for ${member.name}`}
+                          size="sm"
+                          className="w-full sm:w-44"
+                          selectedKeys={new Set([member.role])}
+                          isDisabled={Boolean(roleUpdateMemberId)}
+                          onSelectionChange={(keys) => {
+                            const next = Array.from(keys)[0] as UserRole | undefined;
+                            if (next && next !== member.role) updateRole(member, next);
+                          }}
+                        >
+                          <SelectItem key={UserRole.ADMIN}>Admin</SelectItem>
+                          <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
+                        </Select>
+                      ) : (
+                        <div className="max-w-xs rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+                          {roleDisabledReason}
+                        </div>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{member.email}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">Joined {formatDate(member.createdAt)}</p>
-                  </div>
-
-                  {canEditMemberRole(user?.role, user?.id, member) ? (
-                    <Select
-                      aria-label={`Role for ${member.name}`}
-                      size="sm"
-                      className="w-40"
-                      selectedKeys={new Set([member.role])}
-                      onSelectionChange={(keys) => {
-                        const next = Array.from(keys)[0] as UserRole | undefined;
-                        if (next && next !== member.role) updateRole(member, next);
-                      }}
-                    >
-                      <SelectItem key={UserRole.ADMIN}>Admin</SelectItem>
-                      <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
-                    </Select>
-                  ) : (
-                    <p className="text-xs text-gray-400 dark:text-gray-400 sm:text-right max-w-[220px]">
-                      {ROLE_META[member.role].description}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </article>
+                );
+              })}
+            </DataListItems>
           )}
-        </Card>
+        </DataList>
 
-        <div className="space-y-6">
-          <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-5">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Invite Someone</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Use admin for people who help run compliance. Use member for evidence and register maintenance.
-            </p>
-
-            <form className="mt-5 space-y-4" onSubmit={inviteMember}>
+        <div className="space-y-5">
+          <form
+            className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+            onSubmit={inviteMember}
+          >
+            <FieldGroup
+              title="Invite someone"
+              description="Use admin for people helping run compliance. Use member for evidence and register maintenance."
+            >
               <Input
                 label="Email"
                 type="email"
@@ -236,58 +313,70 @@ export default function TeamPage() {
                 <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
                 <SelectItem key={UserRole.ADMIN}>Admin</SelectItem>
               </Select>
+              <FormHint id="team-invite-disabled-hint" tone={inviteDisabledReason ? 'warning' : 'neutral'}>
+                {inviteDisabledReason || 'The invite will be created with a pending status until accepted, revoked, or expired.'}
+              </FormHint>
               <Button
                 type="submit"
-                className="w-full bg-teal-primary text-white"
+                className="w-full bg-teal-primary text-white hover:bg-teal-dark"
                 isLoading={saving}
-                isDisabled={!canInvite}
+                isDisabled={!canInvite || Boolean(inviteDisabledReason) || saving}
+                aria-describedby="team-invite-disabled-hint"
               >
-                Send Invite
+                Send invite
               </Button>
-              {!canInvite && (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Your role can view the team list, but only owners and admins can invite people.
-                </p>
-              )}
-            </form>
-          </Card>
+            </FieldGroup>
+          </form>
 
-          <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm p-5">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Pending Invites</h2>
-            <div className="mt-4 space-y-3">
-              {team?.invites.length ? (
-                team.invites.map((invite) => {
-                  const status = inviteStatus(invite);
-                  const active = status.label === 'Pending';
-                  return (
-                    <div key={invite.id} className="rounded-lg border border-gray-100 dark:border-gray-800 dark:bg-gray-800/60 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{invite.email}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {ROLE_META[invite.role].label} invited by {invite.invitedByName ?? 'CharityPilot'}
-                          </p>
+          <AppSection title="Pending invites" description="Pending invites can be revoked by owners or admins until accepted or expired.">
+            {!team?.invites.length ? (
+              <EmptyState
+                title="No team invites yet"
+                description="Invite records will appear here with pending, accepted, revoked, or expired status."
+              />
+            ) : (
+              <DataListItems divided={false}>
+                <div className="space-y-3 p-3">
+                  {team.invites.map((invite) => {
+                    const status = inviteStatus(invite);
+                    const active = status.label === 'Pending';
+                    return (
+                      <article key={invite.id} className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{invite.email}</p>
+                            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                              {ROLE_META[invite.role].label} invited by {invite.invitedByName ?? 'CharityPilot'}
+                            </p>
+                          </div>
+                          <StatusChip tone={status.tone}>{status.label}</StatusChip>
                         </div>
-                        <Chip size="sm" color={status.color} variant="flat">{status.label}</Chip>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-gray-400 dark:text-gray-400">Expires {formatDate(invite.expiresAt)}</p>
-                        {active && canInvite && (
-                          <Button size="sm" variant="light" color="danger" onPress={() => revokeInvite(invite.id)}>
-                            Revoke
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No team invites have been sent yet.</p>
-              )}
-            </div>
-          </Card>
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Expires {formatDate(invite.expiresAt)}</p>
+                          {active && canInvite ? (
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              color="danger"
+                              onPress={() => revokeInvite(invite.id)}
+                              isLoading={revokeInviteId === invite.id}
+                              isDisabled={Boolean(revokeInviteId) || saving}
+                            >
+                              Revoke
+                            </Button>
+                          ) : active ? (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{permissionDisabledReason}</p>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </DataListItems>
+            )}
+          </AppSection>
         </div>
       </div>
-    </div>
+    </AppPage>
   );
 }
