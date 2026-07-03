@@ -70,6 +70,7 @@ const fixedInThisAuditBranch = [
   'The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.',
   'Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.',
   'The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.',
+  'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
 ];
 
 const independentAuditFindings = [

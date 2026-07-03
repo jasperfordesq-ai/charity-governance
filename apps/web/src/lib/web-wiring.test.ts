@@ -331,7 +331,10 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
 });
 
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {
-  const src = dash('documents/page.tsx');
+  const src = [
+    dash('documents/page.tsx'),
+    optionalDash('documents/document-profile-prompts.tsx'),
+  ].join('\n');
   for (const term of [
     'OrganisationResponse',
     'CONDITIONAL_OBLIGATION_REVIEW_RULES',
@@ -352,6 +355,20 @@ test('documents workflow surfaces conditional obligation evidence prompts from t
       `documents page must include ${term}`,
     );
   }
+});
+
+test('documents profile-triggered evidence UX is extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const panelPath = dashPath('documents/document-profile-prompts.tsx');
+  assert.ok(existsSync(panelPath), 'document profile prompts should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /DocumentProfilePromptsPanel/);
+  assert.match(pageSrc, /buildDocumentProfilePrompts/);
+  assert.doesNotMatch(pageSrc, /formatReviewFlag/);
+  assert.match(panelSrc, /formatReviewFlag/);
+  assert.match(panelSrc, /linkedEvidenceCount/);
+  assert.match(panelSrc, /Profile-triggered evidence prompts/);
 });
 
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
