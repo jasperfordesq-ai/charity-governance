@@ -67,7 +67,7 @@ test('board member update normalises optional date fields (clear vs leave-untouc
 
 function orgPrisma(opts: { org?: Record<string, unknown> | null; updateResult?: Record<string, unknown> } = {}) {
   const calls: Call[] = [];
-  const prisma = {
+  const tx = {
     organisation: {
       findUnique: async (args: unknown) => { calls.push({ name: 'organisation.findUnique', args }); return opts.org === undefined ? { id: 'org_1', name: 'Charity' } : opts.org; },
       update: async (args: { data: Record<string, unknown> }) => { calls.push({ name: 'organisation.update', args }); return opts.updateResult ?? { id: 'org_1', name: 'Charity' }; },
@@ -78,6 +78,13 @@ function orgPrisma(opts: { org?: Record<string, unknown> | null; updateResult?: 
       create: async () => ({}),
       update: async () => ({}),
       deleteMany: async () => ({ count: 0 }),
+    },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => {
+      calls.push({ name: 'prisma.$transaction', args: {} });
+      return callback(tx);
     },
   };
   return { service: new OrganisationService(prisma as never), calls };

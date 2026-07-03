@@ -1,4 +1,5 @@
 import type { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
+import { serializeErrorForLog } from './logger.js';
 
 export function startCronJobs(deadlineService: DeadlineRemindersService): void {
   if (process.env.NODE_ENV === 'production' && process.env.ENABLE_IN_PROCESS_JOBS !== 'true') {
@@ -11,7 +12,7 @@ export function startCronJobs(deadlineService: DeadlineRemindersService): void {
     try {
       await deadlineService.sendDueReminders();
     } catch (err) {
-      console.error('[CRON] Deadline reminder failed:', err);
+      console.error('[CRON] Deadline reminder failed:', serializeErrorForLog(err));
     }
   }, INTERVAL_MS);
   console.log('[CRON] Deadline reminder scheduler started (interval: 24h)');

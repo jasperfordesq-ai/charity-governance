@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateInputSchema } from './date.js';
 
 const documentCategoryValues = [
   'CONSTITUTION',
@@ -12,13 +13,6 @@ const documentCategoryValues = [
   'STRATEGIC_PLAN',
   'OTHER',
 ] as const;
-
-const dateInputSchema = z.string().refine(
-  (value) =>
-    /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) &&
-    !Number.isNaN(Date.parse(value)),
-  'Date must be an ISO date or datetime',
-);
 
 export const uploadDocumentSchema = z.object({
   name: z.string().min(1, 'Document name is required').max(300),

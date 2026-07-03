@@ -97,6 +97,10 @@ test('Complete plan exports include governance registers', async () => {
     assert.equal(response.statusCode, 200);
     assert.match(response.body, /Governance registers/);
     assert.match(response.body, /Visible trustee/);
+    assert.match(response.body, /Source and professional-review appendix/);
+    assert.match(response.body, /not legal advice/);
+    assert.match(response.body, /not a certificate that the charity is compliant/);
+    assert.match(response.body, /Matrix last checked: 2026-07-03/);
   } finally {
     await app.close();
   }

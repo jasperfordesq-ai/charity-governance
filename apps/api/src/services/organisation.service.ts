@@ -21,20 +21,26 @@ export class OrganisationService {
   }
 
   async updateOrganisation(organisationId: string, data: UpdateOrganisationRequest) {
-    const org = await this.prisma.organisation.update({
-      where: { id: organisationId },
-      data: {
-        ...data,
-        financialYearEnd: data.financialYearEnd ? new Date(data.financialYearEnd) : data.financialYearEnd,
-        dateRegistered: data.dateRegistered ? new Date(data.dateRegistered) : data.dateRegistered,
-        lastAgmDate: data.lastAgmDate ? new Date(data.lastAgmDate) : data.lastAgmDate,
-      },
-      select: publicOrganisationSelect,
-    });
+    const shouldRegenerateDeadlines = data.financialYearEnd !== undefined || data.lastAgmDate !== undefined;
 
-    if (data.financialYearEnd !== undefined || data.lastAgmDate !== undefined) {
-      await new DeadlineService(this.prisma).generateAutoDeadlines(organisationId);
-    }
+    const org = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.organisation.update({
+        where: { id: organisationId },
+        data: {
+          ...data,
+          financialYearEnd: data.financialYearEnd ? new Date(data.financialYearEnd) : data.financialYearEnd,
+          dateRegistered: data.dateRegistered ? new Date(data.dateRegistered) : data.dateRegistered,
+          lastAgmDate: data.lastAgmDate ? new Date(data.lastAgmDate) : data.lastAgmDate,
+        },
+        select: publicOrganisationSelect,
+      });
+
+      if (shouldRegenerateDeadlines) {
+        await new DeadlineService(tx).generateAutoDeadlines(organisationId);
+      }
+
+      return updated;
+    });
 
     return publicOrganisation(org);
   }

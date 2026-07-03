@@ -77,10 +77,12 @@ async function buildApp(
   subscription: unknown = activeSubscription(),
 ) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', {
+  const prisma = {
     ...authModels(role, subscription),
     ...prismaOverrides,
-  } as never);
+  } as Record<string, unknown>;
+  prisma.$transaction = async (callback: (transaction: typeof prisma) => Promise<unknown>) => callback(prisma);
+  app.decorate('prisma', prisma as never);
   await app.register(organisationRoutes);
   return app;
 }

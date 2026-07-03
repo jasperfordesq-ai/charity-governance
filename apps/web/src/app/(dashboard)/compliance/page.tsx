@@ -155,7 +155,7 @@ export default function CompliancePage() {
             />
             <div className="flex flex-wrap gap-2 text-xs">
               {Object.entries({
-                Compliant: summary.compliant,
+                'Recorded compliant': summary.compliant,
                 'Working Towards': summary.workingTowards,
                 'Not Started': summary.notStarted,
                 'N/A': summary.notApplicable,
@@ -254,7 +254,7 @@ export default function CompliancePage() {
                           <span className={`block text-[10px] font-medium ${
                             pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-500 dark:text-amber-300' : 'text-gray-400 dark:text-gray-400'
                           }`}>
-                            {pct >= 80 ? 'Compliant' : pct >= 50 ? 'Working Towards' : pct > 0 ? 'In Progress' : 'Not Started'}
+                            {pct >= 80 ? 'Mostly recorded' : pct >= 50 ? 'Partly recorded' : pct > 0 ? 'Started' : 'Not started'}
                           </span>
                         </div>
                         <svg
@@ -277,7 +277,7 @@ export default function CompliancePage() {
                     />
                     {pSummary && (
                       <p className="text-xs text-gray-400 dark:text-gray-400 mt-2">
-                        {pSummary.compliant} / {pSummary.totalApplicable} standards compliant
+                        {pSummary.compliant} / {pSummary.totalApplicable} standards recorded compliant
                       </p>
                     )}
                   </button>

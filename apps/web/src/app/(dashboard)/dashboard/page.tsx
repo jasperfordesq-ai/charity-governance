@@ -286,7 +286,7 @@ export default function DashboardPage() {
         <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="flex-shrink-0 text-center sm:text-left">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Overall Compliance Score</p>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Overall recorded progress</p>
               <p className={`text-5xl font-extrabold ${
                 compliance.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
                 : compliance.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
@@ -295,7 +295,7 @@ export default function DashboardPage() {
                 {Math.round(compliance.percentComplete)}%
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {compliance.compliant} of {compliance.totalApplicable} standards compliant
+                {compliance.compliant} of {compliance.totalApplicable} standards recorded compliant
               </p>
             </div>
             <div className="flex-1 min-w-0">
@@ -309,7 +309,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
-                  Compliant: {compliance.compliant}
+                  Recorded compliant: {compliance.compliant}
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />
@@ -411,7 +411,7 @@ export default function DashboardPage() {
                         : p.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
                         : 'text-gray-500 dark:text-gray-400'
                       }`}>
-                        {p.percentComplete >= 80 ? 'Compliant' : p.percentComplete >= 50 ? 'Working Towards' : p.percentComplete > 0 ? 'In Progress' : 'Not Started'}
+                        {p.percentComplete >= 80 ? 'Mostly recorded' : p.percentComplete >= 50 ? 'Partly recorded' : p.percentComplete > 0 ? 'Started' : 'Not started'}
                       </span>
                     </div>
                   </div>

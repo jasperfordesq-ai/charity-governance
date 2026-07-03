@@ -133,7 +133,10 @@ test('local storage driver writes, reads, signs, and deletes files without Supab
       'application/pdf',
     );
 
-    assert.match(uploaded.storagePath, /^org-local\/\d+-board-minutes-june-2026\.pdf$/);
+    assert.match(
+      uploaded.storagePath,
+      /^org-local\/\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-board-minutes-june-2026\.pdf$/,
+    );
     assert.equal(
       await readFile(join(storageDir, uploaded.storagePath), 'utf8'),
       '%PDF-1.7\nlocal file',
@@ -142,7 +145,7 @@ test('local storage driver writes, reads, signs, and deletes files without Supab
     const signedUrl = await service.getSignedUrl('org-local', uploaded.storagePath);
     assert.match(
       signedUrl,
-      /^http:\/\/localhost:3002\/api\/v1\/documents\/_local-download\?path=org-local%2F\d+-board-minutes-june-2026\.pdf$/,
+      /^http:\/\/localhost:3002\/api\/v1\/documents\/_local-download\?path=org-local%2F\d+-[0-9a-f-]+-board-minutes-june-2026\.pdf$/,
     );
 
     const file = await service.readLocalFile('org-local', uploaded.storagePath);
@@ -150,6 +153,38 @@ test('local storage driver writes, reads, signs, and deletes files without Supab
 
     await service.deleteFile('org-local', uploaded.storagePath);
     await assert.rejects(() => readFile(join(storageDir, uploaded.storagePath)));
+  } finally {
+    await rm(storageDir, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test('uploadFile generates unique storage paths for same-name uploads', async () => {
+  const originalEnv = {
+    DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+    LOCAL_FILE_STORAGE_DIR: process.env.LOCAL_FILE_STORAGE_DIR,
+  };
+  const storageDir = await mkdtemp(join(tmpdir(), 'charitypilot-local-storage-'));
+
+  process.env.DOCUMENT_STORAGE_DRIVER = 'local';
+  process.env.LOCAL_FILE_STORAGE_DIR = storageDir;
+
+  try {
+    const service = new StorageService();
+    const [first, second] = await Promise.all([
+      service.uploadFile('org-local', 'Board Minutes.pdf', Buffer.from('one'), 'application/pdf'),
+      service.uploadFile('org-local', 'Board Minutes.pdf', Buffer.from('two'), 'application/pdf'),
+    ]);
+
+    assert.notEqual(first.storagePath, second.storagePath);
+    assert.match(first.storagePath, /^org-local\/\d+-[0-9a-f-]+-board-minutes\.pdf$/);
+    assert.match(second.storagePath, /^org-local\/\d+-[0-9a-f-]+-board-minutes\.pdf$/);
   } finally {
     await rm(storageDir, { recursive: true, force: true });
     for (const [key, value] of Object.entries(originalEnv)) {

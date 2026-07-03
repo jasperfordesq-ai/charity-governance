@@ -1,0 +1,158 @@
+# CharityPilot Platform Completion Audit
+
+Generated: 2026-07-03
+
+Branch: `codex/platform-completion-audit`
+
+Working-tree base commit when generated: `dfb2b5d`
+
+Generation note: inspect `git status` before release because this report is committed as part of the audit work.
+
+This ledger is a current-state engineering audit. It is not legal advice and does not claim CharityPilot is legally complete, guaranteed, or ready to process real charity data.
+
+## Executive Readiness
+
+| Area | Current state | Next action |
+| --- | --- | --- |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /deadlines (571), /dashboard (550), /compliance/[principleId] (528). |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| Irish compliance model | 10 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
+| Verification surface | 16 web unit test files, 44 API test files, 10 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+
+## Fixed During This Audit Branch
+
+- Strict shared ISO date validation now rejects impossible calendar dates before they can normalize into filing, board, document, register, or deadline records.
+- Organisation profile date changes and derived auto-deadline regeneration now run inside one Prisma transaction.
+- Document storage paths now include a UUID segment to avoid same-millisecond same-filename collisions.
+- Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.
+- Optional in-process cron logging now serializes errors through the redacted logger helper.
+- Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
+- API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
+- Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, and exposes a retry action for failed saves.
+
+## Independent Audit Findings Still Driving Next Work
+
+| Priority | Area | Finding |
+| --- | --- | --- |
+| P1 | Frontend workflow | Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits. |
+| P0 | Compliance export | Export posture was less cautious than app UI; branch adds a source/review appendix, but future work should broaden readiness beyond missing explanations. |
+| P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
+| P1 | Operations | Deploy script defaults to compose.production.yml while TLS runbook uses compose.production-tls.yml; align deployment paths and evidence commands. |
+| P1 | Operations | Canonical hostnames drift between charitypilot.ie and app.charitypilot.ie; pick one production web origin and align env, Caddy, release, smoke, and evidence validators. |
+| P1 | Compliance model | The model supports not_commenced but currently has no explicit not_commenced 2024 Act monitoring rows; add future-law monitoring entries after legal review. |
+| P1 | Product onboarding | Conditional obligations need profile facts for staff/workers, public fundraising, child-facing services, personal-data processing, premises/events, public-sector status, and processors. |
+| P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
+| P2 | Accessibility/navigation | Breadcrumb labels and mobile nav/sidebar focus management need another pass, including dynamic principle labels and Escape/focus behavior. |
+| P2 | Security hardening | Identifier-aware auth throttles and Stripe customer reconciliation remain good next hardening tasks. |
+
+## Route Audit
+
+| Priority | Route | Area | File | Lines | Client | Static audit finding |
+| --- | --- | --- | --- | ---: | --- | --- |
+| P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 377 | no | 7 inline svg icon(s) |
+| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 159 | yes | no obvious static risk; verify in browser |
+| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 367 | yes | decorative or pill-heavy styling needs visual QA |
+| P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
+| P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
+| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 654 | yes | large route file; refactor soon; 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 528 | yes | large route file; refactor soon; 4 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 550 | yes | large route file; refactor soon; 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 571 | yes | large route file; refactor soon; 2 inline svg icon(s) |
+| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 742 | yes | oversized route file; split first; 2 inline svg icon(s) |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 504 | yes | large route file; refactor soon; 9 inline svg icon(s) |
+| P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
+| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 109 | yes | 1 inline svg icon(s) |
+| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | 2 inline svg icon(s) |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 490 | yes | large route file; refactor soon |
+| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 264 | no | 3 inline svg icon(s) |
+| P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
+| P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 272 | yes | 7 inline svg icon(s) |
+| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 1063 | yes | oversized route file; split first |
+| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 256 | yes | decorative or pill-heavy styling needs visual QA; client flow has weak visible error-state signal |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 198 | yes | 4 inline svg icon(s) |
+| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 401 | yes | no obvious static risk; verify in browser |
+| P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
+| P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 205 | yes | 3 inline svg icon(s) |
+
+## API And Backend Audit
+
+| Route group | File | Lines | Guard signals | Nearby tests | Audit note |
+| --- | --- | ---: | --- | ---: | --- |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 210 | public/partial by design | 6 | preserve current guard and tenant boundary |
+| `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 2 | preserve current guard and tenant boundary |
+| `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
+| `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
+| `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
+| `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `documents` | `apps/api/src/routes/documents/index.ts` | 382 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `export` | `apps/api/src/routes/export/index.ts` | 402 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
+| `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
+| `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
+| `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `team` | `apps/api/src/routes/team/index.ts` | 112 | auth, subscription | 2 | preserve current guard and tenant boundary |
+
+## Launch Evidence Blockers
+
+- Real production secrets and provider values are not committed and must be supplied from the operator secret store.
+- Production hosting, DNS, TLS, reverse proxy, and public HTTPS smoke evidence remain external launch gates.
+- Production PostgreSQL backup and restore evidence is required before real charity data.
+- Production Supabase private bucket, signed URL, backup, and restore evidence is required.
+- Stripe live products/prices/webhook and Resend sender-domain evidence are required.
+- Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
+- Solicitor/governance/privacy review and external penetration test are required before real charity data.
+
+### Local Production Environment Placeholders
+
+The local non-committed production env still needs 23 real value(s):
+
+- `TRUSTED_PROXY_ADDRESSES`
+- `DATABASE_URL`
+- `FRONTEND_URL`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`
+- `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`
+- `STRIPE_COMPLETE_MONTHLY_PRICE_ID`
+- `STRIPE_COMPLETE_YEARLY_PRICE_ID`
+- `RESEND_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `ERROR_ALERT_WEBHOOK_URL`
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`
+- `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
+- `CHARITYPILOT_API_IMAGE`
+- `CHARITYPILOT_WEB_IMAGE`
+- `CHARITYPILOT_MIGRATION_IMAGE`
+- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`
+- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
+
+## Irish Compliance Source Posture
+
+The matrix must stay source-cited and review-ready. The following official sources were used as the current verification set for this audit; refresh them again before production legal signoff.
+
+| Source | Owner | URL |
+| --- | --- | --- |
+| Charities Governance Code | Charities Regulator | https://www.charitiesregulator.ie/en/information-for-charities/charities-governance-code |
+| Toolkit and templates | Charities Regulator | https://www.charitiesregulator.ie/en/information-for-charities/charities-governance-code/toolkit-and-templates |
+| Compliance Record Form | Charities Regulator | https://www.charitiesregulator.ie/en/guidance/forms-and-templates/forms |
+| Annual report submission guidance | Charities Regulator | https://www.charitiesregulator.ie/en/information-for-charities/annual-report-how-to-submit |
+| Charities Act 2009 revised | Law Reform Commission | https://revisedacts.lawreform.ie/eli/2009/act/6/front/revised/en/html |
+| Charities (Amendment) Act 2024 commencement table | Irish Statute Book | https://www.irishstatutebook.ie/isbc/2024_21.html |
+| S.I. No. 10/2025 commencement order | Irish Statute Book | https://www.irishstatutebook.ie/eli/2025/si/10/made/en/print |
+| GDPR accountability obligation | Data Protection Commission | https://www.dataprotection.ie/en/organisations/know-your-obligations/accountability-obligation |
+| Safety Statement and Risk Assessment | Health and Safety Authority | https://www.hsa.ie/topics/managing_health_and_safety/safety_statement_and_risk_assessment/ |
+| Child safeguarding statement relevance | Tusla | https://www.tusla.ie/children-first/organisations/what-is-a-child-safeguarding-statement/who-needs-to-have-a-child-safeguarding-statement/ |
+| Protected disclosures employer obligations | Workplace Relations Commission | https://www.workplacerelations.ie/en/what_you_should_know/employer-obligations/protection-of-whistleblowers/new-obligations-under-the-protected-disclosures-amendment-act-2022/ |
+
+## Next Completion Sequence
+
+1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
+2. Decompose and polish the largest P0 workflows: registers, documents, board, dashboard, export, organisation, deadlines, and compliance detail.
+3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
+4. Wire compliance source metadata, professional-review flags, and conditional obligations into user-visible review flows without creating legal-certainty claims.
+5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.

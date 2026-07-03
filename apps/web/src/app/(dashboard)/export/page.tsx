@@ -169,10 +169,10 @@ export default function ExportPage() {
   };
 
   const scoreLabel = (pct: number) => {
-    if (pct >= 80) return 'Compliant';
-    if (pct >= 50) return 'Working Towards';
-    if (pct > 0) return 'In Progress';
-    return 'Not Started';
+    if (pct >= 80) return 'Mostly recorded';
+    if (pct >= 50) return 'Partly recorded';
+    if (pct > 0) return 'Started';
+    return 'Not started';
   };
 
   const signoffChipColor =
@@ -357,7 +357,7 @@ export default function ExportPage() {
                   <svg className="w-5 h-5 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Overall Compliance Score</h3>
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Overall recorded progress</h3>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={`text-2xl font-bold ${scoreColour(summary.percentComplete)}`}>
@@ -368,7 +368,7 @@ export default function ExportPage() {
                       {scoreLabel(summary.percentComplete)}
                     </span>
                     <span className="block text-xs text-gray-500 dark:text-gray-400">
-                      {summary.compliant} compliant / {summary.totalApplicable} applicable standards
+                      {summary.compliant} recorded compliant / {summary.totalApplicable} applicable standards
                     </span>
                   </div>
                 </div>

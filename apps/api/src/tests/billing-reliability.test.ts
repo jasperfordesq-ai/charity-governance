@@ -18,11 +18,12 @@ process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID =
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID ?? 'price_complete_yearly';
 process.env.FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://app.example.org';
 
-const [{ default: Fastify }, { billingRoutes }, { BillingService }, { signAccessToken }] = await Promise.all([
+const [{ default: Fastify }, { billingRoutes }, { BillingService }, { signAccessToken }, { SubscriptionPlan }] = await Promise.all([
   import('fastify'),
   import('../routes/billing/index.js'),
   import('../services/billing.service.js'),
   import('../utils/jwt.js'),
+  import('@charitypilot/shared'),
 ]);
 
 type Role = 'OWNER' | 'ADMIN' | 'MEMBER';
@@ -342,6 +343,53 @@ test('checkout returns 503 BILLING_NOT_CONFIGURED when Stripe is unconfigured', 
       process.env.STRIPE_SECRET_KEY = previousSecret;
     }
   }
+});
+
+test('createCheckoutSession uses an organisation-scoped Stripe idempotency key when creating a customer', async () => {
+  const calls: Array<{ name: string; args: unknown[] }> = [];
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org-1',
+        name: 'Acme Charity',
+        contactEmail: 'billing@example.org',
+        stripeCustomerId: null,
+      }),
+      update: async (args: unknown) => {
+        calls.push({ name: 'organisation.update', args: [args] });
+        return {};
+      },
+    },
+  };
+  const service = new BillingService(prisma as never);
+  (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    customers: {
+      create: async (...args: unknown[]) => {
+        calls.push({ name: 'stripe.customers.create', args });
+        return { id: 'cus_created' };
+      },
+    },
+    checkout: {
+      sessions: {
+        create: async (...args: unknown[]) => {
+          calls.push({ name: 'stripe.checkout.sessions.create', args });
+          return { url: 'https://checkout.stripe.test/session' };
+        },
+      },
+    },
+  });
+
+  const result = await service.createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
+
+  assert.deepEqual(result, { url: 'https://checkout.stripe.test/session' });
+  const customerCall = calls.find((call) => call.name === 'stripe.customers.create');
+  assert.ok(customerCall, 'expected a Stripe customer create call');
+  assert.deepEqual(customerCall.args[1], { idempotencyKey: 'charitypilot-customer-org-1' });
+  const updateCall = calls.find((call) => call.name === 'organisation.update');
+  assert.deepEqual(updateCall?.args[0], {
+    where: { id: 'org-1' },
+    data: { stripeCustomerId: 'cus_created' },
+  });
 });
 
 // ── billing-graceful-degradation-15 ──

@@ -334,11 +334,14 @@ export class BillingService {
     let customerId = org.stripeCustomerId;
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        metadata: { organisationId },
-        name: org.name,
-        email: org.contactEmail ?? undefined,
-      });
+      const customer = await stripe.customers.create(
+        {
+          metadata: { organisationId },
+          name: org.name,
+          email: org.contactEmail ?? undefined,
+        },
+        { idempotencyKey: `charitypilot-customer-${organisationId}` },
+      );
       customerId = customer.id;
 
       await this.prisma.organisation.update({

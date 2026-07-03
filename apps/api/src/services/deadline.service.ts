@@ -2,8 +2,10 @@ import type { PrismaClient } from '@prisma/client';
 import type { CreateDeadlineRequest, UpdateDeadlineRequest } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 
+type DeadlinePrisma = Pick<PrismaClient, 'deadline' | 'organisation'>;
+
 export class DeadlineService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: DeadlinePrisma) {}
 
   async list(organisationId: string, page = 1, pageSize = 50) {
     const skip = (page - 1) * pageSize;

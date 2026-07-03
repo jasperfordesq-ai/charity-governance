@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateInputSchema, nullableDateInputSchema } from './date.js';
 
 const registerStatusValues = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 const conflictStatusValues = ['DECLARED', 'MANAGED', 'CLOSED'] as const;
@@ -14,27 +15,6 @@ const riskCategoryValues = [
   'OTHER',
 ] as const;
 const annualReportFilingStatusValues = ['NOT_STARTED', 'IN_PROGRESS', 'BOARD_APPROVED', 'FILED'] as const;
-
-const dateInputSchema = z.string().refine(
-  (value) =>
-    (/^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)) &&
-    !Number.isNaN(Date.parse(value)),
-  'Date must be an ISO date or datetime',
-);
-
-const nullableDateInputSchema = z
-  .string()
-  .trim()
-  .refine(
-    (value) =>
-      value === '' ||
-      ((/^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)) &&
-        !Number.isNaN(Date.parse(value))),
-    'Date must be an ISO date or datetime',
-  )
-  .nullable()
-  .optional()
-  .transform((value) => (value === '' ? null : value));
 
 const nullableText = (max: number) =>
   z

@@ -57,6 +57,7 @@ export default function PrincipleDetailPage() {
 
   // Debounce timers
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingSaveData = useRef<Record<string, StandardFormState>>({});
   const readinessRequestSeq = useRef(0);
 
   const refreshApprovalReadiness = useCallback(async () => {
@@ -125,41 +126,70 @@ export default function PrincipleDetailPage() {
     fetchData();
   }, [principleId, currentYear, refreshApprovalReadiness]);
 
+  const saveStandardNow = useCallback(
+    async (standardId: string, data: StandardFormState, options: { silent?: boolean } = {}) => {
+      if (!options.silent) {
+        setSaveState((prev) => ({ ...prev, [standardId]: 'saving' }));
+      }
+
+      try {
+        await api.put(`/compliance/records/${standardId}`, {
+          reportingYear: currentYear,
+          status: data.status,
+          actionTaken: data.actionTaken || null,
+          evidence: data.evidence || null,
+          notes: data.notes || null,
+          explanationIfNA: data.explanationIfNA || null,
+        });
+
+        delete pendingSaveData.current[standardId];
+
+        if (!options.silent) {
+          await refreshApprovalReadiness();
+          setSaveState((prev) => ({ ...prev, [standardId]: 'saved' }));
+
+          setTimeout(() => {
+            setSaveState((prev) => ({ ...prev, [standardId]: 'idle' }));
+          }, 2000);
+        }
+      } catch (err) {
+        logClientError(`Failed to save standard ${standardId}`, err);
+        if (!options.silent) {
+          setSaveState((prev) => ({ ...prev, [standardId]: 'error' }));
+        }
+      }
+    },
+    [currentYear, refreshApprovalReadiness],
+  );
+
+  const flushSave = useCallback(
+    async (standardId: string, options: { silent?: boolean } = {}) => {
+      if (debounceTimers.current[standardId]) {
+        clearTimeout(debounceTimers.current[standardId]);
+        delete debounceTimers.current[standardId];
+      }
+
+      const pending = pendingSaveData.current[standardId];
+      if (!pending) return;
+      await saveStandardNow(standardId, pending, options);
+    },
+    [saveStandardNow],
+  );
+
   // Auto-save with debounce
   const autoSave = useCallback(
     (standardId: string, data: StandardFormState) => {
-      // Clear previous timer
+      pendingSaveData.current[standardId] = data;
+
       if (debounceTimers.current[standardId]) {
         clearTimeout(debounceTimers.current[standardId]);
       }
 
-      debounceTimers.current[standardId] = setTimeout(async () => {
-        setSaveState((prev) => ({ ...prev, [standardId]: 'saving' }));
-
-        try {
-          await api.put(`/compliance/records/${standardId}`, {
-            reportingYear: currentYear,
-            status: data.status,
-            actionTaken: data.actionTaken || null,
-            evidence: data.evidence || null,
-            notes: data.notes || null,
-            explanationIfNA: data.explanationIfNA || null,
-          });
-
-          await refreshApprovalReadiness();
-          setSaveState((prev) => ({ ...prev, [standardId]: 'saved' }));
-
-          // Reset "saved" indicator after 2 seconds
-          setTimeout(() => {
-            setSaveState((prev) => ({ ...prev, [standardId]: 'idle' }));
-          }, 2000);
-        } catch (err) {
-          logClientError(`Failed to save standard ${standardId}`, err);
-          setSaveState((prev) => ({ ...prev, [standardId]: 'error' }));
-        }
+      debounceTimers.current[standardId] = setTimeout(() => {
+        void flushSave(standardId);
       }, 800);
     },
-    [currentYear, refreshApprovalReadiness],
+    [flushSave],
   );
 
   // Update field and trigger auto-save
@@ -177,13 +207,33 @@ export default function PrincipleDetailPage() {
     });
   };
 
-  // Cleanup debounce timers on unmount
+  // Flush pending debounce saves on unmount so quick in-app navigation does not drop edits.
   useEffect(() => {
     const timers = debounceTimers.current;
+    const pending = pendingSaveData.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
+      void Promise.all(
+        Object.entries(pending).map(([standardId, data]) =>
+          saveStandardNow(standardId, data, { silent: true }),
+        ),
+      );
     };
-  }, []);
+  }, [saveStandardNow]);
+
+  useEffect(() => {
+    const warnIfUnsaved = (event: BeforeUnloadEvent) => {
+      const hasPending = Object.keys(pendingSaveData.current).length > 0;
+      const hasSaving = Object.values(saveState).includes('saving');
+      if (!hasPending && !hasSaving) return;
+
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', warnIfUnsaved);
+    return () => window.removeEventListener('beforeunload', warnIfUnsaved);
+  }, [saveState]);
 
   const statusOptions = [
     { key: ComplianceStatus.COMPLIANT, label: 'Compliant' },
@@ -349,9 +399,19 @@ export default function PrincipleDetailPage() {
                         </span>
                       )}
                       {save === 'error' && (
-                        <span className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400 font-medium">
+                        <span className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 font-medium">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
                           Save failed
+                          <button
+                            type="button"
+                            className="rounded border border-red-200 px-2 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-200 dark:hover:bg-red-950/40"
+                            onClick={() => {
+                              pendingSaveData.current[standard.id] = form;
+                              void flushSave(standard.id);
+                            }}
+                          >
+                            Retry
+                          </button>
                         </span>
                       )}
                     </div>
@@ -361,6 +421,7 @@ export default function PrincipleDetailPage() {
                   <Select
                     label="Status"
                     selectedKeys={new Set([form.status])}
+                    onBlur={() => void flushSave(standard.id)}
                     onSelectionChange={(keys) => {
                       const val = Array.from(keys)[0] as ComplianceStatus;
                       if (val) updateField(standard.id, 'status', val);
@@ -401,6 +462,7 @@ export default function PrincipleDetailPage() {
                     placeholder="Describe what your organisation has done to address this standard..."
                     value={form.actionTaken}
                     onValueChange={(val) => updateField(standard.id, 'actionTaken', val)}
+                    onBlur={() => void flushSave(standard.id)}
                     minRows={2}
                     maxRows={6}
                     size="sm"
@@ -412,6 +474,7 @@ export default function PrincipleDetailPage() {
                     placeholder="List supporting evidence (e.g. policies, minutes, documents)..."
                     value={form.evidence}
                     onValueChange={(val) => updateField(standard.id, 'evidence', val)}
+                    onBlur={() => void flushSave(standard.id)}
                     minRows={2}
                     maxRows={6}
                     size="sm"
@@ -424,6 +487,7 @@ export default function PrincipleDetailPage() {
                     placeholder="Any internal notes or reminders for your team..."
                     value={form.notes}
                     onValueChange={(val) => updateField(standard.id, 'notes', val)}
+                    onBlur={() => void flushSave(standard.id)}
                     minRows={2}
                     maxRows={4}
                     size="sm"
@@ -443,6 +507,7 @@ export default function PrincipleDetailPage() {
                       placeholder="Please explain why this standard does not apply or why your organisation is not compliant..."
                       value={form.explanationIfNA}
                       onValueChange={(val) => updateField(standard.id, 'explanationIfNA', val)}
+                      onBlur={() => void flushSave(standard.id)}
                       minRows={2}
                       maxRows={6}
                       size="sm"

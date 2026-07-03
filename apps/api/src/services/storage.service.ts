@@ -1,5 +1,6 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { AppError } from '../utils/errors.js';
 import { isConfiguredSecret } from '../utils/env.js';
@@ -143,7 +144,7 @@ export class StorageService {
     mimeType: string,
   ): Promise<{ storagePath: string }> {
     const sanitised = sanitiseFilename(filename);
-    const storagePath = `${organisationId}/${Date.now()}-${sanitised}`;
+    const storagePath = `${organisationId}/${Date.now()}-${randomUUID()}-${sanitised}`;
 
     if (isLocalStorageDriver()) {
       const filePath = localFilePath(storagePath);
