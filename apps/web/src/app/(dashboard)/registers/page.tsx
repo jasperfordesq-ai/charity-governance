@@ -2,7 +2,7 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Button,
@@ -19,12 +19,12 @@ import { apiErrorMessage } from '@/lib/errors';
 import { useDocumentTitle } from '@/lib/use-title';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
-import { DataList, DataListItems } from '@/components/ui/data-list';
 import { FormHint, ValidationSummary } from '@/components/ui/forms';
-import { EmptyState, ErrorState, LoadingState, LockedFeatureState } from '@/components/ui/states';
-import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ErrorState, LoadingState, LockedFeatureState } from '@/components/ui/states';
+import { ReviewFlag } from '@/components/ui/status';
 import { RegisterPriorityPanel, buildRegisterPriorities, buildRegisterSearchText } from './register-priority-panel';
 import { AnnualReportCard, FinancialControlsCard } from './register-compliance-cards';
+import { RegisterRecordsPanel, riskScore } from './register-record-lists';
 import {
   ComplaintForm,
   ConflictForm,
@@ -32,7 +32,6 @@ import {
   RiskForm,
   modalTitle,
   normalizeRegisterForm,
-  riskCategoryLabels,
   type RegisterType,
 } from './register-record-forms';
 import {
@@ -51,18 +50,6 @@ import {
 } from '@charitypilot/shared';
 
 type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'info' | 'brand';
-
-const registerStatusLabels = {
-  [RegisterStatus.OPEN]: 'Open',
-  [RegisterStatus.MONITORING]: 'Monitoring',
-  [RegisterStatus.CLOSED]: 'Closed',
-};
-
-const conflictStatusLabels = {
-  [ConflictStatus.DECLARED]: 'Declared',
-  [ConflictStatus.MANAGED]: 'Managed',
-  [ConflictStatus.CLOSED]: 'Closed',
-};
 
 const emptyAnnual = (year: number): AnnualReportReadinessResponse => ({
   id: null,
@@ -102,12 +89,6 @@ const emptyFinancial = (year: number): FinancialControlReviewResponse => ({
   actions: null,
   updatedAt: null,
 });
-
-const niceDate = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set';
-
-const compactValue = (value: string | null | undefined, fallback = 'Not recorded') => value?.trim() || fallback;
-const riskScore = (risk: RiskRecordResponse) => risk.likelihood * risk.impact;
 
 export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
@@ -545,166 +526,16 @@ export default function RegistersPage() {
             title="Operational registers"
             description="Use each register for one decision trail: what happened, what was done, where the board minute sits, and what needs review next."
           >
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <RegisterSection
-                title="Conflicts register"
-                description="Declared interests, meeting handling, decisions, and review dates."
-                count={conflictsForSelectedYear.length}
-                actionLabel="Add conflict"
-                onAdd={() => openModal('conflict')}
-                emptyTitle="No conflicts recorded"
-                emptyDescription="Add declared trustee interests so decisions and minute references stay visible."
-              >
-                {conflictsForSelectedYear.map((item) => (
-                  <RegisterRow
-                    key={item.id}
-                    title={item.trusteeName}
-                    description={item.matter}
-                    meta={`Declared ${niceDate(item.dateDeclared)} - Minute ${compactValue(item.minuteReference, 'not linked')}`}
-                    chips={(
-                      <>
-                        <StatusChip tone={item.status === ConflictStatus.CLOSED ? 'success' : 'warning'}>
-                          {conflictStatusLabels[item.status]}
-                        </StatusChip>
-                        <EvidenceChip status={item.minuteReference ? 'ready' : 'partial'}>
-                          {item.minuteReference ? 'Minute linked' : 'Minute pending'}
-                        </EvidenceChip>
-                      </>
-                    )}
-                    action={item.status !== ConflictStatus.CLOSED ? (
-                      <Button
-                        size="sm"
-                        variant="flat"
-                        onPress={() => closeRecord('conflict', item.id)}
-                        isLoading={closingRecordId === item.id}
-                        isDisabled={Boolean(closingRecordId) || saving}
-                      >
-                        Close
-                      </Button>
-                    ) : null}
-                  />
-                ))}
-              </RegisterSection>
-
-              <RegisterSection
-                title="Risk register"
-                description="Board-level risk, score, mitigation, owner, and review evidence."
-                count={risksForSelectedYear.length}
-                actionLabel="Add risk"
-                onAdd={() => openModal('risk')}
-                emptyTitle="No risks recorded"
-                emptyDescription="Add key risks so mitigation, owner, and review dates are ready for trustee oversight."
-              >
-                {risksForSelectedYear.map((item) => (
-                  <RegisterRow
-                    key={item.id}
-                    title={item.title}
-                    description={item.mitigation || item.description}
-                    meta={`Owner ${compactValue(item.owner, 'not assigned')} - Review ${niceDate(item.reviewDate)}`}
-                    chips={(
-                      <>
-                        <StatusChip tone={riskScore(item) >= 12 ? 'danger' : 'warning'}>Score {riskScore(item)}</StatusChip>
-                        <StatusChip tone="neutral">{riskCategoryLabels[item.category]}</StatusChip>
-                        <EvidenceChip status={item.boardMinuteReference ? 'ready' : 'review'}>
-                          {item.boardMinuteReference ? 'Board minute' : 'Review flag'}
-                        </EvidenceChip>
-                      </>
-                    )}
-                    action={item.status !== RegisterStatus.CLOSED ? (
-                      <Button
-                        size="sm"
-                        variant="flat"
-                        onPress={() => closeRecord('risk', item.id)}
-                        isLoading={closingRecordId === item.id}
-                        isDisabled={Boolean(closingRecordId) || saving}
-                      >
-                        Close
-                      </Button>
-                    ) : null}
-                  />
-                ))}
-              </RegisterSection>
-
-              <RegisterSection
-                title="Complaints register"
-                description="Complaints, action taken, outcomes, and board review references."
-                count={complaintsForSelectedYear.length}
-                actionLabel="Add complaint"
-                onAdd={() => openModal('complaint')}
-                emptyTitle="No complaints recorded"
-                emptyDescription="Record complaints and board review status so improvement actions do not disappear."
-              >
-                {complaintsForSelectedYear.map((item) => (
-                  <RegisterRow
-                    key={item.id}
-                    title={item.summary}
-                    description={item.outcome || item.actionTaken || 'Outcome not recorded yet.'}
-                    meta={`Received ${niceDate(item.receivedDate)} - Source ${compactValue(item.source, 'not recorded')}`}
-                    chips={(
-                      <>
-                        <StatusChip tone={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'}>
-                          {registerStatusLabels[item.status]}
-                        </StatusChip>
-                        <EvidenceChip status={item.reviewedByBoard ? 'ready' : 'review'}>
-                          {item.reviewedByBoard ? 'Board reviewed' : 'Board review pending'}
-                        </EvidenceChip>
-                      </>
-                    )}
-                    action={item.status !== RegisterStatus.CLOSED ? (
-                      <Button
-                        size="sm"
-                        variant="flat"
-                        onPress={() => closeRecord('complaint', item.id)}
-                        isLoading={closingRecordId === item.id}
-                        isDisabled={Boolean(closingRecordId) || saving}
-                      >
-                        Close
-                      </Button>
-                    ) : null}
-                  />
-                ))}
-              </RegisterSection>
-
-              <RegisterSection
-                title="Fundraising register"
-                description="Public fundraising activities, controls, complaints, and review outcomes."
-                count={fundraisingForSelectedYear.length}
-                actionLabel="Add activity"
-                onAdd={() => openModal('fundraising')}
-                emptyTitle="No fundraising activities recorded"
-                emptyDescription="Add public-facing campaigns, controls, and third-party fundraiser checks where relevant."
-              >
-                {fundraisingForSelectedYear.map((item) => (
-                  <RegisterRow
-                    key={item.id}
-                    title={item.name}
-                    description={item.controls || 'Controls not recorded yet.'}
-                    meta={`Review outcome: ${compactValue(item.reviewOutcome, 'pending')}`}
-                    chips={(
-                      <>
-                        <StatusChip tone={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'}>
-                          {registerStatusLabels[item.status]}
-                        </StatusChip>
-                        <StatusChip tone="neutral">{item.activityType}</StatusChip>
-                        {item.thirdPartyFundraiser ? <ReviewFlag tone="needs-review">Third party</ReviewFlag> : null}
-                        {item.complaintsReceived ? <ReviewFlag tone="needs-review">Complaint linked</ReviewFlag> : null}
-                      </>
-                    )}
-                    action={item.status !== RegisterStatus.CLOSED ? (
-                      <Button
-                        size="sm"
-                        variant="flat"
-                        onPress={() => closeRecord('fundraising', item.id)}
-                        isLoading={closingRecordId === item.id}
-                        isDisabled={Boolean(closingRecordId) || saving}
-                      >
-                        Close
-                      </Button>
-                    ) : null}
-                  />
-                ))}
-              </RegisterSection>
-            </div>
+            <RegisterRecordsPanel
+              conflicts={conflictsForSelectedYear}
+              risks={risksForSelectedYear}
+              complaints={complaintsForSelectedYear}
+              fundraising={fundraisingForSelectedYear}
+              onAdd={openModal}
+              onClose={closeRecord}
+              closingRecordId={closingRecordId}
+              saving={saving}
+            />
           </AppSection>
 
           <AppSection
@@ -766,80 +597,5 @@ function SummaryTile({ label, value, tone }: { label: string; value: string | nu
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`mt-1 text-xl font-bold ${colour}`}>{value}</p>
     </div>
-  );
-}
-
-function RegisterSection({
-  title,
-  description,
-  actionLabel,
-  onAdd,
-  count,
-  emptyTitle,
-  emptyDescription,
-  children,
-}: {
-  title: string;
-  description: string;
-  actionLabel: string;
-  onAdd: () => void;
-  count: number;
-  emptyTitle: string;
-  emptyDescription: string;
-  children: ReactNode;
-}) {
-  return (
-    <DataList
-      title={(
-        <span className="flex flex-wrap items-center gap-2">
-          {title}
-          <StatusChip tone="neutral">{count}</StatusChip>
-        </span>
-      )}
-      description={description}
-      actions={(
-        <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onAdd}>
-          {actionLabel}
-        </Button>
-      )}
-    >
-      {count === 0 ? (
-        <EmptyState title={emptyTitle} description={emptyDescription} />
-      ) : (
-        <DataListItems divided={false}>
-          <div className="space-y-3 p-3">{children}</div>
-        </DataListItems>
-      )}
-    </DataList>
-  );
-}
-
-function RegisterRow({
-  title,
-  description,
-  meta,
-  chips,
-  action,
-}: {
-  title: ReactNode;
-  description: ReactNode;
-  meta: ReactNode;
-  chips: ReactNode;
-  action: ReactNode;
-}) {
-  return (
-    <article className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{title}</h3>
-            {chips}
-          </div>
-          <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{meta}</p>
-        </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
-    </article>
   );
 }

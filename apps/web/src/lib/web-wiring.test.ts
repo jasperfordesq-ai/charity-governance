@@ -497,6 +497,7 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
     dash('registers/page.tsx'),
     optionalDash('registers/register-compliance-cards.tsx'),
     optionalDash('registers/register-record-forms.tsx'),
+    optionalDash('registers/register-record-lists.tsx'),
   ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -682,6 +683,22 @@ test('registers modal record forms are extracted from the oversized route file',
   assert.match(formsSrc, /Conflict record/);
   assert.match(formsSrc, /Fundraising activity/);
   assert.match(formsSrc, /export function normalizeRegisterForm/);
+});
+
+test('registers operational record list sections are extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const listsPath = dashPath('registers/register-record-lists.tsx');
+  assert.ok(existsSync(listsPath), 'register record lists should be split out of page.tsx');
+  const listsSrc = readFileSync(listsPath, 'utf8');
+
+  assert.match(pageSrc, /RegisterRecordsPanel/);
+  assert.doesNotMatch(pageSrc, /Conflicts register/);
+  assert.doesNotMatch(pageSrc, /function RegisterSection/);
+  assert.doesNotMatch(pageSrc, /function RegisterRow/);
+  assert.match(listsSrc, /Conflicts register/);
+  assert.match(listsSrc, /Fundraising register/);
+  assert.match(listsSrc, /export function RegisterRecordsPanel/);
+  assert.match(listsSrc, /export function riskScore/);
 });
 
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
