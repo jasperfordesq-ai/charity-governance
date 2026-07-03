@@ -25,12 +25,18 @@ import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
-import { EvidenceChip, StatusChip } from '@/components/ui/status';
+import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
 import type {
   DocumentResponse,
   GovernanceStandardResponse,
+  OrganisationResponse,
 } from '@charitypilot/shared';
-import { DocumentCategory, DOCUMENT_CATEGORY_LABELS } from '@charitypilot/shared';
+import {
+  CONDITIONAL_OBLIGATION_REVIEW_RULES,
+  DocumentCategory,
+  DOCUMENT_CATEGORY_LABELS,
+  getMatrixEntriesForStandard,
+} from '@charitypilot/shared';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -49,13 +55,20 @@ const formatFileSize = (bytes: number) => {
   return `${bytes} B`;
 };
 
+const formatReviewFlag = (value: string) =>
+  value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function DocumentsPage() {
   useDocumentTitle('Documents');
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [standards, setStandards] = useState<GovernanceStandardResponse[]>([]);
+  const [organisation, setOrganisation] = useState<OrganisationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [standardsError, setStandardsError] = useState('');
+  const [organisationProfileError, setOrganisationProfileError] = useState('');
   const { toast } = useToast();
 
   const uploadModal = useDisclosure();
@@ -115,12 +128,26 @@ export default function DocumentsPage() {
     }
   }, []);
 
+  const fetchOrganisationProfile = useCallback(async () => {
+    setOrganisationProfileError('');
+    try {
+      const res = await api.get('/organisations');
+      setOrganisation(res.data?.data ?? res.data ?? null);
+    } catch (err) {
+      const message = apiErrorMessage(err, 'Organisation profile could not be loaded for conditional evidence prompts.');
+      logClientError('Failed to load organisation profile for document prompts', err);
+      setOrganisationProfileError(message);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDocuments(true);
     fetchStandards();
-  }, [fetchDocuments, fetchStandards]);
+    fetchOrganisationProfile();
+  }, [fetchDocuments, fetchOrganisationProfile, fetchStandards]);
 
   const categoryOptions = Object.entries(DOCUMENT_CATEGORY_LABELS);
+  const conditionalProfile = organisation?.conditionalObligationProfile ?? null;
 
   const documentCounts = useMemo(() => {
     return documents.reduce<Record<string, number>>((acc, doc) => {
@@ -146,8 +173,42 @@ export default function DocumentsPage() {
     });
   }, [documentCounts, documentSearchText]);
 
+  const conditionalObligationPrompts = useMemo(() => {
+    const profile = organisation?.conditionalObligationProfile;
+    if (!profile) return [];
+
+    return CONDITIONAL_OBLIGATION_REVIEW_RULES
+      .filter((rule) => profile?.[rule.profileKey])
+      .map((rule) => {
+        const matrixEntries = rule.standardCodes.flatMap((code) => getMatrixEntriesForStandard(code));
+        const sourceRefs = Array.from(
+          new Map(
+            matrixEntries
+              .flatMap((entry) => entry.sourceRefs)
+              .map((source) => [source.url, source]),
+          ).values(),
+        );
+        const professionalReview = Array.from(
+          new Set(matrixEntries.flatMap((entry) => entry.professionalReview)),
+        );
+        const linkedEvidenceCount = documents.reduce(
+          (total, doc) =>
+            total + (doc.standardLinks ?? []).filter((link) => rule.standardCodes.includes(link.standardCode)).length,
+          0,
+        );
+
+        return {
+          ...rule,
+          sourceRefs,
+          professionalReview,
+          linkedEvidenceCount,
+        };
+      });
+  }, [documents, organisation?.conditionalObligationProfile]);
+
   const missingEvidenceCount = evidencePackItems.filter((item) => !documentCounts[item.category]).length;
   const missingSignalCount = signalCoverage.filter((item) => !item.covered).length;
+  const missingConditionalEvidenceCount = conditionalObligationPrompts.filter((item) => item.linkedEvidenceCount === 0).length;
   const linkedStandardsCount = documents.reduce((total, doc) => total + (doc.standardLinks?.length ?? 0), 0);
   const selectedLinkDoc = documents.find((doc) => doc.id === linkDocId);
   const selectedDeleteDoc = documents.find((doc) => doc.id === deleteDocId);
@@ -372,6 +433,72 @@ export default function DocumentsPage() {
             );
           })}
         </div>
+      </AppSection>
+
+      <AppSection
+        title="Profile-triggered evidence prompts"
+        description="These prompts come from the organisation setup profile and the Irish compliance matrix. They highlight profile-triggered obligations that may need source-backed evidence or professional review."
+        actions={(
+          <StatusChip tone={!conditionalProfile ? 'warning' : missingConditionalEvidenceCount === 0 ? 'success' : 'warning'}>
+            {!conditionalProfile
+              ? 'Profile needed'
+              : conditionalObligationPrompts.length === 0
+                ? 'No triggers selected'
+                : `${missingConditionalEvidenceCount} evidence prompt${missingConditionalEvidenceCount === 1 ? '' : 's'} to link`}
+          </StatusChip>
+        )}
+      >
+        {organisationProfileError ? (
+          <ErrorState
+            title="Profile-triggered prompts could not be loaded"
+            description={organisationProfileError}
+            action={(
+              <Button size="sm" variant="flat" onPress={fetchOrganisationProfile}>
+                Try again
+              </Button>
+            )}
+          />
+        ) : !conditionalProfile ? (
+          <EmptyState
+            title="Complete the organisation profile"
+            description="Answer the conditional obligation questions in Organisation before relying on document evidence prompts."
+          />
+        ) : conditionalObligationPrompts.length === 0 ? (
+          <EmptyState
+            title="No conditional triggers selected"
+            description="The current organisation profile has not selected staff, volunteers, public fundraising, safeguarding, data, premises, public-sector, or processor triggers."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {conditionalObligationPrompts.map((item) => {
+              const professionalReviewLabel = item.professionalReview.length
+                ? item.professionalReview.map(formatReviewFlag).join(', ')
+                : 'Board judgement';
+              const sourceLabel = item.sourceRefs.length
+                ? item.sourceRefs.slice(0, 2).map((source) => source.owner).join(', ')
+                : 'Irish compliance matrix';
+
+              return (
+                <div key={item.profileKey} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.label}</h3>
+                      <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.recommendedAction}</p>
+                    </div>
+                    <EvidenceChip status={item.linkedEvidenceCount > 0 ? 'ready' : 'review'}>
+                      {item.linkedEvidenceCount > 0 ? `${item.linkedEvidenceCount} linked` : 'Link evidence'}
+                    </EvidenceChip>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusChip tone="brand">Standards {item.standardCodes.join(', ')}</StatusChip>
+                    <ReviewFlag tone="needs-review">Professional review: {professionalReviewLabel}</ReviewFlag>
+                    <ReviewFlag tone="draft">Sources: {sourceLabel}</ReviewFlag>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </AppSection>
 
       <AppSection

@@ -328,6 +328,30 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
   }
 });
 
+test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {
+  const src = dash('documents/page.tsx');
+  for (const term of [
+    'OrganisationResponse',
+    'CONDITIONAL_OBLIGATION_REVIEW_RULES',
+    'getMatrixEntriesForStandard',
+    "api.get('/organisations')",
+    'conditionalObligationPrompts',
+    'organisation?.conditionalObligationProfile',
+    'profile?.[rule.profileKey]',
+    'Profile-triggered evidence prompts',
+    'profile-triggered obligations',
+    'professional review',
+    'sourceRefs',
+    'standardCodes.includes(link.standardCode)',
+  ]) {
+    assert.match(
+      src,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+      `documents page must include ${term}`,
+    );
+  }
+});
+
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
   const src = dash('registers/page.tsx');
   const imports: Array<[string, string[]]> = [
