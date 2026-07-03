@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { GOVERNANCE_PRINCIPLES } from '../constants/governance-code.js';
 import {
+  CONDITIONAL_OBLIGATION_REVIEW_RULES,
   IRISH_COMPLIANCE_MATRIX,
   IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
   getMatrixEntriesForStandard,
@@ -82,6 +83,35 @@ test('Irish compliance matrix includes not-yet-commenced 2024 Act monitoring pro
     assert.match(entry.applicabilityNote, /not yet commenced|monitor/i);
     assert.match(entry.copyTone, /not.*current|not.*live|monitor/i);
     assert.ok(entry.professionalReview.includes('solicitor'), `${entry.id} must require solicitor review`);
+  }
+});
+
+test('conditional obligation review rules reference valid profile keys and sourced standards', () => {
+  const validProfileKeys = new Set([
+    'hasPaidStaff',
+    'hasVolunteers',
+    'raisesFundsFromPublic',
+    'worksWithChildrenOrVulnerableAdults',
+    'processesPersonalData',
+    'operatesPremisesOrEvents',
+    'isPublicSectorBody',
+    'usesDataProcessors',
+  ]);
+
+  assert.deepEqual(
+    [...new Set(CONDITIONAL_OBLIGATION_REVIEW_RULES.map((rule) => rule.profileKey))].sort(),
+    [...validProfileKeys].sort(),
+  );
+
+  for (const rule of CONDITIONAL_OBLIGATION_REVIEW_RULES) {
+    assert.ok(validProfileKeys.has(rule.profileKey), `${rule.profileKey} must be a valid profile key`);
+    assert.ok(rule.label.trim(), `${rule.profileKey} must have a label`);
+    assert.ok(rule.recommendedAction.trim(), `${rule.profileKey} must have a recommended action`);
+    assert.ok(rule.standardCodes.length > 0, `${rule.profileKey} must cite at least one standard`);
+    for (const code of rule.standardCodes) {
+      assert.ok(knownGovernanceCodes.has(code), `${rule.profileKey} references unknown standard ${code}`);
+      assert.ok(getMatrixEntriesForStandard(code).length > 0, `${rule.profileKey} standard ${code} must have matrix sources`);
+    }
   }
 });
 

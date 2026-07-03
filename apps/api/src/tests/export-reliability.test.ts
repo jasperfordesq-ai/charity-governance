@@ -34,10 +34,24 @@ function activeEssentials() {
   return { status: 'ACTIVE', trialEndsAt: null, plan: 'ESSENTIALS' };
 }
 
+function falseProfile() {
+  return {
+    hasPaidStaff: false,
+    hasVolunteers: false,
+    raisesFundsFromPublic: false,
+    worksWithChildrenOrVulnerableAdults: false,
+    processesPersonalData: false,
+    operatesPremisesOrEvents: false,
+    isPublicSectorBody: false,
+    usesDataProcessors: false,
+  };
+}
+
 // Base read mocks that produce an empty-but-valid compliance report.
 function emptyComplianceReads(): Record<string, unknown> {
   return {
     governancePrinciple: { findMany: async () => [] },
+    governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
     conflictRecord: { findMany: async () => [] },
@@ -56,6 +70,7 @@ function emptyOrganisation() {
       name: 'Example Charity',
       rcnNumber: 'RCN 123',
       complexity: 'COMPLEX',
+      conditionalObligationProfile: falseProfile(),
     }),
   };
 }
@@ -234,9 +249,11 @@ test('Complete plan governance registers are scoped to the token organisation', 
         name: 'Org A',
         rcnNumber: 'RCN-A',
         complexity: 'COMPLEX',
+        conditionalObligationProfile: falseProfile(),
       }),
     },
     governancePrinciple: { findMany: async () => [] },
+    governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
     conflictRecord: { findMany: findManyScoped('conflict') },
@@ -414,6 +431,7 @@ test('export HTML-escapes stored record and register values', async () => {
         },
       ],
     },
+    governanceStandard: { findMany: async () => [{ id: 's1', code: 'S1', isCore: true }] },
     complianceRecord: {
       findMany: async () => [
         {
@@ -481,6 +499,7 @@ test('export includes an escaped approval-readiness warning when explanations ar
         },
       ],
     },
+    governanceStandard: { findMany: async () => [{ id: 's1', code: unsafeCode, isCore: true }] },
     complianceRecord: {
       findMany: async () => [
         {
@@ -521,6 +540,136 @@ test('export includes an escaped approval-readiness warning when explanations ar
   }
 });
 
+test('export includes missing records and evidence gaps in the approval-readiness warning', async () => {
+  const app = await buildApp({
+    ...authModels(),
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: emptyOrganisation(),
+    governancePrinciple: {
+      findMany: async () => [
+        {
+          id: 'p1',
+          number: 1,
+          title: 'Principle One',
+          standards: [
+            { id: 's1', code: '1.1', title: 'Standard one', isCore: true },
+            { id: 's2', code: '1.2', title: 'Standard two', isCore: true },
+          ],
+        },
+      ],
+    },
+    governanceStandard: {
+      findMany: async () => [
+        { id: 's1', code: '1.1', isCore: true },
+        { id: 's2', code: '1.2', isCore: true },
+      ],
+    },
+    complianceRecord: {
+      findMany: async () => [
+        {
+          standardId: 's1',
+          status: 'COMPLIANT',
+          actionTaken: '',
+          evidence: ' ',
+          explanationIfNA: null,
+          standard: { id: 's1', code: '1.1', principle: {} },
+          updatedBy: null,
+        },
+      ],
+    },
+    complianceSignoff: { findUnique: async () => null },
+    conflictRecord: { findMany: async () => [] },
+    riskRecord: { findMany: async () => [] },
+    complaintRecord: { findMany: async () => [] },
+    fundraisingRecord: { findMany: async () => [] },
+    annualReportReadiness: { findUnique: async () => null },
+    financialControlReview: { findUnique: async () => null },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-record?year=2026',
+      headers: { authorization: tokenFor() },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /Missing action taken and evidence/);
+    assert.match(response.body, /No Compliance Record status captured/);
+    assert.match(response.body, /1\.1/);
+    assert.match(response.body, /1\.2/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('export surfaces conditional obligation review prompts from the organisation profile', async () => {
+  const app = await buildApp({
+    ...authModels(),
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org-1',
+        name: 'Example Charity',
+        rcnNumber: 'RCN 123',
+        complexity: 'SIMPLE',
+        conditionalObligationProfile: {
+          ...falseProfile(),
+          hasPaidStaff: true,
+          usesDataProcessors: true,
+        },
+      }),
+    },
+    governancePrinciple: {
+      findMany: async () => [
+        {
+          id: 'p1',
+          number: 1,
+          title: 'Principle One',
+          standards: [{ id: 's1', code: '1.1', title: 'Standard one', isCore: true }],
+        },
+      ],
+    },
+    governanceStandard: { findMany: async () => [{ id: 's1', code: '1.1', isCore: true }] },
+    complianceRecord: {
+      findMany: async () => [
+        {
+          standardId: 's1',
+          status: 'COMPLIANT',
+          actionTaken: 'Reviewed by trustees',
+          evidence: 'Board pack and minutes',
+          explanationIfNA: null,
+          standard: { id: 's1', code: '1.1', principle: {} },
+          updatedBy: null,
+        },
+      ],
+    },
+    complianceSignoff: { findUnique: async () => null },
+    conflictRecord: { findMany: async () => [] },
+    riskRecord: { findMany: async () => [] },
+    complaintRecord: { findMany: async () => [] },
+    fundraisingRecord: { findMany: async () => [] },
+    annualReportReadiness: { findUnique: async () => null },
+    financialControlReview: { findUnique: async () => null },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-record?year=2026',
+      headers: { authorization: tokenFor() },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /Conditional obligation review prompts/);
+    assert.match(response.body, /Employment obligations/);
+    assert.match(response.body, /Data processor review/);
+    assert.match(response.body, /Professional review/);
+  } finally {
+    await app.close();
+  }
+});
+
 test('export omits the approval-readiness warning when explanations are complete', async () => {
   const app = await buildApp({
     ...authModels(),
@@ -536,6 +685,7 @@ test('export omits the approval-readiness warning when explanations are complete
         },
       ],
     },
+    governanceStandard: { findMany: async () => [{ id: 's1', code: '1.1', isCore: true }] },
     complianceRecord: {
       findMany: async () => [
         {

@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { ReviewWarningState } from '@/components/ui/states';
-import type { ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
+import type { ComplianceApprovalReadinessResponse, ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus, GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 
 const signoffStatusLabels = {
@@ -20,19 +20,20 @@ const signoffStatusLabels = {
 const toDateInput = (value: string | null | undefined) => value?.slice(0, 10) ?? '';
 
 const approvalIncompleteMessage =
-  'Resolve compliance explanations before board approval. Standards marked Not Applicable or Explain need an explanation before the board sign-off can be approved.';
+  'Resolve Compliance Record readiness blockers before board approval. Missing records, evidence fields, explanations, and organisation profile checks must be completed first.';
 
 const apiErrorCode = (error: unknown) =>
   (error as { response?: { data?: { code?: string } } })?.response?.data?.code;
 
-type ApprovalReadiness = {
-  ready: boolean;
-  missingExplanations: Array<{
-    standardId: string;
-    standardCode: string;
-    status: 'NOT_APPLICABLE' | 'EXPLAIN';
-  }>;
-};
+type ApprovalReadiness = ComplianceApprovalReadinessResponse;
+
+const readable = (value: string) => value.replace(/_/g, ' ').toLowerCase();
+
+function evidenceGapLabel(item: ApprovalReadiness['missingEvidence'][number]) {
+  if (item.missingActionTaken && item.missingEvidence) return 'Missing action taken and evidence';
+  if (item.missingActionTaken) return 'Missing action taken';
+  return 'Missing evidence';
+}
 
 export default function ExportPage() {
   useDocumentTitle('Export Report');
@@ -117,7 +118,7 @@ export default function ExportPage() {
     try {
       if (signoffForm.status === ComplianceSignoffStatus.APPROVED) {
         const freshApprovalReadiness = await fetchApprovalReadiness();
-        if ((freshApprovalReadiness?.missingExplanations ?? []).length > 0) {
+        if (freshApprovalReadiness?.ready === false) {
           setSignoffError(approvalIncompleteMessage);
           return;
         }
@@ -181,7 +182,18 @@ export default function ExportPage() {
       : signoffForm.status === ComplianceSignoffStatus.BOARD_REVIEW
         ? 'warning'
         : 'default';
+  const missingRecords = approvalReadiness?.missingRecords ?? [];
+  const missingEvidence = approvalReadiness?.missingEvidence ?? [];
   const missingExplanations = approvalReadiness?.missingExplanations ?? [];
+  const profileIssues = approvalReadiness?.profileIssues ?? [];
+  const conditionalReviewItems = approvalReadiness?.conditionalReviewItems ?? [];
+  const readinessBlockerCount =
+    missingRecords.length + missingEvidence.length + missingExplanations.length + profileIssues.length;
+  const readinessBlockerCodes = [
+    ...missingRecords.map((item) => item.standardCode),
+    ...missingEvidence.map((item) => item.standardCode),
+    ...missingExplanations.map((item) => item.standardCode),
+  ];
 
   return (
     <AppPage
@@ -219,18 +231,78 @@ export default function ExportPage() {
             Generate Compliance Report
           </Button>
         </div>
-        {missingExplanations.length > 0 && (
+        {readinessBlockerCount > 0 && (
           <p className="mt-4 text-sm leading-6 text-amber-700 dark:text-amber-300">
-            This export can still be opened for review, but it is not board-approval-ready until explanations are added for {missingExplanations.length} standard{missingExplanations.length === 1 ? '' : 's'}.
+            This export can still be opened for review, but it is not board-approval-ready until {readinessBlockerCount} readiness blocker{readinessBlockerCount === 1 ? '' : 's'} are resolved.
           </p>
         )}
       </Card>
 
-      {missingExplanations.length > 0 && (
+      {readinessBlockerCount > 0 && (
         <ReviewWarningState
-          title="Missing explanations block board approval"
-          description={`Complete explanations for ${missingExplanations.map((item) => item.standardCode).join(', ')} before saving an approved sign-off. The export remains available as a review-ready working report.`}
+          title="Readiness blockers prevent board approval"
+          description={`Resolve missing records, evidence fields, explanations, and profile checks before saving an approved sign-off. ${readinessBlockerCodes.length > 0 ? `Affected standards: ${readinessBlockerCodes.join(', ')}.` : 'The organisation profile needs review.'} The export remains available as a review-ready working report.`}
         />
+      )}
+
+      {readinessBlockerCount > 0 && (
+        <AppSection
+          title="Approval Readiness"
+          description="These checks make missing annual Compliance Record evidence visible before trustees save an approved sign-off."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            {missingRecords.map((item) => (
+              <Card key={`record-${item.standardId}`} className="border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-4">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Standard {item.standardCode}</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">No Compliance Record status has been captured for this standard.</p>
+              </Card>
+            ))}
+            {missingEvidence.map((item) => (
+              <Card key={`evidence-${item.standardId}`} className="border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-4">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Standard {item.standardCode}</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  {evidenceGapLabel(item)} for a {readable(item.status)} record.
+                </p>
+              </Card>
+            ))}
+            {missingExplanations.map((item) => (
+              <Card key={`explanation-${item.standardId}`} className="border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-4">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Standard {item.standardCode}</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  Add an explanation for the {readable(item.status)} position before board approval.
+                </p>
+              </Card>
+            ))}
+            {profileIssues.map((item) => (
+              <Card key={item.code} className="border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-4">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Organisation profile</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">{item.message}</p>
+              </Card>
+            ))}
+          </div>
+        </AppSection>
+      )}
+
+      {conditionalReviewItems.length > 0 && (
+        <AppSection
+          title="Conditional Review Prompts"
+          description={`Profile facts trigger ${conditionalReviewItems.length} specialist review prompt${conditionalReviewItems.length === 1 ? '' : 's'}. These are source-cited workflow prompts, not legal conclusions.`}
+        >
+          <div className="grid gap-3 lg:grid-cols-2">
+            {conditionalReviewItems.map((item) => (
+              <Card key={item.profileKey} className="border border-teal-200 dark:border-teal-500/20 bg-teal-50 dark:bg-teal-500/10 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold text-teal-950 dark:text-teal-100">{item.label}</h3>
+                  <Chip size="sm" variant="flat" color="warning">Professional review</Chip>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-teal-900 dark:text-teal-100/90">{item.recommendedAction}</p>
+                <p className="mt-2 text-xs text-teal-800 dark:text-teal-200">
+                  Standards {item.standardCodes.join(', ')} · {item.professionalReview.map(readable).join(', ') || 'trustee review'}
+                </p>
+              </Card>
+            ))}
+          </div>
+        </AppSection>
       )}
 
       <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">

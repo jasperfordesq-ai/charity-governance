@@ -33,6 +33,19 @@ function activeSubscription(plan = 'ESSENTIALS') {
   };
 }
 
+function falseProfile() {
+  return {
+    hasPaidStaff: false,
+    hasVolunteers: false,
+    raisesFundsFromPublic: false,
+    worksWithChildrenOrVulnerableAdults: false,
+    processesPersonalData: false,
+    operatesPremisesOrEvents: false,
+    isPublicSectorBody: false,
+    usesDataProcessors: false,
+  };
+}
+
 function authModels(role: Role, subscription: unknown) {
   return {
     authSession: { findFirst: async () => ({ id: 'sess-1' }) },
@@ -53,7 +66,7 @@ async function buildComplianceApp(
     ...authModels(role, subscription),
     // Default organisation scope lookup (used by the service's getOrganisationComplianceScope);
     // overridable so subscription-guard tests can prove it is never reached.
-    organisation: { findUniqueOrThrow: async () => ({ complexity: 'COMPLEX' }) },
+    organisation: { findUniqueOrThrow: async () => ({ complexity: 'COMPLEX', conditionalObligationProfile: falseProfile() }) },
     ...prismaOverrides,
   } as never);
   await app.register(complianceRoutes);
@@ -69,6 +82,7 @@ function buildService(opts: {
   plan?: string | null; // null => no subscription
   complexity?: string;
   standard?: { id: string; isCore: boolean } | null; // for findUnique
+  standards?: Array<{ id: string; code: string; isCore?: boolean; principleId: string; principle: { number: number; title: string } }>;
   records?: Array<{
     standardId: string;
     status: string;
@@ -79,14 +93,17 @@ function buildService(opts: {
   const calls: Call[] = [];
   const prisma = {
     organisation: {
-      findUniqueOrThrow: async () => ({ complexity: opts.complexity ?? 'SIMPLE' }),
+      findUniqueOrThrow: async () => ({
+        complexity: opts.complexity ?? 'SIMPLE',
+        conditionalObligationProfile: falseProfile(),
+      }),
     },
     subscription: {
       findUnique: async () => (opts.plan === null ? null : { plan: opts.plan ?? 'ESSENTIALS' }),
     },
     governanceStandard: {
       findUnique: async () => (opts.standard === undefined ? { id: 's1', isCore: true } : opts.standard),
-      findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return []; },
+      findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return opts.standards ?? []; },
     },
     complianceRecord: {
       findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return opts.records ?? []; },
@@ -208,6 +225,7 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
   ];
   const app = await buildComplianceApp(
     {
+      governanceStandard: { findMany: async () => [{ id: 's1', code: '1.1', isCore: true }] },
       complianceRecord: { findMany: async () => records },
     },
     'MEMBER',
@@ -222,8 +240,15 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
     assert.equal(ok.statusCode, 200);
     assert.deepEqual(ok.json().data, {
       ready: false,
+      missingRecords: [],
+      missingEvidence: [],
       missingExplanations: [{ standardId: 's1', standardCode: '1.1', status: 'EXPLAIN' }],
+      profileIssues: [],
+      conditionalReviewItems: [],
+      matrixReviewItems: ok.json().data.matrixReviewItems,
+      matrixLastChecked: '2026-07-03',
     });
+    assert.ok(ok.json().data.matrixReviewItems.length > 0);
 
     const badYear = await app.inject({
       method: 'GET',
@@ -369,6 +394,7 @@ test('upsertSignoff rejects APPROVED when approval readiness is incomplete and d
   const { service, calls } = buildService({
     plan: 'COMPLETE',
     complexity: 'COMPLEX',
+    standards: [{ id: 's1', code: '1.1', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } }],
     records: [
       { standardId: 's1', status: 'NOT_APPLICABLE', explanationIfNA: ' ', standard: { id: 's1', code: '1.1' } },
     ],

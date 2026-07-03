@@ -4,7 +4,7 @@ Generated: 2026-07-03
 
 Branch: `master`
 
-Working-tree base commit when generated: `668c7e0`
+Working-tree base commit when generated: `61d7010`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /organisation (602), /deadlines (571), /dashboard (550). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (742), /board (654), /organisation (602), /export (576), /deadlines (571). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -36,15 +36,15 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production hostname defaults now consistently use app.charitypilot.ie for the web app and api.charitypilot.ie for the API.
 - The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.
 - Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.
+- Approval readiness and exports now flag missing standard records, missing action/evidence fields, missing explanations, missing conditional-profile facts, and profile-triggered professional-review prompts.
 
 ## Independent Audit Findings Still Driving Next Work
 
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P1 | Frontend workflow | Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits. |
-| P0 | Compliance export | Export posture was less cautious than app UI; branch adds a source/review appendix, but future work should broaden readiness beyond missing explanations. |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Product compliance | Conditional obligation facts are now captured on the organisation profile; next wire those facts into deadline, register, evidence, export, and regulator prompt prioritisation. |
+| P1 | Product compliance | Conditional obligation facts now drive export/readiness prompts; next wire those facts into deadline, register, evidence, and regulator prioritisation. |
 | P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
 | P2 | Accessibility/navigation | Breadcrumb labels and mobile nav/sidebar focus management need another pass, including dynamic principle labels and Escape/focus behavior. |
 
@@ -63,7 +63,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 550 | yes | large route file; refactor soon; 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 571 | yes | large route file; refactor soon; 2 inline svg icon(s) |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 742 | yes | oversized route file; split first; 2 inline svg icon(s) |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 504 | yes | large route file; refactor soon; 9 inline svg icon(s) |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 576 | yes | large route file; refactor soon; 9 inline svg icon(s) |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 109 | yes | 1 inline svg icon(s) |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | 2 inline svg icon(s) |
@@ -89,7 +89,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `documents` | `apps/api/src/routes/documents/index.ts` | 382 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `export` | `apps/api/src/routes/export/index.ts` | 402 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
+| `export` | `apps/api/src/routes/export/index.ts` | 461 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |

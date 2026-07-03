@@ -22,6 +22,19 @@ function subscription() {
   };
 }
 
+function falseProfile() {
+  return {
+    hasPaidStaff: false,
+    hasVolunteers: false,
+    raisesFundsFromPublic: false,
+    worksWithChildrenOrVulnerableAdults: false,
+    processesPersonalData: false,
+    operatesPremisesOrEvents: false,
+    isPublicSectorBody: false,
+    usesDataProcessors: false,
+  };
+}
+
 test('export HTML route sets a scoped CSP that allows its inline stylesheet', async () => {
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
@@ -34,9 +47,11 @@ test('export HTML route sets a scoped CSP that allows its inline stylesheet', as
         name: 'Example Charity',
         rcnNumber: 'RCN 123',
         complexity: 'SIMPLE',
+        conditionalObligationProfile: falseProfile(),
       }),
     },
     governancePrinciple: { findMany: async () => [] },
+    governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
     conflictRecord: { findMany: async () => [] },
@@ -82,12 +97,15 @@ test('Essentials exports do not include Complete-only governance registers', asy
         name: 'Example Charity',
         rcnNumber: 'RCN 123',
         complexity: 'COMPLEX',
+        conditionalObligationProfile: falseProfile(),
       }),
       findUnique: async () => ({
         complexity: 'COMPLEX',
+        conditionalObligationProfile: falseProfile(),
       }),
     },
     governancePrinciple: { findMany: async () => [] },
+    governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
     conflictRecord: {

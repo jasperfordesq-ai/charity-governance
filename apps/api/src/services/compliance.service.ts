@@ -1,7 +1,15 @@
 import type { PrismaClient } from '@prisma/client';
 import {
+  CONDITIONAL_OBLIGATION_REVIEW_RULES,
   ComplianceSignoffStatus,
+  IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
   SubscriptionPlan,
+  conditionalObligationProfileSchema,
+  getMatrixEntriesForStandard,
+  type ComplianceApprovalConditionalReviewItem,
+  type ComplianceApprovalMatrixReviewItem,
+  type ComplianceApprovalReadinessResponse,
+  type ConditionalObligationProfile,
   type ComplianceSignoffResponse,
   type ComplianceSummary,
   type PrincipleComplianceSummary,
@@ -13,18 +21,14 @@ import { AppError } from '../utils/errors.js';
 type OrganisationComplianceScope = {
   complexity: string;
   plan: string;
+  conditionalObligationProfile: ConditionalObligationProfile | null;
 };
 
 type MissingComplianceExplanationStatus = 'NOT_APPLICABLE' | 'EXPLAIN';
 
-export type ComplianceApprovalReadiness = {
-  ready: boolean;
-  missingExplanations: Array<{
-    standardId: string;
-    standardCode: string;
-    status: MissingComplianceExplanationStatus;
-  }>;
-};
+export type ComplianceApprovalReadiness = ComplianceApprovalReadinessResponse;
+
+type MissingComplianceEvidenceStatus = 'COMPLIANT' | 'WORKING_TOWARDS';
 
 function includesAdditionalStandards(scope: OrganisationComplianceScope): boolean {
   return scope.complexity === 'COMPLEX' && scope.plan === SubscriptionPlan.COMPLETE;
@@ -34,6 +38,56 @@ function standardsWhere(scope: OrganisationComplianceScope): { isCore: true } | 
   return includesAdditionalStandards(scope) ? undefined : { isCore: true };
 }
 
+function parseConditionalObligationProfile(value: unknown): ConditionalObligationProfile | null {
+  const parsed = conditionalObligationProfileSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function trimValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function matrixReviewItemsForStandard(standardCode: string): ComplianceApprovalMatrixReviewItem[] {
+  return getMatrixEntriesForStandard(standardCode).map((entry) => ({
+    standardCode,
+    matrixEntryId: entry.id,
+    commencementStatus: entry.commencementStatus,
+    boardApproval: entry.boardApproval,
+    professionalReview: entry.professionalReview,
+    sourceRefs: entry.sourceRefs,
+    applicabilityNote: entry.applicabilityNote,
+    evidenceRequired: entry.evidenceRequired,
+  }));
+}
+
+function conditionalReviewItemsForProfile(
+  profile: ConditionalObligationProfile | null,
+): ComplianceApprovalConditionalReviewItem[] {
+  if (!profile) {
+    return [];
+  }
+
+  return CONDITIONAL_OBLIGATION_REVIEW_RULES
+    .filter((rule) => profile[rule.profileKey])
+    .map((rule) => {
+      const entries = rule.standardCodes.flatMap((code) => getMatrixEntriesForStandard(code));
+      return {
+        profileKey: rule.profileKey,
+        label: rule.label,
+        recommendedAction: rule.recommendedAction,
+        standardCodes: [...new Set(rule.standardCodes)].sort(),
+        commencementStatuses: [...new Set(entries.map((entry) => entry.commencementStatus))].sort(),
+        professionalReview: [...new Set(entries.flatMap((entry) => entry.professionalReview))].sort(),
+        sourceRefs: [
+          ...new Map(
+            entries.flatMap((entry) => entry.sourceRefs).map((sourceRef) => [sourceRef.url, sourceRef] as const),
+          ).values(),
+        ].sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name)),
+        applicabilityNotes: [...new Set(entries.map((entry) => entry.applicabilityNote))],
+      };
+    });
+}
+
 export class ComplianceService {
   constructor(private prisma: PrismaClient) {}
 
@@ -41,7 +95,7 @@ export class ComplianceService {
     const [organisation, subscription] = await Promise.all([
       this.prisma.organisation.findUniqueOrThrow({
         where: { id: organisationId },
-        select: { complexity: true },
+        select: { complexity: true, conditionalObligationProfile: true },
       }),
       this.prisma.subscription.findUnique({
         where: { organisationId },
@@ -53,7 +107,11 @@ export class ComplianceService {
       throw new AppError(403, 'NO_SUBSCRIPTION', 'No active subscription. Please subscribe to continue.');
     }
 
-    return { complexity: organisation.complexity, plan: subscription.plan };
+    return {
+      complexity: organisation.complexity,
+      plan: subscription.plan,
+      conditionalObligationProfile: parseConditionalObligationProfile(organisation.conditionalObligationProfile),
+    };
   }
 
   private async ensureStandardIncludedInPlan(organisationId: string, standardId: string): Promise<void> {
@@ -150,23 +208,96 @@ export class ComplianceService {
   }
 
   async getApprovalReadiness(organisationId: string, reportingYear: number): Promise<ComplianceApprovalReadiness> {
-    const records = await this.getRecords(organisationId, reportingYear);
-    const missingExplanations = records
-      .filter((record): record is typeof record & { status: MissingComplianceExplanationStatus } => {
-        return (
-          (record.status === 'NOT_APPLICABLE' || record.status === 'EXPLAIN') &&
-          !record.explanationIfNA?.trim()
-        );
-      })
-      .map((record) => ({
-        standardId: record.standardId,
-        standardCode: record.standard.code,
-        status: record.status,
-      }));
+    const scope = await this.getOrganisationComplianceScope(organisationId);
+    const [standards, records] = await Promise.all([
+      this.prisma.governanceStandard.findMany({
+        where: standardsWhere(scope),
+        select: { id: true, code: true },
+        orderBy: { sortOrder: 'asc' },
+      }),
+      this.prisma.complianceRecord.findMany({
+        where: {
+          organisationId,
+          reportingYear,
+          standard: standardsWhere(scope),
+        },
+        select: {
+          standardId: true,
+          status: true,
+          actionTaken: true,
+          evidence: true,
+          explanationIfNA: true,
+        },
+      }),
+    ]);
+
+    const recordMap = new Map(records.map((record) => [record.standardId, record]));
+    const missingRecords: ComplianceApprovalReadiness['missingRecords'] = [];
+    const missingEvidence: ComplianceApprovalReadiness['missingEvidence'] = [];
+    const missingExplanations: ComplianceApprovalReadiness['missingExplanations'] = [];
+    const matrixReviewItems: ComplianceApprovalReadiness['matrixReviewItems'] = [];
+
+    for (const standard of standards) {
+      const record = recordMap.get(standard.id);
+      matrixReviewItems.push(...matrixReviewItemsForStandard(standard.code));
+
+      if (!record || record.status === 'NOT_STARTED') {
+        missingRecords.push({
+          standardId: standard.id,
+          standardCode: standard.code,
+          status: 'NOT_STARTED',
+        });
+        continue;
+      }
+
+      if (
+        (record.status === 'NOT_APPLICABLE' || record.status === 'EXPLAIN') &&
+        !trimValue(record.explanationIfNA)
+      ) {
+        missingExplanations.push({
+          standardId: standard.id,
+          standardCode: standard.code,
+          status: record.status as MissingComplianceExplanationStatus,
+        });
+      }
+
+      if (record.status === 'COMPLIANT' || record.status === 'WORKING_TOWARDS') {
+        const missingActionTaken = !trimValue(record.actionTaken);
+        const evidenceMissing = !trimValue(record.evidence);
+        if (missingActionTaken || evidenceMissing) {
+          missingEvidence.push({
+            standardId: standard.id,
+            standardCode: standard.code,
+            status: record.status as MissingComplianceEvidenceStatus,
+            missingActionTaken,
+            missingEvidence: evidenceMissing,
+          });
+        }
+      }
+    }
+
+    const profileIssues: ComplianceApprovalReadiness['profileIssues'] = scope.conditionalObligationProfile
+      ? []
+      : [
+          {
+            code: 'CONDITIONAL_OBLIGATION_PROFILE_MISSING',
+            message: 'Capture the organisation conditional obligation profile before approving the annual Compliance Record.',
+          },
+        ];
 
     return {
-      ready: missingExplanations.length === 0,
+      ready:
+        missingRecords.length === 0 &&
+        missingEvidence.length === 0 &&
+        missingExplanations.length === 0 &&
+        profileIssues.length === 0,
+      missingRecords,
+      missingEvidence,
       missingExplanations,
+      profileIssues,
+      conditionalReviewItems: conditionalReviewItemsForProfile(scope.conditionalObligationProfile),
+      matrixReviewItems,
+      matrixLastChecked: IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
     };
   }
 
@@ -287,7 +418,7 @@ export class ComplianceService {
         throw new AppError(
           400,
           'COMPLIANCE_APPROVAL_INCOMPLETE',
-          'Resolve compliance explanations before board approval.',
+          'Resolve Compliance Record readiness blockers before board approval.',
         );
       }
     }

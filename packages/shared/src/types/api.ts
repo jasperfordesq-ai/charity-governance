@@ -14,6 +14,7 @@ import type {
   UserRole,
   DeadlineReminderStatus,
 } from './enums.js';
+import type { ComplianceSourceRef, CommencementStatus, ProfessionalReviewFlag } from '../constants/irish-compliance-matrix.js';
 
 // ── Generic API response ──
 
@@ -233,6 +234,64 @@ export interface ComplianceSignoffResponse {
   approvedAt: string | null;
   updatedById: string | null;
   updatedAt: string | null;
+}
+
+export interface ComplianceApprovalMissingRecord {
+  standardId: string;
+  standardCode: string;
+  status: 'NOT_STARTED';
+}
+
+export interface ComplianceApprovalMissingEvidence {
+  standardId: string;
+  standardCode: string;
+  status: 'COMPLIANT' | 'WORKING_TOWARDS';
+  missingActionTaken: boolean;
+  missingEvidence: boolean;
+}
+
+export interface ComplianceApprovalMissingExplanation {
+  standardId: string;
+  standardCode: string;
+  status: 'NOT_APPLICABLE' | 'EXPLAIN';
+}
+
+export interface ComplianceApprovalProfileIssue {
+  code: 'CONDITIONAL_OBLIGATION_PROFILE_MISSING';
+  message: string;
+}
+
+export interface ComplianceApprovalConditionalReviewItem {
+  profileKey: keyof ConditionalObligationProfile;
+  label: string;
+  recommendedAction: string;
+  standardCodes: string[];
+  commencementStatuses: CommencementStatus[];
+  professionalReview: ProfessionalReviewFlag[];
+  sourceRefs: ComplianceSourceRef[];
+  applicabilityNotes: string[];
+}
+
+export interface ComplianceApprovalMatrixReviewItem {
+  standardCode: string;
+  matrixEntryId: string;
+  commencementStatus: CommencementStatus;
+  boardApproval: 'required' | 'recommended' | 'conditional' | 'not_applicable';
+  professionalReview: ProfessionalReviewFlag[];
+  sourceRefs: ComplianceSourceRef[];
+  applicabilityNote: string;
+  evidenceRequired: string[];
+}
+
+export interface ComplianceApprovalReadinessResponse {
+  ready: boolean;
+  missingRecords: ComplianceApprovalMissingRecord[];
+  missingEvidence: ComplianceApprovalMissingEvidence[];
+  missingExplanations: ComplianceApprovalMissingExplanation[];
+  profileIssues: ComplianceApprovalProfileIssue[];
+  conditionalReviewItems: ComplianceApprovalConditionalReviewItem[];
+  matrixReviewItems: ComplianceApprovalMatrixReviewItem[];
+  matrixLastChecked: string;
 }
 
 export interface UpsertComplianceRecordRequest {

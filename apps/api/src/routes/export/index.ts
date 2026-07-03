@@ -265,20 +265,8 @@ function buildComplianceReportHtml(
         <p><strong>Signed by Chairperson:</strong> ____________________</p>
         <p><strong>Date:</strong> ____________________</p>`;
 
-  const readinessWarningHtml = approvalReadiness.ready
-    ? ''
-    : `
-      <section style="margin-top: 40px; border: 1px solid #f59e0b; background: #fffbeb; padding: 14px 16px;">
-        <h2 style="margin-top: 0; color: #92400e;">Approval readiness warning</h2>
-        <p style="font-size: 13px; color: #78350f;">This report is review-ready but not board-approval-ready until explanations are completed for all standards marked not applicable or explain.</p>
-        ${simpleTable(
-          ['Standard', 'Status'],
-          approvalReadiness.missingExplanations.map((item) => [
-            item.standardCode,
-            item.status.replace(/_/g, ' '),
-          ]),
-        )}
-      </section>`;
+  const readinessWarningHtml = buildReadinessWarningHtml(approvalReadiness);
+  const conditionalReviewHtml = buildConditionalReviewHtml(approvalReadiness);
   const sourceReviewAppendixHtml = buildSourceReviewAppendixHtml();
 
   return `<!DOCTYPE html>
@@ -309,6 +297,7 @@ function buildComplianceReportHtml(
   ${standardRows}
   ${governanceRegisterRows}
   ${readinessWarningHtml}
+  ${conditionalReviewHtml}
   ${sourceReviewAppendixHtml}
   <div style="margin-top: 48px; border-top: 2px solid #0D7377; padding-top: 16px;">
     <h2>Board approval</h2>
@@ -320,6 +309,76 @@ function buildComplianceReportHtml(
   </footer>
 </body>
 </html>`;
+}
+
+function buildReadinessWarningHtml(approvalReadiness: ComplianceApprovalReadiness): string {
+  if (approvalReadiness.ready) {
+    return '';
+  }
+
+  const rows = [
+    ...approvalReadiness.missingRecords.map((item) => [
+      item.standardCode,
+      'No Compliance Record status captured',
+      'Open the standard and record the trustee-reviewed position before board approval.',
+    ]),
+    ...approvalReadiness.missingEvidence.map((item) => [
+      item.standardCode,
+      missingEvidenceLabel(item.missingActionTaken, item.missingEvidence),
+      'Add the action taken and evidence fields needed for a review-ready Compliance Record.',
+    ]),
+    ...approvalReadiness.missingExplanations.map((item) => [
+      item.standardCode,
+      `${item.status.replace(/_/g, ' ')} explanation missing`,
+      'Explain why the standard is not applicable or why the charity is explaining instead of marking compliant.',
+    ]),
+    ...approvalReadiness.profileIssues.map((item) => [
+      'Organisation profile',
+      item.code.replace(/_/g, ' '),
+      item.message,
+    ]),
+  ];
+
+  return `
+    <section style="margin-top: 40px; border: 1px solid #f59e0b; background: #fffbeb; padding: 14px 16px;">
+      <h2 style="margin-top: 0; color: #92400e;">Approval readiness warning</h2>
+      <p style="font-size: 13px; color: #78350f;">
+        This report is review-ready but not board-approval-ready until missing records, evidence fields,
+        explanations and organisation-profile checks are completed. This is a workflow readiness check,
+        not legal certification.
+      </p>
+      ${simpleTable(['Area', 'Readiness blocker', 'Next action'], rows)}
+    </section>`;
+}
+
+function buildConditionalReviewHtml(approvalReadiness: ComplianceApprovalReadiness): string {
+  if (approvalReadiness.conditionalReviewItems.length === 0) {
+    return '';
+  }
+
+  return `
+    <section style="margin-top: 40px; border: 1px solid #99f6e4; background: #f0fdfa; padding: 14px 16px;">
+      <h2 style="margin-top: 0; color: #115e59;">Conditional obligation review prompts</h2>
+      <p style="font-size: 13px; color: #134e4a;">
+        These prompts come from the organisation profile. They identify areas for trustee and professional review;
+        they do not certify that the listed obligation applies in every case.
+      </p>
+      ${simpleTable(
+        ['Profile trigger', 'Relevant standards', 'Professional review', 'Recommended action'],
+        approvalReadiness.conditionalReviewItems.map((item) => [
+          item.label,
+          item.standardCodes.join(', '),
+          item.professionalReview.map((flag) => flag.replace(/_/g, ' ')).join(', ') || 'Trustee review',
+          item.recommendedAction,
+        ]),
+      )}
+    </section>`;
+}
+
+function missingEvidenceLabel(missingActionTaken: boolean, missingEvidence: boolean): string {
+  if (missingActionTaken && missingEvidence) return 'Missing action taken and evidence';
+  if (missingActionTaken) return 'Missing action taken';
+  return 'Missing evidence';
 }
 
 function buildSourceReviewAppendixHtml(): string {

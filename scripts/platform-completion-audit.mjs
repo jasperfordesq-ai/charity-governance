@@ -63,13 +63,13 @@ const fixedInThisAuditBranch = [
   'Production hostname defaults now consistently use app.charitypilot.ie for the web app and api.charitypilot.ie for the API.',
   'The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.',
   'Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.',
+  'Approval readiness and exports now flag missing standard records, missing action/evidence fields, missing explanations, missing conditional-profile facts, and profile-triggered professional-review prompts.',
 ];
 
 const independentAuditFindings = [
   ['P1', 'Frontend workflow', 'Compliance detail autosave now flushes pending edits on blur/unmount; a fuller in-app navigation confirmation can still improve confidence for long edits.'],
-  ['P0', 'Compliance export', 'Export posture was less cautious than app UI; branch adds a source/review appendix, but future work should broaden readiness beyond missing explanations.'],
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Product compliance', 'Conditional obligation facts are now captured on the organisation profile; next wire those facts into deadline, register, evidence, export, and regulator prompt prioritisation.'],
+  ['P1', 'Product compliance', 'Conditional obligation facts now drive export/readiness prompts; next wire those facts into deadline, register, evidence, and regulator prioritisation.'],
   ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish.'],
   ['P2', 'Accessibility/navigation', 'Breadcrumb labels and mobile nav/sidebar focus management need another pass, including dynamic principle labels and Escape/focus behavior.'],
 ];

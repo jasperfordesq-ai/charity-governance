@@ -132,9 +132,15 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   const exportPage = dash('export/page.tsx');
   assert.match(exportPage, /approval-readiness\?year=\$\{year\}/);
   assert.match(exportPage, /missingExplanations/);
+  assert.match(exportPage, /missingRecords/);
+  assert.match(exportPage, /missingEvidence/);
+  assert.match(exportPage, /profileIssues/);
+  assert.match(exportPage, /conditionalReviewItems/);
   assert.match(exportPage, /COMPLIANCE_APPROVAL_INCOMPLETE/);
   assert.match(exportPage, /fetchApprovalReadiness/);
   assert.match(exportPage, /freshApprovalReadiness/);
+  assert.match(exportPage, /freshApprovalReadiness\?\.ready === false/);
+  assert.doesNotMatch(exportPage, /freshApprovalReadiness\?\.missingExplanations/);
   assert.doesNotMatch(
     exportPage,
     /const missingExplanations = approvalReadiness\?\.missingExplanations \?\? \[\];[\s\S]*?setSignoffError\(approvalIncompleteMessage\);[\s\S]*?return;[\s\S]*?setSavingSignoff\(true\);/,

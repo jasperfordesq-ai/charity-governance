@@ -1,3 +1,5 @@
+import type { ConditionalObligationProfile } from '../types/api.js';
+
 export type CommencementStatus = 'in_force' | 'not_commenced' | 'conditional' | 'guidance';
 
 export type ProfessionalReviewFlag =
@@ -50,7 +52,73 @@ export interface IrishComplianceMatrixEntry {
   testExpectation: string;
 }
 
+export interface ConditionalObligationReviewRule {
+  profileKey: keyof ConditionalObligationProfile;
+  label: string;
+  recommendedAction: string;
+  standardCodes: string[];
+}
+
 export const IRISH_COMPLIANCE_MATRIX_LAST_CHECKED = '2026-07-03';
+
+export const CONDITIONAL_OBLIGATION_REVIEW_RULES: ConditionalObligationReviewRule[] = [
+  {
+    profileKey: 'hasPaidStaff',
+    label: 'Employment obligations',
+    recommendedAction:
+      'Review employment, equality, payroll, protected-disclosure and role-delegation evidence with the appropriate professional advisers.',
+    standardCodes: ['3.4', '3.5', '3.6', '4.2'],
+  },
+  {
+    profileKey: 'hasVolunteers',
+    label: 'Volunteer role and supervision evidence',
+    recommendedAction:
+      'Keep role descriptions, onboarding, supervision and policy ownership records proportionate to the volunteer activity.',
+    standardCodes: ['3.1', '3.2', '3.3'],
+  },
+  {
+    profileKey: 'raisesFundsFromPublic',
+    label: 'Public fundraising controls',
+    recommendedAction:
+      'Review fundraising controls, third-party fundraiser arrangements, complaints handling and board oversight records.',
+    standardCodes: ['4.3', '6.4'],
+  },
+  {
+    profileKey: 'worksWithChildrenOrVulnerableAdults',
+    label: 'Safeguarding review',
+    recommendedAction:
+      'Confirm whether safeguarding statements, vetting, incident escalation and specialist board-review records are required.',
+    standardCodes: ['4.2', '4.5'],
+  },
+  {
+    profileKey: 'processesPersonalData',
+    label: 'Data protection accountability',
+    recommendedAction:
+      'Review privacy, retention, processor, access-control and breach-response evidence under data-protection obligations.',
+    standardCodes: ['4.2', '6.1'],
+  },
+  {
+    profileKey: 'operatesPremisesOrEvents',
+    label: 'Premises, events and safety controls',
+    recommendedAction:
+      'Review insurance, risk assessment, safety-statement and incident/escalation records for premises or events.',
+    standardCodes: ['4.2', '4.4', '4.5'],
+  },
+  {
+    profileKey: 'isPublicSectorBody',
+    label: 'Public-sector context review',
+    recommendedAction:
+      'Review public-sector, protected-disclosure, publication and stakeholder-accountability obligations before relying on generic workflows.',
+    standardCodes: ['4.2', '6.1', '6.2'],
+  },
+  {
+    profileKey: 'usesDataProcessors',
+    label: 'Data processor review',
+    recommendedAction:
+      'Review processor due diligence, contracts, storage locations, access controls and retention evidence with data-protection advice where needed.',
+    standardCodes: ['4.2', '6.1'],
+  },
+];
 
 const sourceRef = (
   name: string,

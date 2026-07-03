@@ -11,11 +11,20 @@ const codeOf = (err: unknown) => (err as { code?: string })?.code;
 function buildService(opts: {
   plan?: string | null; // null => no subscription
   complexity?: string;
+  conditionalObligationProfile?: unknown;
   standard?: { id: string; isCore: boolean } | null; // for findUnique
-  standards?: Array<{ id: string; principleId: string; principle: { number: number; title: string } }>;
+  standards?: Array<{
+    id: string;
+    code?: string;
+    isCore?: boolean;
+    principleId: string;
+    principle: { number: number; title: string };
+  }>;
   records?: Array<{
     standardId: string;
     status: string;
+    actionTaken?: string | null;
+    evidence?: string | null;
     explanationIfNA?: string | null;
     standard?: { id: string; code: string };
   }>;
@@ -24,7 +33,10 @@ function buildService(opts: {
   const calls: Call[] = [];
   const prisma = {
     organisation: {
-      findUniqueOrThrow: async () => ({ complexity: opts.complexity ?? 'SIMPLE' }),
+      findUniqueOrThrow: async () => ({
+        complexity: opts.complexity ?? 'SIMPLE',
+        conditionalObligationProfile: opts.conditionalObligationProfile,
+      }),
     },
     subscription: {
       findUnique: async () => (opts.plan === null ? null : { plan: opts.plan ?? 'ESSENTIALS' }),
@@ -50,6 +62,19 @@ function buildService(opts: {
   return { service: new ComplianceService(prisma as never), calls };
 }
 
+function falseProfile() {
+  return {
+    hasPaidStaff: false,
+    hasVolunteers: false,
+    raisesFundsFromPublic: false,
+    worksWithChildrenOrVulnerableAdults: false,
+    processesPersonalData: false,
+    operatesPremisesOrEvents: false,
+    isPublicSectorBody: false,
+    usesDataProcessors: false,
+  };
+}
+
 test('compliance scope requires an active subscription', async () => {
   const { service } = buildService({ plan: null });
   await assert.rejects(() => service.getRecords('org_1', 2026), (e: unknown) => codeOf(e) === 'NO_SUBSCRIPTION');
@@ -72,12 +97,23 @@ test('getRecords for a Complete/Complex org includes additional standards', asyn
 });
 
 test('getApprovalReadiness reports missing NOT_APPLICABLE and EXPLAIN explanations', async () => {
+  const standards = [
+    { id: 's1', code: '1.1', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } },
+    { id: 's2', code: '1.2', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } },
+    { id: 's3', code: '2.1', isCore: true, principleId: 'p2', principle: { number: 2, title: 'Principle 2' } },
+  ];
   const records = [
     { standardId: 's1', status: 'NOT_APPLICABLE', explanationIfNA: null, standard: { id: 's1', code: '1.1' } },
     { standardId: 's2', status: 'NOT_APPLICABLE', explanationIfNA: '', standard: { id: 's2', code: '1.2' } },
     { standardId: 's3', status: 'EXPLAIN', explanationIfNA: '   ', standard: { id: 's3', code: '2.1' } },
   ];
-  const { service, calls } = buildService({ plan: 'COMPLETE', complexity: 'COMPLEX', records });
+  const { service, calls } = buildService({
+    plan: 'COMPLETE',
+    complexity: 'COMPLEX',
+    conditionalObligationProfile: falseProfile(),
+    standards,
+    records,
+  });
 
   const readiness = await service.getApprovalReadiness('org_1', 2026);
 
@@ -92,13 +128,126 @@ test('getApprovalReadiness reports missing NOT_APPLICABLE and EXPLAIN explanatio
   assert.equal((find?.args as { where: { organisationId: string; reportingYear: number } }).where.reportingYear, 2026);
 });
 
+test('getApprovalReadiness reports missing records and evidence fields, not only explanations', async () => {
+  const standards = [
+    { id: 's1', code: '1.1', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } },
+    { id: 's2', code: '1.2', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } },
+    { id: 's3', code: '2.1', isCore: true, principleId: 'p2', principle: { number: 2, title: 'Principle 2' } },
+    { id: 's4', code: '2.2', isCore: true, principleId: 'p2', principle: { number: 2, title: 'Principle 2' } },
+  ];
+  const records = [
+    { standardId: 's1', status: 'COMPLIANT', actionTaken: '', evidence: '   ', standard: { id: 's1', code: '1.1' } },
+    { standardId: 's2', status: 'WORKING_TOWARDS', actionTaken: 'Drafting controls', evidence: '', standard: { id: 's2', code: '1.2' } },
+    { standardId: 's3', status: 'EXPLAIN', explanationIfNA: ' ', standard: { id: 's3', code: '2.1' } },
+  ];
+  const { service } = buildService({
+    plan: 'ESSENTIALS',
+    complexity: 'SIMPLE',
+    conditionalObligationProfile: falseProfile(),
+    standards,
+    records,
+  });
+
+  const readiness = await service.getApprovalReadiness('org_1', 2026);
+
+  assert.equal(readiness.ready, false);
+  assert.deepEqual(readiness.missingRecords, [
+    { standardId: 's4', standardCode: '2.2', status: 'NOT_STARTED' },
+  ]);
+  assert.deepEqual(readiness.missingEvidence, [
+    { standardId: 's1', standardCode: '1.1', status: 'COMPLIANT', missingActionTaken: true, missingEvidence: true },
+    { standardId: 's2', standardCode: '1.2', status: 'WORKING_TOWARDS', missingActionTaken: false, missingEvidence: true },
+  ]);
+  assert.deepEqual(readiness.missingExplanations, [
+    { standardId: 's3', standardCode: '2.1', status: 'EXPLAIN' },
+  ]);
+});
+
+test('getApprovalReadiness blocks board approval until conditional obligation facts are captured', async () => {
+  const { service } = buildService({
+    plan: 'ESSENTIALS',
+    complexity: 'SIMPLE',
+    standards: [{ id: 's1', code: '1.1', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } }],
+    records: [
+      {
+        standardId: 's1',
+        status: 'COMPLIANT',
+        actionTaken: 'Trustees reviewed the standard',
+        evidence: 'Board pack and minutes',
+        standard: { id: 's1', code: '1.1' },
+      },
+    ],
+  });
+
+  const readiness = await service.getApprovalReadiness('org_1', 2026);
+
+  assert.equal(readiness.ready, false);
+  assert.deepEqual(readiness.profileIssues, [
+    {
+      code: 'CONDITIONAL_OBLIGATION_PROFILE_MISSING',
+      message: 'Capture the organisation conditional obligation profile before approving the annual Compliance Record.',
+    },
+  ]);
+});
+
+test('getApprovalReadiness surfaces conditional review prompts without treating them as legal certification blockers', async () => {
+  const { service } = buildService({
+    plan: 'ESSENTIALS',
+    complexity: 'SIMPLE',
+    conditionalObligationProfile: {
+      ...falseProfile(),
+      hasPaidStaff: true,
+      raisesFundsFromPublic: true,
+      worksWithChildrenOrVulnerableAdults: true,
+      usesDataProcessors: true,
+    },
+    standards: [{ id: 's1', code: '1.1', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } }],
+    records: [
+      {
+        standardId: 's1',
+        status: 'COMPLIANT',
+        actionTaken: 'Trustees reviewed the standard',
+        evidence: 'Board pack and minutes',
+        standard: { id: 's1', code: '1.1' },
+      },
+    ],
+  });
+
+  const readiness = await service.getApprovalReadiness('org_1', 2026);
+
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(
+    readiness.conditionalReviewItems.map((item) => item.profileKey),
+    ['hasPaidStaff', 'raisesFundsFromPublic', 'worksWithChildrenOrVulnerableAdults', 'usesDataProcessors'],
+  );
+  assert.match(readiness.conditionalReviewItems[0].recommendedAction, /employment/i);
+});
+
 test('getApprovalReadiness ignores complete, irrelevant, and out-of-scope records for Essentials/Simple', async () => {
+  const standards = [
+    { id: 's1', code: '1.1', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } },
+    { id: 's2', code: '1.2', isCore: true, principleId: 'p1', principle: { number: 1, title: 'Principle 1' } },
+    { id: 's3', code: '2.1', isCore: true, principleId: 'p2', principle: { number: 2, title: 'Principle 2' } },
+  ];
   const records = [
     { standardId: 's1', status: 'NOT_APPLICABLE', explanationIfNA: 'Explained', standard: { id: 's1', code: '1.1' } },
     { standardId: 's2', status: 'EXPLAIN', explanationIfNA: 'Because this standard does not fit', standard: { id: 's2', code: '1.2' } },
-    { standardId: 's3', status: 'COMPLIANT', explanationIfNA: null, standard: { id: 's3', code: '2.1' } },
+    {
+      standardId: 's3',
+      status: 'COMPLIANT',
+      actionTaken: 'Reviewed',
+      evidence: 'Minutes',
+      explanationIfNA: null,
+      standard: { id: 's3', code: '2.1' },
+    },
   ];
-  const { service, calls } = buildService({ plan: 'ESSENTIALS', complexity: 'SIMPLE', records });
+  const { service, calls } = buildService({
+    plan: 'ESSENTIALS',
+    complexity: 'SIMPLE',
+    conditionalObligationProfile: falseProfile(),
+    standards,
+    records,
+  });
 
   const readiness = await service.getApprovalReadiness('org_1', 2026);
 
