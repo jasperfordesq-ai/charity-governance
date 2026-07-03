@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="light min-h-screen bg-gray-50 text-gray-900 flex flex-col" style={{ colorScheme: 'light' }}>
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 flex flex-col">
       {/* Header */}
       <header className="py-5 px-4 sm:px-6">
         <div className="w-full max-w-md mx-auto flex items-center justify-between gap-4">

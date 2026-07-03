@@ -58,10 +58,79 @@
 
 /* Body surface is themed via utilities on the <body> element in app/layout.tsx
    (bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100). Utilities must be
-   used here — a `.dark body {}` rule in @layer base would be overridden by the
+   used here; a `.dark body {}` rule in @layer base would be overridden by the
    body's own `bg-white` utility (later cascade layer wins). The old blunt
    `.dark .bg-white {}` override hacks are gone; per-element dark: variants handle
-   the rest. Dark mode is applied (.dark class) only on app routes. */
+   the rest. Dark mode can apply on every route. */
+
+/* Semantic helpers for gradual route migration. These classes are intentionally opt-in:
+   they do not rewrite legacy Tailwind utilities globally. */
+.cp-surface {
+  background: white;
+  color: var(--color-gray-950);
+}
+.dark .cp-surface {
+  background: var(--color-gray-950);
+  color: var(--color-gray-50);
+}
+.cp-surface-raised {
+  background: white;
+  color: var(--color-gray-950);
+  border-color: var(--color-gray-200);
+}
+.dark .cp-surface-raised {
+  background: var(--color-gray-900);
+  color: var(--color-gray-50);
+  border-color: var(--color-gray-800);
+}
+.cp-border {
+  border-color: var(--color-gray-200);
+}
+.dark .cp-border {
+  border-color: var(--color-gray-800);
+}
+.cp-text {
+  color: var(--color-gray-950);
+}
+.dark .cp-text {
+  color: var(--color-gray-50);
+}
+.cp-text-muted {
+  color: var(--color-gray-600);
+}
+.dark .cp-text-muted {
+  color: var(--color-gray-300);
+}
+.cp-status-success {
+  background: var(--color-emerald-50);
+  color: var(--color-emerald-800);
+  border-color: var(--color-emerald-300);
+}
+.dark .cp-status-success {
+  background: color-mix(in srgb, var(--color-emerald-950) 60%, transparent);
+  color: var(--color-emerald-200);
+  border-color: var(--color-emerald-700);
+}
+.cp-status-warning {
+  background: var(--color-amber-50);
+  color: var(--color-amber-900);
+  border-color: var(--color-amber-300);
+}
+.dark .cp-status-warning {
+  background: color-mix(in srgb, var(--color-amber-950) 60%, transparent);
+  color: var(--color-amber-200);
+  border-color: var(--color-amber-700);
+}
+.cp-status-danger {
+  background: var(--color-rose-50);
+  color: var(--color-rose-800);
+  border-color: var(--color-rose-300);
+}
+.dark .cp-status-danger {
+  background: color-mix(in srgb, var(--color-rose-950) 60%, transparent);
+  color: var(--color-rose-200);
+  border-color: var(--color-rose-700);
+}
 
 /* Smooth scroll for anchor navigation */
 html {

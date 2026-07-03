@@ -12,6 +12,7 @@ import { join } from 'node:path';
 const WEB = process.cwd(); // apps/web
 const dash = (p: string) => readFileSync(join(WEB, 'src', 'app', '(dashboard)', p), 'utf8');
 const app = (p: string) => readFileSync(join(WEB, 'src', 'app', p), 'utf8');
+const component = (p: string) => readFileSync(join(WEB, 'src', 'components', p), 'utf8');
 
 test('dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)', () => {
   const src = dash('dashboard/page.tsx');
@@ -98,4 +99,43 @@ test('a board mutation failure shows a toast and keeps the existing list (no par
   const src = dash('board/page.tsx');
   assert.match(src, /toast\(/);
   assert.match(src, /logClientError/);
+});
+
+test('the shared UI foundation exposes reusable page, state, form, list, status, and evidence primitives', () => {
+  const expectedExports: Array<[string, string[]]> = [
+    ['ui/app-page.tsx', ['AppPage', 'AppSection']],
+    ['ui/status.tsx', ['StatusChip', 'EvidenceChip', 'ReviewFlag', 'DeadlineBadge']],
+    ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
+    ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
+    ['ui/data-list.tsx', ['DataList', 'DataListTable', 'DataListItems']],
+    ['governance/evidence-readiness.tsx', ['EvidenceReadiness', 'EvidencePromptList', 'EvidenceSourceList']],
+  ];
+
+  for (const [file, exports] of expectedExports) {
+    const src = component(file);
+    for (const exportedName of exports) {
+      assert.match(src, new RegExp(`export function ${exportedName}\\b`), `${file} must export ${exportedName}`);
+    }
+  }
+});
+
+test('theme prepaint and client layout handling support dark mode beyond protected app routes', () => {
+  const routeScopedDarkModeTerms = new RegExp(
+    ['var app=', 'app&&', 'app routes ' + 'only', 'light' + '-only'].join('|'),
+    'i',
+  );
+
+  const rootLayout = app('layout.tsx');
+  assert.match(rootLayout, /localStorage\.theme/);
+  assert.doesNotMatch(rootLayout, routeScopedDarkModeTerms);
+
+  const dashboardLayout = app('(dashboard)/layout.tsx');
+  assert.doesNotMatch(dashboardLayout, routeScopedDarkModeTerms);
+  assert.doesNotMatch(dashboardLayout, /remove\('dark'\)/);
+
+  for (const file of ['(marketing)/layout.tsx', '(auth)/layout.tsx']) {
+    const src = app(file);
+    assert.doesNotMatch(src, /className="light|colorScheme: 'light'/i, `${file} must not force light mode`);
+    assert.doesNotMatch(src, routeScopedDarkModeTerms, `${file} must not force light mode`);
+  }
 });

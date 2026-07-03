@@ -5,14 +5,14 @@ import { BackToTop } from '@/components/back-to-top';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="light min-h-screen flex flex-col bg-white text-gray-900" style={{ colorScheme: 'light' }}>
+    <div className="min-h-screen flex flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Skip to content — a11y */}
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-teal-primary focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold">
         Skip to content
       </a>
 
       {/* Navigation */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 dark:bg-gray-950/90 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}

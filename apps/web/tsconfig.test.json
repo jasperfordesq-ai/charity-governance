@@ -40,6 +40,12 @@
     "src/lib/tenant-isolation.test.ts",
     "src/lib/form-schema-parity.test.ts",
     "src/lib/web-wiring.test.ts",
+    "src/components/ui/app-page.tsx",
+    "src/components/ui/status.tsx",
+    "src/components/ui/states.tsx",
+    "src/components/ui/forms.tsx",
+    "src/components/ui/data-list.tsx",
+    "src/components/governance/evidence-readiness.tsx",
     "src/proxy.ts",
     "src/proxy.test.ts"
   ]

@@ -127,9 +127,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Resolve and apply the theme as a .dark class — dark mode is scoped to app routes.
-  // Reacts to the ThemeToggle ('themechange') and OS changes (for 'system'), and removes
-  // .dark on unmount so light-only marketing/auth routes stay light after client nav.
+  // Resolve and apply the theme as a .dark class. The root layout pre-paints this for
+  // every route; this client effect keeps dashboard theme changes and system changes live.
   useEffect(() => {
     const root = document.documentElement;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -144,7 +143,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => {
       mq.removeEventListener('change', apply);
       window.removeEventListener('themechange', apply);
-      root.classList.remove('dark');
     };
   }, []);
 
