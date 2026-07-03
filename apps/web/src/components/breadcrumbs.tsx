@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 
 const LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -14,6 +15,28 @@ const LABELS: Record<string, string> = {
   export: 'Export',
 };
 
+const PRINCIPLE_LABELS = Object.fromEntries(
+  GOVERNANCE_PRINCIPLES.flatMap((principle) => {
+    const label = `Principle ${principle.number}: ${principle.title}`;
+    return [
+      [`governance-principle-${principle.number}`, label],
+      [`principle-${principle.number}`, label],
+      [`p${principle.number}`, label],
+    ];
+  }),
+);
+
+function titleCaseSegment(segment: string) {
+  return segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function labelForSegment(seg: string, previousSegment?: string) {
+  if (previousSegment === 'compliance') {
+    return PRINCIPLE_LABELS[seg] ?? 'Principle details';
+  }
+  return LABELS[seg] ?? titleCaseSegment(seg);
+}
+
 export function Breadcrumbs() {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
@@ -22,7 +45,7 @@ export function Breadcrumbs() {
 
   const crumbs = segments.map((seg, i) => {
     const href = '/' + segments.slice(0, i + 1).join('/');
-    const label = LABELS[seg] ?? seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const label = labelForSegment(seg, segments[i - 1]);
     const isLast = i === segments.length - 1;
     return { href, label, isLast };
   });
@@ -38,7 +61,7 @@ export function Breadcrumbs() {
               </svg>
             )}
             {crumb.isLast ? (
-              <span className="text-gray-700 dark:text-gray-300 font-medium">{crumb.label}</span>
+              <span aria-current="page" className="text-gray-700 dark:text-gray-300 font-medium">{crumb.label}</span>
             ) : (
               <Link href={crumb.href} className="hover:text-teal-primary dark:hover:text-teal-bright transition-colors">
                 {crumb.label}

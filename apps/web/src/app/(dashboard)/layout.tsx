@@ -1,6 +1,6 @@
 'use client';
 
-import { cloneElement, useEffect, useState } from 'react';
+import { cloneElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
@@ -126,6 +126,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktopNav, setIsDesktopNav] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const sidebarId = 'dashboard-primary-navigation';
+  const navInteractive = isDesktopNav || sidebarOpen;
+
+  const closeSidebar = useCallback((restoreFocus = false) => {
+    setSidebarOpen(false);
+    if (restoreFocus) {
+      menuButtonRef.current?.focus();
+    }
+  }, []);
 
   // Resolve and apply the theme as a .dark class. The root layout pre-paints this for
   // every route; this client effect keeps dashboard theme changes and system changes live.
@@ -145,6 +157,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.removeEventListener('themechange', apply);
     };
   }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const syncDesktopNav = () => setIsDesktopNav(mq.matches);
+    syncDesktopNav();
+    mq.addEventListener('change', syncDesktopNav);
+    return () => mq.removeEventListener('change', syncDesktopNav);
+  }, []);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+
+    const firstLink = sidebarRef.current?.querySelector<HTMLElement>('a[href]');
+    firstLink?.focus();
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeSidebar(true);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [closeSidebar, sidebarOpen]);
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -192,13 +232,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => closeSidebar(true)}
         />
       )}
 
       {/* Sidebar */}
       <aside
+        id={sidebarId}
+        ref={sidebarRef}
+        aria-label="Primary navigation"
+        aria-hidden={!navInteractive ? true : undefined}
         className={`
           fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-200 ease-in-out
           lg:translate-x-0 lg:static lg:z-auto
@@ -223,6 +268,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
+                tabIndex={navInteractive ? undefined : -1}
                 onClick={() => setSidebarOpen(false)}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
@@ -256,10 +302,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-20 flex items-center justify-between h-16 px-4 sm:px-6 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
           {/* Mobile menu button */}
           <button
+            ref={menuButtonRef}
             type="button"
-            aria-label="Open sidebar menu"
+            aria-label={sidebarOpen ? 'Close sidebar menu' : 'Open sidebar menu'}
+            aria-controls={sidebarId}
+            aria-expanded={sidebarOpen}
             className="lg:hidden p-2 -ml-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => setSidebarOpen((open) => !open)}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />

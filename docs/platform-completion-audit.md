@@ -4,7 +4,7 @@ Generated: 2026-07-03
 
 Branch: `master`
 
-Working-tree base commit when generated: `61d7010`
+Working-tree base commit when generated: `23a8278`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -37,6 +37,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.
 - Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.
 - Approval readiness and exports now flag missing standard records, missing action/evidence fields, missing explanations, missing conditional-profile facts, and profile-triggered professional-review prompts.
+- Dashboard navigation now gives the mobile sidebar explicit ARIA controls, Escape-to-close focus recovery, non-tabbable closed mobile links, and source-backed principle breadcrumb labels.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -46,7 +47,6 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
 | P1 | Product compliance | Conditional obligation facts now drive export/readiness prompts; next wire those facts into deadline, register, evidence, and regulator prioritisation. |
 | P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
-| P2 | Accessibility/navigation | Breadcrumb labels and mobile nav/sidebar focus management need another pass, including dynamic principle labels and Escape/focus behavior. |
 
 ## Route Audit
 

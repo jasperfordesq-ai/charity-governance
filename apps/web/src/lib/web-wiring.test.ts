@@ -467,6 +467,46 @@ test('phase 6C billing preserves Stripe redirect validation while clarifying pla
   assert.match(src, /Monthly \(\\u20ac\$\{plan\.monthlyPrice\}\/mo\)/);
 });
 
+test('dashboard navigation manages mobile sidebar focus and meaningful breadcrumbs', () => {
+  const dashboardLayout = app('(dashboard)/layout.tsx');
+  for (const term of [
+    'menuButtonRef',
+    'sidebarRef',
+    'sidebarId',
+    'navInteractive',
+    'aria-controls={sidebarId}',
+    'aria-expanded={sidebarOpen}',
+    'aria-label="Primary navigation"',
+    'aria-hidden={!navInteractive ? true : undefined}',
+    'tabIndex={navInteractive ? undefined : -1}',
+    "event.key === 'Escape'",
+    'menuButtonRef.current?.focus()',
+    "querySelector<HTMLElement>('a[href]')",
+  ]) {
+    assert.match(
+      dashboardLayout,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `dashboard layout must include ${term}`,
+    );
+  }
+
+  const breadcrumbs = component('breadcrumbs.tsx');
+  for (const term of [
+    'GOVERNANCE_PRINCIPLES',
+    'PRINCIPLE_LABELS',
+    'labelForSegment(seg, segments[i - 1])',
+    'Principle details',
+    'aria-current="page"',
+  ]) {
+    assert.match(
+      breadcrumbs,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `breadcrumbs must include ${term}`,
+    );
+  }
+  assert.doesNotMatch(breadcrumbs, /const label = LABELS\[seg\] \?\? seg\.replace/);
+});
+
 test('theme prepaint and client layout handling support dark mode beyond protected app routes', () => {
   const routeScopedDarkModeTerms = new RegExp(
     ['var app=', 'app&&', 'app routes ' + 'only', 'light' + '-only'].join('|'),
