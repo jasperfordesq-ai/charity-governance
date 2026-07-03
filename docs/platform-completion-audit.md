@@ -4,7 +4,7 @@ Generated: 2026-07-03
 
 Branch: `master`
 
-Working-tree base commit when generated: `5509607`
+Working-tree base commit when generated: `ac67e75`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1123), /documents (776), /deadlines (725), /board (654), /organisation (602), /export (576). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1123), /documents (776), /board (654), /deadlines (626), /organisation (602), /export (576). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -44,6 +44,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.
 - The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.
 - The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.
+- The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -65,7 +66,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 573 | yes | large route file; refactor soon; 4 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 550 | yes | large route file; refactor soon; 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
-| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 725 | yes | oversized route file; split first; 2 inline svg icon(s) |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 626 | yes | large route file; refactor soon; 2 inline svg icon(s) |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 776 | yes | oversized route file; split first; 2 inline svg icon(s) |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 576 | yes | large route file; refactor soon; 9 inline svg icon(s) |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |

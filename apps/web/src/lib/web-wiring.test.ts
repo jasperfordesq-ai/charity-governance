@@ -372,7 +372,10 @@ test('documents profile-triggered evidence UX is extracted from the oversized ro
 });
 
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
-  const src = dash('deadlines/page.tsx');
+  const src = [
+    dash('deadlines/page.tsx'),
+    optionalDash('deadlines/deadline-profile-prompts.tsx'),
+  ].join('\n');
   for (const term of [
     'OrganisationResponse',
     'CONDITIONAL_OBLIGATION_REVIEW_RULES',
@@ -395,6 +398,20 @@ test('deadlines workflow surfaces conditional obligation review dates from the o
       `deadlines page must include ${term}`,
     );
   }
+});
+
+test('deadlines profile-triggered review-date UX is extracted from the oversized route file', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const panelPath = dashPath('deadlines/deadline-profile-prompts.tsx');
+  assert.ok(existsSync(panelPath), 'deadline profile prompts should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /DeadlineProfilePromptsPanel/);
+  assert.match(pageSrc, /buildDeadlineProfilePrompts/);
+  assert.doesNotMatch(pageSrc, /formatReviewFlag/);
+  assert.match(panelSrc, /formatReviewFlag/);
+  assert.match(panelSrc, /reviewDateAlreadyScheduled/);
+  assert.match(panelSrc, /Profile-triggered review dates/);
 });
 
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
