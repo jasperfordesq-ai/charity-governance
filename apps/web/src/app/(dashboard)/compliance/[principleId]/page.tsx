@@ -57,14 +57,20 @@ export default function PrincipleDetailPage() {
 
   // Debounce timers
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const readinessRequestSeq = useRef(0);
 
   const refreshApprovalReadiness = useCallback(async () => {
+    const requestSeq = ++readinessRequestSeq.current;
     try {
       const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
-      setApprovalReadiness(readinessRes.data);
+      if (requestSeq === readinessRequestSeq.current) {
+        setApprovalReadiness(readinessRes.data);
+      }
     } catch (readinessErr) {
       logClientError('Failed to load approval readiness', readinessErr);
-      setApprovalReadiness(null);
+      if (requestSeq === readinessRequestSeq.current) {
+        setApprovalReadiness(null);
+      }
     }
   }, [currentYear]);
 

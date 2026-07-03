@@ -130,6 +130,10 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
 test('principle detail refreshes approval-readiness after successful autosave', () => {
   const src = dash('compliance/[principleId]/page.tsx');
   assert.match(src, /refreshApprovalReadiness/);
+  assert.match(src, /readinessRequestSeq/);
+  assert.match(src, /const requestSeq = \+\+readinessRequestSeq\.current/);
+  assert.match(src, /if \(requestSeq === readinessRequestSeq\.current\) \{[\s\S]*?setApprovalReadiness\(readinessRes\.data\);[\s\S]*?\}/);
+  assert.match(src, /if \(requestSeq === readinessRequestSeq\.current\) \{[\s\S]*?setApprovalReadiness\(null\);[\s\S]*?\}/);
   assert.match(
     src,
     /await api\.put\(`\/compliance\/records\/\$\{standardId\}`[\s\S]*?await refreshApprovalReadiness\(\);[\s\S]*?setSaveState\(\(prev\) => \(\{ \.\.\.prev, \[standardId\]: 'saved' \}\)\);/,
