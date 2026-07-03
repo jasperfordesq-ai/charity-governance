@@ -58,6 +58,16 @@ export default function PrincipleDetailPage() {
   // Debounce timers
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  const refreshApprovalReadiness = useCallback(async () => {
+    try {
+      const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
+      setApprovalReadiness(readinessRes.data);
+    } catch (readinessErr) {
+      logClientError('Failed to load approval readiness', readinessErr);
+      setApprovalReadiness(null);
+    }
+  }, [currentYear]);
+
   // Fetch principle and compliance records
   useEffect(() => {
     async function fetchData() {
@@ -98,14 +108,7 @@ export default function PrincipleDetailPage() {
         }
 
         setFormState(initialForm);
-
-        try {
-          const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
-          setApprovalReadiness(readinessRes.data);
-        } catch (readinessErr) {
-          logClientError('Failed to load approval readiness', readinessErr);
-          setApprovalReadiness(null);
-        }
+        await refreshApprovalReadiness();
       } catch (err) {
         logClientError('Failed to load principle data', err);
       } finally {
@@ -114,7 +117,7 @@ export default function PrincipleDetailPage() {
     }
 
     fetchData();
-  }, [principleId, currentYear]);
+  }, [principleId, currentYear, refreshApprovalReadiness]);
 
   // Auto-save with debounce
   const autoSave = useCallback(
@@ -137,6 +140,7 @@ export default function PrincipleDetailPage() {
             explanationIfNA: data.explanationIfNA || null,
           });
 
+          await refreshApprovalReadiness();
           setSaveState((prev) => ({ ...prev, [standardId]: 'saved' }));
 
           // Reset "saved" indicator after 2 seconds
@@ -149,7 +153,7 @@ export default function PrincipleDetailPage() {
         }
       }, 800);
     },
-    [currentYear],
+    [currentYear, refreshApprovalReadiness],
   );
 
   // Update field and trigger auto-save

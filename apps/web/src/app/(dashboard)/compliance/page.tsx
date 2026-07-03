@@ -115,8 +115,8 @@ export default function CompliancePage() {
           title="Approval explanations are incomplete"
           description={`${missingExplanations.length} standard${missingExplanations.length === 1 ? '' : 's'} marked not applicable or explain need an explanation before annual board approval can be saved.`}
           action={(
-            <Button as={Link} href="/export" size="sm" variant="flat">
-              Review sign-off
+            <Button as={Link} href="#principles" size="sm" variant="flat">
+              Edit explanations below
             </Button>
           )}
         />
@@ -195,7 +195,8 @@ export default function CompliancePage() {
         </span>
       </div>
 
-      <AppSection title="Principles" description="Open a principle to edit standards, evidence, and explanations.">
+      <div id="principles">
+        <AppSection title="Principles" description="Open a principle to edit standards, evidence, and explanations.">
         {loading ? (
           <div className="space-y-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -344,7 +345,8 @@ export default function CompliancePage() {
             })}
           </div>
         )}
-      </AppSection>
+        </AppSection>
+      </div>
     </AppPage>
   );
 }

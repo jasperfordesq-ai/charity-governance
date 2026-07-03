@@ -118,8 +118,22 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(exportPage, /missingExplanations/);
   assert.match(exportPage, /COMPLIANCE_APPROVAL_INCOMPLETE/);
   assert.match(exportPage, /fetchApprovalReadiness/);
+  assert.match(exportPage, /freshApprovalReadiness/);
+  assert.doesNotMatch(
+    exportPage,
+    /const missingExplanations = approvalReadiness\?\.missingExplanations \?\? \[\];[\s\S]*?setSignoffError\(approvalIncompleteMessage\);[\s\S]*?return;[\s\S]*?setSavingSignoff\(true\);/,
+  );
   assert.match(exportPage, /review-ready/i);
   assert.match(exportPage, /legal advice/i);
+});
+
+test('principle detail refreshes approval-readiness after successful autosave', () => {
+  const src = dash('compliance/[principleId]/page.tsx');
+  assert.match(src, /refreshApprovalReadiness/);
+  assert.match(
+    src,
+    /await api\.put\(`\/compliance\/records\/\$\{standardId\}`[\s\S]*?await refreshApprovalReadiness\(\);[\s\S]*?setSaveState\(\(prev\) => \(\{ \.\.\.prev, \[standardId\]: 'saved' \}\)\);/,
+  );
 });
 
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {

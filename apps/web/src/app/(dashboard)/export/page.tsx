@@ -56,13 +56,15 @@ export default function ExportPage() {
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  const fetchApprovalReadiness = useCallback(async () => {
+  const fetchApprovalReadiness = useCallback(async (): Promise<ApprovalReadiness | null> => {
     try {
       const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
       setApprovalReadiness(readinessRes.data);
+      return readinessRes.data;
     } catch (readinessErr) {
       logClientError('Failed to load approval readiness', readinessErr);
       setApprovalReadiness(null);
+      return null;
     }
   }, [year]);
 
@@ -102,7 +104,6 @@ export default function ExportPage() {
 
   const handleSaveSignoff = async () => {
     setSignoffError('');
-    const missingExplanations = approvalReadiness?.missingExplanations ?? [];
 
     if (
       signoffForm.status === ComplianceSignoffStatus.APPROVED &&
@@ -112,13 +113,16 @@ export default function ExportPage() {
       return;
     }
 
-    if (signoffForm.status === ComplianceSignoffStatus.APPROVED && missingExplanations.length > 0) {
-      setSignoffError(approvalIncompleteMessage);
-      return;
-    }
-
     setSavingSignoff(true);
     try {
+      if (signoffForm.status === ComplianceSignoffStatus.APPROVED) {
+        const freshApprovalReadiness = await fetchApprovalReadiness();
+        if ((freshApprovalReadiness?.missingExplanations ?? []).length > 0) {
+          setSignoffError(approvalIncompleteMessage);
+          return;
+        }
+      }
+
       const res = await api.put('/compliance/signoff', {
         reportingYear: year,
         status: signoffForm.status,
