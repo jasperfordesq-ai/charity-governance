@@ -124,6 +124,21 @@ test('the dashboard renders an explicit error card on a load failure (not a blan
   assert.match(src, /Failed to load dashboard data/i);
 });
 
+test('dashboard action lists are extracted from the oversized route file', () => {
+  const pageSrc = dash('dashboard/page.tsx');
+  const actionListsPath = dashPath('dashboard/dashboard-action-lists.tsx');
+  assert.ok(existsSync(actionListsPath), 'dashboard deadlines and board-alert lists should be split out of page.tsx');
+  const actionListsSrc = readFileSync(actionListsPath, 'utf8');
+
+  assert.match(pageSrc, /DashboardActionLists/);
+  assert.doesNotMatch(pageSrc, /SkeletonList/);
+  assert.match(actionListsSrc, /SkeletonList/);
+  assert.match(actionListsSrc, /Upcoming Deadlines/);
+  assert.match(actionListsSrc, /Board Alerts/);
+  assert.match(actionListsSrc, /View all deadlines/);
+  assert.match(actionListsSrc, /View board register/);
+});
+
 test('the per-standard compliance editor announces its save state (Saving / Saved / Save failed)', () => {
   const src = dash('compliance/[principleId]/page.tsx');
   assert.match(src, /aria-live/);

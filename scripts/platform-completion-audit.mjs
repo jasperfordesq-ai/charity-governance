@@ -75,6 +75,7 @@ const fixedInThisAuditBranch = [
   'The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.',
   'The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.',
   'The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.',
+  'The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.',
 ];
 
 const independentAuditFindings = [
