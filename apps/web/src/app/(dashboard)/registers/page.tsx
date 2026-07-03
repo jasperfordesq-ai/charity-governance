@@ -18,6 +18,7 @@ import {
   Textarea,
 } from '@heroui/react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import { useDocumentTitle } from '@/lib/use-title';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
@@ -27,15 +28,18 @@ import { EmptyState, ErrorState, LoadingState, LockedFeatureState } from '@/comp
 import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
 import {
   AnnualReportFilingStatus,
+  CONDITIONAL_OBLIGATION_REVIEW_RULES,
   ConflictStatus,
   RegisterStatus,
   RiskCategory,
+  getMatrixEntriesForStandard,
   type AnnualReportReadinessResponse,
   type ComplaintRecordResponse,
   type ConflictRecordResponse,
   type FinancialControlReviewResponse,
   type FundraisingRecordResponse,
   type GovernanceRegistersSummary,
+  type OrganisationResponse,
   type RiskRecordResponse,
 } from '@charitypilot/shared';
 
@@ -118,6 +122,46 @@ const niceDate = (value: string | null | undefined) =>
 
 const compactValue = (value: string | null | undefined, fallback = 'Not recorded') => value?.trim() || fallback;
 const riskScore = (risk: RiskRecordResponse) => risk.likelihood * risk.impact;
+const formatReviewFlag = (value: string) =>
+  value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+
+const registerPriorityEvidence: Record<
+  keyof NonNullable<OrganisationResponse['conditionalObligationProfile']>,
+  { label: string; keywords: string[] }
+> = {
+  hasPaidStaff: {
+    label: 'Employment and payroll register evidence',
+    keywords: ['staff', 'employee', 'employment', 'payroll', 'worker', 'protected disclosure', 'role delegation'],
+  },
+  hasVolunteers: {
+    label: 'Volunteer role and supervision evidence',
+    keywords: ['volunteer', 'role description', 'supervision', 'onboarding', 'induction'],
+  },
+  raisesFundsFromPublic: {
+    label: 'Fundraising activity and control evidence',
+    keywords: ['fundraising', 'fundraiser', 'public', 'campaign', 'third party', 'third-party'],
+  },
+  worksWithChildrenOrVulnerableAdults: {
+    label: 'Safeguarding and incident register evidence',
+    keywords: ['safeguarding', 'children', 'vulnerable', 'vetting', 'incident', 'protection'],
+  },
+  processesPersonalData: {
+    label: 'Data protection risk and breach evidence',
+    keywords: ['data protection', 'personal data', 'privacy', 'gdpr', 'breach', 'retention'],
+  },
+  operatesPremisesOrEvents: {
+    label: 'Premises, event and safety register evidence',
+    keywords: ['premises', 'event', 'safety', 'insurance', 'risk assessment', 'incident'],
+  },
+  isPublicSectorBody: {
+    label: 'Public-sector accountability evidence',
+    keywords: ['public sector', 'public-sector', 'protected disclosure', 'stakeholder', 'publication'],
+  },
+  usesDataProcessors: {
+    label: 'Processor and supplier control evidence',
+    keywords: ['processor', 'supplier', 'storage', 'access control', 'retention', 'contract'],
+  },
+};
 
 export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
@@ -132,6 +176,8 @@ export default function RegistersPage() {
   const [loadError, setLoadError] = useState('');
   const [formError, setFormError] = useState('');
   const [planUnavailable, setPlanUnavailable] = useState(false);
+  const [organisation, setOrganisation] = useState<OrganisationResponse | null>(null);
+  const [organisationProfileError, setOrganisationProfileError] = useState('');
   const [summary, setSummary] = useState<GovernanceRegistersSummary | null>(null);
   const [conflicts, setConflicts] = useState<ConflictRecordResponse[]>([]);
   const [risks, setRisks] = useState<RiskRecordResponse[]>([]);
@@ -203,10 +249,23 @@ export default function RegistersPage() {
     }
   }, [isLatestRegistersRequest, toast]);
 
+  const fetchOrganisationProfile = useCallback(async () => {
+    setOrganisationProfileError('');
+    try {
+      const res = await api.get('/organisations');
+      setOrganisation(res.data?.data ?? res.data ?? null);
+    } catch (err) {
+      const message = apiErrorMessage(err, 'Organisation profile could not be loaded for register priorities.');
+      logClientError('Failed to load organisation profile for register priorities', err);
+      setOrganisationProfileError(message);
+    }
+  }, []);
+
   useEffect(() => {
     latestYearRef.current = year;
     fetchRegisters(year);
-  }, [fetchRegisters, year]);
+    fetchOrganisationProfile();
+  }, [fetchOrganisationProfile, fetchRegisters, year]);
 
   const hasLoadedSelectedYear = loadedRegistersYear === year && !loadError;
   const canSaveAnnual = hasLoadedSelectedYear && annual.reportingYear === year;
@@ -398,16 +457,135 @@ export default function RegistersPage() {
   };
 
   const summaryForSelectedYear = hasLoadedSelectedYear ? summary : null;
-  const conflictsForSelectedYear = hasLoadedSelectedYear ? conflicts : [];
-  const risksForSelectedYear = hasLoadedSelectedYear ? risks : [];
-  const complaintsForSelectedYear = hasLoadedSelectedYear ? complaints : [];
-  const fundraisingForSelectedYear = hasLoadedSelectedYear ? fundraising : [];
+  const conflictsForSelectedYear = useMemo(
+    () => (hasLoadedSelectedYear ? conflicts : []),
+    [conflicts, hasLoadedSelectedYear],
+  );
+  const risksForSelectedYear = useMemo(
+    () => (hasLoadedSelectedYear ? risks : []),
+    [hasLoadedSelectedYear, risks],
+  );
+  const complaintsForSelectedYear = useMemo(
+    () => (hasLoadedSelectedYear ? complaints : []),
+    [complaints, hasLoadedSelectedYear],
+  );
+  const fundraisingForSelectedYear = useMemo(
+    () => (hasLoadedSelectedYear ? fundraising : []),
+    [fundraising, hasLoadedSelectedYear],
+  );
   const highRisks = risksForSelectedYear.filter((risk) => risk.status !== RegisterStatus.CLOSED && riskScore(risk) >= 12);
   const openRegisterCount =
     (summaryForSelectedYear?.openConflicts ?? 0) +
     (summaryForSelectedYear?.openRisks ?? 0) +
     (summaryForSelectedYear?.openComplaints ?? 0) +
     fundraisingForSelectedYear.filter((item) => item.status !== RegisterStatus.CLOSED).length;
+  const conditionalProfile = organisation?.conditionalObligationProfile ?? null;
+  const registerSearchText = useMemo(() => {
+    return [
+      conflictsForSelectedYear.map((item) => [
+        item.trusteeName,
+        item.matter,
+        item.nature,
+        item.actionTaken,
+        item.decision,
+        item.minuteReference,
+      ].join(' ')),
+      risksForSelectedYear.map((item) => [
+        item.title,
+        item.category,
+        item.description,
+        item.mitigation,
+        item.owner,
+        item.boardMinuteReference,
+      ].join(' ')),
+      complaintsForSelectedYear.map((item) => [
+        item.source,
+        item.summary,
+        item.actionTaken,
+        item.outcome,
+        item.boardMinuteReference,
+        item.reviewedByBoard ? 'board reviewed complaint' : '',
+      ].join(' ')),
+      fundraisingForSelectedYear.map((item) => [
+        item.name,
+        item.activityType,
+        item.thirdPartyFundraiser,
+        item.controls,
+        item.reviewOutcome,
+        item.publicFacing ? 'public fundraising' : '',
+        item.complaintsReceived ? 'fundraising complaint' : '',
+      ].join(' ')),
+      [
+        annual.activitiesNarrative,
+        annual.publicBenefitStatement,
+        annual.beneficiariesSummary,
+        annual.fundraisingReviewed ? 'fundraising reviewed' : '',
+        annual.complaintsReviewed ? 'complaints reviewed' : '',
+        annual.notes,
+      ].join(' '),
+      [
+        financial.payrollControlsReviewed ? 'payroll controls reviewed' : '',
+        financial.fundraisingControlsReviewed ? 'fundraising controls reviewed' : '',
+        financial.assetsInsuranceReviewed ? 'insurance reviewed' : '',
+        financial.actions,
+        financial.reviewedBy,
+        financial.minuteReference,
+      ].join(' '),
+    ]
+      .flat()
+      .join(' ')
+      .toLowerCase();
+  }, [
+    annual.activitiesNarrative,
+    annual.beneficiariesSummary,
+    annual.complaintsReviewed,
+    annual.fundraisingReviewed,
+    annual.notes,
+    annual.publicBenefitStatement,
+    complaintsForSelectedYear,
+    conflictsForSelectedYear,
+    financial.actions,
+    financial.assetsInsuranceReviewed,
+    financial.fundraisingControlsReviewed,
+    financial.minuteReference,
+    financial.payrollControlsReviewed,
+    financial.reviewedBy,
+    fundraisingForSelectedYear,
+    risksForSelectedYear,
+  ]);
+  const conditionalRegisterPriorities = useMemo(() => {
+    const profile = organisation?.conditionalObligationProfile;
+    if (!profile) return [];
+
+    return CONDITIONAL_OBLIGATION_REVIEW_RULES
+      .filter((rule) => profile?.[rule.profileKey])
+      .map((rule) => {
+        const matrixEntries = rule.standardCodes.flatMap((code) => getMatrixEntriesForStandard(code));
+        const sourceRefs = Array.from(
+          new Map(
+            matrixEntries
+              .flatMap((entry) => entry.sourceRefs)
+              .map((source) => [source.url, source]),
+          ).values(),
+        );
+        const professionalReview = Array.from(
+          new Set(matrixEntries.flatMap((entry) => entry.professionalReview)),
+        );
+        const evidence = registerPriorityEvidence[rule.profileKey];
+        const registerEvidenceTracked =
+          evidence.keywords.some((keyword) => registerSearchText.includes(keyword.toLowerCase())) ||
+          rule.standardCodes.some((code) => registerSearchText.includes(code.toLowerCase()));
+
+        return {
+          ...rule,
+          sourceRefs,
+          professionalReview,
+          registerEvidenceLabel: evidence.label,
+          registerEvidenceTracked,
+        };
+      });
+  }, [organisation?.conditionalObligationProfile, registerSearchText]);
+  const missingConditionalRegisterCount = conditionalRegisterPriorities.filter((item) => !item.registerEvidenceTracked).length;
   const registerSavingLabel = saving
     ? 'Saving register record'
     : closingRecordId
@@ -494,6 +672,75 @@ export default function RegistersPage() {
         />
       ) : (
         <>
+          <AppSection
+            title="Profile-triggered register priorities"
+            description="These profile-triggered obligations come from the organisation setup profile and the Irish compliance matrix. Use them to prioritise register evidence and professional review without treating CharityPilot as legal advice."
+            actions={(
+              <StatusChip tone={!conditionalProfile ? 'warning' : missingConditionalRegisterCount === 0 ? 'success' : 'warning'}>
+                {!conditionalProfile
+                  ? 'Profile needed'
+                  : conditionalRegisterPriorities.length === 0
+                    ? 'No triggers selected'
+                    : `${missingConditionalRegisterCount} register priorit${missingConditionalRegisterCount === 1 ? 'y' : 'ies'} to evidence`}
+              </StatusChip>
+            )}
+          >
+            {organisationProfileError ? (
+              <ErrorState
+                title="Profile-triggered register priorities could not be loaded"
+                description={organisationProfileError}
+                action={(
+                  <Button size="sm" variant="flat" onPress={fetchOrganisationProfile}>
+                    Try again
+                  </Button>
+                )}
+              />
+            ) : !conditionalProfile ? (
+              <EmptyState
+                title="Complete the organisation profile"
+                description="Answer the conditional obligation questions in Organisation before relying on register priorities."
+              />
+            ) : conditionalRegisterPriorities.length === 0 ? (
+              <EmptyState
+                title="No conditional triggers selected"
+                description="The current organisation profile has not selected staff, volunteers, public fundraising, safeguarding, data, premises, public-sector, or processor triggers."
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {conditionalRegisterPriorities.map((item) => {
+                  const professionalReviewLabel = item.professionalReview.length
+                    ? item.professionalReview.map(formatReviewFlag).join(', ')
+                    : 'Board judgement';
+                  const sourceLabel = item.sourceRefs.length
+                    ? item.sourceRefs.slice(0, 2).map((source) => source.owner).join(', ')
+                    : 'Irish compliance matrix';
+
+                  return (
+                    <div key={item.profileKey} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.label}</h3>
+                          <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.recommendedAction}</p>
+                        </div>
+                        <EvidenceChip status={item.registerEvidenceTracked ? 'ready' : 'review'}>
+                          {item.registerEvidenceTracked ? 'Register signal found' : 'Add register evidence'}
+                        </EvidenceChip>
+                      </div>
+                      <p className="mt-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Priority evidence: {item.registerEvidenceLabel}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <StatusChip tone="brand">Standards {item.standardCodes.join(', ')}</StatusChip>
+                        <ReviewFlag tone="needs-review">Professional review: {professionalReviewLabel}</ReviewFlag>
+                        <ReviewFlag tone="draft">Sources: {sourceLabel}</ReviewFlag>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </AppSection>
+
           <AppSection
             title="Operational registers"
             description="Use each register for one decision trail: what happened, what was done, where the board minute sits, and what needs review next."

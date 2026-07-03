@@ -4,7 +4,7 @@ Generated: 2026-07-03
 
 Branch: `master`
 
-Working-tree base commit when generated: `8fdc285`
+Working-tree base commit when generated: `fc79fca`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1063), /documents (869), /deadlines (725), /board (654), /organisation (602), /export (576). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 8 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (1298), /documents (869), /deadlines (725), /board (654), /organisation (602), /export (576). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -41,13 +41,13 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.
 - Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.
 - The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.
+- Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.
 
 ## Independent Audit Findings Still Driving Next Work
 
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Product compliance | Conditional obligation facts now drive export/readiness, document-evidence, deadline-review, and regulator-priority prompts; next wire those facts into register prioritisation. |
 | P1 | Frontend polish | Largest all-client routes remain registers, documents, board, deadlines, dashboard, and export; split route-local forms/cards/hooks before broader visual polish. |
 
 ## Route Audit
@@ -73,7 +73,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 264 | no | 3 inline svg icon(s) |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 272 | yes | 7 inline svg icon(s) |
-| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 1063 | yes | oversized route file; split first |
+| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 1298 | yes | oversized route file; split first |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 392 | yes | decorative or pill-heavy styling needs visual QA |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 198 | yes | 4 inline svg icon(s) |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 401 | yes | no obvious static risk; verify in browser |
@@ -158,5 +158,5 @@ The matrix must stay source-cited and review-ready. The following official sourc
 1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
 2. Decompose and polish the largest P0 workflows: registers, documents, board, dashboard, export, organisation, deadlines, and compliance detail.
 3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
-4. Extend compliance source metadata, professional-review flags, and conditional obligation facts into deadline, register, evidence, export, and regulator prioritisation without creating legal-certainty claims.
+4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.
 5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.

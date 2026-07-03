@@ -490,6 +490,31 @@ test('regulator guide prioritises profile-triggered obligations without legal ce
   }
 });
 
+test('registers workflow prioritises conditional obligation register work from the organisation profile', () => {
+  const src = dash('registers/page.tsx');
+  for (const term of [
+    'OrganisationResponse',
+    'CONDITIONAL_OBLIGATION_REVIEW_RULES',
+    'getMatrixEntriesForStandard',
+    "api.get('/organisations')",
+    'conditionalRegisterPriorities',
+    'registerSearchText',
+    'organisation?.conditionalObligationProfile',
+    'profile?.[rule.profileKey]',
+    'Profile-triggered register priorities',
+    'profile-triggered obligations',
+    'professional review',
+    'sourceRefs',
+    'registerPriorityEvidence',
+  ]) {
+    assert.match(
+      src,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+      `registers page must include ${term}`,
+    );
+  }
+});
+
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
   const src = dash('team/page.tsx');
   const imports: Array<[string, string[]]> = [
