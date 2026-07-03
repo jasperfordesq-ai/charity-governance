@@ -19,6 +19,12 @@ const signoffStatusLabels = {
 
 const toDateInput = (value: string | null | undefined) => value?.slice(0, 10) ?? '';
 
+const approvalIncompleteMessage =
+  'Resolve compliance explanations before board approval. Standards marked Not Applicable or Explain need an explanation before the board sign-off can be approved.';
+
+const apiErrorCode = (error: unknown) =>
+  (error as { response?: { data?: { code?: string } } })?.response?.data?.code;
+
 type ApprovalReadiness = {
   ready: boolean;
   missingExplanations: Array<{
@@ -50,6 +56,16 @@ export default function ExportPage() {
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
+  const fetchApprovalReadiness = useCallback(async () => {
+    try {
+      const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
+      setApprovalReadiness(readinessRes.data);
+    } catch (readinessErr) {
+      logClientError('Failed to load approval readiness', readinessErr);
+      setApprovalReadiness(null);
+    }
+  }, [year]);
+
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
@@ -57,13 +73,7 @@ export default function ExportPage() {
         api.get(`/compliance/summary?year=${year}`),
         api.get(`/compliance/signoff?year=${year}`),
       ]);
-      try {
-        const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
-        setApprovalReadiness(readinessRes.data);
-      } catch (readinessErr) {
-        logClientError('Failed to load approval readiness', readinessErr);
-        setApprovalReadiness(null);
-      }
+      await fetchApprovalReadiness();
       const nextSignoff = signoffRes.data as ComplianceSignoffResponse;
       setSummary(summaryRes.data);
       setSignoff(nextSignoff);
@@ -81,7 +91,7 @@ export default function ExportPage() {
     } finally {
       setLoading(false);
     }
-  }, [year]);
+  }, [fetchApprovalReadiness, year]);
 
   useEffect(() => {
     fetchSummary();
@@ -103,7 +113,7 @@ export default function ExportPage() {
     }
 
     if (signoffForm.status === ComplianceSignoffStatus.APPROVED && missingExplanations.length > 0) {
-      setSignoffError('Annual approval cannot be saved until every not applicable or explain standard has an explanation.');
+      setSignoffError(approvalIncompleteMessage);
       return;
     }
 
@@ -122,6 +132,11 @@ export default function ExportPage() {
       toast('Board sign-off saved');
     } catch (err) {
       logClientError('Failed to save board sign-off', err);
+      if (apiErrorCode(err) === 'COMPLIANCE_APPROVAL_INCOMPLETE') {
+        setSignoffError(approvalIncompleteMessage);
+        await fetchApprovalReadiness();
+        return;
+      }
       setSignoffError('Could not save the board sign-off record. Please review the fields and try again.');
     } finally {
       setSavingSignoff(false);

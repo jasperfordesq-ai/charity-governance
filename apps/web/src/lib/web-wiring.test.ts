@@ -116,6 +116,8 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   const exportPage = dash('export/page.tsx');
   assert.match(exportPage, /approval-readiness\?year=\$\{year\}/);
   assert.match(exportPage, /missingExplanations/);
+  assert.match(exportPage, /COMPLIANCE_APPROVAL_INCOMPLETE/);
+  assert.match(exportPage, /fetchApprovalReadiness/);
   assert.match(exportPage, /review-ready/i);
   assert.match(exportPage, /legal advice/i);
 });
