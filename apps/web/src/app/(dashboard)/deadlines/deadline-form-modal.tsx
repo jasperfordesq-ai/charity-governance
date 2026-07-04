@@ -10,6 +10,7 @@ import {
   ModalHeader,
   Textarea,
 } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import type { DeadlineResponse } from '@charitypilot/shared';
 
@@ -94,7 +95,7 @@ export function DeadlineFormModal({
                 Cancel
               </Button>
               <Button
-                className="bg-teal-primary text-white hover:bg-teal-dark"
+                className={primaryActionButtonClassName}
                 onPress={handleSaveDeadline}
                 isLoading={saving}
                 isDisabled={Boolean(formDisabledReason) || saving}

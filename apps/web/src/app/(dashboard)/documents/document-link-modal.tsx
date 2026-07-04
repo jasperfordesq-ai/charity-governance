@@ -10,6 +10,7 @@ import {
   Select,
   SelectItem,
 } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormHint } from '@/components/ui/forms';
 import type { DocumentResponse, GovernanceStandardResponse } from '@charitypilot/shared';
 
@@ -78,7 +79,7 @@ export function DocumentLinkModal({
                 Cancel
               </Button>
               <Button
-                className="bg-teal-primary text-white hover:bg-teal-dark"
+                className={primaryActionButtonClassName}
                 onPress={handleLinkStandard}
                 isLoading={linkingStandard}
                 isDisabled={Boolean(linkDisabledReason) || linkingStandard}

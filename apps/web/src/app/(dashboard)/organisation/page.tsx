@@ -17,6 +17,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { useAuth } from '@/lib/auth-context';
 import { AppPage } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import type { ConditionalObligationProfile, UpdateOrganisationRequest } from '@charitypilot/shared';
@@ -337,7 +338,7 @@ export default function OrganisationPage() {
                 </InlineStatus>
               </ModalBody>
               <ModalFooter>
-                <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onClose}>
+                <Button className={primaryActionButtonClassName} onPress={onClose}>
                   Got it
                 </Button>
               </ModalFooter>

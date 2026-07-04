@@ -8,6 +8,7 @@ import { Button, Card, Progress, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { EmptyState, ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { StatusDot } from '@/components/ui/status';
@@ -177,7 +178,7 @@ export default function DashboardPage() {
           <Button as={Link} href="/compliance" size="sm" variant="flat">
             Compliance workspace
           </Button>
-          <Button as={Link} href="/export" size="sm" className="bg-teal-primary text-white hover:bg-teal-dark">
+          <Button as={Link} href="/export" size="sm" className={primaryActionButtonClassName}>
             Export report
           </Button>
         </>
@@ -204,7 +205,7 @@ export default function DashboardPage() {
             <Button as={Link} href="/documents" size="sm" variant="flat">
               Evidence pack
             </Button>
-            <Button as={Link} href="/export" size="sm" className="bg-teal-primary text-white hover:bg-teal-dark">
+            <Button as={Link} href="/export" size="sm" className={primaryActionButtonClassName}>
               Export report
             </Button>
           </div>

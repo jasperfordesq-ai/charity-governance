@@ -8,6 +8,7 @@ import { ChevronLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppPage } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import { StandardEditorCard, type SaveState, type StandardFormState } from './standard-editor-card';
@@ -313,7 +314,7 @@ export default function PrincipleDetailPage() {
           title={loadError ? 'Compliance principle could not be loaded' : 'Principle not found'}
           description={loadError || 'This principle is not available for the current organisation workspace.'}
           action={(
-            <Button className="bg-teal-primary text-white" onPress={navigateBackToCompliance}>
+            <Button className={primaryActionButtonClassName} onPress={navigateBackToCompliance}>
               Back to Compliance
             </Button>
           )}

@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@heroui/react';
 import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { StatusChip } from '@/components/ui/status';
 import type { BoardMemberResponse } from '@charitypilot/shared';
@@ -88,7 +89,7 @@ export function BoardMemberListPanel({
           title={showInactive ? 'No trustees in this view' : 'No active trustees added yet'}
           description={showInactive ? 'No active or inactive trustees are available.' : 'Add trustees so conduct, induction, appointment, and term evidence can be reviewed before annual sign-off.'}
           action={(
-            <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onAdd}>
+            <Button size="sm" className={primaryActionButtonClassName} onPress={onAdd}>
               Add first trustee
             </Button>
           )}

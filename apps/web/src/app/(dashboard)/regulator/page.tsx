@@ -8,6 +8,7 @@ import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { logClientError } from '@/lib/client-logger';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { DataListItems } from '@/components/ui/data-list';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
@@ -117,7 +118,7 @@ export default function RegulatorGuidePage() {
       description="A source-cited working dashboard for trustee workflows, official guidance, conditional prompts, and professional-review areas. It is not legal advice."
       actions={(
         <>
-          <Button as={Link} href="/compliance" className="bg-teal-primary text-white hover:bg-teal-dark">
+          <Button as={Link} href="/compliance" className={primaryActionButtonClassName}>
             Open Compliance
           </Button>
           <Button as={Link} href="/documents" variant="flat">

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { Button } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { EmptyState } from '@/components/ui/states';
 import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
@@ -248,7 +249,7 @@ function RegisterSection({
       )}
       description={description}
       actions={(
-        <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onAdd}>
+        <Button size="sm" className={primaryActionButtonClassName} onPress={onAdd}>
           {actionLabel}
         </Button>
       )}

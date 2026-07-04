@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { canInviteMembers, canEditMemberRole } from '@/lib/team-permissions';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
 import { EmptyState, ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
@@ -328,7 +329,7 @@ export default function TeamPage() {
               </FormHint>
               <Button
                 type="submit"
-                className="w-full bg-teal-primary text-white hover:bg-teal-dark"
+                className={primaryActionButtonClasses('w-full')}
                 isLoading={saving}
                 isDisabled={!canInvite || Boolean(inviteDisabledReason) || saving}
                 aria-describedby="team-invite-disabled-hint"

@@ -2,6 +2,7 @@
 
 import { Button, Checkbox } from '@heroui/react';
 import { DataList, DataListItems } from '@/components/ui/data-list';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { DeadlineBadge, StatusChip } from '@/components/ui/status';
 import type { DeadlineResponse } from '@charitypilot/shared';
@@ -127,7 +128,7 @@ export function DeadlineListPanel({
           title="No deadlines yet"
           description="Auto-generated dates will appear once the organisation profile is set up. Add any board, funder, AGM, audit, or reporting dates you already know."
           action={(
-            <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onAdd}>
+            <Button size="sm" className={primaryActionButtonClassName} onPress={onAdd}>
               Add first deadline
             </Button>
           )}

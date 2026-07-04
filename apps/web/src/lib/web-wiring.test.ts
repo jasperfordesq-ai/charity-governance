@@ -1801,3 +1801,48 @@ test('public SEO and sharing URLs use the canonical production app origin', () =
   assert.match(component('json-ld.tsx'), /mainEntityOfPage:\s*absoluteSiteUrl\(`\/blog\/\$\{slug\}`\)/);
   assert.match(app('(marketing)/blog/[slug]/page.tsx'), /const canonicalUrl = absoluteSiteUrl\(`\/blog\/\$\{meta\.slug\}`\)/);
 });
+
+test('dashboard primary actions use the shared action button styling', () => {
+  const actionButtonPath = join(WEB, 'src', 'components', 'ui', 'action-button.tsx');
+  assert.ok(existsSync(actionButtonPath), 'shared action button helper should exist');
+  const actionButton = readFileSync(actionButtonPath, 'utf8');
+
+  assert.match(actionButton, /primaryActionButtonClassName/);
+  assert.match(actionButton, /dark:bg-teal-bright/);
+  assert.match(actionButton, /dark:text-gray-950/);
+
+  const dashboardFiles = [
+    'board/page.tsx',
+    'board/board-member-list-panel.tsx',
+    'board/board-member-modal.tsx',
+    'billing/page.tsx',
+    'compliance/page.tsx',
+    'compliance/[principleId]/page.tsx',
+    'dashboard/page.tsx',
+    'deadlines/page.tsx',
+    'deadlines/deadline-form-modal.tsx',
+    'deadlines/deadline-list-panel.tsx',
+    'documents/page.tsx',
+    'documents/document-list-panel.tsx',
+    'documents/document-upload-modal.tsx',
+    'documents/document-link-modal.tsx',
+    'export/page.tsx',
+    'organisation/page.tsx',
+    'organisation/organisation-profile-form.tsx',
+    'registers/page.tsx',
+    'registers/register-compliance-cards.tsx',
+    'registers/register-record-lists.tsx',
+    'registers/register-record-modal.tsx',
+    'regulator/page.tsx',
+    'team/page.tsx',
+  ];
+
+  for (const file of dashboardFiles) {
+    const src = dash(file);
+    assert.doesNotMatch(
+      src,
+      /className="[^"]*bg-teal-primary text-white[^"]*"/,
+      `${file} should not keep route-local primary button classes`,
+    );
+  }
+});

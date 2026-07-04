@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { getTrustedStripeRedirectUrl } from '@/lib/url-security';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip, StatusTile } from '@/components/ui/status';
 import type { BillingStatusResponse } from '@charitypilot/shared';
@@ -278,7 +279,7 @@ export default function BillingPage() {
 
                     <div className="mt-5 flex flex-col gap-2">
                       <Button
-                        className="bg-teal-primary text-white hover:bg-teal-dark"
+                        className={primaryActionButtonClassName}
                         fullWidth
                         onPress={() => startCheckout(plan.plan, 'yearly')}
                         isLoading={checkoutLoading === yearlyKey}

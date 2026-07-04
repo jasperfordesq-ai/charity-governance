@@ -17,6 +17,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import { DeadlineFormModal } from './deadline-form-modal';
 import { DeadlineListPanel, summarizeDeadlines } from './deadline-list-panel';
@@ -259,7 +260,7 @@ export default function DeadlinesPage() {
       title="Deadline Tracker"
       description="Keep annual returns, board approvals, funder dates, and internal review deadlines visible before they become filing problems."
       actions={(
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={openAdd}>
+        <Button className={primaryActionButtonClassName} onPress={openAdd}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Add deadline
         </Button>

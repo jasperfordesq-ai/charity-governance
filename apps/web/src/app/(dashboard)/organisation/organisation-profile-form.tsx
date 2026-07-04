@@ -10,6 +10,7 @@ import {
   SelectItem,
 } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, StickyFormActions, ValidationSummary } from '@/components/ui/forms';
 import { StatusChip } from '@/components/ui/status';
 import type { ConditionalObligationProfile } from '@charitypilot/shared';
@@ -296,7 +297,7 @@ export function OrganisationProfileForm({
             {dirtyStateLabel}
           </div>
           <Button
-            className="bg-teal-primary text-white hover:bg-teal-dark"
+            className={primaryActionButtonClassName}
             onPress={handleSave}
             isLoading={saving}
             isDisabled={saving || !isDirty || !name.trim()}

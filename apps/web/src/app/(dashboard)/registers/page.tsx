@@ -8,6 +8,7 @@ import {
 } from '@heroui/react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, LockedFeatureState } from '@/components/ui/states';
 import { RegisterPriorityPanel } from './register-priority-panel';
 import { AnnualReportCard, FinancialControlsCard } from './register-compliance-cards';
@@ -73,7 +74,7 @@ export default function RegistersPage() {
           title="Governance registers are available on Complete"
           description="Upgrade when the charity needs dense operational registers, Annual Report readiness, and financial-control review evidence in one place."
           action={(
-            <Button as={Link} href="/billing" color="primary" className="bg-teal-primary text-white">
+            <Button as={Link} href="/billing" color="primary" className={primaryActionButtonClassName}>
               View billing
             </Button>
           )}

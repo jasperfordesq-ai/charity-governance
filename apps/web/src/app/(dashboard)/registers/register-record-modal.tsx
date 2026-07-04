@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormHint, ValidationSummary } from '@/components/ui/forms';
 import {
   ComplaintForm,
@@ -49,7 +50,7 @@ export function RegisterRecordModal({
             Cancel
           </Button>
           <Button
-            className="bg-teal-primary text-white hover:bg-teal-dark"
+            className={primaryActionButtonClassName}
             onPress={handleCreate}
             isLoading={saving}
             isDisabled={Boolean(formDisabledReason) || saving}

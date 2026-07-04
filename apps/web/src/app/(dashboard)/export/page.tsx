@@ -8,6 +8,7 @@ import { Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { AppPage } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { ReviewWarningState } from '@/components/ui/states';
 import type { ComplianceApprovalReadinessResponse, ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
@@ -199,7 +200,7 @@ export default function ExportPage() {
           </Select>
 
           <Button
-            className="bg-teal-primary text-white hover:bg-teal-dark"
+            className={primaryActionButtonClassName}
             size="lg"
             onPress={handleExport}
             isLoading={exporting}
@@ -251,7 +252,7 @@ export default function ExportPage() {
             )}
           </div>
           <Button
-            className="bg-teal-primary text-white hover:bg-teal-dark"
+            className={primaryActionButtonClassName}
             onPress={handleSaveSignoff}
             isLoading={savingSignoff}
           >

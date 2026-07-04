@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { AppPage } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { TrusteeEvidencePromptCards, getTrusteeEvidence } from './board-evidence';
 import { BoardMemberListPanel } from './board-member-list-panel';
 import { BoardMemberModal } from './board-member-modal';
@@ -200,7 +201,7 @@ export default function BoardPage() {
       title="Board Members Register"
       description="Maintain a review-ready trustee register with conduct, induction, appointment, and term evidence for Irish charity governance workflows."
       actions={(
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={openAdd}>
+        <Button className={primaryActionButtonClassName} onPress={openAdd}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Add trustee
         </Button>

@@ -4,6 +4,7 @@ import { Button } from '@heroui/react';
 import { Plus } from 'lucide-react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { evidencePackItems } from '@/lib/regulator-guidance';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { EvidenceChip, StatusChip } from '@/components/ui/status';
 import { DocumentDeleteModal } from './document-delete-modal';
@@ -82,7 +83,7 @@ export default function DocumentsPage() {
       description="Store governance files in private evidence storage, then link them to standards so trustee review packs are review-ready."
       actions={(
         <Button
-          className="bg-teal-primary text-white hover:bg-teal-dark"
+          className={primaryActionButtonClassName}
           onPress={uploadModal.onOpen}
         >
           <Plus className="h-4 w-4" aria-hidden="true" />

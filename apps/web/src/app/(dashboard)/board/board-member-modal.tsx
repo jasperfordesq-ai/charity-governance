@@ -10,6 +10,7 @@ import {
   ModalFooter,
   ModalHeader,
 } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 
@@ -182,7 +183,7 @@ export function BoardMemberModal({
                 Cancel
               </Button>
               <Button
-                className="bg-teal-primary text-white hover:bg-teal-dark"
+                className={primaryActionButtonClassName}
                 onPress={handleSave}
                 isLoading={saving}
                 isDisabled={Boolean(formDisabledReason) || saving}

@@ -127,6 +127,7 @@ const fixedInThisAuditBranch = [
   'Document uploads now use a shared HeroUI-backed file upload field instead of route-local file input styling.',
   'Marketing blog search and trial CTA now use HeroUI Input and Button primitives instead of route-local form/link styling.',
   'Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.',
+  'Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.',
 ];
 
 const independentAuditFindings = [

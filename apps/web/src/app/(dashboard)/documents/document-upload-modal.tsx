@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem, Textarea } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, ValidationSummary } from '@/components/ui/forms';
 import { FileUploadField } from '@/components/ui/file-upload-field';
 import { DocumentCategory } from '@charitypilot/shared';
@@ -152,7 +153,7 @@ export function DocumentUploadModal({
                 Cancel
               </Button>
               <Button
-                className="bg-teal-primary text-white hover:bg-teal-dark"
+                className={primaryActionButtonClassName}
                 onPress={handleUpload}
                 isLoading={uploading}
                 isDisabled={Boolean(uploadDisabledReason) || uploading}

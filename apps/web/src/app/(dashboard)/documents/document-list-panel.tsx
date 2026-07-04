@@ -2,6 +2,7 @@
 
 import { Button } from '@heroui/react';
 import { DataList, DataListItems } from '@/components/ui/data-list';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { EvidenceChip, StatusChip } from '@/components/ui/status';
 import type { DocumentResponse } from '@charitypilot/shared';
@@ -74,7 +75,7 @@ export function DocumentListPanel({
           title="No documents uploaded yet"
           description="Upload the governing document, board conduct records, minutes, accounts, policies, and other evidence before the annual review."
           action={(
-            <Button size="sm" className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onUploadFirst}>
+            <Button size="sm" className={primaryActionButtonClassName} onPress={onUploadFirst}>
               Upload first document
             </Button>
           )}

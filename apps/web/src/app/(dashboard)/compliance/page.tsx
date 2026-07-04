@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import Link from 'next/link';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import type {
@@ -339,7 +340,7 @@ export default function CompliancePage() {
                         <Link href={`/compliance/${principle.id}`}>
                           <Button
                             size="sm"
-                            className="bg-teal-primary text-white hover:bg-teal-dark"
+                            className={primaryActionButtonClassName}
                           >
                             Edit Compliance Records
                           </Button>

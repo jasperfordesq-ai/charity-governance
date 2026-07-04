@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Checkbox, Input, Progress, Select, SelectItem, Textarea } from '@heroui/react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup } from '@/components/ui/forms';
 import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
 import {
@@ -89,7 +90,7 @@ export function AnnualReportCard({
             <Input label="Notes" value={annual.notes ?? ''} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
           </div>
         </FieldGroup>
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
+        <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
           Save Annual Report readiness
         </Button>
       </div>
@@ -156,7 +157,7 @@ export function FinancialControlsCard({
             <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
           </div>
         </FieldGroup>
-        <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
+        <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
           Save controls review
         </Button>
       </div>
