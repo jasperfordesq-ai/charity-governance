@@ -61,6 +61,16 @@ function stripeSearchValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+type StripeCustomerOrganisation = {
+  id: string;
+  stripeCustomerId: string | null;
+};
+
+type BillableOrganisation = StripeCustomerOrganisation & {
+  name: string;
+  contactEmail: string | null;
+};
+
 function mapStripeSubscriptionStatus(status: string): SubscriptionStatus {
   switch (status) {
     case 'active':
@@ -175,6 +185,50 @@ export class BillingService {
     });
 
     return result.data[0]?.id ?? null;
+  }
+
+  private async rememberStripeCustomerId(organisationId: string, customerId: string): Promise<void> {
+    await this.prisma.organisation.update({
+      where: { id: organisationId },
+      data: { stripeCustomerId: customerId },
+    });
+  }
+
+  private async reconcileStripeCustomerId(
+    stripe: Stripe,
+    org: StripeCustomerOrganisation,
+  ): Promise<string | null> {
+    if (org.stripeCustomerId) {
+      return org.stripeCustomerId;
+    }
+
+    const customerId = await this.findStripeCustomerForOrganisation(stripe, org.id);
+
+    if (customerId) {
+      await this.rememberStripeCustomerId(org.id, customerId);
+    }
+
+    return customerId;
+  }
+
+  private async ensureStripeCustomerId(stripe: Stripe, org: BillableOrganisation): Promise<string> {
+    const reconciledCustomerId = await this.reconcileStripeCustomerId(stripe, org);
+
+    if (reconciledCustomerId) {
+      return reconciledCustomerId;
+    }
+
+    const customer = await stripe.customers.create(
+      {
+        metadata: { organisationId: org.id },
+        name: org.name,
+        email: org.contactEmail ?? undefined,
+      },
+      { idempotencyKey: `charitypilot-customer-${org.id}` },
+    );
+
+    await this.rememberStripeCustomerId(org.id, customer.id);
+    return customer.id;
   }
 
   private async hasProcessedWebhookEvent(eventId: string): Promise<boolean> {
@@ -348,28 +402,7 @@ export class BillingService {
     const stripe = this.getStripe();
     const priceId = this.getPriceId(plan, interval);
 
-    let customerId = org.stripeCustomerId;
-
-    if (!customerId) {
-      customerId = await this.findStripeCustomerForOrganisation(stripe, organisationId);
-
-      if (!customerId) {
-        const customer = await stripe.customers.create(
-          {
-            metadata: { organisationId },
-            name: org.name,
-            email: org.contactEmail ?? undefined,
-          },
-          { idempotencyKey: `charitypilot-customer-${organisationId}` },
-        );
-        customerId = customer.id;
-      }
-
-      await this.prisma.organisation.update({
-        where: { id: organisationId },
-        data: { stripeCustomerId: customerId },
-      });
-    }
+    const customerId = await this.ensureStripeCustomerId(stripe, org);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -388,12 +421,15 @@ export class BillingService {
       where: { id: organisationId },
     });
 
-    if (!org.stripeCustomerId) {
+    const stripe = this.getStripe();
+    const customerId = await this.reconcileStripeCustomerId(stripe, org);
+
+    if (!customerId) {
       throw new AppError(400, 'NO_STRIPE_CUSTOMER', 'No billing account found');
     }
 
-    const session = await this.getStripe().billingPortal.sessions.create({
-      customer: org.stripeCustomerId,
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
       return_url: `${getFrontendUrl()}/billing`,
     });
 

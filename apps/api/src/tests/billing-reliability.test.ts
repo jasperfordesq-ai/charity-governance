@@ -445,6 +445,53 @@ test('createCheckoutSession reconciles an existing Stripe customer by organisati
 
 // ── billing-graceful-degradation-15 ──
 
+test('createPortalSession reconciles an existing Stripe customer by organisation metadata instead of failing', async () => {
+  const calls: Array<{ name: string; args: unknown[] }> = [];
+  const prisma = {
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org-1',
+        name: 'Acme Charity',
+        contactEmail: 'billing@example.org',
+        stripeCustomerId: null,
+      }),
+      update: async (args: unknown) => {
+        calls.push({ name: 'organisation.update', args: [args] });
+        return {};
+      },
+    },
+  };
+  const service = new BillingService(prisma as never);
+  (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    customers: {
+      search: async (...args: unknown[]) => {
+        calls.push({ name: 'stripe.customers.search', args });
+        return { data: [{ id: 'cus_reconciled' }] };
+      },
+    },
+    billingPortal: {
+      sessions: {
+        create: async (...args: unknown[]) => {
+          calls.push({ name: 'stripe.billingPortal.sessions.create', args });
+          return { url: 'https://billing.stripe.test/session' };
+        },
+      },
+    },
+  });
+
+  const result = await service.createPortalSession('org-1');
+
+  assert.deepEqual(result, { url: 'https://billing.stripe.test/session' });
+  assert.ok(calls.some((call) => call.name === 'stripe.customers.search'), 'expected Stripe customer search first');
+  const updateCall = calls.find((call) => call.name === 'organisation.update');
+  assert.deepEqual(updateCall?.args[0], {
+    where: { id: 'org-1' },
+    data: { stripeCustomerId: 'cus_reconciled' },
+  });
+  const portalCall = calls.find((call) => call.name === 'stripe.billingPortal.sessions.create');
+  assert.equal((portalCall?.args[0] as { customer?: string }).customer, 'cus_reconciled');
+});
+
 test('billing status reports billingConfigured:false without erroring when Stripe is unconfigured', async () => {
   const previousPrice = process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
   delete process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
