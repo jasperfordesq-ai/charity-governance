@@ -10,8 +10,6 @@ import {
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Select,
-  SelectItem,
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
@@ -21,9 +19,9 @@ import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-g
 import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataList, DataListItems } from '@/components/ui/data-list';
-import { FormHint } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { EvidenceChip, StatusChip } from '@/components/ui/status';
+import { DocumentLinkModal } from './document-link-modal';
 import { DocumentProfilePromptsPanel, buildDocumentProfilePrompts } from './document-profile-prompts';
 import { DocumentUploadModal, MAX_FILE_SIZE } from './document-upload-modal';
 import type {
@@ -630,53 +628,18 @@ export default function DocumentsPage() {
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={linkModal.isOpen} onOpenChange={linkModal.onOpenChange}>
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>Link standard</ModalHeader>
-              <ModalBody className="gap-4">
-                <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
-                  Link {selectedLinkDoc ? <strong>{selectedLinkDoc.name}</strong> : 'this document'} to the compliance standard it supports.
-                </p>
-                <Select
-                  label="Standard"
-                  selectedKeys={linkStandardId ? new Set([linkStandardId]) : new Set()}
-                  onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as string | undefined;
-                    if (value) setLinkStandardId(value);
-                  }}
-                  isDisabled={Boolean(standardsError) || standards.length === 0}
-                >
-                  {standards.map((standard) => (
-                    <SelectItem key={standard.id} textValue={`${standard.code} - ${standard.title}`}>
-                      <span className="font-mono text-sm font-semibold">{standard.code}</span>
-                      <span className="ml-2 text-sm text-gray-600 dark:text-gray-300">{standard.title}</span>
-                    </SelectItem>
-                  ))}
-                </Select>
-                <FormHint id="link-disabled-hint" tone={linkDisabledReason ? 'warning' : 'success'}>
-                  {linkDisabledReason || 'This document will appear as evidence on the selected standard.'}
-                </FormHint>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="flat" onPress={() => { setLinkStandardId(''); onClose(); }} isDisabled={linkingStandard}>
-                  Cancel
-                </Button>
-                <Button
-                  className="bg-teal-primary text-white hover:bg-teal-dark"
-                  onPress={handleLinkStandard}
-                  isLoading={linkingStandard}
-                  isDisabled={Boolean(linkDisabledReason) || linkingStandard}
-                  aria-describedby="link-disabled-hint"
-                >
-                  Link
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      <DocumentLinkModal
+        isOpen={linkModal.isOpen}
+        onOpenChange={linkModal.onOpenChange}
+        selectedLinkDoc={selectedLinkDoc}
+        standards={standards}
+        standardsError={standardsError}
+        linkStandardId={linkStandardId}
+        setLinkStandardId={setLinkStandardId}
+        linkDisabledReason={linkDisabledReason}
+        handleLinkStandard={handleLinkStandard}
+        linkingStandard={linkingStandard}
+      />
     </AppPage>
   );
 }

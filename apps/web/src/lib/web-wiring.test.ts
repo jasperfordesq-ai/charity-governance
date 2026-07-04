@@ -258,7 +258,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
   }> = [
     {
       file: 'documents/page.tsx',
-      extraFiles: ['documents/document-upload-modal.tsx'],
+      extraFiles: ['documents/document-upload-modal.tsx', 'documents/document-link-modal.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -472,6 +472,21 @@ test('documents upload modal is extracted from the oversized route file', () => 
   assert.match(modalSrc, /document-upload-file/);
   assert.match(modalSrc, /File size exceeds the 10 MB limit/);
   assert.match(modalSrc, /MAX_FILE_SIZE/);
+});
+
+test('documents standard-link modal is extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const modalPath = dashPath('documents/document-link-modal.tsx');
+  assert.ok(existsSync(modalPath), 'document standard-link modal should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /DocumentLinkModal/);
+  assert.doesNotMatch(pageSrc, /<ModalHeader>Link standard<\/ModalHeader>/);
+  assert.doesNotMatch(pageSrc, /link-disabled-hint/);
+  assert.doesNotMatch(pageSrc, /This document will appear as evidence on the selected standard/);
+  assert.match(modalSrc, /<ModalHeader>Link standard<\/ModalHeader>/);
+  assert.match(modalSrc, /link-disabled-hint/);
+  assert.match(modalSrc, /This document will appear as evidence on the selected standard/);
 });
 
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
