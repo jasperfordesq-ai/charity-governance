@@ -194,9 +194,9 @@ You need four external services. Create the **production/live** versions
 
 ### Step 10 — Final sign-off
 - **What:** Record real evidence in `docs/production-launch-checklist.md` and the
-  machine-readable `production-launch-evidence.json`, with four named approvals:
-  **engineering, operations, security, business**.
-- **Why:** A deliberate "four eyes" gate so no single person launches alone.
+  machine-readable `production-launch-evidence.json`, with five named approvals:
+  **engineering, operations, security, legal/compliance, and business**.
+- **Why:** A deliberate multi-role launch gate so no single person launches alone.
 - **Effort:** ~1 hour once everything above is done.
 
 ---

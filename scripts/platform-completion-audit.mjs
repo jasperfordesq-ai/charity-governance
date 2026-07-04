@@ -130,6 +130,7 @@ const fixedInThisAuditBranch = [
   'Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.',
   'Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.',
   'Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.',
+  'The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.',
 ];
 
 const independentAuditFindings = [

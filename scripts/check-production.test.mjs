@@ -2037,6 +2037,14 @@ test('production runbook documents deployed browser QA evidence commands', () =>
   assert.match(runbook, /production-launch-evidence\.json/);
 });
 
+test('plain English launch guide names every final approval role', () => {
+  const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
+
+  assert.doesNotMatch(launchGuide, /four named approvals/i);
+  assert.match(launchGuide, /five named approvals/i);
+  assert.match(launchGuide, /engineering, operations, security, legal\/compliance, and business/);
+});
+
 test('production deploy preflight is wired for digest-pinned image promotion', () => {
   const packageJson = JSON.parse(readRepoFile('package.json'));
   const runbook = readRepoFile('docs/production-runbook.md');
