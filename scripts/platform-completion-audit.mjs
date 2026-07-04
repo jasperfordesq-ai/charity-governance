@@ -70,6 +70,7 @@ const fixedInThisAuditBranch = [
   'The document standard-link modal is split out of the oversized documents route behind a wiring regression test.',
   'The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.',
   'The uploaded-document list panel is split out of the oversized documents route behind a wiring regression test.',
+  'The document workflow loading, organisation-profile prompts, upload/link/delete/download mutations, and trusted download handling are split into a route-local hook behind a wiring regression test.',
   'Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.',
   'The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.',
   'Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.',
@@ -97,7 +98,6 @@ const fixedInThisAuditBranch = [
 
 const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Frontend polish', 'Largest all-client route remains documents; keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.'],
 ];
 
 const officialSources = [
@@ -286,6 +286,16 @@ function render() {
     .filter((route) => route.lines >= 450)
     .sort((a, b) => b.lines - a.lines);
   const p0Routes = routes.filter((route) => route.priority === 'P0');
+  const oversizedRouteSummary = oversizedRoutes.slice(0, 6).map((r) => `${r.route} (${r.lines})`).join(', ');
+  const productUiNextAction = oversizedRoutes.length > 0
+    ? `Refactor and browser-QA the largest P0 workflows first: ${oversizedRouteSummary}.`
+    : 'Browser-QA flagged P0 workflows and clean remaining inline SVG/decorative styling.';
+  const frontendPolishFinding = oversizedRoutes.length > 0
+    ? `Largest all-client route remains ${oversizedRoutes[0].route} (${oversizedRoutes[0].lines} lines); keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.`
+    : 'No route files remain over 450 lines; shift frontend polish toward browser QA, inline-icon cleanup, and visual treatment on flagged P0 routes.';
+  const workflowPolishStep = oversizedRoutes.length > 0
+    ? 'Decompose and polish the largest remaining P0 workflows: documents, board, dashboard, export, organisation, deadlines, compliance detail, and route-specific browser-QA follow-ups.'
+    : 'Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.';
 
   let md = `# CharityPilot Platform Completion Audit\n\n`;
   md += `Generated: ${auditDate}\n\n`;
@@ -297,7 +307,7 @@ function render() {
   md += `## Executive Readiness\n\n`;
   md += `| Area | Current state | Next action |\n`;
   md += `| --- | --- | --- |\n`;
-  md += `| Product UI | ${routes.length} page routes scanned; ${p0Routes.length} are P0 trustee/compliance workflows; ${oversizedRoutes.length} route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: ${oversizedRoutes.slice(0, 6).map((r) => `${r.route} (${r.lines})`).join(', ') || 'none'}. |\n`;
+  md += `| Product UI | ${routes.length} page routes scanned; ${p0Routes.length} are P0 trustee/compliance workflows; ${oversizedRoutes.length} route files are 450+ lines. | ${productUiNextAction} |\n`;
   md += `| API/backend | ${apis.length} route groups scanned with route-local guard heuristics and ${tests.apiTests} API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |\n`;
   md += `| Launch operations | ${launch.headline.replace(/\|/g, '\\|')} | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |\n`;
   md += `| Irish compliance model | ${compliance.entries} matrix entries; last checked ${compliance.lastChecked}; statuses ${Object.entries(compliance.statuses).map(([k, v]) => `${k}:${v}`).join(', ')}. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |\n`;
@@ -309,7 +319,10 @@ function render() {
   md += `## Independent Audit Findings Still Driving Next Work\n\n`;
   md += `| Priority | Area | Finding |\n`;
   md += `| --- | --- | --- |\n`;
-  for (const [priority, area, finding] of independentAuditFindings) {
+  for (const [priority, area, finding] of [
+    ...independentAuditFindings,
+    ['P1', 'Frontend polish', frontendPolishFinding],
+  ]) {
     md += `| ${priority} | ${area} | ${finding.replace(/\|/g, '\\|')} |\n`;
   }
   md += `\n`;
@@ -346,7 +359,7 @@ function render() {
 
   md += `\n## Next Completion Sequence\n\n`;
   md += `1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.\n`;
-  md += `2. Decompose and polish the largest remaining P0 workflows: documents, board, dashboard, export, organisation, deadlines, compliance detail, and route-specific browser-QA follow-ups.\n`;
+  md += `2. ${workflowPolishStep}\n`;
   md += `3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.\n`;
   md += `4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.\n`;
   md += `5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.\n`;

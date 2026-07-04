@@ -35,7 +35,10 @@ test('registers gates the whole page behind a Complete upsell on a plan-feature 
 });
 
 test('documents routes every download URL through the trusted-download allow-list', () => {
-  const src = dash('documents/page.tsx');
+  const src = [
+    dash('documents/page.tsx'),
+    optionalDash('documents/use-documents-workflow.ts'),
+  ].join('\n');
   assert.match(src, /from '@\/lib\/url-security'/);
   assert.ok(src.includes('getTrustedDocumentDownloadUrl'));
 });
@@ -66,6 +69,7 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'board/board-member-list-panel.tsx',
   ],
   'documents/page.tsx': [
+    'documents/use-documents-workflow.ts',
     'documents/document-upload-modal.tsx',
     'documents/document-list-panel.tsx',
     'documents/document-link-modal.tsx',
@@ -320,6 +324,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     {
       file: 'documents/page.tsx',
       extraFiles: [
+        'documents/use-documents-workflow.ts',
         'documents/document-upload-modal.tsx',
         'documents/document-link-modal.tsx',
         'documents/document-delete-modal.tsx',
@@ -520,6 +525,7 @@ test('export report preview UI is extracted from the oversized route file', () =
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {
   const src = [
     dash('documents/page.tsx'),
+    optionalDash('documents/use-documents-workflow.ts'),
     optionalDash('documents/document-profile-prompts.tsx'),
   ].join('\n');
   for (const term of [
@@ -544,14 +550,34 @@ test('documents workflow surfaces conditional obligation evidence prompts from t
   }
 });
 
+test('documents workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const hookPath = dashPath('documents/use-documents-workflow.ts');
+  assert.ok(existsSync(hookPath), 'document workflow state should be split out of page.tsx');
+  const hookSrc = readFileSync(hookPath, 'utf8');
+
+  assert.match(pageSrc, /useDocumentsWorkflow/);
+  assert.doesNotMatch(pageSrc, /useState<DocumentResponse\[\]>/);
+  assert.doesNotMatch(pageSrc, /const fetchDocuments = useCallback/);
+  assert.doesNotMatch(pageSrc, /getTrustedDocumentDownloadUrl/);
+  assert.match(hookSrc, /export function useDocumentsWorkflow/);
+  assert.match(hookSrc, /const fetchDocuments = useCallback/);
+  assert.match(hookSrc, /getTrustedDocumentDownloadUrl/);
+  assert.match(hookSrc, /conditionalObligationPrompts/);
+  assert.match(hookSrc, /uploadDisabledReason/);
+  assert.match(hookSrc, /linkDisabledReason/);
+});
+
 test('documents profile-triggered evidence UX is extracted from the oversized route file', () => {
   const pageSrc = dash('documents/page.tsx');
+  const hookSrc = optionalDash('documents/use-documents-workflow.ts');
   const panelPath = dashPath('documents/document-profile-prompts.tsx');
   assert.ok(existsSync(panelPath), 'document profile prompts should be split out of page.tsx');
   const panelSrc = readFileSync(panelPath, 'utf8');
 
   assert.match(pageSrc, /DocumentProfilePromptsPanel/);
-  assert.match(pageSrc, /buildDocumentProfilePrompts/);
+  assert.doesNotMatch(pageSrc, /buildDocumentProfilePrompts/);
+  assert.match(hookSrc, /buildDocumentProfilePrompts/);
   assert.doesNotMatch(pageSrc, /formatReviewFlag/);
   assert.match(panelSrc, /formatReviewFlag/);
   assert.match(panelSrc, /linkedEvidenceCount/);

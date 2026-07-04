@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `e556f94`
+Working-tree base commit when generated: `057a717`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 1 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /documents (480). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Browser-QA flagged P0 workflows and clean remaining inline SVG/decorative styling. |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -43,6 +43,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The document standard-link modal is split out of the oversized documents route behind a wiring regression test.
 - The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.
 - The uploaded-document list panel is split out of the oversized documents route behind a wiring regression test.
+- The document workflow loading, organisation-profile prompts, upload/link/delete/download mutations, and trusted download handling are split into a route-local hook behind a wiring regression test.
 - Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.
 - The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.
 - Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.
@@ -72,7 +73,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Frontend polish | Largest all-client route remains documents; keep splitting route-local forms/cards/hooks before broader visual polish and browser QA. |
+| P1 | Frontend polish | No route files remain over 450 lines; shift frontend polish toward browser QA, inline-icon cleanup, and visual treatment on flagged P0 routes. |
 
 ## Route Audit
 
@@ -88,7 +89,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | 1 inline svg icon(s) |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 391 | yes | 1 inline svg icon(s) |
-| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 480 | yes | large route file; refactor soon; 1 inline svg icon(s) |
+| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 254 | yes | 1 inline svg icon(s) |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 410 | yes | 2 inline svg icon(s) |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 109 | yes | 1 inline svg icon(s) |
@@ -180,7 +181,7 @@ The matrix must stay source-cited and review-ready. The following official sourc
 ## Next Completion Sequence
 
 1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
-2. Decompose and polish the largest remaining P0 workflows: documents, board, dashboard, export, organisation, deadlines, compliance detail, and route-specific browser-QA follow-ups.
+2. Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.
 3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
 4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.
 5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.
