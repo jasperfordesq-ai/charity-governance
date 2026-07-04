@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `bc73886`
+Working-tree base commit when generated: `0a4d41b`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -78,6 +78,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
+- Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Team feedback now uses the shared inline status primitive instead of route-local alert styling.
 
 ## Independent Audit Findings Still Driving Next Work

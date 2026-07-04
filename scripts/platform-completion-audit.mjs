@@ -105,6 +105,7 @@ const fixedInThisAuditBranch = [
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
   'Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.',
+  'Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.',
   'Team feedback now uses the shared inline status primitive instead of route-local alert styling.',
 ];
 

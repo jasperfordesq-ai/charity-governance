@@ -360,7 +360,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /79 check\(s\)/);
+    assert.match(result.stdout, /80 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -694,6 +694,28 @@ test('production launch evidence validator requires every final signoff role app
     assert.match(result.stderr, /finalSignoff\.approvals\.operations\.status must be approved/);
     assert.match(result.stderr, /finalSignoff\.approvals\.business\.approvedAt must not be before preparedAt/);
     assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.evidence must include at least one evidence entry/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires solicitor governance and privacy review evidence', async () => {
+  const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const legalArea = REQUIRED_LAUNCH_AREAS.find((area) => area.id === 'legalAndCompliance');
+  assert.ok(
+    legalArea?.checks.some((check) => check.id === 'solicitor-governance-privacy-review'),
+    'legalAndCompliance must include the solicitor/governance/privacy review check',
+  );
+
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  delete evidence.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /legalAndCompliance\.checks\.solicitor-governance-privacy-review is required/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

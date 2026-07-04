@@ -128,6 +128,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['terms-approved', 'terms or service agreement approved'],
       ['retention-policy-approved', 'data retention policy approved'],
       ['support-deletion-contact', 'support and data deletion contact path published'],
+      ['solicitor-governance-privacy-review', 'solicitor, governance, and privacy review completed'],
     ],
   },
   {

@@ -203,6 +203,7 @@ Evidence:
 - [ ] Data retention policy is approved for production.
 - [ ] Support and data deletion contact path is published.
 - [ ] Solicitor, governance, and privacy review confirms the production wording remains review-ready, source-cited, and clear that CharityPilot is not a substitute for legal advice.
+- [ ] Machine-readable launch evidence includes `legalAndCompliance.checks.solicitor-governance-privacy-review` with non-secret external review evidence.
 
 Evidence:
 
