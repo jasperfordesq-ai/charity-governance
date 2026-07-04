@@ -183,8 +183,12 @@ test('organisation profile form is extracted from the oversized route file', () 
 test('the global and dashboard error boundaries render a recoverable screen', () => {
   for (const file of ['error.tsx', '(dashboard)/error.tsx']) {
     const src = app(file);
+    assert.match(src, /from '@\/components\/ui\/states'/, `${file} should use shared state primitives`);
+    assert.match(src, /ErrorState/, `${file} should render the shared ErrorState`);
     assert.match(src, /reset/, `${file} must offer a recover action`);
     assert.match(src, /Something went wrong/i, `${file} must render a clean error message`);
+    assert.doesNotMatch(src, /CircleAlert/, `${file} should not duplicate the error icon`);
+    assert.doesNotMatch(src, /border-red-200|bg-red-50/, `${file} should not duplicate red error-card styling`);
   }
 });
 
@@ -814,9 +818,9 @@ test('dashboard layout navigation uses lucide icons instead of inline svg', () =
 
 test('app shell and error chrome use lucide icons instead of inline svg', () => {
   const expectations: Array<[string, string, string[]]> = [
-    ['app', 'error.tsx', ['CircleAlert', 'RefreshCcw']],
+    ['app', 'error.tsx', ['RefreshCcw']],
     ['app', 'not-found.tsx', ['ArrowLeft']],
-    ['dashboard', 'error.tsx', ['CircleAlert', 'RefreshCcw']],
+    ['dashboard', 'error.tsx', ['RefreshCcw']],
     ['app', '(auth)/layout.tsx', ['ArrowLeft', 'ShieldCheck']],
     ['app', '(marketing)/layout.tsx', ['ShieldCheck']],
     ['app', '(marketing)/MobileNav.tsx', ['Menu', 'X']],
