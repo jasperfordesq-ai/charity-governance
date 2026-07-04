@@ -1047,7 +1047,27 @@ test('platform audit summary follows the remaining route findings instead of sta
 
   assert.doesNotMatch(audit, /visual treatment on decorative or pill-heavy pages/i);
   assert.doesNotMatch(audit, /visual treatment on flagged P0 routes/i);
-  assert.match(audit, /board and registers dark-mode screenshot QA/i);
+  assert.match(audit, /deployed browser QA for every route/i);
+});
+
+test('platform audit scans route-local extracted components for static dark-mode evidence', () => {
+  const auditScript = repo('scripts/platform-completion-audit.mjs');
+  const audit = repo('docs/platform-completion-audit.md');
+
+  assert.match(auditScript, /routeSurfaceContent/);
+  assert.doesNotMatch(audit, /`\/board`[^\n]+dark-mode relies mostly on layout/i);
+  assert.doesNotMatch(audit, /`\/registers`[^\n]+dark-mode relies mostly on layout/i);
+});
+
+test('marketing navigation CTAs avoid pill-badge styling', () => {
+  const desktopNav = app('(marketing)/layout.tsx');
+  const mobileNav = app('(marketing)/MobileNav.tsx');
+
+  assert.doesNotMatch(desktopNav, /rounded-full/);
+  assert.doesNotMatch(desktopNav, /backdrop-blur-/);
+  assert.doesNotMatch(mobileNav, /rounded-full/);
+  assert.match(desktopNav, /rounded-md/);
+  assert.match(mobileNav, /rounded-md/);
 });
 
 test('registers workflow prioritises conditional obligation register work from the organisation profile', () => {
@@ -1370,7 +1390,7 @@ test('marketing and auth layout chrome includes dark variants for muted text and
   }
 
   const marketing = app('(marketing)/layout.tsx');
-  assert.match(marketing, /dark:bg-gray-950\/90/);
+  assert.match(marketing, /dark:bg-gray-950\/9[05]/);
   assert.match(marketing, /dark:border-gray-800/);
   assert.match(marketing, /dark:bg-gray-950/);
   assert.match(marketing, /dark:\[&_button\]:text-gray-300/);

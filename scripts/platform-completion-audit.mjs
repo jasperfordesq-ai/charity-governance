@@ -101,6 +101,7 @@ const fixedInThisAuditBranch = [
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
   'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
+  'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
 ];
 
 const independentAuditFindings = [
@@ -166,6 +167,18 @@ function routeArea(pagePath) {
   return 'root';
 }
 
+function routeSurfaceContent(pagePath, pageContent) {
+  const routeDir = dirname(pagePath);
+  const siblingSurfaceFiles = readdirSync(routeDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => name.endsWith('.tsx') && name !== 'page.tsx' && !name.endsWith('.test.tsx'))
+    .sort();
+
+  const siblingContent = siblingSurfaceFiles.map((name) => readFileSync(join(routeDir, name), 'utf8'));
+  return [pageContent, ...siblingContent].join('\n');
+}
+
 function countMatches(content, pattern) {
   return [...content.matchAll(pattern)].length;
 }
@@ -178,7 +191,7 @@ function hasDecorativeStylingRisk(content) {
   return gradientOrBlurPattern.test(content) || pillLikeDecorativePattern.test(content);
 }
 
-function routeRisks(content, lines, route, area) {
+function routeRisks(content, pageContent, lines, route, area) {
   const risks = [];
   const svgCount = countMatches(content, /<svg\b/g);
   if (lines >= 700) risks.push('oversized route file; split first');
@@ -186,7 +199,7 @@ function routeRisks(content, lines, route, area) {
   if (svgCount > 0) risks.push(`${svgCount} inline svg icon(s)`);
   if (hasDecorativeStylingRisk(content)) risks.push('decorative or pill-heavy styling needs visual QA');
   if (!/dark:|\bcp-surface\b|\bcp-text\b/.test(content)) risks.push('dark-mode relies mostly on layout; screenshot QA required');
-  if (/use client/.test(content) && !/ErrorState|error|catch|toast|setError/i.test(content)) risks.push('client flow has weak visible error-state signal');
+  if (/use client/.test(pageContent) && !/ErrorState|error|catch|toast|setError/i.test(content)) risks.push('client flow has weak visible error-state signal');
   if (routePriorities.get(route) === 'P0' && area === 'dashboard' && !/source|Source|review|Review|evidence|Evidence/.test(content)) {
     risks.push('trust workflow should expose source/evidence review cues');
   }
@@ -198,6 +211,7 @@ function readRouteInventory() {
   return walk(appRoot, (file) => file.endsWith(`${sep}page.tsx`))
     .map((pagePath) => {
       const content = readFileSync(pagePath, 'utf8');
+      const surfaceContent = routeSurfaceContent(pagePath, content);
       const route = routeFromPage(pagePath);
       const area = routeArea(pagePath);
       const lines = lineCount(content);
@@ -208,7 +222,7 @@ function readRouteInventory() {
         lines,
         client: /['"]use client['"]/.test(content),
         priority: routePriorities.get(route) ?? 'P2',
-        risks: routeRisks(content, lines, route, area),
+        risks: routeRisks(surfaceContent, content, lines, route, area),
       };
     })
     .sort((a, b) => a.route.localeCompare(b.route));
@@ -310,19 +324,19 @@ function render() {
       ? 'Browser-QA flagged P0 workflows and clean remaining route-local inline SVG/decorative styling.'
       : decorativeRoutes.length > 0
         ? 'Browser-QA flagged P0 workflows and visual treatment on decorative or pill-heavy pages.'
-        : 'Complete deployed browser QA for every route, with board and registers dark-mode screenshot QA still called out.';
+        : 'Complete deployed browser QA for every route across desktop/mobile and both themes.';
   const frontendPolishFinding = oversizedRoutes.length > 0
     ? `Largest all-client route remains ${oversizedRoutes[0].route} (${oversizedRoutes[0].lines} lines); keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.`
     : inlineSvgRoutes.length > 0
       ? 'No route files remain over 450 lines; shift frontend polish toward browser QA, route-local icon cleanup, and visual treatment on flagged P0 routes.'
       : decorativeRoutes.length > 0
         ? 'No route files remain over 450 lines and route page inline SVG findings are closed; shift frontend polish toward browser QA and visual treatment on flagged P0 routes.'
-        : 'No route files remain over 450 lines, route page inline SVG findings are closed, and decorative-pill static findings are clear; board and registers dark-mode screenshot QA plus deployed browser evidence remain.';
+        : 'No route files remain over 450 lines, route page inline SVG findings are closed, and route-surface static dark-mode/decorative findings are clear; deployed browser and accessibility evidence remain.';
   const workflowPolishStep = oversizedRoutes.length > 0
     ? 'Decompose and polish the largest remaining P0 workflows: documents, board, dashboard, export, organisation, deadlines, compliance detail, and route-specific browser-QA follow-ups.'
     : decorativeRoutes.length > 0
       ? 'Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.'
-      : 'Complete deployed browser QA across every route, focusing local follow-up on board and registers dark-mode screenshot QA and production-only evidence.';
+      : 'Complete deployed browser QA across every route in desktop/mobile and light/dark mode, then attach production-only evidence.';
 
   let md = `# CharityPilot Platform Completion Audit\n\n`;
   md += `Generated: ${auditDate}\n\n`;

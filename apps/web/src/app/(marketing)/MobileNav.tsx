@@ -47,7 +47,7 @@ export function MobileNav() {
               <Link
                 href="/register"
                 onClick={() => setOpen(false)}
-                className="block w-full text-center bg-teal-primary text-white font-semibold py-3 rounded-full hover:bg-teal-dark transition-colors"
+                className="block w-full text-center bg-teal-primary text-white font-semibold py-3 rounded-md hover:bg-teal-dark transition-colors"
               >
                 Start free trial
               </Link>
