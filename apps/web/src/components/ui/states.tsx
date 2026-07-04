@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CircleAlert, Clock, LoaderCircle, LockKeyhole, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Clock, LoaderCircle, LockKeyhole, TriangleAlert } from 'lucide-react';
 
 type StateVariant = 'compact' | 'page';
 
@@ -125,5 +125,45 @@ export function ReviewWarningState(props: BaseStateProps) {
         <CircleAlert className="h-8 w-8 text-amber-700 dark:text-amber-300" strokeWidth={1.5} aria-hidden="true" />
       }
     />
+  );
+}
+
+export function InlineStatus({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+}) {
+  const toneClasses = {
+    neutral: 'border-gray-200 bg-white text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200',
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100',
+    warning: 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100',
+    danger: 'border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100',
+  };
+  const iconClasses = {
+    neutral: 'text-gray-500 dark:text-gray-400',
+    success: 'text-emerald-700 dark:text-emerald-300',
+    warning: 'text-amber-700 dark:text-amber-300',
+    danger: 'text-rose-700 dark:text-rose-300',
+  };
+  const icon =
+    tone === 'success' ? (
+      <CheckCircle2 className={classes('mt-0.5 h-4 w-4 flex-shrink-0', iconClasses[tone])} aria-hidden="true" />
+    ) : tone === 'danger' ? (
+      <TriangleAlert className={classes('mt-0.5 h-4 w-4 flex-shrink-0', iconClasses[tone])} aria-hidden="true" />
+    ) : (
+      <CircleAlert className={classes('mt-0.5 h-4 w-4 flex-shrink-0', iconClasses[tone])} aria-hidden="true" />
+    );
+
+  return (
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      aria-live={tone === 'danger' ? 'assertive' : 'polite'}
+      className={classes('flex gap-3 rounded-lg border px-4 py-3 text-sm', toneClasses[tone])}
+    >
+      {icon}
+      <p className="min-w-0 leading-5">{children}</p>
+    </div>
   );
 }

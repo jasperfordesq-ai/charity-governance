@@ -1370,6 +1370,17 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
   assert.match(src, /isLoading=\{revokeInviteId === invite\.id\}/);
 });
 
+test('team feedback uses the shared inline status primitive instead of route-local alert styling', () => {
+  const src = dash('team/page.tsx');
+  const states = component('ui/states.tsx');
+
+  assert.match(states, /export function InlineStatus/);
+  assert.match(src, /InlineStatus/);
+  assert.match(src, /tone=\{error \? 'danger' : 'success'\}/);
+  assert.doesNotMatch(src, /border-rose-200 bg-rose-50/);
+  assert.doesNotMatch(src, /border-emerald-200 bg-emerald-50/);
+});
+
 test('phase 6C billing preserves Stripe redirect validation while clarifying plan gates', () => {
   const src = dash('billing/page.tsx');
   const imports: Array<[string, string[]]> = [

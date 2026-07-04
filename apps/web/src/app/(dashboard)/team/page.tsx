@@ -11,7 +11,7 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { EmptyState, ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import type { TeamResponse, TeamInviteResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
@@ -197,17 +197,9 @@ export default function TeamPage() {
       </div>
 
       {(message || error) ? (
-        <div
-          role={error ? 'alert' : 'status'}
-          aria-live="polite"
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            error
-              ? 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100'
-          }`}
-        >
+        <InlineStatus tone={error ? 'danger' : 'success'}>
           {error ?? message}
-        </div>
+        </InlineStatus>
       ) : null}
 
       <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
