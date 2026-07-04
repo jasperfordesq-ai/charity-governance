@@ -4,6 +4,13 @@ Run this checklist against the deployed HTTPS production URL. Localhost testing 
 
 Do not use real charity records for launch QA. Use an approved non-sensitive test workspace and remove test documents after the run when required by policy.
 
+## Repository Preflight
+
+These local checks do not replace deployed production QA, but they should be green before booking a production browser run:
+
+- [ ] `npm run test:e2e:responsive` completed against the local Docker stack.
+- [ ] `npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
+
 ## QA Run
 
 | Field | Value |
