@@ -120,6 +120,7 @@ const fixedInThisAuditBranch = [
   'Compliance overview principle disclosure buttons now expose expanded state and controlled panel relationships for assistive technology.',
   'Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.',
   'Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.',
+  'Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.',
 ];
 
 const independentAuditFindings = [

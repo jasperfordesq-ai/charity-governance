@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, Chip, Select, SelectItem, Textarea } from '@heroui/react';
+import { Button, Card, Chip, Select, SelectItem, Textarea } from '@heroui/react';
 import {
   ComplianceStatus,
   type GovernancePrincipleResponse,
@@ -119,13 +119,16 @@ export function StandardEditorCard({
               <span className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 font-medium">
                 <CircleAlert className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
                 Save failed
-                <button
+                <Button
                   type="button"
-                  className="rounded border border-red-200 px-2 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-200 dark:hover:bg-red-950/40"
-                  onClick={() => onRetrySave(standard.id, form)}
+                  size="sm"
+                  variant="flat"
+                  color="danger"
+                  className="h-6 min-w-0 px-2 text-[11px] font-semibold"
+                  onPress={() => onRetrySave(standard.id, form)}
                 >
                   Retry
-                </button>
+                </Button>
               </span>
             )}
           </div>

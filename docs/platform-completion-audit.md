@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `52437c7`
+Working-tree base commit when generated: `8d25490`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -93,6 +93,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Compliance overview principle disclosure buttons now expose expanded state and controlled panel relationships for assistive technology.
 - Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
+- Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -112,7 +113,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 189 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 258 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 397 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 399 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 436 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 394 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 253 | yes | no obvious static risk; verify in browser |

@@ -427,6 +427,27 @@ test('principle detail confirms in-app navigation while saves are pending', () =
   assert.doesNotMatch(src, /onClick=\{\(\) => router\.push\('\/compliance'\)\}/);
 });
 
+test('principle detail back and retry controls use HeroUI Button primitives', () => {
+  const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const cardSrc = dash('compliance/[principleId]/standard-editor-card.tsx');
+
+  assert.match(pageSrc, /<Button[\s\S]{0,320}onPress=\{navigateBackToCompliance\}/);
+  assert.match(pageSrc, /startContent=\{\s*<ChevronLeft/);
+  assert.doesNotMatch(
+    pageSrc,
+    /<button[\s\S]{0,320}(navigateBackToCompliance|Back to Compliance)/,
+    'principle detail back navigation should not use a route-local raw button',
+  );
+
+  assert.match(cardSrc, /from '@heroui\/react'/);
+  assert.match(cardSrc, /<Button[\s\S]{0,260}onPress=\{\(\) => onRetrySave\(standard\.id, form\)\}/);
+  assert.doesNotMatch(
+    cardSrc,
+    /<button[\s\S]{0,260}onRetrySave/,
+    'standard retry control should not use a raw button',
+  );
+});
+
 test('principle detail standard editor card is extracted from the oversized route file', () => {
   const pageSrc = dash('compliance/[principleId]/page.tsx');
   const cardPath = dashPath('compliance/[principleId]/standard-editor-card.tsx');

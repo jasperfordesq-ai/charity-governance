@@ -333,14 +333,16 @@ export default function PrincipleDetailPage() {
         </>
       )}
       actions={(
-        <button
+        <Button
           type="button"
-          onClick={navigateBackToCompliance}
-          className="text-sm text-teal-primary dark:text-teal-bright hover:underline mb-3 inline-flex items-center gap-1"
+          size="sm"
+          variant="light"
+          onPress={navigateBackToCompliance}
+          className="mb-3 px-1 text-teal-primary dark:text-teal-bright"
+          startContent={<ChevronLeft className="w-4 h-4" aria-hidden="true" />}
         >
-          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
           Back to Compliance
-        </button>
+        </Button>
       )}
     >
 
