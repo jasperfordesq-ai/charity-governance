@@ -13,6 +13,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 
+const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
+  'Complete production-launch-evidence.json with release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
+  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie.',
+  'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
+  'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
+]);
+
 function placeholderKeys(envContent) {
   const keys = [];
   for (const line of envContent.split('\n')) {
@@ -32,6 +39,7 @@ export function assessLaunchState(state) {
       phase: 'NO_ENV',
       headline: 'You have not created a production environment file yet.',
       remainingKeys: [],
+      externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
         'Run:  npm run setup:production-env',
         'It creates .env.production and auto-generates the secret values for you.',
@@ -46,6 +54,7 @@ export function assessLaunchState(state) {
       phase: 'ENV_INCOMPLETE',
       headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
       remainingKeys,
+      externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
         'Open .env.production and replace each REPLACE_ME value listed below.',
         'docs/LAUNCH-GUIDE.md says where each value comes from (Stripe, Supabase, domain, hosting).',
@@ -58,6 +67,7 @@ export function assessLaunchState(state) {
     phase: 'ENV_COMPLETE',
     headline: '.env.production has no remaining placeholders. Validate it next.',
     remainingKeys: [],
+    externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
       'Run:  npm run check:production -- --production-env-file=.env.production',
       'If it passes, follow docs/production-runbook.md to deploy.',
@@ -87,6 +97,9 @@ function main() {
   }
   console.log('Next:');
   for (const action of state.nextActions) console.log(`  ${action}`);
+  console.log('');
+  console.log('External launch evidence still required:');
+  for (const gate of state.externalEvidenceGates) console.log(`  - ${gate}`);
   console.log('');
   console.log('Full map: docs/LAUNCH-GUIDE.md');
 }

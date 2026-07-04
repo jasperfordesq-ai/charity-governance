@@ -3,10 +3,23 @@ import test from 'node:test';
 
 import { assessLaunchState } from './launch-status.mjs';
 
+function assertExternalLaunchEvidenceGates(state) {
+  assert.ok(
+    Array.isArray(state.externalEvidenceGates),
+    'launch status must expose the external evidence gates separately from env placeholders',
+  );
+  const gates = state.externalEvidenceGates.join('\n');
+  assert.match(gates, /production-launch-evidence\.json/);
+  assert.match(gates, /E2E_DEPLOYED_QA=true/);
+  assert.match(gates, /solicitor\/governance\/privacy review/);
+  assert.match(gates, /external penetration test/);
+}
+
 test('reports NO_ENV and points at the generator when .env.production is absent', () => {
   const s = assessLaunchState({ envExists: false });
   assert.equal(s.phase, 'NO_ENV');
   assert.ok(s.nextActions.some((a) => a.includes('setup:production-env')));
+  assertExternalLaunchEvidenceGates(s);
 });
 
 test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
@@ -21,6 +34,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
+  assertExternalLaunchEvidenceGates(s);
 });
 
 test('reports ENV_INCOMPLETE for CRLF production env files', () => {
@@ -45,6 +59,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   assert.equal(s.phase, 'ENV_COMPLETE');
   assert.equal(s.remainingKeys.length, 0);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
+  assertExternalLaunchEvidenceGates(s);
   assert.ok(
     s.nextActions.some((a) => /penetration test|sign-off|checklist/i.test(a)),
     'must remind the operator that external gates remain',
