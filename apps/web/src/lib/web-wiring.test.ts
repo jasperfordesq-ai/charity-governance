@@ -66,7 +66,10 @@ for (const file of DOUBLE_SUBMIT_GUARDED) {
 }
 
 test('documents blocks an oversize upload inline before any request (no wasted 4xx round-trip)', () => {
-  const src = dash('documents/page.tsx');
+  const src = [
+    dash('documents/page.tsx'),
+    optionalDash('documents/document-upload-modal.tsx'),
+  ].join('\n');
   assert.match(src, /MAX_FILE_SIZE/);
 });
 
@@ -248,12 +251,14 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
 test('phase 6B operational workflows use shared primitives and review-ready safeguards', () => {
   const expectations: Array<{
     file: string;
+    extraFiles?: string[];
     imports: Array<[string, string[]]>;
     sourceTerms: string[];
     patterns?: RegExp[];
   }> = [
     {
       file: 'documents/page.tsx',
+      extraFiles: ['documents/document-upload-modal.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -346,8 +351,11 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
   ];
 
-  for (const { file, imports, sourceTerms, patterns = [] } of expectations) {
-    const src = dash(file);
+  for (const { file, extraFiles = [], imports, sourceTerms, patterns = [] } of expectations) {
+    const src = [
+      dash(file),
+      ...extraFiles.map((extraFile) => optionalDash(extraFile)),
+    ].join('\n');
     for (const [moduleName, importedNames] of imports) {
       assert.match(src, new RegExp(`from '${moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`), `${file} must import ${moduleName}`);
       for (const importedName of importedNames) {
@@ -447,6 +455,22 @@ test('documents profile-triggered evidence UX is extracted from the oversized ro
   assert.match(panelSrc, /formatReviewFlag/);
   assert.match(panelSrc, /linkedEvidenceCount/);
   assert.match(panelSrc, /Profile-triggered evidence prompts/);
+});
+
+test('documents upload modal is extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const modalPath = dashPath('documents/document-upload-modal.tsx');
+  assert.ok(existsSync(modalPath), 'document upload modal should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /DocumentUploadModal/);
+  assert.doesNotMatch(pageSrc, /Document details/);
+  assert.doesNotMatch(pageSrc, /document-upload-file/);
+  assert.doesNotMatch(pageSrc, /File size exceeds the 10 MB limit/);
+  assert.match(modalSrc, /Document details/);
+  assert.match(modalSrc, /document-upload-file/);
+  assert.match(modalSrc, /File size exceeds the 10 MB limit/);
+  assert.match(modalSrc, /MAX_FILE_SIZE/);
 });
 
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {

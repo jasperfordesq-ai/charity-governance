@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
   Button,
-  Input,
   Modal,
   ModalBody,
   ModalContent,
@@ -13,7 +12,6 @@ import {
   ModalHeader,
   Select,
   SelectItem,
-  Textarea,
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
@@ -23,10 +21,11 @@ import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-g
 import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataList, DataListItems } from '@/components/ui/data-list';
-import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
+import { FormHint } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { EvidenceChip, StatusChip } from '@/components/ui/status';
 import { DocumentProfilePromptsPanel, buildDocumentProfilePrompts } from './document-profile-prompts';
+import { DocumentUploadModal, MAX_FILE_SIZE } from './document-upload-modal';
 import type {
   DocumentResponse,
   GovernanceStandardResponse,
@@ -36,8 +35,6 @@ import {
   DocumentCategory,
   DOCUMENT_CATEGORY_LABELS,
 } from '@charitypilot/shared';
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return 'Not set';
@@ -581,123 +578,33 @@ export default function DocumentsPage() {
         )}
       </DataList>
 
-      <Modal isOpen={uploadModal.isOpen} onOpenChange={uploadModal.onOpenChange} size="2xl" scrollBehavior="inside">
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>Upload document</ModalHeader>
-              <ModalBody className="gap-5">
-                <ValidationSummary errors={uploadError ? [uploadError] : []} />
-                <FieldGroup
-                  title="Document details"
-                  description="Name the file in a way trustees can recognise in an evidence pack."
-                >
-                  <Input
-                    label="Document name"
-                    placeholder="Board Code of Conduct 2026"
-                    value={uploadName}
-                    onValueChange={setUploadName}
-                    isRequired
-                  />
-                  <Select
-                    label="Category"
-                    selectedKeys={new Set([uploadCategory])}
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as DocumentCategory | undefined;
-                      if (value) setUploadCategory(value);
-                    }}
-                  >
-                    {categoryOptions.map(([key, label]) => (
-                      <SelectItem key={key}>{label}</SelectItem>
-                    ))}
-                  </Select>
-                  <Textarea
-                    label="Description"
-                    placeholder="Short note on what trustees should use this document for."
-                    value={uploadDescription}
-                    onValueChange={setUploadDescription}
-                    minRows={2}
-                  />
-                </FieldGroup>
-
-                <FieldGroup
-                  title="Review metadata"
-                  description="Owner, approval, and minute fields help make the evidence review-ready."
-                >
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Input
-                      label="Owner"
-                      placeholder="Secretary, treasurer, chair"
-                      value={uploadOwner}
-                      onValueChange={setUploadOwner}
-                    />
-                    <Input
-                      label="Board minute reference"
-                      placeholder="Board minutes 24 Oct, item 5"
-                      value={uploadMinuteReference}
-                      onValueChange={setUploadMinuteReference}
-                    />
-                    <Input
-                      label="Approved date"
-                      type="date"
-                      value={uploadApprovedDate}
-                      onValueChange={setUploadApprovedDate}
-                    />
-                    <Input
-                      label="Next review date"
-                      type="date"
-                      value={uploadNextReviewDate}
-                      onValueChange={setUploadNextReviewDate}
-                    />
-                  </div>
-                </FieldGroup>
-
-                <FieldGroup title="File">
-                  <div>
-                    <label htmlFor="document-upload-file" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Choose file
-                    </label>
-                    <input
-                      id="document-upload-file"
-                      type="file"
-                      onChange={(event) => {
-                        const nextFile = event.target.files?.[0] ?? null;
-                        setUploadFile(nextFile);
-                        if (nextFile && nextFile.size > MAX_FILE_SIZE) {
-                          setUploadError('File size exceeds the 10 MB limit. Please choose a smaller file.');
-                        } else {
-                          setUploadError('');
-                        }
-                      }}
-                      className="mt-2 block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-teal-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-teal-primary hover:file:bg-teal-primary/20 dark:text-gray-300 dark:file:bg-teal-light/10 dark:file:text-teal-bright dark:hover:file:bg-teal-light/20"
-                      accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg"
-                    />
-                    <FormHint id="upload-disabled-hint" tone={uploadDisabledReason ? 'warning' : 'neutral'}>
-                      {uploadFile
-                        ? `${uploadFile.name} (${formatFileSize(uploadFile.size)}). ${uploadDisabledReason || 'Ready to upload.'}`
-                        : 'PDF, Office, text, spreadsheet, and image files are supported up to 10 MB.'}
-                    </FormHint>
-                  </div>
-                </FieldGroup>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="flat" onPress={() => { resetUploadForm(); onClose(); }}>
-                  Cancel
-                </Button>
-                <Button
-                  className="bg-teal-primary text-white hover:bg-teal-dark"
-                  onPress={handleUpload}
-                  isLoading={uploading}
-                  isDisabled={Boolean(uploadDisabledReason) || uploading}
-                  aria-describedby="upload-disabled-hint"
-                >
-                  Upload
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      <DocumentUploadModal
+        isOpen={uploadModal.isOpen}
+        onOpenChange={uploadModal.onOpenChange}
+        categoryOptions={categoryOptions}
+        uploadName={uploadName}
+        setUploadName={setUploadName}
+        uploadCategory={uploadCategory}
+        setUploadCategory={setUploadCategory}
+        uploadDescription={uploadDescription}
+        setUploadDescription={setUploadDescription}
+        uploadOwner={uploadOwner}
+        setUploadOwner={setUploadOwner}
+        uploadApprovedDate={uploadApprovedDate}
+        setUploadApprovedDate={setUploadApprovedDate}
+        uploadNextReviewDate={uploadNextReviewDate}
+        setUploadNextReviewDate={setUploadNextReviewDate}
+        uploadMinuteReference={uploadMinuteReference}
+        setUploadMinuteReference={setUploadMinuteReference}
+        uploadFile={uploadFile}
+        setUploadFile={setUploadFile}
+        uploadError={uploadError}
+        setUploadError={setUploadError}
+        uploadDisabledReason={uploadDisabledReason}
+        resetUploadForm={resetUploadForm}
+        handleUpload={handleUpload}
+        uploading={uploading}
+      />
 
       <Modal isOpen={deleteModal.isOpen} onOpenChange={deleteModal.onOpenChange} size="sm">
         <ModalContent>

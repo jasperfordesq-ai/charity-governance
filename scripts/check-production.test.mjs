@@ -2669,12 +2669,15 @@ test('registers page handles Complete-plan denial as an upgrade state', () => {
 });
 
 test('web document upload picker does not advertise legacy Office formats', () => {
-  const documentsPage = readRepoFile('apps/web/src/app/(dashboard)/documents/page.tsx');
+  const documentUploadSurface = [
+    readRepoFile('apps/web/src/app/(dashboard)/documents/page.tsx'),
+    readRepoFile('apps/web/src/app/(dashboard)/documents/document-upload-modal.tsx'),
+  ].join('\n');
 
-  assert.doesNotMatch(documentsPage, /accept="[^"]*\.(doc|xls|ppt)(,|")/);
-  assert.match(documentsPage, /\.docx/);
-  assert.match(documentsPage, /\.xlsx/);
-  assert.match(documentsPage, /\.pptx/);
+  assert.doesNotMatch(documentUploadSurface, /accept="[^"]*\.(doc|xls|ppt)(,|")/);
+  assert.match(documentUploadSurface, /\.docx/);
+  assert.match(documentUploadSurface, /\.xlsx/);
+  assert.match(documentUploadSurface, /\.pptx/);
 });
 
 test('CI deploys Prisma migrations against PostgreSQL before release gates', () => {
