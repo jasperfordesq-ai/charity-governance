@@ -1,4 +1,5 @@
 import { test as base, expect, type Page, type Locator, type BrowserContext } from '@playwright/test';
+import { deployedQaOwnerCredentials, IS_DEPLOYED_QA } from './env';
 import { getUserAndOrg, markEmailVerified } from './helpers/db';
 
 /**
@@ -197,6 +198,25 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     async ({ browser }, use) => {
       const context = await browser.newContext();
       const page = await context.newPage();
+
+      if (IS_DEPLOYED_QA) {
+        const existingOwner = deployedQaOwnerCredentials();
+        await loginViaUi(page, existingOwner.email, existingOwner.password);
+
+        const storageState = await context.storageState();
+        await context.close();
+
+        await use({
+          email: existingOwner.email,
+          password: existingOwner.password,
+          name: 'Existing QA Owner',
+          organisationName: 'Existing QA Workspace',
+          userId: 'deployed-qa-existing-user',
+          organisationId: 'deployed-qa-existing-organisation',
+          storageState,
+        });
+        return;
+      }
 
       const email = uniqueEmail();
       const creds = await registerViaUi(page, { email, name: 'Shared Owner', organisationName: 'Shared E2E Charity' });

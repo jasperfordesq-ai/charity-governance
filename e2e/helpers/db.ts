@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { Client } from 'pg';
 
+import { IS_DEPLOYED_QA } from '../env';
+
 /**
  * Direct Postgres access for the E2E harness.
  *
@@ -16,6 +18,14 @@ import { Client } from 'pg';
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ??
   'postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypilot';
+
+function assertLocalDatabaseSeamAllowed(): void {
+  if (IS_DEPLOYED_QA) {
+    throw new Error(
+      'E2E_DEPLOYED_QA=true forbids direct database access. Use the approved deployed QA credentials instead of local DB reset/token seams.',
+    );
+  }
+}
 
 /**
  * Tenant/app tables truncated on reset. The seeded governance reference data
@@ -47,6 +57,7 @@ const APP_TABLES = [
 ];
 
 export async function withDb<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+  assertLocalDatabaseSeamAllowed();
   const client = new Client({ connectionString: E2E_DATABASE_URL });
   await client.connect();
   try {

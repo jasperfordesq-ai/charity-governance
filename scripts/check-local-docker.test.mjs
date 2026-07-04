@@ -257,6 +257,44 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
   assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*180_000\s*\}/);
 });
 
+test('deployed browser QA mode does not reset or mutate databases through local seams', () => {
+  const env = readRepoFile('e2e/env.ts');
+  const db = readRepoFile('e2e/helpers/db.ts');
+  const globalSetup = readRepoFile('e2e/global-setup.ts');
+  const fixtures = readRepoFile('e2e/fixtures.ts');
+  const e2eReadme = readRepoFile('e2e/README.md');
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
+
+  assert.match(env, /E2E_DEPLOYED_QA/);
+  assert.match(env, /E2E_OWNER_EMAIL/);
+  assert.match(env, /E2E_OWNER_PASSWORD/);
+  assert.match(env, /deployedQaOwnerCredentials/);
+  assert.match(env, /requires E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD/);
+
+  assert.match(db, /assertLocalDatabaseSeamAllowed/);
+  assert.match(db, /E2E_DEPLOYED_QA=true forbids direct database access/);
+  assert.match(db, /assertLocalDatabaseSeamAllowed\(\);\s*const client = new Client/);
+
+  assert.match(globalSetup, /IS_DEPLOYED_QA/);
+  assert.match(globalSetup, /if \(IS_DEPLOYED_QA\) \{[\s\S]*database reset and route warming skipped/);
+  assert.match(globalSetup, /await resetDb\(\);/);
+  assert.match(globalSetup, /await warmRoutes\(\);/);
+
+  assert.match(fixtures, /IS_DEPLOYED_QA/);
+  assert.match(fixtures, /deployedQaOwnerCredentials/);
+  assert.match(fixtures, /if \(IS_DEPLOYED_QA\) \{[\s\S]*await loginViaUi\(page, existingOwner\.email, existingOwner\.password\)/);
+  assert.match(fixtures, /userId:\s*'deployed-qa-existing-user'/);
+  assert.match(fixtures, /organisationId:\s*'deployed-qa-existing-organisation'/);
+
+  assert.match(e2eReadme, /Deployed browser QA mode/);
+  assert.match(e2eReadme, /E2E_DEPLOYED_QA=true/);
+  assert.match(e2eReadme, /does not reset the database/);
+  assert.match(browserQa, /E2E_DEPLOYED_QA=true/);
+  assert.match(browserQa, /E2E_OWNER_EMAIL/);
+  assert.match(browserQa, /E2E_OWNER_PASSWORD/);
+  assert.match(browserQa, /approved non-sensitive test workspace/);
+});
+
 test('responsive route smoke is runnable as a focused launch QA command', () => {
   const rootPackage = packageJson();
   const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');

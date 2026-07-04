@@ -1,11 +1,14 @@
 import type { FullConfig } from '@playwright/test';
 import { API_BASE_URL, WEB_BASE_URL } from './playwright.config';
+import { IS_DEPLOYED_QA } from './env';
 import { resetDb } from './helpers/db';
 
-const STARTUP_HINT =
+const LOCAL_STARTUP_HINT =
   'CharityPilot E2E expects the local Docker stack to be running:\n' +
   '  docker compose -f compose.yml -f compose.local.yml up\n' +
   'Then the web app is at http://localhost:3003 and the API at http://localhost:3002.';
+const DEPLOYED_STARTUP_HINT =
+  'CharityPilot deployed QA expects E2E_DEPLOYED_QA=true plus E2E_WEB_URL, E2E_API_URL, E2E_OWNER_EMAIL, and E2E_OWNER_PASSWORD for an approved non-sensitive test workspace.';
 const STACK_READINESS_TIMEOUT_MS = 180_000;
 const WEB_READINESS_TIMEOUT_MS = 360_000;
 const ROUTE_WARM_TIMEOUT_MS = 300_000;
@@ -35,7 +38,11 @@ async function waitForOk(url: string, label: string, timeoutMs = STACK_READINESS
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error(`Timed out waiting for ${label} at ${url} (${String(lastErr)}).\n\n${STARTUP_HINT}`);
+  throw new Error(
+    `Timed out waiting for ${label} at ${url} (${String(lastErr)}).\n\n${
+      IS_DEPLOYED_QA ? DEPLOYED_STARTUP_HINT : LOCAL_STARTUP_HINT
+    }`,
+  );
 }
 
 /**
@@ -68,12 +75,18 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   await waitForOk(`${API_BASE_URL}/api/v1/health`, 'API health');
   await waitForOk(`${WEB_BASE_URL}/`, 'Web app', WEB_READINESS_TIMEOUT_MS);
 
+  if (IS_DEPLOYED_QA) {
+    // eslint-disable-next-line no-console
+    console.log('[e2e] Deployed QA mode: endpoints reachable; database reset and route warming skipped.');
+    return;
+  }
+
   // 2. The DB must be reachable and resettable (also validates the DSN/port).
   try {
     await resetDb();
   } catch (err) {
     throw new Error(
-      `Could not reset the database. Is Postgres published on host port 5434?\n${String(err)}\n\n${STARTUP_HINT}`,
+      `Could not reset the database. Is Postgres published on host port 5434?\n${String(err)}\n\n${LOCAL_STARTUP_HINT}`,
     );
   }
 

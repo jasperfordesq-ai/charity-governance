@@ -10,6 +10,20 @@ These local checks do not replace deployed production QA, but they should be gre
 
 - [ ] `npm run test:e2e:responsive` completed against the local Docker stack.
 - [ ] `npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
+- [ ] Deployed browser QA credentials exist for an approved non-sensitive test workspace with owner/admin access.
+- [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store.
+- [ ] Deployed accessibility smoke completed with the same deployed QA environment.
+
+Example deployed responsive smoke command:
+
+```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=qa-owner@example.com \
+E2E_OWNER_PASSWORD='from-secret-store' \
+npm run test:e2e:responsive
+```
 
 ## QA Run
 

@@ -96,6 +96,37 @@ Connection: `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypi
 | `E2E_API_URL` | `http://localhost:3002` |
 | `E2E_DATABASE_URL` | `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypilot` |
 
+## Deployed browser QA mode
+
+The default suite is local and intentionally uses database seams for reset, token
+injection, and assertions. For deployed HTTPS browser QA, set
+`E2E_DEPLOYED_QA=true` and run only the browser-rendering/accessibility suites
+against an approved non-sensitive test workspace.
+
+In deployed browser QA mode the harness:
+
+- does not reset the database;
+- does not warm routes for local Next.js dev compilation;
+- logs in with `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD`;
+- fails closed if any test tries to use the local direct-Postgres helpers.
+
+Example:
+
+```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=qa-owner@example.com \
+E2E_OWNER_PASSWORD='from-secret-store' \
+npm run test:e2e:responsive
+```
+
+Use the same environment for `npm run test:e2e -- tests/accessibility.spec.ts`.
+Do not run the full local deterministic suite in deployed QA mode; specs that
+exercise registration, token injection, invites, document mutation, or DB
+assertions remain local-stack tests unless a dedicated production-safe variant is
+written.
+
 ## A note on the Next.js dev hydration race
 
 Under the dev server, a `type=submit` click can land before React hydrates,
