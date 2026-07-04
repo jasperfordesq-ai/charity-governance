@@ -145,6 +145,7 @@ const fixedInThisAuditBranch = [
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
   'Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.',
+  'Irish compliance matrix source metadata was refreshed against official Charities Regulator, Irish Statute Book, and Revised Acts sources on 2026-07-04.',
 ];
 
 const independentAuditFindings = [
