@@ -233,7 +233,7 @@ export default function RegulatorGuidePage() {
                         href={source.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
+                        className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
                       >
                         {source.name}
                       </a>
@@ -288,7 +288,7 @@ export default function RegulatorGuidePage() {
                           href={source.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
+                          className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
                         >
                           {source.name}
                         </a>

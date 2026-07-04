@@ -1027,6 +1027,29 @@ test('regulator guide prioritises profile-triggered obligations without legal ce
   }
 });
 
+test('regulator official-source links use compact link styling rather than pill badges', () => {
+  const src = dash('regulator/page.tsx');
+
+  assert.doesNotMatch(src, /rounded-full\s+border/, 'regulator source links should not read as pill badges');
+  assert.match(src, /rounded-md border border-gray-200 px-2.5 py-1/);
+});
+
+test('platform audit distinguishes decorative pills from functional toggles and status dots', () => {
+  const auditScript = repo('scripts/platform-completion-audit.mjs');
+
+  assert.doesNotMatch(auditScript, /gradient\|blur-\|rounded-full/);
+  assert.match(auditScript, /pillLikeDecorativePattern/);
+  assert.match(auditScript, /hasDecorativeStylingRisk/);
+});
+
+test('platform audit summary follows the remaining route findings instead of stale decorative-pill wording', () => {
+  const audit = repo('docs/platform-completion-audit.md');
+
+  assert.doesNotMatch(audit, /visual treatment on decorative or pill-heavy pages/i);
+  assert.doesNotMatch(audit, /visual treatment on flagged P0 routes/i);
+  assert.match(audit, /board and registers dark-mode screenshot QA/i);
+});
+
 test('registers workflow prioritises conditional obligation register work from the organisation profile', () => {
   const src = [
     dash('registers/page.tsx'),

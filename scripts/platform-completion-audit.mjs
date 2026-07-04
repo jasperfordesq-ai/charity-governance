@@ -98,6 +98,9 @@ const fixedInThisAuditBranch = [
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',
   'The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.',
   'The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.',
+  'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
+  'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
+  'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
 ];
 
 const independentAuditFindings = [
@@ -167,13 +170,21 @@ function countMatches(content, pattern) {
   return [...content.matchAll(pattern)].length;
 }
 
+const gradientOrBlurPattern = /gradient|blur-/;
+const pillLikeDecorativePattern =
+  /(?:rounded-full[^\n"'`]*(?:border|px-|py-|shadow)|(?:border|px-|py-|shadow)[^\n"'`]*rounded-full)/;
+
+function hasDecorativeStylingRisk(content) {
+  return gradientOrBlurPattern.test(content) || pillLikeDecorativePattern.test(content);
+}
+
 function routeRisks(content, lines, route, area) {
   const risks = [];
   const svgCount = countMatches(content, /<svg\b/g);
   if (lines >= 700) risks.push('oversized route file; split first');
   else if (lines >= 450) risks.push('large route file; refactor soon');
   if (svgCount > 0) risks.push(`${svgCount} inline svg icon(s)`);
-  if (/gradient|blur-|rounded-full/.test(content)) risks.push('decorative or pill-heavy styling needs visual QA');
+  if (hasDecorativeStylingRisk(content)) risks.push('decorative or pill-heavy styling needs visual QA');
   if (!/dark:|\bcp-surface\b|\bcp-text\b/.test(content)) risks.push('dark-mode relies mostly on layout; screenshot QA required');
   if (/use client/.test(content) && !/ErrorState|error|catch|toast|setError/i.test(content)) risks.push('client flow has weak visible error-state signal');
   if (routePriorities.get(route) === 'P0' && area === 'dashboard' && !/source|Source|review|Review|evidence|Evidence/.test(content)) {
@@ -291,20 +302,27 @@ function render() {
     .sort((a, b) => b.lines - a.lines);
   const p0Routes = routes.filter((route) => route.priority === 'P0');
   const inlineSvgRoutes = routes.filter((route) => route.risks.includes('inline svg'));
+  const decorativeRoutes = routes.filter((route) => route.risks.includes('decorative or pill-heavy'));
   const oversizedRouteSummary = oversizedRoutes.slice(0, 6).map((r) => `${r.route} (${r.lines})`).join(', ');
   const productUiNextAction = oversizedRoutes.length > 0
     ? `Refactor and browser-QA the largest P0 workflows first: ${oversizedRouteSummary}.`
     : inlineSvgRoutes.length > 0
       ? 'Browser-QA flagged P0 workflows and clean remaining route-local inline SVG/decorative styling.'
-      : 'Browser-QA flagged P0 workflows and visual treatment on decorative or pill-heavy pages.';
+      : decorativeRoutes.length > 0
+        ? 'Browser-QA flagged P0 workflows and visual treatment on decorative or pill-heavy pages.'
+        : 'Complete deployed browser QA for every route, with board and registers dark-mode screenshot QA still called out.';
   const frontendPolishFinding = oversizedRoutes.length > 0
     ? `Largest all-client route remains ${oversizedRoutes[0].route} (${oversizedRoutes[0].lines} lines); keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.`
     : inlineSvgRoutes.length > 0
       ? 'No route files remain over 450 lines; shift frontend polish toward browser QA, route-local icon cleanup, and visual treatment on flagged P0 routes.'
-      : 'No route files remain over 450 lines and route page inline SVG findings are closed; shift frontend polish toward browser QA and visual treatment on flagged P0 routes.';
+      : decorativeRoutes.length > 0
+        ? 'No route files remain over 450 lines and route page inline SVG findings are closed; shift frontend polish toward browser QA and visual treatment on flagged P0 routes.'
+        : 'No route files remain over 450 lines, route page inline SVG findings are closed, and decorative-pill static findings are clear; board and registers dark-mode screenshot QA plus deployed browser evidence remain.';
   const workflowPolishStep = oversizedRoutes.length > 0
     ? 'Decompose and polish the largest remaining P0 workflows: documents, board, dashboard, export, organisation, deadlines, compliance detail, and route-specific browser-QA follow-ups.'
-    : 'Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.';
+    : decorativeRoutes.length > 0
+      ? 'Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.'
+      : 'Complete deployed browser QA across every route, focusing local follow-up on board and registers dark-mode screenshot QA and production-only evidence.';
 
   let md = `# CharityPilot Platform Completion Audit\n\n`;
   md += `Generated: ${auditDate}\n\n`;
