@@ -41,19 +41,24 @@ function StateShell({
       role={role}
       aria-live={ariaLive}
       className={classes(
-        'flex flex-col items-center justify-center rounded-lg border text-center',
+        'flex w-full min-w-0 flex-col items-center justify-center overflow-hidden rounded-lg border text-center',
         toneClasses[tone],
         variant === 'page' ? 'min-h-[360px] px-6 py-12' : 'px-4 py-6',
       )}
     >
-      {icon ? <div className="mb-3 text-current">{icon}</div> : null}
-      <h2 className={classes('font-semibold tracking-normal', variant === 'page' ? 'text-xl' : 'text-base')}>
+      {icon ? <div className="mb-3 shrink-0 text-current">{icon}</div> : null}
+      <h2
+        className={classes(
+          'max-w-full break-words font-semibold tracking-normal',
+          variant === 'page' ? 'text-xl' : 'text-base',
+        )}
+      >
         {title}
       </h2>
       {description ? (
-        <p className="mt-2 max-w-xl text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
+        <p className="mt-2 max-w-xl break-words text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
       ) : null}
-      {action ? <div className="mt-4 flex flex-wrap justify-center gap-2">{action}</div> : null}
+      {action ? <div className="mt-4 flex max-w-full flex-wrap justify-center gap-2">{action}</div> : null}
     </div>
   );
 }
@@ -160,10 +165,10 @@ export function InlineStatus({
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
       aria-live={tone === 'danger' ? 'assertive' : 'polite'}
-      className={classes('flex gap-3 rounded-lg border px-4 py-3 text-sm', toneClasses[tone])}
+      className={classes('flex w-full min-w-0 gap-3 overflow-hidden rounded-lg border px-4 py-3 text-sm', toneClasses[tone])}
     >
       {icon}
-      <p className="min-w-0 leading-5">{children}</p>
+      <p className="min-w-0 break-words leading-5">{children}</p>
     </div>
   );
 }

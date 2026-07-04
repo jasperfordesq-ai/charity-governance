@@ -534,6 +534,19 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
   }
 });
 
+test('shared state primitives keep long text and actions inside narrow layouts', () => {
+  const src = component('ui/states.tsx');
+
+  assert.match(src, /w-full/);
+  assert.match(src, /min-w-0/);
+  assert.match(src, /overflow-hidden/);
+  assert.match(src, /break-words/);
+  assert.match(src, /max-w-full/);
+  assert.match(src, /role=\{role\}/);
+  assert.match(src, /aria-live=\{ariaLive\}/);
+  assert.match(src, /flex-wrap justify-center gap-2/);
+});
+
 test('phase 6B operational workflows use shared primitives and review-ready safeguards', () => {
   const expectations: Array<{
     file: string;
