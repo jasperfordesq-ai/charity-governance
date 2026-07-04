@@ -256,6 +256,17 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(exportPage, /legal advice/i);
 });
 
+test('compliance overview uses shared loading and error state primitives', () => {
+  const src = dash('compliance/page.tsx');
+
+  assert.match(src, /from '@\/components\/ui\/states'/);
+  assert.match(src, /LoadingState/);
+  assert.match(src, /ErrorState/);
+  assert.match(src, /apiErrorMessage/);
+  assert.match(src, /setLoadError/);
+  assert.doesNotMatch(src, /animate-pulse/);
+});
+
 test('principle detail refreshes approval-readiness after successful autosave', () => {
   const src = dash('compliance/[principleId]/page.tsx');
   assert.match(src, /refreshApprovalReadiness/);

@@ -6,9 +6,10 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Progress, Select, SelectItem, Chip, Button } from '@heroui/react';
 import { ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import Link from 'next/link';
 import { AppPage, AppSection } from '@/components/ui/app-page';
-import { ReviewWarningState } from '@/components/ui/states';
+import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import type {
   GovernancePrincipleResponse,
@@ -34,12 +35,14 @@ export default function CompliancePage() {
   const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [showAdditional, setShowAdditional] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [principlesRes, summaryRes] = await Promise.all([
         api.get('/compliance/principles'),
@@ -56,7 +59,12 @@ export default function CompliancePage() {
         setApprovalReadiness(null);
       }
     } catch (err) {
+      const message = apiErrorMessage(err, 'Compliance data could not be loaded. Please try again.');
       logClientError('Failed to load compliance data', err);
+      setPrinciples([]);
+      setSummary(null);
+      setApprovalReadiness(null);
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
@@ -199,15 +207,17 @@ export default function CompliancePage() {
       <div id="principles">
         <AppSection title="Principles" description="Open a principle to edit standards, evidence, and explanations.">
         {loading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="p-6 animate-pulse border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-2/3 mb-3" />
-                <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full mb-2" />
-                <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/2" />
-              </Card>
-            ))}
-          </div>
+          <LoadingState title="Loading compliance principles" description="Checking Governance Code principles, reporting-year progress, and approval-readiness." />
+        ) : loadError ? (
+          <ErrorState
+            title="Compliance data could not be loaded"
+            description={loadError}
+            action={(
+              <Button size="sm" variant="flat" onPress={fetchData}>
+                Try again
+              </Button>
+            )}
+          />
         ) : (
           <div className="space-y-4">
           {principles
