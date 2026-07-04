@@ -1879,3 +1879,18 @@ test('public and auth primary CTAs use the shared action button styling', () => 
     );
   }
 });
+
+test('remaining public action controls use shared action button styling', () => {
+  const backToTop = component('back-to-top.tsx');
+  const blogPost = app('(marketing)/blog/[slug]/page.tsx');
+  const blogClient = app('(marketing)/blog/BlogClient.tsx');
+
+  assert.match(backToTop, /primaryActionButtonClasses/);
+  assert.doesNotMatch(backToTop, /fixed bottom-6 right-6[^"]*bg-teal-primary text-white/);
+
+  assert.match(blogPost, /primaryActionButtonClasses/);
+  assert.doesNotMatch(blogPost, /inline-flex items-center justify-center rounded-lg bg-teal-primary/);
+
+  assert.match(blogClient, /primaryActionButtonClasses/);
+  assert.doesNotMatch(blogClient, /className="bg-teal-primary px-6 font-semibold text-white/);
+});

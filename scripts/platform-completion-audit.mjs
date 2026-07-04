@@ -129,6 +129,7 @@ const fixedInThisAuditBranch = [
   'Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.',
   'Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.',
   'Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.',
+  'Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.',
 ];
 
 const independentAuditFindings = [

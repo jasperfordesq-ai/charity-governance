@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `fb4b811`
+Working-tree base commit when generated: `25310a0`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -102,6 +102,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.
 - Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.
 - Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.
+- Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -118,7 +119,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 166 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 351 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
-| P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 189 | no | no obvious static risk; verify in browser |
+| P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 259 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 361 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 400 | yes | no obvious static risk; verify in browser |

@@ -7,6 +7,7 @@ import { absoluteSiteUrl } from '@/lib/site-origin';
 import { ReadingProgress } from '@/components/reading-progress';
 import { CopyLinkButton } from '@/components/copy-link-button';
 import { BlogPostJsonLd } from '@/components/json-ld';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 
 export function generateStaticParams() {
   return ALL_POSTS.map((p) => ({ slug: p.slug }));
@@ -143,7 +144,9 @@ export default async function BlogPostPage({
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/register"
-              className="inline-flex items-center justify-center rounded-lg bg-teal-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
+              className={primaryActionButtonClasses(
+                'inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold transition-colors',
+              )}
             >
               Start your 14-day free trial
             </Link>

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowRight, BookOpen, FileText, Search, ShieldCheck } from 'lucide-react';
 import { getCategories, formatDate } from '@/lib/blog';
 import type { PostMeta } from '@/lib/blog';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 
 function PostCard({ post, featured = false }: { post: PostMeta; featured?: boolean }) {
   return (
@@ -170,7 +171,7 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
           as={Link}
           href="/register"
           radius="md"
-          className="bg-teal-primary px-6 font-semibold text-white hover:bg-teal-dark dark:bg-teal-bright dark:text-gray-950"
+          className={primaryActionButtonClasses('px-6 font-semibold')}
         >
           Start free 14-day trial
         </Button>
