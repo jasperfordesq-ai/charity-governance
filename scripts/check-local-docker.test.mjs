@@ -295,6 +295,16 @@ test('deployed browser QA mode does not reset or mutate databases through local 
   assert.match(browserQa, /approved non-sensitive test workspace/);
 });
 
+test('platform audit ledger records deployed browser QA hardening', () => {
+  const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
+  const auditLedger = readRepoFile('docs/platform-completion-audit.md');
+
+  assert.match(auditGenerator, /Deployed browser QA mode now uses existing non-sensitive test credentials/);
+  assert.match(auditGenerator, /direct database reset or token-injection seams/);
+  assert.match(auditLedger, /Deployed browser QA mode now uses existing non-sensitive test credentials/);
+  assert.match(auditLedger, /direct database reset or token-injection seams/);
+});
+
 test('responsive route smoke is runnable as a focused launch QA command', () => {
   const rootPackage = packageJson();
   const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');

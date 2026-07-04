@@ -99,6 +99,7 @@ const fixedInThisAuditBranch = [
   'The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.',
   'The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.',
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
+  'Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.',
   'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
