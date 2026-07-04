@@ -34,6 +34,9 @@ function completeDeployEnv(overrides = {}) {
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CADDY_ACME_EMAIL: 'ops@charitypilot.ie',
+    CHARITYPILOT_WEB_DOMAIN: 'app.charitypilot.ie',
+    CHARITYPILOT_API_DOMAIN: 'api.charitypilot.ie',
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
@@ -156,7 +159,10 @@ test('deploy preflight dry-run emits production validation and signature verific
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production deploy preflight dry-run/);
     assert.match(result.stdout, /node scripts\/check-production\.mjs "?--production-env-file=.*production\.env"?/);
-    assert.match(result.stdout, /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml config --quiet/);
+    assert.match(
+      result.stdout,
+      /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml -f compose\.production-tls\.yml config --quiet/,
+    );
     assert.match(result.stdout, /cosign verify/);
     assert.match(result.stdout, /--certificate-identity-regexp "\^https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\//);
     assert.match(result.stdout, /release-images\\\.yml@refs\/\(heads\/master\|tags\/v\.\*\)\$"/);
@@ -166,6 +172,48 @@ test('deploy preflight dry-run emits production validation and signature verific
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:[a-f0-9]{64}/);
     assert.doesNotMatch(result.stdout, /[A-Z]:\\\\/);
     assert.doesNotMatch(result.stdout, /docker compose[\s\S]* up /);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight can opt out of the TLS overlay when a managed load balancer terminates HTTPS', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-no-tls-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    CADDY_ACME_EMAIL: '',
+    CHARITYPILOT_WEB_DOMAIN: '',
+    CHARITYPILOT_API_DOMAIN: '',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run', '--no-tls-proxy']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml config --quiet/);
+    assert.doesNotMatch(result.stdout, /compose\.production-tls\.yml/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight rejects TLS proxy hostname drift from canonical production origins', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-caddy-drift-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    CHARITYPILOT_WEB_DOMAIN: 'charitypilot.ie',
+    CHARITYPILOT_API_DOMAIN: 'services.charitypilot.ie',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_DOMAIN must match the canonical production web hostname app\.charitypilot\.ie/);
+    assert.match(result.stderr, /CHARITYPILOT_API_DOMAIN must match the canonical production API hostname api\.charitypilot\.ie/);
+    assert.doesNotMatch(result.stdout, /cosign verify/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

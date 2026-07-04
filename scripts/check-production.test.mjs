@@ -2060,7 +2060,10 @@ test('production operations docs explain the compose runtime web public origins'
   assert.match(runbook, /must match `NEXT_PUBLIC_API_URL`/);
   assert.match(runbook, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(runbook, /must match `NEXT_PUBLIC_SUPABASE_URL`/);
-  assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml config --quiet/);
+  assert.match(
+    runbook,
+    /docker compose --env-file \.env\.production -f compose\.production\.yml -f compose\.production-tls\.yml config --quiet/,
+  );
   assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_API_URL`/);
   assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
@@ -2909,6 +2912,23 @@ test('repo-owned security scanner is wired before CI and release Docker gates', 
   );
 });
 
+test('release workflow builds web images only for the canonical production API origin', () => {
+  const workflow = readRepoFile('.github/workflows/release-images.yml');
+  const validationStep = workflow.slice(
+    workflow.indexOf('name: Validate production public web origins'),
+    workflow.indexOf('name: Setup Node'),
+  );
+
+  assert.match(validationStep, /const canonicalApiOrigin = 'https:\/\/api\.charitypilot\.ie'/);
+  assert.match(validationStep, /url\.origin !== canonicalApiOrigin/);
+  assert.match(
+    validationStep,
+    /NEXT_PUBLIC_API_URL must be the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+  );
+  assert.doesNotMatch(validationStep, /hostname !== 'charitypilot\.ie'/);
+  assert.doesNotMatch(validationStep, /endsWith\('\\.charitypilot\\.ie'\)/);
+});
+
 test('CI uses GitHub Actions releases that run on the Node 24 action runtime', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
@@ -3205,7 +3225,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_SUPABASE_URL\s*\}\}/);
   assert.match(workflow, /NEXT_PUBLIC_API_URL production variable is required/);
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL production variable is required/);
-  assert.match(workflow, /NEXT_PUBLIC_API_URL must be an origin-only HTTPS CharityPilot production URL/);
+  assert.match(workflow, /NEXT_PUBLIC_API_URL must be the canonical production API origin https:\/\/api\.charitypilot\.ie/);
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);
   assert.match(workflow, /docker login "\$\{REGISTRY\}"/);

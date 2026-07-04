@@ -2,7 +2,7 @@
 #
 # Caddy terminates TLS for the public domains and proxies to the internal api
 # and web containers over the private compose network. It obtains and renews
-# certificates automatically — no certbot, no manual cert files.
+# certificates automatically - no certbot, no manual cert files.
 #
 # Domains and the ACME email are injected from the environment (see
 # compose.production-tls.yml). HTTP is auto-redirected to HTTPS by Caddy.

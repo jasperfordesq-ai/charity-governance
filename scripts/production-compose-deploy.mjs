@@ -149,6 +149,7 @@ export function runProductionComposeDeployFromArgs(
     '--production-env-file',
     options.productionEnvFile,
     ...(options.dryRun ? ['--dry-run'] : []),
+    ...(options.tlsProxy ? [] : ['--no-tls-proxy']),
   ];
   const preflightResult = runPreflight(preflightArgs, processEnv);
   if (preflightResult.status !== 0) {

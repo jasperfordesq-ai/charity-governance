@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runProductionPreflight } from './check-production.mjs';
+import {
+  CANONICAL_PRODUCTION_API_ORIGIN,
+  CANONICAL_PRODUCTION_WEB_ORIGIN,
+} from './production-hostnames.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -37,12 +41,13 @@ const cosignIdentityRegex = '^https://github.com/jasperfordesq-ai/charity-govern
 const cosignIssuer = 'https://token.actions.githubusercontent.com';
 
 function usage() {
-  return 'Usage: node scripts/production-deploy-preflight.mjs --production-env-file <path> [--dry-run]\n';
+  return 'Usage: node scripts/production-deploy-preflight.mjs --production-env-file <path> [--dry-run] [--no-tls-proxy]\n';
 }
 
 function parseArgs(argv) {
   const options = {
     dryRun: false,
+    tlsProxy: true,
     productionEnvFile: '.env.production',
   };
 
@@ -50,6 +55,10 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--dry-run') {
       options.dryRun = true;
+      continue;
+    }
+    if (arg === '--no-tls-proxy') {
+      options.tlsProxy = false;
       continue;
     }
     if (arg === '--production-env-file') {
@@ -123,6 +132,33 @@ function webBuildOriginIssue({ envName, expectedEnvName }, deploymentEnv) {
   return null;
 }
 
+function tlsProxyIssues(deploymentEnv) {
+  const issues = [];
+  const caddyEmail = deploymentEnv.CADDY_ACME_EMAIL?.trim() ?? '';
+  const expectedWebHostname = new URL(CANONICAL_PRODUCTION_WEB_ORIGIN).hostname;
+  const expectedApiHostname = new URL(CANONICAL_PRODUCTION_API_ORIGIN).hostname;
+
+  if (!caddyEmail || caddyEmail.includes('REPLACE_ME')) {
+    issues.push('CADDY_ACME_EMAIL is required when the default TLS proxy overlay is enabled');
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(caddyEmail)) {
+    issues.push('CADDY_ACME_EMAIL must be a valid email address for ACME certificate registration');
+  }
+
+  const domainChecks = [
+    ['CHARITYPILOT_WEB_DOMAIN', expectedWebHostname, 'web'],
+    ['CHARITYPILOT_API_DOMAIN', expectedApiHostname, 'API'],
+  ];
+
+  for (const [envName, expectedHostname, label] of domainChecks) {
+    const configuredHostname = deploymentEnv[envName]?.trim();
+    if (configuredHostname && configuredHostname !== expectedHostname) {
+      issues.push(`${envName} must match the canonical production ${label} hostname ${expectedHostname}`);
+    }
+  }
+
+  return issues;
+}
+
 function shellQuote(value) {
   if (/^[A-Za-z0-9_./:=@,+-]+$/.test(value)) return value;
   return `"${value.replaceAll('"', '\\"')}"`;
@@ -145,10 +181,16 @@ function runCommand(command, env) {
   }
 }
 
-function commandsFor({ productionEnvFile, images }) {
+function commandsFor({ productionEnvFile, images, tlsProxy }) {
+  const composeFiles = [
+    '-f',
+    'compose.production.yml',
+    ...(tlsProxy ? ['-f', 'compose.production-tls.yml'] : []),
+  ];
+
   const commands = [
     ['node', 'scripts/check-production.mjs', `--production-env-file=${productionEnvFile}`],
-    ['docker', 'compose', '--env-file', productionEnvFile, '-f', 'compose.production.yml', 'config', '--quiet'],
+    ['docker', 'compose', '--env-file', productionEnvFile, ...composeFiles, 'config', '--quiet'],
   ];
 
   for (const image of images) {
@@ -208,6 +250,9 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
     const issue = webBuildOriginIssue(buildOrigin, deploymentEnv);
     if (issue) issues.push(issue);
   }
+  if (options.tlsProxy) {
+    issues.push(...tlsProxyIssues(deploymentEnv));
+  }
 
   if (issues.length > 0) {
     return result(
@@ -222,7 +267,7 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
   }
 
   const images = requiredImages.map(({ envName }) => deploymentEnv[envName]);
-  const commands = commandsFor({ productionEnvFile: options.productionEnvFile, images });
+  const commands = commandsFor({ productionEnvFile: options.productionEnvFile, images, tlsProxy: options.tlsProxy });
 
   if (options.dryRun) {
     return result(0, [

@@ -1,10 +1,11 @@
 # =============================================================================
-# CharityPilot - Optional TLS reverse proxy (Caddy, automatic Let's Encrypt)
+# CharityPilot - Default TLS reverse proxy (Caddy, automatic Let's Encrypt)
 # =============================================================================
-# Use this overlay ON TOP OF compose.production.yml when you do NOT have a
-# separate load balancer / platform TLS in front of the stack. Caddy terminates
-# HTTPS for the public domains and proxies to the internal api/web containers,
-# obtaining and renewing certificates automatically.
+# The production deploy script uses this overlay by default on top of
+# compose.production.yml. Caddy terminates HTTPS for the public domains and
+# proxies to the internal api/web containers, obtaining and renewing
+# certificates automatically. Pass --no-tls-proxy to the deploy/preflight
+# commands only when a separate load balancer or hosting platform terminates TLS.
 #
 # Prerequisites:
 #   1. A server with a public IP and ports 80 + 443 open to the internet.

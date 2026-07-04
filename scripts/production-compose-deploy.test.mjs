@@ -54,6 +54,9 @@ function completeDeployEnv(overrides = {}) {
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CADDY_ACME_EMAIL: 'ops@charitypilot.ie',
+    CHARITYPILOT_WEB_DOMAIN: 'app.charitypilot.ie',
+    CHARITYPILOT_API_DOMAIN: 'api.charitypilot.ie',
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
@@ -244,6 +247,7 @@ test('production deploy can opt out of the TLS overlay when a managed load balan
   );
 
   assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls[0].args, ['--production-env-file', envPath, '--no-tls-proxy']);
   assert.deepEqual(calls[1].command, [
     'docker',
     'compose',
