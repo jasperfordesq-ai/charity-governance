@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@heroui/react';
+import { Button, Input } from '@heroui/react';
 import Link from 'next/link';
 import { ArrowRight, BookOpen, FileText, Search, ShieldCheck } from 'lucide-react';
 import { getCategories, formatDate } from '@/lib/blog';
@@ -69,22 +69,21 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <div className="relative max-w-md">
-          <Search
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-400"
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-          <input
-            type="search"
-            placeholder="Search articles..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-800 placeholder-gray-400 transition-colors focus:border-teal-primary focus:outline-none focus:ring-2 focus:ring-teal-primary/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-teal-bright dark:focus:ring-teal-bright/20"
-            aria-label="Search blog articles"
-          />
-        </div>
+      <div className="mb-6 max-w-md">
+        <Input
+          type="search"
+          placeholder="Search articles..."
+          value={search}
+          onValueChange={setSearch}
+          aria-label="Search blog articles"
+          radius="md"
+          variant="bordered"
+          startContent={<Search className="h-4 w-4 text-gray-400 dark:text-gray-400" strokeWidth={2} aria-hidden="true" />}
+          classNames={{
+            inputWrapper: 'border-gray-300 bg-white hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:bg-gray-900 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright',
+            input: 'text-sm text-gray-800 placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500',
+          }}
+        />
       </div>
 
       <div className="mb-12 flex flex-wrap gap-2" role="tablist" aria-label="Filter by category">
@@ -167,12 +166,14 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
         <p className="mx-auto mb-6 max-w-md text-sm text-gray-700 dark:text-gray-300">
           Start a CharityPilot trial and keep your governance work connected to practical Irish charity guidance.
         </p>
-        <Link
+        <Button
+          as={Link}
           href="/register"
-          className="inline-flex items-center rounded-lg bg-teal-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-teal-dark dark:bg-teal-bright dark:text-gray-950"
+          radius="md"
+          className="bg-teal-primary px-6 font-semibold text-white hover:bg-teal-dark dark:bg-teal-bright dark:text-gray-950"
         >
           Start free 14-day trial
-        </Link>
+        </Button>
       </div>
     </div>
   );

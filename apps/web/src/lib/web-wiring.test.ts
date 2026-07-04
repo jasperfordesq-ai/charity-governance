@@ -1050,6 +1050,18 @@ test('marketing blog client uses lucide icons instead of inline svg', () => {
   assert.doesNotMatch(src, /<svg\b/, 'BlogClient should not carry hand-drawn inline SVG markup');
 });
 
+test('marketing blog search and CTA use HeroUI controls instead of route-local form/link styling', () => {
+  const src = app('(marketing)/blog/BlogClient.tsx');
+
+  assert.match(src, /import \{ Button, Input \} from '@heroui\/react'/);
+  assert.match(src, /<Input\b/);
+  assert.match(src, /startContent=\{<Search/);
+  assert.match(src, /onValueChange=\{setSearch\}/);
+  assert.match(src, /<Button\s+as=\{Link\}\s+href="\/register"/);
+  assert.doesNotMatch(src, /<input\b/);
+  assert.doesNotMatch(src, /inline-flex items-center rounded-lg bg-teal-primary px-6/);
+});
+
 test('public marketing and cookie action controls use HeroUI Button primitives', () => {
   const expectations: Array<['app' | 'component', string]> = [
     ['app', '(marketing)/MobileNav.tsx'],
