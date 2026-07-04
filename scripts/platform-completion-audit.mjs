@@ -55,6 +55,7 @@ const fixedInThisAuditBranch = [
   'Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.',
   'Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.',
   'Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.',
+  'Sensitive public auth and invite throttles now have regression coverage proving one email/token identifier does not block a different identifier from the same caller.',
   'Optional in-process cron logging now serializes errors through the redacted logger helper.',
   'Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.',
   'API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.',

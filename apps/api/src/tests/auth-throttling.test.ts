@@ -16,6 +16,7 @@ type SensitiveAuthCase = {
   name: string;
   url: string;
   payload: Record<string, string>;
+  alternatePayload?: Record<string, string>;
   expectedStatusCode: number;
   expectedCode?: string;
 };
@@ -25,12 +26,14 @@ const sensitiveAuthCases: SensitiveAuthCase[] = [
     name: 'forgot-password',
     url: '/auth/forgot-password',
     payload: { email: 'missing@example.org' },
+    alternatePayload: { email: 'other-missing@example.org' },
     expectedStatusCode: 200,
   },
   {
     name: 'reset-password',
     url: '/auth/reset-password',
     payload: { token: 'invalid-reset-token', password: 'NewPassword1' },
+    alternatePayload: { token: 'another-invalid-reset-token', password: 'NewPassword1' },
     expectedStatusCode: 400,
     expectedCode: 'INVALID_RESET_TOKEN',
   },
@@ -38,6 +41,7 @@ const sensitiveAuthCases: SensitiveAuthCase[] = [
     name: 'verify-email',
     url: '/auth/verify-email',
     payload: { token: 'invalid-verify-token' },
+    alternatePayload: { token: 'another-invalid-verify-token' },
     expectedStatusCode: 400,
     expectedCode: 'INVALID_VERIFY_TOKEN',
   },
@@ -52,6 +56,7 @@ const sensitiveAuthCases: SensitiveAuthCase[] = [
     name: 'accept-invite',
     url: '/team/accept-invite',
     payload: { token: 'invalid-invite-token', name: 'Invitee', password: 'NewPassword1' },
+    alternatePayload: { token: 'another-invalid-invite-token', name: 'Invitee', password: 'NewPassword1' },
     expectedStatusCode: 400,
     expectedCode: 'INVALID_INVITE',
   },
@@ -97,6 +102,44 @@ for (const routeCase of sensitiveAuthCases) {
         }
       }
       assert.equal(responses[5].statusCode, 429);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+for (const routeCase of sensitiveAuthCases.filter((candidate) => candidate.alternatePayload)) {
+  test(`${routeCase.name} throttling is keyed by caller and normalized body identifier`, { concurrency: false }, async () => {
+    const app = await buildSensitiveRoutesApp();
+    const alternatePayload = routeCase.alternatePayload;
+    assert.ok(alternatePayload, `${routeCase.name} must define an alternate payload for identifier-key tests`);
+
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const res = await app.inject({
+          method: 'POST',
+          url: routeCase.url,
+          payload: routeCase.payload,
+        });
+        assert.equal(res.statusCode, routeCase.expectedStatusCode, res.body);
+      }
+
+      const sameIdentifier = await app.inject({
+        method: 'POST',
+        url: routeCase.url,
+        payload: routeCase.payload,
+      });
+      assert.equal(sameIdentifier.statusCode, 429, sameIdentifier.body);
+
+      const otherIdentifier = await app.inject({
+        method: 'POST',
+        url: routeCase.url,
+        payload: alternatePayload,
+      });
+      assert.equal(otherIdentifier.statusCode, routeCase.expectedStatusCode, otherIdentifier.body);
+      if (routeCase.expectedCode) {
+        assert.equal(otherIdentifier.json().code, routeCase.expectedCode);
+      }
     } finally {
       await app.close();
     }
