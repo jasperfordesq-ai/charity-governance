@@ -240,6 +240,20 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
   assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*180_000\s*\}/);
 });
 
+test('responsive route smoke is runnable as a focused launch QA command', () => {
+  const rootPackage = packageJson();
+  const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');
+  assert.equal(rootPackage.scripts['test:e2e:responsive'], 'cd e2e && npm test -- tests/responsive-smoke.spec.ts');
+  assert.equal(existsSync(responsiveSpecPath), true, 'responsive-smoke.spec.ts must exist');
+
+  const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
+  assert.match(responsiveSpec, /launch-critical public and auth routes/);
+  assert.match(responsiveSpec, /launch-critical dashboard routes/);
+  assert.match(responsiveSpec, /mobile dark/);
+  assert.match(responsiveSpec, /desktop light/);
+  assert.match(responsiveSpec, /horizontal page overflow/);
+});
+
 test('local Docker migrations stop running app services before refreshing dependencies', () => {
   const migrationScript = readRepoFile('scripts/migrate-local-docker.mjs');
 
