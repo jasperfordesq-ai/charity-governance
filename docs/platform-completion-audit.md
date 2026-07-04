@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `bfeb4a2`
+Working-tree base commit when generated: `43b013a`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -88,7 +88,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Route | Area | File | Lines | Client | Static audit finding |
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
-| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 159 | yes | no obvious static risk; verify in browser |
+| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 158 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 367 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 187 | no | no obvious static risk; verify in browser |
@@ -100,15 +100,15 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 253 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 407 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
-| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
-| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 139 | yes | no obvious static risk; verify in browser |
+| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 107 | yes | no obvious static risk; verify in browser |
+| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | no obvious static risk; verify in browser |
 | P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 353 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 259 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
-| P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 271 | yes | no obvious static risk; verify in browser |
+| P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 270 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 180 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 396 | yes | no obvious static risk; verify in browser |
-| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 195 | yes | no obvious static risk; verify in browser |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 194 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 401 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 200 | yes | no obvious static risk; verify in browser |

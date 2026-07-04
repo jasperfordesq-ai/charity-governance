@@ -856,6 +856,30 @@ test('auth routes use lucide icons instead of route-local inline svg', () => {
   }
 });
 
+test('auth form errors use the shared FormAlert primitive instead of repeated raw red alert blocks', () => {
+  const routes = [
+    '(auth)/login/page.tsx',
+    '(auth)/register/page.tsx',
+    '(auth)/forgot-password/page.tsx',
+    '(auth)/reset-password/page.tsx',
+    '(auth)/accept-invite/page.tsx',
+  ];
+
+  for (const route of routes) {
+    const src = app(route);
+    assert.match(src, /from '@\/components\/ui\/form-alert'/, `${route} should import the shared form alert`);
+    assert.match(src, /<FormAlert/, `${route} should render FormAlert for form-level errors`);
+    assert.doesNotMatch(src, /bg-red-50 border border-red-200/, `${route} should not duplicate alert styling`);
+    assert.doesNotMatch(src, /role="alert"/, `${route} should leave alert semantics to FormAlert`);
+  }
+
+  const primitive = component('ui/form-alert.tsx');
+  assert.match(primitive, /export function FormAlert/);
+  assert.match(primitive, /role="alert"/);
+  assert.match(primitive, /aria-live="assertive"/);
+  assert.match(primitive, /TriangleAlert/);
+});
+
 test('marketing routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['page.tsx', ['CircleCheck', 'FolderOpen', 'UsersRound', 'CalendarDays', 'FileText', 'Clock', 'ChevronDown']],

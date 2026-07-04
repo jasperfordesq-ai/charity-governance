@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
+import { FormAlert } from '@/components/ui/form-alert';
 
 function ResetPasswordForm() {
   const { token } = useSensitiveQueryToken();
@@ -99,9 +100,7 @@ function ResetPasswordForm() {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
-                    <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm dark:bg-red-950/40 dark:border-red-800 dark:text-red-100">
-                      {error}
-                    </div>
+                    <FormAlert>{error}</FormAlert>
                   )}
 
                   <Input

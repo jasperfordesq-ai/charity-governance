@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { useAuth } from '@/lib/auth-context';
+import { FormAlert } from '@/components/ui/form-alert';
 
 function AcceptInviteForm() {
   const router = useRouter();
@@ -69,9 +70,7 @@ function AcceptInviteForm() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm dark:bg-red-950/40 dark:border-red-800 dark:text-red-100">
-                  {error}
-                </div>
+                <FormAlert>{error}</FormAlert>
               )}
 
               <Input
