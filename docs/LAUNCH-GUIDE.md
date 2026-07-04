@@ -1,6 +1,6 @@
 # CharityPilot — Plain-English Launch Guide
 
-*Last updated: 2026-06-20. This is the human-friendly companion to the dense
+*Last updated: 2026-07-04. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
 > **Not sure where you are?** Run `npm run launch:status` any time — it inspects
@@ -10,20 +10,24 @@
 
 ## 1. Where the platform actually is right now
 
-The **code is finished and hardened**. This is not a half-built project. As of
-2026-06-20 the full automated "code release gate" passes end to end:
+The codebase is substantially hardened, but launch readiness is not complete
+until the final release gate, deployed browser QA, external provider evidence,
+legal/privacy approval, and independent security review are all recorded.
+As of 2026-07-04, the local platform audit shows strong automated coverage and
+no obvious static route-level UI risks, but the release checks below must still
+be rerun against the final production configuration:
 
 | Check | Result |
 | --- | --- |
-| TypeScript build (shared + API + web) | ✅ passes |
-| Lint | ✅ passes |
-| Unit tests (API 159, web, shared) | ✅ passes |
-| Production-tooling tests (201) | ✅ passes |
-| Prisma schema validation | ✅ passes |
-| Secret scan + SAST scan | ✅ passes |
-| `npm audit` (production deps, moderate+) | ✅ 0 vulnerabilities |
-| `npm ci` reproducible install | ✅ passes |
-| Full app boots in Docker (db + API + web), migrates, seeds, serves | ✅ passes |
+| TypeScript build (shared + API + web) | Must pass for the release ref |
+| Lint | Must pass for the release ref |
+| Unit tests (API, web, shared) | Must pass for the release ref |
+| Production-tooling tests | Must pass for the release ref |
+| Prisma schema validation | Must pass for the release ref |
+| Secret scan + SAST scan | Must pass for the release ref |
+| `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
+| `npm ci` reproducible install | Must pass on the release build machine |
+| Full app boots in Docker (db + API + web), migrates, seeds, serves | Must be proven for the release candidate |
 
 The core security model is already in place: HTTP-only cookie auth,
 hashed rotating refresh sessions, role guards, private document storage with
@@ -35,7 +39,7 @@ placeholder secrets.
 
 The platform deliberately separates **two gates**:
 
-1. **Code gate** — "is the software correct and safe?" → *Done. ✅*
+1. **Code gate** — "is the software correct and safe?" → *implemented, but rerun for the final release ref.*
 2. **Launch gate** — "is it actually running on real infrastructure, with real
    payment/email providers, legal cover, and an independent security sign-off?"
    → *This is what's left, and almost none of it is code.*
