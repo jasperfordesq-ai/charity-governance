@@ -651,6 +651,48 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       }
     }
   }
+
+  if (areaId === 'browserQa' && checkId === 'browser-qa-completed') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'E2E_OWNER_EMAIL',
+      'E2E_OWNER_PASSWORD',
+      'npm run test:e2e:responsive',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'E2E_OWNER_EMAIL',
+      'E2E_OWNER_PASSWORD',
+      'npm run test:e2e -- tests/accessibility.spec.ts',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
 }
 
 function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {

@@ -200,6 +200,30 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'browserQa' && checkId === 'browser-qa-completed') {
+    entry.type = 'command-output';
+    entry.description = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
+      'npm run test:e2e:responsive',
+      'responsive-smoke.spec.ts passed against deployed HTTPS production URL',
+    ].join(' ');
+  }
+
+  if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
+    entry.type = 'command-output';
+    entry.description = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
+      'npm run test:e2e -- tests/accessibility.spec.ts',
+      'accessibility.spec.ts passed against deployed HTTPS production URL in light and dark themes',
+    ].join(' ');
+  }
+
   return entry;
 }
 
@@ -456,6 +480,37 @@ test('production launch evidence validator requires executable checker command t
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-check\.evidence must include the check:production:supabase command/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include Production provider check passed/);
     assert.match(result.stderr, /areas\.observability\.checks\.observability-check\.evidence must include the check:production:observability command/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires deployed browser QA command transcripts', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericBrowserEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/browser/generic',
+    description: 'Browser QA checklist reviewed without deployed Playwright command output',
+    capturedAt,
+  };
+  evidence.areas.browserQa.checks['browser-qa-completed'].evidence = [genericBrowserEvidence];
+  evidence.areas.browserQa.checks['critical-flows-covered'].evidence = [genericBrowserEvidence];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_DEPLOYED_QA=true/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_WEB_URL=https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_API_URL=https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_EMAIL/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_PASSWORD/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run test:e2e:responsive/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
