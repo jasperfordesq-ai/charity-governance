@@ -759,6 +759,26 @@ test('app shell and error chrome use lucide icons instead of inline svg', () => 
   }
 });
 
+test('workflow status controls use lucide icons instead of inline svg', () => {
+  const expectations: Array<[string, string, string[]]> = [
+    ['component', 'cookie-consent.tsx', ['CircleAlert']],
+    ['component', 'session-timeout.tsx', ['Clock']],
+    ['dashboard', 'compliance/[principleId]/standard-editor-card.tsx', ['Check', 'CircleAlert', 'LoaderCircle']],
+    ['dashboard', 'deadlines/deadline-list-panel.tsx', ['Check']],
+    ['dashboard', 'documents/document-list-panel.tsx', ['X']],
+    ['dashboard', 'export/export-report-preview.tsx', ['Building2', 'CircleCheck', 'FileText', 'ListChecks', 'ShieldCheck', 'UsersRound']],
+  ];
+
+  for (const [scope, file, icons] of expectations) {
+    const src = scope === 'dashboard' ? dash(file) : component(file);
+    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for workflow status icons`);
+    for (const icon of icons) {
+      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+    }
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['login/page.tsx', ['Eye', 'EyeOff']],

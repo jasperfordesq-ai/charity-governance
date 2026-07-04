@@ -6,6 +6,7 @@ import {
   COMPLIANCE_STATUS_META,
   type GovernancePrincipleResponse,
 } from '@charitypilot/shared';
+import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
 
 export interface StandardFormState {
   status: ComplianceStatus;
@@ -88,19 +89,19 @@ export function StandardEditorCard({
           <div className="flex items-center gap-1.5 flex-shrink-0" aria-live="polite">
             {save === 'saving' && (
               <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-400">
-                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                <LoaderCircle className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                 Saving...
               </span>
             )}
             {save === 'saved' && (
               <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <Check className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden="true" />
                 Saved
               </span>
             )}
             {save === 'error' && (
               <span className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 font-medium">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                <CircleAlert className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
                 Save failed
                 <button
                   type="button"

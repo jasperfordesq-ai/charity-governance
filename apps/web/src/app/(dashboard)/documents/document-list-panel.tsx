@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { EvidenceChip, StatusChip } from '@/components/ui/status';
 import type { DocumentResponse } from '@charitypilot/shared';
 import { DOCUMENT_CATEGORY_LABELS } from '@charitypilot/shared';
+import { X } from 'lucide-react';
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return 'Not set';
@@ -149,9 +150,7 @@ export function DocumentListPanel({
                                   onPress={() => handleUnlinkStandard(doc.id, link.standardId)}
                                   className="h-7 w-7 min-w-7"
                                 >
-                                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                  </svg>
+                                  <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
                                 </Button>
                               </span>
                             );

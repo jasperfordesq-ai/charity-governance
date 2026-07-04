@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button } from '@heroui/react';
 import { api } from '@/lib/api';
+import { Clock } from 'lucide-react';
 
 const SESSION_TIMEOUT = 14 * 60 * 1000; // 14 minutes (token lasts 15m)
 const WARNING_BEFORE = 2 * 60 * 1000;   // Show warning 2 min before
@@ -79,9 +80,7 @@ export function SessionTimeout() {
         <ModalBody>
           <div className="text-center">
             <div className="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-amber-500 dark:text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Clock className="w-8 h-8 text-amber-500 dark:text-amber-300" strokeWidth={1.5} aria-hidden="true" />
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
               Your session will expire in

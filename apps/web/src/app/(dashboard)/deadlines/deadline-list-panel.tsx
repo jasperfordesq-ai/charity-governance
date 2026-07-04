@@ -5,6 +5,7 @@ import { DataList, DataListItems } from '@/components/ui/data-list';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { DeadlineBadge, StatusChip } from '@/components/ui/status';
 import type { DeadlineResponse } from '@charitypilot/shared';
+import { Check } from 'lucide-react';
 
 type DeadlineDueState = 'complete' | 'overdue' | 'due-soon' | 'upcoming';
 
@@ -173,9 +174,7 @@ export function DeadlineListPanel({
                           className="mt-0.5 shrink-0"
                         >
                           {deadline.isComplete ? (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} aria-hidden="true">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
+                            <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
                           ) : (
                             <span className="h-3 w-3 rounded-sm border border-current" aria-hidden="true" />
                           )}

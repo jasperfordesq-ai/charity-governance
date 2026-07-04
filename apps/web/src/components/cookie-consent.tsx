@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CircleAlert } from 'lucide-react';
 
 const STORAGE_KEY = 'cookie-consent';
 
@@ -50,19 +51,7 @@ export function CookieConsent() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
           {/* Icon */}
           <div className="shrink-0 hidden sm:flex w-10 h-10 rounded-full bg-white/10 items-center justify-center">
-            <svg
-              className="w-5 h-5 text-amber-accent"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-              />
-            </svg>
+            <CircleAlert className="w-5 h-5 text-amber-accent" strokeWidth={1.5} aria-hidden="true" />
           </div>
 
           {/* Text */}
