@@ -1,16 +1,11 @@
 'use client';
 
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem, Textarea } from '@heroui/react';
-import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
+import { FieldGroup, ValidationSummary } from '@/components/ui/forms';
+import { FileUploadField } from '@/components/ui/file-upload-field';
 import { DocumentCategory } from '@charitypilot/shared';
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-const formatUploadFileSize = (bytes: number) => {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
-};
 
 export function DocumentUploadModal({
   isOpen,
@@ -138,31 +133,18 @@ export function DocumentUploadModal({
               </FieldGroup>
 
               <FieldGroup title="File">
-                <div>
-                  <label htmlFor="document-upload-file" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Choose file
-                  </label>
-                  <input
-                    id="document-upload-file"
-                    type="file"
-                    onChange={(event) => {
-                      const nextFile = event.target.files?.[0] ?? null;
-                      setUploadFile(nextFile);
-                      if (nextFile && nextFile.size > MAX_FILE_SIZE) {
-                        setUploadError('File size exceeds the 10 MB limit. Please choose a smaller file.');
-                      } else {
-                        setUploadError('');
-                      }
-                    }}
-                    className="mt-2 block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-teal-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-teal-primary hover:file:bg-teal-primary/20 dark:text-gray-300 dark:file:bg-teal-light/10 dark:file:text-teal-bright dark:hover:file:bg-teal-light/20"
-                    accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg"
-                  />
-                  <FormHint id="upload-disabled-hint" tone={uploadDisabledReason ? 'warning' : 'neutral'}>
-                    {uploadFile
-                      ? `${uploadFile.name} (${formatUploadFileSize(uploadFile.size)}). ${uploadDisabledReason || 'Ready to upload.'}`
-                      : 'PDF, Office, text, spreadsheet, and image files are supported up to 10 MB.'}
-                  </FormHint>
-                </div>
+                <FileUploadField
+                  id="document-upload-file"
+                  label="Choose file"
+                  file={uploadFile}
+                  onFileChange={setUploadFile}
+                  onValidationError={setUploadError}
+                  maxSizeBytes={MAX_FILE_SIZE}
+                  oversizeMessage="File size exceeds the 10 MB limit. Please choose a smaller file."
+                  disabledReason={uploadDisabledReason}
+                  helperText="PDF, Office, text, spreadsheet, and image files are supported up to 10 MB."
+                  accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg"
+                />
               </FieldGroup>
             </ModalBody>
             <ModalFooter>
@@ -174,7 +156,7 @@ export function DocumentUploadModal({
                 onPress={handleUpload}
                 isLoading={uploading}
                 isDisabled={Boolean(uploadDisabledReason) || uploading}
-                aria-describedby="upload-disabled-hint"
+                aria-describedby="document-upload-file-hint"
               >
                 Upload
               </Button>

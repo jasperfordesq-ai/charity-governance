@@ -119,6 +119,19 @@ test('documents blocks an oversize upload inline before any request (no wasted 4
   assert.match(src, /MAX_FILE_SIZE/);
 });
 
+test('document upload uses the shared file upload field instead of route-local file input styling', () => {
+  const modalSrc = dash('documents/document-upload-modal.tsx');
+  const fileFieldSrc = component('ui/file-upload-field.tsx');
+
+  assert.match(modalSrc, /FileUploadField/);
+  assert.match(fileFieldSrc, /from '@heroui\/react'/);
+  assert.match(fileFieldSrc, /<Button\b/);
+  assert.match(fileFieldSrc, /type="file"/);
+  assert.match(fileFieldSrc, /formatFileSize/);
+  assert.doesNotMatch(modalSrc, /type="file"/);
+  assert.doesNotMatch(modalSrc, /file:mr-4/);
+});
+
 test('organisation warns before discarding unsaved edits (no silent data loss)', () => {
   const src = dash('organisation/page.tsx');
   assert.match(src, /beforeunload/);

@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `48f549f`
+Working-tree base commit when generated: `0ade814`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -97,6 +97,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
 - Global recovery, not-found, dashboard mobile-menu, and compliance disclosure actions now use HeroUI Button primitives instead of bespoke route-local action markup.
 - Responsive browser-smoke QA now waits for the parsed document shell before applying light/dark theme checks after commit-stage navigations.
+- Document uploads now use a shared HeroUI-backed file upload field instead of route-local file input styling.
 
 ## Independent Audit Findings Still Driving Next Work
 
