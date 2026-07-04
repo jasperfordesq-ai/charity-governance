@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { useAuth } from '@/lib/auth-context';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
@@ -122,7 +123,7 @@ function AcceptInviteForm() {
               <Button
                 type="submit"
                 isLoading={isLoading}
-                className="w-full bg-teal-primary text-white font-semibold"
+                className={primaryActionButtonClasses('w-full font-semibold')}
                 radius="lg"
                 size="lg"
               >

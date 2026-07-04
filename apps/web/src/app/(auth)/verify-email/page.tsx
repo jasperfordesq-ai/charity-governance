@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
 import { Check, CircleAlert, Mail } from 'lucide-react';
 import { FormAlert } from '@/components/ui/form-alert';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -108,7 +109,7 @@ function VerifyEmailContent() {
                     <Button
                       onPress={handleResend}
                       isLoading={isResending}
-                      className="bg-teal-primary text-white font-semibold"
+                      className={primaryActionButtonClasses('font-semibold')}
                       radius="full"
                     >
                       Resend verification email
@@ -141,7 +142,7 @@ function VerifyEmailContent() {
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
                 <Link
                   href={user ? '/dashboard' : '/login'}
-                  className="inline-flex items-center justify-center rounded-lg bg-teal-primary text-white font-semibold px-8 py-2.5 hover:opacity-90 transition-opacity"
+                  className={primaryActionButtonClasses('inline-flex items-center justify-center rounded-lg px-8 py-2.5 font-semibold transition-colors')}
                 >
                   {user ? 'Continue to dashboard' : 'Go to sign in'}
                 </Link>
@@ -160,7 +161,7 @@ function VerifyEmailContent() {
                 <div className="flex flex-col items-center gap-3">
                   <Button
                     onPress={handleRetry}
-                    className="bg-teal-primary text-white font-semibold"
+                    className={primaryActionButtonClasses('font-semibold')}
                     radius="lg"
                   >
                     Try again

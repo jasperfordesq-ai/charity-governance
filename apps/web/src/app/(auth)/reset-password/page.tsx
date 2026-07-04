@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
@@ -79,7 +80,7 @@ function ResetPasswordForm() {
                 </p>
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center rounded-lg bg-teal-primary text-white font-semibold px-8 py-2.5 hover:opacity-90 transition-opacity"
+                  className={primaryActionButtonClasses('inline-flex items-center justify-center rounded-lg px-8 py-2.5 font-semibold transition-colors')}
                 >
                   Sign in
                 </Link>
@@ -144,7 +145,7 @@ function ResetPasswordForm() {
                   <Button
                     type="submit"
                     isLoading={isLoading}
-                    className="w-full bg-teal-primary text-white font-semibold"
+                    className={primaryActionButtonClasses('w-full font-semibold')}
                     radius="lg"
                     size="lg"
                   >

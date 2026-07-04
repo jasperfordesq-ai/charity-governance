@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
 import { loginSchema, firstSchemaError } from '@/lib/form-schemas';
 import { safeNextPath } from '@/lib/safe-next-path';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
@@ -113,7 +114,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 isLoading={isLoading}
-                className="w-full bg-teal-primary text-white font-semibold"
+                className={primaryActionButtonClasses('w-full font-semibold')}
                 radius="lg"
                 size="lg"
               >

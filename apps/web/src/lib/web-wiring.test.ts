@@ -1846,3 +1846,36 @@ test('dashboard primary actions use the shared action button styling', () => {
     );
   }
 });
+
+test('public and auth primary CTAs use the shared action button styling', () => {
+  const ctaFiles = [
+    '(auth)/accept-invite/page.tsx',
+    '(auth)/forgot-password/page.tsx',
+    '(auth)/login/page.tsx',
+    '(auth)/register/page.tsx',
+    '(auth)/reset-password/page.tsx',
+    '(auth)/verify-email/page.tsx',
+    '(marketing)/layout.tsx',
+    '(marketing)/MobileNav.tsx',
+    '(marketing)/pricing/page.tsx',
+  ];
+
+  for (const file of ctaFiles) {
+    const src = app(file);
+    assert.match(
+      src,
+      /primaryActionButtonClassName|primaryActionButtonClasses/,
+      `${file} should import shared primary action styling`,
+    );
+    assert.doesNotMatch(
+      src,
+      /className="[^"]*bg-teal-primary text-white[^"]*"/,
+      `${file} should not keep route-local primary CTA classes`,
+    );
+    assert.doesNotMatch(
+      src,
+      /\? 'bg-teal-primary text-white'/,
+      `${file} should not keep conditional route-local primary CTA classes`,
+    );
+  }
+});

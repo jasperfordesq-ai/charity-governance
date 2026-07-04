@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { MobileNav } from './MobileNav';
 import { BackToTop } from '@/components/back-to-top';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { ShieldCheck } from 'lucide-react';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
@@ -55,7 +56,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             {/* Desktop CTA */}
             <Link
               href="/register"
-              className="hidden md:inline-flex items-center bg-teal-primary text-white font-semibold text-sm px-5 py-2.5 rounded-md hover:bg-teal-dark transition-colors"
+              className={primaryActionButtonClasses('hidden items-center rounded-md px-5 py-2.5 text-sm font-semibold transition-colors md:inline-flex')}
             >
               Start free trial
             </Link>

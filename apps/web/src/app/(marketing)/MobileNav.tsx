@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@heroui/react';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 
 const NAV_LINKS = [
   { href: '/features', label: 'Features' },
@@ -54,7 +55,7 @@ export function MobileNav() {
               <Link
                 href="/register"
                 onClick={() => setOpen(false)}
-                className="block w-full text-center bg-teal-primary text-white font-semibold py-3 rounded-md hover:bg-teal-dark transition-colors"
+                className={primaryActionButtonClasses('block w-full rounded-md py-3 text-center font-semibold transition-colors')}
               >
                 Start free trial
               </Link>

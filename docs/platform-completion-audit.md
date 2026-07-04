@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `7c3bf96`
+Working-tree base commit when generated: `fb4b811`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -101,6 +101,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Marketing blog search and trial CTA now use HeroUI Input and Button primitives instead of route-local form/link styling.
 - Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.
 - Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.
+- Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -114,7 +115,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Route | Area | File | Lines | Client | Static audit finding |
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
-| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 165 | yes | no obvious static risk; verify in browser |
+| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 166 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 351 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 189 | no | no obvious static risk; verify in browser |
@@ -126,18 +127,18 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 254 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 333 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
-| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 107 | yes | no obvious static risk; verify in browser |
-| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 135 | yes | no obvious static risk; verify in browser |
+| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
+| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 136 | yes | no obvious static risk; verify in browser |
 | P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 352 | yes | no obvious static risk; verify in browser |
-| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 259 | no | no obvious static risk; verify in browser |
+| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 260 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
-| P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 265 | yes | no obvious static risk; verify in browser |
+| P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 181 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 397 | yes | no obvious static risk; verify in browser |
-| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 394 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
-| P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
+| P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 206 | yes | no obvious static risk; verify in browser |
 
 ## API And Backend Audit
 

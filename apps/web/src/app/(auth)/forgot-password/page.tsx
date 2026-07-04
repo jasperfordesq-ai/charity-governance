@@ -6,6 +6,7 @@ import { Mail } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { forgotPasswordSchema, firstSchemaError } from '@/lib/form-schemas';
+import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 
 export default function ForgotPasswordPage() {
@@ -83,7 +84,7 @@ export default function ForgotPasswordPage() {
                   <Button
                     type="submit"
                     isLoading={isLoading}
-                    className="w-full bg-teal-primary text-white font-semibold"
+                    className={primaryActionButtonClasses('w-full font-semibold')}
                     radius="lg"
                     size="lg"
                   >

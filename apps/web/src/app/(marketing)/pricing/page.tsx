@@ -1,6 +1,7 @@
 import { Button, Card, CardBody, CardHeader, Link } from '@/components/heroui-client';
 import type { Metadata } from 'next';
 import { Check, ChevronDown, X } from 'lucide-react';
+import { primaryActionButtonClassName } from '@/components/ui/action-button';
 
 export const metadata: Metadata = {
   title: 'Pricing — CharityPilot',
@@ -145,7 +146,7 @@ export default function PricingPage() {
                     href="/register"
                     className={`w-full font-semibold ${
                       plan.highlight
-                        ? 'bg-teal-primary text-white'
+                        ? primaryActionButtonClassName
                         : 'bg-white border-2 border-teal-primary text-teal-primary hover:bg-teal-primary hover:text-white dark:bg-gray-950 dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950'
                     }`}
                     radius="lg"
