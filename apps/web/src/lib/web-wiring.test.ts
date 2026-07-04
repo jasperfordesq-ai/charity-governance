@@ -281,6 +281,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'deadlines/page.tsx',
+      extraFiles: ['deadlines/deadline-form-modal.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -514,6 +515,21 @@ test('deadlines profile-triggered review-date UX is extracted from the oversized
   assert.match(panelSrc, /formatReviewFlag/);
   assert.match(panelSrc, /reviewDateAlreadyScheduled/);
   assert.match(panelSrc, /Profile-triggered review dates/);
+});
+
+test('deadlines form modal is extracted from the oversized route file', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const modalPath = dashPath('deadlines/deadline-form-modal.tsx');
+  assert.ok(existsSync(modalPath), 'deadline form modal should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /DeadlineFormModal/);
+  assert.doesNotMatch(pageSrc, /Deadline details/);
+  assert.doesNotMatch(pageSrc, /deadline-disabled-hint/);
+  assert.doesNotMatch(pageSrc, /Default reminders are kept at 30, 7, and 1 day before the due date/);
+  assert.match(modalSrc, /Deadline details/);
+  assert.match(modalSrc, /deadline-disabled-hint/);
+  assert.match(modalSrc, /Default reminders are kept at 30, 7, and 1 day before the due date/);
 });
 
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {

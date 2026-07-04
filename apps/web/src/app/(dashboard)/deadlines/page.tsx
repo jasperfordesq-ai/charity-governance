@@ -5,13 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
   Button,
-  Input,
   Modal,
   ModalBody,
   ModalContent,
   ModalFooter,
   ModalHeader,
-  Textarea,
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
@@ -19,9 +17,9 @@ import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataList, DataListItems } from '@/components/ui/data-list';
-import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { DeadlineBadge, ReviewFlag, StatusChip } from '@/components/ui/status';
+import { DeadlineFormModal } from './deadline-form-modal';
 import { DeadlineProfilePromptsPanel, buildDeadlineProfilePrompts } from './deadline-profile-prompts';
 import type { CreateDeadlineRequest, DeadlineResponse, OrganisationResponse, UpdateDeadlineRequest } from '@charitypilot/shared';
 
@@ -529,61 +527,22 @@ export default function DeadlinesPage() {
         )}
       </DataList>
 
-      <Modal isOpen={deadlineModal.isOpen} onOpenChange={deadlineModal.onOpenChange} scrollBehavior="inside">
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>{editingDeadline ? 'Edit deadline' : 'Add deadline'}</ModalHeader>
-              <ModalBody className="gap-5">
-                <ValidationSummary errors={formError ? [formError] : []} />
-                <FieldGroup
-                  title="Deadline details"
-                  description="Use plain names and dates so trustees can scan what is due before board review."
-                >
-                  <Input
-                    label="Title"
-                    placeholder="Submit Annual Report to CRA"
-                    value={formTitle}
-                    onValueChange={setFormTitle}
-                    isRequired
-                  />
-                  <Textarea
-                    label="Description"
-                    placeholder="Notes, owner, or supporting evidence needed."
-                    value={formDescription}
-                    onValueChange={setFormDescription}
-                    minRows={2}
-                  />
-                  <Input
-                    label="Due date"
-                    type="date"
-                    value={formDueDate}
-                    onValueChange={setFormDueDate}
-                    isRequired
-                  />
-                  <FormHint id="deadline-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
-                    {formDisabledReason || 'Default reminders are kept at 30, 7, and 1 day before the due date.'}
-                  </FormHint>
-                </FieldGroup>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="flat" onPress={() => { resetForm(); onClose(); }} isDisabled={saving}>
-                  Cancel
-                </Button>
-                <Button
-                  className="bg-teal-primary text-white hover:bg-teal-dark"
-                  onPress={handleSaveDeadline}
-                  isLoading={saving}
-                  isDisabled={Boolean(formDisabledReason) || saving}
-                  aria-describedby="deadline-disabled-hint"
-                >
-                  {editingDeadline ? 'Save deadline' : 'Add deadline'}
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      <DeadlineFormModal
+        isOpen={deadlineModal.isOpen}
+        onOpenChange={deadlineModal.onOpenChange}
+        editingDeadline={editingDeadline}
+        formError={formError}
+        formTitle={formTitle}
+        setFormTitle={setFormTitle}
+        formDescription={formDescription}
+        setFormDescription={setFormDescription}
+        formDueDate={formDueDate}
+        setFormDueDate={setFormDueDate}
+        formDisabledReason={formDisabledReason}
+        resetForm={resetForm}
+        handleSaveDeadline={handleSaveDeadline}
+        saving={saving}
+      />
 
       <Modal isOpen={deleteModal.isOpen} onOpenChange={deleteModal.onOpenChange} size="sm">
         <ModalContent>
