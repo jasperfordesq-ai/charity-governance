@@ -231,7 +231,7 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
 
   assert.match(globalSetup, /const STACK_READINESS_TIMEOUT_MS = 180_000/);
   assert.match(globalSetup, /const WEB_READINESS_TIMEOUT_MS = 360_000/);
-  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = 300_000/);
+  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = 420_000/);
   assert.match(globalSetup, /async function fetchWithTimeout\(url: string,\s*timeoutMs: number\): Promise<Response>/);
   assert.match(globalSetup, /const remainingMs = Math\.max\(1,\s*deadline - Date\.now\(\)\)/);
   assert.match(globalSetup, /await fetchWithTimeout\(url,\s*remainingMs\)/);
@@ -239,6 +239,36 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
   assert.match(globalSetup, /waitForOk\(`\$\{WEB_BASE_URL\}\/`,\s*'Web app',\s*WEB_READINESS_TIMEOUT_MS\)/);
   assert.match(globalSetup, /finally\s*\{\s*clearTimeout\(timer\);\s*\}/);
   assert.doesNotMatch(globalSetup, /await fetch\(url,\s*\{\s*redirect:\s*'manual'\s*\}\)/);
+});
+
+test('e2e route warm-up precompiles public and auth smoke routes', () => {
+  const globalSetup = readRepoFile('e2e/global-setup.ts');
+  const requiredWarmRoutes = [
+    '/',
+    '/features',
+    '/pricing',
+    '/blog',
+    '/blog/understanding-the-charities-governance-code',
+    '/privacy',
+    '/terms',
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/accept-invite',
+    '/verify-email',
+  ];
+
+  assert.match(globalSetup, /const PUBLIC_ROUTES_TO_WARM = \[/);
+  assert.match(globalSetup, /for \(const route of PUBLIC_ROUTES_TO_WARM\)/);
+
+  for (const route of requiredWarmRoutes) {
+    assert.match(
+      globalSetup,
+      new RegExp(`'${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`),
+      `global setup must warm ${route}`,
+    );
+  }
 });
 
 test('accessibility scans navigate to rendered pages without waiting on dev-only load noise', () => {

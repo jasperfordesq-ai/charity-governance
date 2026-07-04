@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `c78fe0e`
+Working-tree base commit when generated: `599633e`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -115,6 +115,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.
 - The release readiness command now reports full local success as repository release gates passed instead of implying production launch readiness.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
+- Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 
 ## Independent Audit Findings Still Driving Next Work
 

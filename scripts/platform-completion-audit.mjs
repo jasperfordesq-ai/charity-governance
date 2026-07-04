@@ -142,6 +142,7 @@ const fixedInThisAuditBranch = [
   'The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.',
   'The release readiness command now reports full local success as repository release gates passed instead of implying production launch readiness.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
+  'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
 ];
 
 const independentAuditFindings = [

@@ -11,7 +11,22 @@ const DEPLOYED_STARTUP_HINT =
   'CharityPilot deployed QA expects E2E_DEPLOYED_QA=true plus E2E_WEB_URL, E2E_API_URL, E2E_OWNER_EMAIL, and E2E_OWNER_PASSWORD for an approved non-sensitive test workspace.';
 const STACK_READINESS_TIMEOUT_MS = 180_000;
 const WEB_READINESS_TIMEOUT_MS = 360_000;
-const ROUTE_WARM_TIMEOUT_MS = 300_000;
+const ROUTE_WARM_TIMEOUT_MS = 420_000;
+const PUBLIC_ROUTES_TO_WARM = [
+  '/',
+  '/features',
+  '/pricing',
+  '/blog',
+  '/blog/understanding-the-charities-governance-code',
+  '/privacy',
+  '/terms',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/accept-invite',
+  '/verify-email',
+] as const;
 
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -49,23 +64,23 @@ async function waitForOk(url: string, label: string, timeoutMs = STACK_READINESS
  * Pre-compile the public routes the suite navigates to. Next runs in DEV mode on the
  * local stack and compiles each route on its first request; doing it once here (instead
  * of inside a bounded test navigation) keeps the per-test cold-compile from flaking
- * under host load. Best-effort: failures are ignored — the tests still gate correctness.
+ * under host load. Best-effort: failures are ignored - the tests still gate correctness.
  */
 async function warmFetch(url: string): Promise<void> {
   try {
     await fetchWithTimeout(url, ROUTE_WARM_TIMEOUT_MS);
   } catch {
-    // Ignore — warming is an optimisation, not a gate.
+    // Ignore - warming is an optimisation, not a gate.
   }
 }
 
 async function warmRoutes(): Promise<void> {
   // Compile the public routes the suite navigates to (login/register/etc.) without a
   // session. Protected pages are left to compile on their first authenticated hit, under
-  // the generous per-navigation timeout — warming them here (an authenticated render of
+  // the generous per-navigation timeout - warming them here (an authenticated render of
   // every dashboard page) proved to spike host load and destabilise the browser, so we
   // keep warm-up light and lean on the navigation timeout instead.
-  for (const route of ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/accept-invite', '/pricing']) {
+  for (const route of PUBLIC_ROUTES_TO_WARM) {
     await warmFetch(`${WEB_BASE_URL}${route}`);
   }
 }
@@ -94,5 +109,5 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   await warmRoutes();
 
   // eslint-disable-next-line no-console
-  console.log('[e2e] Stack reachable, database reset, routes warmed — starting tests.');
+  console.log('[e2e] Stack reachable, database reset, routes warmed - starting tests.');
 }
