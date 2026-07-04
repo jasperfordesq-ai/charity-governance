@@ -133,6 +133,7 @@ const fixedInThisAuditBranch = [
   'The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.',
   'The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.',
   'The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.',
+  'The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.',
 ];
 
 const independentAuditFindings = [

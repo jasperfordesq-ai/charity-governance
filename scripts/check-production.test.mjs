@@ -1551,6 +1551,15 @@ test('release readiness command distinguishes skipped gates from full readiness'
   assert.doesNotMatch(releaseReady, /failed\.length === 0 \? 'GREEN - platform is release-ready'/);
 });
 
+test('production todo reflects current launch blockers without overclaiming local smoke', () => {
+  const productionTodo = readRepoFile('PRODUCTION_TODO.md');
+
+  assert.match(productionTodo, /Current local status checked 2026-07-04/);
+  assert.match(productionTodo, /23 production values still require real data/);
+  assert.doesNotMatch(productionTodo, /full Docker stack smoke all pass/i);
+  assert.doesNotMatch(productionTodo, /Everything verifiable without external accounts now passes/i);
+});
+
 test('production secret env files are ignored by git without hiding the template', () => {
   const gitignoreLines = readRepoFile('.gitignore')
     .split(/\r?\n/)
