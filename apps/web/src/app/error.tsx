@@ -2,6 +2,7 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { useEffect } from 'react';
+import { Button } from '@heroui/react';
 import { RefreshCcw } from 'lucide-react';
 import { ErrorState } from '@/components/ui/states';
 
@@ -40,13 +41,15 @@ export default function Error({ error, reset }: ErrorProps) {
             </>
           )}
           action={(
-            <button
-              onClick={reset}
-              className="inline-flex items-center gap-2 rounded-md bg-teal-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
+            <Button
+              type="button"
+              radius="md"
+              onPress={reset}
+              startContent={<RefreshCcw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
+              className="bg-teal-primary font-semibold text-white hover:bg-teal-dark"
             >
-              <RefreshCcw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               Try again
-            </button>
+            </Button>
           )}
           variant="page"
         />

@@ -271,21 +271,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex items-center justify-between h-16 px-4 sm:px-6 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
           {/* Mobile menu button */}
-          <button
+          <Button
             ref={menuButtonRef}
             type="button"
+            isIconOnly
+            size="sm"
+            radius="md"
+            variant="light"
             aria-label={sidebarOpen ? 'Close sidebar menu' : 'Open sidebar menu'}
             aria-controls={sidebarId}
             aria-expanded={sidebarOpen}
-            className="lg:hidden p-2 -ml-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            onClick={() => setSidebarOpen((open) => !open)}
+            className="-ml-2 h-10 min-w-10 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300 lg:hidden"
+            onPress={() => setSidebarOpen((open) => !open)}
           >
             {sidebarOpen ? (
               <X className="w-6 h-6" strokeWidth={1.5} aria-hidden="true" />
             ) : (
               <Menu className="w-6 h-6" strokeWidth={1.5} aria-hidden="true" />
             )}
-          </button>
+          </Button>
 
           {/* Organisation name */}
           <div className="hidden lg:block">

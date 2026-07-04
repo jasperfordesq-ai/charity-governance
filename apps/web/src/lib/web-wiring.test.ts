@@ -389,6 +389,26 @@ test('compliance overview principle disclosures expose expanded state and panel 
   assert.match(src, /id=\{panelId\}/);
 });
 
+test('shell recovery and disclosure actions use HeroUI Button primitives', () => {
+  const expectations: Array<['app' | 'dashboard', string]> = [
+    ['app', 'error.tsx'],
+    ['app', 'not-found.tsx'],
+    ['dashboard', 'layout.tsx'],
+    ['dashboard', 'compliance/page.tsx'],
+  ];
+
+  for (const [scope, file] of expectations) {
+    const src = scope === 'dashboard' ? dash(file) : app(file);
+    assert.match(src, /from '@heroui\/react'/, `${file} should import HeroUI for shell actions`);
+    assert.match(src, /<Button\b/, `${file} should render HeroUI Button controls`);
+    assert.doesNotMatch(src, /<button\b/, `${file} should not keep route-local raw action buttons`);
+  }
+
+  const notFound = app('not-found.tsx');
+  assert.doesNotMatch(notFound, /rounded-full/, '404 actions should not use pill-shaped bespoke link buttons');
+  assert.doesNotMatch(notFound, /as=\{Link\}/, 'server-rendered 404 actions should not pass Next Link as a Client Component prop');
+});
+
 test('principle detail refreshes approval-readiness after successful autosave', () => {
   const src = dash('compliance/[principleId]/page.tsx');
   assert.match(src, /refreshApprovalReadiness/);

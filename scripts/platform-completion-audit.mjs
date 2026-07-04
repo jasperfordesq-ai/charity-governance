@@ -122,6 +122,7 @@ const fixedInThisAuditBranch = [
   'Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.',
   'Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.',
   'Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.',
+  'Global recovery, not-found, dashboard mobile-menu, and compliance disclosure actions now use HeroUI Button primitives instead of bespoke route-local action markup.',
 ];
 
 const independentAuditFindings = [

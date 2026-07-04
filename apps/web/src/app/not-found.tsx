@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Button } from '@heroui/react';
 import { ArrowLeft } from 'lucide-react';
 
 export default function NotFound() {
@@ -24,19 +25,24 @@ export default function NotFound() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-3">
-          <Link
+          <Button
+            as="a"
             href="/"
-            className="inline-flex items-center gap-2 bg-teal-primary text-white font-semibold px-6 py-3 rounded-full hover:bg-teal-dark transition-colors"
+            radius="md"
+            startContent={<ArrowLeft className="w-4 h-4" strokeWidth={2} aria-hidden="true" />}
+            className="bg-teal-primary font-semibold text-white hover:bg-teal-dark"
           >
-            <ArrowLeft className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
             Back to home
-          </Link>
-          <Link
+          </Button>
+          <Button
+            as="a"
             href="/dashboard"
-            className="inline-flex items-center gap-2 border border-teal-primary dark:border-teal-light text-teal-primary dark:text-teal-light font-semibold px-6 py-3 rounded-full hover:bg-teal-primary hover:text-white transition-colors"
+            radius="md"
+            variant="bordered"
+            className="border-teal-primary font-semibold text-teal-primary hover:bg-teal-primary hover:text-white dark:border-teal-light dark:text-teal-light"
           >
             Go to dashboard
-          </Link>
+          </Button>
         </div>
         <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
           Need help?{' '}

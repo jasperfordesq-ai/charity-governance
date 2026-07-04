@@ -224,14 +224,8 @@ export default function CompliancePage() {
                   key={principle.id}
                   className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
                 >
-                  {/* Principle header (clickable to expand) */}
-                  <button
-                    type="button"
-                    className="w-full text-left p-5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    aria-expanded={isExpanded}
-                    aria-controls={panelId}
-                    onClick={() => setExpandedId(isExpanded ? null : principle.id)}
-                  >
+                  {/* Principle header */}
+                  <div className="p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 min-w-0">
                         <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright flex items-center justify-center text-sm font-bold">
@@ -259,10 +253,23 @@ export default function CompliancePage() {
                             {pct >= 80 ? 'Mostly recorded' : pct >= 50 ? 'Partly recorded' : pct > 0 ? 'Started' : 'Not started'}
                           </span>
                         </div>
-                        <ChevronDown
-                          className={`w-5 h-5 text-gray-400 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                          aria-hidden="true"
-                        />
+                        <Button
+                          type="button"
+                          isIconOnly
+                          size="sm"
+                          radius="md"
+                          variant="light"
+                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} Principle ${principle.number}`}
+                          aria-expanded={isExpanded}
+                          aria-controls={panelId}
+                          onPress={() => setExpandedId(isExpanded ? null : principle.id)}
+                          className="min-w-9 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                        >
+                          <ChevronDown
+                            className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            aria-hidden="true"
+                          />
+                        </Button>
                       </div>
                     </div>
                     <Progress
@@ -277,7 +284,7 @@ export default function CompliancePage() {
                         {pSummary.compliant} / {pSummary.totalApplicable} standards recorded compliant
                       </p>
                     )}
-                  </button>
+                  </div>
 
                   {/* Expanded standards list */}
                   {isExpanded && (
