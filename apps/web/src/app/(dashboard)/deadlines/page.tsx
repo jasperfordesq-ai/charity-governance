@@ -14,7 +14,7 @@ import {
 } from '@heroui/react';
 import { Plus } from 'lucide-react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
@@ -94,6 +94,10 @@ export default function DeadlinesPage() {
       const res = await api.get('/organisations');
       setOrganisation(res.data?.data ?? res.data ?? null);
     } catch (err) {
+      if (isApiNotFoundError(err)) {
+        setOrganisation(null);
+        return;
+      }
       const message = apiErrorMessage(err, 'Organisation profile could not be loaded for conditional review dates.');
       logClientError('Failed to load organisation profile for deadline prompts', err);
       setOrganisationProfileError(message);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { apiErrorMessage } from './errors';
+import { apiErrorMessage, isApiNotFoundError } from './errors';
 
 // Concern: graceful degradation / input validation — a server error must render a
 // SAFE, SPECIFIC message (never a raw exception or stack), and the renderer must never
@@ -11,6 +11,14 @@ test('apiErrorMessage surfaces the server error field first', () => {
     apiErrorMessage({ response: { data: { error: 'Password must contain at least one uppercase letter' } } }, 'fallback'),
     'Password must contain at least one uppercase letter',
   );
+});
+
+test('isApiNotFoundError recognises axios-style 404 responses only', () => {
+  assert.equal(isApiNotFoundError({ response: { status: 404, data: { code: 'ORG_NOT_FOUND' } } }), true);
+  assert.equal(isApiNotFoundError({ response: { status: 403, data: { code: 'FORBIDDEN' } } }), false);
+  assert.equal(isApiNotFoundError({ response: { status: '404' } }), false);
+  assert.equal(isApiNotFoundError(new Error('not found')), false);
+  assert.equal(isApiNotFoundError(null), false);
 });
 
 test('apiErrorMessage falls back to the server message field', () => {

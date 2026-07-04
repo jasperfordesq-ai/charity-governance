@@ -56,6 +56,26 @@ test('team surfaces the server\'s specific error message (apiErrorMessage), not 
   assert.ok(src.includes('apiErrorMessage'));
 });
 
+test('profile-triggered workflows treat missing organisation profiles as setup state', () => {
+  const consumers = [
+    'documents/use-documents-workflow.ts',
+    'deadlines/page.tsx',
+    'registers/use-registers-workflow.ts',
+    'regulator/page.tsx',
+  ];
+
+  for (const file of consumers) {
+    const src = dash(file);
+    assert.match(src, /from '@\/lib\/errors'/, `${file} must import the API error helpers`);
+    assert.match(src, /isApiNotFoundError/, `${file} must recognise expected missing-profile 404s`);
+    assert.match(
+      src,
+      /if \(isApiNotFoundError\(err\)\) \{[\s\S]*?setOrganisation\(null\);[\s\S]*?return;[\s\S]*?\}/,
+      `${file} must fall back to the profile setup state without logging expected 404s`,
+    );
+  }
+});
+
 // State integrity: each critical create/edit form guards against double-submit with an
 // isLoading flag (and, where there is a required field, an isDisabled guard).
 const DOUBLE_SUBMIT_GUARDED = [
@@ -1238,4 +1258,12 @@ test('marketing and auth layout chrome includes dark variants for muted text and
   const auth = app('(auth)/layout.tsx');
   assert.match(auth, /dark:bg-gray-950/);
   assert.match(auth, /dark:text-gray-100/);
+});
+
+test('root layout declares smooth scroll behavior expected by Next route transitions', () => {
+  const layoutSrc = app('layout.tsx');
+  const globalCss = app('globals.css');
+
+  assert.match(globalCss, /scroll-behavior:\s*smooth/);
+  assert.match(layoutSrc, /data-scroll-behavior="smooth"/);
 });

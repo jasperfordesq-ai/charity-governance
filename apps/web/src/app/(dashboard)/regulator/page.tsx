@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@heroui/react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { logClientError } from '@/lib/client-logger';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
@@ -56,6 +56,10 @@ export default function RegulatorGuidePage() {
       const res = await api.get('/organisations');
       setOrganisation(res.data?.data ?? res.data ?? null);
     } catch (err) {
+      if (isApiNotFoundError(err)) {
+        setOrganisation(null);
+        return;
+      }
       const message = apiErrorMessage(err, 'Organisation profile could not be loaded for regulator priorities.');
       logClientError('Failed to load organisation profile for regulator priorities', err);
       setOrganisationProfileError(message);

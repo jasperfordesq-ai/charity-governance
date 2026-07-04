@@ -4,7 +4,7 @@ import { logClientError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDisclosure } from '@heroui/react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-guidance';
 import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
@@ -93,6 +93,10 @@ export function useDocumentsWorkflow() {
       const res = await api.get('/organisations');
       setOrganisation(res.data?.data ?? res.data ?? null);
     } catch (err) {
+      if (isApiNotFoundError(err)) {
+        setOrganisation(null);
+        return;
+      }
       const message = apiErrorMessage(err, 'Organisation profile could not be loaded for conditional evidence prompts.');
       logClientError('Failed to load organisation profile for document prompts', err);
       setOrganisationProfileError(message);

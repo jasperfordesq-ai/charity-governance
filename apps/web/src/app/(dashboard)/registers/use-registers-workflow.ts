@@ -4,7 +4,7 @@ import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { buildRegisterPriorities, buildRegisterSearchText } from './register-priority-panel';
 import { normalizeRegisterForm, type RegisterType } from './register-record-forms';
@@ -154,6 +154,10 @@ export function useRegistersWorkflow() {
       const res = await api.get('/organisations');
       setOrganisation(res.data?.data ?? res.data ?? null);
     } catch (err) {
+      if (isApiNotFoundError(err)) {
+        setOrganisation(null);
+        return;
+      }
       const message = apiErrorMessage(err, 'Organisation profile could not be loaded for register priorities.');
       logClientError('Failed to load organisation profile for register priorities', err);
       setOrganisationProfileError(message);
