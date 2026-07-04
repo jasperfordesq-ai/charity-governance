@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `f66d7b6`
+Working-tree base commit when generated: `0b6db81`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -38,6 +38,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.
 - Approval readiness and exports now flag missing standard records, missing action/evidence fields, missing explanations, missing conditional-profile facts, and profile-triggered professional-review prompts.
 - Dashboard navigation now gives the mobile sidebar explicit ARIA controls, Escape-to-close focus recovery, non-tabbable closed mobile links, and source-backed principle breadcrumb labels.
+- Dashboard, compliance, compliance detail, and export route chrome now use lucide-react status, chevron, and download icons instead of route-local inline SVG markup behind a wiring regression test.
 - Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.
 - The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.
 - The document standard-link modal is split out of the oversized documents route behind a wiring regression test.
@@ -86,12 +87,12 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 258 | yes | dark-mode relies mostly on layout; screenshot QA required |
-| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | 1 inline svg icon(s) |
-| P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 349 | yes | decorative or pill-heavy styling needs visual QA |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | no obvious static risk; verify in browser |
+| P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 434 | yes | decorative or pill-heavy styling needs visual QA |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 390 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 253 | yes | no obvious static risk; verify in browser |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 410 | yes | 2 inline svg icon(s) |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 407 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 109 | yes | 1 inline svg icon(s) |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | 2 inline svg icon(s) |

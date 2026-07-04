@@ -5,6 +5,7 @@ import { isPlanFeatureUnavailable, isSubscriptionLapseError } from '@/lib/plan-f
 import { useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Button, Card, Progress, Chip } from '@heroui/react';
+import { CircleAlert } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -237,9 +238,7 @@ export default function DashboardPage() {
       {subscriptionLapsed && !loading && (
         <Card className="p-6 border border-amber-200 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/10" role="alert">
           <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
+            <CircleAlert className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0" aria-hidden="true" />
             <div>
               <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Your subscription or free trial has ended</p>
               <p className="text-xs text-amber-700 dark:text-amber-300">
@@ -255,9 +254,7 @@ export default function DashboardPage() {
       {error && !loading && (
         <Card className="p-6 border border-red-200 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/10" role="alert">
           <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 text-red-400 dark:text-red-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
+            <CircleAlert className="w-5 h-5 text-red-400 dark:text-red-300 flex-shrink-0" aria-hidden="true" />
             <div>
               <p className="text-sm font-medium text-red-800 dark:text-red-300">Failed to load dashboard data</p>
               <p className="text-xs text-red-600 dark:text-red-300">Please check your connection and try refreshing the page.</p>

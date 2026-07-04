@@ -653,6 +653,24 @@ test('primary add actions use icon-library icons instead of route-local inline s
   }
 });
 
+test('remaining P0 dashboard route chrome uses lucide icons instead of inline svg', () => {
+  const expectations: Array<[string, string[]]> = [
+    ['dashboard/page.tsx', ['CircleAlert']],
+    ['export/page.tsx', ['Download', 'CircleAlert']],
+    ['compliance/page.tsx', ['ChevronDown']],
+    ['compliance/[principleId]/page.tsx', ['ChevronLeft']],
+  ];
+
+  for (const [file, icons] of expectations) {
+    const src = dash(file);
+    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for route chrome icons`);
+    for (const icon of icons) {
+      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+    }
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
   const src = [
     dash('deadlines/page.tsx'),

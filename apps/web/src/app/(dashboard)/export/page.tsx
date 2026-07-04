@@ -4,6 +4,7 @@ import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
+import { CircleAlert, Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
@@ -213,9 +214,7 @@ export default function ExportPage() {
             onPress={handleExport}
             isLoading={exporting}
           >
-            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
+            <Download className="w-5 h-5 mr-2" aria-hidden="true" />
             Generate Compliance Report
           </Button>
         </div>
@@ -390,9 +389,7 @@ export default function ExportPage() {
       {/* Additional info */}
       <Card className="border border-amber-200 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-500/10 p-5">
         <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-          </svg>
+          <CircleAlert className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Before exporting</p>
             <p className="text-xs text-amber-700 dark:text-amber-200/90 mt-0.5">
