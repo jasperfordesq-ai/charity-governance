@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { Check, CircleAlert } from 'lucide-react';
 
 interface Toast {
   id: number;
@@ -50,10 +51,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center gap-2">
               {t.type === 'success' && (
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <Check className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} aria-hidden="true" />
               )}
               {t.type === 'error' && (
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                <CircleAlert className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden="true" />
               )}
               {t.message}
             </div>

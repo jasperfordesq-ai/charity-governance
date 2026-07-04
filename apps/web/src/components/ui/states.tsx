@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { CircleAlert, Clock, LoaderCircle, LockKeyhole, TriangleAlert } from 'lucide-react';
 
 type StateVariant = 'compact' | 'page';
 
@@ -70,10 +71,7 @@ export function LoadingState({
       role="status"
       ariaLive="polite"
       icon={
-        <svg className="h-8 w-8 animate-spin text-teal-primary dark:text-teal-bright" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+        <LoaderCircle className="h-8 w-8 animate-spin text-teal-primary dark:text-teal-bright" aria-hidden="true" />
       }
     />
   );
@@ -84,9 +82,7 @@ export function EmptyState(props: BaseStateProps) {
     <StateShell
       {...props}
       icon={
-        <svg className="h-8 w-8 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <Clock className="h-8 w-8 text-gray-400 dark:text-gray-500" strokeWidth={1.5} aria-hidden="true" />
       }
     />
   );
@@ -100,9 +96,7 @@ export function ErrorState(props: BaseStateProps) {
       role="alert"
       ariaLive="assertive"
       icon={
-        <svg className="h-8 w-8 text-rose-700 dark:text-rose-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zM10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-        </svg>
+        <TriangleAlert className="h-8 w-8 text-rose-700 dark:text-rose-300" strokeWidth={1.5} aria-hidden="true" />
       }
     />
   );
@@ -114,9 +108,7 @@ export function LockedFeatureState(props: BaseStateProps) {
       {...props}
       tone="locked"
       icon={
-        <svg className="h-8 w-8 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5A1.5 1.5 0 0118.75 12v7.5A1.5 1.5 0 0117.25 21H6.75a1.5 1.5 0 01-1.5-1.5V12a1.5 1.5 0 011.5-1.5z" />
-        </svg>
+        <LockKeyhole className="h-8 w-8 text-gray-500 dark:text-gray-400" strokeWidth={1.5} aria-hidden="true" />
       }
     />
   );
@@ -130,9 +122,7 @@ export function ReviewWarningState(props: BaseStateProps) {
       role="alert"
       ariaLive="polite"
       icon={
-        <svg className="h-8 w-8 text-amber-700 dark:text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4.5m0 3h.008v.008H12V16.5zM2.25 12a9.75 9.75 0 1119.5 0 9.75 9.75 0 01-19.5 0z" />
-        </svg>
+        <CircleAlert className="h-8 w-8 text-amber-700 dark:text-amber-300" strokeWidth={1.5} aria-hidden="true" />
       }
     />
   );

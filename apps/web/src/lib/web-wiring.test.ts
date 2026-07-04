@@ -692,6 +692,26 @@ test('remaining P0 dashboard route chrome uses lucide icons instead of inline sv
   }
 });
 
+test('shared UI chrome uses lucide icons instead of inline svg', () => {
+  const expectations: Array<[string, string[]]> = [
+    ['back-to-top.tsx', ['ArrowUp']],
+    ['breadcrumbs.tsx', ['ChevronRight']],
+    ['copy-link-button.tsx', ['Check', 'Link2']],
+    ['theme-toggle.tsx', ['Monitor', 'Moon', 'Sun']],
+    ['toast.tsx', ['Check', 'CircleAlert']],
+    ['ui/states.tsx', ['CircleAlert', 'Clock', 'LoaderCircle', 'LockKeyhole', 'TriangleAlert']],
+  ];
+
+  for (const [file, icons] of expectations) {
+    const src = component(file);
+    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for shared chrome icons`);
+    for (const icon of icons) {
+      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+    }
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['login/page.tsx', ['Eye', 'EyeOff']],
