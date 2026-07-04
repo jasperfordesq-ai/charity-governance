@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `5982b32`
+Working-tree base commit when generated: `bd9be3f`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -104,6 +104,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.
 - Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.
 - The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.
+- The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.
 
 ## Independent Audit Findings Still Driving Next Work
 

@@ -1532,6 +1532,17 @@ test('package test scripts stay compatible with the Node 22 production runtime',
   );
 });
 
+test('release readiness command uses ASCII-safe operator output', () => {
+  const releaseReady = readRepoFile('scripts/release-ready.mjs');
+
+  assert.doesNotMatch(releaseReady, /[✅❌➖]/);
+  assert.doesNotMatch(releaseReady, /â/);
+  assert.match(releaseReady, /-- \$\{name\} --/);
+  assert.match(releaseReady, /PASS/);
+  assert.match(releaseReady, /FAIL/);
+  assert.match(releaseReady, /SKIP/);
+});
+
 test('production secret env files are ignored by git without hiding the template', () => {
   const gitignoreLines = readRepoFile('.gitignore')
     .split(/\r?\n/)
