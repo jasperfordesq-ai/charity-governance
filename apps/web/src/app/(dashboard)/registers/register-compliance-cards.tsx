@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Input, Progress, Select, SelectItem, Textarea } from '@heroui/react';
+import { Button, Checkbox, Input, Progress, Select, SelectItem, Textarea } from '@heroui/react';
 import { FieldGroup } from '@/components/ui/forms';
 import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
 import {
@@ -166,14 +166,16 @@ export function FinancialControlsCard({
 
 export function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex min-h-12 items-start gap-3 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-2 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-      />
+    <Checkbox
+      isSelected={checked}
+      onValueChange={onChange}
+      classNames={{
+        base: 'm-0 flex min-h-12 max-w-none items-start gap-3 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-950',
+        wrapper: 'mt-0.5',
+        label: 'text-sm leading-5 text-gray-700 dark:text-gray-300',
+      }}
+    >
       <span className="leading-5">{label}</span>
-    </label>
+    </Checkbox>
   );
 }

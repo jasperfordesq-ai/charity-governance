@@ -189,6 +189,31 @@ test('organisation review warnings use the shared inline status primitive', () =
   assert.doesNotMatch(profileSrc, /border-amber-200 bg-amber-50/);
 });
 
+test('organisation setup checkbox groups use HeroUI Checkbox controls', () => {
+  const formSrc = dash('organisation/organisation-profile-form.tsx');
+  const profileSrc = dash('organisation/organisation-conditional-profile.tsx');
+
+  assert.match(formSrc, /Checkbox/);
+  assert.match(profileSrc, /Checkbox/);
+  assert.match(formSrc, /from '@heroui\/react'/);
+  assert.match(profileSrc, /from '@heroui\/react'/);
+  assert.doesNotMatch(formSrc, /type="checkbox"/);
+  assert.doesNotMatch(profileSrc, /type="checkbox"/);
+  assert.doesNotMatch(formSrc, /h-4 w-4 rounded border-gray-300/);
+  assert.doesNotMatch(profileSrc, /h-4 w-4 rounded border-gray-300/);
+});
+
+test('organisation complexity selector uses HeroUI RadioGroup controls', () => {
+  const formSrc = dash('organisation/organisation-profile-form.tsx');
+
+  assert.match(formSrc, /RadioGroup/);
+  assert.match(formSrc, /Radio/);
+  assert.match(formSrc, /value=\{complexity\}/);
+  assert.match(formSrc, /onValueChange=\{\(value\) => handleComplexityChange\(value as OrganisationComplexity\)\}/);
+  assert.doesNotMatch(formSrc, /aria-pressed/);
+  assert.doesNotMatch(formSrc, /<button[\s\S]*handleComplexityChange/);
+});
+
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,
 // never a blank screen / infinite spinner / unhandled exception).
 test('the global and dashboard error boundaries render a recoverable screen', () => {
@@ -622,6 +647,17 @@ test('board member form modal is extracted from the oversized route file', () =>
   assert.match(modalSrc, /Trustee details/);
   assert.match(modalSrc, /board-disabled-hint/);
   assert.match(modalSrc, /Saving updates the trustee register after the API confirms the change/);
+});
+
+test('board trustee evidence checkboxes use HeroUI Checkbox controls', () => {
+  const modalSrc = dash('board/board-member-modal.tsx');
+
+  assert.match(modalSrc, /Checkbox/);
+  assert.match(modalSrc, /from '@heroui\/react'/);
+  assert.match(modalSrc, /isSelected=\{formConductSigned\}/);
+  assert.match(modalSrc, /isSelected=\{formInduction\}/);
+  assert.doesNotMatch(modalSrc, /type="checkbox"/);
+  assert.doesNotMatch(modalSrc, /h-4 w-4 rounded border-gray-300/);
 });
 
 test('board member list panel is extracted from the oversized route file', () => {
@@ -1326,6 +1362,17 @@ test('registers annual report and financial control cards are extracted from the
   assert.match(cardsSrc, /Annual Report source check/);
   assert.match(cardsSrc, /Financial controls source check/);
   assert.match(cardsSrc, /isDisabled=\{saving \|\| saveDisabled\}/);
+});
+
+test('register financial control checklist uses HeroUI Checkbox controls', () => {
+  const cardsSrc = dash('registers/register-compliance-cards.tsx');
+
+  assert.match(cardsSrc, /Checkbox/);
+  assert.match(cardsSrc, /from '@heroui\/react'/);
+  assert.match(cardsSrc, /isSelected=\{checked\}/);
+  assert.match(cardsSrc, /onValueChange=\{onChange\}/);
+  assert.doesNotMatch(cardsSrc, /type="checkbox"/);
+  assert.doesNotMatch(cardsSrc, /h-4 w-4 rounded border-gray-300/);
 });
 
 test('registers overview summary panel is extracted from the oversized route file', () => {

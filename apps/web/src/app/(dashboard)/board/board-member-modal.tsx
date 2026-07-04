@@ -2,6 +2,7 @@
 
 import {
   Button,
+  Checkbox,
   Input,
   Modal,
   ModalBody,
@@ -123,15 +124,17 @@ export function BoardMemberModal({
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-                    <label className="flex items-start gap-3 text-sm font-medium text-gray-800 dark:text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={formConductSigned}
-                        onChange={(event) => setFormConductSigned(event.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-                      />
+                    <Checkbox
+                      isSelected={formConductSigned}
+                      onValueChange={setFormConductSigned}
+                      classNames={{
+                        base: 'm-0 flex max-w-none items-start gap-3',
+                        wrapper: 'mt-0.5',
+                        label: 'text-sm font-medium text-gray-800 dark:text-gray-200',
+                      }}
+                    >
                       Code of conduct signed
-                    </label>
+                    </Checkbox>
                     {formConductSigned ? (
                       <Input
                         label="Date signed"
@@ -145,15 +148,17 @@ export function BoardMemberModal({
                     )}
                   </div>
                   <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-                    <label className="flex items-start gap-3 text-sm font-medium text-gray-800 dark:text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={formInduction}
-                        onChange={(event) => setFormInduction(event.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-                      />
+                    <Checkbox
+                      isSelected={formInduction}
+                      onValueChange={setFormInduction}
+                      classNames={{
+                        base: 'm-0 flex max-w-none items-start gap-3',
+                        wrapper: 'mt-0.5',
+                        label: 'text-sm font-medium text-gray-800 dark:text-gray-200',
+                      }}
+                    >
                       Induction completed
-                    </label>
+                    </Checkbox>
                     {formInduction ? (
                       <Input
                         label="Induction date"

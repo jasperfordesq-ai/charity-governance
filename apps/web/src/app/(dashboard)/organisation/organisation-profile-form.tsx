@@ -2,7 +2,10 @@
 
 import {
   Button,
+  Checkbox,
   Input,
+  Radio,
+  RadioGroup,
   Select,
   SelectItem,
 } from '@heroui/react';
@@ -162,42 +165,47 @@ export function OrganisationProfileForm({
             title="Governance scope"
             description="Complexity controls whether the additional Governance Code standards appear in compliance workflows."
           >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {[OrganisationComplexity.SIMPLE, OrganisationComplexity.COMPLEX].map((value) => {
-                const selected = complexity === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => handleComplexityChange(value)}
-                    className={`rounded-lg border p-4 text-left transition-colors ${selected ? 'border-teal-primary bg-teal-primary/10 dark:border-teal-bright dark:bg-teal-bright/10' : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-gray-700'}`}
-                    aria-pressed={selected}
-                  >
-                    <span className={`text-sm font-semibold ${selected ? 'text-teal-dark dark:text-teal-bright' : 'text-gray-950 dark:text-gray-50'}`}>
-                      {value === OrganisationComplexity.SIMPLE ? 'Simple' : 'Complex'}
-                    </span>
-                    <span className="mt-1 block text-xs leading-5 text-gray-600 dark:text-gray-300">
-                      {value === OrganisationComplexity.SIMPLE
-                        ? 'Core standards only. This is suitable for many smaller or straightforward charities.'
-                        : 'Core plus additional standards for charities with larger, higher-risk, or more complex operations.'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <RadioGroup
+              name="organisation-complexity"
+              value={complexity}
+              onValueChange={(value) => handleComplexityChange(value as OrganisationComplexity)}
+              classNames={{ wrapper: 'grid grid-cols-1 gap-3 sm:grid-cols-2' }}
+            >
+              {[OrganisationComplexity.SIMPLE, OrganisationComplexity.COMPLEX].map((value) => (
+                <Radio
+                  key={value}
+                  value={value}
+                  description={value === OrganisationComplexity.SIMPLE
+                    ? 'Core standards only. This is suitable for many smaller or straightforward charities.'
+                    : 'Core plus additional standards for charities with larger, higher-risk, or more complex operations.'}
+                  classNames={{
+                    base: 'm-0 flex max-w-none items-start gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-gray-300 data-[selected=true]:border-teal-primary data-[selected=true]:bg-teal-primary/10 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-gray-700 dark:data-[selected=true]:border-teal-bright dark:data-[selected=true]:bg-teal-bright/10',
+                    wrapper: 'mt-0.5',
+                    labelWrapper: 'min-w-0',
+                    label: 'text-sm font-semibold text-gray-950 dark:text-gray-50',
+                    description: 'mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300',
+                  }}
+                >
+                  {value === OrganisationComplexity.SIMPLE ? 'Simple' : 'Complex'}
+                </Radio>
+              ))}
+            </RadioGroup>
             <div>
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Charitable purpose</p>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {purposeOptions.map(([key, label]) => (
-                  <label key={key} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={charitablePurpose.has(key)}
-                      onChange={(event) => handlePurposeChange(key, event.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-                    />
+                  <Checkbox
+                    key={key}
+                    isSelected={charitablePurpose.has(key)}
+                    onValueChange={(checked) => handlePurposeChange(key, checked)}
+                    classNames={{
+                      base: 'm-0 flex max-w-none items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:border-gray-300 dark:border-gray-800 dark:hover:border-gray-700',
+                      wrapper: 'mt-0.5',
+                      label: 'text-sm text-gray-700 dark:text-gray-300',
+                    }}
+                  >
                     {label}
-                  </label>
+                  </Checkbox>
                 ))}
               </div>
               {selectedPurposes.length > 0 ? (

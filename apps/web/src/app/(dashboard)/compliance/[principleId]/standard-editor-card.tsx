@@ -50,8 +50,8 @@ function classes(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
 }
 
-function labelForStatus(status: ComplianceStatus, fallback: string) {
-  return statusOptions.find((option) => option.key === status)?.label ?? fallback;
+function labelForStatus(status: ComplianceStatus, fallback?: string) {
+  return statusOptions.find((option) => option.key === status)?.label ?? fallback ?? status;
 }
 
 export function StandardEditorCard({

@@ -1,5 +1,6 @@
 'use client';
 
+import { Checkbox } from '@heroui/react';
 import { FieldGroup } from '@/components/ui/forms';
 import { InlineStatus } from '@/components/ui/states';
 import { ReviewFlag } from '@/components/ui/status';
@@ -85,24 +86,24 @@ export function OrganisationConditionalProfileFields({
         {CONDITIONAL_OBLIGATION_FIELDS.map((field) => {
           const hintId = `conditional-${field.key}`;
           return (
-            <label
+            <Checkbox
               key={field.key}
-              className="flex min-h-24 items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 transition-colors hover:border-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-gray-700"
+              isSelected={profile[field.key]}
+              onValueChange={(checked) => onChange(field.key, checked)}
+              aria-describedby={hintId}
+              classNames={{
+                base: 'm-0 flex min-h-24 max-w-none items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 transition-colors hover:border-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-gray-700',
+                wrapper: 'mt-1',
+                label: 'min-w-0',
+              }}
             >
-              <input
-                type="checkbox"
-                checked={profile[field.key]}
-                onChange={(event) => onChange(field.key, event.target.checked)}
-                aria-describedby={hintId}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-              />
               <span>
                 <span className="block font-medium text-gray-950 dark:text-gray-50">{field.label}</span>
                 <span id={hintId} className="mt-1 block text-xs leading-5 text-gray-600 dark:text-gray-400">
                   {field.description}
                 </span>
               </span>
-            </label>
+            </Checkbox>
           );
         })}
       </div>

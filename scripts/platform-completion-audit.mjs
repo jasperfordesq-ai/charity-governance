@@ -112,6 +112,11 @@ const fixedInThisAuditBranch = [
   'Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.',
   'Export approval-readiness issue cards and conditional review prompts are split out of the route and now use shared status/review primitives instead of repeated warning-card markup.',
   'Organisation setup warning surfaces now use the shared inline status primitive instead of route-local amber advisory boxes.',
+  'Organisation purpose and conditional-obligation checkbox groups now use HeroUI Checkbox controls instead of raw input controls.',
+  'Organisation complexity selection now uses HeroUI RadioGroup controls instead of route-local pressed-button toggles.',
+  'Board trustee conduct and induction evidence toggles now use HeroUI Checkbox controls instead of raw checkbox inputs.',
+  'Register Annual Report and financial-control checklist rows now use HeroUI Checkbox controls instead of raw checkbox inputs.',
+  'Compliance standard editor status rendering now tolerates optional selected-item labels during production builds.',
 ];
 
 const independentAuditFindings = [
