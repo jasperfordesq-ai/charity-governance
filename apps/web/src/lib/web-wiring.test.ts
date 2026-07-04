@@ -188,6 +188,15 @@ test('the global and dashboard error boundaries render a recoverable screen', ()
   }
 });
 
+test('route-group loading screens use the shared LoadingState primitive', () => {
+  for (const file of ['(auth)/loading.tsx', '(dashboard)/loading.tsx']) {
+    const src = app(file);
+    assert.match(src, /from '@\/components\/ui\/states'/, `${file} should import shared state primitives`);
+    assert.match(src, /LoadingState/, `${file} should render LoadingState`);
+    assert.doesNotMatch(src, /animate-pulse/, `${file} should not duplicate skeleton markup`);
+  }
+});
+
 test('the dashboard renders an explicit error card on a load failure (not a blank/empty screen)', () => {
   const src = dash('dashboard/page.tsx');
   assert.match(src, /from '@\/components\/ui\/states'/);
