@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '../fixtures';
+import type { Page } from '@playwright/test';
+import { test, expect } from '../fixtures';
 import AxeBuilder from '@axe-core/playwright';
 
 // axe colour-contrast results are deterministic, but each scan needs a fully-rendered page.

@@ -1,23 +1,48 @@
-import { test, expect, type Page } from '../fixtures';
+import type { Page } from '@playwright/test';
+import { test, expect } from '../fixtures';
+import { getPrincipleIdByNumber } from '../helpers/db';
 
 type Theme = 'light' | 'dark';
+type RouteSpec = string | { label: string; resolve: () => Promise<string> };
 
 const VIEWPORT_THEME_CASES = [
   { label: 'desktop light', width: 1440, height: 1000, theme: 'light' },
+  { label: 'desktop dark', width: 1440, height: 1000, theme: 'dark' },
+  { label: 'mobile light', width: 390, height: 844, theme: 'light' },
   { label: 'mobile dark', width: 390, height: 844, theme: 'dark' },
 ] as const;
 
 const PUBLIC_ROUTES = [
   '/',
+  '/features',
   '/pricing',
+  '/blog',
+  '/blog/understanding-the-charities-governance-code',
+  '/privacy',
+  '/terms',
   '/login',
   '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/accept-invite',
+  '/verify-email',
 ] as const;
 
-const DASHBOARD_ROUTES = [
+const DASHBOARD_ROUTES: readonly RouteSpec[] = [
   '/dashboard',
+  '/compliance',
+  {
+    label: '/compliance/${principleId}',
+    resolve: async () => `/compliance/${await getPrincipleIdByNumber(1)}`,
+  },
+  '/board',
   '/documents',
+  '/deadlines',
   '/registers',
+  '/regulator',
+  '/organisation',
+  '/team',
+  '/billing',
   '/export',
 ] as const;
 
@@ -32,19 +57,25 @@ async function applyTheme(page: Page, theme: Theme): Promise<void> {
 }
 
 async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState('networkidle');
+  await page.addStyleTag({
+    content: '*, *::before, *::after { transition: none !important; animation: none !important; }',
+  });
   await page.evaluate(() => (document.fonts ? document.fonts.ready.then(() => undefined) : undefined));
-  await page.waitForTimeout(250);
 }
 
 async function assertRenderable(page: Page, route: string): Promise<void> {
   await expect(page.locator('body')).toBeVisible();
   await expect.poll(
-    async () => page.locator('body').evaluate((body) => body.innerText.trim().length),
+    async () => page.locator('body').evaluate((body) => body.textContent?.trim().length ?? 0),
     { message: `${route} should render visible text`, timeout: 10_000 },
   ).toBeGreaterThan(20);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, `${route} should not create horizontal page overflow`).toBeLessThanOrEqual(2);
+}
+
+async function resolveRoute(route: RouteSpec): Promise<{ label: string; path: string }> {
+  if (typeof route === 'string') return { label: route, path: route };
+  return { label: route.label, path: await route.resolve() };
 }
 
 for (const viewportCase of VIEWPORT_THEME_CASES) {
@@ -63,10 +94,11 @@ for (const viewportCase of VIEWPORT_THEME_CASES) {
     await ownerPage.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
 
     for (const route of DASHBOARD_ROUTES) {
-      await ownerPage.goto(route, { waitUntil: 'domcontentloaded' });
+      const { label, path } = await resolveRoute(route);
+      await ownerPage.goto(path, { waitUntil: 'domcontentloaded' });
       await applyTheme(ownerPage, viewportCase.theme as Theme);
       await settle(ownerPage);
-      await assertRenderable(ownerPage, route);
+      await assertRenderable(ownerPage, label);
     }
   });
 }

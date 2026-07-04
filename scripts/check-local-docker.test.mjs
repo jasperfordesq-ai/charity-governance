@@ -250,8 +250,50 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.match(responsiveSpec, /launch-critical public and auth routes/);
   assert.match(responsiveSpec, /launch-critical dashboard routes/);
   assert.match(responsiveSpec, /mobile dark/);
+  assert.match(responsiveSpec, /mobile light/);
   assert.match(responsiveSpec, /desktop light/);
+  assert.match(responsiveSpec, /desktop dark/);
   assert.match(responsiveSpec, /horizontal page overflow/);
+  assert.doesNotMatch(responsiveSpec, /waitForLoadState\('networkidle'\)/);
+});
+
+test('responsive route smoke covers every shipped page route', () => {
+  const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
+  const requiredRoutes = [
+    '/',
+    '/features',
+    '/pricing',
+    '/blog',
+    '/blog/understanding-the-charities-governance-code',
+    '/privacy',
+    '/terms',
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/accept-invite',
+    '/verify-email',
+    '/dashboard',
+    '/compliance',
+    '/compliance/${principleId}',
+    '/board',
+    '/documents',
+    '/deadlines',
+    '/registers',
+    '/regulator',
+    '/organisation',
+    '/team',
+    '/billing',
+    '/export',
+  ];
+
+  for (const route of requiredRoutes) {
+    assert.match(
+      responsiveSpec,
+      new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `responsive smoke must cover ${route}`,
+    );
+  }
 });
 
 test('local Docker migrations stop running app services before refreshing dependencies', () => {
