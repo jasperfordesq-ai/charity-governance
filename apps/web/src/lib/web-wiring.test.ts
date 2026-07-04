@@ -200,6 +200,12 @@ test('route-group loading screens use the shared LoadingState primitive', () => 
     assert.match(src, /LoadingState/, `${file} should render LoadingState`);
     assert.doesNotMatch(src, /animate-pulse/, `${file} should not duplicate skeleton markup`);
   }
+
+  const dashboardLayout = app('(dashboard)/layout.tsx');
+  assert.match(dashboardLayout, /from '@\/components\/ui\/states'/);
+  assert.match(dashboardLayout, /LoadingState/);
+  assert.doesNotMatch(dashboardLayout, /Loading CharityPilot\.\.\./);
+  assert.doesNotMatch(dashboardLayout, /LoaderCircle/);
 });
 
 test('the dashboard renders an explicit error card on a load failure (not a blank/empty screen)', () => {
@@ -233,10 +239,15 @@ test('dashboard loading and empty states use shared primitives instead of route-
   const actionListsSrc = dash('dashboard/dashboard-action-lists.tsx');
 
   assert.match(pageSrc, /from '@\/components\/ui\/states'/);
+  assert.match(pageSrc, /from '@\/components\/ui\/status'/);
   assert.match(pageSrc, /LoadingState/);
   assert.match(pageSrc, /EmptyState/);
+  assert.match(pageSrc, /StatusDot/);
   assert.doesNotMatch(pageSrc, /function SkeletonCard/);
   assert.doesNotMatch(pageSrc, /animate-pulse/);
+  assert.doesNotMatch(pageSrc, /rounded-full bg-green-500/);
+  assert.doesNotMatch(pageSrc, /rounded-full bg-amber-400/);
+  assert.doesNotMatch(pageSrc, /rounded-full bg-gray-400/);
 
   assert.match(actionListsSrc, /from '@\/components\/ui\/states'/);
   assert.match(actionListsSrc, /LoadingState/);
@@ -254,6 +265,9 @@ test('the per-standard compliance editor announces its save state (Saving / Save
   ].join('\n');
   assert.match(src, /aria-live/);
   assert.match(src, /Save failed/i);
+  assert.match(src, /from '@\/components\/ui\/status'/);
+  assert.match(src, /StatusDot/);
+  assert.doesNotMatch(src, /style=\{\{ backgroundColor: .*?colour/);
 });
 
 test('phase 6A workflows surface approval-readiness and evidence-led review guidance', () => {
@@ -381,7 +395,7 @@ test('a board mutation failure shows a toast and keeps the existing list (no par
 test('the shared UI foundation exposes reusable page, state, form, list, status, and evidence primitives', () => {
   const expectedExports: Array<[string, string[]]> = [
     ['ui/app-page.tsx', ['AppPage', 'AppSection']],
-    ['ui/status.tsx', ['StatusChip', 'EvidenceChip', 'ReviewFlag', 'DeadlineBadge']],
+    ['ui/status.tsx', ['StatusChip', 'StatusDot', 'EvidenceChip', 'ReviewFlag', 'DeadlineBadge']],
     ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
     ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
     ['ui/data-list.tsx', ['DataList', 'DataListTable', 'DataListItems']],
@@ -801,7 +815,6 @@ test('dashboard layout navigation uses lucide icons instead of inline svg', () =
     'Download',
     'FileText',
     'LayoutDashboard',
-    'LoaderCircle',
     'LogOut',
     'Menu',
     'ShieldCheck',

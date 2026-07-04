@@ -9,6 +9,7 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { SessionTimeout } from '@/components/session-timeout';
+import { LoadingState } from '@/components/ui/states';
 import {
   BookOpenCheck,
   Building2,
@@ -18,7 +19,6 @@ import {
   Download,
   FileText,
   LayoutDashboard,
-  LoaderCircle,
   LogOut,
   Menu,
   ShieldCheck,
@@ -178,11 +178,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
-        <div className="flex flex-col items-center gap-3">
-          <LoaderCircle className="animate-spin h-10 w-10 text-teal-primary" aria-hidden="true" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading CharityPilot...</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 dark:bg-gray-950">
+        <LoadingState
+          title="Loading dashboard"
+          description="Checking your secure CharityPilot session."
+          variant="page"
+        />
       </div>
     );
   }

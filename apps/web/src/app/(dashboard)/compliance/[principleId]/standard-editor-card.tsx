@@ -3,10 +3,10 @@
 import { Card, Chip, Select, SelectItem, Textarea } from '@heroui/react';
 import {
   ComplianceStatus,
-  COMPLIANCE_STATUS_META,
   type GovernancePrincipleResponse,
 } from '@charitypilot/shared';
 import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
+import { StatusChip, StatusDot, type StatusTone } from '@/components/ui/status';
 
 export interface StandardFormState {
   status: ComplianceStatus;
@@ -30,6 +30,30 @@ const statusOptions = [
   { key: ComplianceStatus.EXPLAIN, label: 'Explain Non-Compliance' },
 ];
 
+const statusTones: Record<ComplianceStatus, StatusTone> = {
+  [ComplianceStatus.COMPLIANT]: 'success',
+  [ComplianceStatus.WORKING_TOWARDS]: 'warning',
+  [ComplianceStatus.NOT_STARTED]: 'neutral',
+  [ComplianceStatus.NOT_APPLICABLE]: 'info',
+  [ComplianceStatus.EXPLAIN]: 'danger',
+};
+
+const statusAccentClasses: Record<ComplianceStatus, string> = {
+  [ComplianceStatus.COMPLIANT]: 'bg-emerald-500 dark:bg-emerald-400',
+  [ComplianceStatus.WORKING_TOWARDS]: 'bg-amber-500 dark:bg-amber-300',
+  [ComplianceStatus.NOT_STARTED]: 'bg-gray-400 dark:bg-gray-500',
+  [ComplianceStatus.NOT_APPLICABLE]: 'bg-sky-500 dark:bg-sky-400',
+  [ComplianceStatus.EXPLAIN]: 'bg-rose-500 dark:bg-rose-400',
+};
+
+function classes(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(' ');
+}
+
+function labelForStatus(status: ComplianceStatus, fallback: string) {
+  return statusOptions.find((option) => option.key === status)?.label ?? fallback;
+}
+
 export function StandardEditorCard({
   standard,
   form,
@@ -45,7 +69,7 @@ export function StandardEditorCard({
   flushSave: (standardId: string) => void | Promise<void>;
   onRetrySave: (standardId: string, form: StandardFormState) => void;
 }) {
-  const meta = COMPLIANCE_STATUS_META[form.status] ?? COMPLIANCE_STATUS_META.NOT_STARTED;
+  const statusTone = statusTones[form.status] ?? 'neutral';
   const showExplanation =
     form.status === ComplianceStatus.NOT_APPLICABLE ||
     form.status === ComplianceStatus.EXPLAIN;
@@ -55,21 +79,13 @@ export function StandardEditorCard({
       key={standard.id}
       className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
     >
-      <div
-        className="h-1"
-        style={{ backgroundColor: meta.colour }} /* replace meta.colour with a dark-mode-aware token (e.g. meta.colourDark resolved via theme) so the accent does not stay light-tuned in dark mode */
-      />
+      <div className={classes('h-1', statusAccentClasses[form.status] ?? statusAccentClasses.NOT_STARTED)} />
       <div className="p-5 sm:p-6 space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <Chip
-              size="sm"
-              variant="flat"
-              className="flex-shrink-0 font-mono font-semibold"
-              style={{ backgroundColor: meta.bgColour, color: meta.colour }} /* supply dark-mode-aware bg/text (e.g. meta.bgColourDark/meta.colourDark) so the code chip keeps contrast in dark mode */
-            >
+            <StatusChip tone={statusTone} className="flex-shrink-0 font-mono font-semibold">
               {standard.code}
-            </Chip>
+            </StatusChip>
             <div>
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{standard.title}</p>
               <div className="flex items-center gap-2 mt-1">
@@ -128,14 +144,11 @@ export function StandardEditorCard({
           renderValue={(items) => {
             const item = items[0];
             if (!item) return null;
-            const m = COMPLIANCE_STATUS_META[item.key as ComplianceStatus];
+            const status = item.key as ComplianceStatus;
             return (
               <div className="flex items-center gap-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0"
-                  style={{ backgroundColor: m?.colour }}
-                />
-                <span>{m?.label ?? item.textValue}</span>
+                <StatusDot tone={statusTones[status] ?? 'neutral'} />
+                <span>{labelForStatus(status, item.textValue)}</span>
               </div>
             );
           }}
@@ -143,10 +156,7 @@ export function StandardEditorCard({
           {statusOptions.map((opt) => (
             <SelectItem key={opt.key} textValue={opt.label}>
               <div className="flex items-center gap-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-full inline-block"
-                  style={{ backgroundColor: COMPLIANCE_STATUS_META[opt.key].colour }}
-                />
+                <StatusDot tone={statusTones[opt.key]} />
                 {opt.label}
               </div>
             </SelectItem>

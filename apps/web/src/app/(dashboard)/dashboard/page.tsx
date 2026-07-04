@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { EmptyState, ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
+import { StatusDot } from '@/components/ui/status';
 import { DashboardActionLists } from './dashboard-action-lists';
 import type {
   ComplianceSummary,
@@ -280,15 +281,15 @@ export default function DashboardPage() {
               />
               <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
+                  <StatusDot tone="success" />
                   Recorded compliant: {compliance.compliant}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />
+                  <StatusDot tone="warning" />
                   Working Towards: {compliance.workingTowards}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block" />
+                  <StatusDot tone="neutral" />
                   Not Started: {compliance.notStarted}
                 </span>
               </div>
