@@ -893,6 +893,7 @@ test('auth form errors use the shared FormAlert primitive instead of repeated ra
     '(auth)/forgot-password/page.tsx',
     '(auth)/reset-password/page.tsx',
     '(auth)/accept-invite/page.tsx',
+    '(auth)/verify-email/page.tsx',
   ];
 
   for (const route of routes) {

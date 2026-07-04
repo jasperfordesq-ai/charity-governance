@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
 import { Check, CircleAlert, Mail } from 'lucide-react';
+import { FormAlert } from '@/components/ui/form-alert';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -117,7 +118,9 @@ function VerifyEmailContent() {
                     <p role="status" className="text-sm text-green-600 dark:text-green-400">{resendMessage}</p>
                   )}
                   {resendError && (
-                    <p role="alert" className="text-sm text-red-600 dark:text-red-300">{resendError}</p>
+                    <div className="w-full text-left">
+                      <FormAlert title="Verification email could not be sent">{resendError}</FormAlert>
+                    </div>
                   )}
                   <Link
                     href="/login"
@@ -151,7 +154,9 @@ function VerifyEmailContent() {
                   <CircleAlert className="w-7 h-7 text-red-500" aria-hidden="true" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Verification failed</h1>
-                <p role="alert" className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
+                <div className="mb-6 text-left">
+                  <FormAlert title="Verification could not be completed">{message}</FormAlert>
+                </div>
                 <div className="flex flex-col items-center gap-3">
                   <Button
                     onPress={handleRetry}
