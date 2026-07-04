@@ -190,7 +190,13 @@ test('the global and dashboard error boundaries render a recoverable screen', ()
 
 test('the dashboard renders an explicit error card on a load failure (not a blank/empty screen)', () => {
   const src = dash('dashboard/page.tsx');
-  assert.match(src, /role="alert"/);
+  assert.match(src, /from '@\/components\/ui\/states'/);
+  assert.match(src, /ErrorState/);
+  assert.match(src, /ReviewWarningState/);
+  assert.match(src, /EmptyState/);
+  assert.match(src, /fetchDashboard/);
+  assert.doesNotMatch(src, /border-red-200/);
+  assert.doesNotMatch(src, /border-amber-200/);
   assert.match(src, /Failed to load dashboard data/i);
 });
 
@@ -700,7 +706,6 @@ test('primary add actions use icon-library icons instead of route-local inline s
 
 test('remaining P0 dashboard route chrome uses lucide icons instead of inline svg', () => {
   const expectations: Array<[string, string[]]> = [
-    ['dashboard/page.tsx', ['CircleAlert']],
     ['export/page.tsx', ['Download', 'CircleAlert']],
     ['compliance/page.tsx', ['ChevronDown']],
     ['compliance/[principleId]/page.tsx', ['ChevronLeft']],

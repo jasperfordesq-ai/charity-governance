@@ -2,15 +2,14 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable, isSubscriptionLapseError } from '@/lib/plan-feature';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Button, Card, Progress, Chip } from '@heroui/react';
-import { CircleAlert } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { AppPage, AppSection } from '@/components/ui/app-page';
-import { ReviewWarningState } from '@/components/ui/states';
+import { EmptyState, ErrorState, ReviewWarningState } from '@/components/ui/states';
 import { DashboardActionLists } from './dashboard-action-lists';
 import type {
   ComplianceSummary,
@@ -64,91 +63,94 @@ export default function DashboardPage() {
 
   const currentYear = new Date().getFullYear();
 
-  useEffect(() => {
-    async function fetchDashboard() {
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    setSubscriptionLapsed(false);
+    try {
+      const [summaryRes, deadlinesRes, boardRes, signoffRes] = await Promise.all([
+        api.get(`/compliance/summary?year=${currentYear}`),
+        api.get('/deadlines'),
+        api.get('/board-members'),
+        api.get(`/compliance/signoff?year=${currentYear}`),
+      ]);
+
+      setCompliance(summaryRes.data);
+      setDeadlines(deadlinesRes.data?.data ?? deadlinesRes.data);
+      setSignoff(signoffRes.data);
+
       try {
-        const [summaryRes, deadlinesRes, boardRes, signoffRes] = await Promise.all([
-          api.get(`/compliance/summary?year=${currentYear}`),
-          api.get('/deadlines'),
-          api.get('/board-members'),
-          api.get(`/compliance/signoff?year=${currentYear}`),
-        ]);
-
-        setCompliance(summaryRes.data);
-        setDeadlines(deadlinesRes.data?.data ?? deadlinesRes.data);
-        setSignoff(signoffRes.data);
-
-        try {
-          const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
-          setApprovalReadiness(readinessRes.data);
-        } catch (readinessErr) {
-          logClientError('Failed to load approval readiness', readinessErr);
-          setApprovalReadiness(null);
-        }
-
-        // Derive board alerts from board members
-        const members = boardRes.data?.data ?? boardRes.data ?? [];
-        setBoardMemberCount(members.length);
-        const alerts: BoardAlert[] = [];
-        const now = new Date();
-
-        for (const m of members) {
-          if (!m.isActive) continue;
-          if (!m.conductSigned) {
-            alerts.push({
-              boardMemberId: m.id,
-              memberName: m.name,
-              type: 'conduct_unsigned',
-              message: `${m.name} has not signed the code of conduct`,
-            });
-          }
-          if (!m.inductionCompleted) {
-            alerts.push({
-              boardMemberId: m.id,
-              memberName: m.name,
-              type: 'induction_pending',
-              message: `${m.name} has not completed induction`,
-            });
-          }
-          if (m.appointedDate) {
-            const appointed = new Date(m.appointedDate);
-            const yearsServed = (now.getTime() - appointed.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-            if (yearsServed >= 8) {
-              alerts.push({
-                boardMemberId: m.id,
-                memberName: m.name,
-                type: 'term_expiring',
-                message: `${m.name} is approaching the 9-year term limit (${Math.floor(yearsServed)} years served)`,
-              });
-            }
-          }
-        }
-
-        setBoardAlerts(alerts);
-
-        try {
-          const registerRes = await api.get(`/governance-registers/summary?year=${currentYear}`);
-          setRegisterSummary(registerRes.data);
-        } catch (registerErr) {
-          if (!isPlanFeatureUnavailable(registerErr)) {
-            logClientError('Failed to load governance register summary', registerErr);
-          }
-          setRegisterSummary(null);
-        }
-      } catch (err) {
-        if (isSubscriptionLapseError(err)) {
-          setSubscriptionLapsed(true);
-        } else {
-          logClientError('Failed to load dashboard data', err);
-          setError(true);
-        }
-      } finally {
-        setLoading(false);
+        const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
+        setApprovalReadiness(readinessRes.data);
+      } catch (readinessErr) {
+        logClientError('Failed to load approval readiness', readinessErr);
+        setApprovalReadiness(null);
       }
-    }
 
-    fetchDashboard();
+      // Derive board alerts from board members
+      const members = boardRes.data?.data ?? boardRes.data ?? [];
+      setBoardMemberCount(members.length);
+      const alerts: BoardAlert[] = [];
+      const now = new Date();
+
+      for (const m of members) {
+        if (!m.isActive) continue;
+        if (!m.conductSigned) {
+          alerts.push({
+            boardMemberId: m.id,
+            memberName: m.name,
+            type: 'conduct_unsigned',
+            message: `${m.name} has not signed the code of conduct`,
+          });
+        }
+        if (!m.inductionCompleted) {
+          alerts.push({
+            boardMemberId: m.id,
+            memberName: m.name,
+            type: 'induction_pending',
+            message: `${m.name} has not completed induction`,
+          });
+        }
+        if (m.appointedDate) {
+          const appointed = new Date(m.appointedDate);
+          const yearsServed = (now.getTime() - appointed.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+          if (yearsServed >= 8) {
+            alerts.push({
+              boardMemberId: m.id,
+              memberName: m.name,
+              type: 'term_expiring',
+              message: `${m.name} is approaching the 9-year term limit (${Math.floor(yearsServed)} years served)`,
+            });
+          }
+        }
+      }
+
+      setBoardAlerts(alerts);
+
+      try {
+        const registerRes = await api.get(`/governance-registers/summary?year=${currentYear}`);
+        setRegisterSummary(registerRes.data);
+      } catch (registerErr) {
+        if (!isPlanFeatureUnavailable(registerErr)) {
+          logClientError('Failed to load governance register summary', registerErr);
+        }
+        setRegisterSummary(null);
+      }
+    } catch (err) {
+      if (isSubscriptionLapseError(err)) {
+        setSubscriptionLapsed(true);
+      } else {
+        logClientError('Failed to load dashboard data', err);
+        setError(true);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [currentYear]);
+
+  useEffect(() => {
+    void fetchDashboard();
+  }, [fetchDashboard]);
 
   const scoreColour = (pct: number) => {
     if (pct >= 80) return 'success';
@@ -236,31 +238,28 @@ export default function DashboardPage() {
 
       {/* ── Subscription lapsed state ── */}
       {subscriptionLapsed && !loading && (
-        <Card className="p-6 border border-amber-200 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/10" role="alert">
-          <div className="flex items-center gap-3">
-            <CircleAlert className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Your subscription or free trial has ended</p>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Reactivate your plan to regain access to your governance data.{' '}
-                <a href="/billing" className="font-semibold underline">Manage billing</a>
-              </p>
-            </div>
-          </div>
-        </Card>
+        <ReviewWarningState
+          title="Your subscription or free trial has ended"
+          description="Reactivate your plan to regain access to your governance data."
+          action={(
+            <Button as={Link} href="/billing" size="sm" variant="flat">
+              Manage billing
+            </Button>
+          )}
+        />
       )}
 
       {/* ── Error state ── */}
       {error && !loading && (
-        <Card className="p-6 border border-red-200 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/10" role="alert">
-          <div className="flex items-center gap-3">
-            <CircleAlert className="w-5 h-5 text-red-400 dark:text-red-300 flex-shrink-0" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-medium text-red-800 dark:text-red-300">Failed to load dashboard data</p>
-              <p className="text-xs text-red-600 dark:text-red-300">Please check your connection and try refreshing the page.</p>
-            </div>
-          </div>
-        </Card>
+        <ErrorState
+          title="Failed to load dashboard data"
+          description="Please check your connection and try again."
+          action={(
+            <Button size="sm" variant="flat" onPress={() => void fetchDashboard()}>
+              Try again
+            </Button>
+          )}
+        />
       )}
 
       {/* ── Overall compliance score ── */}
@@ -308,9 +307,15 @@ export default function DashboardPage() {
           </div>
         </Card>
       ) : (
-        <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-center text-gray-500 dark:text-gray-400">
-          No compliance data available. Start by reviewing your standards.
-        </Card>
+        <EmptyState
+          title="No compliance data available"
+          description="Start by reviewing your standards for this reporting year."
+          action={(
+            <Button as={Link} href="/compliance" size="sm" variant="flat">
+              Open compliance
+            </Button>
+          )}
+        />
       )}
 
       {/* ── Principle progress cards ── */}
