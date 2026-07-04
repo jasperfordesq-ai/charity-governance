@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `ec355f9`
+Working-tree base commit when generated: `d96bd54`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -82,6 +82,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Team feedback now uses the shared inline status primitive instead of route-local alert styling.
 - Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.
 - Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.
+- Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.
 
 ## Independent Audit Findings Still Driving Next Work
 

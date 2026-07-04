@@ -1,11 +1,10 @@
 'use client';
 
-import { Button } from '@heroui/react';
+import { Button, Checkbox } from '@heroui/react';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { DeadlineBadge, StatusChip } from '@/components/ui/status';
 import type { DeadlineResponse } from '@charitypilot/shared';
-import { Check } from 'lucide-react';
 
 type DeadlineDueState = 'complete' | 'overdue' | 'due-soon' | 'upcoming';
 
@@ -157,28 +156,18 @@ export function DeadlineListPanel({
                   <article key={deadline.id} className={`rounded-lg border p-4 ${meta.rowClass}`}>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex min-w-0 gap-3">
-                        <Button
-                          role="checkbox"
-                          aria-checked={deadline.isComplete}
+                        <Checkbox
+                          isSelected={deadline.isComplete}
                           aria-label={`Mark ${deadline.title} as ${deadline.isComplete ? 'incomplete' : 'complete'}`}
-                          isIconOnly
                           size="sm"
-                          variant={deadline.isComplete ? 'solid' : 'bordered'}
-                          color={deadline.isComplete ? 'success' : 'default'}
-                          isLoading={toggleDeadlineId === deadline.id}
+                          color="success"
                           isDisabled={
-                            (Boolean(toggleDeadlineId) && toggleDeadlineId !== deadline.id) ||
+                            Boolean(toggleDeadlineId) ||
                             Boolean(deletingDeadlineId)
                           }
-                          onPress={() => onToggleComplete(deadline)}
+                          onValueChange={() => void onToggleComplete(deadline)}
                           className="mt-0.5 shrink-0"
-                        >
-                          {deadline.isComplete ? (
-                            <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
-                          ) : (
-                            <span className="h-3 w-3 rounded-sm border border-current" aria-hidden="true" />
-                          )}
-                        </Button>
+                        />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className={`break-words text-sm font-semibold ${deadline.isComplete ? 'text-gray-500 line-through dark:text-gray-400' : 'text-gray-950 dark:text-gray-50'}`}>

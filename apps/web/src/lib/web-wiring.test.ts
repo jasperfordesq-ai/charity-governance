@@ -273,6 +273,15 @@ test('dashboard binary filters use HeroUI Switch instead of route-local switch m
   }
 });
 
+test('deadline completion uses HeroUI Checkbox instead of a button with checkbox ARIA', () => {
+  const src = dash('deadlines/deadline-list-panel.tsx');
+
+  assert.match(src, /Checkbox/);
+  assert.match(src, /from '@heroui\/react'/);
+  assert.doesNotMatch(src, /role="checkbox"/);
+  assert.doesNotMatch(src, /aria-checked=/);
+});
+
 test('the per-standard compliance editor announces its save state (Saving / Saved / Save failed)', () => {
   const src = [
     dash('compliance/[principleId]/page.tsx'),
@@ -485,7 +494,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         /isDisabled=\{[^}]*toggleDeadlineId/,
         /api\.delete\(`\/deadlines\/\$\{deleteDeadlineId\}`\)/,
         /Delete deadline/,
-        /role="checkbox"/,
+        /Checkbox/,
       ],
     },
     {
@@ -870,7 +879,6 @@ test('workflow status controls use lucide icons instead of inline svg', () => {
     ['component', 'cookie-consent.tsx', ['CircleAlert']],
     ['component', 'session-timeout.tsx', ['Clock']],
     ['dashboard', 'compliance/[principleId]/standard-editor-card.tsx', ['Check', 'CircleAlert', 'LoaderCircle']],
-    ['dashboard', 'deadlines/deadline-list-panel.tsx', ['Check']],
     ['dashboard', 'documents/document-list-panel.tsx', ['X']],
     ['dashboard', 'export/export-report-preview.tsx', ['Building2', 'CircleCheck', 'FileText', 'ListChecks', 'ShieldCheck', 'UsersRound']],
   ];
