@@ -67,6 +67,7 @@ const fixedInThisAuditBranch = [
   'Dashboard navigation now gives the mobile sidebar explicit ARIA controls, Escape-to-close focus recovery, non-tabbable closed mobile links, and source-backed principle breadcrumb labels.',
   'Dashboard, compliance, compliance detail, and export route chrome now use lucide-react status, chevron, and download icons instead of route-local inline SVG markup behind a wiring regression test.',
   'Auth routes now use lucide-react password visibility, validation, mail, and alert icons instead of route-local inline SVG markup behind a wiring regression test.',
+  'Marketing routes now use lucide-react feature, pricing, FAQ, and share/navigation icons instead of route-local inline SVG markup behind a wiring regression test.',
   'Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.',
   'The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.',
   'The document standard-link modal is split out of the oversized documents route behind a wiring regression test.',
@@ -289,13 +290,18 @@ function render() {
     .filter((route) => route.lines >= 450)
     .sort((a, b) => b.lines - a.lines);
   const p0Routes = routes.filter((route) => route.priority === 'P0');
+  const inlineSvgRoutes = routes.filter((route) => route.risks.includes('inline svg'));
   const oversizedRouteSummary = oversizedRoutes.slice(0, 6).map((r) => `${r.route} (${r.lines})`).join(', ');
   const productUiNextAction = oversizedRoutes.length > 0
     ? `Refactor and browser-QA the largest P0 workflows first: ${oversizedRouteSummary}.`
-    : 'Browser-QA flagged P0 workflows and clean remaining inline SVG/decorative styling.';
+    : inlineSvgRoutes.length > 0
+      ? 'Browser-QA flagged P0 workflows and clean remaining route-local inline SVG/decorative styling.'
+      : 'Browser-QA flagged P0 workflows and visual treatment on decorative or pill-heavy pages.';
   const frontendPolishFinding = oversizedRoutes.length > 0
     ? `Largest all-client route remains ${oversizedRoutes[0].route} (${oversizedRoutes[0].lines} lines); keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.`
-    : 'No route files remain over 450 lines; shift frontend polish toward browser QA, inline-icon cleanup, and visual treatment on flagged P0 routes.';
+    : inlineSvgRoutes.length > 0
+      ? 'No route files remain over 450 lines; shift frontend polish toward browser QA, route-local icon cleanup, and visual treatment on flagged P0 routes.'
+      : 'No route files remain over 450 lines and route page inline SVG findings are closed; shift frontend polish toward browser QA and visual treatment on flagged P0 routes.';
   const workflowPolishStep = oversizedRoutes.length > 0
     ? 'Decompose and polish the largest remaining P0 workflows: documents, board, dashboard, export, organisation, deadlines, compliance detail, and route-specific browser-QA follow-ups.'
     : 'Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.';

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 // stops applying the guard. CJS-safe (reads source; loads no ESM/React modules).
 
 const WEB = process.cwd(); // apps/web
+const repo = (p: string) => readFileSync(join(WEB, '..', '..', p), 'utf8');
 const dashPath = (p: string) => join(WEB, 'src', 'app', '(dashboard)', p);
 const dash = (p: string) => readFileSync(dashPath(p), 'utf8');
 const optionalDash = (p: string) => (existsSync(dashPath(p)) ? readFileSync(dashPath(p), 'utf8') : '');
@@ -688,6 +689,30 @@ test('auth routes use lucide icons instead of route-local inline svg', () => {
     }
     assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
   }
+});
+
+test('marketing routes use lucide icons instead of route-local inline svg', () => {
+  const expectations: Array<[string, string[]]> = [
+    ['page.tsx', ['CircleCheck', 'FolderOpen', 'UsersRound', 'CalendarDays', 'FileText', 'Clock', 'ChevronDown']],
+    ['features/page.tsx', ['CircleCheck', 'FolderOpen', 'UsersRound', 'CalendarDays', 'FileText', 'Check']],
+    ['pricing/page.tsx', ['Check', 'X', 'ChevronDown']],
+    ['blog/[slug]/page.tsx', ['ArrowLeft', 'Share2']],
+  ];
+
+  for (const [file, icons] of expectations) {
+    const src = app(`(marketing)/${file}`);
+    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for marketing icons`);
+    for (const icon of icons) {
+      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+    }
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
+test('platform audit no longer asks to clean route inline SVGs after route pages are clear', () => {
+  const audit = repo('docs/platform-completion-audit.md');
+  assert.doesNotMatch(audit, /clean remaining inline SVG/i);
+  assert.doesNotMatch(audit, /inline-icon cleanup/i);
 });
 
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {

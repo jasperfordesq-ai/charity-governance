@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `2e48efa`
+Working-tree base commit when generated: `298b445`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Browser-QA flagged P0 workflows and clean remaining inline SVG/decorative styling. |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Browser-QA flagged P0 workflows and visual treatment on decorative or pill-heavy pages. |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -40,6 +40,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Dashboard navigation now gives the mobile sidebar explicit ARIA controls, Escape-to-close focus recovery, non-tabbable closed mobile links, and source-backed principle breadcrumb labels.
 - Dashboard, compliance, compliance detail, and export route chrome now use lucide-react status, chevron, and download icons instead of route-local inline SVG markup behind a wiring regression test.
 - Auth routes now use lucide-react password visibility, validation, mail, and alert icons instead of route-local inline SVG markup behind a wiring regression test.
+- Marketing routes now use lucide-react feature, pricing, FAQ, and share/navigation icons instead of route-local inline SVG markup behind a wiring regression test.
 - Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.
 - The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.
 - The document standard-link modal is split out of the oversized documents route behind a wiring regression test.
@@ -76,17 +77,17 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Frontend polish | No route files remain over 450 lines; shift frontend polish toward browser QA, inline-icon cleanup, and visual treatment on flagged P0 routes. |
+| P1 | Frontend polish | No route files remain over 450 lines and route page inline SVG findings are closed; shift frontend polish toward browser QA and visual treatment on flagged P0 routes. |
 
 ## Route Audit
 
 | Priority | Route | Area | File | Lines | Client | Static audit finding |
 | --- | --- | --- | --- | ---: | --- | --- |
-| P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 377 | no | 7 inline svg icon(s) |
+| P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 159 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 367 | yes | decorative or pill-heavy styling needs visual QA |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
-| P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
+| P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 187 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 258 | yes | dark-mode relies mostly on layout; screenshot QA required |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 349 | yes | decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | no obvious static risk; verify in browser |
@@ -94,11 +95,11 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 390 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 253 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 407 | yes | no obvious static risk; verify in browser |
-| P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
+| P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 139 | yes | no obvious static risk; verify in browser |
 | P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 353 | yes | no obvious static risk; verify in browser |
-| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 264 | no | 3 inline svg icon(s) |
+| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 259 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 271 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 180 | yes | dark-mode relies mostly on layout; screenshot QA required |
