@@ -5,12 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
   Button,
-  Input,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
   Table,
   TableBody,
   TableCell,
@@ -24,10 +18,10 @@ import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { AppPage } from '@/components/ui/app-page';
 import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
-import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { StatusChip } from '@/components/ui/status';
 import { BoardEvidenceChips, TrusteeEvidencePromptCards, getTrusteeEvidence } from './board-evidence';
+import { BoardMemberModal } from './board-member-modal';
 import { BoardSummaryPanel } from './board-summary-panel';
 import type {
   BoardMemberResponse,
@@ -437,128 +431,34 @@ export default function BoardPage() {
         )}
       </DataList>
 
-      <Modal isOpen={memberModal.isOpen} onOpenChange={memberModal.onOpenChange} size="2xl" scrollBehavior="inside">
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>{editing ? 'Edit trustee' : 'Add trustee'}</ModalHeader>
-              <ModalBody className="gap-5">
-                <ValidationSummary errors={formError ? [formError] : []} />
-                <FieldGroup
-                  title="Trustee details"
-                  description="Record the name, role, contact, and appointment dates that should appear in the trustee register."
-                >
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Input
-                      label="Full name"
-                      placeholder="Mary O'Brien"
-                      value={formName}
-                      onValueChange={setFormName}
-                      isRequired
-                    />
-                    <Input
-                      label="Role"
-                      placeholder="Chairperson, secretary, treasurer, trustee"
-                      value={formRole}
-                      onValueChange={setFormRole}
-                      isRequired
-                    />
-                    <Input
-                      label="Email"
-                      placeholder="mary@example.com"
-                      type="email"
-                      value={formEmail}
-                      onValueChange={setFormEmail}
-                    />
-                    <Input
-                      label="Date appointed"
-                      type="date"
-                      value={formAppointed}
-                      onValueChange={setFormAppointed}
-                      isRequired
-                    />
-                    <Input
-                      label="Term end date"
-                      type="date"
-                      value={formTermEnd}
-                      onValueChange={setFormTermEnd}
-                    />
-                  </div>
-                </FieldGroup>
-
-                <FieldGroup
-                  title="Conduct and induction evidence"
-                  description="Use these fields to make trustee evidence prompts clear before annual review."
-                >
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-                      <label className="flex items-start gap-3 text-sm font-medium text-gray-800 dark:text-gray-200">
-                        <input
-                          type="checkbox"
-                          checked={formConductSigned}
-                          onChange={(event) => setFormConductSigned(event.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-                        />
-                        Code of conduct signed
-                      </label>
-                      {formConductSigned ? (
-                        <Input
-                          label="Date signed"
-                          type="date"
-                          value={formConductDate}
-                          onValueChange={setFormConductDate}
-                          className="mt-3"
-                        />
-                      ) : (
-                        <FormHint tone="warning">Add the signing date once the trustee conduct record is ready.</FormHint>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-                      <label className="flex items-start gap-3 text-sm font-medium text-gray-800 dark:text-gray-200">
-                        <input
-                          type="checkbox"
-                          checked={formInduction}
-                          onChange={(event) => setFormInduction(event.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-primary focus:ring-teal-primary dark:border-gray-700 dark:bg-gray-900"
-                        />
-                        Induction completed
-                      </label>
-                      {formInduction ? (
-                        <Input
-                          label="Induction date"
-                          type="date"
-                          value={formInductionDate}
-                          onValueChange={setFormInductionDate}
-                          className="mt-3"
-                        />
-                      ) : (
-                        <FormHint tone="warning">Add the induction date once the trustee has completed onboarding.</FormHint>
-                      )}
-                    </div>
-                  </div>
-                  <FormHint id="board-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
-                    {formDisabledReason || 'Saving updates the trustee register after the API confirms the change.'}
-                  </FormHint>
-                </FieldGroup>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="flat" onPress={() => { resetForm(); onClose(); }} isDisabled={saving}>
-                  Cancel
-                </Button>
-                <Button
-                  className="bg-teal-primary text-white hover:bg-teal-dark"
-                  onPress={handleSave}
-                  isLoading={saving}
-                  isDisabled={Boolean(formDisabledReason) || saving}
-                  aria-describedby="board-disabled-hint"
-                >
-                  {editing ? 'Save trustee' : 'Add trustee'}
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      <BoardMemberModal
+        isOpen={memberModal.isOpen}
+        onOpenChange={memberModal.onOpenChange}
+        editing={editing}
+        formError={formError}
+        formName={formName}
+        setFormName={setFormName}
+        formRole={formRole}
+        setFormRole={setFormRole}
+        formEmail={formEmail}
+        setFormEmail={setFormEmail}
+        formAppointed={formAppointed}
+        setFormAppointed={setFormAppointed}
+        formTermEnd={formTermEnd}
+        setFormTermEnd={setFormTermEnd}
+        formConductSigned={formConductSigned}
+        setFormConductSigned={setFormConductSigned}
+        formConductDate={formConductDate}
+        setFormConductDate={setFormConductDate}
+        formInduction={formInduction}
+        setFormInduction={setFormInduction}
+        formInductionDate={formInductionDate}
+        setFormInductionDate={setFormInductionDate}
+        formDisabledReason={formDisabledReason}
+        resetForm={resetForm}
+        handleSave={handleSave}
+        saving={saving}
+      />
     </AppPage>
   );
 }

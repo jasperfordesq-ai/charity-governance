@@ -342,6 +342,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'board/page.tsx',
+      extraFiles: ['board/board-member-modal.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -435,6 +436,21 @@ test('board summary UX is extracted from the oversized route file', () => {
   assert.match(summarySrc, /Review-ready register/);
   assert.match(summarySrc, /Conduct gaps/);
   assert.match(summarySrc, /ReviewFlag/);
+});
+
+test('board member form modal is extracted from the oversized route file', () => {
+  const pageSrc = dash('board/page.tsx');
+  const modalPath = dashPath('board/board-member-modal.tsx');
+  assert.ok(existsSync(modalPath), 'board member modal should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /BoardMemberModal/);
+  assert.doesNotMatch(pageSrc, /Trustee details/);
+  assert.doesNotMatch(pageSrc, /board-disabled-hint/);
+  assert.doesNotMatch(pageSrc, /Saving updates the trustee register after the API confirms the change/);
+  assert.match(modalSrc, /Trustee details/);
+  assert.match(modalSrc, /board-disabled-hint/);
+  assert.match(modalSrc, /Saving updates the trustee register after the API confirms the change/);
 });
 
 test('export report preview UI is extracted from the oversized route file', () => {

@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `78b23b5`
+Working-tree base commit when generated: `31fbb37`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 4 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /board (565), /registers (541), /organisation (511), /documents (480). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 4 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (541), /organisation (511), /documents (480), /board (465). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -58,6 +58,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.
 - The deadline list panel, status classifier, and summary helper are split out of the oversized deadlines route behind a wiring regression test.
 - The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.
+- The board member add/edit modal is split out of the oversized board route behind a wiring regression test.
 - The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.
 - The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.
 - The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.
@@ -79,7 +80,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 367 | yes | decorative or pill-heavy styling needs visual QA |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
-| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 565 | yes | large route file; refactor soon; 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 465 | yes | large route file; refactor soon; 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | 1 inline svg icon(s) |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
