@@ -68,6 +68,9 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'documents/document-link-modal.tsx',
     'documents/document-delete-modal.tsx',
   ],
+  'organisation/page.tsx': [
+    'organisation/organisation-profile-form.tsx',
+  ],
 };
 for (const file of DOUBLE_SUBMIT_GUARDED) {
   test(`${file} guards its primary mutation against double-submit (isLoading)`, () => {
@@ -95,6 +98,7 @@ test('organisation warns before discarding unsaved edits (no silent data loss)',
 test('organisation captures conditional obligation facts for review-ready workflows', () => {
   const src = [
     dash('organisation/page.tsx'),
+    optionalDash('organisation/organisation-profile-form.tsx'),
     optionalDash('organisation/organisation-conditional-profile.tsx'),
   ].join('\n');
   for (const term of [
@@ -113,16 +117,37 @@ test('organisation captures conditional obligation facts for review-ready workfl
 
 test('organisation conditional obligation UX is extracted from the oversized route file', () => {
   const pageSrc = dash('organisation/page.tsx');
+  const formPath = dashPath('organisation/organisation-profile-form.tsx');
+  assert.ok(existsSync(formPath), 'organisation profile form should own conditional profile rendering');
+  const formSrc = readFileSync(formPath, 'utf8');
   const profilePath = dashPath('organisation/organisation-conditional-profile.tsx');
   assert.ok(existsSync(profilePath), 'organisation conditional profile UI should be split out of page.tsx');
   const profileSrc = readFileSync(profilePath, 'utf8');
 
-  assert.match(pageSrc, /OrganisationConditionalProfileFields/);
+  assert.doesNotMatch(pageSrc, /OrganisationConditionalProfileFields/);
+  assert.match(formSrc, /OrganisationConditionalProfileFields/);
   assert.match(pageSrc, /normaliseConditionalObligationProfile/);
   assert.doesNotMatch(pageSrc, /CONDITIONAL_OBLIGATION_FIELDS/);
   assert.match(profileSrc, /CONDITIONAL_OBLIGATION_FIELDS/);
   assert.match(profileSrc, /Professional review/);
   assert.match(profileSrc, /usesDataProcessors/);
+});
+
+test('organisation profile form is extracted from the oversized route file', () => {
+  const pageSrc = dash('organisation/page.tsx');
+  const formPath = dashPath('organisation/organisation-profile-form.tsx');
+  assert.ok(existsSync(formPath), 'organisation profile form should be split out of page.tsx');
+  const formSrc = readFileSync(formPath, 'utf8');
+
+  assert.match(pageSrc, /OrganisationProfileForm/);
+  assert.doesNotMatch(pageSrc, /Legal identity/);
+  assert.doesNotMatch(pageSrc, /Choose at least one purpose/);
+  assert.doesNotMatch(pageSrc, /financial-year-hint/);
+  assert.doesNotMatch(pageSrc, /Save profile/);
+  assert.match(formSrc, /Legal identity/);
+  assert.match(formSrc, /Choose at least one purpose/);
+  assert.match(formSrc, /financial-year-hint/);
+  assert.match(formSrc, /Save profile/);
 });
 
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,
@@ -369,6 +394,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'organisation/page.tsx',
+      extraFiles: ['organisation/organisation-profile-form.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['ErrorState']],
