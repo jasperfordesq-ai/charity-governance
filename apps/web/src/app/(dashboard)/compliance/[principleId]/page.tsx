@@ -3,11 +3,12 @@
 import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, Button } from '@heroui/react';
+import { Button } from '@heroui/react';
 import { ChevronLeft } from 'lucide-react';
 import { api } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/errors';
 import { AppPage } from '@/components/ui/app-page';
-import { ReviewWarningState } from '@/components/ui/states';
+import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import { StandardEditorCard, type SaveState, type StandardFormState } from './standard-editor-card';
 import type {
@@ -40,6 +41,7 @@ export default function PrincipleDetailPage() {
   const [saveState, setSaveState] = useState<SaveState>({});
   const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   // Debounce timers
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -65,6 +67,7 @@ export default function PrincipleDetailPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
+      setLoadError('');
       try {
         const [principleRes, recordsRes] = await Promise.all([
           api.get(`/compliance/principles/${principleId}`),
@@ -103,7 +106,10 @@ export default function PrincipleDetailPage() {
         setFormState(initialForm);
         await refreshApprovalReadiness();
       } catch (err) {
+        const message = apiErrorMessage(err, 'Compliance principle could not be loaded. Please try again.');
         logClientError('Failed to load principle data', err);
+        setPrinciple(null);
+        setLoadError(message);
       } finally {
         setLoading(false);
       }
@@ -281,34 +287,38 @@ export default function PrincipleDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="animate-pulse">
-          <div className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mb-3" />
-          <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-3/4 mb-8" />
-        </div>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="p-6 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
-            <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-3" />
-            <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full mb-4" />
-            <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-3" />
-            <div className="h-20 bg-gray-200 dark:bg-gray-800 rounded w-full" />
-          </Card>
-        ))}
-      </div>
+      <AppPage
+        eyebrow={`Reporting year ${currentYear}`}
+        title="Loading principle"
+        description="Preparing the standard editor and evidence prompts for this reporting year."
+      >
+        <LoadingState
+          variant="page"
+          title="Loading compliance principle"
+          description="Checking standards, records, evidence prompts, and approval-readiness."
+        />
+      </AppPage>
     );
   }
 
   if (!principle) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">Principle not found.</p>
-        <Button
-          className="mt-4 bg-teal-primary text-white"
-          onPress={navigateBackToCompliance}
-        >
-          Back to Compliance
-        </Button>
-      </div>
+      <AppPage
+        eyebrow={`Reporting year ${currentYear}`}
+        title="Compliance principle"
+        description="Open a valid Governance Code principle to edit standards, evidence, and explanations."
+      >
+        <ErrorState
+          variant="page"
+          title={loadError ? 'Compliance principle could not be loaded' : 'Principle not found'}
+          description={loadError || 'This principle is not available for the current organisation workspace.'}
+          action={(
+            <Button className="bg-teal-primary text-white" onPress={navigateBackToCompliance}>
+              Back to Compliance
+            </Button>
+          )}
+        />
+      </AppPage>
     );
   }
 

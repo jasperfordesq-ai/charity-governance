@@ -310,6 +310,19 @@ test('principle detail standard editor card is extracted from the oversized rout
   assert.match(cardSrc, /onRetrySave/);
 });
 
+test('principle detail uses shared loading and error state primitives', () => {
+  const src = dash('compliance/[principleId]/page.tsx');
+
+  assert.match(src, /from '@\/components\/ui\/states'/);
+  assert.match(src, /LoadingState/);
+  assert.match(src, /ErrorState/);
+  assert.match(src, /apiErrorMessage/);
+  assert.match(src, /setLoadError/);
+  assert.doesNotMatch(src, /animate-pulse/);
+  assert.doesNotMatch(src, /text-center py-12/);
+  assert.doesNotMatch(src, /Principle not found\.<\/p>/);
+});
+
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {
   const src = dash('board/page.tsx');
   assert.match(src, /toast\(/);
