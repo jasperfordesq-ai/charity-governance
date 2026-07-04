@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `31fbb37`
+Working-tree base commit when generated: `d09c168`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 4 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (541), /organisation (511), /documents (480), /board (465). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 3 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /organisation (511), /documents (480), /board (465). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -52,6 +52,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The register modal record forms and payload normaliser are split out of the oversized registers route behind a wiring regression test.
 - The register record modal shell is split out of the oversized registers route behind a wiring regression test.
 - The register operational record list sections are split out of the oversized registers route behind a wiring regression test.
+- The register workflow loading, stale-request guard, save mutations, and priority derivation are split into a route-local hook behind a wiring regression test.
 - The compliance principle standard editor card and save-state UI are split out of the oversized compliance detail route behind a wiring regression test.
 - The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.
 - The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.
@@ -69,7 +70,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Frontend polish | Largest all-client routes remain registers, documents, deadlines, compliance detail, board, and organisation; split route-local forms/cards/hooks before broader visual polish. |
+| P1 | Frontend polish | Largest all-client routes remain organisation, documents, and board; keep splitting route-local forms/cards/hooks before broader visual polish and browser QA. |
 
 ## Route Audit
 
@@ -94,7 +95,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 264 | no | 3 inline svg icon(s) |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 272 | yes | 7 inline svg icon(s) |
-| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 541 | yes | large route file; refactor soon; dark-mode relies mostly on layout; screenshot QA required |
+| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 180 | yes | dark-mode relies mostly on layout; screenshot QA required |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 392 | yes | decorative or pill-heavy styling needs visual QA |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 198 | yes | 4 inline svg icon(s) |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 401 | yes | no obvious static risk; verify in browser |
@@ -177,7 +178,7 @@ The matrix must stay source-cited and review-ready. The following official sourc
 ## Next Completion Sequence
 
 1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
-2. Decompose and polish the largest P0 workflows: registers, documents, board, dashboard, export, organisation, deadlines, and compliance detail.
+2. Decompose and polish the largest remaining P0 workflows: organisation, documents, board, dashboard, export, deadlines, compliance detail, and route-specific browser-QA follow-ups.
 3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
 4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.
 5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.

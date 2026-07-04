@@ -79,6 +79,7 @@ const fixedInThisAuditBranch = [
   'The register modal record forms and payload normaliser are split out of the oversized registers route behind a wiring regression test.',
   'The register record modal shell is split out of the oversized registers route behind a wiring regression test.',
   'The register operational record list sections are split out of the oversized registers route behind a wiring regression test.',
+  'The register workflow loading, stale-request guard, save mutations, and priority derivation are split into a route-local hook behind a wiring regression test.',
   'The compliance principle standard editor card and save-state UI are split out of the oversized compliance detail route behind a wiring regression test.',
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
@@ -94,7 +95,7 @@ const fixedInThisAuditBranch = [
 
 const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Frontend polish', 'Largest all-client routes remain registers, documents, deadlines, compliance detail, board, and organisation; split route-local forms/cards/hooks before broader visual polish.'],
+  ['P1', 'Frontend polish', 'Largest all-client routes remain organisation, documents, and board; keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.'],
 ];
 
 const officialSources = [
@@ -343,7 +344,7 @@ function render() {
 
   md += `\n## Next Completion Sequence\n\n`;
   md += `1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.\n`;
-  md += `2. Decompose and polish the largest P0 workflows: registers, documents, board, dashboard, export, organisation, deadlines, and compliance detail.\n`;
+  md += `2. Decompose and polish the largest remaining P0 workflows: organisation, documents, board, dashboard, export, deadlines, compliance detail, and route-specific browser-QA follow-ups.\n`;
   md += `3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.\n`;
   md += `4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.\n`;
   md += `5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.\n`;

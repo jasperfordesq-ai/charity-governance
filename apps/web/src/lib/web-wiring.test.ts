@@ -24,7 +24,10 @@ test('dashboard applies the plan-feature + subscription-lapse helpers (gracefull
 });
 
 test('registers gates the whole page behind a Complete upsell on a plan-feature denial', () => {
-  const src = dash('registers/page.tsx');
+  const src = [
+    dash('registers/page.tsx'),
+    optionalDash('registers/use-registers-workflow.ts'),
+  ].join('\n');
   assert.match(src, /from '@\/lib\/plan-feature'/);
   assert.ok(src.includes('isPlanFeatureUnavailable'));
   // The upsell card links to billing rather than rendering a broken error.
@@ -646,6 +649,7 @@ test('deadlines list panel is extracted from the oversized route file', () => {
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
   const src = [
     dash('registers/page.tsx'),
+    optionalDash('registers/use-registers-workflow.ts'),
     optionalDash('registers/register-compliance-cards.tsx'),
     optionalDash('registers/register-overview-panel.tsx'),
     optionalDash('registers/register-record-forms.tsx'),
@@ -765,6 +769,7 @@ test('regulator guide prioritises profile-triggered obligations without legal ce
 test('registers workflow prioritises conditional obligation register work from the organisation profile', () => {
   const src = [
     dash('registers/page.tsx'),
+    optionalDash('registers/use-registers-workflow.ts'),
     optionalDash('registers/register-priority-panel.tsx'),
   ].join('\n');
   for (const term of [
@@ -790,15 +795,39 @@ test('registers workflow prioritises conditional obligation register work from t
   }
 });
 
+test('registers workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const hookPath = dashPath('registers/use-registers-workflow.ts');
+  assert.ok(existsSync(hookPath), 'registers workflow hook should be split out of page.tsx');
+  const hookSrc = readFileSync(hookPath, 'utf8');
+
+  assert.match(pageSrc, /useRegistersWorkflow/);
+  assert.doesNotMatch(pageSrc, /registersRequestSeq/);
+  assert.doesNotMatch(pageSrc, /isLatestRegistersRequest/);
+  assert.doesNotMatch(pageSrc, /function emptyAnnual|const emptyAnnual/);
+  assert.doesNotMatch(pageSrc, /function emptyFinancial|const emptyFinancial/);
+  assert.match(hookSrc, /export function useRegistersWorkflow/);
+  assert.match(hookSrc, /registersRequestSeq/);
+  assert.match(hookSrc, /isLatestRegistersRequest/);
+  assert.match(hookSrc, /emptyAnnual/);
+  assert.match(hookSrc, /emptyFinancial/);
+  assert.match(hookSrc, /formDisabledReason/);
+});
+
 test('registers profile-priority UX is extracted from the oversized route file', () => {
   const pageSrc = dash('registers/page.tsx');
+  const hookPath = dashPath('registers/use-registers-workflow.ts');
+  assert.ok(existsSync(hookPath), 'register workflow hook should own priority derivation');
+  const hookSrc = readFileSync(hookPath, 'utf8');
   const panelPath = dashPath('registers/register-priority-panel.tsx');
   assert.ok(existsSync(panelPath), 'register priority panel/model should be split out of page.tsx');
   const panelSrc = readFileSync(panelPath, 'utf8');
 
   assert.match(pageSrc, /RegisterPriorityPanel/);
-  assert.match(pageSrc, /buildRegisterPriorities/);
-  assert.match(pageSrc, /buildRegisterSearchText/);
+  assert.doesNotMatch(pageSrc, /buildRegisterPriorities/);
+  assert.doesNotMatch(pageSrc, /buildRegisterSearchText/);
+  assert.match(hookSrc, /buildRegisterPriorities/);
+  assert.match(hookSrc, /buildRegisterSearchText/);
   assert.doesNotMatch(pageSrc, /registerPriorityEvidence/);
   assert.match(panelSrc, /registerPriorityEvidence/);
   assert.match(panelSrc, /Profile-triggered register priorities/);
@@ -836,6 +865,9 @@ test('registers overview summary panel is extracted from the oversized route fil
 
 test('registers modal record forms are extracted from the oversized route file', () => {
   const pageSrc = dash('registers/page.tsx');
+  const hookPath = dashPath('registers/use-registers-workflow.ts');
+  assert.ok(existsSync(hookPath), 'register workflow hook should own record normalization calls');
+  const hookSrc = readFileSync(hookPath, 'utf8');
   const formsPath = dashPath('registers/register-record-forms.tsx');
   assert.ok(existsSync(formsPath), 'register record forms should be split out of page.tsx');
   const formsSrc = readFileSync(formsPath, 'utf8');
@@ -844,7 +876,8 @@ test('registers modal record forms are extracted from the oversized route file',
   assert.doesNotMatch(pageSrc, /RiskForm/);
   assert.doesNotMatch(pageSrc, /ComplaintForm/);
   assert.doesNotMatch(pageSrc, /FundraisingForm/);
-  assert.match(pageSrc, /normalizeRegisterForm/);
+  assert.doesNotMatch(pageSrc, /normalizeRegisterForm/);
+  assert.match(hookSrc, /normalizeRegisterForm/);
   assert.doesNotMatch(pageSrc, /Conflict record/);
   assert.doesNotMatch(pageSrc, /Fundraising activity/);
   assert.doesNotMatch(pageSrc, /function normalizeForm/);

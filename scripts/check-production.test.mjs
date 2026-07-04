@@ -2659,7 +2659,10 @@ test('web export opens the API-rendered report directly with opener isolation', 
 });
 
 test('registers page handles Complete-plan denial as an upgrade state', () => {
-  const registersPage = readRepoFile('apps/web/src/app/(dashboard)/registers/page.tsx');
+  const registersPage = [
+    readRepoFile('apps/web/src/app/(dashboard)/registers/page.tsx'),
+    readRepoFile('apps/web/src/app/(dashboard)/registers/use-registers-workflow.ts'),
+  ].join('\n');
 
   assert.match(registersPage, /isPlanFeatureUnavailable/);
   assert.match(registersPage, /setPlanUnavailable\(true\)/);
