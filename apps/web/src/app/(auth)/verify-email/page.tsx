@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
+import { Check, CircleAlert, Mail } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -97,9 +98,7 @@ function VerifyEmailContent() {
             {status === 'pending' && (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-lg bg-teal-primary/10 dark:bg-teal-bright/10 flex items-center justify-center mx-auto mb-5">
-                  <svg className="w-7 h-7 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 7.5v9a2.25 2.25 0 01-2.25 2.25h-15A2.25 2.25 0 012.25 16.5v-9m19.5 0A2.25 2.25 0 0019.5 5.25h-15A2.25 2.25 0 002.25 7.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 9.66A2.25 2.25 0 012.25 7.743V7.5" />
-                  </svg>
+                  <Mail className="w-7 h-7 text-teal-primary" aria-hidden="true" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Check your email</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
@@ -133,9 +132,7 @@ function VerifyEmailContent() {
             {status === 'success' && (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-lg bg-green-50 dark:bg-green-950/40 flex items-center justify-center mx-auto mb-5">
-                  <svg className="w-7 h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                  </svg>
+                  <Check className="w-7 h-7 text-green-500" aria-hidden="true" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Email verified</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
@@ -151,9 +148,7 @@ function VerifyEmailContent() {
             {status === 'error' && (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-lg bg-red-50 dark:bg-red-950/40 flex items-center justify-center mx-auto mb-5">
-                  <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                  </svg>
+                  <CircleAlert className="w-7 h-7 text-red-500" aria-hidden="true" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Verification failed</h1>
                 <p role="alert" className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>

@@ -671,6 +671,25 @@ test('remaining P0 dashboard route chrome uses lucide icons instead of inline sv
   }
 });
 
+test('auth routes use lucide icons instead of route-local inline svg', () => {
+  const expectations: Array<[string, string[]]> = [
+    ['login/page.tsx', ['Eye', 'EyeOff']],
+    ['register/page.tsx', ['Eye', 'EyeOff', 'Check', 'Circle']],
+    ['reset-password/page.tsx', ['Eye', 'EyeOff', 'Check']],
+    ['forgot-password/page.tsx', ['Mail']],
+    ['verify-email/page.tsx', ['Mail', 'Check', 'CircleAlert']],
+  ];
+
+  for (const [file, icons] of expectations) {
+    const src = app(`(auth)/${file}`);
+    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for auth icons`);
+    for (const icon of icons) {
+      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+    }
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
   const src = [
     dash('deadlines/page.tsx'),

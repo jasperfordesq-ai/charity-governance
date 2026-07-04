@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
+import { Mail } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { forgotPasswordSchema, firstSchemaError } from '@/lib/form-schemas';
@@ -40,9 +41,7 @@ export default function ForgotPasswordPage() {
             {isSuccess ? (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-lg bg-teal-primary/10 dark:bg-teal-bright/10 flex items-center justify-center mx-auto mb-5">
-                  <svg className="w-7 h-7 text-teal-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                  </svg>
+                  <Mail className="w-7 h-7 text-teal-primary" aria-hidden="true" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Check your email</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
