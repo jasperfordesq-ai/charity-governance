@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { MobileNav } from './MobileNav';
 import { BackToTop } from '@/components/back-to-top';
+import { ShieldCheck } from 'lucide-react';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
@@ -17,28 +18,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group">
-              <svg
-                className="w-7 h-7 text-teal-primary shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="9" strokeWidth={1.5} />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 2v2m0 16v2M2 12h2m16 0h2m-4.343-7.657-1.414 1.414M7.757 16.243l-1.414 1.414M19.657 19.657l-1.414-1.414M7.757 7.757 6.343 6.343"
-                />
-                <circle cx="12" cy="12" r="2.5" fill="currentColor" strokeWidth={0} />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="m12 12 3-5"
-                  strokeWidth={2}
-                />
-              </svg>
+              <ShieldCheck className="w-7 h-7 text-teal-primary shrink-0" strokeWidth={1.5} aria-hidden="true" />
               <span className="text-xl font-extrabold text-teal-primary dark:text-teal-bright tracking-tight group-hover:text-teal-dark dark:group-hover:text-teal-light transition-colors">
                 CharityPilot
               </span>

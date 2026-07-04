@@ -739,6 +739,26 @@ test('dashboard layout navigation uses lucide icons instead of inline svg', () =
   assert.doesNotMatch(src, /<svg\b/, 'dashboard layout should not carry hand-drawn inline SVG markup');
 });
 
+test('app shell and error chrome use lucide icons instead of inline svg', () => {
+  const expectations: Array<[string, string, string[]]> = [
+    ['app', 'error.tsx', ['CircleAlert', 'RefreshCcw']],
+    ['app', 'not-found.tsx', ['ArrowLeft']],
+    ['dashboard', 'error.tsx', ['CircleAlert', 'RefreshCcw']],
+    ['app', '(auth)/layout.tsx', ['ArrowLeft', 'ShieldCheck']],
+    ['app', '(marketing)/layout.tsx', ['ShieldCheck']],
+    ['app', '(marketing)/MobileNav.tsx', ['Menu', 'X']],
+  ];
+
+  for (const [scope, file, icons] of expectations) {
+    const src = scope === 'dashboard' ? dash(file) : app(file);
+    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for app shell icons`);
+    for (const icon of icons) {
+      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+    }
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['login/page.tsx', ['Eye', 'EyeOff']],

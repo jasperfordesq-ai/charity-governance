@@ -2,6 +2,7 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { useEffect } from 'react';
+import { CircleAlert, RefreshCcw } from 'lucide-react';
 
 interface ErrorProps {
   error: Error & { digest?: string };
@@ -27,19 +28,7 @@ export default function Error({ error, reset }: ErrorProps) {
         {/* Error icon */}
         <div className="flex items-center justify-center mb-6">
           <div className="w-16 h-16 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-red-400 dark:text-red-300"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-              />
-            </svg>
+            <CircleAlert className="w-8 h-8 text-red-400 dark:text-red-300" strokeWidth={1.5} aria-hidden="true" />
           </div>
         </div>
 
@@ -60,19 +49,7 @@ export default function Error({ error, reset }: ErrorProps) {
           onClick={reset}
           className="inline-flex items-center gap-2 bg-teal-primary text-white font-semibold px-6 py-3 rounded-full hover:bg-teal-dark transition-colors"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-            />
-          </svg>
+          <RefreshCcw className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
           Try again
         </button>
       </div>
