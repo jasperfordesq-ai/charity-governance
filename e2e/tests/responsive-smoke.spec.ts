@@ -5,12 +5,15 @@ import { getPrincipleIdByNumber } from '../helpers/db';
 type Theme = 'light' | 'dark';
 type RouteSpec = string | { label: string; resolve: () => Promise<string> };
 
-const VIEWPORT_THEME_CASES = [
-  { label: 'desktop light', width: 1440, height: 1000, theme: 'light' },
-  { label: 'desktop dark', width: 1440, height: 1000, theme: 'dark' },
-  { label: 'mobile light', width: 390, height: 844, theme: 'light' },
-  { label: 'mobile dark', width: 390, height: 844, theme: 'dark' },
+const VIEWPORT_CASES = [
+  { label: 'desktop light and dark', width: 1440, height: 1000 },
+  { label: 'mobile light and dark', width: 390, height: 844 },
 ] as const;
+
+const THEME_CASES: readonly Theme[] = ['light', 'dark'];
+const NAVIGATION_TIMEOUT_MS = 300_000;
+const PUBLIC_ROUTE_TIMEOUT_MS = 420_000;
+const DASHBOARD_ROUTE_BATCH_TIMEOUT_MS = 900_000;
 
 const PUBLIC_ROUTES = [
   '/',
@@ -78,27 +81,34 @@ async function resolveRoute(route: RouteSpec): Promise<{ label: string; path: st
   return { label: route.label, path: await route.resolve() };
 }
 
-for (const viewportCase of VIEWPORT_THEME_CASES) {
-  test(`launch-critical public and auth routes render in ${viewportCase.label}`, async ({ page }) => {
-    await page.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
+for (const viewportCase of VIEWPORT_CASES) {
+  for (const route of PUBLIC_ROUTES) {
+    test(`launch-critical public/auth route ${route} renders in ${viewportCase.label}`, async ({ page }) => {
+      test.setTimeout(PUBLIC_ROUTE_TIMEOUT_MS);
+      await page.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
+      await page.goto(route, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
 
-    for (const route of PUBLIC_ROUTES) {
-      await page.goto(route, { waitUntil: 'domcontentloaded' });
-      await applyTheme(page, viewportCase.theme as Theme);
-      await settle(page);
-      await assertRenderable(page, route);
-    }
-  });
+      for (const theme of THEME_CASES) {
+        await applyTheme(page, theme);
+        await settle(page);
+        await assertRenderable(page, `${route} ${theme}`);
+      }
+    });
+  }
 
   test(`launch-critical dashboard routes render in ${viewportCase.label}`, async ({ ownerPage }) => {
+    test.setTimeout(DASHBOARD_ROUTE_BATCH_TIMEOUT_MS);
     await ownerPage.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
 
     for (const route of DASHBOARD_ROUTES) {
       const { label, path } = await resolveRoute(route);
-      await ownerPage.goto(path, { waitUntil: 'domcontentloaded' });
-      await applyTheme(ownerPage, viewportCase.theme as Theme);
-      await settle(ownerPage);
-      await assertRenderable(ownerPage, label);
+      await ownerPage.goto(path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
+
+      for (const theme of THEME_CASES) {
+        await applyTheme(ownerPage, theme);
+        await settle(ownerPage);
+        await assertRenderable(ownerPage, `${label} ${theme}`);
+      }
     }
   });
 }

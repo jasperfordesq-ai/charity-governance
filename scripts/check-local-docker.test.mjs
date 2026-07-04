@@ -225,6 +225,21 @@ test('dashboard accessibility scans allow protected route cold compiles to finis
   assert.match(playwrightConfig, /navigationTimeout:\s*150_000/);
 });
 
+test('e2e stack readiness fetches have bounded request lifetimes', () => {
+  const globalSetup = readRepoFile('e2e/global-setup.ts');
+
+  assert.match(globalSetup, /const STACK_READINESS_TIMEOUT_MS = 180_000/);
+  assert.match(globalSetup, /const WEB_READINESS_TIMEOUT_MS = 360_000/);
+  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = 300_000/);
+  assert.match(globalSetup, /async function fetchWithTimeout\(url: string,\s*timeoutMs: number\): Promise<Response>/);
+  assert.match(globalSetup, /const remainingMs = Math\.max\(1,\s*deadline - Date\.now\(\)\)/);
+  assert.match(globalSetup, /await fetchWithTimeout\(url,\s*remainingMs\)/);
+  assert.match(globalSetup, /await fetchWithTimeout\(url,\s*ROUTE_WARM_TIMEOUT_MS\)/);
+  assert.match(globalSetup, /waitForOk\(`\$\{WEB_BASE_URL\}\/`,\s*'Web app',\s*WEB_READINESS_TIMEOUT_MS\)/);
+  assert.match(globalSetup, /finally\s*\{\s*clearTimeout\(timer\);\s*\}/);
+  assert.doesNotMatch(globalSetup, /await fetch\(url,\s*\{\s*redirect:\s*'manual'\s*\}\)/);
+});
+
 test('accessibility scans navigate to rendered pages without waiting on dev-only load noise', () => {
   const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
 
@@ -237,6 +252,8 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
 
   assert.match(fixtures, /await page\.goto\('\/register',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
   assert.match(fixtures, /await page\.goto\('\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /page\.waitForURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
+  assert.match(fixtures, /expect\(page\)\.toHaveURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
   assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*180_000\s*\}/);
 });
 
@@ -247,13 +264,22 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.equal(existsSync(responsiveSpecPath), true, 'responsive-smoke.spec.ts must exist');
 
   const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
-  assert.match(responsiveSpec, /launch-critical public and auth routes/);
-  assert.match(responsiveSpec, /launch-critical dashboard routes/);
-  assert.match(responsiveSpec, /mobile dark/);
-  assert.match(responsiveSpec, /mobile light/);
-  assert.match(responsiveSpec, /desktop light/);
-  assert.match(responsiveSpec, /desktop dark/);
+  assert.match(responsiveSpec, /mobile light and dark/);
+  assert.match(responsiveSpec, /desktop light and dark/);
   assert.match(responsiveSpec, /horizontal page overflow/);
+  assert.match(responsiveSpec, /launch-critical public\/auth route/);
+  assert.match(responsiveSpec, /launch-critical dashboard routes render/);
+  assert.match(responsiveSpec, /const NAVIGATION_TIMEOUT_MS = 300_000/);
+  assert.match(responsiveSpec, /const PUBLIC_ROUTE_TIMEOUT_MS = 420_000/);
+  assert.match(responsiveSpec, /const DASHBOARD_ROUTE_BATCH_TIMEOUT_MS = 900_000/);
+  assert.match(responsiveSpec, /test\.setTimeout\(PUBLIC_ROUTE_TIMEOUT_MS\)/);
+  assert.match(responsiveSpec, /test\.setTimeout\(DASHBOARD_ROUTE_BATCH_TIMEOUT_MS\)/);
+  assert.match(responsiveSpec, /page\.goto\(route,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(responsiveSpec, /for \(const route of DASHBOARD_ROUTES\)[\s\S]*ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(responsiveSpec, /waitUntil:\s*'commit'/);
+  assert.doesNotMatch(responsiveSpec, /waitUntil:\s*'domcontentloaded'/);
+  assert.doesNotMatch(responsiveSpec, /launch-critical public and auth routes render/);
+  assert.doesNotMatch(responsiveSpec, /launch-critical dashboard route \$\{testLabel\}/);
   assert.doesNotMatch(responsiveSpec, /waitForLoadState\('networkidle'\)/);
 });
 

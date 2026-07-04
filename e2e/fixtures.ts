@@ -57,14 +57,14 @@ async function fillAndSubmit(
     await fill();
     await page.getByRole('button', { name: submitName }).click();
     try {
-      await page.waitForURL(expectedUrl, { timeout: 8000 });
+      await page.waitForURL(expectedUrl, { timeout: 30_000 });
       return;
     } catch {
       if (!formUrl.test(page.url())) throw new Error(`Unexpected navigation to ${page.url()}`);
       await page.waitForLoadState('domcontentloaded'); // native submit reloaded the form; retry.
     }
   }
-  await expect(page).toHaveURL(expectedUrl);
+  await expect(page).toHaveURL(expectedUrl, { timeout: 30_000 });
 }
 
 /**

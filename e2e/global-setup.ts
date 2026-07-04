@@ -6,13 +6,27 @@ const STARTUP_HINT =
   'CharityPilot E2E expects the local Docker stack to be running:\n' +
   '  docker compose -f compose.yml -f compose.local.yml up\n' +
   'Then the web app is at http://localhost:3003 and the API at http://localhost:3002.';
+const STACK_READINESS_TIMEOUT_MS = 180_000;
+const WEB_READINESS_TIMEOUT_MS = 360_000;
+const ROUTE_WARM_TIMEOUT_MS = 300_000;
 
-async function waitForOk(url: string, label: string, timeoutMs = 180_000): Promise<void> {
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { redirect: 'manual', signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function waitForOk(url: string, label: string, timeoutMs = STACK_READINESS_TIMEOUT_MS): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(url, { redirect: 'manual' });
+      const remainingMs = Math.max(1, deadline - Date.now());
+      const res = await fetchWithTimeout(url, remainingMs);
       // Any non-5xx response means the service is up and serving.
       if (res.status < 500) return;
       lastErr = new Error(`${label} responded ${res.status}`);
@@ -27,15 +41,12 @@ async function waitForOk(url: string, label: string, timeoutMs = 180_000): Promi
 /**
  * Pre-compile the public routes the suite navigates to. Next runs in DEV mode on the
  * local stack and compiles each route on its first request; doing it once here (instead
- * of inside a 90s-bounded test navigation) keeps the per-test cold-compile from flaking
+ * of inside a bounded test navigation) keeps the per-test cold-compile from flaking
  * under host load. Best-effort: failures are ignored — the tests still gate correctness.
  */
-async function warmFetch(url: string, init: RequestInit = {}): Promise<void> {
+async function warmFetch(url: string): Promise<void> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 150_000);
-    await fetch(url, { redirect: 'manual', signal: controller.signal, ...init });
-    clearTimeout(timer);
+    await fetchWithTimeout(url, ROUTE_WARM_TIMEOUT_MS);
   } catch {
     // Ignore — warming is an optimisation, not a gate.
   }
@@ -55,7 +66,7 @@ async function warmRoutes(): Promise<void> {
 export default async function globalSetup(_config: FullConfig): Promise<void> {
   // 1. The stack must be reachable. Fail fast with an actionable message.
   await waitForOk(`${API_BASE_URL}/api/v1/health`, 'API health');
-  await waitForOk(`${WEB_BASE_URL}/`, 'Web app');
+  await waitForOk(`${WEB_BASE_URL}/`, 'Web app', WEB_READINESS_TIMEOUT_MS);
 
   // 2. The DB must be reachable and resettable (also validates the DSN/port).
   try {
