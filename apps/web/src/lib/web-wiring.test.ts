@@ -58,9 +58,20 @@ const DOUBLE_SUBMIT_GUARDED = [
   'organisation/page.tsx',
   'export/page.tsx',
 ];
+const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
+  'documents/page.tsx': [
+    'documents/document-upload-modal.tsx',
+    'documents/document-list-panel.tsx',
+    'documents/document-link-modal.tsx',
+    'documents/document-delete-modal.tsx',
+  ],
+};
 for (const file of DOUBLE_SUBMIT_GUARDED) {
   test(`${file} guards its primary mutation against double-submit (isLoading)`, () => {
-    const src = dash(file);
+    const src = [
+      dash(file),
+      ...(DOUBLE_SUBMIT_EXTRA_FILES[file] ?? []).map((extraFile) => optionalDash(extraFile)),
+    ].join('\n');
     assert.match(src, /isLoading=\{/, `${file} must have an isLoading-guarded submit button`);
   });
 }
@@ -262,6 +273,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'documents/document-upload-modal.tsx',
         'documents/document-link-modal.tsx',
         'documents/document-delete-modal.tsx',
+        'documents/document-list-panel.tsx',
       ],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -504,6 +516,22 @@ test('documents delete modal is extracted from the oversized route file', () => 
   assert.doesNotMatch(pageSrc, /This removes the file and its standard links/);
   assert.match(modalSrc, /<ModalHeader>Delete document<\/ModalHeader>/);
   assert.match(modalSrc, /This removes the file and its standard links/);
+});
+
+test('documents uploaded-list panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const panelPath = dashPath('documents/document-list-panel.tsx');
+  assert.ok(existsSync(panelPath), 'document uploaded-list panel should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /DocumentListPanel/);
+  assert.doesNotMatch(pageSrc, /Uploaded documents/);
+  assert.doesNotMatch(pageSrc, /No documents uploaded yet/);
+  assert.doesNotMatch(pageSrc, /No linked standards/);
+  assert.match(panelSrc, /Uploaded documents/);
+  assert.match(panelSrc, /No documents uploaded yet/);
+  assert.match(panelSrc, /No linked standards/);
+  assert.match(panelSrc, /getTrustedDocumentDownloadUrl|handleDownload/);
 });
 
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
