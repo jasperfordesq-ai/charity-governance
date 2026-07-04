@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { assessLaunchState } from './launch-status.mjs';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function assertExternalLaunchEvidenceGates(state) {
   assert.ok(
@@ -14,6 +19,13 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /solicitor\/governance\/privacy review/);
   assert.match(gates, /external penetration test/);
 }
+
+test('launch status script text is ASCII-safe for operator transcripts', () => {
+  const source = readFileSync(join(repoRoot, 'scripts', 'launch-status.mjs'), 'utf8');
+
+  assert.doesNotMatch(source, /[^\x00-\x7F]/);
+  assert.match(source, /external gates/);
+});
 
 test('reports NO_ENV and points at the generator when .env.production is absent', () => {
   const s = assessLaunchState({ envExists: false });

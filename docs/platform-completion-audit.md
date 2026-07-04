@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `1de0316`
+Working-tree base commit when generated: `8cb9266`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -110,6 +110,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.
 - The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.
+- The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.
 
 ## Independent Audit Findings Still Driving Next Work
 

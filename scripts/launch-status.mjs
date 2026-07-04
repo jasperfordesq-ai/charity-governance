@@ -3,7 +3,7 @@
 // "Where am I, and what do I do next?" for the launch process. It inspects local
 // state only (no secrets, no network) and prints the current phase plus the
 // single next action. It deliberately does not claim the platform is launch-ready
-// — the external gates (hosting, legal, pentest, sign-off) live in
+// - the external gates (hosting, legal, pentest, sign-off) live in
 // docs/LAUNCH-GUIDE.md and docs/production-launch-checklist.md.
 
 import { readFileSync, existsSync } from 'node:fs';
