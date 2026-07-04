@@ -313,12 +313,14 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(principleDetail, /legal advice/i);
 
   const exportPage = dash('export/page.tsx');
+  const exportReadiness = optionalDash('export/export-approval-readiness.tsx');
+  const exportSurface = [exportPage, exportReadiness].join('\n');
   assert.match(exportPage, /approval-readiness\?year=\$\{year\}/);
-  assert.match(exportPage, /missingExplanations/);
-  assert.match(exportPage, /missingRecords/);
-  assert.match(exportPage, /missingEvidence/);
-  assert.match(exportPage, /profileIssues/);
-  assert.match(exportPage, /conditionalReviewItems/);
+  assert.match(exportSurface, /missingExplanations/);
+  assert.match(exportSurface, /missingRecords/);
+  assert.match(exportSurface, /missingEvidence/);
+  assert.match(exportSurface, /profileIssues/);
+  assert.match(exportSurface, /conditionalReviewItems/);
   assert.match(exportPage, /COMPLIANCE_APPROVAL_INCOMPLETE/);
   assert.match(exportPage, /fetchApprovalReadiness/);
   assert.match(exportPage, /freshApprovalReadiness/);
@@ -658,6 +660,31 @@ test('export loading, warning, and sign-off error states use shared primitives',
   assert.match(previewSrc, /from '@\/components\/ui\/states'/);
   assert.match(previewSrc, /LoadingState/);
   assert.doesNotMatch(previewSrc, /animate-pulse/);
+});
+
+test('export approval-readiness issue UI is extracted and uses shared review primitives', () => {
+  const pageSrc = dash('export/page.tsx');
+  const readinessPath = dashPath('export/export-approval-readiness.tsx');
+  assert.ok(existsSync(readinessPath), 'export approval-readiness UI should be split out of page.tsx');
+  const readinessSrc = readFileSync(readinessPath, 'utf8');
+
+  assert.match(pageSrc, /ApprovalReadinessIssues/);
+  assert.match(pageSrc, /ConditionalReviewPrompts/);
+  assert.match(pageSrc, /countApprovalReadinessBlockers/);
+  assert.match(pageSrc, /approvalReadinessBlockerCodes/);
+  assert.doesNotMatch(pageSrc, /border-amber-200/);
+  assert.doesNotMatch(pageSrc, /bg-amber-50/);
+  assert.doesNotMatch(pageSrc, /evidenceGapLabel/);
+
+  assert.match(readinessSrc, /export function ApprovalReadinessIssues/);
+  assert.match(readinessSrc, /export function ConditionalReviewPrompts/);
+  assert.match(readinessSrc, /export function countApprovalReadinessBlockers/);
+  assert.match(readinessSrc, /export function approvalReadinessBlockerCodes/);
+  assert.match(readinessSrc, /from '@\/components\/ui\/status'/);
+  assert.match(readinessSrc, /ReviewFlag/);
+  assert.match(readinessSrc, /StatusChip/);
+  assert.doesNotMatch(readinessSrc, /border-amber-200/);
+  assert.doesNotMatch(readinessSrc, /bg-amber-50/);
 });
 
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {

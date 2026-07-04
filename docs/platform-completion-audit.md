@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `d96bd54`
+Working-tree base commit when generated: `dfd31cf`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -83,6 +83,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.
 - Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.
 - Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.
+- Export approval-readiness issue cards and conditional review prompts are split out of the route and now use shared status/review primitives instead of repeated warning-card markup.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -106,7 +107,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 436 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 394 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 253 | yes | no obvious static risk; verify in browser |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 399 | yes | no obvious static risk; verify in browser |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 332 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 107 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | no obvious static risk; verify in browser |

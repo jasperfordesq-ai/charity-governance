@@ -110,6 +110,7 @@ const fixedInThisAuditBranch = [
   'Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.',
   'Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.',
   'Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.',
+  'Export approval-readiness issue cards and conditional review prompts are split out of the route and now use shared status/review primitives instead of repeated warning-card markup.',
 ];
 
 const independentAuditFindings = [
