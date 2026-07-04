@@ -135,6 +135,7 @@ const fixedInThisAuditBranch = [
   'The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.',
   'The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.',
   'The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.',
+  'The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.',
 ];
 
 const independentAuditFindings = [

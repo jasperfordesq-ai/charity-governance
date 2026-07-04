@@ -1551,6 +1551,18 @@ test('release readiness command distinguishes skipped gates from full readiness'
   assert.doesNotMatch(releaseReady, /failed\.length === 0 \? 'GREEN - platform is release-ready'/);
 });
 
+test('reliability report emits ASCII-safe operator output', () => {
+  const result = spawnSync(process.execPath, ['scripts/reliability-report.mjs', '--no-run'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /[^\x00-\x7F]/);
+  assert.match(result.stdout, /covered : \d+/);
+  assert.match(result.stdout, /OVERALL|--no-run/);
+});
+
 test('production todo reflects current launch blockers without overclaiming local smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
 

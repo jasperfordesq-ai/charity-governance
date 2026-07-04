@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// CharityPilot reliability report — the unified "trust ledger" verifier (API + Web).
+// CharityPilot reliability report - the unified "trust ledger" verifier (API + Web).
 //
 // Reads the curated guarantee matrix (docs/reliability/guarantees.json), runs the
 // proving suites, and proves that every guarantee marked `covered` is linked to a
 // test that actually exists and passes:
-//   • surface "api"            -> apps/api  node:test unit suite (dist/tests/*.test.js)
-//   • surface "web", unit      -> apps/web  node:test unit suite (.test-dist/**/*.test.js)
-//   • surface "web", e2e       -> e2e/tests/*.spec.ts  (Playwright; linked statically by
+//   - surface "api"            -> apps/api  node:test unit suite (dist/tests/*.test.js)
+//   - surface "web", unit      -> apps/web  node:test unit suite (.test-dist/**/*.test.js)
+//   - surface "web", e2e       -> e2e/tests/*.spec.ts  (Playwright; linked statically by
 //                                 title, executed by `npm run test:e2e` / the CI E2E gate)
 //
 // Prints guarantee counts (split by surface) and an overall PASS/FAIL, and exits
@@ -38,39 +38,39 @@ const SURFACE_ARG = (args.find((a) => a.startsWith('--surface=')) || '').split('
 
 // ---- API surface groups (ordered) ----
 const API_GROUP_ORDER = [
-  ['auth', 'auth — `/api/v1/auth`'],
-  ['organisation', 'organisation — `/api/v1/organisation`'],
-  ['compliance', 'compliance — `/api/v1/compliance`'],
-  ['board-members', 'board-members — `/api/v1/board-members`'],
-  ['documents', 'documents — `/api/v1/documents`'],
-  ['deadlines', 'deadlines — `/api/v1/deadlines`'],
-  ['billing', 'billing — `/api/v1/billing`'],
-  ['export', 'export — `/api/v1/export`'],
-  ['dashboard', 'dashboard — `/api/v1/dashboard`'],
-  ['governance-registers', 'governance-registers — `/api/v1/governance-registers`'],
-  ['team', 'team — `/api/v1/team`'],
-  ['health', 'health — `/api/v1/health`'],
-  ['x-auth-session', 'cross-cutting — auth & session integrity'],
-  ['x-idempotency', 'cross-cutting — idempotency & jobs'],
-  ['x-observability', 'cross-cutting — observability'],
-  ['x-degradation', 'cross-cutting — graceful degradation'],
+  ['auth', 'auth - `/api/v1/auth`'],
+  ['organisation', 'organisation - `/api/v1/organisation`'],
+  ['compliance', 'compliance - `/api/v1/compliance`'],
+  ['board-members', 'board-members - `/api/v1/board-members`'],
+  ['documents', 'documents - `/api/v1/documents`'],
+  ['deadlines', 'deadlines - `/api/v1/deadlines`'],
+  ['billing', 'billing - `/api/v1/billing`'],
+  ['export', 'export - `/api/v1/export`'],
+  ['dashboard', 'dashboard - `/api/v1/dashboard`'],
+  ['governance-registers', 'governance-registers - `/api/v1/governance-registers`'],
+  ['team', 'team - `/api/v1/team`'],
+  ['health', 'health - `/api/v1/health`'],
+  ['x-auth-session', 'cross-cutting - auth & session integrity'],
+  ['x-idempotency', 'cross-cutting - idempotency & jobs'],
+  ['x-observability', 'cross-cutting - observability'],
+  ['x-degradation', 'cross-cutting - graceful degradation'],
 ];
 
 // ---- Web surface groups (ordered) ----
 const WEB_GROUP_ORDER = [
-  ['web-platform', 'platform — proxy / CSP / API client / session refresh'],
-  ['web-auth', 'auth pages — login / register / forgot / reset / verify / accept-invite'],
-  ['web-dashboard', 'dashboard — `/dashboard`'],
-  ['web-compliance', 'compliance — `/compliance`, `/compliance/[principleId]`'],
-  ['web-board', 'board — `/board`'],
-  ['web-documents', 'documents — `/documents`'],
-  ['web-deadlines', 'deadlines — `/deadlines`'],
-  ['web-registers', 'registers — `/registers`'],
-  ['web-organisation', 'organisation — `/organisation`'],
-  ['web-team', 'team — `/team`'],
-  ['web-billing', 'billing & pricing — `/billing`, `/pricing`'],
-  ['web-export', 'export — `/export`'],
-  ['web-regulator', 'regulator — `/regulator`'],
+  ['web-platform', 'platform - proxy / CSP / API client / session refresh'],
+  ['web-auth', 'auth pages - login / register / forgot / reset / verify / accept-invite'],
+  ['web-dashboard', 'dashboard - `/dashboard`'],
+  ['web-compliance', 'compliance - `/compliance`, `/compliance/[principleId]`'],
+  ['web-board', 'board - `/board`'],
+  ['web-documents', 'documents - `/documents`'],
+  ['web-deadlines', 'deadlines - `/deadlines`'],
+  ['web-registers', 'registers - `/registers`'],
+  ['web-organisation', 'organisation - `/organisation`'],
+  ['web-team', 'team - `/team`'],
+  ['web-billing', 'billing & pricing - `/billing`, `/pricing`'],
+  ['web-export', 'export - `/export`'],
+  ['web-regulator', 'regulator - `/regulator`'],
 ];
 
 const CONCERN_LABEL = {
@@ -126,9 +126,9 @@ function parseResults(out) {
   const fail = new Set();
   for (const raw of out.split(/\r?\n/)) {
     const line = raw.replace(/\[[0-9;]*m/g, ''); // strip ANSI
-    let m = line.match(/^\s*✔\s+(.*?)(?:\s+\(\d[\d.]*ms\))?\s*$/);
+    let m = line.match(/^\s*\u2714\s+(.*?)(?:\s+\(\d[\d.]*ms\))?\s*$/u);
     if (m) { pass.add(m[1].trim()); continue; }
-    m = line.match(/^\s*✖\s+(.*?)(?:\s+\(\d[\d.]*ms\))?\s*$/);
+    m = line.match(/^\s*\u2716\s+(.*?)(?:\s+\(\d[\d.]*ms\))?\s*$/u);
     if (m) { fail.add(m[1].trim()); continue; }
   }
   const passN = (out.match(/# pass (\d+)/) || [])[1];
@@ -153,10 +153,10 @@ function readE2eTitles() {
 }
 
 function statusBadge(s) {
-  if (s === 'covered') return '🟢 covered';
-  if (s === 'partial') return '🟡 partial';
-  if (s === 'gap') return '🔴 gap';
-  if (s === 'na') return '⚪ n/a';
+  if (s === 'covered') return 'covered';
+  if (s === 'partial') return 'partial';
+  if (s === 'gap') return 'gap';
+  if (s === 'na') return 'n/a';
   return s;
 }
 
@@ -177,7 +177,7 @@ function proofCell(r) {
     return `_${(r.gapDescription || 'documented not applicable').replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 200)}_`;
   }
   if (r.proposedTitle) return `_planned:_ \`${r.proposedTitle.replace(/\|/g, '\\|')}\``;
-  return '—';
+  return '-';
 }
 
 function renderMatrix(md, rows, groupOrder) {
@@ -189,8 +189,8 @@ function renderMatrix(md, rows, groupOrder) {
     if (!grp || !grp.length) continue;
     const gc = countByStatus(grp);
     out += `### ${label}\n\n`;
-    out += `_${grp.length} guarantees — `;
-    out += [['covered', '🟢'], ['partial', '🟡'], ['gap', '🔴'], ['na', '⚪']]
+    out += `_${grp.length} guarantees - `;
+    out += [['covered', 'covered'], ['partial', 'partial'], ['gap', 'gap'], ['na', 'n/a']]
       .filter(([k]) => gc[k]).map(([k, e]) => `${e} ${gc[k]}`).join('  ') + '_\n\n';
     out += '| Concern | Guarantee | Status | Proven by |\n|---|---|---|---|\n';
     grp.sort((a, b) => (a.concern.localeCompare(b.concern)) || a.id.localeCompare(b.id));
@@ -201,7 +201,7 @@ function renderMatrix(md, rows, groupOrder) {
     }
     out += '\n';
   }
-  // Any groups not in the declared order — surface them so nothing is silently dropped.
+  // Any groups not in the declared order - surface them so nothing is silently dropped.
   const known = new Set(groupOrder.map(([s]) => s));
   for (const slug of Object.keys(byGroup)) {
     if (known.has(slug)) continue;
@@ -229,17 +229,17 @@ function buildMarkdown(guars, res) {
 
   let md = '';
   md += '# CharityPilot Reliability Ledger\n\n';
-  md += '> **The trust ledger — API + Web.** Every behaviour here is one whose failure would\n';
+  md += '> **The trust ledger - API + Web.** Every behaviour here is one whose failure would\n';
   md += '> lose customer trust or generate support tickets. Each row is a concrete, falsifiable\n';
   md += '> guarantee linked to the automated test that proves it holds today and will keep holding.\n\n';
-  md += 'This is **evidence, not an audit**. An audit asks "can I find a problem?" — an unbounded\n';
+  md += 'This is **evidence, not an audit**. An audit asks "can I find a problem?" - an unbounded\n';
   md += 'question that always finds *something*. This ledger asks the bounded question: "is every\n';
-  md += 'reliability-critical behaviour pinned by a test that is green?" When every row is 🟢 (or a\n';
-  md += 'documented ⚪ n/a), the job is finished and stays finished.\n\n';
+  md += 'reliability-critical behaviour pinned by a test that is green?" When every row is covered (or a\n';
+  md += 'documented n/a), the job is finished and stays finished.\n\n';
 
   md += '## At a glance\n\n';
-  md += `Generated: ${date} · Source of truth: [\`docs/reliability/guarantees.json\`](reliability/guarantees.json)\n\n`;
-  md += '| Surface | 🟢 covered | 🟡 partial | 🔴 gap | ⚪ n/a | Total |\n|---|---|---|---|---|---|\n';
+  md += `Generated: ${date} - Source of truth: [\`docs/reliability/guarantees.json\`](reliability/guarantees.json)\n\n`;
+  md += '| Surface | covered | partial | gap | n/a | Total |\n|---|---|---|---|---|---|\n';
   const row = (label, c, rows) => `| ${label} | ${c.covered || 0} | ${c.partial || 0} | ${c.gap || 0} | ${c.na || 0} | ${rows.length} |\n`;
   md += row('API', apiCounts, apiRows);
   md += row('Web', webCounts, webRows);
@@ -252,7 +252,7 @@ function buildMarkdown(guars, res) {
     md += `**E2E:** ${res.e2eCount} Playwright titles linked (executed by the CI E2E gate).\n\n`;
     md += `**Linkage:** ${res.proven}/${counts.covered || 0} covered guarantees verified against a passing/linked test`;
     md += res.brokenLinks.length ? `, ${res.brokenLinks.length} broken link(s).` : '.';
-    md += `\n\n**Overall: ${ok ? '✅ GREEN' : '❌ NOT GREEN'}**\n\n`;
+    md += `\n\n**Overall: ${ok ? 'GREEN' : 'NOT GREEN'}**\n\n`;
   }
 
   md += '## How to verify\n\n';
@@ -263,23 +263,23 @@ function buildMarkdown(guars, res) {
   md += '\n# Prove the WHOLE platform green in one command (every gate + this report):\n';
   md += 'npm run release:ready\n';
   md += '```\n\n';
-  md += 'The report exits non-zero if any executed suite fails or any 🟢 guarantee\'s linked test\n';
+  md += 'The report exits non-zero if any executed suite fails or any covered guarantee\'s linked test\n';
   md += 'is missing. Regenerate this document with `npm run reliability:report -- --write`.\n\n';
 
   md += '## The reliability concerns\n\n';
-  md += '**API surface (8):** tenant isolation · authorization boundary · subscription/plan gating ·\n';
-  md += 'input validation · graceful degradation · auth & session integrity · at-least-once/idempotency ·\n';
+  md += '**API surface (8):** tenant isolation / authorization boundary / subscription/plan gating /\n';
+  md += 'input validation / graceful degradation / auth & session integrity / at-least-once/idempotency /\n';
   md += 'observability.\n\n';
-  md += '**Web surface (8):** tenant isolation (UI) · authorization (UI) · plan gating (UI) ·\n';
-  md += 'input-validation parity · graceful degradation · auth & session integrity · state integrity /\n';
-  md += 'no data loss · accessibility & resilience.\n\n';
+  md += '**Web surface (8):** tenant isolation (UI) / authorization (UI) / plan gating (UI) /\n';
+  md += 'input-validation parity / graceful degradation / auth & session integrity / state integrity /\n';
+  md += 'no data loss / accessibility & resilience.\n\n';
 
   md += '---\n\n';
-  md += `## API surface — the matrix (${apiRows.length} guarantees)\n\n`;
+  md += `## API surface - the matrix (${apiRows.length} guarantees)\n\n`;
   md = renderMatrix(md, apiRows, API_GROUP_ORDER);
 
   md += '---\n\n';
-  md += `## Web surface — the matrix (${webRows.length} guarantees)\n\n`;
+  md += `## Web surface - the matrix (${webRows.length} guarantees)\n\n`;
   md += '> The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the\n';
   md += '> extractable logic (auth/session, validation parity, plan/role decisions, redirect & download\n';
   md += '> allow-listing, error redaction); Playwright E2E (<sup>e2e</sup>) proves rendered behaviour and\n';
@@ -293,15 +293,15 @@ function buildMarkdown(guars, res) {
   if (fixed.length) {
     md += 'Real defects found *by a test written here*, fixed minimally, and locked in:\n\n';
     md += '| Surface | Defect | Minimal fix | Proven by |\n|---|---|---|---|\n';
-    for (const f of fixed) md += `| ${f.surface || '—'} | ${f.defect} | ${f.fix} | \`${f.test}\` |\n`;
+    for (const f of fixed) md += `| ${f.surface || '-'} | ${f.defect} | ${f.fix} | \`${f.test}\` |\n`;
     md += '\n';
   } else {
     md += '_None. Every guarantee above was already correct; the work was to pin each one with a test._\n\n';
   }
 
   md += '---\n\n';
-  md += '<sub>Legend: 🟢 covered = a passing automated test proves the guarantee · 🟡 partial = part proven ·\n';
-  md += '🔴 gap = not yet proven · ⚪ n/a = concern considered and documented as not applicable to this group.\n';
+  md += '<sub>Legend: covered = a passing automated test proves the guarantee / partial = part proven /\n';
+  md += 'gap = not yet proven / n/a = concern considered and documented as not applicable to this group.\n';
   md += '<sup>e2e</sup> = proven by a Playwright journey, executed by the CI E2E gate.</sub>\n';
   return md;
 }
@@ -344,10 +344,10 @@ const apiRows = guars.filter((g) => g.surface === 'api');
 const webRows = guars.filter((g) => g.surface === 'web');
 console.log('\n=== CharityPilot Reliability Report (API + Web) ===');
 console.log(`Guarantees: ${guars.length} total  (api ${apiRows.length}, web ${webRows.length})`);
-console.log(`  🟢 covered : ${counts.covered || 0}`);
-console.log(`  🟡 partial : ${counts.partial || 0}`);
-console.log(`  🔴 gap     : ${counts.gap || 0}`);
-console.log(`  ⚪ n/a     : ${counts.na || 0}`);
+console.log(`  covered : ${counts.covered || 0}`);
+console.log(`  partial : ${counts.partial || 0}`);
+console.log(`  gap     : ${counts.gap || 0}`);
+console.log(`  n/a     : ${counts.na || 0}`);
 
 if (res) {
   if (res.api) console.log(`\nAPI suite: ${res.api.passN} passing, ${res.api.failN} failing`);
@@ -356,11 +356,11 @@ if (res) {
   const coveredChecked = (res.api ? apiCovered.length : 0) + (res.web ? webUnitCovered.length : 0) + e2eCovered.length;
   console.log(`Covered-guarantee linkage: ${res.proven}/${coveredChecked} verified against a passing/linked test`);
   if (res.brokenLinks.length) {
-    console.log(`\n❌ ${res.brokenLinks.length} BROKEN LINK(S) — covered guarantee with no passing/linked test of that title:`);
+    console.log(`\nFAIL ${res.brokenLinks.length} BROKEN LINK(S) - covered guarantee with no passing/linked test of that title:`);
     for (const b of res.brokenLinks.slice(0, 60)) console.log(`   - [${b.surface}/${b.testType}] [${b.id}] expected: "${b.testTitle}"`);
   }
   const green = res.failN === 0 && res.brokenLinks.length === 0;
-  console.log(`\nOVERALL: ${green ? '✅ GREEN' : '❌ NOT GREEN'}`);
+  console.log(`\nOVERALL: ${green ? 'GREEN' : 'NOT GREEN'}`);
   process.exit(green ? 0 : 1);
 } else {
   console.log('\n(--no-run: skipped executing the suites)');
