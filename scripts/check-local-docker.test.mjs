@@ -332,6 +332,10 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.match(responsiveSpec, /const DASHBOARD_ROUTE_BATCH_TIMEOUT_MS = 900_000/);
   assert.match(responsiveSpec, /test\.setTimeout\(PUBLIC_ROUTE_TIMEOUT_MS\)/);
   assert.match(responsiveSpec, /test\.setTimeout\(DASHBOARD_ROUTE_BATCH_TIMEOUT_MS\)/);
+  assert.match(responsiveSpec, /async function waitForDocumentShell\(page: Page\): Promise<void>/);
+  assert.match(responsiveSpec, /Boolean\(document\.documentElement && document\.body\)/);
+  assert.match(responsiveSpec, /await waitForDocumentShell\(page\);[\s\S]*await applyTheme\(page, theme\);/);
+  assert.match(responsiveSpec, /await waitForDocumentShell\(ownerPage\);[\s\S]*await applyTheme\(ownerPage, theme\);/);
   assert.match(responsiveSpec, /page\.goto\(route,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(responsiveSpec, /for \(const route of DASHBOARD_ROUTES\)[\s\S]*ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(responsiveSpec, /waitUntil:\s*'commit'/);

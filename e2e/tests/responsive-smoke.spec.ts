@@ -51,6 +51,10 @@ const DASHBOARD_ROUTES: readonly RouteSpec[] = [
 
 test.describe.configure({ retries: 1, timeout: 240_000 });
 
+async function waitForDocumentShell(page: Page): Promise<void> {
+  await page.waitForFunction(() => Boolean(document.documentElement && document.body), null, { timeout: 30_000 });
+}
+
 async function applyTheme(page: Page, theme: Theme): Promise<void> {
   await page.evaluate((nextTheme) => {
     localStorage.setItem('theme', nextTheme);
@@ -89,6 +93,7 @@ for (const viewportCase of VIEWPORT_CASES) {
       await page.goto(route, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
 
       for (const theme of THEME_CASES) {
+        await waitForDocumentShell(page);
         await applyTheme(page, theme);
         await settle(page);
         await assertRenderable(page, `${route} ${theme}`);
@@ -105,6 +110,7 @@ for (const viewportCase of VIEWPORT_CASES) {
       await ownerPage.goto(path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
 
       for (const theme of THEME_CASES) {
+        await waitForDocumentShell(ownerPage);
         await applyTheme(ownerPage, theme);
         await settle(ownerPage);
         await assertRenderable(ownerPage, `${label} ${theme}`);
