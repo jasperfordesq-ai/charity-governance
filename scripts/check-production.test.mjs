@@ -2024,6 +2024,19 @@ test('production operations docs explain the compose runtime web public origins'
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_SUPABASE_URL`/);
 });
 
+test('production runbook documents deployed browser QA evidence commands', () => {
+  const runbook = readRepoFile('docs/production-runbook.md');
+
+  assert.match(runbook, /E2E_DEPLOYED_QA=true/);
+  assert.match(runbook, /E2E_WEB_URL=https:\/\/app\.charitypilot\.ie/);
+  assert.match(runbook, /E2E_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(runbook, /E2E_OWNER_EMAIL/);
+  assert.match(runbook, /E2E_OWNER_PASSWORD/);
+  assert.match(runbook, /npm run test:e2e:responsive/);
+  assert.match(runbook, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
+  assert.match(runbook, /production-launch-evidence\.json/);
+});
+
 test('production deploy preflight is wired for digest-pinned image promotion', () => {
   const packageJson = JSON.parse(readRepoFile('package.json'));
   const runbook = readRepoFile('docs/production-runbook.md');

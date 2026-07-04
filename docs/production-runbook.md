@@ -118,6 +118,26 @@ Run `npm run check:production:supabase -- --production-env-file=.env.production`
 
 Run `docs/production-browser-qa.md` against the deployed HTTPS production URL and supported mobile devices. Localhost QA does not prove production DNS, TLS, cookies, CORS, security headers, storage downloads, or live provider integrations.
 
+For automated deployed browser evidence, use an approved non-sensitive owner/admin test workspace and supply credentials from the secret store. Record redacted command output in `production-launch-evidence.json`; do not record the credential values themselves.
+
+```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=<secret-store-reference> \
+E2E_OWNER_PASSWORD=<secret-store-reference> \
+npm run test:e2e:responsive
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=<secret-store-reference> \
+E2E_OWNER_PASSWORD=<secret-store-reference> \
+npm run test:e2e -- tests/accessibility.spec.ts
+```
+
+The launch evidence validator requires both deployed command transcripts, `E2E_DEPLOYED_QA=true`, the canonical web/API URLs, and references showing `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` came from the approved secret store.
+
 ## Incident Basics
 
 Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys after any suspected secret exposure. Password reset invalidates all active sessions for that user.
