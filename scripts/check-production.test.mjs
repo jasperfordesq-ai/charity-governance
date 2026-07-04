@@ -2168,6 +2168,8 @@ test('web Docker build requires production HTTPS public origins before Next buil
   assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_API_URL'/);
   assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_SUPABASE_URL'/);
   assert.match(dockerfile, /api\.charitypilot\.ie/);
+  assert.match(dockerfile, /host\)=>host==='api\.charitypilot\.ie'/);
+  assert.doesNotMatch(dockerfile, /host\.endsWith\('\.charitypilot\.ie'\)/);
   assert.match(dockerfile, /origin-only CharityPilot production URL/);
   assert.match(dockerfile, /origin-only HTTPS Supabase project URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);

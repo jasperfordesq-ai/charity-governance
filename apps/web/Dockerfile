@@ -13,7 +13,7 @@ ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-RUN node -e "function requireOrigin(name,validateHost,message){try{const value=process.env[name];const url=new URL(value);if(url.protocol!=='https:'||url.origin!==value.replace(/\/+$/,'')||!validateHost(url.hostname.toLowerCase()))throw new Error();}catch{console.error(message);process.exit(1)}}requireOrigin('NEXT_PUBLIC_API_URL',(host)=>host==='charitypilot.ie'||host.endsWith('.charitypilot.ie'),'NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL such as https://api.charitypilot.ie');requireOrigin('NEXT_PUBLIC_SUPABASE_URL',(host)=>host.endsWith('.supabase.co'),'NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL such as https://project-ref.supabase.co')"
+RUN node -e "function requireOrigin(name,validateHost,message){try{const value=process.env[name];const url=new URL(value);if(url.protocol!=='https:'||url.origin!==value.replace(/\/+$/,'')||!validateHost(url.hostname.toLowerCase()))throw new Error();}catch{console.error(message);process.exit(1)}}requireOrigin('NEXT_PUBLIC_API_URL',(host)=>host==='api.charitypilot.ie','NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL and must use the canonical API origin https://api.charitypilot.ie');requireOrigin('NEXT_PUBLIC_SUPABASE_URL',(host)=>host.endsWith('.supabase.co'),'NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL such as https://project-ref.supabase.co')"
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
 RUN rm -rf apps/web/.next/cache \

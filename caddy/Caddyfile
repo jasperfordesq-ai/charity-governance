@@ -11,7 +11,7 @@
 	email {$CADDY_ACME_EMAIL}
 }
 
-# Public web app (e.g. charitypilot.ie)
+# Public web app (e.g. app.charitypilot.ie)
 {$CHARITYPILOT_WEB_DOMAIN} {
 	encode zstd gzip
 	reverse_proxy web:3003
