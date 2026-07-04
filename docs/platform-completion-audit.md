@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `0a11728`
+Working-tree base commit when generated: `14f05b0`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -14,7 +14,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 5 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /compliance/[principleId] (573), /registers (573), /board (565), /organisation (511), /documents (480). |
+| Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 4 route files are 450+ lines. | Refactor and browser-QA the largest P0 workflows first: /registers (573), /board (565), /organisation (511), /documents (480). |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-03; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
@@ -51,6 +51,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The register modal record forms and payload normaliser are split out of the oversized registers route behind a wiring regression test.
 - The register record modal shell is split out of the oversized registers route behind a wiring regression test.
 - The register operational record list sections are split out of the oversized registers route behind a wiring regression test.
+- The compliance principle standard editor card and save-state UI are split out of the oversized compliance detail route behind a wiring regression test.
 - The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.
 - The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.
 - The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.
@@ -79,7 +80,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 565 | yes | large route file; refactor soon; 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 573 | yes | large route file; refactor soon; 4 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | 1 inline svg icon(s) |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 391 | yes | 1 inline svg icon(s) |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 480 | yes | large route file; refactor soon; 1 inline svg icon(s) |

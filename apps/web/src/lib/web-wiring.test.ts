@@ -154,7 +154,10 @@ test('dashboard action lists are extracted from the oversized route file', () =>
 });
 
 test('the per-standard compliance editor announces its save state (Saving / Saved / Save failed)', () => {
-  const src = dash('compliance/[principleId]/page.tsx');
+  const src = [
+    dash('compliance/[principleId]/page.tsx'),
+    optionalDash('compliance/[principleId]/standard-editor-card.tsx'),
+  ].join('\n');
   assert.match(src, /aria-live/);
   assert.match(src, /Save failed/i);
 });
@@ -233,6 +236,22 @@ test('principle detail confirms in-app navigation while saves are pending', () =
   }
   assert.doesNotMatch(src, /onPress=\{\(\) => router\.push\('\/compliance'\)\}/);
   assert.doesNotMatch(src, /onClick=\{\(\) => router\.push\('\/compliance'\)\}/);
+});
+
+test('principle detail standard editor card is extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const cardPath = dashPath('compliance/[principleId]/standard-editor-card.tsx');
+  assert.ok(existsSync(cardPath), 'standard editor card should be split out of page.tsx');
+  const cardSrc = readFileSync(cardPath, 'utf8');
+
+  assert.match(pageSrc, /StandardEditorCard/);
+  assert.doesNotMatch(pageSrc, /Action Taken/);
+  assert.doesNotMatch(pageSrc, /Internal Notes/);
+  assert.doesNotMatch(pageSrc, /Save failed/);
+  assert.match(cardSrc, /Action Taken/);
+  assert.match(cardSrc, /Internal Notes/);
+  assert.match(cardSrc, /Save failed/);
+  assert.match(cardSrc, /onRetrySave/);
 });
 
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {
