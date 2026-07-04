@@ -7,6 +7,7 @@ import {
   Button,
   useDisclosure,
 } from '@heroui/react';
+import { Plus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
@@ -200,9 +201,7 @@ export default function BoardPage() {
       description="Maintain a review-ready trustee register with conduct, induction, appointment, and term evidence for Irish charity governance workflows."
       actions={(
         <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={openAdd}>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
+          <Plus className="h-4 w-4" aria-hidden="true" />
           Add trustee
         </Button>
       )}

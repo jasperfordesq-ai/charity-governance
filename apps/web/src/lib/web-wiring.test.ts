@@ -644,6 +644,15 @@ test('documents uploaded-list panel is extracted from the oversized route file',
   assert.match(panelSrc, /getTrustedDocumentDownloadUrl|handleDownload/);
 });
 
+test('primary add actions use icon-library icons instead of route-local inline svg', () => {
+  for (const file of ['documents/page.tsx', 'board/page.tsx', 'deadlines/page.tsx']) {
+    const src = dash(file);
+    assert.match(src, /from 'lucide-react'/, `${file} should use the shared icon library for primary add actions`);
+    assert.match(src, /<Plus\b/, `${file} should render the add icon through lucide-react`);
+    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
   const src = [
     dash('deadlines/page.tsx'),

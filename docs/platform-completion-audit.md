@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `057a717`
+Working-tree base commit when generated: `f66d7b6`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -63,6 +63,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The board member add/edit modal is split out of the oversized board route behind a wiring regression test.
 - The board member list, mobile cards, desktop table, and status-toggle states are split out of the oversized board route behind a wiring regression test.
 - The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.
+- The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.
 - The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.
 - The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.
 - The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.
@@ -84,12 +85,12 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 367 | yes | decorative or pill-heavy styling needs visual QA |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 194 | no | 3 inline svg icon(s) |
-| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 259 | yes | 1 inline svg icon(s); dark-mode relies mostly on layout; screenshot QA required |
+| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 258 | yes | dark-mode relies mostly on layout; screenshot QA required |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | 1 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 387 | yes | 1 inline svg icon(s) |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | 2 inline svg icon(s); decorative or pill-heavy styling needs visual QA |
-| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 391 | yes | 1 inline svg icon(s) |
-| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 254 | yes | 1 inline svg icon(s) |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 390 | yes | no obvious static risk; verify in browser |
+| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 253 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 410 | yes | 2 inline svg icon(s) |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 269 | no | 6 inline svg icon(s) |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 109 | yes | 1 inline svg icon(s) |

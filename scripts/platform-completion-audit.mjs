@@ -90,6 +90,7 @@ const fixedInThisAuditBranch = [
   'The board member add/edit modal is split out of the oversized board route behind a wiring regression test.',
   'The board member list, mobile cards, desktop table, and status-toggle states are split out of the oversized board route behind a wiring regression test.',
   'The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.',
+  'The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.',
   'The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.',
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',
   'The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.',
