@@ -779,6 +779,17 @@ test('workflow status controls use lucide icons instead of inline svg', () => {
   }
 });
 
+test('marketing blog client uses lucide icons instead of inline svg', () => {
+  const src = app('(marketing)/blog/BlogClient.tsx');
+  const icons = ['ArrowRight', 'BookOpen', 'FileText', 'Search', 'ShieldCheck'];
+
+  assert.match(src, /from 'lucide-react'/, 'BlogClient should use lucide-react for marketing blog icons');
+  for (const icon of icons) {
+    assert.match(src, new RegExp(`<${icon}\\b`), `BlogClient should render ${icon} through lucide-react`);
+  }
+  assert.doesNotMatch(src, /<svg\b/, 'BlogClient should not carry hand-drawn inline SVG markup');
+});
+
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['login/page.tsx', ['Eye', 'EyeOff']],
