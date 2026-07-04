@@ -151,6 +151,12 @@ const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
 ];
 
+const localVerificationEvidence = [
+  '`npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.',
+  '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.',
+  'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
+];
+
 const officialSources = [
   ['Charities Governance Code', 'Charities Regulator', 'https://www.charitiesregulator.ie/en/information-for-charities/charities-governance-code'],
   ['Toolkit and templates', 'Charities Regulator', 'https://www.charitiesregulator.ie/en/information-for-charities/charities-governance-code/toolkit-and-templates'],
@@ -399,6 +405,9 @@ function render() {
 
   md += `## Fixed During This Audit Pass\n\n`;
   md += `${markdownList(fixedInThisAuditBranch)}\n\n`;
+
+  md += `## Local Verification Evidence\n\n`;
+  md += `${markdownList(localVerificationEvidence)}\n\n`;
 
   md += `## Independent Audit Findings Still Driving Next Work\n\n`;
   md += `| Priority | Area | Finding |\n`;

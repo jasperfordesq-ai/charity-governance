@@ -391,6 +391,18 @@ test('platform audit ledger records deployed browser QA hardening', () => {
   assert.match(auditLedger, /direct database reset or token-injection seams/);
 });
 
+test('platform audit ledger records local browser evidence without closing deployed gates', () => {
+  const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
+  const auditLedger = readRepoFile('docs/platform-completion-audit.md');
+
+  assert.match(auditGenerator, /Local Verification Evidence/);
+  assert.match(auditGenerator, /npm run test:e2e:responsive/);
+  assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
+  assert.match(auditLedger, /Local Verification Evidence/);
+  assert.match(auditLedger, /50\/50 Playwright route smoke checks/);
+  assert.match(auditLedger, /deployed HTTPS QA/);
+});
+
 test('platform audit ledger records launch evidence gate hardening', () => {
   const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');

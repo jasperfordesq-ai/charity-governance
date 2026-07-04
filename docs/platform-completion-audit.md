@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `3f02752`
+Working-tree base commit when generated: `353d70b`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -118,6 +118,12 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
 - Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.
+
+## Local Verification Evidence
+
+- `npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.
+- `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
+- This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
 
