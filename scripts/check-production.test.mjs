@@ -2068,6 +2068,7 @@ test('production runbook documents deployed browser QA evidence commands', () =>
 test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
 
+  assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);
   assert.match(launchGuide, /five named approvals/i);
   assert.match(launchGuide, /engineering, operations, security, legal\/compliance, and business/);
