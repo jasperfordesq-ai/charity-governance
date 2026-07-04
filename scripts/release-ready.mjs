@@ -88,8 +88,13 @@ for (const r of results) {
 const failed = results.filter((r) => !r.ok && !r.skipped);
 const passed = results.filter((r) => r.ok && !r.skipped).length;
 const skipped = results.filter((r) => r.skipped).length;
+const overallStatus = failed.length > 0
+  ? 'NOT GREEN'
+  : skipped > 0
+    ? 'GREEN - selected gates passed; skipped gates remain'
+    : 'GREEN - platform is release-ready';
 console.log('-------------------------------------------------------');
 console.log(`  ${passed} passed, ${failed.length} failed, ${skipped} skipped`);
-console.log(`  OVERALL: ${failed.length === 0 ? 'GREEN - platform is release-ready' : 'NOT GREEN'}`);
+console.log(`  OVERALL: ${overallStatus}`);
 console.log('=======================================================\n');
 process.exit(failed.length === 0 ? 0 : 1);

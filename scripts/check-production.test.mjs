@@ -1543,6 +1543,14 @@ test('release readiness command uses ASCII-safe operator output', () => {
   assert.match(releaseReady, /SKIP/);
 });
 
+test('release readiness command distinguishes skipped gates from full readiness', () => {
+  const releaseReady = readRepoFile('scripts/release-ready.mjs');
+
+  assert.match(releaseReady, /skipped > 0/);
+  assert.match(releaseReady, /GREEN - selected gates passed; skipped gates remain/);
+  assert.doesNotMatch(releaseReady, /failed\.length === 0 \? 'GREEN - platform is release-ready'/);
+});
+
 test('production secret env files are ignored by git without hiding the template', () => {
   const gitignoreLines = readRepoFile('.gitignore')
     .split(/\r?\n/)
