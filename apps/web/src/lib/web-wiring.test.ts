@@ -597,6 +597,7 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
     dash('registers/page.tsx'),
     optionalDash('registers/register-compliance-cards.tsx'),
     optionalDash('registers/register-record-forms.tsx'),
+    optionalDash('registers/register-record-modal.tsx'),
     optionalDash('registers/register-record-lists.tsx'),
   ].join('\n');
   const imports: Array<[string, string[]]> = [
@@ -772,17 +773,36 @@ test('registers modal record forms are extracted from the oversized route file',
   assert.ok(existsSync(formsPath), 'register record forms should be split out of page.tsx');
   const formsSrc = readFileSync(formsPath, 'utf8');
 
-  assert.match(pageSrc, /ConflictForm/);
-  assert.match(pageSrc, /RiskForm/);
-  assert.match(pageSrc, /ComplaintForm/);
-  assert.match(pageSrc, /FundraisingForm/);
+  assert.doesNotMatch(pageSrc, /ConflictForm/);
+  assert.doesNotMatch(pageSrc, /RiskForm/);
+  assert.doesNotMatch(pageSrc, /ComplaintForm/);
+  assert.doesNotMatch(pageSrc, /FundraisingForm/);
   assert.match(pageSrc, /normalizeRegisterForm/);
   assert.doesNotMatch(pageSrc, /Conflict record/);
   assert.doesNotMatch(pageSrc, /Fundraising activity/);
   assert.doesNotMatch(pageSrc, /function normalizeForm/);
+  assert.match(formsSrc, /export function ConflictForm/);
+  assert.match(formsSrc, /export function RiskForm/);
+  assert.match(formsSrc, /export function ComplaintForm/);
+  assert.match(formsSrc, /export function FundraisingForm/);
   assert.match(formsSrc, /Conflict record/);
   assert.match(formsSrc, /Fundraising activity/);
   assert.match(formsSrc, /export function normalizeRegisterForm/);
+});
+
+test('registers record modal shell is extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const modalPath = dashPath('registers/register-record-modal.tsx');
+  assert.ok(existsSync(modalPath), 'register record modal shell should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /RegisterRecordModal/);
+  assert.doesNotMatch(pageSrc, /register-disabled-hint/);
+  assert.doesNotMatch(pageSrc, /Saving updates the register after the API confirms the record/);
+  assert.match(modalSrc, /register-disabled-hint/);
+  assert.match(modalSrc, /Saving updates the register after the API confirms the record/);
+  assert.match(modalSrc, /ConflictForm/);
+  assert.match(modalSrc, /FundraisingForm/);
 });
 
 test('registers operational record list sections are extracted from the oversized route file', () => {

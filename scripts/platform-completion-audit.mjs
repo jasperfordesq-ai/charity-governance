@@ -76,6 +76,7 @@ const fixedInThisAuditBranch = [
   'The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.',
   'The register Annual Report readiness and financial control review cards are split out of the oversized registers route behind a wiring regression test.',
   'The register modal record forms and payload normaliser are split out of the oversized registers route behind a wiring regression test.',
+  'The register record modal shell is split out of the oversized registers route behind a wiring regression test.',
   'The register operational record list sections are split out of the oversized registers route behind a wiring regression test.',
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',

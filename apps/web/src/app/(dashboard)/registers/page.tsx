@@ -6,11 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Button,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
   Select,
   SelectItem,
 } from '@heroui/react';
@@ -19,21 +14,16 @@ import { apiErrorMessage } from '@/lib/errors';
 import { useDocumentTitle } from '@/lib/use-title';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
-import { FormHint, ValidationSummary } from '@/components/ui/forms';
 import { ErrorState, LoadingState, LockedFeatureState } from '@/components/ui/states';
 import { ReviewFlag } from '@/components/ui/status';
 import { RegisterPriorityPanel, buildRegisterPriorities, buildRegisterSearchText } from './register-priority-panel';
 import { AnnualReportCard, FinancialControlsCard } from './register-compliance-cards';
 import { RegisterRecordsPanel, riskScore } from './register-record-lists';
 import {
-  ComplaintForm,
-  ConflictForm,
-  FundraisingForm,
-  RiskForm,
-  modalTitle,
   normalizeRegisterForm,
   type RegisterType,
 } from './register-record-forms';
+import { RegisterRecordModal } from './register-record-modal';
 import {
   AnnualReportFilingStatus,
   ConflictStatus,
@@ -550,35 +540,16 @@ export default function RegistersPage() {
         </>
       )}
 
-      <Modal isOpen={Boolean(modalType)} onOpenChange={(open) => !open && closeModal()} size="2xl" scrollBehavior="inside">
-        <ModalContent>
-          <ModalHeader>{modalType ? modalTitle(modalType) : 'Add register record'}</ModalHeader>
-          <ModalBody className="gap-5">
-            <ValidationSummary errors={formError ? [formError] : []} />
-            {modalType === 'conflict' && <ConflictForm form={form} updateForm={updateForm} />}
-            {modalType === 'risk' && <RiskForm form={form} updateForm={updateForm} />}
-            {modalType === 'complaint' && <ComplaintForm form={form} updateForm={updateForm} />}
-            {modalType === 'fundraising' && <FundraisingForm form={form} updateForm={updateForm} />}
-            <FormHint id="register-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
-              {formDisabledReason || 'Saving updates the register after the API confirms the record.'}
-            </FormHint>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="flat" onPress={closeModal} isDisabled={saving}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-teal-primary text-white hover:bg-teal-dark"
-              onPress={handleCreate}
-              isLoading={saving}
-              isDisabled={Boolean(formDisabledReason) || saving}
-              aria-describedby="register-disabled-hint"
-            >
-              Save record
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      <RegisterRecordModal
+        modalType={modalType}
+        closeModal={closeModal}
+        form={form}
+        updateForm={updateForm}
+        formError={formError}
+        formDisabledReason={formDisabledReason}
+        saving={saving}
+        handleCreate={handleCreate}
+      />
     </AppPage>
   );
 }
