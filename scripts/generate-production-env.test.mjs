@@ -91,3 +91,11 @@ test('works against the real .env.production.example, changing only the auto-key
     assert.ok(key in after, `${key} must remain in the generated file`);
   }
 });
+
+test('operator-facing production env generator text is ASCII-safe', () => {
+  const source = readFileSync(join(repoRoot, 'scripts', 'generate-production-env.mjs'), 'utf8');
+
+  assert.doesNotMatch(source, /[^\x00-\x7F]/);
+  assert.match(source, /gitignored - never commit it/);
+  assert.match(source, /sk_live_\.\.\./);
+});

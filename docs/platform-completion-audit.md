@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `fabc862`
+Working-tree base commit when generated: `1de0316`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -109,6 +109,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.
+- The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.
 
 ## Independent Audit Findings Still Driving Next Work
 

@@ -22,18 +22,18 @@ export const AUTO_GENERATED_KEYS = ['JWT_SECRET', 'READINESS_API_KEY'];
 const FIXED_VALUES = { NODE_ENV: 'production' };
 
 // External values the operator must supply (with where to get each). Used only
-// for the human-facing summary — they are left as placeholders in the file.
+// for the human-facing summary - they are left as placeholders in the file.
 export const OPERATOR_SUPPLIED_KEYS = [
   ['DATABASE_URL', 'Managed production PostgreSQL URL with sslmode=require (Step 3)'],
   ['FRONTEND_URL', 'Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)'],
   ['NEXT_PUBLIC_API_URL', 'Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)'],
   ['NEXT_PUBLIC_SUPABASE_URL', 'Supabase project URL, https://<ref>.supabase.co (Step 2)'],
   ['SUPABASE_URL', 'Same Supabase project URL (Step 2)'],
-  ['SUPABASE_SERVICE_ROLE_KEY', 'Supabase service role key — secret store only (Step 2)'],
-  ['STRIPE_SECRET_KEY', 'Live Stripe secret key sk_live_… (Step 2)'],
-  ['STRIPE_WEBHOOK_SECRET', 'Live Stripe webhook signing secret whsec_… (Step 2)'],
-  ['NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'Live Stripe publishable key pk_live_… (Step 2)'],
-  ['RESEND_API_KEY', 'Resend production API key re_… (Step 2)'],
+  ['SUPABASE_SERVICE_ROLE_KEY', 'Supabase service role key - secret store only (Step 2)'],
+  ['STRIPE_SECRET_KEY', 'Live Stripe secret key sk_live_... (Step 2)'],
+  ['STRIPE_WEBHOOK_SECRET', 'Live Stripe webhook signing secret whsec_... (Step 2)'],
+  ['NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'Live Stripe publishable key pk_live_... (Step 2)'],
+  ['RESEND_API_KEY', 'Resend production API key re_... (Step 2)'],
   ['EMAIL_FROM', 'Verified sender, e.g. noreply@charitypilot.ie (Step 2)'],
   ['ERROR_ALERT_WEBHOOK_URL', 'HTTPS incident webhook (Slack etc.) (Step 2)'],
   ['TRUSTED_PROXY_ADDRESSES', 'Reverse-proxy IP/CIDR in front of the API (Step 4)'],
@@ -82,7 +82,7 @@ function main() {
   const content = buildProductionEnv(readFileSync(examplePath, 'utf8'));
   writeFileSync(targetPath, content, { mode: 0o600 });
 
-  console.log('Created .env.production (gitignored — never commit it).');
+  console.log('Created .env.production (gitignored - never commit it).');
   console.log('');
   console.log(`Auto-generated for you: ${AUTO_GENERATED_KEYS.join(', ')} (high-entropy secrets) and NODE_ENV=production.`);
   console.log('');
