@@ -214,6 +214,7 @@ export default function CompliancePage() {
               const pSummary = getPrincipleSummary(principle.id);
               const pct = pSummary?.percentComplete ?? 0;
               const isExpanded = expandedId === principle.id;
+              const panelId = `principle-${principle.id}-standards`;
 
               const coreStandards = principle.standards.filter((s) => s.isCore);
               const additionalStandards = principle.standards.filter((s) => s.isAdditional);
@@ -227,6 +228,8 @@ export default function CompliancePage() {
                   <button
                     type="button"
                     className="w-full text-left p-5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    aria-expanded={isExpanded}
+                    aria-controls={panelId}
                     onClick={() => setExpandedId(isExpanded ? null : principle.id)}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -278,7 +281,10 @@ export default function CompliancePage() {
 
                   {/* Expanded standards list */}
                   {isExpanded && (
-                    <div className="border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/60">
+                    <div
+                      id={panelId}
+                      className="border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/60"
+                    >
                       {/* Core standards */}
                       <div className="px-5 py-3">
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">

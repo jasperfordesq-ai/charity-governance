@@ -380,6 +380,15 @@ test('compliance overview uses shared loading and error state primitives', () =>
   assert.doesNotMatch(src, /animate-pulse/);
 });
 
+test('compliance overview principle disclosures expose expanded state and panel ownership', () => {
+  const src = dash('compliance/page.tsx');
+
+  assert.match(src, /const panelId = `principle-\$\{principle\.id\}-standards`/);
+  assert.match(src, /aria-expanded=\{isExpanded\}/);
+  assert.match(src, /aria-controls=\{panelId\}/);
+  assert.match(src, /id=\{panelId\}/);
+});
+
 test('principle detail refreshes approval-readiness after successful autosave', () => {
   const src = dash('compliance/[principleId]/page.tsx');
   assert.match(src, /refreshApprovalReadiness/);

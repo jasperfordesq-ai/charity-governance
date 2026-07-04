@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `eda3d24`
+Working-tree base commit when generated: `5241f19`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -90,6 +90,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Board trustee conduct and induction evidence toggles now use HeroUI Checkbox controls instead of raw checkbox inputs.
 - Register Annual Report and financial-control checklist rows now use HeroUI Checkbox controls instead of raw checkbox inputs.
 - Compliance standard editor status rendering now tolerates optional selected-item labels during production builds.
+- Compliance overview principle disclosure buttons now expose expanded state and controlled panel relationships for assistive technology.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -108,7 +109,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 189 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 258 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 347 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 353 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 397 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 436 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 394 | yes | no obvious static risk; verify in browser |
