@@ -305,6 +305,16 @@ test('platform audit ledger records deployed browser QA hardening', () => {
   assert.match(auditLedger, /direct database reset or token-injection seams/);
 });
 
+test('platform audit ledger records launch evidence gate hardening', () => {
+  const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
+  const auditLedger = readRepoFile('docs/platform-completion-audit.md');
+
+  assert.match(auditGenerator, /Launch status now separates missing production env values from external launch evidence gates/);
+  assert.match(auditGenerator, /legal\/compliance final approval/);
+  assert.match(auditLedger, /Launch status now separates missing production env values from external launch evidence gates/);
+  assert.match(auditLedger, /legal\/compliance final approval/);
+});
+
 test('responsive route smoke is runnable as a focused launch QA command', () => {
   const rootPackage = packageJson();
   const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');

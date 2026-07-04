@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `5656845`
+Working-tree base commit when generated: `bc73886`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -76,6 +76,9 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.
 - The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
+- Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
+- Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
+- Team feedback now uses the shared inline status primitive instead of route-local alert styling.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -110,7 +113,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 180 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 396 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 194 | yes | no obvious static risk; verify in browser |
-| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 401 | yes | no obvious static risk; verify in browser |
+| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 393 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
 

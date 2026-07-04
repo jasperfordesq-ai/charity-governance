@@ -103,6 +103,9 @@ const fixedInThisAuditBranch = [
   'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
+  'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
+  'Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.',
+  'Team feedback now uses the shared inline status primitive instead of route-local alert styling.',
 ];
 
 const independentAuditFindings = [
