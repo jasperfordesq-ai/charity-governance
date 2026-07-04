@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `353d70b`
+Working-tree base commit when generated: `f46d248`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -121,6 +121,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
+- `npm run release:ready -- --no-e2e` passed locally with 6/6 selected release gates and only the full Playwright suite skipped.
 - `npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.

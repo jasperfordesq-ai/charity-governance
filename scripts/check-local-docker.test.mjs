@@ -396,9 +396,11 @@ test('platform audit ledger records local browser evidence without closing deplo
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
 
   assert.match(auditGenerator, /Local Verification Evidence/);
+  assert.match(auditGenerator, /npm run release:ready -- --no-e2e/);
   assert.match(auditGenerator, /npm run test:e2e:responsive/);
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
+  assert.match(auditLedger, /6\/6 selected release gates/);
   assert.match(auditLedger, /50\/50 Playwright route smoke checks/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
