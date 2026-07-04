@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `dfd31cf`
+Working-tree base commit when generated: `a877bcd`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -84,6 +84,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.
 - Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.
 - Export approval-readiness issue cards and conditional review prompts are split out of the route and now use shared status/review primitives instead of repeated warning-card markup.
+- Organisation setup warning surfaces now use the shared inline status primitive instead of route-local amber advisory boxes.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -111,7 +112,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 107 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 138 | yes | no obvious static risk; verify in browser |
-| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 353 | yes | no obvious static risk; verify in browser |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 351 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 259 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 270 | yes | no obvious static risk; verify in browser |

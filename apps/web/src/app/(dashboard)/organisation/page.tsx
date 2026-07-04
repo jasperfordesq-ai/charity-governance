@@ -17,7 +17,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { useAuth } from '@/lib/auth-context';
 import { AppPage } from '@/components/ui/app-page';
-import { ErrorState, LoadingState } from '@/components/ui/states';
+import { ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import type { ConditionalObligationProfile, UpdateOrganisationRequest } from '@charitypilot/shared';
 import {
@@ -332,11 +332,9 @@ export default function OrganisationPage() {
                     Complex organisations track the core standards plus the 17 additional standards. Consider this for larger, higher-risk, staffed, or multi-activity charities.
                   </p>
                 </div>
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
-                  <p className="text-sm leading-6 text-amber-900 dark:text-amber-100">
-                    Changing this setting affects which standards appear. Existing records are retained. Treat this as a governance setup choice, not legal advice.
-                  </p>
-                </div>
+                <InlineStatus tone="warning">
+                  Changing this setting affects which standards appear. Existing records are retained. Treat this as a governance setup choice, not legal advice.
+                </InlineStatus>
               </ModalBody>
               <ModalFooter>
                 <Button className="bg-teal-primary text-white hover:bg-teal-dark" onPress={onClose}>

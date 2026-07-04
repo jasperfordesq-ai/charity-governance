@@ -179,6 +179,16 @@ test('organisation profile form is extracted from the oversized route file', () 
   assert.match(formSrc, /Save profile/);
 });
 
+test('organisation review warnings use the shared inline status primitive', () => {
+  const pageSrc = dash('organisation/page.tsx');
+  const profileSrc = dash('organisation/organisation-conditional-profile.tsx');
+
+  assert.match(pageSrc, /InlineStatus/);
+  assert.match(profileSrc, /InlineStatus/);
+  assert.doesNotMatch(pageSrc, /border-amber-200 bg-amber-50/);
+  assert.doesNotMatch(profileSrc, /border-amber-200 bg-amber-50/);
+});
+
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,
 // never a blank screen / infinite spinner / unhandled exception).
 test('the global and dashboard error boundaries render a recoverable screen', () => {

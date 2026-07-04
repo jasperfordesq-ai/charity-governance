@@ -1,6 +1,7 @@
 'use client';
 
 import { FieldGroup } from '@/components/ui/forms';
+import { InlineStatus } from '@/components/ui/states';
 import { ReviewFlag } from '@/components/ui/status';
 import type { ConditionalObligationProfile } from '@charitypilot/shared';
 
@@ -105,12 +106,12 @@ export function OrganisationConditionalProfileFields({
           );
         })}
       </div>
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+      <InlineStatus tone="warning">
         <ReviewFlag tone="needs-review">Professional review</ReviewFlag>
-        <p className="mt-2 text-sm leading-6 text-amber-900 dark:text-amber-100">
+        <span className="mt-2 block">
           These answers help surface conditional workflows for staff, fundraising, safeguarding, GDPR, premises, public-sector context, and processors. Solicitor, privacy, HR, safeguarding, accounting, or governance review may still be needed.
-        </p>
-      </div>
+        </span>
+      </InlineStatus>
     </FieldGroup>
   );
 }
