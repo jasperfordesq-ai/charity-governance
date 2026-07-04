@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `8d25490`
+Working-tree base commit when generated: `7d98f79`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -94,6 +94,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
+- Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
 
 ## Independent Audit Findings Still Driving Next Work
 

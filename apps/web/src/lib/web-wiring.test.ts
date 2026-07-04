@@ -1017,6 +1017,25 @@ test('marketing blog client uses lucide icons instead of inline svg', () => {
   assert.doesNotMatch(src, /<svg\b/, 'BlogClient should not carry hand-drawn inline SVG markup');
 });
 
+test('public marketing and cookie action controls use HeroUI Button primitives', () => {
+  const expectations: Array<['app' | 'component', string]> = [
+    ['app', '(marketing)/MobileNav.tsx'],
+    ['app', '(marketing)/blog/BlogClient.tsx'],
+    ['component', 'cookie-consent.tsx'],
+  ];
+
+  for (const [scope, file] of expectations) {
+    const src = scope === 'app' ? app(file) : component(file);
+    assert.match(src, /from '@heroui\/react'/, `${file} should use HeroUI for public action controls`);
+    assert.match(src, /<Button\b/, `${file} should render HeroUI Button controls`);
+    assert.doesNotMatch(src, /<button\b/, `${file} should not keep raw public action buttons`);
+  }
+
+  const mobileNav = app('(marketing)/MobileNav.tsx');
+  assert.match(mobileNav, /dark:bg-gray-900/, 'mobile nav menu should have dark-mode surface styling');
+  assert.match(mobileNav, /dark:text-gray-200/, 'mobile nav menu links should have dark-mode text styling');
+});
+
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['register/page.tsx', ['Check', 'Circle']],

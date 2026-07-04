@@ -121,6 +121,7 @@ const fixedInThisAuditBranch = [
   'Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.',
   'Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.',
   'Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.',
+  'Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.',
 ];
 
 const independentAuditFindings = [

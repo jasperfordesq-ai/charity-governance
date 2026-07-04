@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@heroui/react';
 import Link from 'next/link';
 import { ArrowRight, BookOpen, FileText, Search, ShieldCheck } from 'lucide-react';
 import { getCategories, formatDate } from '@/lib/blog';
@@ -88,20 +89,23 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
 
       <div className="mb-12 flex flex-wrap gap-2" role="tablist" aria-label="Filter by category">
         {categories.map((cat) => (
-          <button
+          <Button
             key={cat}
             type="button"
             role="tab"
             aria-selected={activeCategory === cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            size="sm"
+            radius="md"
+            variant={activeCategory === cat ? 'solid' : 'flat'}
+            onPress={() => setActiveCategory(cat)}
+            className={`font-semibold ${
               activeCategory === cat
                 ? 'bg-teal-primary text-white dark:bg-teal-bright dark:text-gray-950'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
             }`}
           >
             {cat}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -114,16 +118,19 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
           <p className="mx-auto max-w-sm text-sm text-gray-600 dark:text-gray-300">
             Try a broader search term or switch back to all categories.
           </p>
-          <button
+          <Button
             type="button"
-            onClick={() => {
+            size="sm"
+            radius="md"
+            variant="bordered"
+            onPress={() => {
               setSearch('');
               setActiveCategory('All');
             }}
-            className="mt-5 rounded-lg border border-teal-primary px-4 py-2 text-sm font-semibold text-teal-primary hover:bg-teal-primary hover:text-white dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950"
+            className="mt-5 border-teal-primary font-semibold text-teal-primary hover:bg-teal-primary hover:text-white dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950"
           >
             Clear filters
-          </button>
+          </Button>
         </div>
       ) : (
         <>

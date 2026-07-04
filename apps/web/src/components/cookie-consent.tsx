@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Button } from '@heroui/react';
 import { CircleAlert } from 'lucide-react';
 
 const STORAGE_KEY = 'cookie-consent';
@@ -72,18 +73,23 @@ export function CookieConsent() {
 
           {/* Buttons */}
           <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
-            <button
-              onClick={handleAccept}
-              className="bg-amber-accent text-gray-900 font-semibold text-sm px-5 py-2.5 rounded-full hover:bg-amber-light transition-colors whitespace-nowrap"
+            <Button
+              type="button"
+              radius="full"
+              onPress={handleAccept}
+              className="bg-amber-accent px-5 font-semibold text-gray-900 hover:bg-amber-light whitespace-nowrap"
             >
               Accept All
-            </button>
-            <button
-              onClick={handleDecline}
-              className="bg-white/10 text-white font-semibold text-sm px-5 py-2.5 rounded-full hover:bg-white/20 transition-colors whitespace-nowrap border border-white/20"
+            </Button>
+            <Button
+              type="button"
+              radius="full"
+              variant="bordered"
+              onPress={handleDecline}
+              className="border-white/20 bg-white/10 px-5 font-semibold text-white hover:bg-white/20 whitespace-nowrap"
             >
               Essential Only
-            </button>
+            </Button>
           </div>
         </div>
       </div>
