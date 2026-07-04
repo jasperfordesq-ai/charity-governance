@@ -220,8 +220,9 @@ test('dashboard accessibility scans allow protected route cold compiles to finis
 
   assert.match(
     accessibilitySpec,
-    /test\.describe\.configure\(\{\s*retries:\s*2,\s*timeout:\s*180_000\s*\}\)/,
+    /const ACCESSIBILITY_TEST_TIMEOUT_MS = 300_000/,
   );
+  assert.match(accessibilitySpec, /test\.describe\.configure\(\{\s*retries:\s*2,\s*timeout:\s*ACCESSIBILITY_TEST_TIMEOUT_MS\s*\}\)/);
   assert.match(playwrightConfig, /navigationTimeout:\s*150_000/);
 });
 
@@ -243,8 +244,17 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
 test('accessibility scans navigate to rendered pages without waiting on dev-only load noise', () => {
   const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
 
-  assert.match(accessibilitySpec, /ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
-  assert.match(accessibilitySpec, /page\.goto\(path,\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(accessibilitySpec, /const NAVIGATION_TIMEOUT_MS = 300_000/);
+  assert.match(accessibilitySpec, /async function waitForDocumentShell\(page: Page\): Promise<void>/);
+  assert.match(accessibilitySpec, /async function applyTheme\(page: Page,\s*theme: Theme\): Promise<void>/);
+  assert.match(accessibilitySpec, /Boolean\(document\.documentElement && document\.body\)/);
+  assert.match(accessibilitySpec, /document\.documentElement\.classList\.toggle\('dark',\s*theme === 'dark'\)/);
+  assert.match(accessibilitySpec, /ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(accessibilitySpec, /page\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'light'\)/);
+  assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'dark'\)/);
+  assert.doesNotMatch(accessibilitySpec, /waitForLoadState\('networkidle'\)/);
+  assert.doesNotMatch(accessibilitySpec, /waitUntil:\s*'domcontentloaded'/);
 });
 
 test('e2e authenticated owner setup has cold compile headroom', () => {
@@ -254,7 +264,8 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
   assert.match(fixtures, /await page\.goto\('\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
   assert.match(fixtures, /page\.waitForURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
   assert.match(fixtures, /expect\(page\)\.toHaveURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
-  assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*180_000\s*\}/);
+  assert.match(fixtures, /const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 300_000/);
+  assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS\s*\}/);
 });
 
 test('deployed browser QA mode does not reset or mutate databases through local seams', () => {

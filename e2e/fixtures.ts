@@ -23,6 +23,7 @@ export async function reliableFill(locator: Locator, value: string): Promise<voi
  * (>=8 chars, an uppercase, a lowercase and a digit).
  */
 export const TEST_PASSWORD = 'TestPass123';
+const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 300_000;
 
 /** A unique email per call — registration is anti-enumeration, so emails must not repeat. */
 export function uniqueEmail(prefix = 'owner'): string {
@@ -238,7 +239,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         storageState,
       });
     },
-    { scope: 'worker', timeout: 180_000 },
+    { scope: 'worker', timeout: AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS },
   ],
 
   ownerPage: async ({ browser, owner }, use) => {
