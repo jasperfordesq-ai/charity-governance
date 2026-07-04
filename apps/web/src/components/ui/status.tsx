@@ -60,6 +60,23 @@ export function StatusChip({
   );
 }
 
+export function StatusTile({
+  title,
+  detail,
+  tone = 'neutral',
+}: {
+  title: ReactNode;
+  detail: ReactNode;
+  tone?: StatusTone;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <StatusChip tone={tone}>{title}</StatusChip>
+      <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{detail}</p>
+    </div>
+  );
+}
+
 export function StatusDot({
   tone = 'neutral',
   className,

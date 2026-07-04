@@ -9,7 +9,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { getTrustedStripeRedirectUrl } from '@/lib/url-security';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
-import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip, StatusTile } from '@/components/ui/status';
 import type { BillingStatusResponse } from '@charitypilot/shared';
 import { SubscriptionPlan, SubscriptionStatus } from '@charitypilot/shared';
 
@@ -221,9 +221,9 @@ export default function BillingPage() {
             description="Essentials covers the core Governance Code workflow. Complete adds dense operational registers and readiness records; it does not replace trustee judgement or professional advice."
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <GateTile title="Essentials" detail="Compliance, documents, board register, deadlines, and export workflows." tone="brand" />
-              <GateTile title="Complete" detail="Conflicts, risks, complaints, fundraising, financial controls, and Annual Report readiness." tone="success" />
-              <GateTile title="Review prompts" detail="Professional review may still be needed for accounting, legal form, staff, data, safeguarding, or fundraising context." tone="warning" />
+              <StatusTile title="Essentials" detail="Compliance, documents, board register, deadlines, and export workflows." tone="brand" />
+              <StatusTile title="Complete" detail="Conflicts, risks, complaints, fundraising, financial controls, and Annual Report readiness." tone="success" />
+              <StatusTile title="Review prompts" detail="Professional review may still be needed for accounting, legal form, staff, data, safeguarding, or fundraising context." tone="warning" />
             </div>
           </AppSection>
 
@@ -345,22 +345,5 @@ export default function BillingPage() {
         </>
       )}
     </AppPage>
-  );
-}
-
-function GateTile({
-  title,
-  detail,
-  tone,
-}: {
-  title: string;
-  detail: string;
-  tone: 'brand' | 'success' | 'warning';
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <StatusChip tone={tone}>{title}</StatusChip>
-      <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{detail}</p>
-    </div>
   );
 }

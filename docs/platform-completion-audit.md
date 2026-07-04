@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `229d196`
+Working-tree base commit when generated: `8c5b962`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -99,6 +99,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Responsive browser-smoke QA now waits for the parsed document shell before applying light/dark theme checks after commit-stage navigations.
 - Document uploads now use a shared HeroUI-backed file upload field instead of route-local file input styling.
 - Marketing blog search and trial CTA now use HeroUI Input and Button primitives instead of route-local form/link styling.
+- Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.
 
 ## Independent Audit Findings Still Driving Next Work
 
@@ -113,7 +114,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 165 | yes | no obvious static risk; verify in browser |
-| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 367 | yes | no obvious static risk; verify in browser |
+| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 350 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 189 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 258 | yes | no obvious static risk; verify in browser |

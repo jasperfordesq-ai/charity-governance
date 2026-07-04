@@ -1639,7 +1639,7 @@ test('phase 6C billing preserves Stripe redirect validation while clarifying pla
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
     ['@/components/ui/states', ['LoadingState', 'ErrorState', 'ReviewWarningState']],
-    ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+    ['@/components/ui/status', ['ReviewFlag', 'StatusChip', 'StatusTile']],
   ];
 
   for (const [moduleName, importedNames] of imports) {
@@ -1665,6 +1665,8 @@ test('phase 6C billing preserves Stripe redirect validation while clarifying pla
   assert.match(src, /Checkout returned an unexpected redirect URL/);
   assert.doesNotMatch(src, /Monthly \(&euro;\$\{plan\.monthlyPrice\}\/mo\)/);
   assert.match(src, /Monthly \(\\u20ac\$\{plan\.monthlyPrice\}\/mo\)/);
+  assert.match(src, /<StatusTile\b/);
+  assert.doesNotMatch(src, /function GateTile/);
 });
 
 test('dashboard navigation manages mobile sidebar focus and meaningful breadcrumbs', () => {
