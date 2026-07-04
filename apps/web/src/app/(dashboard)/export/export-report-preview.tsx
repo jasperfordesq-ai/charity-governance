@@ -2,6 +2,7 @@
 
 import { Card, Chip } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
+import { LoadingState } from '@/components/ui/states';
 import { GOVERNANCE_PRINCIPLES, type ComplianceSummary } from '@charitypilot/shared';
 import type { ReactNode } from 'react';
 import { Building2, CircleCheck, FileText, ListChecks, ShieldCheck, UsersRound } from 'lucide-react';
@@ -62,14 +63,10 @@ export function ExportReportPreview({
       description="The exported report will include the following sections:"
     >
       {loading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="animate-pulse border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-              <div className="mb-3 h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-800" />
-              <div className="h-3 w-2/3 rounded bg-gray-200 dark:bg-gray-800" />
-            </Card>
-          ))}
-        </div>
+        <LoadingState
+          title="Loading report preview"
+          description="Preparing the sections that will appear in the exported compliance report."
+        />
       ) : (
         <div className="space-y-4">
           <PreviewCard

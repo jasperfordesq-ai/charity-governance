@@ -591,6 +591,23 @@ test('export report preview UI is extracted from the oversized route file', () =
   assert.match(previewSrc, /Board Approval Record/);
 });
 
+test('export loading, warning, and sign-off error states use shared primitives', () => {
+  const pageSrc = dash('export/page.tsx');
+  const previewSrc = dash('export/export-report-preview.tsx');
+
+  assert.match(pageSrc, /from '@\/components\/ui\/form-alert'/);
+  assert.match(pageSrc, /FormAlert/);
+  assert.match(pageSrc, /ReviewWarningState/);
+  assert.match(pageSrc, /Before exporting/);
+  assert.doesNotMatch(pageSrc, /CircleAlert/);
+  assert.doesNotMatch(pageSrc, /role="alert" className=/);
+  assert.doesNotMatch(pageSrc, /bg-red-50/);
+
+  assert.match(previewSrc, /from '@\/components\/ui\/states'/);
+  assert.match(previewSrc, /LoadingState/);
+  assert.doesNotMatch(previewSrc, /animate-pulse/);
+});
+
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {
   const src = [
     dash('documents/page.tsx'),
@@ -724,7 +741,7 @@ test('primary add actions use icon-library icons instead of route-local inline s
 
 test('remaining P0 dashboard route chrome uses lucide icons instead of inline svg', () => {
   const expectations: Array<[string, string[]]> = [
-    ['export/page.tsx', ['Download', 'CircleAlert']],
+    ['export/page.tsx', ['Download']],
     ['compliance/page.tsx', ['ChevronDown']],
     ['compliance/[principleId]/page.tsx', ['ChevronLeft']],
   ];

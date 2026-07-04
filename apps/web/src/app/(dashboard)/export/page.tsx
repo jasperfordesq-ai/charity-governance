@@ -4,10 +4,11 @@ import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
-import { CircleAlert, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
+import { FormAlert } from '@/components/ui/form-alert';
 import { ReviewWarningState } from '@/components/ui/states';
 import type { ComplianceApprovalReadinessResponse, ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
@@ -326,8 +327,10 @@ export default function ExportPage() {
         </div>
 
         {signoffError && (
-          <div role="alert" className="mt-4 rounded-lg border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-            {signoffError}
+          <div className="mt-4">
+            <FormAlert>
+              {signoffError}
+            </FormAlert>
           </div>
         )}
 
@@ -386,21 +389,10 @@ export default function ExportPage() {
         signoffChipColor={signoffChipColor}
       />
 
-      {/* Additional info */}
-      <Card className="border border-amber-200 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-500/10 p-5">
-        <div className="flex items-start gap-3">
-          <CircleAlert className="w-5 h-5 text-amber-500 dark:text-amber-300 flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Before exporting</p>
-            <p className="text-xs text-amber-700 dark:text-amber-200/90 mt-0.5">
-              Make sure all your compliance records are up to date and your organisation profile is complete.
-              Record board approval once the trustees have reviewed the annual position.
-              Internal notes (marked as such in the editor) will not be included in the exported report.
-              The report is formatted for printing -- use your browser&apos;s &quot;Print to PDF&quot; option to save a copy.
-            </p>
-          </div>
-        </div>
-      </Card>
+      <ReviewWarningState
+        title="Before exporting"
+        description="Make sure all compliance records are up to date, the organisation profile is complete, and trustees have reviewed the annual position. Internal notes are excluded from the exported report. Use your browser's Print to PDF option to save a copy."
+      />
     </AppPage>
   );
 }
