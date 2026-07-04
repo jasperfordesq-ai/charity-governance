@@ -82,6 +82,11 @@ test('production provider checker verifies live Stripe prices, webhook endpoint,
             livemode: true,
             status: 'enabled',
             url: 'https://api.charitypilot.ie/api/v1/billing/webhooks',
+            enabled_events: [
+              'checkout.session.completed',
+              'customer.subscription.updated',
+              'customer.subscription.deleted',
+            ],
           },
         ],
       });
@@ -104,6 +109,7 @@ test('production provider checker verifies live Stripe prices, webhook endpoint,
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production provider check passed/);
+    assert.match(result.stdout, /required subscription events/);
     assert.equal(calls.filter((call) => call.url.includes('/v1/prices/')).length, 4);
     assert.ok(calls.some((call) => call.url.includes('/v1/webhook_endpoints')));
     assert.ok(calls.some((call) => call.url.includes('api.resend.com/domains')));
@@ -133,7 +139,14 @@ test('production provider checker fails when a Stripe price is inactive or not l
           }
           if (url.includes('api.stripe.com/v1/prices/')) return response(200, priceBody(decodeURIComponent(url.split('/').pop())));
           if (url.includes('api.stripe.com/v1/webhook_endpoints')) {
-            return response(200, { data: [{ livemode: true, status: 'enabled', url: 'https://api.charitypilot.ie/api/v1/billing/webhooks' }] });
+            return response(200, {
+              data: [{
+                livemode: true,
+                status: 'enabled',
+                url: 'https://api.charitypilot.ie/api/v1/billing/webhooks',
+                enabled_events: ['*'],
+              }],
+            });
           }
           if (url.includes('api.resend.com/domains')) {
             return response(200, { data: [{ name: 'charitypilot.ie', status: 'verified' }] });
@@ -165,7 +178,16 @@ test('production provider checker fails when webhook or Resend domain evidence i
           if (url.includes('api.stripe.com/v1/prices/')) return response(200, priceBody(decodeURIComponent(url.split('/').pop())));
           if (url.includes('api.stripe.com/v1/webhook_endpoints')) {
             return response(200, {
-              data: [{ livemode: true, status: 'disabled', url: 'https://api.charitypilot.ie/api/v1/billing/webhooks' }],
+              data: [{
+                livemode: true,
+                status: 'disabled',
+                url: 'https://api.charitypilot.ie/api/v1/billing/webhooks',
+                enabled_events: [
+                  'checkout.session.completed',
+                  'customer.subscription.updated',
+                  'customer.subscription.deleted',
+                ],
+              }],
             });
           }
           if (url.includes('api.resend.com/domains')) {
@@ -179,6 +201,42 @@ test('production provider checker fails when webhook or Resend domain evidence i
     assert.equal(result.status, 1);
     assert.match(result.stderr, /enabled live Stripe webhook endpoint must exist for https:\/\/api\.charitypilot\.ie\/api\/v1\/billing\/webhooks/);
     assert.match(result.stderr, /Resend domain charitypilot\.ie must be verified/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production provider checker fails when the Stripe webhook is missing required events', async () => {
+  const runProductionProvidersCheckFromArgs = await loadProviderRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+
+  try {
+    const result = await runProductionProvidersCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async (url) => {
+          if (url.includes('api.stripe.com/v1/prices/')) return response(200, priceBody(decodeURIComponent(url.split('/').pop())));
+          if (url.includes('api.stripe.com/v1/webhook_endpoints')) {
+            return response(200, {
+              data: [{
+                livemode: true,
+                status: 'enabled',
+                url: 'https://api.charitypilot.ie/api/v1/billing/webhooks',
+                enabled_events: ['checkout.session.completed'],
+              }],
+            });
+          }
+          if (url.includes('api.resend.com/domains')) {
+            return response(200, { data: [{ name: 'charitypilot.ie', status: 'verified' }] });
+          }
+          return response(404, {});
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /must subscribe to customer\.subscription\.updated/);
+    assert.match(result.stderr, /must subscribe to customer\.subscription\.deleted/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

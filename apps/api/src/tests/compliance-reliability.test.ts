@@ -246,7 +246,7 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
       profileIssues: [],
       conditionalReviewItems: [],
       matrixReviewItems: ok.json().data.matrixReviewItems,
-      matrixLastChecked: '2026-07-03',
+      matrixLastChecked: '2026-07-04',
     });
     assert.ok(ok.json().data.matrixReviewItems.length > 0);
 

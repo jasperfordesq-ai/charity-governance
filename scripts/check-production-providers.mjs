@@ -12,6 +12,12 @@ const stripePriceEnvNames = [
   'STRIPE_COMPLETE_YEARLY_PRICE_ID',
 ];
 
+const requiredStripeWebhookEvents = [
+  'checkout.session.completed',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+];
+
 function usage() {
   return [
     'Usage: node scripts/check-production-providers.mjs --production-env-file <path> [--expect-api-origin <origin>]',
@@ -233,13 +239,22 @@ async function verifyStripeWebhook({ env, fetchImpl, apiOrigin, issues }) {
   );
   if (!endpoints) return;
 
-  const hasExpectedEndpoint = Array.isArray(endpoints.data) && endpoints.data.some((endpoint) => (
+  const expectedEndpoint = Array.isArray(endpoints.data) && endpoints.data.find((endpoint) => (
     endpoint?.livemode === true &&
     endpoint?.status === 'enabled' &&
     endpoint?.url === expectedWebhookUrl
   ));
-  if (!hasExpectedEndpoint) {
+  if (!expectedEndpoint) {
     issues.push(`enabled live Stripe webhook endpoint must exist for ${expectedWebhookUrl}`);
+    return;
+  }
+
+  const enabledEvents = Array.isArray(expectedEndpoint.enabled_events) ? expectedEndpoint.enabled_events : [];
+  const subscribesToAll = enabledEvents.includes('*');
+  for (const eventName of requiredStripeWebhookEvents) {
+    if (!subscribesToAll && !enabledEvents.includes(eventName)) {
+      issues.push(`Stripe webhook endpoint for ${expectedWebhookUrl} must subscribe to ${eventName}`);
+    }
   }
 }
 
@@ -311,7 +326,7 @@ export async function runProductionProvidersCheckFromArgs(
 
   return result(
     0,
-    'Production provider check passed: active live recurring Stripe prices, enabled live billing webhook endpoint, and verified Resend sender domain confirmed.\n',
+    'Production provider check passed: active live recurring Stripe prices, enabled live billing webhook endpoint with required subscription events, and verified Resend sender domain confirmed.\n',
   );
 }
 

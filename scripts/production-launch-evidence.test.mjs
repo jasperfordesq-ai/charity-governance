@@ -77,7 +77,42 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       'npm run check:production:providers -- --production-env-file=.env.production',
-      'Production provider check passed: active live recurring Stripe prices, enabled live billing webhook endpoint, and verified Resend sender domain confirmed.',
+      'Production provider check passed: active live recurring Stripe prices, enabled live billing webhook endpoint with required subscription events, and verified Resend sender domain confirmed.',
+      'required subscription events:',
+      'checkout.session.completed',
+      'customer.subscription.updated',
+      'customer.subscription.deleted',
+    ].join(' ');
+  }
+
+  if (areaId === 'billingAndEmail' && checkId === 'stripe-webhook-endpoint') {
+    entry.description = [
+      'Stripe live webhook endpoint verified for https://api.charitypilot.ie/api/v1/billing/webhooks.',
+      'Subscribed events:',
+      'checkout.session.completed',
+      'customer.subscription.updated',
+      'customer.subscription.deleted',
+    ].join(' ');
+  }
+
+  if (areaId === 'billingAndEmail' && checkId === 'stripe-webhook-secret') {
+    entry.description = [
+      'Stripe signing secret was compared with STRIPE_WEBHOOK_SECRET in the production secret store.',
+      'Evidence records the secret-store path and approver without exposing the raw value.',
+    ].join(' ');
+  }
+
+  if (areaId === 'billingAndEmail' && checkId === 'resend-send') {
+    entry.description = [
+      'Resend test send completed from EMAIL_FROM using the production sender domain.',
+      'Operator recorded the accepted message id and delivery log reference without raw API keys.',
+    ].join(' ');
+  }
+
+  if (areaId === 'billingAndEmail' && checkId === 'email-links-production-origin') {
+    entry.description = [
+      'password reset and email verification messages were requested in production.',
+      'Both email links used https://app.charitypilot.ie as the frontend origin.',
     ].join(' ');
   }
 
@@ -493,6 +528,45 @@ test('production launch evidence validator requires executable checker command t
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-check\.evidence must include the check:production:supabase command/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include Production provider check passed/);
     assert.match(result.stderr, /areas\.observability\.checks\.observability-check\.evidence must include the check:production:observability command/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete billing and email production evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/billing/generic',
+    description: 'Billing and email provider setup was reviewed',
+    capturedAt,
+  };
+  evidence.areas.billingAndEmail.checks['providers-check'].evidence = [{
+    ...genericEvidence,
+    type: 'command-output',
+    description: 'npm run check:production:providers -- --production-env-file=.env.production Production provider check passed',
+  }];
+  evidence.areas.billingAndEmail.checks['stripe-webhook-endpoint'].evidence = [genericEvidence];
+  evidence.areas.billingAndEmail.checks['stripe-webhook-secret'].evidence = [genericEvidence];
+  evidence.areas.billingAndEmail.checks['resend-send'].evidence = [genericEvidence];
+  evidence.areas.billingAndEmail.checks['email-links-production-origin'].evidence = [genericEvidence];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include required subscription events/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include checkout\.session\.completed/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-endpoint\.evidence must include https:\/\/api\.charitypilot\.ie\/api\/v1\/billing\/webhooks/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-secret\.evidence must include STRIPE_WEBHOOK_SECRET/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-secret\.evidence must include Stripe signing secret/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include Resend test send/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include accepted message id/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include password reset/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include email verification/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

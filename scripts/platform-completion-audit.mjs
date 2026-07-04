@@ -108,6 +108,7 @@ const fixedInThisAuditBranch = [
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
   'Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.',
   'Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.',
+  'Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.',
   'Team feedback now uses the shared inline status primitive instead of route-local alert styling.',
   'Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.',
   'Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.',
@@ -154,6 +155,7 @@ const independentAuditFindings = [
 
 const localVerificationEvidence = [
   '`npm run release:ready -- --no-e2e` passed locally with 6/6 selected release gates and only the full Playwright suite skipped.',
+  '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
   '`npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.',
   '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.',
   'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',

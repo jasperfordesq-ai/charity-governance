@@ -623,6 +623,76 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
+  if (areaId === 'billingAndEmail') {
+    const text = evidenceText(actualCheck.evidence);
+
+    if (checkId === 'providers-check') {
+      for (const marker of [
+        'required subscription events',
+        'checkout.session.completed',
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+      ]) {
+        if (!text.includes(marker)) {
+          issues.push(`${checkPath}.evidence must include ${marker}`);
+        }
+      }
+    }
+
+    if (checkId === 'stripe-webhook-endpoint') {
+      const requiredMarkers = [
+        'https://api.charitypilot.ie/api/v1/billing/webhooks',
+        'checkout.session.completed',
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+      ];
+      for (const marker of requiredMarkers) {
+        if (!text.includes(marker)) {
+          issues.push(`${checkPath}.evidence must include ${marker}`);
+        }
+      }
+    }
+
+    if (checkId === 'stripe-webhook-secret') {
+      const requiredMarkers = [
+        'STRIPE_WEBHOOK_SECRET',
+        'Stripe signing secret',
+        'secret store',
+      ];
+      for (const marker of requiredMarkers) {
+        if (!text.includes(marker)) {
+          issues.push(`${checkPath}.evidence must include ${marker}`);
+        }
+      }
+    }
+
+    if (checkId === 'resend-send') {
+      const requiredMarkers = [
+        'EMAIL_FROM',
+        'Resend test send',
+        'accepted message id',
+      ];
+      for (const marker of requiredMarkers) {
+        if (!text.includes(marker)) {
+          issues.push(`${checkPath}.evidence must include ${marker}`);
+        }
+      }
+    }
+
+    if (checkId === 'email-links-production-origin') {
+      const requiredMarkers = [
+        'https://app.charitypilot.ie',
+        'password reset',
+        'email verification',
+      ];
+      for (const marker of requiredMarkers) {
+        if (!text.includes(marker)) {
+          issues.push(`${checkPath}.evidence must include ${marker}`);
+        }
+      }
+    }
+  }
+
   if (areaId === 'jobs' && checkId === 'scheduler-command') {
     const text = evidenceText(actualCheck.evidence);
     const requiredJobCommands = [

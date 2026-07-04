@@ -164,9 +164,9 @@ Evidence:
 ## 7. Billing And Email
 
 - [ ] Stripe live products and prices match the four expected price IDs.
-- [ ] Stripe webhook points to the deployed API webhook endpoint.
-- [ ] Stripe webhook signing secret matches `STRIPE_WEBHOOK_SECRET`.
-- [ ] Resend API key can send from `EMAIL_FROM`.
+- [ ] Stripe webhook points to the deployed API webhook endpoint and is subscribed to `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+- [ ] Stripe webhook signing secret matches `STRIPE_WEBHOOK_SECRET` in the production secret store without recording the raw secret.
+- [ ] Resend API key can send from `EMAIL_FROM`, with an accepted message id or equivalent provider delivery reference recorded outside git.
 - [ ] Password reset and verification email links point to the production frontend origin.
 - [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 
