@@ -62,6 +62,9 @@ const DOUBLE_SUBMIT_GUARDED = [
   'export/page.tsx',
 ];
 const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
+  'board/page.tsx': [
+    'board/board-member-list-panel.tsx',
+  ],
   'documents/page.tsx': [
     'documents/document-upload-modal.tsx',
     'documents/document-list-panel.tsx',
@@ -370,7 +373,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'board/page.tsx',
-      extraFiles: ['board/board-member-modal.tsx'],
+      extraFiles: ['board/board-member-modal.tsx', 'board/board-member-list-panel.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -439,12 +442,13 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
 
 test('board trustee evidence UX is extracted from the oversized route file', () => {
   const pageSrc = dash('board/page.tsx');
+  const listPanelSrc = optionalDash('board/board-member-list-panel.tsx');
   const evidencePath = dashPath('board/board-evidence.tsx');
   assert.ok(existsSync(evidencePath), 'board trustee evidence helpers should be split out of page.tsx');
   const evidenceSrc = readFileSync(evidencePath, 'utf8');
 
   assert.match(pageSrc, /TrusteeEvidencePromptCards/);
-  assert.match(pageSrc, /BoardEvidenceChips/);
+  assert.match(listPanelSrc, /BoardEvidenceChips/);
   assert.match(pageSrc, /getTrusteeEvidence/);
   assert.doesNotMatch(pageSrc, /trusteeEvidencePrompts/);
   assert.match(evidenceSrc, /AppSection/);
@@ -480,6 +484,22 @@ test('board member form modal is extracted from the oversized route file', () =>
   assert.match(modalSrc, /Trustee details/);
   assert.match(modalSrc, /board-disabled-hint/);
   assert.match(modalSrc, /Saving updates the trustee register after the API confirms the change/);
+});
+
+test('board member list panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('board/page.tsx');
+  const panelPath = dashPath('board/board-member-list-panel.tsx');
+  assert.ok(existsSync(panelPath), 'board member list panel should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /BoardMemberListPanel/);
+  assert.doesNotMatch(pageSrc, /Board register ready/);
+  assert.doesNotMatch(pageSrc, /table and mobile card views/);
+  assert.doesNotMatch(pageSrc, /function formatDate|const formatDate/);
+  assert.match(panelSrc, /Board register ready/);
+  assert.match(panelSrc, /table and mobile card views/);
+  assert.match(panelSrc, /BoardEvidenceChips/);
+  assert.match(panelSrc, /formatDate/);
 });
 
 test('export report preview UI is extracted from the oversized route file', () => {

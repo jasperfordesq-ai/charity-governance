@@ -87,6 +87,7 @@ const fixedInThisAuditBranch = [
   'The deadline list panel, status classifier, and summary helper are split out of the oversized deadlines route behind a wiring regression test.',
   'The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.',
   'The board member add/edit modal is split out of the oversized board route behind a wiring regression test.',
+  'The board member list, mobile cards, desktop table, and status-toggle states are split out of the oversized board route behind a wiring regression test.',
   'The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.',
   'The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.',
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',
@@ -96,7 +97,7 @@ const fixedInThisAuditBranch = [
 
 const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
-  ['P1', 'Frontend polish', 'Largest all-client routes remain documents and board; keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.'],
+  ['P1', 'Frontend polish', 'Largest all-client route remains documents; keep splitting route-local forms/cards/hooks before broader visual polish and browser QA.'],
 ];
 
 const officialSources = [
