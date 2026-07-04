@@ -712,6 +712,33 @@ test('shared UI chrome uses lucide icons instead of inline svg', () => {
   }
 });
 
+test('dashboard layout navigation uses lucide icons instead of inline svg', () => {
+  const src = dash('layout.tsx');
+  const icons = [
+    'BookOpenCheck',
+    'Building2',
+    'CalendarDays',
+    'ClipboardCheck',
+    'CreditCard',
+    'Download',
+    'FileText',
+    'LayoutDashboard',
+    'LoaderCircle',
+    'LogOut',
+    'Menu',
+    'ShieldCheck',
+    'UserRoundCog',
+    'UsersRound',
+    'X',
+  ];
+
+  assert.match(src, /from 'lucide-react'/, 'dashboard layout should use lucide-react for shell icons');
+  for (const icon of icons) {
+    assert.match(src, new RegExp(`<${icon}\\b`), `dashboard layout should render ${icon} through lucide-react`);
+  }
+  assert.doesNotMatch(src, /<svg\b/, 'dashboard layout should not carry hand-drawn inline SVG markup');
+});
+
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
     ['login/page.tsx', ['Eye', 'EyeOff']],

@@ -9,111 +9,85 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { SessionTimeout } from '@/components/session-timeout';
+import {
+  BookOpenCheck,
+  Building2,
+  CalendarDays,
+  ClipboardCheck,
+  CreditCard,
+  Download,
+  FileText,
+  LayoutDashboard,
+  LoaderCircle,
+  LogOut,
+  Menu,
+  ShieldCheck,
+  UserRoundCog,
+  UsersRound,
+  X,
+} from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
 /*  Navigation items                                                  */
 /* ------------------------------------------------------------------ */
 
+const navIconClassName = 'w-5 h-5';
+
 const NAV_ITEMS = [
   {
     href: '/dashboard',
     label: 'Dashboard',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-      </svg>
-    ),
+    icon: <LayoutDashboard className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/compliance',
     label: 'Compliance',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-      </svg>
-    ),
+    icon: <ClipboardCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/regulator',
     label: 'Regulator Guide',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75l7.5 3v5.25c0 4.2-2.987 8.137-7.5 9.375-4.513-1.238-7.5-5.175-7.5-9.375V6.75l7.5-3z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 12.75l1.5 1.5 3.75-4.5" />
-      </svg>
-    ),
+    icon: <ShieldCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/documents',
     label: 'Documents',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </svg>
-    ),
+    icon: <FileText className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/board',
     label: 'Board',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-      </svg>
-    ),
+    icon: <UsersRound className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/registers',
     label: 'Registers',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.008v.008H3.75V6.75zm0 5.25h.008v.008H3.75V12zm0 5.25h.008v.008H3.75v-.008z" />
-      </svg>
-    ),
+    icon: <BookOpenCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/deadlines',
     label: 'Deadlines',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-      </svg>
-    ),
+    icon: <CalendarDays className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/organisation',
     label: 'Organisation',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
-      </svg>
-    ),
+    icon: <Building2 className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/team',
     label: 'Team',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm5.25 1.5a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-12 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-      </svg>
-    ),
+    icon: <UserRoundCog className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/billing',
     label: 'Billing',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-      </svg>
-    ),
+    icon: <CreditCard className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/export',
     label: 'Export',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-      </svg>
-    ),
+    icon: <Download className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
 ];
 
@@ -206,10 +180,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
         <div className="flex flex-col items-center gap-3">
-          <svg className="animate-spin h-10 w-10 text-teal-primary" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+          <LoaderCircle className="animate-spin h-10 w-10 text-teal-primary" aria-hidden="true" />
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading CharityPilot...</p>
         </div>
       </div>
@@ -253,9 +224,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 h-16 border-b border-gray-200 dark:border-gray-800">
           <div className="w-8 h-8 rounded-lg bg-teal-primary flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
+            <ShieldCheck className="w-5 h-5 text-white" strokeWidth={2} aria-hidden="true" />
           </div>
           <span className="text-lg font-bold text-teal-primary">CharityPilot</span>
         </div>
@@ -310,9 +279,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className="lg:hidden p-2 -ml-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             onClick={() => setSidebarOpen((open) => !open)}
           >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
+            {sidebarOpen ? (
+              <X className="w-6 h-6" strokeWidth={1.5} aria-hidden="true" />
+            ) : (
+              <Menu className="w-6 h-6" strokeWidth={1.5} aria-hidden="true" />
+            )}
           </button>
 
           {/* Organisation name */}
@@ -343,6 +314,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 router.replace('/login');
               }}
             >
+              <LogOut className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
               Logout
             </Button>
           </div>
