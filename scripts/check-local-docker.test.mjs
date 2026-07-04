@@ -38,6 +38,8 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /\n\s+web:/);
   assert.match(compose, /deps:[\s\S]*environment:[\s\S]*NODE_ENV:\s+development/);
   assert.match(compose, /deps:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
+  assert.match(compose, /deps:[\s\S]*\.charitypilot-package-lock\.sha256/);
+  assert.match(compose, /deps:[\s\S]*sha256sum package-lock\.json/);
   assert.match(compose, /deps:[\s\S]*Using existing node_modules volume/);
   assert.match(compose, /deps:[\s\S]*npm ci --include=dev/);
   assert.match(compose, /api:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
@@ -200,9 +202,42 @@ test('local Docker migrations are a first-class command and are dry-runnable', (
 
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml up --wait --wait-timeout 180 -d db/);
-  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc "if \[ -d node_modules\/next \] && \[ -d node_modules\/@prisma\/client \]; then echo 'Using existing node_modules volume'; else npm ci --include=dev; fi && npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api"/);
+  assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T deps sh -lc/);
+  assert.match(result.stdout, /lock_hash=\$\(sha256sum package-lock\.json \| awk '\{print \$1\}'\)/);
+  assert.match(result.stdout, /marker=node_modules\/\.charitypilot-package-lock\.sha256/);
+  assert.match(result.stdout, /cat .*marker/);
+  assert.match(result.stdout, /= .*lock_hash/);
+  assert.match(result.stdout, /npm ci --include=dev/);
+  assert.match(result.stdout, /printf '%s\\n'.*lock_hash.*>.*marker/);
+  assert.match(result.stdout, /npm run build -w @charitypilot\/shared && npm run db:generate -w @charitypilot\/api/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate status --schema apps\/api\/prisma\/schema\.prisma/);
+});
+
+test('dashboard accessibility scans allow protected route cold compiles to finish', () => {
+  const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
+  const playwrightConfig = readRepoFile('e2e/playwright.config.ts');
+
+  assert.match(
+    accessibilitySpec,
+    /test\.describe\.configure\(\{\s*retries:\s*2,\s*timeout:\s*180_000\s*\}\)/,
+  );
+  assert.match(playwrightConfig, /navigationTimeout:\s*150_000/);
+});
+
+test('accessibility scans navigate to rendered pages without waiting on dev-only load noise', () => {
+  const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
+
+  assert.match(accessibilitySpec, /ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(accessibilitySpec, /page\.goto\(path,\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+});
+
+test('e2e authenticated owner setup has cold compile headroom', () => {
+  const fixtures = readRepoFile('e2e/fixtures.ts');
+
+  assert.match(fixtures, /await page\.goto\('\/register',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /await page\.goto\('\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*180_000\s*\}/);
 });
 
 test('local Docker migrations stop running app services before refreshing dependencies', () => {

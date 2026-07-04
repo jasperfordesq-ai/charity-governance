@@ -79,7 +79,7 @@ export async function registerViaUi(
   const name = opts.name ?? 'E2E Owner';
   const organisationName = opts.organisationName ?? 'E2E Test Charity';
 
-  await page.goto('/register');
+  await page.goto('/register', { waitUntil: 'domcontentloaded' });
   await fillAndSubmit(
     page,
     async () => {
@@ -107,7 +107,7 @@ export async function registerViaUi(
  * and, if not, re-fill and retry until hydration completes.
  */
 export async function loginViaUi(page: Page, email: string, password: string): Promise<void> {
-  await page.goto('/login');
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await fillAndSubmit(
     page,
     async () => {
@@ -218,7 +218,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         storageState,
       });
     },
-    { scope: 'worker' },
+    { scope: 'worker', timeout: 180_000 },
   ],
 
   ownerPage: async ({ browser, owner }, use) => {

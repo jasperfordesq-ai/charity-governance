@@ -1,10 +1,11 @@
 import { test, expect, type Page } from '../fixtures';
 import AxeBuilder from '@axe-core/playwright';
 
-// axe colour-contrast results are deterministic, but each scan needs a fully-rendered page;
-// retry to absorb transient dev-server navigation jitter (slow cold compiles / aborts) under
-// host load. A real contrast violation fails every attempt, so retries never mask one.
-test.describe.configure({ retries: 2 });
+// axe colour-contrast results are deterministic, but each scan needs a fully-rendered page.
+// Retry to absorb transient dev-server navigation jitter and give protected-route cold
+// compiles the same headroom as the project navigation timeout. A real contrast violation
+// fails every attempt, so retries never mask one.
+test.describe.configure({ retries: 2, timeout: 180_000 });
 
 /**
  * Concern: accessibility & resilience. A charity-sector product must clear a WCAG 2.1 AA
@@ -52,7 +53,7 @@ test.describe('Accessibility — dashboard (light + dark)', () => {
     test(`${path} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
       // Light theme (default).
       await ownerPage.emulateMedia({ reducedMotion: 'reduce' });
-      await ownerPage.goto(path);
+      await ownerPage.goto(path, { waitUntil: 'domcontentloaded' });
       await settle(ownerPage);
       expect(await seriousViolations(ownerPage), `${path} (light)`).toEqual([]);
 
@@ -72,7 +73,7 @@ test.describe('Accessibility — public & auth pages', () => {
   for (const path of ['/', '/pricing', '/login', '/register', '/forgot-password']) {
     test(`${path} is axe-clean (0 serious/critical)`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.goto(path);
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
       await settle(page);
       expect(await seriousViolations(page), path).toEqual([]);
     });

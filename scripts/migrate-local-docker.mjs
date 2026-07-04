@@ -22,7 +22,7 @@ const commands = [
     'deps',
     'sh',
     '-lc',
-    "if [ -d node_modules/next ] && [ -d node_modules/@prisma/client ]; then echo 'Using existing node_modules volume'; else npm ci --include=dev; fi && npm run build -w @charitypilot/shared && npm run db:generate -w @charitypilot/api",
+    "set -eu; lock_hash=$(sha256sum package-lock.json | awk '{print $1}'); marker=node_modules/.charitypilot-package-lock.sha256; if [ -d node_modules/next ] && [ -d node_modules/@prisma/client ] && [ -f \"$marker\" ] && [ \"$(cat \"$marker\")\" = \"$lock_hash\" ]; then echo 'Using existing node_modules volume'; else npm ci --include=dev; printf '%s\\n' \"$lock_hash\" > \"$marker\"; fi && npm run build -w @charitypilot/shared && npm run db:generate -w @charitypilot/api",
   ],
   [
     'docker',

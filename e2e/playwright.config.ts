@@ -39,9 +39,9 @@ export default defineConfig({
     video: 'retain-on-failure',
     actionTimeout: 20_000,
     // The local stack runs Next in DEV mode and compiles each route on first hit, which
-    // can exceed 30s for protected pages when the host is under container load. Give cold
+    // can exceed 100s for protected pages when the host is under container load. Give cold
     // compiles generous headroom; warm hits are still fast (see global-setup warm-up).
-    navigationTimeout: 90_000,
+    navigationTimeout: 150_000,
   },
   projects: [
     {
