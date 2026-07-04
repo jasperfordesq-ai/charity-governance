@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CharityPilot release-readiness gate - one command that proves the platform gate state.
+// CharityPilot release-readiness gate - one command that proves the repository gate state.
 //
 // Runs every quality gate in order, captures PASS/FAIL per gate, and prints a single
 // summary with counts. Exits non-zero if any gate fails, so CI and humans can trust a
@@ -92,7 +92,7 @@ const overallStatus = failed.length > 0
   ? 'NOT GREEN'
   : skipped > 0
     ? 'GREEN - selected gates passed; skipped gates remain'
-    : 'GREEN - platform is release-ready';
+    : 'GREEN - repository release gates passed';
 console.log('-------------------------------------------------------');
 console.log(`  ${passed} passed, ${failed.length} failed, ${skipped} skipped`);
 console.log(`  OVERALL: ${overallStatus}`);

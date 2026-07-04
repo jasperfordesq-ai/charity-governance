@@ -138,6 +138,7 @@ const fixedInThisAuditBranch = [
   'The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.',
   'The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.',
   'The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.',
+  'The release readiness command now reports full local success as repository release gates passed instead of implying production launch readiness.',
 ];
 
 const independentAuditFindings = [

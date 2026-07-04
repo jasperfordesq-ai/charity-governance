@@ -1535,8 +1535,9 @@ test('package test scripts stay compatible with the Node 22 production runtime',
 test('release readiness command uses ASCII-safe operator output', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
 
-  assert.doesNotMatch(releaseReady, /[✅❌➖]/);
-  assert.doesNotMatch(releaseReady, /â/);
+  assert.doesNotMatch(releaseReady, /[^\x00-\x7F]/);
+  assert.doesNotMatch(releaseReady, /[\u2705\u274C\u2796]/u);
+  assert.doesNotMatch(releaseReady, /\u00E2/u);
   assert.match(releaseReady, /-- \$\{name\} --/);
   assert.match(releaseReady, /PASS/);
   assert.match(releaseReady, /FAIL/);
@@ -1548,6 +1549,8 @@ test('release readiness command distinguishes skipped gates from full readiness'
 
   assert.match(releaseReady, /skipped > 0/);
   assert.match(releaseReady, /GREEN - selected gates passed; skipped gates remain/);
+  assert.match(releaseReady, /GREEN - repository release gates passed/);
+  assert.doesNotMatch(releaseReady, /platform is release-ready/);
   assert.doesNotMatch(releaseReady, /failed\.length === 0 \? 'GREEN - platform is release-ready'/);
 });
 
