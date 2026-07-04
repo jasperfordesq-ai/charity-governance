@@ -3,20 +3,9 @@
 import { Card, Chip } from '@heroui/react';
 import Link from 'next/link';
 import type { BoardAlert, DeadlineResponse } from '@charitypilot/shared';
+import { EmptyState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 
-function SkeletonList({ rows = 3 }: { rows?: number }) {
-  return (
-    <Card className="animate-pulse border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-      <div className="mb-5 h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-800" />
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="mb-3 flex items-center gap-3">
-          <div className="h-3 w-3/4 rounded bg-gray-200 dark:bg-gray-800" />
-          <div className="h-3 w-1/4 rounded bg-gray-200 dark:bg-gray-800" />
-        </div>
-      ))}
-    </Card>
-  );
-}
+const stateActionClass = 'text-xs font-semibold text-teal-primary hover:underline dark:text-teal-bright';
 
 export function DashboardActionLists({
   loading,
@@ -34,7 +23,10 @@ export function DashboardActionLists({
       <div>
         <h2 className="mb-4 text-lg font-semibold text-gray-800 dark:text-gray-100">Upcoming Deadlines</h2>
         {loading ? (
-          <SkeletonList rows={5} />
+          <LoadingState
+            title="Loading deadlines"
+            description="Checking filing dates and governance review actions."
+          />
         ) : deadlines && deadlines.length > 0 ? (
           <Card className="divide-y divide-gray-100 border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
             {deadlines
@@ -79,16 +71,25 @@ export function DashboardActionLists({
             </div>
           </Card>
         ) : (
-          <Card className="border border-gray-200 bg-white p-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
-            No upcoming deadlines.
-          </Card>
+          <EmptyState
+            title="No upcoming deadlines"
+            description="Add filing dates, trustee reviews, and annual return milestones as they become known."
+            action={(
+              <Link href="/deadlines" className={stateActionClass}>
+                Review deadlines
+              </Link>
+            )}
+          />
         )}
       </div>
 
       <div>
         <h2 className="mb-4 text-lg font-semibold text-gray-800 dark:text-gray-100">Board Alerts</h2>
         {loading ? (
-          <SkeletonList rows={4} />
+          <LoadingState
+            title="Loading board alerts"
+            description="Checking trustee conduct, induction, and term-limit signals."
+          />
         ) : boardAlerts && boardAlerts.length > 0 ? (
           <Card className="divide-y divide-gray-100 border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
             {boardAlerts.slice(0, 8).map((alert, idx) => {
@@ -118,19 +119,25 @@ export function DashboardActionLists({
             </div>
           </Card>
         ) : boardMemberCount === 0 ? (
-          <Card className="border border-amber-200 bg-amber-50/50 p-6 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-            <p className="font-medium">No charity trustees have been added yet.</p>
-            <p className="mt-1 text-xs leading-5">
-              Add the board register so conduct, induction, and term-limit evidence is visible before the annual review.
-            </p>
-            <Link href="/board" className="mt-3 inline-flex text-xs font-semibold text-teal-primary hover:underline dark:text-teal-bright">
-              Add board members
-            </Link>
-          </Card>
+          <ReviewWarningState
+            title="No charity trustees have been added yet"
+            description="Add the board register so conduct, induction, and term-limit evidence is visible before the annual review."
+            action={(
+              <Link href="/board" className={stateActionClass}>
+                Add board members
+              </Link>
+            )}
+          />
         ) : (
-          <Card className="border border-gray-200 bg-white p-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
-            No board alerts. Everything looks good!
-          </Card>
+          <EmptyState
+            title="No board alerts"
+            description="Conduct, induction, and term-limit checks are clear for active trustees."
+            action={(
+              <Link href="/board" className={stateActionClass}>
+                View board register
+              </Link>
+            )}
+          />
         )}
       </div>
     </div>

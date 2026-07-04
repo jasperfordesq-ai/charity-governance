@@ -208,11 +208,29 @@ test('dashboard action lists are extracted from the oversized route file', () =>
 
   assert.match(pageSrc, /DashboardActionLists/);
   assert.doesNotMatch(pageSrc, /SkeletonList/);
-  assert.match(actionListsSrc, /SkeletonList/);
   assert.match(actionListsSrc, /Upcoming Deadlines/);
   assert.match(actionListsSrc, /Board Alerts/);
   assert.match(actionListsSrc, /View all deadlines/);
   assert.match(actionListsSrc, /View board register/);
+});
+
+test('dashboard loading and empty states use shared primitives instead of route-local skeleton cards', () => {
+  const pageSrc = dash('dashboard/page.tsx');
+  const actionListsSrc = dash('dashboard/dashboard-action-lists.tsx');
+
+  assert.match(pageSrc, /from '@\/components\/ui\/states'/);
+  assert.match(pageSrc, /LoadingState/);
+  assert.match(pageSrc, /EmptyState/);
+  assert.doesNotMatch(pageSrc, /function SkeletonCard/);
+  assert.doesNotMatch(pageSrc, /animate-pulse/);
+
+  assert.match(actionListsSrc, /from '@\/components\/ui\/states'/);
+  assert.match(actionListsSrc, /LoadingState/);
+  assert.match(actionListsSrc, /EmptyState/);
+  assert.match(actionListsSrc, /ReviewWarningState/);
+  assert.doesNotMatch(actionListsSrc, /function SkeletonList/);
+  assert.doesNotMatch(actionListsSrc, /animate-pulse/);
+  assert.doesNotMatch(actionListsSrc, /Everything looks good!/);
 });
 
 test('the per-standard compliance editor announces its save state (Saving / Saved / Save failed)', () => {

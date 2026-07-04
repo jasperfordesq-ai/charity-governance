@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { AppPage, AppSection } from '@/components/ui/app-page';
-import { EmptyState, ErrorState, ReviewWarningState } from '@/components/ui/states';
+import { EmptyState, ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { DashboardActionLists } from './dashboard-action-lists';
 import type {
   ComplianceSummary,
@@ -28,20 +28,6 @@ type ApprovalReadiness = {
     status: 'NOT_APPLICABLE' | 'EXPLAIN';
   }>;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Skeleton components                                               */
-/* ------------------------------------------------------------------ */
-
-function SkeletonCard({ className = '' }: { className?: string }) {
-  return (
-    <Card className={`p-6 animate-pulse bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 ${className}`}>
-      <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-4" />
-      <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mb-3" />
-      <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full" />
-    </Card>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Dashboard page                                                    */
@@ -264,7 +250,10 @@ export default function DashboardPage() {
 
       {/* ── Overall compliance score ── */}
       {loading ? (
-        <SkeletonCard />
+        <LoadingState
+          title="Loading dashboard progress"
+          description="Checking this year's standards, deadlines, trustees, and register signals."
+        />
       ) : compliance ? (
         <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center gap-6">
@@ -371,11 +360,10 @@ export default function DashboardPage() {
         description="Open a principle to close evidence gaps and prepare the annual Compliance Record."
       >
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
+          <LoadingState
+            title="Loading principle progress"
+            description="Preparing the Governance Code principle cards for this reporting year."
+          />
         ) : compliance?.byPrinciple?.length ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {compliance.byPrinciple.map((p) => (
@@ -422,7 +410,15 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No principle data available yet.</p>
+          <EmptyState
+            title="No principle data available"
+            description="Review the Governance Code standards to start building the annual Compliance Record."
+            action={(
+              <Button as={Link} href="/compliance" size="sm" variant="flat">
+                Open compliance
+              </Button>
+            )}
+          />
         )}
       </AppSection>
 
