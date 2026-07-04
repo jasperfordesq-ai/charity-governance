@@ -68,6 +68,7 @@ const fixedInThisAuditBranch = [
   'Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.',
   'The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.',
   'The document standard-link modal is split out of the oversized documents route behind a wiring regression test.',
+  'The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.',
   'Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.',
   'The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.',
   'Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.',

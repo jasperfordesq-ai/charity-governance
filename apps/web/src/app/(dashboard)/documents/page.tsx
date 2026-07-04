@@ -5,11 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
   Button,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
   useDisclosure,
 } from '@heroui/react';
 import { api } from '@/lib/api';
@@ -21,6 +16,7 @@ import { AppPage, AppSection } from '@/components/ui/app-page';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { EvidenceChip, StatusChip } from '@/components/ui/status';
+import { DocumentDeleteModal } from './document-delete-modal';
 import { DocumentLinkModal } from './document-link-modal';
 import { DocumentProfilePromptsPanel, buildDocumentProfilePrompts } from './document-profile-prompts';
 import { DocumentUploadModal, MAX_FILE_SIZE } from './document-upload-modal';
@@ -604,29 +600,13 @@ export default function DocumentsPage() {
         uploading={uploading}
       />
 
-      <Modal isOpen={deleteModal.isOpen} onOpenChange={deleteModal.onOpenChange} size="sm">
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>Delete document</ModalHeader>
-              <ModalBody>
-                <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
-                  Delete {selectedDeleteDoc ? <strong>{selectedDeleteDoc.name}</strong> : 'this document'} from the evidence vault?
-                  This removes the file and its standard links.
-                </p>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="flat" onPress={onClose} isDisabled={deleting}>
-                  Cancel
-                </Button>
-                <Button color="danger" onPress={handleDelete} isLoading={deleting}>
-                  Delete
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      <DocumentDeleteModal
+        isOpen={deleteModal.isOpen}
+        onOpenChange={deleteModal.onOpenChange}
+        selectedDeleteDoc={selectedDeleteDoc}
+        deleting={deleting}
+        handleDelete={handleDelete}
+      />
 
       <DocumentLinkModal
         isOpen={linkModal.isOpen}
