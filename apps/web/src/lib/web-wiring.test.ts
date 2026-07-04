@@ -258,6 +258,21 @@ test('dashboard loading and empty states use shared primitives instead of route-
   assert.doesNotMatch(actionListsSrc, /Everything looks good!/);
 });
 
+test('dashboard binary filters use HeroUI Switch instead of route-local switch markup', () => {
+  const sources = [
+    dash('board/board-member-list-panel.tsx'),
+    dash('compliance/page.tsx'),
+  ];
+
+  for (const src of sources) {
+    assert.match(src, /Switch/);
+    assert.match(src, /from '@heroui\/react'/);
+    assert.doesNotMatch(src, /role="switch"/);
+    assert.doesNotMatch(src, /aria-checked=/);
+    assert.doesNotMatch(src, /rounded-full transition-colors/);
+  }
+});
+
 test('the per-standard compliance editor announces its save state (Saving / Saved / Save failed)', () => {
   const src = [
     dash('compliance/[principleId]/page.tsx'),

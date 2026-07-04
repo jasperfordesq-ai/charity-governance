@@ -108,6 +108,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.',
   'Team feedback now uses the shared inline status primitive instead of route-local alert styling.',
   'Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.',
+  'Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.',
 ];
 
 const independentAuditFindings = [

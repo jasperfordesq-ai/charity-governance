@@ -3,7 +3,7 @@
 import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { Card, Progress, Select, SelectItem, Chip, Button } from '@heroui/react';
+import { Card, Progress, Select, SelectItem, Chip, Button, Switch } from '@heroui/react';
 import { ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
@@ -180,29 +180,17 @@ export default function CompliancePage() {
       )}
 
       {/* Additional standards toggle */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showAdditional}
-          aria-label="Show additional standards for complex organisations"
-          onClick={() => setShowAdditional(!showAdditional)}
-          className={`
-            relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-            ${showAdditional ? 'bg-teal-primary' : 'bg-gray-300 dark:bg-gray-700'}
-          `}
-        >
-          <span
-            className={`
-              inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-              ${showAdditional ? 'translate-x-6' : 'translate-x-1'}
-            `}
-          />
-        </button>
-        <span className="text-sm text-gray-600 dark:text-gray-300">
-          Show additional standards (complex organisations)
-        </span>
-      </div>
+      <Switch
+        size="sm"
+        color="primary"
+        isSelected={showAdditional}
+        onValueChange={setShowAdditional}
+        classNames={{
+          label: 'text-sm text-gray-600 dark:text-gray-300',
+        }}
+      >
+        Show additional standards (complex organisations)
+      </Switch>
 
       <div id="principles">
         <AppSection title="Principles" description="Open a principle to edit standards, evidence, and explanations.">

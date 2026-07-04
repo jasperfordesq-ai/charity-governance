@@ -3,6 +3,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import {
   Button,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -57,19 +58,17 @@ export function BoardMemberListPanel({
       title="Trustees"
       description="The active view is the default register. Toggle inactive members when you need historic appointment evidence."
       actions={(
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={showInactive}
-            aria-label="Show inactive members"
-            onClick={() => setShowInactive((value) => !value)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showInactive ? 'bg-teal-primary' : 'bg-gray-300 dark:bg-gray-700'}`}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showInactive ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-          <span className="text-sm text-gray-600 dark:text-gray-300">Show inactive</span>
-        </div>
+        <Switch
+          size="sm"
+          color="primary"
+          isSelected={showInactive}
+          onValueChange={setShowInactive}
+          classNames={{
+            label: 'text-sm text-gray-600 dark:text-gray-300',
+          }}
+        >
+          Show inactive
+        </Switch>
       )}
     >
       {loading ? (
