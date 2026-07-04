@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Button } from '@heroui/react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -36,9 +37,14 @@ export function ThemeToggle() {
   };
 
   return (
-    <button
-      onClick={cycle}
-      className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800 transition-colors"
+    <Button
+      type="button"
+      isIconOnly
+      size="sm"
+      radius="lg"
+      variant="light"
+      onPress={cycle}
+      className="h-9 min-w-9 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800"
       aria-label={`Theme: ${theme}. Click to change.`}
       title={`Current: ${theme}`}
     >
@@ -51,6 +57,6 @@ export function ThemeToggle() {
       {theme === 'system' && (
         <Monitor className="w-5 h-5" strokeWidth={1.5} aria-hidden="true" />
       )}
-    </button>
+    </Button>
   );
 }

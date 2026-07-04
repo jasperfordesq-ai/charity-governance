@@ -910,6 +910,16 @@ test('shared UI chrome uses lucide icons instead of inline svg', () => {
   }
 });
 
+test('shared utility icon controls use HeroUI Button rather than raw button markup', () => {
+  for (const file of ['back-to-top.tsx', 'copy-link-button.tsx', 'theme-toggle.tsx']) {
+    const src = component(file);
+    assert.match(src, /from '@heroui\/react'/, `${file} should use HeroUI for icon button semantics`);
+    assert.match(src, /<Button\b/, `${file} should render a HeroUI Button`);
+    assert.match(src, /isIconOnly/, `${file} should keep the compact icon-only affordance explicit`);
+    assert.doesNotMatch(src, /<button\b/, `${file} should not render a route-local raw button`);
+  }
+});
+
 test('dashboard layout navigation uses lucide icons instead of inline svg', () => {
   const src = dash('layout.tsx');
   const icons = [

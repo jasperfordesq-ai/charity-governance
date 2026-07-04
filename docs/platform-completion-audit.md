@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `2c03732`
+Working-tree base commit when generated: `52437c7`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -92,6 +92,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Compliance standard editor status rendering now tolerates optional selected-item labels during production builds.
 - Compliance overview principle disclosure buttons now expose expanded state and controlled panel relationships for assistive technology.
 - Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.
+- Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 
 ## Independent Audit Findings Still Driving Next Work
 
