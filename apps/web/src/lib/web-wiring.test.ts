@@ -297,7 +297,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'deadlines/page.tsx',
-      extraFiles: ['deadlines/deadline-form-modal.tsx'],
+      extraFiles: ['deadlines/deadline-form-modal.tsx', 'deadlines/deadline-list-panel.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -590,6 +590,22 @@ test('deadlines form modal is extracted from the oversized route file', () => {
   assert.match(modalSrc, /Deadline details/);
   assert.match(modalSrc, /deadline-disabled-hint/);
   assert.match(modalSrc, /Default reminders are kept at 30, 7, and 1 day before the due date/);
+});
+
+test('deadlines list panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const panelPath = dashPath('deadlines/deadline-list-panel.tsx');
+  assert.ok(existsSync(panelPath), 'deadline list panel should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /DeadlineListPanel/);
+  assert.doesNotMatch(pageSrc, /Deadline list ready/);
+  assert.doesNotMatch(pageSrc, /No deadlines yet/);
+  assert.doesNotMatch(pageSrc, /classifyDeadline/);
+  assert.match(panelSrc, /Deadline list ready/);
+  assert.match(panelSrc, /No deadlines yet/);
+  assert.match(panelSrc, /classifyDeadline/);
+  assert.match(panelSrc, /DeadlineBadge/);
 });
 
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
