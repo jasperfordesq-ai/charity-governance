@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { serialiseJsonLdForScript } from '@/lib/json-ld';
+import { absoluteSiteUrl } from '@/lib/site-origin';
 
 async function getNonce() {
   return (await headers()).get('x-nonce') ?? undefined;
@@ -14,7 +15,7 @@ export async function OrganisationJsonLd() {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description: 'Governance compliance tool for Irish registered charities. Track CRA Charities Governance Code compliance.',
-    url: 'https://charitypilot.ie',
+    url: absoluteSiteUrl(),
     offers: {
       '@type': 'AggregateOffer',
       priceCurrency: 'EUR',
@@ -63,9 +64,9 @@ export async function BlogPostJsonLd({
     publisher: {
       '@type': 'Organization',
       name: 'CharityPilot',
-      url: 'https://charitypilot.ie',
+      url: absoluteSiteUrl(),
     },
-    mainEntityOfPage: `https://charitypilot.ie/blog/${slug}`,
+    mainEntityOfPage: absoluteSiteUrl(`/blog/${slug}`),
   };
 
   return (

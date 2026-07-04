@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { ArrowLeft, Share2 } from 'lucide-react';
 import { getPost, getRelatedPosts, ALL_POSTS, formatDate } from '@/lib/blog';
+import { absoluteSiteUrl } from '@/lib/site-origin';
 import { ReadingProgress } from '@/components/reading-progress';
 import { CopyLinkButton } from '@/components/copy-link-button';
 import { BlogPostJsonLd } from '@/components/json-ld';
@@ -44,6 +45,7 @@ export default async function BlogPostPage({
 
   const { meta, Component } = post;
   const related = getRelatedPosts(slug, 2);
+  const canonicalUrl = absoluteSiteUrl(`/blog/${meta.slug}`);
 
   return (
     <div className="bg-white text-gray-950 dark:bg-gray-950 dark:text-gray-50">
@@ -95,7 +97,7 @@ export default async function BlogPostPage({
         <div className="mb-6 flex items-center gap-3 border-t border-gray-200 pt-8 dark:border-gray-800">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Share</span>
           <a
-            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(meta.title)}&url=${encodeURIComponent(`https://charitypilot.ie/blog/${meta.slug}`)}`}
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(meta.title)}&url=${encodeURIComponent(canonicalUrl)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
@@ -104,7 +106,7 @@ export default async function BlogPostPage({
             <Share2 className="h-4 w-4" aria-hidden="true" />
           </a>
           <a
-            href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`https://charitypilot.ie/blog/${meta.slug}`)}`}
+            href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(canonicalUrl)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
@@ -112,7 +114,7 @@ export default async function BlogPostPage({
           >
             <Share2 className="h-4 w-4" aria-hidden="true" />
           </a>
-          <CopyLinkButton url={`https://charitypilot.ie/blog/${meta.slug}`} />
+          <CopyLinkButton url={canonicalUrl} />
         </div>
 
         <div className="flex flex-wrap gap-2">

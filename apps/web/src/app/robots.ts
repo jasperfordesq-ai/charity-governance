@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { absoluteSiteUrl } from '@/lib/site-origin';
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -9,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/dashboard/', '/api/', '/billing/'],
       },
     ],
-    sitemap: 'https://charitypilot.ie/sitemap.xml',
+    sitemap: absoluteSiteUrl('/sitemap.xml'),
   };
 }

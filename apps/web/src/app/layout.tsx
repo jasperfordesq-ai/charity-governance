@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { Providers } from './providers';
+import { PRODUCTION_WEB_ORIGIN } from '@/lib/site-origin';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://charitypilot.ie'),
+  metadataBase: new URL(PRODUCTION_WEB_ORIGIN),
   title: {
     default: 'CharityPilot — Charity Governance Made Simple',
     template: '%s — CharityPilot',
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
     'CharityPilot',
   ],
   alternates: {
-    canonical: 'https://charitypilot.ie',
+    canonical: PRODUCTION_WEB_ORIGIN,
   },
   openGraph: {
     title: 'CharityPilot — Charity Governance Made Simple',
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
       'The affordable, Ireland-specific governance compliance tool for registered charities.',
     type: 'website',
     locale: 'en_IE',
-    url: 'https://charitypilot.ie',
+    url: PRODUCTION_WEB_ORIGIN,
     siteName: 'CharityPilot',
   },
   twitter: {

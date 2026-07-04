@@ -16,6 +16,7 @@ const dash = (p: string) => readFileSync(dashPath(p), 'utf8');
 const optionalDash = (p: string) => (existsSync(dashPath(p)) ? readFileSync(dashPath(p), 'utf8') : '');
 const app = (p: string) => readFileSync(join(WEB, 'src', 'app', p), 'utf8');
 const component = (p: string) => readFileSync(join(WEB, 'src', 'components', p), 'utf8');
+const lib = (p: string) => readFileSync(join(WEB, 'src', 'lib', p), 'utf8');
 
 test('dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)', () => {
   const src = dash('dashboard/page.tsx');
@@ -1509,4 +1510,28 @@ test('root layout declares smooth scroll behavior expected by Next route transit
 
   assert.match(globalCss, /scroll-behavior:\s*smooth/);
   assert.match(layoutSrc, /data-scroll-behavior="smooth"/);
+});
+
+test('public SEO and sharing URLs use the canonical production app origin', () => {
+  const siteOrigin = lib('site-origin.ts');
+  assert.match(siteOrigin, /export const PRODUCTION_WEB_ORIGIN = 'https:\/\/app\.charitypilot\.ie'/);
+  assert.match(siteOrigin, /export function absoluteSiteUrl/);
+
+  const surfaces = [
+    ['root layout', app('layout.tsx')],
+    ['sitemap', app('sitemap.ts')],
+    ['robots', app('robots.ts')],
+    ['JSON-LD', component('json-ld.tsx')],
+    ['blog share links', app('(marketing)/blog/[slug]/page.tsx')],
+  ] as const;
+
+  for (const [label, src] of surfaces) {
+    assert.match(src, /PRODUCTION_WEB_ORIGIN|absoluteSiteUrl/, `${label} should use the shared canonical origin helper`);
+    assert.doesNotMatch(src, /https:\/\/charitypilot\.ie(?![.\w-])/, `${label} must not hard-code the apex production URL`);
+  }
+
+  assert.match(app('layout.tsx'), /metadataBase:\s*new URL\(PRODUCTION_WEB_ORIGIN\)/);
+  assert.match(app('robots.ts'), /sitemap:\s*absoluteSiteUrl\('\/sitemap\.xml'\)/);
+  assert.match(component('json-ld.tsx'), /mainEntityOfPage:\s*absoluteSiteUrl\(`\/blog\/\$\{slug\}`\)/);
+  assert.match(app('(marketing)/blog/[slug]/page.tsx'), /const canonicalUrl = absoluteSiteUrl\(`\/blog\/\$\{meta\.slug\}`\)/);
 });
