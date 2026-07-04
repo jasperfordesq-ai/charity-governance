@@ -105,6 +105,40 @@ test('validateProductionEnv accepts complete production configuration', () => {
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
+test('validateProductionEnv rejects non-canonical production public origins', () => {
+  setCompleteProductionEnv({
+    FRONTEND_URL: 'https://charitypilot.ie',
+    NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie',
+    AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
+  });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('FRONTEND_URL must use the canonical production web origin https://app.charitypilot.ie') &&
+      error.details.includes('NEXT_PUBLIC_API_URL must use the canonical production API origin https://api.charitypilot.ie'),
+  );
+});
+
+test('validateDeadlineRemindersEnv rejects non-canonical production frontend origins', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.FRONTEND_URL = 'https://charitypilot.ie';
+  process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
+  process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
+
+  assert.throws(
+    () => validateDeadlineRemindersEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('FRONTEND_URL must use the canonical production web origin https://app.charitypilot.ie'),
+  );
+});
+
 test('validateProductionEnv rejects malformed or overlong access token expiry values', () => {
   for (const [expiry, expectedIssue] of [
     ['forever', 'JWT_EXPIRY must be a duration like 15m, 1h, or 3600s'],
@@ -587,7 +621,7 @@ test('validateProductionEnv requires explicit trusted proxy addresses in product
   );
 });
 
-test('validateProductionEnv accepts comma-separated production frontend origins', () => {
+test('validateProductionEnv rejects comma-separated non-canonical production frontend origins', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
@@ -610,7 +644,13 @@ test('validateProductionEnv accepts comma-separated production frontend origins'
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
-  assert.doesNotThrow(() => validateProductionEnv());
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('FRONTEND_URL must use the canonical production web origin https://app.charitypilot.ie'),
+  );
 });
 
 test('validateProductionEnv rejects missing production API origin used for cookie-domain checks', () => {

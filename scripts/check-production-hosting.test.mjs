@@ -176,6 +176,34 @@ test('production hosting checker fails when HTTPS reachability or security heade
   }
 });
 
+test('production hosting checker rejects non-canonical CharityPilot origins before network calls', async () => {
+  const runProductionHostingCheckFromArgs = await loadHostingRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    FRONTEND_URL: 'https://charitypilot.ie',
+    NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie',
+  }));
+  let called = false;
+
+  try {
+    const result = await runProductionHostingCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        resolveHost: async () => {
+          called = true;
+          return [];
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(called, false);
+    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production hosting checker fails before network calls for non-production origins', async () => {
   const runProductionHostingCheckFromArgs = await loadHostingRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv({

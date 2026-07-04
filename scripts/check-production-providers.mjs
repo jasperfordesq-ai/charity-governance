@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
 
 const stripePriceEnvNames = [
   'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
@@ -90,10 +91,6 @@ function isConfigured(value) {
   return typeof value === 'string' && value.trim().length > 0 && !/REPLACE_ME|TODO|TBD|placeholder/i.test(value);
 }
 
-function approvedCharityPilotHost(hostname) {
-  return hostname === 'charitypilot.ie' || hostname.endsWith('.charitypilot.ie');
-}
-
 function parseApiOrigin(value, issues) {
   if (!isConfigured(value)) {
     issues.push('NEXT_PUBLIC_API_URL must be configured for the production API origin');
@@ -108,9 +105,11 @@ function parseApiOrigin(value, issues) {
     if (url.origin !== value.replace(/\/+$/, '')) {
       issues.push('NEXT_PUBLIC_API_URL must be an origin-only production URL');
     }
-    if (!approvedCharityPilotHost(url.hostname.toLowerCase())) {
+    if (!isApprovedCharityPilotHostname(url.hostname)) {
       issues.push('NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname');
     }
+    const issue = canonicalOriginIssue('NEXT_PUBLIC_API_URL', url.origin, 'api');
+    if (issue) issues.push(issue);
     return url.origin;
   } catch {
     issues.push('NEXT_PUBLIC_API_URL must be a valid URL');
@@ -145,7 +144,7 @@ function validateEnv(env, expectApiOrigin) {
   }
 
   const domain = senderDomain(env.EMAIL_FROM);
-  if (!domain || !approvedCharityPilotHost(domain)) {
+  if (!domain || !isApprovedCharityPilotHostname(domain)) {
     issues.push('EMAIL_FROM must use an approved CharityPilot sender domain');
   }
 

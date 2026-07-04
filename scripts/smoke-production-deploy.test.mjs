@@ -267,6 +267,38 @@ test('production deploy smoke fails when API CORS allows an unapproved origin', 
   }
 });
 
+test('production deploy smoke rejects non-canonical CharityPilot origins before fetching', async () => {
+  const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-canonical-hosts-'));
+  const envPath = join(tempDir, 'production.env');
+  let fetchCalled = false;
+
+  writeFileSync(envPath, completeSmokeEnv({
+    FRONTEND_URL: 'https://charitypilot.ie',
+    NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie',
+  }));
+
+  try {
+    const result = await runProductionDeploySmokeFromArgs(
+      ['--production-env-file', envPath],
+      {
+        processEnv: cleanEnv(),
+        fetchImpl: async () => {
+          fetchCalled = true;
+          return response(200, {}, baselineHeaders());
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(fetchCalled, false);
+    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production deploy smoke fails when keyed readiness is not ready', async () => {
   const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-not-ready-'));

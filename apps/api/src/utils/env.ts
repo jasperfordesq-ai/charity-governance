@@ -7,6 +7,8 @@ export { isConfiguredSecret } from './secrets.js';
 
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
+const CANONICAL_PRODUCTION_WEB_ORIGIN = 'https://app.charitypilot.ie';
+const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 
@@ -43,6 +45,7 @@ function validateUrlValue(
     requireOrigin?: boolean;
     requireApprovedPublicHost?: boolean;
     requirePublicHost?: boolean;
+    canonicalOriginRole?: 'web' | 'api';
   },
 ) {
   try {
@@ -58,6 +61,15 @@ function validateUrlValue(
     }
     if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
       issues.push(`${name} must use an approved CharityPilot production hostname`);
+    }
+    if (options.canonicalOriginRole) {
+      const expected = options.canonicalOriginRole === 'web'
+        ? CANONICAL_PRODUCTION_WEB_ORIGIN
+        : CANONICAL_PRODUCTION_API_ORIGIN;
+      const label = options.canonicalOriginRole === 'api' ? 'API' : 'web';
+      if (url.origin !== expected) {
+        issues.push(`${name} must use the canonical production ${label} origin ${expected}`);
+      }
     }
     if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
       issues.push(`${name} must use a public, non-local URL in production`);
@@ -76,6 +88,7 @@ function requireUrl(
     requireOrigin?: boolean;
     requireApprovedPublicHost?: boolean;
     requirePublicHost?: boolean;
+    canonicalOriginRole?: 'web' | 'api';
   } = {},
 ) {
   const value = requireConfiguredEnv(name, issues);
@@ -393,6 +406,7 @@ export function validateDeadlineRemindersEnv(): void {
     allowCommaSeparated: true,
     requireOrigin: true,
     requireApprovedPublicHost: true,
+    canonicalOriginRole: 'web',
   });
   requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);
@@ -428,11 +442,13 @@ export function validateProductionEnv(): void {
     allowCommaSeparated: true,
     requireOrigin: true,
     requireApprovedPublicHost: true,
+    canonicalOriginRole: 'web',
   });
   requireUrl('NEXT_PUBLIC_API_URL', issues, {
     requireHttps: true,
     requireOrigin: true,
     requireApprovedPublicHost: true,
+    canonicalOriginRole: 'api',
   });
   requireAuthCookieDomain(issues);
 

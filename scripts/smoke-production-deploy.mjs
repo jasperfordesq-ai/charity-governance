@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
 
 const ENV_FILE_FLAG = '--production-env-file=';
 const READINESS_PATH = '/api/v1/health/readiness';
-const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 const DISALLOWED_CORS_PROBE_ORIGIN = 'https://not-charitypilot.example';
 
 function usage() {
@@ -78,16 +78,7 @@ function envList(value) {
     .filter(Boolean);
 }
 
-function normaliseHostname(hostname) {
-  return hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-}
-
-function isApprovedPublicHostname(hostname) {
-  const normalizedHostname = normaliseHostname(hostname);
-  return normalizedHostname === APPROVED_PUBLIC_HOST_ROOT || normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`);
-}
-
-function originFor(name, value, issues) {
+function originFor(name, value, issues, role) {
   if (!value?.trim()) {
     issues.push(`${name} is required for production deploy smoke`);
     return null;
@@ -99,8 +90,13 @@ function originFor(name, value, issues) {
       issues.push(`${name} must be an origin-only HTTPS URL for production deploy smoke`);
       return null;
     }
-    if (!isApprovedPublicHostname(url.hostname)) {
+    if (!isApprovedCharityPilotHostname(url.hostname)) {
       issues.push(`${name} must use an approved CharityPilot production hostname for production deploy smoke`);
+      return null;
+    }
+    const issue = canonicalOriginIssue(name, url.origin, role);
+    if (issue) {
+      issues.push(issue);
       return null;
     }
     return url.origin;
@@ -112,8 +108,8 @@ function originFor(name, value, issues) {
 
 function smokeConfig(env) {
   const issues = [];
-  const webOrigin = originFor('FRONTEND_URL', envList(env.FRONTEND_URL ?? '')[0] ?? '', issues);
-  const apiOrigin = originFor('NEXT_PUBLIC_API_URL', env.NEXT_PUBLIC_API_URL ?? '', issues);
+  const webOrigin = originFor('FRONTEND_URL', envList(env.FRONTEND_URL ?? '')[0] ?? '', issues, 'web');
+  const apiOrigin = originFor('NEXT_PUBLIC_API_URL', env.NEXT_PUBLIC_API_URL ?? '', issues, 'api');
   const readinessKey = env.READINESS_API_KEY?.trim() ?? '';
 
   if (!readinessKey) {

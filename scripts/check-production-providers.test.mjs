@@ -184,6 +184,32 @@ test('production provider checker fails when webhook or Resend domain evidence i
   }
 });
 
+test('production provider checker rejects non-canonical API origin before network calls', async () => {
+  const runProductionProvidersCheckFromArgs = await loadProviderRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie',
+  }));
+  let called = false;
+
+  try {
+    const result = await runProductionProvidersCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async () => {
+          called = true;
+          return response(200, {});
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(called, false);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production provider checker fails before network calls when provider env is missing', async () => {
   const runProductionProvidersCheckFromArgs = await loadProviderRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv({

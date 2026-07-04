@@ -3,6 +3,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import {
+  APPROVED_PUBLIC_HOST_ROOT,
+  canonicalOriginIssue,
+  isApprovedCharityPilotHostname,
+  normaliseHostname,
+} from './production-hostnames.mjs';
 
 const PLACEHOLDERS = [
   'REPLACE_ME',
@@ -47,7 +53,6 @@ const ENV_FILE_FLAG = '--production-env-file=';
 const COMPOSE_RUNTIME_WEB_API_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL';
 const COMPOSE_RUNTIME_WEB_SUPABASE_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
-const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 
@@ -77,10 +82,6 @@ function isConfigured(value) {
 function isLocalHost(hostname) {
   const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'host.docker.internal'].includes(normalizedHostname);
-}
-
-function normaliseHostname(hostname) {
-  return hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
 }
 
 function isDnsHostname(hostname) {
@@ -131,8 +132,7 @@ function isPublicHost(hostname) {
 }
 
 function isApprovedPublicHostname(hostname) {
-  const normalizedHostname = normaliseHostname(hostname);
-  return normalizedHostname === APPROVED_PUBLIC_HOST_ROOT || normalizedHostname.endsWith(`.${APPROVED_PUBLIC_HOST_ROOT}`);
+  return isApprovedCharityPilotHostname(hostname);
 }
 
 function senderEmailHostname(value) {
@@ -246,6 +246,10 @@ function validateUrlValue(key, value, issues, options = {}) {
     }
     if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
       issues.push(`${key} must use an approved CharityPilot production hostname`);
+    }
+    if (options.canonicalOriginRole) {
+      const issue = canonicalOriginIssue(key, url.origin, options.canonicalOriginRole);
+      if (issue) issues.push(issue);
     }
     if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
       issues.push(`${key} must use a public, non-local URL for production`);
@@ -401,6 +405,7 @@ function requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues) {
   requireUrl(runtimeEnv, COMPOSE_RUNTIME_WEB_API_URL, issues, {
     requireOrigin: true,
     requireApprovedPublicHost: true,
+    canonicalOriginRole: 'api',
   });
 
   if (issues.length !== issueCountBeforeUrlValidation) return;
@@ -507,10 +512,15 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
     allowCommaSeparated: true,
     requireOrigin: true,
     requireApprovedPublicHost: true,
+    canonicalOriginRole: 'web',
   });
   requireUrl(env, 'SUPABASE_URL', issues, { requirePublicHost: true });
   requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
-  requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, { requireOrigin: true, requireApprovedPublicHost: true });
+  requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, {
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+    canonicalOriginRole: 'api',
+  });
   requireUrl(env, 'NEXT_PUBLIC_SUPABASE_URL', issues, { requireOrigin: true, requirePublicHost: true });
   requirePublicSupabaseUrlMatchesApiSupabaseUrl(env, issues);
   requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);

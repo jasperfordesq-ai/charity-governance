@@ -5,6 +5,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
 
 const DEFAULT_MIN_TLS_DAYS = 14;
 
@@ -96,11 +97,7 @@ function envList(value) {
     .filter(Boolean);
 }
 
-function approvedCharityPilotHost(hostname) {
-  return hostname === 'charitypilot.ie' || hostname.endsWith('.charitypilot.ie');
-}
-
-function originFor(name, value, issues) {
+function originFor(name, value, issues, role) {
   if (!value?.trim()) {
     issues.push(`${name} is required for production hosting checks`);
     return null;
@@ -112,8 +109,13 @@ function originFor(name, value, issues) {
       issues.push(`${name} must be an origin-only HTTPS URL`);
       return null;
     }
-    if (!approvedCharityPilotHost(url.hostname.toLowerCase())) {
+    if (!isApprovedCharityPilotHostname(url.hostname)) {
       issues.push(`${name} must use an approved CharityPilot production hostname`);
+      return null;
+    }
+    const issue = canonicalOriginIssue(name, url.origin, role);
+    if (issue) {
+      issues.push(issue);
       return null;
     }
     return url.origin;
@@ -127,10 +129,10 @@ function hostingConfig(env) {
   const issues = [];
   const origins = [];
   for (const [index, value] of envList(env.FRONTEND_URL ?? '').entries()) {
-    const origin = originFor(index === 0 ? 'FRONTEND_URL' : `FRONTEND_URL[${index}]`, value, issues);
+    const origin = originFor(index === 0 ? 'FRONTEND_URL' : `FRONTEND_URL[${index}]`, value, issues, 'web');
     if (origin) origins.push({ label: index === 0 ? 'web origin' : `web origin ${index + 1}`, origin });
   }
-  const apiOrigin = originFor('NEXT_PUBLIC_API_URL', env.NEXT_PUBLIC_API_URL ?? '', issues);
+  const apiOrigin = originFor('NEXT_PUBLIC_API_URL', env.NEXT_PUBLIC_API_URL ?? '', issues, 'api');
   if (apiOrigin) origins.push({ label: 'API health', origin: apiOrigin, path: '/api/v1/health' });
 
   const unique = [];

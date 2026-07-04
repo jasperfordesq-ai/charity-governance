@@ -205,7 +205,7 @@ sequenceDiagram
 
 ## Environment validation
 
-Both standalone reminder paths call `validateDeadlineRemindersEnv()` (`apps/api/src/utils/env.ts:385-399`), which is a no-op outside production (`:386`) and otherwise requires `DATABASE_URL`, an HTTPS approved-host `FRONTEND_URL`, a `RESEND_API_KEY` prefixed `re_`, an approved `EMAIL_FROM`, and an HTTPS `ERROR_ALERT_WEBHOOK_URL`. The cleanup path calls `validateDocumentStorageCleanupEnv()` (`apps/api/src/utils/env.ts:367-382`), requiring `DATABASE_URL`, Supabase storage settings, and the alert webhook. The production scheduler validates both before scheduling (`apps/api/src/jobs/production-scheduler.ts:221-222`).
+Both standalone reminder paths call `validateDeadlineRemindersEnv()` (`apps/api/src/utils/env.ts`), which is a no-op outside production and otherwise requires `DATABASE_URL`, the canonical HTTPS `FRONTEND_URL=https://app.charitypilot.ie`, a `RESEND_API_KEY` prefixed `re_`, an approved `EMAIL_FROM`, and an HTTPS `ERROR_ALERT_WEBHOOK_URL`. The cleanup path calls `validateDocumentStorageCleanupEnv()` (`apps/api/src/utils/env.ts`), requiring `DATABASE_URL`, Supabase storage settings, and the alert webhook. The production scheduler validates both before scheduling (`apps/api/src/jobs/production-scheduler.ts:221-222`).
 
 ## Cross-references
 

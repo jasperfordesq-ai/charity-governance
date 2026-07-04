@@ -32,18 +32,18 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `JWT_EXPIRY` | API | Access-token lifetime as a `15m`/`1h`/`3600s` duration; capped at 1h in production (`apps/api/src/utils/env.ts:248-264`) | No, but validated if set; default `15m` (`.env.example:19`) |
 | `REFRESH_TOKEN_TTL_DAYS` | API | Refresh-token TTL; integer 1–30 (`apps/api/src/utils/env.ts:266-279`) | No, but validated if set; default `7` (`.env.example:20`) |
 | `JWT_REFRESH_SECRET` | API | Listed in Turbo's `globalEnv` for cache keying (`turbo.json:10`) | Not enforced by `validateProductionEnv` |
-| `AUTH_COOKIE_DOMAIN` | API | Cookie scope when web and API live on different hostnames; required only for split-host deployments, must not be a URL, must be an approved CharityPilot host, and must cover both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` (`apps/api/src/utils/env.ts:323-354`) | Conditional — required when `FRONTEND_URL`/`NEXT_PUBLIC_API_URL` use different hostnames |
+| `AUTH_COOKIE_DOMAIN` | API | Cookie scope for the canonical split-host deployment; production should use `.charitypilot.ie`, must not be a URL, must be an approved CharityPilot host, and must cover both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` (`apps/api/src/utils/env.ts`) | Yes for the canonical production deployment |
 
 ### Public origins / frontend
 
 | Var | Used by | Purpose | Required in production? |
 | --- | --- | --- | --- |
-| `FRONTEND_URL` | API (CORS, CSRF origin checks, email links, Stripe redirects) | One or more approved web origins; HTTPS, origin-only (no path/query/hash), and on an approved `charitypilot.ie` host; comma-separated list allowed (`apps/api/src/utils/env.ts:426-431`) | Yes |
+| `FRONTEND_URL` | API (CORS, CSRF origin checks, email links, Stripe redirects) | Canonical production web origin: `https://app.charitypilot.ie`; HTTPS and origin-only (no path/query/hash) (`apps/api/src/utils/env.ts`) | Yes |
 | `API_URL` | API/dev | Self-reference for local links (`.env.example:24`); also in Turbo `globalEnv` (`turbo.json:8`) | Not enforced by `validateProductionEnv` |
-| `NEXT_PUBLIC_API_URL` | web (browser) + API validation | Public API origin baked into the web build; HTTPS, origin-only, approved host (`apps/api/src/utils/env.ts:432-436`) | Yes |
+| `NEXT_PUBLIC_API_URL` | web (browser) + API validation | Canonical production API origin baked into the web build: `https://api.charitypilot.ie`; HTTPS and origin-only (`apps/api/src/utils/env.ts`) | Yes |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | web | Stripe.js publishable key (`.env.example:31`, `turbo.json:23`) | Not enforced by the API validator (browser-side) |
 | `NEXT_PUBLIC_SUPABASE_URL` | web | Public Supabase project URL for the browser (`.env.production.example:59`) | Not enforced by the API validator |
-| `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` / `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` | Docker Compose | Map the public values into the web runtime; must match the `NEXT_PUBLIC_*` values (`.env.production.example:60-63`) | Compose-time, deployment-specific |
+| `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` / `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` | Docker Compose | Map the public values into the web runtime; API value must be `https://api.charitypilot.ie` and must match the `NEXT_PUBLIC_API_URL` value (`.env.production.example`) | Compose-time, deployment-specific |
 | `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL` / `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL` | deploy preflight | Prove the published web image was built for the promoted public origins (`.env.production.example:70-72`) | Deployment-specific |
 
 ### Stripe (billing)
@@ -105,7 +105,7 @@ On top of presence, the validator applies structural rules:
 | Minimum length | `requireMinLength` | `READINESS_API_KEY` and `JWT_SECRET` ≥ 32 chars (`apps/api/src/utils/env.ts:241-246`) |
 | Prefix | `requirePrefix` | Stripe (`sk_live_`/`whsec_`/`price_`) and Resend (`re_`) prefixes (`apps/api/src/utils/env.ts:234-239`) |
 | URL shape | `requireUrl` / `validateUrlValue` | HTTPS, no localhost, origin-only, approved/public host (`apps/api/src/utils/env.ts:37-93`) |
-| Approved host | `isApprovedPublicHostname` | Hostname is `charitypilot.ie` or a subdomain (`apps/api/src/utils/env.ts:151-157`) |
+| Canonical web/API origins | `validateUrlValue` | Production web/API origins must be `https://app.charitypilot.ie` and `https://api.charitypilot.ie`; approved-host checks alone are not sufficient for launch (`apps/api/src/utils/env.ts`) |
 | DB connection | `requireDatabaseUrl` | PostgreSQL protocol, non-local host, TLS `sslmode` (`apps/api/src/utils/env.ts:211-232`) |
 | Email sender | `requireApprovedEmailSender` | Valid address on an approved sender domain (`apps/api/src/utils/env.ts:178-191`) |
 | Proxy list | `requireTrustedProxyAddresses` | Explicit IPs/CIDRs only, no wildcards (`apps/api/src/utils/env.ts:303-314`) |
@@ -169,7 +169,7 @@ Gate 1 is the CI pipeline in `.github/workflows/ci.yml` and the equivalent local
 | API/web/job smoke | health, security headers, CORS rejection, readiness 401/503, register flow, scheduled jobs (`.github/workflows/ci.yml:125-298`) | Uses the CI-smoke local-DB escape hatch |
 | Dependency audit | `npm audit --omit=dev --audit-level=moderate` (`.github/workflows/ci.yml:342-343`) | |
 
-Crucially, the synthetic secrets the CI feeds to `validateProductionEnv` (e.g. `sk_live_ci_configured_secret`, `https://api.charitypilot.ie`) are constructed to *pass* every prefix/host/length rule — so Gate 1 proves the validator behaves correctly, but never holds a real production secret.
+Crucially, the synthetic secrets the CI feeds to `validateProductionEnv` (e.g. `sk_live_ci_configured_secret`, `https://app.charitypilot.ie`, `https://api.charitypilot.ie`) are constructed to *pass* every prefix/host/length rule — so Gate 1 proves the validator behaves correctly, but never holds a real production secret.
 
 ### Gate 2 — the launch gate
 

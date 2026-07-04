@@ -325,6 +325,32 @@ test('passes when the selected env file contains complete production values', ()
   }
 });
 
+test('fails when production web or API origins drift from canonical hostnames', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-canonical-hosts-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      FRONTEND_URL: 'https://charitypilot.ie',
+      NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when production billing or email provider identifiers have invalid prefixes', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-provider-prefixes-'));
   const envPath = join(tempDir, 'production.env');
@@ -544,7 +570,7 @@ test('fails when the public Supabase URL drifts from the API Supabase URL', () =
   }
 });
 
-test('fails when the compose runtime web API URL drifts from the production env API URL', () => {
+test('fails when the compose runtime web API URL uses a non-canonical production origin', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-drift-'));
   const envPath = join(tempDir, 'production.env');
 
@@ -558,7 +584,7 @@ test('fails when the compose runtime web API URL drifts from the production env 
     assert.equal(result.status, 1);
     assert.match(
       result.stderr,
-      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must match NEXT_PUBLIC_API_URL/,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -1121,7 +1147,7 @@ test('fails when production database URL uses the Docker host gateway', () => {
   }
 });
 
-test('passes when production frontend origins include multiple approved HTTPS origins', () => {
+test('fails when production frontend origins include non-canonical additional origins', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-multi-origin-'));
   const envPath = join(tempDir, 'production.env');
 
@@ -1161,7 +1187,8 @@ test('passes when production frontend origins include multiple approved HTTPS or
       CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     });
 
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1388,7 +1415,7 @@ test('fails when same-host production sets an invalid auth cookie domain', () =>
   }
 });
 
-test('passes when same-host production omits auth cookie domain', () => {
+test('fails when production tries to collapse web and API onto the apex same-host origin', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-same-host-no-cookie-domain-'));
   const envPath = join(tempDir, 'production.env');
 
@@ -1406,8 +1433,10 @@ test('passes when same-host production omits auth cookie domain', () => {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://charitypilot.ie',
     });
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Production preflight passed using /);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1526,7 +1555,8 @@ test('production secret env files are ignored by git without hiding the template
 test('production env template documents the compose runtime web public origins', () => {
   const template = readRepoFile('.env.production.example');
 
-  assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/REPLACE_ME_PUBLIC_API_ORIGIN\.example/);
+  assert.match(template, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /must match `NEXT_PUBLIC_API_URL`/);
@@ -1534,7 +1564,7 @@ test('production env template documents the compose runtime web public origins',
   assert.match(template, /CHARITYPILOT_API_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:REPLACE_ME_API_IMAGE_DIGEST/);
   assert.match(template, /CHARITYPILOT_WEB_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:REPLACE_ME_WEB_IMAGE_DIGEST/);
   assert.match(template, /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/);
-  assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/REPLACE_ME_PUBLIC_API_ORIGIN\.example/);
+  assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /Docker Compose/);
 });

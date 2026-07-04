@@ -45,7 +45,7 @@ Route handlers may also throw `AppError` (`apps/api/src/utils/errors.ts:4-14`) a
 
 `registerBrowserOriginProtection` (`apps/api/src/server.ts:55`) does two things. First it installs a `preHandler` hook that runs `validateUnsafeRequestOrigin` and short-circuits with the returned status/payload when origin validation fails (`apps/api/src/plugins/browser-origin-protection.ts:9-14`). Then it registers `@fastify/cors` with a per-origin allow callback, `credentials: true`, and a fixed method/header allow-list (`apps/api/src/plugins/browser-origin-protection.ts:16-28`).
 
-The allowed-origin set is built in `server.ts` from `FRONTEND_URL` (comma-separated), falling back to `http://localhost:3003` and `http://localhost:3000`, each normalised via `normaliseOrigin` (`apps/api/src/server.ts:29-36`).
+The allowed-origin set is built in `server.ts` from `FRONTEND_URL` (comma-separated for non-production flexibility), falling back to `http://localhost:3003` and `http://localhost:3000`, each normalised via `normaliseOrigin` (`apps/api/src/server.ts:29-36`). In production validation restricts `FRONTEND_URL` to the canonical web origin `https://app.charitypilot.ie`.
 
 `validateUnsafeRequestOrigin` (`apps/api/src/utils/request-origin.ts:57-93`) implements CSRF-style protection for cookie-authenticated browsers:
 

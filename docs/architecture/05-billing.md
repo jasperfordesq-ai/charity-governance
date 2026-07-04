@@ -54,7 +54,7 @@ The authenticated scope applies `authGuard` via an `onRequest` hook (`apps/api/s
 3. Lazily creates a Stripe customer if `organisation.stripeCustomerId` is null — tagging it with `metadata.organisationId`, the organisation name and contact email — then persists the new `stripeCustomerId` on the organisation (`apps/api/src/services/billing.service.ts:336-348`).
 4. Creates a `mode: 'subscription'` Checkout session with a single line item, success/cancel URLs under the primary frontend origin (`/billing?success=true` / `/billing?cancelled=true`), and `metadata: { organisationId, plan }`. The metadata is later re-checked by the webhook handler. Returns `{ url }`.
 
-The frontend origin comes from `getPrimaryFrontendOrigin()`, which takes the first comma-separated entry of `FRONTEND_URL` (defaulting to `http://localhost:3000`) with trailing slashes stripped (`apps/api/src/utils/frontend-origin.ts:1-8`).
+The frontend origin comes from `getPrimaryFrontendOrigin()`, which takes the first comma-separated entry of `FRONTEND_URL` (defaulting to `http://localhost:3000`) with trailing slashes stripped (`apps/api/src/utils/frontend-origin.ts:1-8`). Production validation keeps that first entry canonical: `https://app.charitypilot.ie`.
 
 The billing-portal session (`createPortalSession`) requires an existing `stripeCustomerId`, otherwise it throws `400 NO_STRIPE_CUSTOMER`, and returns a portal URL with `return_url` set to `/billing` (`apps/api/src/services/billing.service.ts:362-377`).
 

@@ -70,11 +70,11 @@ Evidence:
 - [ ] `.env.production` or the platform-generated equivalent is excluded from git.
 - [ ] `NODE_ENV=production` is set for the API, web app, and scheduled job runtime.
 - [ ] `JWT_SECRET` is high entropy and at least 32 characters.
-- [ ] `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` use HTTPS public origins.
+- [ ] `FRONTEND_URL=https://app.charitypilot.ie` and `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`.
 - [ ] `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL` use the same HTTPS Supabase project origin.
 - [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` is set for Docker Compose and matches `NEXT_PUBLIC_API_URL`.
 - [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` is set for Docker Compose and matches `NEXT_PUBLIC_SUPABASE_URL`.
-- [ ] `AUTH_COOKIE_DOMAIN` matches the deployed cookie scope or is intentionally unset for a single-host deployment.
+- [ ] `AUTH_COOKIE_DOMAIN=.charitypilot.ie` covers the canonical web and API subdomains.
 - [ ] Stripe keys are live-mode production keys.
 - [ ] Resend sender domain is verified for production sending.
 - [ ] Supabase service role key is stored only in the API secret store.
@@ -89,11 +89,11 @@ Evidence:
 
 ## 3. Hosting, DNS, And TLS
 
-- [ ] Web app is deployed at the approved public HTTPS origin.
-- [ ] API is deployed at the approved public HTTPS origin.
+- [ ] Web app is deployed at `https://app.charitypilot.ie`.
+- [ ] API is deployed at `https://api.charitypilot.ie`.
 - [ ] DNS records are managed by the approved owner.
 - [ ] TLS certificates are valid for the web and API origins.
-- [ ] API CORS allows only the approved `FRONTEND_URL` origin list.
+- [ ] API CORS allows only the canonical `FRONTEND_URL` origin.
 - [ ] Security headers are present on API responses.
 - [ ] `npm run check:production:hosting -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 
