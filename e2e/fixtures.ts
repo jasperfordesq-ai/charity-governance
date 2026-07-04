@@ -1,12 +1,13 @@
 import { test as base, expect, type Page, type Locator, type BrowserContext } from '@playwright/test';
 import { deployedQaOwnerCredentials, IS_DEPLOYED_QA } from './env';
-import { getUserAndOrg, markEmailVerified } from './helpers/db';
+import { createVerifiedOwner } from './helpers/db';
+import { gotoWithDevServerRetry } from './helpers/navigation';
 
 /**
  * Fill a HeroUI/React-Aria controlled input and confirm the value actually
  * stuck. These inputs are controlled by React state (value={state}); a fill
  * that lands before Next.js hydration sets the DOM value, but hydration then
- * resets the input to the (empty) state — so the submitted value is blank.
+ * resets the input to the (empty) state - so the submitted value is blank.
  * Re-filling until toHaveValue passes both fixes the race and proves the field
  * is hydrated and wired to its onValueChange handler.
  */
@@ -25,7 +26,7 @@ export async function reliableFill(locator: Locator, value: string): Promise<voi
 export const TEST_PASSWORD = 'TestPass123';
 const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 300_000;
 
-/** A unique email per call — registration is anti-enumeration, so emails must not repeat. */
+/** A unique email per call - registration is anti-enumeration, so emails must not repeat. */
 export function uniqueEmail(prefix = 'owner'): string {
   return `e2e-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
@@ -81,7 +82,7 @@ export async function registerViaUi(
   const name = opts.name ?? 'E2E Owner';
   const organisationName = opts.organisationName ?? 'E2E Test Charity';
 
-  await page.goto('/register', { waitUntil: 'domcontentloaded' });
+  await gotoWithDevServerRetry(page, '/register', { waitUntil: 'domcontentloaded' });
   await fillAndSubmit(
     page,
     async () => {
@@ -109,7 +110,7 @@ export async function registerViaUi(
  * and, if not, re-fill and retry until hydration completes.
  */
 export async function loginViaUi(page: Page, email: string, password: string): Promise<void> {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  await gotoWithDevServerRetry(page, '/login', { waitUntil: 'domcontentloaded' });
   await fillAndSubmit(
     page,
     async () => {
@@ -169,7 +170,7 @@ export async function acceptInviteViaUi(
   name: string,
   password: string,
 ): Promise<void> {
-  await page.goto(`/accept-invite#token=${token}`);
+  await gotoWithDevServerRetry(page, `/accept-invite#token=${token}`);
   await fillAndSubmit(
     page,
     async () => {
@@ -190,7 +191,7 @@ interface Fixtures {
 }
 
 interface WorkerFixtures {
-  /** The shared verified OWNER, registered once per worker (keeps us under the 5/min auth rate limit). */
+  /** The shared verified OWNER, created once per worker (keeps us under the 5/min auth rate limit). */
   owner: OwnerInfo;
 }
 
@@ -220,20 +221,19 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       }
 
       const email = uniqueEmail();
-      const creds = await registerViaUi(page, { email, name: 'Shared Owner', organisationName: 'Shared E2E Charity' });
-      // Fast-path verification via DB; the real verify flow is covered by auth.spec.ts.
-      await markEmailVerified(creds.email);
-      await loginViaUi(page, creds.email, creds.password);
-
-      const { userId, organisationId } = await getUserAndOrg(creds.email);
+      const password = TEST_PASSWORD;
+      const name = 'Shared Owner';
+      const organisationName = 'Shared E2E Charity';
+      const { userId, organisationId } = await createVerifiedOwner({ email, password, name, organisationName });
+      await loginViaUi(page, email, password);
       const storageState = await context.storageState();
       await context.close();
 
       await use({
-        email: creds.email,
-        password: creds.password,
-        name: creds.name,
-        organisationName: creds.organisationName,
+        email,
+        password,
+        name,
+        organisationName,
         userId,
         organisationId,
         storageState,

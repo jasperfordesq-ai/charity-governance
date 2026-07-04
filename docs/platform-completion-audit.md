@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `599633e`
+Working-tree base commit when generated: `3f02752`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -116,6 +116,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The release readiness command now reports full local success as repository release gates passed instead of implying production launch readiness.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
+- Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
+- Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.
 
 ## Independent Audit Findings Still Driving Next Work
 

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { getPrincipleIdByNumber } from '../helpers/db';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 type Theme = 'light' | 'dark';
 type RouteSpec = string | { label: string; resolve: () => Promise<string> };
@@ -13,7 +14,7 @@ const VIEWPORT_CASES = [
 const THEME_CASES: readonly Theme[] = ['light', 'dark'];
 const NAVIGATION_TIMEOUT_MS = 300_000;
 const PUBLIC_ROUTE_TIMEOUT_MS = 420_000;
-const DASHBOARD_ROUTE_BATCH_TIMEOUT_MS = 900_000;
+const DASHBOARD_ROUTE_TIMEOUT_MS = 420_000;
 
 const PUBLIC_ROUTES = [
   '/',
@@ -90,7 +91,7 @@ for (const viewportCase of VIEWPORT_CASES) {
     test(`launch-critical public/auth route ${route} renders in ${viewportCase.label}`, async ({ page }) => {
       test.setTimeout(PUBLIC_ROUTE_TIMEOUT_MS);
       await page.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
-      await page.goto(route, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
+      await gotoWithDevServerRetry(page, route, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
 
       for (const theme of THEME_CASES) {
         await waitForDocumentShell(page);
@@ -101,13 +102,12 @@ for (const viewportCase of VIEWPORT_CASES) {
     });
   }
 
-  test(`launch-critical dashboard routes render in ${viewportCase.label}`, async ({ ownerPage }) => {
-    test.setTimeout(DASHBOARD_ROUTE_BATCH_TIMEOUT_MS);
-    await ownerPage.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
-
-    for (const route of DASHBOARD_ROUTES) {
+  for (const route of DASHBOARD_ROUTES) {
+    test(`launch-critical dashboard route ${typeof route === 'string' ? route : route.label} renders in ${viewportCase.label}`, async ({ ownerPage }) => {
+      test.setTimeout(DASHBOARD_ROUTE_TIMEOUT_MS);
+      await ownerPage.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
       const { label, path } = await resolveRoute(route);
-      await ownerPage.goto(path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
+      await gotoWithDevServerRetry(ownerPage, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
 
       for (const theme of THEME_CASES) {
         await waitForDocumentShell(ownerPage);
@@ -115,6 +115,6 @@ for (const viewportCase of VIEWPORT_CASES) {
         await settle(ownerPage);
         await assertRenderable(ownerPage, `${label} ${theme}`);
       }
-    }
-  });
+    });
+  }
 }

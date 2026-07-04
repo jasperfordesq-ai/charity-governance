@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { Client } from 'pg';
 
 import { IS_DEPLOYED_QA } from '../env';
@@ -77,6 +78,10 @@ export function randomToken(bytes = 32): string {
   return crypto.randomBytes(bytes).toString('base64url');
 }
 
+function testId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(8).toString('hex')}`;
+}
+
 /**
  * Truncate all tenant/app tables, preserving seeded governance reference data.
  * CASCADE handles foreign-key dependents (org-scoped FKs default to Restrict);
@@ -99,6 +104,55 @@ export async function getUserAndOrg(email: string): Promise<{ userId: string; or
     const row = res.rows[0];
     if (!row) throw new Error(`getUserAndOrg: no user for ${email}`);
     return { userId: row.id as string, organisationId: row.organisationId as string };
+  });
+}
+
+export async function createVerifiedOwner(data: {
+  email: string;
+  password: string;
+  name: string;
+  organisationName: string;
+}): Promise<{ userId: string; organisationId: string }> {
+  const normalizedEmail = data.email.trim().toLowerCase();
+  const passwordHash = await bcrypt.hash(data.password, 12);
+  const now = new Date();
+  const trialEndsAt = new Date();
+  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
+  return withDb(async (client) => {
+    await client.query('BEGIN');
+    try {
+      const organisationId = testId('org');
+      const organisationResult = await client.query<{ id: string }>(
+        `INSERT INTO "Organisation" ("id", "name", "updatedAt") VALUES ($1, $2, $3) RETURNING "id"`,
+        [organisationId, data.organisationName, now],
+      );
+      if (organisationResult.rows[0]?.id !== organisationId) {
+        throw new Error('createVerifiedOwner: organisation insert returned no id');
+      }
+
+      const userId = testId('usr');
+      const userResult = await client.query<{ id: string }>(
+        `INSERT INTO "User" ("id", "email", "name", "passwordHash", "role", "organisationId", "emailVerified", "updatedAt")
+         VALUES ($1, $2, $3, $4, 'OWNER', $5, true, $6)
+         RETURNING "id"`,
+        [userId, normalizedEmail, data.name, passwordHash, organisationId, now],
+      );
+      if (userResult.rows[0]?.id !== userId) throw new Error('createVerifiedOwner: user insert returned no id');
+
+      const subscriptionId = testId('sub');
+      await client.query(
+        `INSERT INTO "Subscription" ("id", "organisationId", "plan", "status", "trialEndsAt", "updatedAt")
+         VALUES ($1, $2, 'ESSENTIALS', 'TRIALING', $3, $4)`,
+        [subscriptionId, organisationId, trialEndsAt, now],
+      );
+
+      await client.query('COMMIT');
+      return { userId, organisationId };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    }
   });
 }
 

@@ -143,6 +143,8 @@ const fixedInThisAuditBranch = [
   'The release readiness command now reports full local success as repository release gates passed instead of implying production launch readiness.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
+  'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
+  'Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.',
 ];
 
 const independentAuditFindings = [

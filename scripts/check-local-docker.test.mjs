@@ -287,15 +287,60 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   assert.doesNotMatch(accessibilitySpec, /waitUntil:\s*'domcontentloaded'/);
 });
 
+test('responsive smoke retries only local Next dev-server restart navigations', () => {
+  const navigationHelper = readRepoFile('e2e/helpers/navigation.ts');
+  const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
+  const fixtures = readRepoFile('e2e/fixtures.ts');
+
+  assert.match(navigationHelper, /DEV_SERVER_RESTART_ERROR_PATTERNS = \[/);
+  assert.match(navigationHelper, /net::ERR_EMPTY_RESPONSE/);
+  assert.match(navigationHelper, /net::ERR_CONNECTION_RESET/);
+  assert.match(navigationHelper, /net::ERR_CONNECTION_REFUSED/);
+  assert.match(navigationHelper, /net::ERR_ABORTED; maybe frame was detached/);
+  assert.match(navigationHelper, /if \(IS_DEPLOYED_QA \|\| !isDevServerRestartNavigationError\(err\)\)/);
+  assert.match(navigationHelper, /await waitForLocalWebServer\(\)/);
+  assert.match(navigationHelper, /return page\.goto\(url,\s*options\)/);
+  assert.match(responsiveSpec, /import \{ gotoWithDevServerRetry \} from '\.\.\/helpers\/navigation'/);
+  assert.match(fixtures, /import \{ gotoWithDevServerRetry \} from '\.\/helpers\/navigation'/);
+  assert.doesNotMatch(responsiveSpec, /(?:page|ownerPage)\.goto\(.*waitUntil:\s*'commit'/);
+  assert.doesNotMatch(fixtures, /await page\.goto\('\/(?:register|login)'/);
+});
+
 test('e2e authenticated owner setup has cold compile headroom', () => {
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
-  assert.match(fixtures, /await page\.goto\('\/register',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
-  assert.match(fixtures, /await page\.goto\('\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /const \{ userId, organisationId \} = await createVerifiedOwner/);
+  assert.match(fixtures, /await loginViaUi\(page,\s*email,\s*password\)/);
+  assert.doesNotMatch(fixtures, /await registerViaUi\(page,\s*\{\s*email,\s*name:\s*'Shared Owner'/);
+  assert.doesNotMatch(fixtures, /await markEmailVerified/);
   assert.match(fixtures, /page\.waitForURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
   assert.match(fixtures, /expect\(page\)\.toHaveURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
   assert.match(fixtures, /const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 300_000/);
   assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS\s*\}/);
+});
+
+test('local direct owner setup mirrors registration without using deployed QA seams', () => {
+  const db = readRepoFile('e2e/helpers/db.ts');
+
+  assert.match(db, /import bcrypt from 'bcryptjs'/);
+  assert.match(db, /export async function createVerifiedOwner/);
+  assert.match(db, /assertLocalDatabaseSeamAllowed\(\);/);
+  assert.match(db, /bcrypt\.hash\(data\.password,\s*12\)/);
+  assert.match(db, /INSERT INTO "Organisation" \("id", "name", "updatedAt"\)/);
+  assert.match(db, /INSERT INTO "User" \("id", "email", "name", "passwordHash", "role", "organisationId", "emailVerified", "updatedAt"\)/);
+  assert.match(db, /VALUES \(\$1, \$2, \$3, \$4, 'OWNER', \$5, true, \$6\)/);
+  assert.match(db, /INSERT INTO "Subscription" \("id", "organisationId", "plan", "status", "trialEndsAt", "updatedAt"\)/);
+  assert.match(db, /VALUES \(\$1, \$2, 'ESSENTIALS', 'TRIALING', \$3, \$4\)/);
+  assert.match(db, /await client\.query\('ROLLBACK'\)/);
+});
+
+test('auth journey helpers still exercise registration UI directly', () => {
+  const fixtures = readRepoFile('e2e/fixtures.ts');
+
+  assert.match(fixtures, /export async function registerViaUi/);
+  assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/register',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
 });
 
 test('deployed browser QA mode does not reset or mutate databases through local seams', () => {
@@ -367,21 +412,23 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.match(responsiveSpec, /desktop light and dark/);
   assert.match(responsiveSpec, /horizontal page overflow/);
   assert.match(responsiveSpec, /launch-critical public\/auth route/);
-  assert.match(responsiveSpec, /launch-critical dashboard routes render/);
+  assert.match(responsiveSpec, /launch-critical dashboard route/);
   assert.match(responsiveSpec, /const NAVIGATION_TIMEOUT_MS = 300_000/);
   assert.match(responsiveSpec, /const PUBLIC_ROUTE_TIMEOUT_MS = 420_000/);
-  assert.match(responsiveSpec, /const DASHBOARD_ROUTE_BATCH_TIMEOUT_MS = 900_000/);
+  assert.match(responsiveSpec, /const DASHBOARD_ROUTE_TIMEOUT_MS = 420_000/);
   assert.match(responsiveSpec, /test\.setTimeout\(PUBLIC_ROUTE_TIMEOUT_MS\)/);
-  assert.match(responsiveSpec, /test\.setTimeout\(DASHBOARD_ROUTE_BATCH_TIMEOUT_MS\)/);
+  assert.match(responsiveSpec, /test\.setTimeout\(DASHBOARD_ROUTE_TIMEOUT_MS\)/);
   assert.match(responsiveSpec, /async function waitForDocumentShell\(page: Page\): Promise<void>/);
   assert.match(responsiveSpec, /Boolean\(document\.documentElement && document\.body\)/);
   assert.match(responsiveSpec, /await waitForDocumentShell\(page\);[\s\S]*await applyTheme\(page, theme\);/);
   assert.match(responsiveSpec, /await waitForDocumentShell\(ownerPage\);[\s\S]*await applyTheme\(ownerPage, theme\);/);
-  assert.match(responsiveSpec, /page\.goto\(route,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
-  assert.match(responsiveSpec, /for \(const route of DASHBOARD_ROUTES\)[\s\S]*ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(responsiveSpec, /gotoWithDevServerRetry\(page,\s*route,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(responsiveSpec, /launch-critical dashboard route \$\{typeof route === 'string' \? route : route\.label\} renders/);
+  assert.match(responsiveSpec, /for \(const route of DASHBOARD_ROUTES\)[\s\S]*gotoWithDevServerRetry\(ownerPage,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(responsiveSpec, /waitUntil:\s*'commit'/);
   assert.doesNotMatch(responsiveSpec, /waitUntil:\s*'domcontentloaded'/);
   assert.doesNotMatch(responsiveSpec, /launch-critical public and auth routes render/);
+  assert.doesNotMatch(responsiveSpec, /launch-critical dashboard routes render/);
   assert.doesNotMatch(responsiveSpec, /launch-critical dashboard route \$\{testLabel\}/);
   assert.doesNotMatch(responsiveSpec, /waitForLoadState\('networkidle'\)/);
 });
