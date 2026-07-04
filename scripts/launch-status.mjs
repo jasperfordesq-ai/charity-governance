@@ -14,7 +14,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
-  'Complete production-launch-evidence.json with release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
+  'Complete production-launch-evidence.json with release, deploy, rollback, smoke, provider, backup/restore, and final signoff references, including legal/compliance approval.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
@@ -72,7 +72,7 @@ export function assessLaunchState(state) {
       'Run:  npm run check:production -- --production-env-file=.env.production',
       'If it passes, follow docs/production-runbook.md to deploy.',
       'Remember the non-code gates in docs/production-launch-checklist.md:',
-      '  legal policy approval, external penetration test, and the four sign-offs.',
+      '  legal policy approval, external penetration test, and the five sign-offs.',
     ],
   };
 }

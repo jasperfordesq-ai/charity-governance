@@ -2118,7 +2118,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /refs\/heads\/master/);
   assert.match(runbook, /refs\/tags\/v/);
   assert.match(runbook, /finalSignoff\.approvals/);
-  assert.match(runbook, /engineering, operations, security, and business owners/);
+  assert.match(runbook, /engineering, operations, security, legal\/compliance, and business owners/);
   assert.match(runbook, /GitHub Actions release workflow run URL/);
   assert.match(runbook, /digest-pinned API\/web\/migration image refs/);
   assert.match(runbook, /node dist\/jobs\/production-scheduler\.js/);
@@ -2159,7 +2159,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /Release git ref/);
   assert.match(launchChecklist, /Web image build origins/);
   assert.match(launchChecklist, /finalSignoff\.approvals/);
-  assert.match(launchChecklist, /`engineering`, `operations`, `security`, and `business` approvals/);
+  assert.match(launchChecklist, /`engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals/);
+  assert.match(launchChecklist, /Solicitor, governance, and privacy review confirms/);
   assert.match(launchChecklist, /node dist\/jobs\/production-scheduler\.js/);
   assert.match(launchChecklist, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(launchChecklist, /node dist\/jobs\/cleanup-document-storage\.js/);

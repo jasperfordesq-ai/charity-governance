@@ -177,6 +177,7 @@ export const FINAL_SIGNOFF_ROLES = [
   ['engineering', 'Engineering owner'],
   ['operations', 'Operations owner'],
   ['security', 'Security owner'],
+  ['legalCompliance', 'Legal/compliance owner'],
   ['business', 'Business owner'],
 ].map(([id, label]) => ({ id, label }));
 

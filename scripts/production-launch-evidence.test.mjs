@@ -304,6 +304,19 @@ function completeEvidence(requiredAreas) {
             },
           ],
         },
+        legalCompliance: {
+          status: 'approved',
+          owner: 'Legal/compliance owner',
+          approvedAt: capturedAt,
+          evidence: [
+            {
+              type: 'approval',
+              reference: 'https://evidence.charitypilot.ie/launch/final-signoff/legal-compliance',
+              description: 'Legal/compliance owner launch approval',
+              capturedAt,
+            },
+          ],
+        },
         business: {
           status: 'approved',
           owner: 'Business owner',
@@ -681,6 +694,27 @@ test('production launch evidence validator requires every final signoff role app
     assert.match(result.stderr, /finalSignoff\.approvals\.operations\.status must be approved/);
     assert.match(result.stderr, /finalSignoff\.approvals\.business\.approvedAt must not be before preparedAt/);
     assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.evidence must include at least one evidence entry/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence final signoff requires legal and compliance approval', async () => {
+  const { FINAL_SIGNOFF_ROLES, REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  assert.ok(
+    FINAL_SIGNOFF_ROLES.some((role) => role.id === 'legalCompliance' && /Legal\/compliance owner/.test(role.label)),
+    'final launch signoff must include the legal/compliance owner role',
+  );
+
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  delete evidence.finalSignoff.approvals.legalCompliance;
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /finalSignoff\.approvals\.legalCompliance is required/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

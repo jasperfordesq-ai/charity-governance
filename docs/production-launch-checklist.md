@@ -202,6 +202,7 @@ Evidence:
 - [ ] Terms or service agreement is approved for production.
 - [ ] Data retention policy is approved for production.
 - [ ] Support and data deletion contact path is published.
+- [ ] Solicitor, governance, and privacy review confirms the production wording remains review-ready, source-cited, and clear that CharityPilot is not a substitute for legal advice.
 
 Evidence:
 
@@ -245,11 +246,12 @@ Evidence:
 
 ## Final Signoff
 
-The machine-readable `production-launch-evidence.json` must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and non-secret external evidence references.
+The machine-readable `production-launch-evidence.json` must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and non-secret external evidence references.
 
 | Role | Name | Date | Evidence reference |
 | --- | --- | --- | --- |
 | Engineering owner | | | |
 | Operations owner | | | |
 | Security owner | | | |
+| Legal/compliance owner | | | |
 | Business owner | | | |
