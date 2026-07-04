@@ -75,6 +75,7 @@ const fixedInThisAuditBranch = [
   'Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.',
   'The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.',
   'The register Annual Report readiness and financial control review cards are split out of the oversized registers route behind a wiring regression test.',
+  'The register overview summary panel and metric tiles are split out of the oversized registers route behind a wiring regression test.',
   'The register modal record forms and payload normaliser are split out of the oversized registers route behind a wiring regression test.',
   'The register record modal shell is split out of the oversized registers route behind a wiring regression test.',
   'The register operational record list sections are split out of the oversized registers route behind a wiring regression test.',

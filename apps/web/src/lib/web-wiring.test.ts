@@ -631,6 +631,7 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   const src = [
     dash('registers/page.tsx'),
     optionalDash('registers/register-compliance-cards.tsx'),
+    optionalDash('registers/register-overview-panel.tsx'),
     optionalDash('registers/register-record-forms.tsx'),
     optionalDash('registers/register-record-modal.tsx'),
     optionalDash('registers/register-record-lists.tsx'),
@@ -800,6 +801,21 @@ test('registers annual report and financial control cards are extracted from the
   assert.match(cardsSrc, /Annual Report source check/);
   assert.match(cardsSrc, /Financial controls source check/);
   assert.match(cardsSrc, /isDisabled=\{saving \|\| saveDisabled\}/);
+});
+
+test('registers overview summary panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('registers/page.tsx');
+  const panelPath = dashPath('registers/register-overview-panel.tsx');
+  assert.ok(existsSync(panelPath), 'register overview panel should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /RegisterOverviewPanel/);
+  assert.doesNotMatch(pageSrc, /Review-ready register set/);
+  assert.doesNotMatch(pageSrc, /Open records/);
+  assert.doesNotMatch(pageSrc, /function SummaryTile/);
+  assert.match(panelSrc, /Review-ready register set/);
+  assert.match(panelSrc, /Open records/);
+  assert.match(panelSrc, /function SummaryTile/);
 });
 
 test('registers modal record forms are extracted from the oversized route file', () => {
