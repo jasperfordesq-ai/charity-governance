@@ -9,6 +9,7 @@ import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { useAuth } from '@/lib/auth-context';
 import { FormAlert } from '@/components/ui/form-alert';
+import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
 function AcceptInviteForm() {
   const router = useRouter();
@@ -92,6 +93,13 @@ function AcceptInviteForm() {
                 variant="bordered"
                 classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright' }}
                 description="Use at least 8 characters with uppercase, lowercase, and a number."
+                endContent={
+                  <PasswordVisibilityButton
+                    isVisible={showPassword}
+                    label={showPassword ? 'Hide invite passwords' : 'Show invite passwords'}
+                    onPress={() => setShowPassword((current) => !current)}
+                  />
+                }
               />
               <Input
                 label="Confirm password"
@@ -102,15 +110,14 @@ function AcceptInviteForm() {
                 autoComplete="new-password"
                 variant="bordered"
                 classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright' }}
+                endContent={
+                  <PasswordVisibilityButton
+                    isVisible={showPassword}
+                    label={showPassword ? 'Hide invite passwords' : 'Show invite passwords'}
+                    onPress={() => setShowPassword((current) => !current)}
+                  />
+                }
               />
-
-              <button
-                type="button"
-                className="text-sm text-teal-primary dark:text-teal-bright font-medium hover:underline"
-                onClick={() => setShowPassword((current) => !current)}
-              >
-                {showPassword ? 'Hide passwords' : 'Show passwords'}
-              </button>
 
               <Button
                 type="submit"

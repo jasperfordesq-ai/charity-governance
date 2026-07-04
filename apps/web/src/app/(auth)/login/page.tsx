@@ -2,13 +2,13 @@
 
 import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
-import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
 import { loginSchema, firstSchemaError } from '@/lib/form-schemas';
 import { safeNextPath } from '@/lib/safe-next-path';
 import { FormAlert } from '@/components/ui/form-alert';
+import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
 function loginDestination(user: { emailVerified: boolean }): string {
   const nextPath = new URLSearchParams(window.location.search).get('next');
@@ -97,13 +97,10 @@ export default function LoginPage() {
                   inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright',
                 }}
                 endContent={
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:text-gray-200" aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5" aria-hidden="true" />
-                    ) : (
-                      <Eye className="w-5 h-5" aria-hidden="true" />
-                    )}
-                  </button>
+                  <PasswordVisibilityButton
+                    isVisible={showPassword}
+                    onPress={() => setShowPassword((current) => !current)}
+                  />
                 }
               />
 

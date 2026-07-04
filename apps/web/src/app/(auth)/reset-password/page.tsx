@@ -2,12 +2,13 @@
 
 import { Suspense, useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
-import { Check, Eye, EyeOff } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { FormAlert } from '@/components/ui/form-alert';
+import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
 function ResetPasswordForm() {
   const { token } = useSensitiveQueryToken();
@@ -59,13 +60,7 @@ function ResetPasswordForm() {
   const passwordsMatch = password.length >= 8 && confirmPassword.length > 0 && password === confirmPassword;
 
   const eyeButton = (show: boolean, toggle: () => void) => (
-    <button type="button" onClick={toggle} className="text-gray-500 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:text-gray-200" aria-label={show ? 'Hide password' : 'Show password'}>
-      {show ? (
-        <EyeOff className="w-5 h-5" aria-hidden="true" />
-      ) : (
-        <Eye className="w-5 h-5" aria-hidden="true" />
-      )}
-    </button>
+    <PasswordVisibilityButton isVisible={show} onPress={toggle} />
   );
 
   return (

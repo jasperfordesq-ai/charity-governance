@@ -2,12 +2,13 @@
 
 import { useState, useMemo, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
-import { Check, Circle, Eye, EyeOff } from 'lucide-react';
+import { Check, Circle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
 import { registerSchema, firstSchemaError, passwordIssue } from '@/lib/form-schemas';
 import { FormAlert } from '@/components/ui/form-alert';
+import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
 function PasswordStrengthMeter({ password }: { password: string }) {
   const checks = useMemo(() => {
@@ -109,13 +110,10 @@ export default function RegisterPage() {
   const orgInvalid = touched.organisationName && !organisationName.trim();
 
   const eyeToggle = (
-    <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:text-gray-200" aria-label={showPassword ? 'Hide password' : 'Show password'}>
-      {showPassword ? (
-        <EyeOff className="w-5 h-5" aria-hidden="true" />
-      ) : (
-        <Eye className="w-5 h-5" aria-hidden="true" />
-      )}
-    </button>
+    <PasswordVisibilityButton
+      isVisible={showPassword}
+      onPress={() => setShowPassword((current) => !current)}
+    />
   );
 
   return (
@@ -206,13 +204,10 @@ export default function RegisterPage() {
                     {passwordsMatch && (
                       <Check className="w-5 h-5 text-green-500" aria-hidden="true" />
                     )}
-                    <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="text-gray-500 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:text-gray-200" aria-label={showConfirm ? 'Hide password' : 'Show password'}>
-                      {showConfirm ? (
-                        <EyeOff className="w-5 h-5" aria-hidden="true" />
-                      ) : (
-                        <Eye className="w-5 h-5" aria-hidden="true" />
-                      )}
-                    </button>
+                    <PasswordVisibilityButton
+                      isVisible={showConfirm}
+                      onPress={() => setShowConfirm((current) => !current)}
+                    />
                   </div>
                 }
               />

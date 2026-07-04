@@ -988,9 +988,8 @@ test('marketing blog client uses lucide icons instead of inline svg', () => {
 
 test('auth routes use lucide icons instead of route-local inline svg', () => {
   const expectations: Array<[string, string[]]> = [
-    ['login/page.tsx', ['Eye', 'EyeOff']],
-    ['register/page.tsx', ['Eye', 'EyeOff', 'Check', 'Circle']],
-    ['reset-password/page.tsx', ['Eye', 'EyeOff', 'Check']],
+    ['register/page.tsx', ['Check', 'Circle']],
+    ['reset-password/page.tsx', ['Check']],
     ['forgot-password/page.tsx', ['Mail']],
     ['verify-email/page.tsx', ['Mail', 'Check', 'CircleAlert']],
   ];
@@ -1002,6 +1001,36 @@ test('auth routes use lucide icons instead of route-local inline svg', () => {
       assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
     }
     assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
+test('auth password visibility controls use the shared HeroUI icon button primitive', () => {
+  const sharedPath = join(WEB, 'src', 'components', 'ui', 'password-visibility-button.tsx');
+  assert.ok(existsSync(sharedPath), 'shared password visibility button primitive should exist');
+
+  const primitive = readFileSync(sharedPath, 'utf8');
+  assert.match(primitive, /from '@heroui\/react'/);
+  assert.match(primitive, /<Button\b/);
+  assert.match(primitive, /isIconOnly/);
+  assert.match(primitive, /from 'lucide-react'/);
+  assert.match(primitive, /<Eye\b/);
+  assert.match(primitive, /<EyeOff\b/);
+
+  const routes = [
+    '(auth)/login/page.tsx',
+    '(auth)/register/page.tsx',
+    '(auth)/reset-password/page.tsx',
+    '(auth)/accept-invite/page.tsx',
+  ];
+
+  for (const route of routes) {
+    const src = app(route);
+    assert.match(src, /PasswordVisibilityButton/, `${route} should use the shared password visibility control`);
+    assert.doesNotMatch(
+      src,
+      /<button[\s\S]{0,240}(showPassword|setShowPassword|showConfirm|setShowConfirm|Show passwords|Hide passwords)/,
+      `${route} should not keep a route-local raw password visibility button`,
+    );
   }
 });
 

@@ -118,6 +118,7 @@ const fixedInThisAuditBranch = [
   'Register Annual Report and financial-control checklist rows now use HeroUI Checkbox controls instead of raw checkbox inputs.',
   'Compliance standard editor status rendering now tolerates optional selected-item labels during production builds.',
   'Compliance overview principle disclosure buttons now expose expanded state and controlled panel relationships for assistive technology.',
+  'Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.',
 ];
 
 const independentAuditFindings = [
