@@ -753,6 +753,8 @@ test('board summary UX is extracted from the oversized route file', () => {
   assert.match(summarySrc, /Review-ready register/);
   assert.match(summarySrc, /Conduct gaps/);
   assert.match(summarySrc, /ReviewFlag/);
+  assert.match(summarySrc, /statusPanelClassName/);
+  assert.doesNotMatch(summarySrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
 });
 
 test('board member form modal is extracted from the oversized route file', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { ReviewFlag } from '@/components/ui/status';
+import { ReviewFlag, type StatusTone, statusPanelClassName } from '@/components/ui/status';
 
 export type BoardSummary = {
   active: number;
@@ -10,9 +10,40 @@ export type BoardSummary = {
   termReview: number;
 };
 
-export function BoardSummaryPanel({ summary }: { summary: BoardSummary }) {
+function SummaryMetric({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: number;
+  tone?: StatusTone;
+}) {
+  const valueClassName =
+    tone === 'danger'
+      ? 'text-rose-700 dark:text-rose-300'
+      : tone === 'warning'
+        ? 'text-amber-700 dark:text-amber-300'
+        : 'text-gray-950 dark:text-gray-50';
+
   return (
-    <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+    <div className={statusPanelClassName(tone, 'p-3')}>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`text-xl font-bold ${valueClassName}`}>{value}</p>
+    </div>
+  );
+}
+
+export function BoardSummaryPanel({ summary }: { summary: BoardSummary }) {
+  const metrics = [
+    { label: 'Active', value: summary.active, tone: 'neutral' },
+    { label: 'Conduct gaps', value: summary.conductMissing, tone: 'warning' },
+    { label: 'Induction gaps', value: summary.inductionMissing, tone: 'warning' },
+    { label: 'Term review', value: summary.termReview, tone: 'danger' },
+  ] satisfies Array<{ label: string; value: number; tone: StatusTone }>;
+
+  return (
+    <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-3xl">
           <ReviewFlag tone="draft">Review-ready register</ReviewFlag>
@@ -24,22 +55,9 @@ export function BoardSummaryPanel({ summary }: { summary: BoardSummary }) {
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[28rem]">
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Active</p>
-            <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{summary.active}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Conduct gaps</p>
-            <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{summary.conductMissing}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Induction gaps</p>
-            <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{summary.inductionMissing}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Term review</p>
-            <p className="text-xl font-bold text-rose-700 dark:text-rose-300">{summary.termReview}</p>
-          </div>
+          {metrics.map((metric) => (
+            <SummaryMetric key={metric.label} {...metric} />
+          ))}
         </div>
       </div>
     </section>
