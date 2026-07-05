@@ -1,6 +1,6 @@
 # CharityPilot - Plain-English Launch Guide
 
-*Last updated: 2026-07-04. This is the human-friendly companion to the dense
+*Last updated: 2026-07-05. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
@@ -13,9 +13,14 @@
 The codebase is substantially hardened, but launch readiness is not complete
 until the final release gate, deployed browser QA, external provider evidence,
 legal/privacy approval, and independent security review are all recorded.
-As of 2026-07-04, the local platform audit shows strong automated coverage and
+As of 2026-07-05, the local platform audit shows strong automated coverage and
 no obvious static route-level UI risks, but the release checks below must still
 be rerun against the final production configuration:
+
+`npm run launch:status` currently reports that 23 production values still require real data.
+The machine-readable launch evidence file must also pass all
+81 machine-readable launch evidence checks, including the deployed accessibility
+transcript in `browserQa.checks.accessibility-coverage`.
 
 | Check | Result |
 | --- | --- |
@@ -50,8 +55,8 @@ domain, hire a penetration-testing firm, or sign off as the legally accountable
 owner. **That is the work that remains, and it is yours (with help).** The good
 news: it's a finite, ordered checklist, laid out below.
 
-> **Warning:** Do not put real charity data into the platform until every step below is
-> done.** The platform's own tooling is built to *reject* fake/placeholder
+> **Warning:** Do not put real charity data into the platform until every step below is done.
+> The platform's own tooling is built to *reject* fake/placeholder
 > launch evidence, so there are no shortcuts here - nor should there be, given
 > this handles charity governance records.
 

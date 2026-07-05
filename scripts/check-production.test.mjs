@@ -2097,6 +2097,10 @@ test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
+  assert.match(launchGuide, /Last updated: 2026-07-05/);
+  assert.match(launchGuide, /23 production values still require real data/);
+  assert.match(launchGuide, /81 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);
   assert.match(launchGuide, /five named approvals/i);
   assert.match(launchGuide, /engineering, operations, security, legal\/compliance, and business/);
