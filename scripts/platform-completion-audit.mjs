@@ -57,6 +57,7 @@ const fixedInThisAuditBranch = [
   'Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.',
   'Sensitive public auth and invite throttles now have regression coverage proving one email/token identifier does not block a different identifier from the same caller.',
   'Registration throttling now has regression coverage proving normalized email identifiers share a throttle bucket without blocking a different email from the same caller.',
+  'Resend-verification throttling now keys by hashed bearer/access-cookie credentials at the request hook, so one invalid credential cannot burn the same-IP bucket for another credential.',
   'Optional in-process cron logging now serializes errors through the redacted logger helper.',
   'Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.',
   'API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.',
@@ -167,7 +168,7 @@ const localVerificationEvidence = [
   '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
   '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
   '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.',
-  '`npm run test:e2e:responsive` completed locally with 50/50 Playwright route smoke checks passing after 49 first-try passes and 1 retry pass before auth-helper hardening; rerun clean responsive evidence before launch signoff.',
+  '`npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.',
   'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
 ];
 

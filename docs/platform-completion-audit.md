@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `1bc1807`
+Working-tree base commit when generated: `2abb96d`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -30,6 +30,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.
 - Sensitive public auth and invite throttles now have regression coverage proving one email/token identifier does not block a different identifier from the same caller.
 - Registration throttling now has regression coverage proving normalized email identifiers share a throttle bucket without blocking a different email from the same caller.
+- Resend-verification throttling now keys by hashed bearer/access-cookie credentials at the request hook, so one invalid credential cannot burn the same-IP bucket for another credential.
 - Optional in-process cron logging now serializes errors through the redacted logger helper.
 - Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
 - API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
@@ -136,7 +137,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
-- `npm run test:e2e:responsive` completed locally with 50/50 Playwright route smoke checks passing after 49 first-try passes and 1 retry pass before auth-helper hardening; rerun clean responsive evidence before launch signoff.
+- `npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
@@ -155,13 +156,13 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 351 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
-| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 259 | yes | no obvious static risk; verify in browser |
+| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 262 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 361 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 400 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | no obvious static risk; verify in browser |
-| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 395 | yes | no obvious static risk; verify in browser |
-| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 254 | yes | no obvious static risk; verify in browser |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 336 | yes | no obvious static risk; verify in browser |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 402 | yes | no obvious static risk; verify in browser |
+| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 263 | yes | no obvious static risk; verify in browser |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 367 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 136 | yes | no obvious static risk; verify in browser |
@@ -169,8 +170,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 260 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |
-| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 181 | yes | no obvious static risk; verify in browser |
-| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 397 | yes | no obvious static risk; verify in browser |
+| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 184 | yes | no obvious static risk; verify in browser |
+| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 403 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 394 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
@@ -187,7 +188,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `documents` | `apps/api/src/routes/documents/index.ts` | 382 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `export` | `apps/api/src/routes/export/index.ts` | 461 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
+| `export` | `apps/api/src/routes/export/index.ts` | 470 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
