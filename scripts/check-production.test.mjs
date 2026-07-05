@@ -325,6 +325,25 @@ test('passes when the selected env file contains complete production values', ()
   }
 });
 
+test('fails when production document storage is configured to use the local driver', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-storage-driver-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local' }));
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /DOCUMENT_STORAGE_DRIVER must not be local for production; use Supabase document storage/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when production web or API origins drift from canonical hostnames', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-canonical-hosts-'));
   const envPath = join(tempDir, 'production.env');

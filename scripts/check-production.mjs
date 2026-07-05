@@ -210,6 +210,12 @@ function requireTrustedProxyAddresses(env, issues) {
   }
 }
 
+function requireProductionDocumentStorageDriver(env, issues) {
+  if (envValue(env, 'DOCUMENT_STORAGE_DRIVER').toLowerCase() === 'local') {
+    issues.push('DOCUMENT_STORAGE_DRIVER must not be local for production; use Supabase document storage');
+  }
+}
+
 function requireIntegerPort(env, key, issues) {
   const value = envValue(env, key);
   if (!isConfigured(value)) return;
@@ -515,6 +521,7 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
     canonicalOriginRole: 'web',
   });
   requireUrl(env, 'SUPABASE_URL', issues, { requirePublicHost: true });
+  requireProductionDocumentStorageDriver(env, issues);
   requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
   requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, {
     requireOrigin: true,

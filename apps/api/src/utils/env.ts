@@ -326,6 +326,12 @@ function requireTrustedProxyAddresses(issues: string[]) {
   }
 }
 
+function requireProductionDocumentStorageDriver(issues: string[]) {
+  if (process.env.DOCUMENT_STORAGE_DRIVER?.trim().toLowerCase() === 'local') {
+    issues.push('DOCUMENT_STORAGE_DRIVER must not be local in production; use Supabase document storage');
+  }
+}
+
 function hostMatchesCookieDomain(hostname: string, cookieDomain: string): boolean {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -386,6 +392,7 @@ export function validateDocumentStorageCleanupEnv(): void {
   requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+  requireProductionDocumentStorageDriver(issues);
   requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 
   throwIfProductionIssues(
@@ -465,6 +472,7 @@ export function validateProductionEnv(): void {
   requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+  requireProductionDocumentStorageDriver(issues);
   requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 
   throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);

@@ -105,6 +105,30 @@ test('validateProductionEnv accepts complete production configuration', () => {
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
+test('validateProductionEnv rejects local document storage in production', () => {
+  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local' });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('DOCUMENT_STORAGE_DRIVER must not be local in production; use Supabase document storage'),
+  );
+});
+
+test('validateDocumentStorageCleanupEnv rejects local document storage in production', () => {
+  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local' });
+
+  assert.throws(
+    () => validateDocumentStorageCleanupEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('DOCUMENT_STORAGE_DRIVER must not be local in production; use Supabase document storage'),
+  );
+});
+
 test('validateProductionEnv rejects non-canonical production public origins', () => {
   setCompleteProductionEnv({
     FRONTEND_URL: 'https://charitypilot.ie',
