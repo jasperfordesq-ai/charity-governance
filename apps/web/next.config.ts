@@ -21,6 +21,20 @@ const nextConfig: NextConfig = {
   },
   poweredByHeader: false,
   transpilePackages: ['@charitypilot/shared'],
+  webpack(config, { dev }) {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          ...(Array.isArray(config.watchOptions?.ignored) ? config.watchOptions.ignored : []),
+          '**/e2e/test-results/**',
+          '**/e2e/playwright-report/**',
+        ],
+      };
+    }
+
+    return config;
+  },
   async headers() {
     const securityHeaders = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },

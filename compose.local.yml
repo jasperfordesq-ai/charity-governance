@@ -105,6 +105,7 @@ services:
     command: sh -lc "rm -rf apps/web/.next/* && npm run dev -w @charitypilot/web"
     environment:
       NODE_ENV: development
+      NODE_OPTIONS: ${CHARITYPILOT_LOCAL_WEB_NODE_OPTIONS:---max-old-space-size=4096}
       PORT: 3003
       NEXT_PUBLIC_API_URL: http://localhost:3002
       CHARITYPILOT_INTERNAL_API_URL: http://api:3002

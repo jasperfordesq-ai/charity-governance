@@ -27,6 +27,12 @@ export const TEST_PASSWORD = 'TestPass123';
 const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 900_000;
 const AUTH_FORM_HEADING_TIMEOUT_MS = 60_000;
 
+async function suppressCookieConsent(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    localStorage.setItem('cookie-consent', 'declined');
+  });
+}
+
 /** A unique email per call - registration is anti-enumeration, so emails must not repeat. */
 export function uniqueEmail(prefix = 'owner'): string {
   return `e2e-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -120,6 +126,7 @@ export async function registerViaUi(
   const name = opts.name ?? 'E2E Owner';
   const organisationName = opts.organisationName ?? 'E2E Test Charity';
 
+  await suppressCookieConsent(page);
   await gotoWithDevServerRetry(page, '/register', { waitUntil: 'domcontentloaded' });
   await fillAndSubmit(
     page,
@@ -149,6 +156,7 @@ export async function registerViaUi(
  * and, if not, re-fill and retry until hydration completes.
  */
 export async function loginViaUi(page: Page, email: string, password: string): Promise<void> {
+  await suppressCookieConsent(page);
   await gotoWithDevServerRetry(page, '/login', { waitUntil: 'domcontentloaded' });
   await fillAndSubmit(
     page,
@@ -215,6 +223,7 @@ export async function acceptInviteViaUi(
   name: string,
   password: string,
 ): Promise<void> {
+  await suppressCookieConsent(page);
   await gotoWithDevServerRetry(page, `/accept-invite#token=${token}`);
   await fillAndSubmit(
     page,

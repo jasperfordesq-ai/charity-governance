@@ -45,6 +45,7 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /api:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /web:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /NODE_ENV:\s+development/);
+  assert.match(compose, /web:[\s\S]*NODE_OPTIONS:\s+\$\{CHARITYPILOT_LOCAL_WEB_NODE_OPTIONS:---max-old-space-size=4096\}/);
   assert.match(compose, /DOCUMENT_STORAGE_DRIVER:\s+local/);
   assert.match(compose, /LOCAL_FILE_STORAGE_DIR:\s+\/app\/\.charitypilot-local-storage\/documents/);
   assert.match(compose, /SEED_LOCAL_ADMIN:\s+"true"/);
@@ -308,6 +309,15 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   assert.doesNotMatch(fixtures, /await page\.goto\('\/(?:register|login)'/);
 });
 
+test('web dev server ignores Playwright artifacts during local browser QA', () => {
+  const nextConfig = readRepoFile('apps/web/next.config.ts');
+
+  assert.match(nextConfig, /webpack\(config,\s*\{\s*dev\s*\}\)/);
+  assert.match(nextConfig, /if \(dev\)/);
+  assert.match(nextConfig, /\*\*\/e2e\/test-results\/\*\*/);
+  assert.match(nextConfig, /\*\*\/e2e\/playwright-report\/\*\*/);
+});
+
 test('e2e authenticated owner setup has cold compile headroom', () => {
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
@@ -358,6 +368,8 @@ test('auth journey helpers still exercise registration UI directly', () => {
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
   assert.match(fixtures, /export async function registerViaUi/);
+  assert.match(fixtures, /async function suppressCookieConsent\(page: Page\): Promise<void>/);
+  assert.match(fixtures, /localStorage\.setItem\('cookie-consent', 'declined'\)/);
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/register',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
 });
