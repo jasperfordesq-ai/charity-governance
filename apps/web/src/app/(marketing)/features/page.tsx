@@ -5,7 +5,7 @@ import { CalendarDays, Check, CircleCheck, FileText, FolderOpen, UsersRound } fr
 export const metadata: Metadata = {
   title: 'Features — CharityPilot',
   description:
-    'Explore all the features that make CharityPilot the best governance compliance tool for Irish charities.',
+    'Explore the review-ready governance workflows CharityPilot gives Irish charity teams.',
 };
 
 const features = [
@@ -118,7 +118,7 @@ export default function FeaturesPage() {
           </h1>
           <p className="mt-4 text-lg text-gray-700 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
             Every feature in CharityPilot is designed around the CRA Charities Governance Code.
-            No generic project management -- just the tools you actually need to stay compliant.
+            No generic project management -- just practical tools to stay organised around compliance.
           </p>
         </div>
       </section>

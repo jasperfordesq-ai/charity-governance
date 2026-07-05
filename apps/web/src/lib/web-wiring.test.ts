@@ -1572,6 +1572,13 @@ test('marketing navigation CTAs avoid pill-badge styling', () => {
   assert.match(mobileNav, /rounded-md/);
 });
 
+test('marketing feature copy avoids legal-certainty compliance claims', () => {
+  const features = app('(marketing)/features/page.tsx');
+
+  assert.doesNotMatch(features, /stay compliant/i);
+  assert.match(features, /stay organised around compliance/i);
+});
+
 test('registers workflow prioritises conditional obligation register work from the organisation profile', () => {
   const src = [
     dash('registers/page.tsx'),
