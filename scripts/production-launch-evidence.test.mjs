@@ -1293,6 +1293,24 @@ test('production launch evidence template covers every required area and final s
       Object.keys(template.finalSignoff.approvals).sort(),
       FINAL_SIGNOFF_ROLES.map((role) => role.id).sort(),
     );
+    assert.deepEqual(
+      template.areas.secretsAndEnv.checks['frontend-api-origins'].requiredEvidenceHints,
+      ['https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
+    );
+    assert.ok(
+      template.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].requiredEvidenceHints.includes(
+        'not a substitute for legal advice',
+      ),
+    );
+    assert.ok(
+      template.areas.securityReview.checks['penetration-test-complete'].requiredEvidenceHints.includes(
+        'completed before real charity data',
+      ),
+    );
+    assert.deepEqual(
+      template.finalSignoff.approvals.legalCompliance.requiredEvidenceHints,
+      ['Legal/compliance owner', 'launch approval'],
+    );
     assert.doesNotMatch(JSON.stringify(template), /sk_live_|whsec_|re_[A-Za-z0-9]|postgres(?:ql)?:\/\/|SUPABASE_SERVICE_ROLE_KEY=/);
 
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);

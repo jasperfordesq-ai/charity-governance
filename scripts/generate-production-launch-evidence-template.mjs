@@ -5,6 +5,54 @@ import { FINAL_SIGNOFF_ROLES, REQUIRED_LAUNCH_AREAS } from './production-launch-
 
 const placeholderTimestamp = 'REPLACE_WITH_ISO_TIMESTAMP';
 
+const evidenceHintsByCheck = new Map([
+  ['secretsAndEnv.real-production-values', ['.env.production', 'real production values']],
+  ['secretsAndEnv.secret-source-excluded-from-git', ['secret store', 'excluded from git']],
+  ['secretsAndEnv.node-env-production', ['NODE_ENV=production']],
+  ['secretsAndEnv.jwt-secret-entropy', ['JWT_SECRET', '32 characters', 'high entropy']],
+  ['secretsAndEnv.frontend-api-origins', ['https://app.charitypilot.ie', 'https://api.charitypilot.ie']],
+  ['hostingDnsTls.web-origin', ['https://app.charitypilot.ie']],
+  ['hostingDnsTls.api-origin', ['https://api.charitypilot.ie']],
+  ['database.database-check', ['--expect-operational-sentinel']],
+  ['supabaseStorage.readiness-storage-configured', ['storageConfigured: true']],
+  ['supabaseStorage.readiness-storage-reachable', ['storageBucketReachable: true']],
+  ['jobs.scheduler-command', [
+    'dist/jobs/production-scheduler.js',
+    'dist/jobs/send-deadline-reminders.js',
+    'dist/jobs/cleanup-document-storage.js',
+  ]],
+  ['billingAndEmail.stripe-webhook-endpoint', [
+    'https://api.charitypilot.ie/api/v1/billing/webhooks',
+    'checkout.session.completed',
+    'customer.subscription.updated',
+    'customer.subscription.deleted',
+  ]],
+  ['observability.internal-readiness-monitoring', ['/api/v1/health/readiness', 'x-charitypilot-readiness-key']],
+  ['legalAndCompliance.solicitor-governance-privacy-review', [
+    'solicitor review',
+    'governance review',
+    'privacy review',
+    'review-ready',
+    'source-cited',
+    'not a substitute for legal advice',
+  ]],
+  ['browserQa.browser-qa-completed', [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'npm run test:e2e:responsive',
+  ]],
+  ['securityReview.penetration-test-complete', [
+    'external penetration test',
+    'testing provider',
+    'completed before real charity data',
+  ]],
+]);
+
+function evidenceHints(areaId, checkId) {
+  return evidenceHintsByCheck.get(`${areaId}.${checkId}`) ?? [];
+}
+
 function evidenceTemplate() {
   return {
     version: 1,
@@ -33,6 +81,7 @@ function evidenceTemplate() {
           check.id,
           {
             status: 'pending',
+            requiredEvidenceHints: evidenceHints(area.id, check.id),
             evidence: [],
           },
         ])),
@@ -48,6 +97,7 @@ function evidenceTemplate() {
           status: 'pending',
           owner: `REPLACE_WITH_${role.id.toUpperCase()}_OWNER`,
           approvedAt: placeholderTimestamp,
+          requiredEvidenceHints: [role.label, 'launch approval'],
           evidence: [],
         },
       ])),
