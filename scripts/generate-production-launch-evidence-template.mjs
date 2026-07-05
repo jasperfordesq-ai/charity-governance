@@ -58,6 +58,15 @@ const evidenceHintsByCheck = new Map([
     'E2E_API_URL=https://api.charitypilot.ie',
     'npm run test:e2e:responsive',
   ]],
+  ['browserQa.accessibility-coverage', [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'E2E_OWNER_EMAIL',
+    'E2E_OWNER_PASSWORD',
+    'npm run test:e2e -- tests/accessibility.spec.ts',
+    'light and dark',
+  ]],
   ['securityReview.penetration-test-complete', [
     'external penetration test',
     'testing provider',

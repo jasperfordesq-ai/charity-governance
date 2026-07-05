@@ -138,6 +138,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['browser-qa-completed', 'production browser QA checklist completed'],
       ['desktop-coverage', 'desktop browser coverage recorded'],
       ['mobile-coverage', 'mobile browser coverage recorded'],
+      ['accessibility-coverage', 'deployed accessibility coverage recorded'],
       ['critical-flows-covered', 'critical production flows covered'],
     ],
   },
@@ -1017,7 +1018,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
-  if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
+  if (areaId === 'browserQa' && checkId === 'accessibility-coverage') {
     if (!hasEvidenceType(actualCheck, 'command-output')) {
       issues.push(`${checkPath}.evidence must include command-output evidence`);
     }
@@ -1030,6 +1031,29 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'E2E_OWNER_EMAIL',
       'E2E_OWNER_PASSWORD',
       'npm run test:e2e -- tests/accessibility.spec.ts',
+      'accessibility.spec.ts',
+      'light and dark',
+      'https://app.charitypilot.ie',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'E2E_OWNER_EMAIL',
+      'E2E_OWNER_PASSWORD',
       'docs/production-browser-qa.md',
       'auth flow',
       'dashboard flow',

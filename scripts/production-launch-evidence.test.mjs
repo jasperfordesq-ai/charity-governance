@@ -516,7 +516,7 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
-  if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
+  if (areaId === 'browserQa' && checkId === 'accessibility-coverage') {
     entry.type = 'command-output';
     entry.description = [
       'E2E_DEPLOYED_QA=true',
@@ -525,6 +525,16 @@ function evidenceEntry(areaId, checkId) {
       'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
       'npm run test:e2e -- tests/accessibility.spec.ts',
       'accessibility.spec.ts passed against deployed HTTPS production URL in light and dark themes',
+    ].join(' ');
+  }
+
+  if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
+    entry.type = 'command-output';
+    entry.description = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
       'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
       'zero critical or high-severity browser QA defects remain unresolved.',
     ].join(' ');
@@ -666,7 +676,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /80 check\(s\)/);
+    assert.match(result.stdout, /81 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -987,6 +997,12 @@ test('production launch evidence validator requires concrete billing and email p
 
 test('production launch evidence validator requires deployed browser QA command transcripts', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const browserQaArea = REQUIRED_LAUNCH_AREAS.find((area) => area.id === 'browserQa');
+  assert.ok(
+    browserQaArea?.checks.some((check) => check.id === 'accessibility-coverage'),
+    'browserQa must include a dedicated deployed accessibility evidence check',
+  );
+
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
   const genericBrowserEvidence = {
     type: 'artifact',
@@ -997,6 +1013,7 @@ test('production launch evidence validator requires deployed browser QA command 
   evidence.areas.browserQa.checks['browser-qa-completed'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['desktop-coverage'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['mobile-coverage'].evidence = [genericBrowserEvidence];
+  evidence.areas.browserQa.checks['accessibility-coverage'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['critical-flows-covered'].evidence = [genericBrowserEvidence];
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
@@ -1015,8 +1032,10 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include desktop light and dark/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include mobile light and dark/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include light and dark/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include command-output evidence/);
-    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include docs\/production-browser-qa\.md/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include document upload/);
@@ -1421,6 +1440,14 @@ test('production launch evidence template covers every required area and final s
       template.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].requiredEvidenceHints.includes(
         'not a substitute for legal advice',
       ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['accessibility-coverage'].requiredEvidenceHints.includes(
+        'npm run test:e2e -- tests/accessibility.spec.ts',
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['accessibility-coverage'].requiredEvidenceHints.includes('light and dark'),
     );
     assert.ok(
       template.areas.securityReview.checks['penetration-test-complete'].requiredEvidenceHints.includes(
