@@ -4,15 +4,15 @@ import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable, isSubscriptionLapseError } from '@/lib/plan-feature';
 import { useCallback, useEffect, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { Button, Card, Progress, Chip } from '@heroui/react';
+import { Button, Chip } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { AppPage, AppSection } from '@/components/ui/app-page';
-import { EmptyState, ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
-import { StatusDot } from '@/components/ui/status';
+import { AppPage } from '@/components/ui/app-page';
+import { ErrorState, ReviewWarningState } from '@/components/ui/states';
 import { DashboardActionLists } from './dashboard-action-lists';
+import { DashboardProgressPanels } from './dashboard-progress-panels';
 import { DashboardSummaryCards } from './dashboard-summary-cards';
 import type {
   ComplianceSummary,
@@ -140,12 +140,6 @@ export default function DashboardPage() {
     void fetchDashboard();
   }, [fetchDashboard]);
 
-  const scoreColour = (pct: number) => {
-    if (pct >= 80) return 'success';
-    if (pct >= 50) return 'warning';
-    return 'danger';
-  };
-
   const missingExplanations = approvalReadiness?.missingExplanations ?? [];
 
   return (
@@ -231,134 +225,11 @@ export default function DashboardPage() {
       )}
 
       {/* ── Overall compliance score ── */}
-      {loading ? (
-        <LoadingState
-          title="Loading dashboard progress"
-          description="Checking this year's standards, deadlines, trustees, and register signals."
-        />
-      ) : compliance ? (
-        <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-            <div className="flex-shrink-0 text-center sm:text-left">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Overall recorded progress</p>
-              <p className={`text-5xl font-extrabold ${
-                compliance.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
-                : compliance.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
-                : 'text-red-600 dark:text-red-400'
-              }`}>
-                {Math.round(compliance.percentComplete)}%
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {compliance.compliant} of {compliance.totalApplicable} standards recorded compliant
-              </p>
-            </div>
-            <div className="flex-1 min-w-0">
-              <Progress
-                aria-label="Overall compliance"
-                value={compliance.percentComplete}
-                color={scoreColour(compliance.percentComplete)}
-                className="w-full"
-                size="lg"
-              />
-              <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
-                <span className="flex items-center gap-1">
-                  <StatusDot tone="success" />
-                  Recorded compliant: {compliance.compliant}
-                </span>
-                <span className="flex items-center gap-1">
-                  <StatusDot tone="warning" />
-                  Working Towards: {compliance.workingTowards}
-                </span>
-                <span className="flex items-center gap-1">
-                  <StatusDot tone="neutral" />
-                  Not Started: {compliance.notStarted}
-                </span>
-              </div>
-            </div>
-          </div>
-        </Card>
-      ) : (
-        <EmptyState
-          title="No compliance data available"
-          description="Start by reviewing your standards for this reporting year."
-          action={(
-            <Button as={Link} href="/compliance" size="sm" variant="flat">
-              Open compliance
-            </Button>
-          )}
-        />
-      )}
+      <DashboardProgressPanels loading={loading} compliance={compliance} />
 
       {/* Summary cards */}
       <DashboardSummaryCards loading={loading} registerSummary={registerSummary} signoff={signoff} />
 
-
-      <AppSection
-        title="Progress by Principle"
-        description="Open a principle to close evidence gaps and prepare the annual Compliance Record."
-      >
-        {loading ? (
-          <LoadingState
-            title="Loading principle progress"
-            description="Preparing the Governance Code principle cards for this reporting year."
-          />
-        ) : compliance?.byPrinciple?.length ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {compliance.byPrinciple.map((p) => (
-              <Link key={p.principleId} href={`/compliance/${p.principleId}`}>
-                <Card
-                  className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-teal-primary/40 dark:hover:border-teal-light/40 hover:shadow-md transition-all cursor-pointer h-full"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright flex items-center justify-center text-sm font-bold">
-                      {p.principleNumber}
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-lg font-bold ${
-                        p.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
-                        : p.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
-                        : 'text-gray-500 dark:text-gray-400'
-                      }`}>
-                        {Math.round(p.percentComplete)}%
-                      </span>
-                      <span className={`block text-[10px] font-medium ${
-                        p.percentComplete >= 80 ? 'text-green-600 dark:text-green-400'
-                        : p.percentComplete >= 50 ? 'text-amber-700 dark:text-amber-400'
-                        : 'text-gray-500 dark:text-gray-400'
-                      }`}>
-                        {p.percentComplete >= 80 ? 'Mostly recorded' : p.percentComplete >= 50 ? 'Partly recorded' : p.percentComplete > 0 ? 'Started' : 'Not started'}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2 line-clamp-2">
-                    {p.principleTitle}
-                  </p>
-                  <Progress
-                    aria-label={`Principle ${p.principleNumber} progress`}
-                    value={p.percentComplete}
-                    color={scoreColour(p.percentComplete)}
-                    size="sm"
-                    className="w-full"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    {p.compliant} / {p.totalApplicable} standards
-                  </p>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No principle data available"
-            description="Review the Governance Code standards to start building the annual Compliance Record."
-            action={(
-              <Button as={Link} href="/compliance" size="sm" variant="flat">
-                Open compliance
-              </Button>
-            )}
-          />
-        )}
-      </AppSection>
 
       {/* ── Two-column: Deadlines + Board alerts ── */}
       <DashboardActionLists

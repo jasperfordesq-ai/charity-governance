@@ -288,13 +288,15 @@ test('route-group loading screens use the shared LoadingState primitive', () => 
 
 test('the dashboard renders an explicit error card on a load failure (not a blank/empty screen)', () => {
   const src = dash('dashboard/page.tsx');
+  const progressSrc = dash('dashboard/dashboard-progress-panels.tsx');
+  const dashboardSurface = [src, progressSrc].join('\n');
   assert.match(src, /from '@\/components\/ui\/states'/);
   assert.match(src, /ErrorState/);
   assert.match(src, /ReviewWarningState/);
-  assert.match(src, /EmptyState/);
+  assert.match(dashboardSurface, /EmptyState/);
   assert.match(src, /fetchDashboard/);
-  assert.doesNotMatch(src, /border-red-200/);
-  assert.doesNotMatch(src, /border-amber-200/);
+  assert.doesNotMatch(dashboardSurface, /border-red-200/);
+  assert.doesNotMatch(dashboardSurface, /border-amber-200/);
   assert.match(src, /Failed to load dashboard data/i);
 });
 
@@ -326,20 +328,36 @@ test('dashboard sign-off and register summary cards are extracted from the overs
   assert.match(summaryCardsSrc, /ComplianceSignoffStatus/);
 });
 
+test('dashboard progress panels are extracted from the oversized route file', () => {
+  const pageSrc = dash('dashboard/page.tsx');
+  const progressPath = dashPath('dashboard/dashboard-progress-panels.tsx');
+  assert.ok(existsSync(progressPath), 'dashboard progress panels should be split out of page.tsx');
+  const progressSrc = readFileSync(progressPath, 'utf8');
+
+  assert.match(pageSrc, /DashboardProgressPanels/);
+  assert.doesNotMatch(pageSrc, /Overall recorded progress/);
+  assert.doesNotMatch(pageSrc, /Progress by Principle/);
+  assert.match(progressSrc, /Overall recorded progress/);
+  assert.match(progressSrc, /Progress by Principle/);
+  assert.match(progressSrc, /StatusDot/);
+});
+
 test('dashboard loading and empty states use shared primitives instead of route-local skeleton cards', () => {
   const pageSrc = dash('dashboard/page.tsx');
+  const progressSrc = dash('dashboard/dashboard-progress-panels.tsx');
   const actionListsSrc = dash('dashboard/dashboard-action-lists.tsx');
+  const dashboardSurface = [pageSrc, progressSrc].join('\n');
 
   assert.match(pageSrc, /from '@\/components\/ui\/states'/);
-  assert.match(pageSrc, /from '@\/components\/ui\/status'/);
-  assert.match(pageSrc, /LoadingState/);
-  assert.match(pageSrc, /EmptyState/);
-  assert.match(pageSrc, /StatusDot/);
-  assert.doesNotMatch(pageSrc, /function SkeletonCard/);
-  assert.doesNotMatch(pageSrc, /animate-pulse/);
-  assert.doesNotMatch(pageSrc, /rounded-full bg-green-500/);
-  assert.doesNotMatch(pageSrc, /rounded-full bg-amber-400/);
-  assert.doesNotMatch(pageSrc, /rounded-full bg-gray-400/);
+  assert.match(progressSrc, /from '@\/components\/ui\/status'/);
+  assert.match(dashboardSurface, /LoadingState/);
+  assert.match(dashboardSurface, /EmptyState/);
+  assert.match(dashboardSurface, /StatusDot/);
+  assert.doesNotMatch(dashboardSurface, /function SkeletonCard/);
+  assert.doesNotMatch(dashboardSurface, /animate-pulse/);
+  assert.doesNotMatch(dashboardSurface, /rounded-full bg-green-500/);
+  assert.doesNotMatch(dashboardSurface, /rounded-full bg-amber-400/);
+  assert.doesNotMatch(dashboardSurface, /rounded-full bg-gray-400/);
 
   assert.match(actionListsSrc, /from '@\/components\/ui\/states'/);
   assert.match(actionListsSrc, /LoadingState/);
@@ -400,9 +418,11 @@ test('the per-standard compliance editor announces its save state (Saving / Save
 
 test('phase 6A workflows surface approval-readiness and evidence-led review guidance', () => {
   const dashboard = dash('dashboard/page.tsx');
+  const dashboardProgress = optionalDash('dashboard/dashboard-progress-panels.tsx');
+  const dashboardSurface = [dashboard, dashboardProgress].join('\n');
   assert.match(dashboard, /approval-readiness\?year=\$\{currentYear\}/);
   assert.match(dashboard, /AppPage/);
-  assert.match(dashboard, /AppSection/);
+  assert.match(dashboardSurface, /AppSection/);
   assert.match(dashboard, /missingExplanations/);
 
   const compliance = dash('compliance/page.tsx');
