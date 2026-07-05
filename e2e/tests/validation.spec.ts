@@ -1,4 +1,5 @@
 import { test, expect, uniqueEmail, reliableFill } from '../fixtures';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
  * Concern: input-validation parity. The register form now validates with the SAME shared
@@ -13,7 +14,7 @@ test.describe('Input-validation parity (UI)', () => {
       if (r.url().includes('/auth/register') && r.method() === 'POST') registerPosted = true;
     });
 
-    await page.goto('/register');
+    await gotoWithDevServerRetry(page, '/register');
     await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
 
     // Confirm React has hydrated BEFORE we submit: the password-strength meter renders only

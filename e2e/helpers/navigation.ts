@@ -5,14 +5,16 @@ import { WEB_BASE_URL } from '../playwright.config';
 type GotoOptions = Parameters<Page['goto']>[1];
 type GotoResponse = Awaited<ReturnType<Page['goto']>>;
 
-const DEV_SERVER_RESTART_WAIT_MS = 180_000;
+const DEV_SERVER_RESTART_WAIT_MS = 480_000;
 const DEV_SERVER_POLL_MS = 2_000;
 const DEV_SERVER_FETCH_MS = 5_000;
 const DEV_SERVER_RESTART_ERROR_PATTERNS = [
   'net::ERR_EMPTY_RESPONSE',
   'net::ERR_CONNECTION_RESET',
   'net::ERR_CONNECTION_REFUSED',
+  'net::ERR_SOCKET_NOT_CONNECTED',
   'net::ERR_ABORTED; maybe frame was detached',
+  'page.goto: Timeout',
 ];
 
 function isDevServerRestartNavigationError(err: unknown): boolean {
@@ -54,14 +56,19 @@ export async function gotoWithDevServerRetry(
   url: string,
   options?: GotoOptions,
 ): Promise<GotoResponse> {
-  try {
-    return await page.goto(url, options);
-  } catch (err) {
-    if (IS_DEPLOYED_QA || !isDevServerRestartNavigationError(err)) {
-      throw err;
-    }
+  const gotoOptions = { waitUntil: 'domcontentloaded' as const, ...options };
 
-    await waitForLocalWebServer();
-    return page.goto(url, options);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await page.goto(url, gotoOptions);
+    } catch (err) {
+      if (IS_DEPLOYED_QA || !isDevServerRestartNavigationError(err) || attempt === 2) {
+        throw err;
+      }
+
+      await waitForLocalWebServer();
+    }
   }
+
+  throw new Error(`Unable to navigate to ${url}`);
 }

@@ -1,13 +1,18 @@
 import { test, expect, uniqueEmail, sendInviteViaUi, acceptInviteViaUi } from '../fixtures';
 import { setInviteToken, getUserAndOrg } from '../helpers/db';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 const FUTURE_DATE = `${new Date().getFullYear()}-12-31`;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 test.describe('Deadlines & Team', () => {
   test('create a deadline then mark it complete', async ({ ownerPage }) => {
     const title = `E2E Annual Report filing ${Date.now()}`;
 
-    await ownerPage.goto('/deadlines');
+    await gotoWithDevServerRetry(ownerPage, '/deadlines');
     await expect(ownerPage.getByRole('heading', { name: 'Deadline Tracker' })).toBeVisible();
 
     // Open the modal (header button) — there is a second "Add Deadline" in the footer.
@@ -24,11 +29,11 @@ test.describe('Deadlines & Team', () => {
     const completePatch = ownerPage.waitForResponse(
       (r) => /\/api\/v1\/deadlines\//.test(r.url()) && r.request().method() === 'PATCH',
     );
-    await ownerPage.getByRole('checkbox', { name: `Mark "${title}" as complete` }).click();
+    await ownerPage.getByRole('checkbox', { name: new RegExp(`^Mark ${escapeRegExp(title)} as complete$`) }).click();
     expect((await completePatch).ok()).toBeTruthy();
 
     await expect(
-      ownerPage.getByRole('checkbox', { name: `Mark "${title}" as incomplete` }),
+      ownerPage.getByRole('checkbox', { name: new RegExp(`^Mark ${escapeRegExp(title)} as incomplete$`) }),
     ).toBeVisible();
   });
 
@@ -36,9 +41,9 @@ test.describe('Deadlines & Team', () => {
     const inviteeEmail = uniqueEmail('invitee');
 
     // 1. OWNER sends an invite (HTTP 202, generic message; a pending row appears).
-    await ownerPage.goto('/team');
+    await gotoWithDevServerRetry(ownerPage, '/team');
     await sendInviteViaUi(ownerPage, inviteeEmail, 'Member');
-    await expect(ownerPage.getByText(/Invite sent\./)).toBeVisible();
+    await expect(ownerPage.getByText(/Invite sent\./).last()).toBeVisible();
     await expect(ownerPage.getByText(inviteeEmail)).toBeVisible();
 
     // 2. The plaintext invite token is unrecoverable (stored hashed), so set a

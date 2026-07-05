@@ -1,6 +1,6 @@
 import { test as base, expect, type Page, type Locator, type BrowserContext } from '@playwright/test';
 import { deployedQaOwnerCredentials, IS_DEPLOYED_QA } from './env';
-import { createVerifiedOwner } from './helpers/db';
+import { createAuthenticatedStorageState, createVerifiedOwner } from './helpers/db';
 import { gotoWithDevServerRetry } from './helpers/navigation';
 
 /**
@@ -24,7 +24,8 @@ export async function reliableFill(locator: Locator, value: string): Promise<voi
  * (>=8 chars, an uppercase, a lowercase and a digit).
  */
 export const TEST_PASSWORD = 'TestPass123';
-const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 300_000;
+const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 900_000;
+const AUTH_FORM_HEADING_TIMEOUT_MS = 60_000;
 
 /** A unique email per call - registration is anti-enumeration, so emails must not repeat. */
 export function uniqueEmail(prefix = 'owner'): string {
@@ -55,19 +56,56 @@ async function fillAndSubmit(
   submitName: string,
   expectedUrl: RegExp,
   formUrl: RegExp,
+  submitRequest?: { url: RegExp; method: string },
 ): Promise<void> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await fill();
-    await page.getByRole('button', { name: submitName }).click();
+    const submitted = submitRequest
+      ? page
+          .waitForResponse(
+            (r) => submitRequest.url.test(r.url()) && r.request().method() === submitRequest.method,
+            { timeout: 10_000 },
+          )
+          .catch(() => null)
+      : Promise.resolve(null);
+    await page.getByRole('button', { name: submitName }).click({ noWaitAfter: true });
+    const submitResponse = await submitted;
+    if (submitRequest && !submitResponse) {
+      await page.waitForLoadState('domcontentloaded');
+      continue;
+    }
+    if (submitResponse && !submitResponse.ok()) {
+      const body = await submitResponse.text().catch(() => '');
+      throw new Error(
+        `${submitName} returned HTTP ${submitResponse.status()} for ${submitRequest?.url}${body ? `: ${body}` : ''}`,
+      );
+    }
     try {
-      await page.waitForURL(expectedUrl, { timeout: 30_000 });
+      await page.waitForURL(expectedUrl, { timeout: 60_000 });
       return;
     } catch {
+      if (expectedUrl.test(page.url())) return;
       if (!formUrl.test(page.url())) throw new Error(`Unexpected navigation to ${page.url()}`);
       await page.waitForLoadState('domcontentloaded'); // native submit reloaded the form; retry.
     }
   }
-  await expect(page).toHaveURL(expectedUrl, { timeout: 30_000 });
+  await expect(page).toHaveURL(expectedUrl, { timeout: 60_000 });
+}
+
+async function expectAuthFormHeading(page: Page, path: string, heading: string): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await expect(page.getByRole('heading', { name: heading })).toBeVisible({
+        timeout: AUTH_FORM_HEADING_TIMEOUT_MS,
+      });
+      return;
+    } catch (err) {
+      if (IS_DEPLOYED_QA || attempt === 2) {
+        throw err;
+      }
+      await gotoWithDevServerRetry(page, path, { waitUntil: 'domcontentloaded' });
+    }
+  }
 }
 
 /**
@@ -86,7 +124,7 @@ export async function registerViaUi(
   await fillAndSubmit(
     page,
     async () => {
-      await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible();
+      await expectAuthFormHeading(page, '/register', 'Create your account');
       await reliableFill(page.getByLabel('Your name'), name);
       await reliableFill(page.getByLabel('Email address'), opts.email);
       await reliableFill(page.getByLabel('Password', { exact: true }), password);
@@ -96,6 +134,7 @@ export async function registerViaUi(
     'Create account',
     /\/verify-email/,
     /\/register/,
+    { url: /\/api\/v1\/auth\/register/, method: 'POST' },
   );
 
   return { email: opts.email, password, name, organisationName };
@@ -114,7 +153,7 @@ export async function loginViaUi(page: Page, email: string, password: string): P
   await fillAndSubmit(
     page,
     async () => {
-      await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+      await expectAuthFormHeading(page, '/login', 'Welcome back');
       await reliableFill(page.getByLabel('Email address'), email);
       // Exact match avoids the adjacent "Show password" toggle button.
       await reliableFill(page.getByLabel('Password', { exact: true }), password);
@@ -122,6 +161,7 @@ export async function loginViaUi(page: Page, email: string, password: string): P
     'Sign in',
     /\/dashboard/,
     /\/login/,
+    { url: /\/api\/v1\/auth\/login/, method: 'POST' },
   );
   await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
 }
@@ -132,11 +172,15 @@ export async function loginViaUi(page: Page, email: string, password: string): P
  * click-option in the popup listbox.
  */
 export async function selectHeroUiOption(
-  scope: Page,
+  scope: Page | Locator,
   triggerName: string | RegExp,
   optionName: string | RegExp,
 ): Promise<void> {
-  await scope.getByRole('button', { name: triggerName }).click();
+  const trigger = scope.getByRole('button', { name: triggerName });
+  if (typeof optionName === 'string' && (await trigger.textContent())?.includes(optionName)) {
+    return;
+  }
+  await trigger.click();
   await scope.getByRole('option', { name: optionName }).click();
 }
 
@@ -146,17 +190,18 @@ export async function selectHeroUiOption(
  * fires (a native GET submit produces none and reloads the page).
  */
 export async function sendInviteViaUi(page: Page, email: string, roleLabel = 'Member'): Promise<void> {
-  await expect(page.getByRole('heading', { name: 'Team & Permissions' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Team & Permissions' })).toBeVisible({ timeout: 60_000 });
+  const inviteForm = page.getByRole('group', { name: 'Invite someone' });
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    await reliableFill(page.getByLabel('Email'), email);
-    await selectHeroUiOption(page, 'Role', roleLabel);
+    await reliableFill(inviteForm.getByLabel('Email'), email);
+    await selectHeroUiOption(inviteForm, 'Role', roleLabel);
     const posted = page
       .waitForResponse(
         (r) => /\/api\/v1\/team\/invites/.test(r.url()) && r.request().method() === 'POST',
         { timeout: 8000 },
       )
       .catch(() => null);
-    await page.getByRole('button', { name: 'Send Invite' }).click();
+    await inviteForm.getByRole('button', { name: 'Send Invite' }).click();
     if (await posted) return;
     await page.waitForLoadState('domcontentloaded');
   }
@@ -174,7 +219,7 @@ export async function acceptInviteViaUi(
   await fillAndSubmit(
     page,
     async () => {
-      await expect(page.getByRole('heading', { name: 'Accept your invite' })).toBeVisible();
+      await expectAuthFormHeading(page, `/accept-invite#token=${token}`, 'Accept your invite');
       await reliableFill(page.getByLabel('Your name'), name);
       await reliableFill(page.getByLabel('Password', { exact: true }), password);
       await reliableFill(page.getByLabel('Confirm password'), password);
@@ -182,6 +227,7 @@ export async function acceptInviteViaUi(
     'Join Workspace',
     /\/dashboard/,
     /\/accept-invite/,
+    { url: /\/api\/v1\/team\/accept-invite/, method: 'POST' },
   );
 }
 
@@ -243,7 +289,14 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   ],
 
   ownerPage: async ({ browser, owner }, use) => {
-    const context = await browser.newContext({ storageState: owner.storageState });
+    const storageState = IS_DEPLOYED_QA
+      ? owner.storageState
+      : await createAuthenticatedStorageState({
+          userId: owner.userId,
+          organisationId: owner.organisationId,
+          role: 'OWNER',
+        });
+    const context = await browser.newContext({ storageState });
     const page = await context.newPage();
     await use(page);
     await context.close();

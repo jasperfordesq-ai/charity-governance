@@ -2,6 +2,7 @@ import path from 'node:path';
 import { test, expect } from '../fixtures';
 import { API_BASE_URL, WEB_BASE_URL } from '../playwright.config';
 import { withDb } from '../helpers/db';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
  * Journey: upload a document, then download it back and verify the bytes.
@@ -18,7 +19,7 @@ test.describe('Documents', () => {
   test('upload a document then download it', async ({ ownerPage, owner }) => {
     const docName = `E2E Upload ${Date.now()}`;
 
-    await ownerPage.goto('/documents');
+    await gotoWithDevServerRetry(ownerPage, '/documents');
     await ownerPage.getByRole('button', { name: 'Upload Document' }).click();
 
     // Fill the modal: name + attach the .txt (category defaults to OTHER).

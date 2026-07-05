@@ -4,6 +4,23 @@ import { Client } from 'pg';
 
 import { IS_DEPLOYED_QA } from '../env';
 
+type E2EStorageState = {
+  cookies: Array<{
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    expires: number;
+    httpOnly: boolean;
+    secure: boolean;
+    sameSite: 'Lax' | 'Strict' | 'None';
+  }>;
+  origins: Array<{
+    origin: string;
+    localStorage: Array<{ name: string; value: string }>;
+  }>;
+};
+
 /**
  * Direct Postgres access for the E2E harness.
  *
@@ -82,6 +99,33 @@ function testId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(8).toString('hex')}`;
 }
 
+function base64UrlJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function signLocalAccessToken(payload: {
+  userId: string;
+  organisationId: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  sessionId: string;
+}): string {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const body = {
+    ...payload,
+    iat: nowSeconds,
+    exp: nowSeconds + 15 * 60,
+    iss: 'charitypilot-api',
+    aud: 'charitypilot-web',
+  };
+  const encodedHeader = base64UrlJson({ alg: 'HS256', typ: 'JWT' });
+  const encodedBody = base64UrlJson(body);
+  const signature = crypto
+    .createHmac('sha256', process.env.E2E_JWT_SECRET ?? 'local-dev-jwt-secret-at-least-32-characters')
+    .update(`${encodedHeader}.${encodedBody}`)
+    .digest('base64url');
+  return `${encodedHeader}.${encodedBody}.${signature}`;
+}
+
 /**
  * Truncate all tenant/app tables, preserving seeded governance reference data.
  * CASCADE handles foreign-key dependents (org-scoped FKs default to Restrict);
@@ -154,6 +198,69 @@ export async function createVerifiedOwner(data: {
       throw err;
     }
   });
+}
+
+export async function createAuthenticatedStorageState(data: {
+  userId: string;
+  organisationId: string;
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+}): Promise<E2EStorageState> {
+  assertLocalDatabaseSeamAllowed();
+  const sessionId = testId('sess');
+  const refreshToken = randomToken(48);
+  const accessToken = signLocalAccessToken({
+    userId: data.userId,
+    organisationId: data.organisationId,
+    role: data.role ?? 'OWNER',
+    sessionId,
+  });
+  const now = new Date();
+  const refreshExpiresAt = new Date(now);
+  refreshExpiresAt.setDate(refreshExpiresAt.getDate() + 7);
+
+  await withDb(async (client) => {
+    await client.query(
+      `INSERT INTO "AuthSession" ("id", "userId", "refreshTokenHash", "expiresAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5)`,
+      [sessionId, data.userId, sha256Hex(refreshToken), refreshExpiresAt, now],
+    );
+  });
+
+  const accessExpiresAt = Math.floor((Date.now() + 15 * 60 * 1000) / 1000);
+  const refreshCookieExpiresAt = Math.floor(refreshExpiresAt.getTime() / 1000);
+
+  const webOrigin = new URL(process.env.E2E_WEB_URL ?? 'http://localhost:3003').origin;
+
+  return {
+    cookies: [
+      {
+        name: 'charitypilot_access',
+        value: accessToken,
+        domain: 'localhost',
+        path: '/',
+        expires: accessExpiresAt,
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      },
+      {
+        name: 'charitypilot_refresh',
+        value: refreshToken,
+        domain: 'localhost',
+        path: '/',
+        expires: refreshCookieExpiresAt,
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+      },
+    ],
+    origins: [
+      {
+        origin: webOrigin,
+        localStorage: [{ name: 'cookie-consent', value: 'declined' }],
+      },
+    ],
+  };
 }
 
 /**

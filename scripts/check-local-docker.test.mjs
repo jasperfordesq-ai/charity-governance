@@ -279,8 +279,8 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   assert.match(accessibilitySpec, /async function applyTheme\(page: Page,\s*theme: Theme\): Promise<void>/);
   assert.match(accessibilitySpec, /Boolean\(document\.documentElement && document\.body\)/);
   assert.match(accessibilitySpec, /document\.documentElement\.classList\.toggle\('dark',\s*theme === 'dark'\)/);
-  assert.match(accessibilitySpec, /ownerPage\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
-  assert.match(accessibilitySpec, /page\.goto\(path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(accessibilitySpec, /gotoWithDevServerRetry\(ownerPage,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(accessibilitySpec, /gotoWithDevServerRetry\(page,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'light'\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'dark'\)/);
   assert.doesNotMatch(accessibilitySpec, /waitForLoadState\('networkidle'\)/);
@@ -296,10 +296,12 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   assert.match(navigationHelper, /net::ERR_EMPTY_RESPONSE/);
   assert.match(navigationHelper, /net::ERR_CONNECTION_RESET/);
   assert.match(navigationHelper, /net::ERR_CONNECTION_REFUSED/);
+  assert.match(navigationHelper, /net::ERR_SOCKET_NOT_CONNECTED/);
   assert.match(navigationHelper, /net::ERR_ABORTED; maybe frame was detached/);
-  assert.match(navigationHelper, /if \(IS_DEPLOYED_QA \|\| !isDevServerRestartNavigationError\(err\)\)/);
+  assert.match(navigationHelper, /page\.goto: Timeout/);
+  assert.match(navigationHelper, /if \(IS_DEPLOYED_QA \|\| !isDevServerRestartNavigationError\(err\) \|\| attempt === 2\)/);
   assert.match(navigationHelper, /await waitForLocalWebServer\(\)/);
-  assert.match(navigationHelper, /return page\.goto\(url,\s*options\)/);
+  assert.match(navigationHelper, /return await page\.goto\(url,\s*gotoOptions\)/);
   assert.match(responsiveSpec, /import \{ gotoWithDevServerRetry \} from '\.\.\/helpers\/navigation'/);
   assert.match(fixtures, /import \{ gotoWithDevServerRetry \} from '\.\/helpers\/navigation'/);
   assert.doesNotMatch(responsiveSpec, /(?:page|ownerPage)\.goto\(.*waitUntil:\s*'commit'/);
@@ -314,10 +316,27 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
   assert.match(fixtures, /await loginViaUi\(page,\s*email,\s*password\)/);
   assert.doesNotMatch(fixtures, /await registerViaUi\(page,\s*\{\s*email,\s*name:\s*'Shared Owner'/);
   assert.doesNotMatch(fixtures, /await markEmailVerified/);
-  assert.match(fixtures, /page\.waitForURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
-  assert.match(fixtures, /expect\(page\)\.toHaveURL\(expectedUrl,\s*\{\s*timeout:\s*30_000\s*\}\)/);
-  assert.match(fixtures, /const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 300_000/);
+  assert.match(fixtures, /waitForResponse\(/);
+  assert.match(fixtures, /api\\\/v1\\\/auth\\\/login/);
+  assert.match(fixtures, /page\.waitForURL\(expectedUrl,\s*\{\s*timeout:\s*60_000\s*\}\)/);
+  assert.match(fixtures, /expect\(page\)\.toHaveURL\(expectedUrl,\s*\{\s*timeout:\s*60_000\s*\}\)/);
+  assert.match(fixtures, /const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 900_000/);
   assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS\s*\}/);
+});
+
+test('local owner pages receive a fresh local auth session for long full-suite runs', () => {
+  const fixtures = readRepoFile('e2e/fixtures.ts');
+  const db = readRepoFile('e2e/helpers/db.ts');
+
+  assert.match(db, /export async function createAuthenticatedStorageState/);
+  assert.match(db, /INSERT INTO "AuthSession" \("id", "userId", "refreshTokenHash", "expiresAt", "updatedAt"\)/);
+  assert.match(db, /signLocalAccessToken/);
+  assert.match(db, /local-dev-jwt-secret-at-least-32-characters/);
+  assert.match(db, /charitypilot_access/);
+  assert.match(db, /charitypilot_refresh/);
+  assert.match(db, /localStorage:\s*\[\{\s*name:\s*'cookie-consent',\s*value:\s*'declined'\s*\}\]/);
+  assert.match(fixtures, /createAuthenticatedStorageState/);
+  assert.match(fixtures, /IS_DEPLOYED_QA\s*\?\s*owner\.storageState\s*:\s*await createAuthenticatedStorageState/);
 });
 
 test('local direct owner setup mirrors registration without using deployed QA seams', () => {

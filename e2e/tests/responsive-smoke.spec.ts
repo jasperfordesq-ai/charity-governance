@@ -53,7 +53,7 @@ const DASHBOARD_ROUTES: readonly RouteSpec[] = [
 test.describe.configure({ retries: 1, timeout: 240_000 });
 
 async function waitForDocumentShell(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean(document.documentElement && document.body), null, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean(document.documentElement && document.body), null, { timeout: 120_000 });
 }
 
 async function applyTheme(page: Page, theme: Theme): Promise<void> {

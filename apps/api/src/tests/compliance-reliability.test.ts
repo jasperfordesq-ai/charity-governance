@@ -89,6 +89,7 @@ function buildService(opts: {
     explanationIfNA?: string | null;
     standard?: { id: string; code: string };
   }>;
+  upsertRecordError?: unknown;
 } = {}) {
   const calls: Call[] = [];
   const prisma = {
@@ -108,7 +109,17 @@ function buildService(opts: {
     complianceRecord: {
       findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return opts.records ?? []; },
       findUnique: async (args: unknown) => { calls.push({ name: 'complianceRecord.findUnique', args }); return null; },
-      upsert: async (args: unknown) => { calls.push({ name: 'complianceRecord.upsert', args }); return { id: 'rec_1', standard: {}, updatedBy: {} }; },
+      upsert: async (args: unknown) => {
+        calls.push({ name: 'complianceRecord.upsert', args });
+        if (opts.upsertRecordError) {
+          throw opts.upsertRecordError;
+        }
+        return { id: 'rec_1', standard: {}, updatedBy: {} };
+      },
+      update: async (args: unknown) => {
+        calls.push({ name: 'complianceRecord.update', args });
+        return { id: 'rec_1', standard: {}, updatedBy: {} };
+      },
     },
     complianceSignoff: {
       findUnique: async (args: unknown) => { calls.push({ name: 'complianceSignoff.findUnique', args }); return null; },
@@ -353,6 +364,42 @@ test('upsertRecord scopes the composite key and create payload to the caller org
 });
 
 // ── compliance-tenant-isolation-10 ──
+
+test('upsertRecord recovers from a concurrent create race with a scoped update', async () => {
+  const duplicateRecordError = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+  const { service, calls } = buildService({
+    plan: 'COMPLETE',
+    complexity: 'COMPLEX',
+    standard: { id: 's1', isCore: true },
+    upsertRecordError: duplicateRecordError,
+  });
+
+  await service.upsertRecord('org_A', 's1', 'u1', {
+    reportingYear: 2026,
+    status: 'COMPLIANT',
+    evidence: 'Board-approved policy pack',
+  } as never);
+
+  const update = calls.find((c) => c.name === 'complianceRecord.update');
+  assert.ok(update, 'a duplicate upsert create must retry as an update');
+  const args = update!.args as {
+    where: {
+      organisationId_standardId_reportingYear: {
+        organisationId: string;
+        standardId: string;
+        reportingYear: number;
+      };
+    };
+    data: { evidence: string; updatedById: string };
+  };
+  assert.deepEqual(args.where.organisationId_standardId_reportingYear, {
+    organisationId: 'org_A',
+    standardId: 's1',
+    reportingYear: 2026,
+  });
+  assert.equal(args.data.evidence, 'Board-approved policy pack');
+  assert.equal(args.data.updatedById, 'u1');
+});
 
 test('compliance reads are scoped to the caller organisation', async () => {
   const { service, calls } = buildService({ plan: 'COMPLETE', complexity: 'COMPLEX' });

@@ -47,6 +47,10 @@ function trimValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'P2002');
+}
+
 function matrixReviewItemsForStandard(standardCode: string): ComplianceApprovalMatrixReviewItem[] {
   return getMatrixEntriesForStandard(standardCode).map((entry) => ({
     standardCode,
@@ -327,38 +331,55 @@ export class ComplianceService {
   ) {
     await this.ensureStandardIncludedInPlan(organisationId, standardId);
 
-    const record = await this.prisma.complianceRecord.upsert({
-      where: {
-        organisationId_standardId_reportingYear: {
-          organisationId,
-          standardId,
-          reportingYear: data.reportingYear,
-        },
-      },
-      create: {
+    const where = {
+      organisationId_standardId_reportingYear: {
         organisationId,
         standardId,
         reportingYear: data.reportingYear,
-        status: data.status ?? 'NOT_STARTED',
-        actionTaken: data.actionTaken,
-        evidence: data.evidence,
-        notes: data.notes,
-        explanationIfNA: data.explanationIfNA,
-        updatedById: userId,
       },
-      update: {
-        status: data.status,
-        actionTaken: data.actionTaken,
-        evidence: data.evidence,
-        notes: data.notes,
-        explanationIfNA: data.explanationIfNA,
-        updatedById: userId,
-      },
-      include: {
-        standard: true,
-        updatedBy: { select: { id: true, name: true } },
-      },
-    });
+    };
+    const update = {
+      status: data.status,
+      actionTaken: data.actionTaken,
+      evidence: data.evidence,
+      notes: data.notes,
+      explanationIfNA: data.explanationIfNA,
+      updatedById: userId,
+    };
+    const include = {
+      standard: true,
+      updatedBy: { select: { id: true, name: true } },
+    };
+
+    let record;
+    try {
+      record = await this.prisma.complianceRecord.upsert({
+        where,
+        create: {
+          organisationId,
+          standardId,
+          reportingYear: data.reportingYear,
+          status: data.status ?? 'NOT_STARTED',
+          actionTaken: data.actionTaken,
+          evidence: data.evidence,
+          notes: data.notes,
+          explanationIfNA: data.explanationIfNA,
+          updatedById: userId,
+        },
+        update,
+        include,
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      record = await this.prisma.complianceRecord.update({
+        where,
+        data: update,
+        include,
+      });
+    }
 
     return record;
   }

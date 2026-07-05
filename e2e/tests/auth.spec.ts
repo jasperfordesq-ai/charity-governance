@@ -1,5 +1,6 @@
 import { test, expect, registerViaUi, loginViaUi, uniqueEmail } from '../fixtures';
 import { getUserAndOrg, injectVerifyToken, isEmailVerified } from '../helpers/db';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
  * Journey: register -> email-verify -> create organisation -> log in.
@@ -28,7 +29,7 @@ test.describe('Authentication', () => {
     // #token fragment triggers a full document load (and the auto-verify effect).
     const token = await injectVerifyToken(email);
     await page.goto('about:blank');
-    await page.goto(`/verify-email#token=${token}`);
+    await gotoWithDevServerRetry(page, `/verify-email#token=${token}`);
     await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible();
     expect(await isEmailVerified(email)).toBe(true);
 
@@ -39,7 +40,7 @@ test.describe('Authentication', () => {
   });
 
   test('an invalid verification token shows the failure state', async ({ page }) => {
-    await page.goto('/verify-email#token=this-token-does-not-exist');
-    await expect(page.getByRole('heading', { name: 'Verification failed' })).toBeVisible();
+    await gotoWithDevServerRetry(page, '/verify-email#token=this-token-does-not-exist');
+    await expect(page.getByRole('heading', { name: 'Verification failed' })).toBeVisible({ timeout: 60_000 });
   });
 });

@@ -1,20 +1,35 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { getPrincipleIdByNumber, getSignoff, countRows } from '../helpers/db';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
  * Journey: record a governance standard's compliance status (auto-saved), then
- * complete board sign-off. The principle detail page auto-saves each field
+ * prove the export flow blocks premature board approval while still allowing a
+ * board-review sign-off. The principle detail page auto-saves each field
  * (debounced PUT /compliance/records/:standardId); sign-off lives on /export.
  * We edit the FIRST (core) standard of Principle 1, which is always available
  * on the trial/Essentials plan.
  */
 const YEAR = new Date().getFullYear();
 
+async function chooseApprovalStatus(page: Page, status: string) {
+  const trigger = page.getByRole('button', { name: /Approval status/ }).last();
+  await trigger.scrollIntoViewIfNeeded();
+  const option = page.getByRole('option', { name: status, exact: true });
+  await expect(async () => {
+    await trigger.click();
+    await expect(option).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 30_000 });
+  await expect(option).toBeVisible();
+  await option.click();
+}
+
 test.describe('Compliance', () => {
-  test('record a standard then complete board sign-off', async ({ ownerPage, owner }) => {
+  test('record a standard then block premature approval and save board-review sign-off', async ({ ownerPage, owner }) => {
     // Jump straight to Principle 1's detail page (principleId is a non-stable cuid).
     const principleId = await getPrincipleIdByNumber(1);
-    await ownerPage.goto(`/compliance/${principleId}`);
+    await gotoWithDevServerRetry(ownerPage, `/compliance/${principleId}`);
     await expect(ownerPage.getByRole('heading', { name: /Principle 1:/ })).toBeVisible();
 
     // Set the first standard's status to Compliant and record an action; wait
@@ -40,13 +55,16 @@ test.describe('Compliance', () => {
     expect(complianceRecords).toBeGreaterThanOrEqual(1);
 
     // Board sign-off (on the Export page).
-    await ownerPage.goto('/export');
-    await ownerPage.getByRole('button', { name: 'Approval status' }).click();
-    await ownerPage.getByRole('option', { name: 'Approved by board' }).click();
+    await gotoWithDevServerRetry(ownerPage, '/export');
+    await chooseApprovalStatus(ownerPage, 'Approved by board');
     await ownerPage.getByLabel('Board meeting date').fill(`${YEAR}-05-20`);
     await ownerPage.getByLabel('Minute reference').fill(`Board minutes 20 May ${YEAR}, item 6`);
     await ownerPage.getByRole('textbox', { name: 'Approved by', exact: true }).fill('Jane Chairperson');
 
+    await ownerPage.getByRole('button', { name: 'Save sign-off' }).click();
+    await expect(ownerPage.getByText(/Resolve Compliance Record readiness blockers before board approval/)).toBeVisible();
+
+    await chooseApprovalStatus(ownerPage, 'Ready for board review');
     const signoffPut = ownerPage.waitForResponse(
       (r) => /\/compliance\/signoff/.test(r.url()) && r.request().method() === 'PUT',
     );
@@ -54,10 +72,10 @@ test.describe('Compliance', () => {
     const signoffResp = await signoffPut;
     expect(signoffResp.status()).toBe(200);
 
-    // Persisted as APPROVED with an approver and an approvedAt timestamp.
+    // Persisted as BOARD_REVIEW without falsely recording approval.
     const signoff = await getSignoff(owner.organisationId, YEAR);
-    expect(signoff?.status).toBe('APPROVED');
+    expect(signoff?.status).toBe('BOARD_REVIEW');
     expect(signoff?.approvedByName).toBe('Jane Chairperson');
-    expect(signoff?.approvedAt).toBeTruthy();
+    expect(signoff?.approvedAt).toBeNull();
   });
 });

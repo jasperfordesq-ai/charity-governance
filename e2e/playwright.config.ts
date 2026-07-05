@@ -27,7 +27,7 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  timeout: 60_000,
+  timeout: 600_000,
   expect: { timeout: 15_000 },
   reporter: process.env.CI
     ? [['list'], ['html', { open: 'never' }], ['github']]

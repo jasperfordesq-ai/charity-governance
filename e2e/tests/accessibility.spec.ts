@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import AxeBuilder from '@axe-core/playwright';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 type Theme = 'light' | 'dark';
 
@@ -25,7 +26,7 @@ test.describe.configure({ retries: 2, timeout: ACCESSIBILITY_TEST_TIMEOUT_MS });
 // the library skips those enter animations, (2) also pin transitions/animations off via
 // CSS, (3) wait for webfonts, and (4) let any remaining frame settle.
 async function waitForDocumentShell(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean(document.documentElement && document.body), null, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean(document.documentElement && document.body), null, { timeout: 120_000 });
 }
 
 async function applyTheme(page: Page, theme: Theme): Promise<void> {
@@ -70,7 +71,7 @@ test.describe('Accessibility - dashboard (light + dark)', () => {
     test(`${path} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
       // Light theme (default).
       await ownerPage.emulateMedia({ reducedMotion: 'reduce' });
-      await ownerPage.goto(path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
+      await gotoWithDevServerRetry(ownerPage, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
       await waitForDocumentShell(ownerPage);
       await applyTheme(ownerPage, 'light');
       await settle(ownerPage);
@@ -87,7 +88,7 @@ test.describe('Accessibility - public & auth pages', () => {
   for (const path of ['/', '/pricing', '/login', '/register', '/forgot-password']) {
     test(`${path} is axe-clean (0 serious/critical)`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.goto(path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
+      await gotoWithDevServerRetry(page, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
       await waitForDocumentShell(page);
       await settle(page);
       expect(await seriousViolations(page), path).toEqual([]);

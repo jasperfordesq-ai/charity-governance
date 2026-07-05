@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
  * Concern: auth & session integrity (UI). Protected app routes must bounce an
@@ -11,7 +12,7 @@ test.describe('Auth & session integrity (UI)', () => {
     const context = await browser.newContext(); // no auth cookies
     const page = await context.newPage();
     try {
-      await page.goto('/team');
+      await gotoWithDevServerRetry(page, '/team');
       await expect(page).toHaveURL(/\/login\?next=%2Fteam/);
       await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
     } finally {
@@ -23,14 +24,14 @@ test.describe('Auth & session integrity (UI)', () => {
     const context = await browser.newContext({ storageState: owner.storageState });
     const page = await context.newPage();
     try {
-      await page.goto('/dashboard');
+      await gotoWithDevServerRetry(page, '/dashboard');
       await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
 
       // Simulate the session expiring: drop the auth cookies, then hit a protected route.
       await context.clearCookies();
       // The protected→login redirect can abort the in-flight navigation when leaving an
       // already-loaded page; tolerate that and assert we landed on login.
-      await page.goto('/organisation', { waitUntil: 'commit' }).catch(() => {});
+      await gotoWithDevServerRetry(page, '/organisation', { waitUntil: 'commit' }).catch(() => {});
       await page.waitForURL(/\/login/, { timeout: 30_000 });
       await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
     } finally {
