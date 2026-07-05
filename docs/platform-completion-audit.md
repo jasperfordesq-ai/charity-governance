@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `f7ded40`
+Working-tree base commit when generated: `b8e1f11`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -81,6 +81,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
+- Launch status and production readiness TODO now name all 81 machine-readable launch evidence checks and the browserQa.checks.accessibility-coverage evidence slot.
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
