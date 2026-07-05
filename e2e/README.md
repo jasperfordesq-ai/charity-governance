@@ -95,6 +95,12 @@ Connection: `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypi
 | `E2E_WEB_URL` | `http://localhost:3003` |
 | `E2E_API_URL` | `http://localhost:3002` |
 | `E2E_DATABASE_URL` | `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypilot` |
+| `E2E_ARTIFACT_DIR` | OS temp directory (`charitypilot-e2e-artifacts`) |
+
+By default local Playwright screenshots, traces, videos, and HTML reports are
+written outside the repository so Next.js dev does not watch the artifacts and
+recompile routes during browser QA. CI sets `E2E_ARTIFACT_DIR=playwright-artifacts`
+and uploads `e2e/playwright-artifacts/html-report`.
 
 ## Deployed browser QA mode
 

@@ -1,4 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 /**
  * CharityPilot end-to-end tests.
@@ -17,9 +19,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 export const WEB_BASE_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
 export const API_BASE_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
+const ARTIFACT_ROOT = resolve(
+  process.cwd(),
+  process.env.E2E_ARTIFACT_DIR ?? join(tmpdir(), 'charitypilot-e2e-artifacts'),
+);
 
 export default defineConfig({
   testDir: './tests',
+  outputDir: join(ARTIFACT_ROOT, 'test-results'),
   globalSetup: require.resolve('./global-setup'),
   // The suite shares one database and resets between tests, so it must not run
   // tests concurrently.
@@ -30,8 +37,8 @@ export default defineConfig({
   timeout: 600_000,
   expect: { timeout: 15_000 },
   reporter: process.env.CI
-    ? [['list'], ['html', { open: 'never' }], ['github']]
-    : [['list'], ['html', { open: 'never' }]],
+    ? [['list'], ['html', { open: 'never', outputFolder: join(ARTIFACT_ROOT, 'html-report') }], ['github']]
+    : [['list'], ['html', { open: 'never', outputFolder: join(ARTIFACT_ROOT, 'html-report') }]],
   use: {
     baseURL: WEB_BASE_URL,
     trace: 'on-first-retry',

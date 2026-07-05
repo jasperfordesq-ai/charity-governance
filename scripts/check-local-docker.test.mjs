@@ -311,11 +311,20 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
 
 test('web dev server ignores Playwright artifacts during local browser QA', () => {
   const nextConfig = readRepoFile('apps/web/next.config.ts');
+  const playwrightConfig = readRepoFile('e2e/playwright.config.ts');
+  const e2eReadme = readRepoFile('e2e/README.md');
+  const e2eWorkflow = readRepoFile('.github/workflows/e2e.yml');
 
   assert.match(nextConfig, /webpack\(config,\s*\{\s*dev\s*\}\)/);
   assert.match(nextConfig, /if \(dev\)/);
   assert.match(nextConfig, /\*\*\/e2e\/test-results\/\*\*/);
   assert.match(nextConfig, /\*\*\/e2e\/playwright-report\/\*\*/);
+  assert.match(playwrightConfig, /process\.env\.E2E_ARTIFACT_DIR \?\? join\(tmpdir\(\), 'charitypilot-e2e-artifacts'\)/);
+  assert.match(playwrightConfig, /outputDir:\s*join\(ARTIFACT_ROOT, 'test-results'\)/);
+  assert.match(playwrightConfig, /outputFolder:\s*join\(ARTIFACT_ROOT, 'html-report'\)/);
+  assert.match(e2eReadme, /written outside the repository so Next\.js dev does not watch the artifacts/);
+  assert.match(e2eWorkflow, /E2E_ARTIFACT_DIR:\s*playwright-artifacts/);
+  assert.match(e2eWorkflow, /path:\s*e2e\/playwright-artifacts\/html-report\//);
 });
 
 test('e2e authenticated owner setup has cold compile headroom', () => {

@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `fa80d9c`
+Working-tree base commit when generated: `95277b2`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -122,6 +122,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
 - Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.
 - Local Docker web QA now gives Next dev a configurable heap ceiling and ignores Playwright report/test-result artifacts so route smoke output does not trigger repeated recompiles.
+- Local Playwright screenshots, traces, videos, and HTML reports now default outside the repository, while CI writes them to an explicit uploaded artifact directory.
 - Browser auth helpers now pre-seed the cookie-consent preference before registration, login, and invite acceptance so setup submissions are not competing with the consent dialog.
 - Compliance record autosave now recovers from concurrent create races on the organisation/standard/year key with a scoped update instead of leaking a 500.
 - Auth journey browser helpers now retry only local dev-server blank form loads after a Next.js restart while keeping deployed QA failures strict.
@@ -133,7 +134,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
-- `npm run test:e2e:responsive` completed locally with 49 first-try passes and 1 retry pass before auth-helper hardening; rerun clean responsive evidence before launch signoff.
+- `npm run test:e2e:responsive` completed locally with 50/50 Playwright route smoke checks passing after 49 first-try passes and 1 retry pass before auth-helper hardening; rerun clean responsive evidence before launch signoff.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
