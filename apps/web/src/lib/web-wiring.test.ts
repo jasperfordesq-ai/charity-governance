@@ -639,7 +639,10 @@ test('principle detail evidence readiness panel is extracted from the oversized 
 });
 
 test('principle detail uses shared loading and error state primitives', () => {
-  const src = dash('compliance/[principleId]/page.tsx');
+  const src = [
+    dash('compliance/[principleId]/page.tsx'),
+    optionalDash('compliance/[principleId]/principle-detail-states.tsx'),
+  ].join('\n');
 
   assert.match(src, /from '@\/components\/ui\/states'/);
   assert.match(src, /LoadingState/);
@@ -649,6 +652,23 @@ test('principle detail uses shared loading and error state primitives', () => {
   assert.doesNotMatch(src, /animate-pulse/);
   assert.doesNotMatch(src, /text-center py-12/);
   assert.doesNotMatch(src, /Principle not found\.<\/p>/);
+});
+
+test('principle detail loading and error states are extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const statesPath = dashPath('compliance/[principleId]/principle-detail-states.tsx');
+  assert.ok(existsSync(statesPath), 'principle detail loading/error chrome should be split out of page.tsx');
+  const statesSrc = readFileSync(statesPath, 'utf8');
+
+  assert.match(pageSrc, /PrincipleLoadingState/);
+  assert.match(pageSrc, /PrincipleLoadErrorState/);
+  assert.doesNotMatch(pageSrc, /Loading compliance principle/);
+  assert.doesNotMatch(pageSrc, /Principle not found/);
+  assert.match(statesSrc, /export function PrincipleLoadingState/);
+  assert.match(statesSrc, /export function PrincipleLoadErrorState/);
+  assert.match(statesSrc, /Loading compliance principle/);
+  assert.match(statesSrc, /Principle not found/);
+  assert.match(statesSrc, /primaryActionButtonClassName/);
 });
 
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {

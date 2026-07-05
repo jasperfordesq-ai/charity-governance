@@ -8,9 +8,8 @@ import { ChevronLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppPage } from '@/components/ui/app-page';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { ErrorState, LoadingState } from '@/components/ui/states';
 import { PrincipleEvidencePanel } from './principle-evidence-panel';
+import { PrincipleLoadingState, PrincipleLoadErrorState } from './principle-detail-states';
 import { PrincipleStandardList, type SaveState, type StandardFormState } from './principle-standard-list';
 import type {
   GovernancePrincipleResponse,
@@ -287,39 +286,16 @@ export default function PrincipleDetailPage() {
   );
 
   if (loading) {
-    return (
-      <AppPage
-        eyebrow={`Reporting year ${currentYear}`}
-        title="Loading principle"
-        description="Preparing the standard editor and evidence prompts for this reporting year."
-      >
-        <LoadingState
-          variant="page"
-          title="Loading compliance principle"
-          description="Checking standards, records, evidence prompts, and approval-readiness."
-        />
-      </AppPage>
-    );
+    return <PrincipleLoadingState currentYear={currentYear} />;
   }
 
   if (!principle) {
     return (
-      <AppPage
-        eyebrow={`Reporting year ${currentYear}`}
-        title="Compliance principle"
-        description="Open a valid Governance Code principle to edit standards, evidence, and explanations."
-      >
-        <ErrorState
-          variant="page"
-          title={loadError ? 'Compliance principle could not be loaded' : 'Principle not found'}
-          description={loadError || 'This principle is not available for the current organisation workspace.'}
-          action={(
-            <Button className={primaryActionButtonClassName} onPress={navigateBackToCompliance}>
-              Back to Compliance
-            </Button>
-          )}
-        />
-      </AppPage>
+      <PrincipleLoadErrorState
+        currentYear={currentYear}
+        loadError={loadError}
+        onBack={navigateBackToCompliance}
+      />
     );
   }
 
