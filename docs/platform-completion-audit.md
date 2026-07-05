@@ -1,10 +1,10 @@
 # CharityPilot Platform Completion Audit
 
-Generated: 2026-07-04
+Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `5d5229b`
+Working-tree base commit when generated: `d824090`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 

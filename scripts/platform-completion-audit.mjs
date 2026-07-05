@@ -10,7 +10,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const outputPath = join(repoRoot, 'docs', 'platform-completion-audit.md');
 
-const auditDate = '2026-07-04';
+const auditDate = new Date().toISOString().slice(0, 10);
 
 const routePriorities = new Map([
   ['/', 'P0'],
