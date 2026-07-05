@@ -1,8 +1,17 @@
 import type { PrismaClient } from '@prisma/client';
 import type { CreateDeadlineRequest, UpdateDeadlineRequest } from '@charitypilot/shared';
+import { getMatrixEntriesForStandard } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 
 type DeadlinePrisma = Pick<PrismaClient, 'deadline' | 'organisation'>;
+
+const annualReportSource = getMatrixEntriesForStandard('6.6')
+  .flatMap((entry) => entry.sourceRefs)
+  .find((source) => source.name === 'Annual report - how to submit');
+
+const annualReportDeadlineDescription = annualReportSource
+  ? `Charities Regulator Annual Report filing workflow prompt: 10 months after financial year end. Source: ${annualReportSource.name} (${annualReportSource.url}, checked ${annualReportSource.lastChecked}). Treat this as a review-ready planning prompt, not legal advice.`
+  : 'Charities Regulator Annual Report filing workflow prompt: 10 months after financial year end. Treat this as a review-ready planning prompt, not legal advice.';
 
 export class DeadlineService {
   constructor(private prisma: DeadlinePrisma) {}
@@ -82,7 +91,7 @@ export class DeadlineService {
       filingDeadline.setMonth(filingDeadline.getMonth() + 10);
       deadlines.push({
         title: `Annual Report filing deadline (${fyEnd.getFullYear()})`,
-        description: 'Charities Regulator Annual Report filing deadline: 10 months after financial year end.',
+        description: annualReportDeadlineDescription,
         dueDate: filingDeadline,
       });
     } else {

@@ -153,6 +153,13 @@ test('generateAutoDeadlines derives Annual Report (FY end +10mo) and AGM (last A
   const titles = creates.map((c) => (c.args as { data: { title: string } }).data.title);
   assert.ok(titles.some((t) => t.startsWith('Annual Report filing deadline (')));
   assert.ok(titles.includes('AGM due date'));
+  const annualReportDeadline = creates.find((c) =>
+    ((c.args as { data: { title: string } }).data.title).startsWith('Annual Report filing deadline ('),
+  );
+  const annualReportDescription = (annualReportDeadline?.args as { data: { description: string } }).data.description;
+  assert.match(annualReportDescription, /Annual report - how to submit/);
+  assert.match(annualReportDescription, /https:\/\/www\.charitiesregulator\.ie\/en\/information-for-charities\/annual-report-how-to-submit/);
+  assert.match(annualReportDescription, /review-ready planning prompt/);
 
   for (const c of creates) {
     const data = (c.args as { data: Record<string, unknown> }).data;
