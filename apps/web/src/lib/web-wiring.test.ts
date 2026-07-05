@@ -312,6 +312,20 @@ test('dashboard action lists are extracted from the oversized route file', () =>
   assert.match(actionListsSrc, /View board register/);
 });
 
+test('dashboard sign-off and register summary cards are extracted from the oversized route file', () => {
+  const pageSrc = dash('dashboard/page.tsx');
+  const summaryCardsPath = dashPath('dashboard/dashboard-summary-cards.tsx');
+  assert.ok(existsSync(summaryCardsPath), 'dashboard summary cards should be split out of page.tsx');
+  const summaryCardsSrc = readFileSync(summaryCardsPath, 'utf8');
+
+  assert.match(pageSrc, /DashboardSummaryCards/);
+  assert.doesNotMatch(pageSrc, /Annual board sign-off/);
+  assert.doesNotMatch(pageSrc, /Governance registers/);
+  assert.match(summaryCardsSrc, /Annual board sign-off/);
+  assert.match(summaryCardsSrc, /Governance registers/);
+  assert.match(summaryCardsSrc, /ComplianceSignoffStatus/);
+});
+
 test('dashboard loading and empty states use shared primitives instead of route-local skeleton cards', () => {
   const pageSrc = dash('dashboard/page.tsx');
   const actionListsSrc = dash('dashboard/dashboard-action-lists.tsx');
