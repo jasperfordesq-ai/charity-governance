@@ -22,6 +22,12 @@ export function getLocalAdminSeedConfig(env: SeedEnv = process.env): LocalAdminS
     return { enabled: false };
   }
 
+  if (env.NODE_ENV === 'production') {
+    throw new Error(localAdminSeed
+      ? 'SEED_LOCAL_ADMIN must not be enabled in production'
+      : 'SEED_DEMO_WORKSPACE must not be enabled in production');
+  }
+
   const password = localAdminSeed ? env.LOCAL_ADMIN_PASSWORD : env.DEMO_PASSWORD;
   if (!password) {
     throw new Error(localAdminSeed

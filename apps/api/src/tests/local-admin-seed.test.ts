@@ -18,6 +18,28 @@ test('local admin seed requires an explicit local admin password when enabled', 
   );
 });
 
+test('local admin seed is refused in production', () => {
+  assert.throws(
+    () => getLocalAdminSeedConfig({
+      NODE_ENV: 'production',
+      SEED_LOCAL_ADMIN: 'true',
+      LOCAL_ADMIN_PASSWORD: 'LocalAdmin123!',
+    }),
+    /SEED_LOCAL_ADMIN must not be enabled in production/,
+  );
+});
+
+test('legacy demo seed is refused in production', () => {
+  assert.throws(
+    () => getLocalAdminSeedConfig({
+      NODE_ENV: 'production',
+      SEED_DEMO_WORKSPACE: 'true',
+      DEMO_PASSWORD: 'LegacyDemo123!',
+    }),
+    /SEED_DEMO_WORKSPACE must not be enabled in production/,
+  );
+});
+
 test('local admin seed defaults create a verified owner with Complete access', () => {
   const config = getLocalAdminSeedConfig({
     SEED_LOCAL_ADMIN: 'true',
