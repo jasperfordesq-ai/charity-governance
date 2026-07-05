@@ -727,7 +727,11 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'deadlines/page.tsx',
-      extraFiles: ['deadlines/deadline-form-modal.tsx', 'deadlines/deadline-list-panel.tsx'],
+      extraFiles: [
+        'deadlines/deadline-form-modal.tsx',
+        'deadlines/deadline-list-panel.tsx',
+        'deadlines/deadline-overview-panels.tsx',
+      ],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -1446,21 +1450,40 @@ test('deadlines profile-triggered review-date UX is extracted from the oversized
 
 test('deadlines summary and profile cards use shared status panel tones', () => {
   const pageSrc = dash('deadlines/page.tsx');
+  const overviewSrc = optionalDash('deadlines/deadline-overview-panels.tsx');
   const panelSrc = optionalDash('deadlines/deadline-profile-prompts.tsx');
+  const deadlineSurface = [pageSrc, overviewSrc].join('\n');
 
-  assert.match(pageSrc, /statusPanelClassName/);
+  assert.match(deadlineSurface, /statusPanelClassName/);
   assert.match(panelSrc, /statusPanelClassName/);
-  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
-  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+  assert.doesNotMatch(deadlineSurface, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
+  assert.doesNotMatch(deadlineSurface, /rounded-lg border border-gray-200 bg-white p-4/);
   assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+});
+
+test('deadlines overview and regulatory cadence panels are extracted from the oversized route file', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const overviewPath = dashPath('deadlines/deadline-overview-panels.tsx');
+  assert.ok(existsSync(overviewPath), 'deadline overview panels should be split out of page.tsx');
+  const overviewSrc = readFileSync(overviewPath, 'utf8');
+
+  assert.match(pageSrc, /DeadlineOverviewPanels/);
+  assert.doesNotMatch(pageSrc, /Review-ready schedule/);
+  assert.doesNotMatch(pageSrc, /Regulatory cadence/);
+  assert.match(overviewSrc, /Review-ready schedule/);
+  assert.match(overviewSrc, /Regulatory cadence/);
+  assert.match(overviewSrc, /statusPanelClassName/);
 });
 
 test('deadlines summary waits for a successful load instead of showing zero-count placeholders', () => {
   const pageSrc = dash('deadlines/page.tsx');
+  const overviewSrc = optionalDash('deadlines/deadline-overview-panels.tsx');
+  const deadlineSurface = [pageSrc, overviewSrc].join('\n');
 
   assert.match(pageSrc, /const deadlineDataReady = !loading && !loadError/);
-  assert.match(pageSrc, /\{deadlineDataReady && \(\s*<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
-  assert.match(pageSrc, /\{deadlineDataReady && \(\s*<AppSection\s+title="Regulatory cadence"/);
+  assert.match(pageSrc, /\{deadlineDataReady && \(\s*<DeadlineOverviewPanels/);
+  assert.match(deadlineSurface, /<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
+  assert.match(deadlineSurface, /<AppSection\s+title="Regulatory cadence"/);
   assert.match(pageSrc, /\{deadlineDataReady && \(\s*<DeadlineProfilePromptsPanel/);
 });
 

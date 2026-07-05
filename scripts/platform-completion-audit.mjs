@@ -96,6 +96,7 @@ const fixedInThisAuditBranch = [
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline list panel, status classifier, and summary helper are split out of the oversized deadlines route behind a wiring regression test.',
+  'The deadline overview and regulatory cadence panels are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline delete confirmation modal is split out of the deadlines route behind a wiring regression test.',
   'The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.',
   'The board member add/edit modal is split out of the oversized board route behind a wiring regression test.',
