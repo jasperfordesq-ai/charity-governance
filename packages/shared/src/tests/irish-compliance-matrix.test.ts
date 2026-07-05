@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { GOVERNANCE_PRINCIPLES } from '../constants/governance-code.js';
 import {
   CONDITIONAL_OBLIGATION_REVIEW_RULES,
@@ -18,6 +19,10 @@ const principleNumberByCode = new Map(
     principle.standards.map((standard) => [standard.code, principle.number] as const),
   ),
 );
+
+function readIrishSourceLog(): string {
+  return readFileSync(new URL('../../../../docs/product-revamp/irish-source-log.md', import.meta.url), 'utf8');
+}
 
 test('Irish compliance matrix covers every Governance Code standard with a source-cited entry', () => {
   const coveredCodes = new Set(IRISH_COMPLIANCE_MATRIX.flatMap((entry) => entry.standardCodes));
@@ -41,6 +46,15 @@ test('Irish compliance matrix source references are dated HTTPS citations', () =
       assert.equal(sourceRef.lastChecked, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED);
     }
   }
+});
+
+test('Irish compliance matrix last-checked date matches the refreshed source log', () => {
+  const sourceLog = readIrishSourceLog();
+  const sourceLogDate = sourceLog.match(/Date checked: (\d{4}-\d{2}-\d{2})/)?.[1];
+
+  assert.equal(sourceLogDate, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED);
+  assert.match(sourceLog, /Official sources were rechecked by web search\/browsing/);
+  assert.match(sourceLog, /professional-review flags/);
 });
 
 test('Irish compliance matrix does not reference unknown Governance Code standards', () => {

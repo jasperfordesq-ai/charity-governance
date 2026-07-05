@@ -2133,6 +2133,21 @@ test('backend product audit records current launch and dependency posture', () =
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
 
+test('irish source log records current official-source recheck without legal certainty', () => {
+  const sourceLog = readRepoFile('docs/product-revamp/irish-source-log.md');
+
+  assert.match(sourceLog, /Date checked: 2026-07-05/);
+  assert.match(sourceLog, /Official sources were rechecked by web search\/browsing on 2026-07-05/);
+  assert.match(sourceLog, /Charities Regulator direct automated fetches returned 403/);
+  assert.match(sourceLog, /Irish Statute Book commencement table was updated to 24 June 2026/);
+  assert.match(sourceLog, /Law Reform Commission revised Charities Act 2009 page was updated to 22 April 2026/);
+  assert.match(sourceLog, /not legal advice/);
+  assert.match(sourceLog, /professional-review flags/);
+  assert.doesNotMatch(sourceLog, /legally guaranteed/i);
+  assert.doesNotMatch(sourceLog, /legally bombproof/i);
+  assert.doesNotMatch(sourceLog, /Date checked: 2026-07-03/);
+});
+
 test('production deploy preflight is wired for digest-pinned image promotion', () => {
   const packageJson = JSON.parse(readRepoFile('package.json'));
   const runbook = readRepoFile('docs/production-runbook.md');

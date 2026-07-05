@@ -59,7 +59,7 @@ export interface ConditionalObligationReviewRule {
   standardCodes: string[];
 }
 
-export const IRISH_COMPLIANCE_MATRIX_LAST_CHECKED = '2026-07-04';
+export const IRISH_COMPLIANCE_MATRIX_LAST_CHECKED = '2026-07-05';
 
 export const CONDITIONAL_OBLIGATION_REVIEW_RULES: ConditionalObligationReviewRule[] = [
   {
