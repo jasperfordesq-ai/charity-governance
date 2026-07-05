@@ -3,12 +3,10 @@
 import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
+import { Button } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { AppPage } from '@/components/ui/app-page';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { FormAlert } from '@/components/ui/form-alert';
 import { ErrorState, ReviewWarningState } from '@/components/ui/states';
 import type { ComplianceApprovalReadinessResponse, ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
@@ -19,6 +17,7 @@ import {
   approvalReadinessBlockerCodes,
   countApprovalReadinessBlockers,
 } from './export-approval-readiness';
+import { ExportBoardApprovalPanel, type ExportSignoffForm } from './export-board-approval-panel';
 import { ExportControlsPanel } from './export-controls-panel';
 import { ExportReportPreview } from './export-report-preview';
 
@@ -46,7 +45,7 @@ export default function ExportPage() {
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
   const [signoff, setSignoff] = useState<ComplianceSignoffResponse | null>(null);
   const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
-  const [signoffForm, setSignoffForm] = useState({
+  const [signoffForm, setSignoffForm] = useState<ExportSignoffForm>({
     status: ComplianceSignoffStatus.DRAFT,
     boardMeetingDate: '',
     minuteReference: '',
@@ -177,7 +176,7 @@ export default function ExportPage() {
     }
   };
 
-  const signoffChipColor =
+  const signoffChipColor: 'success' | 'warning' | 'default' =
     signoffForm.status === ComplianceSignoffStatus.APPROVED
       ? 'success'
       : signoffForm.status === ComplianceSignoffStatus.BOARD_REVIEW
@@ -229,94 +228,16 @@ export default function ExportPage() {
 
       <MatrixSourceSummary readiness={approvalReadiness} />
 
-      <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Board approval</h2>
-              <Chip size="sm" color={signoffChipColor} variant="flat">
-                {signoffStatusLabels[signoffForm.status]}
-              </Chip>
-            </div>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-              Record the board meeting where trustees approved the annual Compliance Record before reporting the position to the Charities Regulator.
-            </p>
-            {signoff?.updatedAt && (
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Last updated {new Date(signoff.updatedAt).toLocaleString('en-IE', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </p>
-            )}
-          </div>
-          <Button
-            className={primaryActionButtonClassName}
-            onPress={handleSaveSignoff}
-            isLoading={savingSignoff}
-          >
-            Save sign-off
-          </Button>
-        </div>
-
-        {signoffError && (
-          <div className="mt-4">
-            <FormAlert>
-              {signoffError}
-            </FormAlert>
-          </div>
-        )}
-
-        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Select
-            label="Approval status"
-            selectedKeys={new Set([signoffForm.status])}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as ComplianceSignoffStatus | undefined;
-              if (value) setSignoffForm((prev) => ({ ...prev, status: value }));
-            }}
-          >
-            {Object.entries(signoffStatusLabels).map(([value, label]) => (
-              <SelectItem key={value}>{label}</SelectItem>
-            ))}
-          </Select>
-          <Input
-            label="Board meeting date"
-            type="date"
-            value={signoffForm.boardMeetingDate}
-            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, boardMeetingDate: value }))}
-          />
-          <Input
-            label="Minute reference"
-            placeholder="e.g. Board minutes 24 Oct 2026, item 6"
-            value={signoffForm.minuteReference}
-            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, minuteReference: value }))}
-          />
-          <Input
-            label="Approved by"
-            placeholder="Chairperson or authorised trustee"
-            value={signoffForm.approvedByName}
-            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvedByName: value }))}
-          />
-          <Input
-            label="Role"
-            placeholder="e.g. Chairperson"
-            value={signoffForm.approvedByRole}
-            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvedByRole: value }))}
-          />
-          <Textarea
-            label="Approval notes"
-            placeholder="Actions agreed, exceptions noted, or follow-up owners."
-            value={signoffForm.approvalNotes}
-            onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvalNotes: value }))}
-            minRows={2}
-            className="md:col-span-2"
-          />
-        </div>
-      </Card>
+      <ExportBoardApprovalPanel
+        onSaveSignoff={handleSaveSignoff}
+        savingSignoff={savingSignoff}
+        setSignoffForm={setSignoffForm}
+        signoff={signoff}
+        signoffChipColor={signoffChipColor}
+        signoffError={signoffError}
+        signoffForm={signoffForm}
+        signoffStatusLabels={signoffStatusLabels}
+      />
 
       <ExportReportPreview
         loading={loading}

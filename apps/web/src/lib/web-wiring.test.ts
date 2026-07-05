@@ -105,6 +105,9 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
   'organisation/page.tsx': [
     'organisation/organisation-profile-form.tsx',
   ],
+  'export/page.tsx': [
+    'export/export-board-approval-panel.tsx',
+  ],
 };
 for (const file of DOUBLE_SUBMIT_GUARDED) {
   test(`${file} guards its primary mutation against double-submit (isLoading)`, () => {
@@ -992,8 +995,28 @@ test('export controls and readiness warning are extracted from the oversized rou
   assert.match(controlsSrc, /primaryActionButtonClassName/);
 });
 
-test('export loading, warning, and sign-off error states use shared primitives', () => {
+test('export board approval form is extracted from the oversized route file', () => {
   const pageSrc = dash('export/page.tsx');
+  const panelPath = dashPath('export/export-board-approval-panel.tsx');
+  assert.ok(existsSync(panelPath), 'export board approval form should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /ExportBoardApprovalPanel/);
+  assert.doesNotMatch(pageSrc, /Board approval/);
+  assert.doesNotMatch(pageSrc, /label="Board meeting date"/);
+  assert.doesNotMatch(pageSrc, /label="Approval notes"/);
+  assert.match(panelSrc, /export function ExportBoardApprovalPanel/);
+  assert.match(panelSrc, /Board approval/);
+  assert.match(panelSrc, /Board meeting date/);
+  assert.match(panelSrc, /Approval notes/);
+  assert.match(panelSrc, /FormAlert/);
+});
+
+test('export loading, warning, and sign-off error states use shared primitives', () => {
+  const pageSrc = [
+    dash('export/page.tsx'),
+    optionalDash('export/export-board-approval-panel.tsx'),
+  ].join('\n');
   const previewSrc = dash('export/export-report-preview.tsx');
 
   assert.match(pageSrc, /from '@\/components\/ui\/form-alert'/);
