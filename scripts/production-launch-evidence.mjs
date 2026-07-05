@@ -886,6 +886,15 @@ function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {
       notAfter: approvedAt,
       notAfterLabel: `${approvalPath}.approvedAt`,
     });
+
+    const approvalEvidenceText = evidenceText(approval.evidence).toLowerCase();
+    const requiredRoleMarker = role.label.toLowerCase();
+    if (!approvalEvidenceText.includes(requiredRoleMarker)) {
+      issues.push(`${approvalPath}.evidence must include ${role.label}`);
+    }
+    if (!approvalEvidenceText.includes('launch approval')) {
+      issues.push(`${approvalPath}.evidence must include launch approval`);
+    }
   }
 }
 

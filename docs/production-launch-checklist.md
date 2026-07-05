@@ -247,7 +247,7 @@ Evidence:
 
 ## Final Signoff
 
-The machine-readable `production-launch-evidence.json` must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and non-secret external evidence references.
+The machine-readable `production-launch-evidence.json` must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and role-specific non-secret external evidence references that include that approval role and launch approval.
 
 | Role | Name | Date | Evidence reference |
 | --- | --- | --- | --- |

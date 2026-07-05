@@ -848,6 +848,30 @@ test('production launch evidence validator requires every final signoff role app
   }
 });
 
+test('production launch evidence validator requires role-specific final approval evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericApproval = {
+    type: 'approval',
+    reference: 'https://evidence.charitypilot.ie/launch/final-signoff/generic-approval',
+    description: 'Accountable owner launch approval recorded for launch',
+    capturedAt,
+  };
+  evidence.finalSignoff.approvals.security.evidence = [genericApproval];
+  evidence.finalSignoff.approvals.legalCompliance.evidence = [genericApproval];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /finalSignoff\.approvals\.security\.evidence must include Security owner/);
+    assert.match(result.stderr, /finalSignoff\.approvals\.legalCompliance\.evidence must include Legal\/compliance owner/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires solicitor governance and privacy review evidence', async () => {
   const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
   const legalArea = REQUIRED_LAUNCH_AREAS.find((area) => area.id === 'legalAndCompliance');
