@@ -62,7 +62,7 @@ const sensitiveAuthCases: SensitiveAuthCase[] = [
   },
 ];
 
-async function buildSensitiveRoutesApp() {
+async function buildSensitiveRoutesApp(prismaOverrides: Record<string, unknown> = {}) {
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
     user: {
@@ -72,6 +72,7 @@ async function buildSensitiveRoutesApp() {
     teamInvite: {
       findUnique: async () => null,
     },
+    ...prismaOverrides,
   } as never);
   await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
   await app.register(authRoutes, { prefix: '/auth' });
@@ -175,6 +176,48 @@ test('login throttling is keyed by caller and normalized email identifier', { co
     });
     assert.equal(otherEmailRes.statusCode, 401, otherEmailRes.body);
     assert.equal(otherEmailRes.json().code, 'INVALID_CREDENTIALS');
+  } finally {
+    await app.close();
+  }
+});
+
+test('register throttling is keyed by caller and normalized email identifier', { concurrency: false }, async () => {
+  const app = await buildSensitiveRoutesApp({
+    user: {
+      findUnique: async () => ({ id: 'existing-user' }),
+      findFirst: async () => null,
+    },
+  });
+
+  try {
+    const firstEmailPayload = {
+      email: 'Owner@Example.ORG',
+      password: 'NewPassword1',
+      name: 'Existing Owner',
+      organisationName: 'Existing Charity',
+    };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: firstEmailPayload,
+      });
+      assert.equal(res.statusCode, 202, res.body);
+    }
+
+    const sameEmailRes = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { ...firstEmailPayload, email: 'owner@example.org' },
+    });
+    assert.equal(sameEmailRes.statusCode, 429, sameEmailRes.body);
+
+    const otherEmailRes = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { ...firstEmailPayload, email: 'another-owner@example.org' },
+    });
+    assert.equal(otherEmailRes.statusCode, 202, otherEmailRes.body);
   } finally {
     await app.close();
   }
