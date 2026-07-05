@@ -2237,7 +2237,11 @@ test('registers operational record list sections are extracted from the oversize
 });
 
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
-  const src = dash('team/page.tsx');
+  const src = [
+    dash('team/page.tsx'),
+    optionalDash('team/team-display.ts'),
+    optionalDash('team/team-members-panel.tsx'),
+  ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
     ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -2276,6 +2280,29 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
   assert.match(src, /<SelectItem key=\{UserRole\.ADMIN\} isDisabled=\{!canInviteAdmin\}>Admin<\/SelectItem>/);
   assert.match(src, /if \(next && allowedInviteRoles\.includes\(next\)\) setRole\(next\);/);
   assert.match(src, /isLoading=\{revokeInviteId === invite\.id\}/);
+});
+
+test('team member list is extracted from the oversized route file', () => {
+  const pageSrc = dash('team/page.tsx');
+  const panelPath = dashPath('team/team-members-panel.tsx');
+  const displayPath = dashPath('team/team-display.ts');
+  assert.ok(existsSync(panelPath), 'team member list should be split out of page.tsx');
+  assert.ok(existsSync(displayPath), 'team display metadata should be shared outside page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+  const displaySrc = readFileSync(displayPath, 'utf8');
+
+  assert.match(pageSrc, /TeamMembersPanel/);
+  assert.doesNotMatch(pageSrc, /title="Members"/);
+  assert.doesNotMatch(pageSrc, /roleEditDisabledReason/);
+  assert.doesNotMatch(pageSrc, /canEditMemberRole/);
+  assert.match(panelSrc, /title="Members"/);
+  assert.match(panelSrc, /roleEditDisabledReason/);
+  assert.match(panelSrc, /canEditMemberRole/);
+  assert.match(panelSrc, /LoadingState/);
+  assert.match(panelSrc, /ErrorState/);
+  assert.match(panelSrc, /EmptyState/);
+  assert.match(displaySrc, /export const ROLE_META/);
+  assert.match(displaySrc, /export function formatDate/);
 });
 
 test('team feedback uses the shared inline status primitive instead of route-local alert styling', () => {

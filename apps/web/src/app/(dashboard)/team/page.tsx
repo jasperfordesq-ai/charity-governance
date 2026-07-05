@@ -6,51 +6,18 @@ import { Button, Input, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
-import { canInviteMembers, canEditMemberRole } from '@/lib/team-permissions';
+import { canInviteMembers } from '@/lib/team-permissions';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
-import { DataList, DataListItems } from '@/components/ui/data-list';
+import { DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
-import { EmptyState, ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
+import { EmptyState, InlineStatus } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
-import type { TeamResponse, TeamInviteResponse, TeamMemberResponse } from '@charitypilot/shared';
+import type { TeamResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
-
-type RoleTone = 'success' | 'brand' | 'neutral';
-
-const ROLE_META: Record<UserRole, { label: string; description: string; tone: RoleTone }> = {
-  [UserRole.OWNER]: {
-    label: 'Owner',
-    description: 'Full account control, billing, team administration, and owner-only role changes.',
-    tone: 'success',
-  },
-  [UserRole.ADMIN]: {
-    label: 'Admin',
-    description: 'Can invite people and manage governance work, but cannot change member roles or billing.',
-    tone: 'brand',
-  },
-  [UserRole.MEMBER]: {
-    label: 'Member',
-    description: 'Can maintain compliance records, documents, registers, and deadlines.',
-    tone: 'neutral',
-  },
-};
-
-function inviteStatus(invite: TeamInviteResponse) {
-  if (invite.acceptedAt) return { label: 'Accepted', tone: 'success' as const };
-  if (invite.revokedAt) return { label: 'Revoked', tone: 'neutral' as const };
-  if (new Date(invite.expiresAt) < new Date()) return { label: 'Expired', tone: 'danger' as const };
-  return { label: 'Pending', tone: 'warning' as const };
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('en-IE', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+import { ROLE_META, formatDate, inviteStatus } from './team-display';
+import { TeamMembersPanel } from './team-members-panel';
 
 export default function TeamPage() {
   useDocumentTitle('Team');
@@ -174,13 +141,6 @@ export default function TeamPage() {
     }
   };
 
-  const roleEditDisabledReason = (member: TeamMemberResponse) => {
-    if (member.role === UserRole.OWNER) return 'Owner role changes are protected.';
-    if (member.id === user?.id) return 'You cannot change your own role.';
-    if (!canEditMemberRole(user?.role, user?.id, member)) return 'Only owners can change member roles.';
-    return '';
-  };
-
   return (
     <AppPage
       eyebrow="Team permissions"
@@ -226,74 +186,15 @@ export default function TeamPage() {
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <DataList
-          title="Members"
-          description="Owners are protected from in-page demotion. Role changes mirror the API role guard and remain owner-only."
-        >
-          {loading ? (
-            <LoadingState title="Loading team" description="Checking members and pending invites." />
-          ) : error && !team ? (
-            <ErrorState
-              title="Team settings could not be loaded"
-              description={error}
-              action={(
-                <Button size="sm" variant="flat" onPress={fetchTeam}>
-                  Try again
-                </Button>
-              )}
-            />
-          ) : !team?.members.length ? (
-            <EmptyState
-              title="No members found"
-              description="The organisation owner should appear here once the team endpoint returns member data."
-            />
-          ) : (
-            <DataListItems>
-              {team.members.map((member) => {
-                const roleDisabledReason = roleEditDisabledReason(member);
-                return (
-                  <article key={member.id} className="p-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{member.name}</h3>
-                          <StatusChip tone={ROLE_META[member.role].tone}>{ROLE_META[member.role].label}</StatusChip>
-                          {!member.emailVerified ? <ReviewFlag tone="needs-review">Email not verified</ReviewFlag> : null}
-                        </div>
-                        <p className="mt-1 break-words text-sm text-gray-600 dark:text-gray-300">{member.email}</p>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Joined {formatDate(member.createdAt)}</p>
-                        <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500 dark:text-gray-400">
-                          {ROLE_META[member.role].description}
-                        </p>
-                      </div>
-
-                      {canEditMemberRole(user?.role, user?.id, member) ? (
-                        <Select
-                          aria-label={`Role for ${member.name}`}
-                          size="sm"
-                          className="w-full sm:w-44"
-                          selectedKeys={new Set([member.role])}
-                          isDisabled={Boolean(roleUpdateMemberId)}
-                          onSelectionChange={(keys) => {
-                            const next = Array.from(keys)[0] as UserRole | undefined;
-                            if (next && next !== member.role) updateRole(member, next);
-                          }}
-                        >
-                          <SelectItem key={UserRole.ADMIN}>Admin</SelectItem>
-                          <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
-                        </Select>
-                      ) : (
-                        <div className="max-w-xs rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
-                          {roleDisabledReason}
-                        </div>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </DataListItems>
-          )}
-        </DataList>
+        <TeamMembersPanel
+          error={error}
+          loading={loading}
+          onRetry={fetchTeam}
+          onUpdateRole={updateRole}
+          roleUpdateMemberId={roleUpdateMemberId}
+          team={team}
+          user={user}
+        />
 
         <div className="space-y-5">
           <form

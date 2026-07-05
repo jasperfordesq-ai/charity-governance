@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `d946253`
+Working-tree base commit when generated: `e233b57`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -111,6 +111,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.
+- The team member list, role edit controls, loading/error/empty states, and shared role display metadata are split out of the team route behind a wiring regression test.
 - Team feedback now uses the shared inline status primitive instead of route-local alert styling.
 - Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.
 - Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.
@@ -197,7 +198,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 184 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 263 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
-| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 394 | yes | no obvious static risk; verify in browser |
+| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 295 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 206 | yes | no obvious static risk; verify in browser |
 
