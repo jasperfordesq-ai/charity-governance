@@ -14,8 +14,8 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
-  'Complete production-launch-evidence.json with release, deploy, rollback, smoke, provider, backup/restore, and final signoff references, including legal/compliance approval.',
-  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie.',
+  'Complete production-launch-evidence.json with all 81 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
+  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie, recording accessibility output in browserQa.checks.accessibility-coverage.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
 ]);
