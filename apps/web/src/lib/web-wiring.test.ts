@@ -1589,6 +1589,8 @@ test('registers profile-priority UX is extracted from the oversized route file',
   assert.doesNotMatch(pageSrc, /registerPriorityEvidence/);
   assert.match(panelSrc, /registerPriorityEvidence/);
   assert.match(panelSrc, /Profile-triggered register priorities/);
+  assert.match(panelSrc, /statusPanelClassName/);
+  assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-4/);
 });
 
 test('registers annual report and financial control cards are extracted from the oversized route file', () => {
@@ -1604,6 +1606,8 @@ test('registers annual report and financial control cards are extracted from the
   assert.match(cardsSrc, /Annual Report source check/);
   assert.match(cardsSrc, /Financial controls source check/);
   assert.match(cardsSrc, /isDisabled=\{saving \|\| saveDisabled\}/);
+  assert.match(cardsSrc, /statusPanelClassName/);
+  assert.doesNotMatch(cardsSrc, /rounded-lg border border-gray-200 bg-white p-5/);
 });
 
 test('register financial control checklist uses HeroUI Checkbox controls', () => {

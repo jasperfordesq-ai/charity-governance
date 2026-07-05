@@ -3,7 +3,7 @@
 import { Button, Checkbox, Input, Progress, Select, SelectItem, Textarea } from '@heroui/react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup } from '@/components/ui/forms';
-import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
+import { EvidenceChip, ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   AnnualReportFilingStatus,
   type AnnualReportReadinessResponse,
@@ -49,7 +49,7 @@ export function AnnualReportCard({
   ].filter(Boolean).length;
   const percent = Math.round((completed / 10) * 100);
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <div className={statusPanelClassName(percent >= 80 ? 'success' : 'warning', 'p-5 shadow-sm')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap gap-2">
@@ -124,7 +124,7 @@ export function FinancialControlsCard({
   ] as const;
   const percent = Math.round((checks.map(([key]) => financial[key]).filter(Boolean).length / checks.length) * 100);
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <div className={statusPanelClassName(percent >= 80 ? 'success' : 'warning', 'p-5 shadow-sm')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap gap-2">
