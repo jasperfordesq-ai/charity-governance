@@ -2240,6 +2240,7 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
   const src = [
     dash('team/page.tsx'),
     optionalDash('team/team-display.ts'),
+    optionalDash('team/team-invites-panel.tsx'),
     optionalDash('team/team-members-panel.tsx'),
   ].join('\n');
   const imports: Array<[string, string[]]> = [
@@ -2303,6 +2304,26 @@ test('team member list is extracted from the oversized route file', () => {
   assert.match(panelSrc, /EmptyState/);
   assert.match(displaySrc, /export const ROLE_META/);
   assert.match(displaySrc, /export function formatDate/);
+});
+
+test('team invite form and pending invite list are extracted from the oversized route file', () => {
+  const pageSrc = dash('team/page.tsx');
+  const panelPath = dashPath('team/team-invites-panel.tsx');
+  const displaySrc = optionalDash('team/team-display.ts');
+  assert.ok(existsSync(panelPath), 'team invite form and pending invite list should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /TeamInvitesPanel/);
+  assert.doesNotMatch(pageSrc, /Invite someone/);
+  assert.doesNotMatch(pageSrc, /Pending invites/);
+  assert.doesNotMatch(pageSrc, /inviteStatus\(invite\)/);
+  assert.match(panelSrc, /Invite someone/);
+  assert.match(panelSrc, /Pending invites/);
+  assert.match(panelSrc, /inviteStatus\(invite\)/);
+  assert.match(panelSrc, /isLoading=\{revokeInviteId === invite\.id\}/);
+  assert.match(panelSrc, /isDisabled=\{!canInvite/);
+  assert.match(panelSrc, /aria-describedby="team-invite-disabled-hint"/);
+  assert.match(displaySrc, /export function inviteStatus/);
 });
 
 test('team feedback uses the shared inline status primitive instead of route-local alert styling', () => {

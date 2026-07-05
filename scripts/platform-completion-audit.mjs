@@ -139,6 +139,7 @@ const fixedInThisAuditBranch = [
   'Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.',
   'Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.',
   'The team member list, role edit controls, loading/error/empty states, and shared role display metadata are split out of the team route behind a wiring regression test.',
+  'The team invite form and pending-invite list are split out of the team route behind a wiring regression test while preserving invite role gates and revoke states.',
   'Team feedback now uses the shared inline status primitive instead of route-local alert styling.',
   'Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.',
   'Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.',
