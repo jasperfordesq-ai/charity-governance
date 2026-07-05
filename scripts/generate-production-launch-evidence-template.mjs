@@ -6,6 +6,15 @@ import { FINAL_SIGNOFF_ROLES, REQUIRED_LAUNCH_AREAS } from './production-launch-
 const placeholderTimestamp = 'REPLACE_WITH_ISO_TIMESTAMP';
 
 const evidenceHintsByCheck = new Map([
+  ['releaseGate.npm-ci', ['npm ci', 'exit 0']],
+  ['releaseGate.db-generate', ['npm run db:generate -w @charitypilot/api', 'exit 0']],
+  ['releaseGate.prisma-validate', ['npx prisma validate --schema apps/api/prisma/schema.prisma', 'exit 0']],
+  ['releaseGate.lint', ['npm run lint', 'exit 0']],
+  ['releaseGate.test', ['npm run test', 'exit 0']],
+  ['releaseGate.build-shared', ['npm run build -w @charitypilot/shared', 'exit 0']],
+  ['releaseGate.build-api', ['npm run build -w @charitypilot/api', 'exit 0']],
+  ['releaseGate.build-web', ['npm run build -w @charitypilot/web', 'exit 0']],
+  ['releaseGate.audit', ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities']],
   ['secretsAndEnv.real-production-values', ['.env.production', 'real production values']],
   ['secretsAndEnv.secret-source-excluded-from-git', ['secret store', 'excluded from git']],
   ['secretsAndEnv.node-env-production', ['NODE_ENV=production']],

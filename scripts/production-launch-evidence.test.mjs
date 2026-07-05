@@ -126,6 +126,51 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'releaseGate' && checkId === 'npm-ci') {
+    entry.type = 'command-output';
+    entry.description = 'npm ci completed on the release build machine with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'db-generate') {
+    entry.type = 'command-output';
+    entry.description = 'npm run db:generate -w @charitypilot/api completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'prisma-validate') {
+    entry.type = 'command-output';
+    entry.description = 'npx prisma validate --schema apps/api/prisma/schema.prisma completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'lint') {
+    entry.type = 'command-output';
+    entry.description = 'npm run lint completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'test') {
+    entry.type = 'command-output';
+    entry.description = 'npm run test completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'build-shared') {
+    entry.type = 'command-output';
+    entry.description = 'npm run build -w @charitypilot/shared completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'build-api') {
+    entry.type = 'command-output';
+    entry.description = 'npm run build -w @charitypilot/api completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'build-web') {
+    entry.type = 'command-output';
+    entry.description = 'npm run build -w @charitypilot/web completed with exit 0.';
+  }
+
+  if (areaId === 'releaseGate' && checkId === 'audit') {
+    entry.type = 'command-output';
+    entry.description = 'npm audit --omit=dev --audit-level=moderate completed with no moderate-or-higher production vulnerabilities.';
+  }
+
   if (areaId === 'hostingDnsTls' && checkId === 'hosting-check') {
     entry.type = 'command-output';
     entry.description = [
@@ -612,6 +657,49 @@ test('production launch evidence validator accepts complete dated external evide
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
     assert.match(result.stdout, /80 check\(s\)/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete basic release gate command transcripts', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/release/basic-gates-reviewed',
+    description: 'Basic release gates reviewed by release owner',
+    capturedAt,
+  };
+  for (const checkId of [
+    'npm-ci',
+    'db-generate',
+    'prisma-validate',
+    'lint',
+    'test',
+    'build-shared',
+    'build-api',
+    'build-web',
+    'audit',
+  ]) {
+    evidence.areas.releaseGate.checks[checkId].evidence = [genericEvidence];
+  }
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.npm-ci\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.npm-ci\.evidence must include npm ci/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.db-generate\.evidence must include npm run db:generate -w @charitypilot\/api/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.prisma-validate\.evidence must include npx prisma validate --schema apps\/api\/prisma\/schema\.prisma/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.lint\.evidence must include npm run lint/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.test\.evidence must include npm run test/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.build-shared\.evidence must include npm run build -w @charitypilot\/shared/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.build-api\.evidence must include npm run build -w @charitypilot\/api/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.build-web\.evidence must include npm run build -w @charitypilot\/web/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.audit\.evidence must include no moderate-or-higher production vulnerabilities/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1296,6 +1384,14 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.secretsAndEnv.checks['frontend-api-origins'].requiredEvidenceHints,
       ['https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
+    );
+    assert.deepEqual(
+      template.areas.releaseGate.checks['npm-ci'].requiredEvidenceHints,
+      ['npm ci', 'exit 0'],
+    );
+    assert.deepEqual(
+      template.areas.releaseGate.checks.audit.requiredEvidenceHints,
+      ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities'],
     );
     assert.ok(
       template.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].requiredEvidenceHints.includes(

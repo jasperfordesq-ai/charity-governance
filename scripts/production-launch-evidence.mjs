@@ -438,6 +438,64 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
   const text = evidenceText(actualCheck.evidence);
   const images = releaseImageRefs(release);
 
+  const basicReleaseGateCommands = {
+    'npm-ci': {
+      command: 'npm ci',
+      successText: 'exit 0',
+    },
+    'db-generate': {
+      command: 'npm run db:generate -w @charitypilot/api',
+      successText: 'exit 0',
+    },
+    'prisma-validate': {
+      command: 'npx prisma validate --schema apps/api/prisma/schema.prisma',
+      successText: 'exit 0',
+    },
+    lint: {
+      command: 'npm run lint',
+      successText: 'exit 0',
+    },
+    test: {
+      command: 'npm run test',
+      successText: 'exit 0',
+    },
+    'build-shared': {
+      command: 'npm run build -w @charitypilot/shared',
+      successText: 'exit 0',
+    },
+    'build-api': {
+      command: 'npm run build -w @charitypilot/api',
+      successText: 'exit 0',
+    },
+    'build-web': {
+      command: 'npm run build -w @charitypilot/web',
+      successText: 'exit 0',
+    },
+    audit: {
+      command: 'npm audit --omit=dev --audit-level=moderate',
+      successText: 'no moderate-or-higher production vulnerabilities',
+    },
+  };
+
+  const basicReleaseGateCommand = basicReleaseGateCommands[checkId];
+  if (basicReleaseGateCommand) {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+    requireEvidenceText(
+      text,
+      basicReleaseGateCommand.command,
+      `${checkPath}.evidence must include ${basicReleaseGateCommand.command}`,
+      issues,
+    );
+    requireEvidenceText(
+      text,
+      basicReleaseGateCommand.successText,
+      `${checkPath}.evidence must include ${basicReleaseGateCommand.successText}`,
+      issues,
+    );
+  }
+
   if (checkId === 'release-workflow-identity') {
     if (typeof release?.workflowRunUrl === 'string') {
       requireEvidenceText(text, release.workflowRunUrl, `${checkPath}.evidence must reference release.workflowRunUrl`, issues);

@@ -48,6 +48,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] The release manifest's web image build origins match the promoted production public origins.
 - [ ] `npm run --silent check:production:evidence:template > production-launch-evidence.json` was used as the starting schema for the non-committed external launch evidence ledger.
 - [ ] `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
+- [ ] Machine-readable launch evidence includes command-output entries for `npm ci`, Prisma generation/validation, lint, tests, workspace builds, and production dependency audit.
 
 Evidence:
 
