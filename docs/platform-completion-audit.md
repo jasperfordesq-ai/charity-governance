@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `ede283f`
+Working-tree base commit when generated: `8a14c88`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -85,6 +85,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.
 - The dashboard annual sign-off and governance register summary cards are split out of the oversized dashboard route behind a wiring regression test.
 - The dashboard overall progress and principle progress panels are split out of the oversized dashboard route behind a wiring regression test.
+- The compliance overview principle list and disclosure cards are split out of the oversized compliance route behind a wiring regression test.
 - The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.
 - Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.
 - Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.
@@ -168,7 +169,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 262 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 361 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 204 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 344 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 244 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 302 | yes | no obvious static risk; verify in browser |

@@ -466,7 +466,10 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
 });
 
 test('compliance overview uses shared loading and error state primitives', () => {
-  const src = dash('compliance/page.tsx');
+  const src = [
+    dash('compliance/page.tsx'),
+    optionalDash('compliance/compliance-principle-list.tsx'),
+  ].join('\n');
 
   assert.match(src, /from '@\/components\/ui\/states'/);
   assert.match(src, /LoadingState/);
@@ -477,12 +480,32 @@ test('compliance overview uses shared loading and error state primitives', () =>
 });
 
 test('compliance overview principle disclosures expose expanded state and panel ownership', () => {
-  const src = dash('compliance/page.tsx');
+  const src = [
+    dash('compliance/page.tsx'),
+    optionalDash('compliance/compliance-principle-list.tsx'),
+  ].join('\n');
 
   assert.match(src, /const panelId = `principle-\$\{principle\.id\}-standards`/);
   assert.match(src, /aria-expanded=\{isExpanded\}/);
   assert.match(src, /aria-controls=\{panelId\}/);
   assert.match(src, /id=\{panelId\}/);
+});
+
+test('compliance overview principle list is extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/page.tsx');
+  const listPath = dashPath('compliance/compliance-principle-list.tsx');
+  assert.ok(existsSync(listPath), 'compliance principle list should be split out of page.tsx');
+  const listSrc = readFileSync(listPath, 'utf8');
+
+  assert.match(pageSrc, /CompliancePrincipleList/);
+  assert.doesNotMatch(pageSrc, /Core Standards/);
+  assert.doesNotMatch(pageSrc, /Edit Compliance Records/);
+  assert.doesNotMatch(pageSrc, /const panelId = `principle-\$\{principle\.id\}-standards`/);
+  assert.match(listSrc, /export function CompliancePrincipleList/);
+  assert.match(listSrc, /Core Standards/);
+  assert.match(listSrc, /Edit Compliance Records/);
+  assert.match(listSrc, /primaryActionButtonClassName/);
+  assert.match(listSrc, /ChevronDown/);
 });
 
 test('shell recovery and disclosure actions use HeroUI Button primitives', () => {
@@ -1177,7 +1200,7 @@ test('primary add actions use icon-library icons instead of route-local inline s
 test('remaining P0 dashboard route chrome uses lucide icons instead of inline svg', () => {
   const expectations: Array<[string[], string[]]> = [
     [['export/page.tsx', 'export/export-controls-panel.tsx'], ['Download']],
-    [['compliance/page.tsx'], ['ChevronDown']],
+    [['compliance/page.tsx', 'compliance/compliance-principle-list.tsx'], ['ChevronDown']],
     [['compliance/[principleId]/page.tsx'], ['ChevronLeft']],
   ];
 
