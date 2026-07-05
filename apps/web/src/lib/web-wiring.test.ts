@@ -2050,12 +2050,14 @@ test('regulator official-source links use compact link styling rather than pill 
   const src = [
     dash('regulator/page.tsx'),
     optionalDash('regulator/regulator-source-matrix.tsx'),
+    optionalDash('regulator/regulator-profile-priorities.tsx'),
     component('ui/source-reference.tsx'),
   ].join('\n');
 
   assert.match(src, /SourceReferenceLink/);
   assert.doesNotMatch(src, /rounded-full\s+border/, 'regulator source links should not read as pill badges');
   assert.match(src, /rounded-md border border-gray-200 px-2.5 py-1/);
+  assert.doesNotMatch(optionalDash('regulator/regulator-profile-priorities.tsx'), /href=\{source\.url\}/);
 });
 
 test('regulator source-cited readiness matrix is extracted from the oversized route file', () => {

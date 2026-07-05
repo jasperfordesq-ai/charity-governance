@@ -86,6 +86,7 @@ const fixedInThisAuditBranch = [
   'Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.',
   'The deadlines regulatory cadence panel now cites the Charities Regulator Annual Report source and last-checked metadata for the 10-month filing prompt.',
   'Deadline and regulator official-source links now share reusable source-reference primitives behind a wiring regression test.',
+  'Regulator profile-triggered priority source links now use the shared source-reference primitive instead of route-local anchor styling.',
   'The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.',
   'Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.',
   'The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.',
