@@ -9,8 +9,8 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppPage } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
-import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
+import { ErrorState, LoadingState } from '@/components/ui/states';
+import { PrincipleEvidencePanel } from './principle-evidence-panel';
 import { StandardEditorCard, type SaveState, type StandardFormState } from './standard-editor-card';
 import type {
   GovernancePrincipleResponse,
@@ -346,26 +346,9 @@ export default function PrincipleDetailPage() {
         </Button>
       )}
     >
-
-      {principleMissingExplanations.length > 0 && (
-        <ReviewWarningState
-          title="This principle has approval blockers"
-          description={`${principleMissingExplanations.length} standard${principleMissingExplanations.length === 1 ? '' : 's'} in this principle need explanations before annual board approval can be saved.`}
-        />
-      )}
-
-      <EvidenceReadiness
-        title="Principle evidence prompts"
-        description="Use these prompts to decide what trustee evidence should be recorded for this principle. Applicability depends on your charity profile and trustee judgement."
-        prompts={principleMatrixEntries.map((entry) => ({
-          label: entry.userTask,
-          status: 'review' as const,
-          note: entry.evidenceRequired.join(', '),
-        }))}
-        flags={[
-          { label: 'Evidence-led review aid', tone: 'needs-review' },
-          { label: 'Not legal advice', tone: 'draft' },
-        ]}
+      <PrincipleEvidencePanel
+        matrixEntries={principleMatrixEntries}
+        missingExplanations={principleMissingExplanations}
       />
 
       {/* Standards */}

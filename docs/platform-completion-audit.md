@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `e823301`
+Working-tree base commit when generated: `c8e676d`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -73,6 +73,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The board member add/edit modal is split out of the oversized board route behind a wiring regression test.
 - The board member list, mobile cards, desktop table, and status-toggle states are split out of the oversized board route behind a wiring regression test.
 - The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.
+- The compliance principle evidence-readiness panel is split out of the oversized compliance detail route behind a wiring regression test.
 - The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.
 - The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.
 - The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.
@@ -163,7 +164,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 262 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 361 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 400 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 383 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 373 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 372 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 263 | yes | no obvious static risk; verify in browser |

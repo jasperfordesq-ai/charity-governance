@@ -412,9 +412,11 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(compliance, /review-ready/i);
 
   const principleDetail = dash('compliance/[principleId]/page.tsx');
-  assert.match(principleDetail, /EvidenceReadiness/);
+  const principleEvidencePanel = optionalDash('compliance/[principleId]/principle-evidence-panel.tsx');
+  const principleDetailSurface = [principleDetail, principleEvidencePanel].join('\n');
+  assert.match(principleDetailSurface, /EvidenceReadiness/);
   assert.match(principleDetail, /getMatrixEntriesForStandard/);
-  assert.match(principleDetail, /legal advice/i);
+  assert.match(principleDetailSurface, /legal advice/i);
 
   const exportPage = dash('export/page.tsx');
   const exportReadiness = optionalDash('export/export-approval-readiness.tsx');
@@ -584,6 +586,21 @@ test('principle detail standard editor card is extracted from the oversized rout
   assert.match(cardSrc, /Internal Notes/);
   assert.match(cardSrc, /Save failed/);
   assert.match(cardSrc, /onRetrySave/);
+});
+
+test('principle detail evidence readiness panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const panelPath = dashPath('compliance/[principleId]/principle-evidence-panel.tsx');
+  assert.ok(existsSync(panelPath), 'principle evidence readiness panel should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /PrincipleEvidencePanel/);
+  assert.doesNotMatch(pageSrc, /Principle evidence prompts/);
+  assert.doesNotMatch(pageSrc, /This principle has approval blockers/);
+  assert.match(panelSrc, /Principle evidence prompts/);
+  assert.match(panelSrc, /This principle has approval blockers/);
+  assert.match(panelSrc, /EvidenceReadiness/);
+  assert.match(panelSrc, /Not legal advice/);
 });
 
 test('principle detail uses shared loading and error state primitives', () => {
