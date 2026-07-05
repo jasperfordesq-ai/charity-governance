@@ -765,6 +765,14 @@ test('board summary UX is extracted from the oversized route file', () => {
   assert.doesNotMatch(summarySrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
 });
 
+test('board summary waits for a successful load instead of showing zero-count placeholders', () => {
+  const pageSrc = dash('board/page.tsx');
+
+  assert.match(pageSrc, /const boardDataReady = !loading && !loadError/);
+  assert.match(pageSrc, /\{boardDataReady && \(\s*<BoardSummaryPanel summary=\{summary\} \/>/);
+  assert.match(pageSrc, /\{boardDataReady && <TrusteeEvidencePromptCards \/>/);
+});
+
 test('board evidence and mobile member cards use shared status panel tones', () => {
   const evidenceSrc = dash('board/board-evidence.tsx');
   const listPanelSrc = dash('board/board-member-list-panel.tsx');
@@ -1328,6 +1336,15 @@ test('deadlines summary and profile cards use shared status panel tones', () => 
   assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
   assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-white p-4/);
   assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+});
+
+test('deadlines summary waits for a successful load instead of showing zero-count placeholders', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+
+  assert.match(pageSrc, /const deadlineDataReady = !loading && !loadError/);
+  assert.match(pageSrc, /\{deadlineDataReady && \(\s*<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
+  assert.match(pageSrc, /\{deadlineDataReady && \(\s*<AppSection\s+title="Regulatory cadence"/);
+  assert.match(pageSrc, /\{deadlineDataReady && \(\s*<DeadlineProfilePromptsPanel/);
 });
 
 test('deadlines form modal is extracted from the oversized route file', () => {

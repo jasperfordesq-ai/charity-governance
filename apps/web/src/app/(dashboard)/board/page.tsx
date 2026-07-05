@@ -92,6 +92,7 @@ export default function BoardPage() {
     if (!formAppointed) return 'Add the appointment date before saving.';
     return '';
   }, [formAppointed, formName, formRole]);
+  const boardDataReady = !loading && !loadError;
 
   const resetForm = () => {
     setFormName('');
@@ -207,9 +208,11 @@ export default function BoardPage() {
         </Button>
       )}
     >
-      <BoardSummaryPanel summary={summary} />
+      {boardDataReady && (
+        <BoardSummaryPanel summary={summary} />
+      )}
 
-      <TrusteeEvidencePromptCards />
+      {boardDataReady && <TrusteeEvidencePromptCards />}
 
       <BoardMemberListPanel
         displayMembers={displayMembers}
