@@ -2000,10 +2000,29 @@ test('regulator profile-triggered priorities section is extracted from the overs
 });
 
 test('regulator official-source links use compact link styling rather than pill badges', () => {
-  const src = dash('regulator/page.tsx');
+  const src = [
+    dash('regulator/page.tsx'),
+    optionalDash('regulator/regulator-source-matrix.tsx'),
+  ].join('\n');
 
   assert.doesNotMatch(src, /rounded-full\s+border/, 'regulator source links should not read as pill badges');
   assert.match(src, /rounded-md border border-gray-200 px-2.5 py-1/);
+});
+
+test('regulator source-cited readiness matrix is extracted from the oversized route file', () => {
+  const pageSrc = dash('regulator/page.tsx');
+  const matrixPath = dashPath('regulator/regulator-source-matrix.tsx');
+  assert.ok(existsSync(matrixPath), 'regulator source-cited readiness matrix should be split out of page.tsx');
+  const matrixSrc = readFileSync(matrixPath, 'utf8');
+
+  assert.match(pageSrc, /RegulatorSourceMatrix/);
+  assert.doesNotMatch(pageSrc, /Source-cited readiness matrix/);
+  assert.doesNotMatch(pageSrc, /regulatorMatrixEntries/);
+  assert.match(matrixSrc, /Source-cited readiness matrix/);
+  assert.match(matrixSrc, /IRISH_COMPLIANCE_MATRIX\.filter/);
+  assert.match(matrixSrc, /sourceRefs\.map/);
+  assert.match(matrixSrc, /ReviewFlag/);
+  assert.match(matrixSrc, /statusMeta/);
 });
 
 test('regulator readiness overview is extracted from the oversized route file', () => {

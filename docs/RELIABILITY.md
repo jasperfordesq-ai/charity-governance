@@ -19,7 +19,7 @@ Generated: 2026-07-05 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 95 | 0 | 0 | 7 | 102 |
 | **Total** | **354** | **0** | **0** | **22** | **376** |
 
-**API suite:** 419 passing, 0 failing. **Web suite:** 204 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 419 passing, 0 failing. **Web suite:** 205 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
 
 **Linkage:** 354/354 covered guarantees verified against a passing/linked test.
 

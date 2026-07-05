@@ -130,6 +130,7 @@ const fixedInThisAuditBranch = [
   'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
   'The regulator profile-triggered priorities section is split out of the oversized regulator route behind a wiring regression test.',
   'The regulator readiness overview and operating-model cards are split out of the oversized regulator route behind a wiring regression test.',
+  'The regulator source-cited readiness matrix is split out of the oversized regulator route behind a wiring regression test.',
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
