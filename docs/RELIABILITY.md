@@ -11,7 +11,7 @@ documented n/a), the job is finished and stays finished.
 
 ## At a glance
 
-Generated: 2026-07-04 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-07-05 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Generated: 2026-07-04 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 95 | 0 | 0 | 7 | 102 |
 | **Total** | **351** | **0** | **0** | **22** | **373** |
 
-**API suite:** 405 passing, 0 failing. **Web suite:** 166 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 411 passing, 0 failing. **Web suite:** 168 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
 
 **Linkage:** 351/351 covered guarantees verified against a passing/linked test.
 
@@ -625,7 +625,7 @@ _3 guarantees - covered 3_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Auth & session integrity | Recording a standard then completing board sign-off works end to end. | covered | `record a standard then complete board sign-off` <sup>e2e</sup><br/><sub>tests/compliance.spec.ts</sub> |
+| Auth & session integrity | Recording a standard then completing board sign-off works end to end. | covered | `record a standard then block premature approval and save board-review sign-off` <sup>e2e</sup><br/><sub>tests/compliance.spec.ts</sub> |
 | State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side. | covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 

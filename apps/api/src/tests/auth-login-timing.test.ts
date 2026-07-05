@@ -18,29 +18,27 @@ function mockPrismaNoUser() {
 // branch must spend the same bcrypt cost as the real path, so response latency
 // does not reveal whether an account exists.
 test('login spends bcrypt hashing time even when the email has no account', async () => {
-  // Baseline: cost of one cost-12 bcrypt comparison on this machine.
-  const dummyHash = bcrypt.hashSync('baseline-measurement', 12);
-  const realStart = process.hrtime.bigint();
-  await bcrypt.compare('whatever', dummyHash);
-  const realCompareMs = Number(process.hrtime.bigint() - realStart) / 1e6;
-
+  const originalCompare = bcrypt.compare;
+  const compareCalls: Array<{ password: string; hash: string }> = [];
   const service = new AuthService(mockPrismaNoUser(), {} as never);
 
-  const loginStart = process.hrtime.bigint();
-  await assert.rejects(
-    service.login({ email: 'no-account@example.org', password: 'whatever' }),
-    (err: unknown) => (err as { code?: string })?.code === 'INVALID_CREDENTIALS',
-  );
-  const loginMs = Number(process.hrtime.bigint() - loginStart) / 1e6;
+  bcrypt.compare = async (password: string, hash: string) => {
+    compareCalls.push({ password, hash });
+    return false;
+  };
 
-  // A full bcrypt comparison dominates the no-user path, so it must take a large
-  // fraction of a real compare — not the sub-millisecond of an early return.
-  assert.ok(
-    loginMs >= realCompareMs * 0.5,
-    `login(no-account) took ${loginMs.toFixed(1)}ms but a single bcrypt compare is ` +
-      `${realCompareMs.toFixed(1)}ms; the no-user path is not spending hashing time ` +
-      '(timing-enumeration regression)',
-  );
+  try {
+    await assert.rejects(
+      service.login({ email: 'no-account@example.org', password: 'whatever' }),
+      (err: unknown) => (err as { code?: string })?.code === 'INVALID_CREDENTIALS',
+    );
+  } finally {
+    bcrypt.compare = originalCompare;
+  }
+
+  assert.equal(compareCalls.length, 1);
+  assert.equal(compareCalls[0]?.password, 'whatever');
+  assert.match(compareCalls[0]?.hash, /^\$2[aby]\$12\$/);
 });
 
 test('login returns the generic INVALID_CREDENTIALS error for unknown accounts', async () => {

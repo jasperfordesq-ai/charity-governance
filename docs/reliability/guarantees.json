@@ -4482,7 +4482,7 @@
     "status": "covered",
     "testType": "e2e",
     "testFile": "e2e/tests/compliance.spec.ts",
-    "testTitle": "record a standard then complete board sign-off",
+    "testTitle": "record a standard then block premature approval and save board-review sign-off",
     "gapDescription": "",
     "proposedTitle": ""
   },
