@@ -745,6 +745,44 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
+  if (areaId === 'browserQa' && checkId === 'desktop-coverage') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'E2E_DEPLOYED_QA=true',
+      'npm run test:e2e:responsive',
+      'desktop light and dark',
+      'https://app.charitypilot.ie',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'browserQa' && checkId === 'mobile-coverage') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'E2E_DEPLOYED_QA=true',
+      'npm run test:e2e:responsive',
+      'mobile light and dark',
+      'https://app.charitypilot.ie',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
   if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
     if (!hasEvidenceType(actualCheck, 'command-output')) {
       issues.push(`${checkPath}.evidence must include command-output evidence`);

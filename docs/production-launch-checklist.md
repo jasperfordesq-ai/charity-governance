@@ -218,8 +218,8 @@ Evidence:
 - [ ] `docs/production-browser-qa.md` has been completed against the deployed production URL.
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e:responsive` command output with `E2E_DEPLOYED_QA=true`, canonical web/API URLs, and secret-store owner credential references.
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e -- tests/accessibility.spec.ts` command output with the same deployed QA environment.
-- [ ] Desktop browser coverage is recorded.
-- [ ] Mobile browser coverage is recorded.
+- [ ] Desktop browser coverage is recorded with deployed responsive-smoke evidence for the desktop light/dark route matrix.
+- [ ] Mobile browser coverage is recorded with deployed responsive-smoke evidence for the mobile light/dark route matrix.
 - [ ] Auth, dashboard, billing, document upload, signed download, logout, and error states are covered.
 
 Evidence:

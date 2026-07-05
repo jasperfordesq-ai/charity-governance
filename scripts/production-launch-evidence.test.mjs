@@ -247,6 +247,30 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'browserQa' && checkId === 'desktop-coverage') {
+    entry.type = 'command-output';
+    entry.description = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'npm run test:e2e:responsive',
+      'responsive-smoke.spec.ts passed against deployed HTTPS production URL',
+      'desktop light and dark route coverage completed',
+    ].join(' ');
+  }
+
+  if (areaId === 'browserQa' && checkId === 'mobile-coverage') {
+    entry.type = 'command-output';
+    entry.description = [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'npm run test:e2e:responsive',
+      'responsive-smoke.spec.ts passed against deployed HTTPS production URL',
+      'mobile light and dark route coverage completed',
+    ].join(' ');
+  }
+
   if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
     entry.type = 'command-output';
     entry.description = [
@@ -582,6 +606,8 @@ test('production launch evidence validator requires deployed browser QA command 
     capturedAt,
   };
   evidence.areas.browserQa.checks['browser-qa-completed'].evidence = [genericBrowserEvidence];
+  evidence.areas.browserQa.checks['desktop-coverage'].evidence = [genericBrowserEvidence];
+  evidence.areas.browserQa.checks['mobile-coverage'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['critical-flows-covered'].evidence = [genericBrowserEvidence];
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
@@ -596,6 +622,10 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_EMAIL/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_PASSWORD/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run test:e2e:responsive/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include desktop light and dark/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include command-output evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include mobile light and dark/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
   } finally {
