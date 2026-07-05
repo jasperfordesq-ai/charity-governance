@@ -2106,6 +2106,20 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /engineering, operations, security, legal\/compliance, and business/);
 });
 
+test('frontend architecture docs describe current public theme support', () => {
+  const frontendArchitecture = readRepoFile('docs/architecture/09-frontend.md');
+  const authLayout = readRepoFile('apps/web/src/app/(auth)/layout.tsx');
+  const marketingLayout = readRepoFile('apps/web/src/app/(marketing)/layout.tsx');
+
+  assert.match(authLayout, /dark:bg-gray-950/);
+  assert.match(marketingLayout, /dark:bg-gray-950/);
+  assert.doesNotMatch(frontendArchitecture, /light-only/i);
+  assert.doesNotMatch(frontendArchitecture, /colorScheme: 'light'/);
+  assert.match(frontendArchitecture, /\(auth\)[^\n]*dark-capable/);
+  assert.match(frontendArchitecture, /\(marketing\)[^\n]*dark-capable/);
+  assert.match(frontendArchitecture, /pre-paint inline script applies the user's light\/dark preference across public and protected route groups/);
+});
+
 test('production deploy preflight is wired for digest-pinned image promotion', () => {
   const packageJson = JSON.parse(readRepoFile('package.json'));
   const runbook = readRepoFile('docs/production-runbook.md');

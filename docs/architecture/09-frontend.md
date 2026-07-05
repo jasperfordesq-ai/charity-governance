@@ -8,11 +8,11 @@ The app router lives under `apps/web/src/app/`. Three parenthesised route groups
 
 | Route group | Layout | Theme | Auth status | Layout source |
 |---|---|---|---|---|
-| `(auth)` | minimal header + footer, light-only | light (`colorScheme: 'light'`) | public | `apps/web/src/app/(auth)/layout.tsx:4-71` |
-| `(dashboard)` | sidebar nav + top bar, dark-capable | light/dark per `localStorage.theme` | protected | `apps/web/src/app/(dashboard)/layout.tsx:124-310` |
-| `(marketing)` | public site header + footer, light-only | light (`colorScheme: 'light'`) | public | `apps/web/src/app/(marketing)/layout.tsx:6-162` |
+| `(auth)` | minimal header + footer, dark-capable | light/dark per `localStorage.theme` or system preference | public | `apps/web/src/app/(auth)/layout.tsx:4-49` |
+| `(dashboard)` | sidebar nav + top bar, dark-capable | light/dark per `localStorage.theme` or system preference | protected | `apps/web/src/app/(dashboard)/layout.tsx:124-310` |
+| `(marketing)` | public site header + footer, dark-capable | light/dark per `localStorage.theme` or system preference | public | `apps/web/src/app/(marketing)/layout.tsx:7-126` |
 
-The root layout (`apps/web/src/app/layout.tsx:42-62`) wraps everything in `<Providers>` and injects a pre-paint inline script that toggles the `.dark` class only on app routes, keeping marketing/auth surfaces light (`apps/web/src/app/layout.tsx:55`). The CSP nonce minted by the proxy is read from the `x-nonce` request header and applied to that inline script (`apps/web/src/app/layout.tsx:43`).
+The root layout (`apps/web/src/app/layout.tsx:40-58`) wraps everything in `<Providers>` and injects a pre-paint inline script. The pre-paint inline script applies the user's light/dark preference across public and protected route groups, honours `localStorage.theme`, falls back to the system preference, and toggles `.dark` on the document element before paint (`apps/web/src/app/layout.tsx:50-52`). The CSP nonce minted by the proxy is read from the `x-nonce` request header and applied to that inline script (`apps/web/src/app/layout.tsx:39`).
 
 ### Routes by group
 
