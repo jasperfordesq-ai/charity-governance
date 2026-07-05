@@ -154,6 +154,7 @@ Evidence:
 - [ ] The scheduler and one-shot job runtimes receive the same production secret source that passed preflight, either as injected environment variables or as a non-committed env file materialized for the job runtime.
 - [ ] Scheduler and job logs are captured.
 - [ ] Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`.
+- [ ] Machine-readable launch evidence names scheduler ownership, command surface, shared production secret source, captured scheduler logs, and both job failure alerts.
 
 Evidence:
 
@@ -191,6 +192,7 @@ Evidence:
 - [ ] Public uptime monitoring checks `/api/v1/health`.
 - [ ] Internal readiness monitoring checks `/api/v1/health/readiness` with `x-charitypilot-readiness-key`.
 - [ ] Incident owner and escalation path are recorded outside git.
+- [ ] Machine-readable launch evidence names API/web log capture, error alert testing, uptime/readiness monitors, incident owner, and escalation path.
 
 Evidence:
 

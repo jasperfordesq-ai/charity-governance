@@ -282,6 +282,30 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'observability' && checkId === 'api-logs') {
+    entry.description = 'API logs are captured by the production platform log sink.';
+  }
+
+  if (areaId === 'observability' && checkId === 'web-logs') {
+    entry.description = 'web logs are captured by the production platform log sink.';
+  }
+
+  if (areaId === 'observability' && checkId === 'error-alert-tested') {
+    entry.description = 'error alert destination was configured and tested with a sanitized production test alert.';
+  }
+
+  if (areaId === 'observability' && checkId === 'uptime-health') {
+    entry.description = 'uptime monitoring checks /api/v1/health on the production API origin.';
+  }
+
+  if (areaId === 'observability' && checkId === 'internal-readiness-monitoring') {
+    entry.description = 'internal monitoring checks /api/v1/health/readiness with x-charitypilot-readiness-key.';
+  }
+
+  if (areaId === 'observability' && checkId === 'incident-owner') {
+    entry.description = 'incident owner and escalation path are recorded outside git in the approved runbook system.';
+  }
+
   if (areaId === 'releaseGate' && checkId === 'release-workflow-identity') {
     entry.type = 'command-output';
     entry.reference = releaseWorkflowRunUrl;
@@ -384,10 +408,18 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'jobs' && checkId === 'scheduler-owned') {
+    entry.description = 'Docker Compose production-scheduler service has an accountable owner for production job scheduling.';
+  }
+
+  if (areaId === 'jobs' && checkId === 'scheduler-secret-source') {
+    entry.description = 'Scheduler receives the same production secret source as the API via the non-committed .env.production materialization.';
+  }
+
   if (areaId === 'jobs' && checkId === 'scheduler-logs-alerts') {
     entry.type = 'command-output';
     entry.description = [
-      'Production scheduler logs captured.',
+      'scheduler logs are captured by the production platform log sink.',
       'deadline-reminders failure alert evidence recorded.',
       'document-storage-cleanup failure alert evidence recorded.',
     ].join(' ');
@@ -887,6 +919,52 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include document upload/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include zero critical or high-severity browser QA defects/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete observability and scheduler evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/ops/monitoring-reviewed',
+    description: 'Monitoring and scheduler setup reviewed by operator',
+    capturedAt,
+  };
+  for (const checkId of [
+    'api-logs',
+    'web-logs',
+    'error-alert-tested',
+    'uptime-health',
+    'internal-readiness-monitoring',
+    'incident-owner',
+  ]) {
+    evidence.areas.observability.checks[checkId].evidence = [genericEvidence];
+  }
+  evidence.areas.jobs.checks['scheduler-owned'].evidence = [genericEvidence];
+  evidence.areas.jobs.checks['scheduler-secret-source'].evidence = [genericEvidence];
+  evidence.areas.jobs.checks['scheduler-logs-alerts'].evidence = [{
+    ...genericEvidence,
+    type: 'command-output',
+    description: 'deadline-reminders failure alert and document-storage-cleanup failure alert delivered',
+  }];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.observability\.checks\.api-logs\.evidence must include API logs/);
+    assert.match(result.stderr, /areas\.observability\.checks\.web-logs\.evidence must include web logs/);
+    assert.match(result.stderr, /areas\.observability\.checks\.error-alert-tested\.evidence must include error alert/);
+    assert.match(result.stderr, /areas\.observability\.checks\.uptime-health\.evidence must include \/api\/v1\/health/);
+    assert.match(result.stderr, /areas\.observability\.checks\.internal-readiness-monitoring\.evidence must include x-charitypilot-readiness-key/);
+    assert.match(result.stderr, /areas\.observability\.checks\.incident-owner\.evidence must include escalation path/);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-owned\.evidence must include production-scheduler/);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-secret-source\.evidence must include same production secret source/);
+    assert.match(result.stderr, /areas\.jobs\.checks\.scheduler-logs-alerts\.evidence must include scheduler logs evidence/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -830,6 +830,24 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
+  if (areaId === 'jobs' && checkId === 'scheduler-owned') {
+    const text = evidenceText(actualCheck.evidence);
+    for (const marker of ['production-scheduler', 'owner']) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'jobs' && checkId === 'scheduler-secret-source') {
+    const text = evidenceText(actualCheck.evidence);
+    for (const marker of ['same production secret source', '.env.production']) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
   if (areaId === 'jobs' && checkId === 'scheduler-logs-alerts') {
     if (!hasEvidenceType(actualCheck, 'command-output')) {
       issues.push(`${checkPath}.evidence must include command-output evidence`);
@@ -837,12 +855,32 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
 
     const text = evidenceText(actualCheck.evidence);
     const requiredFailureAlerts = [
+      'scheduler logs',
       'deadline-reminders failure alert',
       'document-storage-cleanup failure alert',
     ];
     for (const alertEvidence of requiredFailureAlerts) {
       if (!text.includes(alertEvidence)) {
         issues.push(`${checkPath}.evidence must include ${alertEvidence} evidence`);
+      }
+    }
+  }
+
+  if (areaId === 'observability') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const observabilityMarkersByCheck = {
+      'api-logs': ['API logs', 'captured'],
+      'web-logs': ['web logs', 'captured'],
+      'error-alert-tested': ['error alert', 'tested'],
+      'uptime-health': ['/api/v1/health', 'uptime monitoring'],
+      'internal-readiness-monitoring': ['/api/v1/health/readiness', 'x-charitypilot-readiness-key'],
+      'incident-owner': ['incident owner', 'escalation path', 'outside git'],
+    };
+
+    for (const marker of observabilityMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
       }
     }
   }
