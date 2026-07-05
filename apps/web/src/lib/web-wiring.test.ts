@@ -895,6 +895,21 @@ test('export report preview UI is extracted from the oversized route file', () =
   assert.doesNotMatch(previewSrc, /border border-gray-200 bg-white p-5 shadow-sm/);
 });
 
+test('export controls and readiness warning are extracted from the oversized route file', () => {
+  const pageSrc = dash('export/page.tsx');
+  const controlsPath = dashPath('export/export-controls-panel.tsx');
+  assert.ok(existsSync(controlsPath), 'export controls should be split out of page.tsx');
+  const controlsSrc = readFileSync(controlsPath, 'utf8');
+
+  assert.match(pageSrc, /ExportControlsPanel/);
+  assert.doesNotMatch(pageSrc, /Generate Compliance Report/);
+  assert.doesNotMatch(pageSrc, /Readiness blockers prevent board approval/);
+  assert.match(controlsSrc, /Generate Compliance Report/);
+  assert.match(controlsSrc, /Readiness blockers prevent board approval/);
+  assert.match(controlsSrc, /ReviewWarningState/);
+  assert.match(controlsSrc, /primaryActionButtonClassName/);
+});
+
 test('export loading, warning, and sign-off error states use shared primitives', () => {
   const pageSrc = dash('export/page.tsx');
   const previewSrc = dash('export/export-report-preview.tsx');
@@ -1101,19 +1116,19 @@ test('primary add actions use icon-library icons instead of route-local inline s
 });
 
 test('remaining P0 dashboard route chrome uses lucide icons instead of inline svg', () => {
-  const expectations: Array<[string, string[]]> = [
-    ['export/page.tsx', ['Download']],
-    ['compliance/page.tsx', ['ChevronDown']],
-    ['compliance/[principleId]/page.tsx', ['ChevronLeft']],
+  const expectations: Array<[string[], string[]]> = [
+    [['export/page.tsx', 'export/export-controls-panel.tsx'], ['Download']],
+    [['compliance/page.tsx'], ['ChevronDown']],
+    [['compliance/[principleId]/page.tsx'], ['ChevronLeft']],
   ];
 
-  for (const [file, icons] of expectations) {
-    const src = dash(file);
-    assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for route chrome icons`);
+  for (const [files, icons] of expectations) {
+    const src = files.map((file) => dash(file)).join('\n');
+    assert.match(src, /from 'lucide-react'/, `${files.join(', ')} should use lucide-react for route chrome icons`);
     for (const icon of icons) {
-      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+      assert.match(src, new RegExp(`<${icon}\\b`), `${files.join(', ')} should render ${icon} through lucide-react`);
     }
-    assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+    assert.doesNotMatch(src, /<svg\b/, `${files.join(', ')} should not carry hand-drawn inline SVG markup`);
   }
 });
 

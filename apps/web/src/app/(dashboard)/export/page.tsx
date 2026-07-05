@@ -4,7 +4,6 @@ import { logClientError } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { Card, Button, Select, SelectItem, Input, Textarea, Chip } from '@heroui/react';
-import { Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/toast';
 import { AppPage } from '@/components/ui/app-page';
@@ -20,6 +19,7 @@ import {
   approvalReadinessBlockerCodes,
   countApprovalReadinessBlockers,
 } from './export-approval-readiness';
+import { ExportControlsPanel } from './export-controls-panel';
 import { ExportReportPreview } from './export-report-preview';
 
 const signoffStatusLabels = {
@@ -213,47 +213,15 @@ export default function ExportPage() {
       title="Export Compliance Report"
       description="Generate a review-ready, evidence-led report for trustee review and filing records. CharityPilot supports workflow preparation; it is not legal advice."
     >
-
-      {/* Year selector and export button */}
-      <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-          <Select
-            label="Reporting Year"
-            selectedKeys={new Set([String(year)])}
-            onSelectionChange={(keys) => {
-              const val = Array.from(keys)[0];
-              if (val) setYear(Number(val));
-            }}
-            className="w-48"
-          >
-            {yearOptions.map((y) => (
-              <SelectItem key={String(y)}>{String(y)}</SelectItem>
-            ))}
-          </Select>
-
-          <Button
-            className={primaryActionButtonClassName}
-            size="lg"
-            onPress={handleExport}
-            isLoading={exporting}
-          >
-            <Download className="w-5 h-5 mr-2" aria-hidden="true" />
-            Generate Compliance Report
-          </Button>
-        </div>
-        {readinessBlockerCount > 0 && (
-          <p className="mt-4 text-sm leading-6 text-amber-700 dark:text-amber-300">
-            This export can still be opened for review, but it is not board-approval-ready until {readinessBlockerCount} readiness blocker{readinessBlockerCount === 1 ? '' : 's'} are resolved.
-          </p>
-        )}
-      </Card>
-
-      {readinessBlockerCount > 0 && (
-        <ReviewWarningState
-          title="Readiness blockers prevent board approval"
-          description={`Resolve missing records, evidence fields, explanations, and profile checks before saving an approved sign-off. ${readinessBlockerCodes.length > 0 ? `Affected standards: ${readinessBlockerCodes.join(', ')}.` : 'The organisation profile needs review.'} The export remains available as a review-ready working report.`}
-        />
-      )}
+      <ExportControlsPanel
+        exporting={exporting}
+        onExport={handleExport}
+        onYearChange={setYear}
+        readinessBlockerCodes={readinessBlockerCodes}
+        readinessBlockerCount={readinessBlockerCount}
+        year={year}
+        yearOptions={yearOptions}
+      />
 
       <ApprovalReadinessIssues readiness={approvalReadiness} />
 
