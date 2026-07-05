@@ -222,3 +222,39 @@ test('register throttling is keyed by caller and normalized email identifier', {
     await app.close();
   }
 });
+
+test('resend-verification throttling is keyed by caller credential', { concurrency: false }, async () => {
+  const app = await buildSensitiveRoutesApp();
+
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/resend-verification',
+        headers: { authorization: 'Bearer invalid-access-token-a' },
+        payload: {},
+      });
+      assert.equal(res.statusCode, 401, res.body);
+      assert.equal(res.json().code, 'UNAUTHORIZED');
+    }
+
+    const sameCredentialRes = await app.inject({
+      method: 'POST',
+      url: '/auth/resend-verification',
+      headers: { authorization: 'Bearer invalid-access-token-a' },
+      payload: {},
+    });
+    assert.equal(sameCredentialRes.statusCode, 429, sameCredentialRes.body);
+
+    const otherCredentialRes = await app.inject({
+      method: 'POST',
+      url: '/auth/resend-verification',
+      headers: { authorization: 'Bearer invalid-access-token-b' },
+      payload: {},
+    });
+    assert.equal(otherCredentialRes.statusCode, 401, otherCredentialRes.body);
+    assert.equal(otherCredentialRes.json().code, 'UNAUTHORIZED');
+  } finally {
+    await app.close();
+  }
+});

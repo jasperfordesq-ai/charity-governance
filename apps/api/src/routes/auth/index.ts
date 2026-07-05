@@ -17,7 +17,7 @@ import {
   setAuthCookies,
 } from '../../utils/auth-cookies.js';
 import { publicUser } from '../../utils/public-dtos.js';
-import { bodyIdentifierRateLimit } from '../../utils/identifier-rate-limit.js';
+import { authCredentialRateLimit, bodyIdentifierRateLimit } from '../../utils/identifier-rate-limit.js';
 
 function formatZodError(error: ZodError) {
   return {
@@ -156,7 +156,7 @@ export async function authRoutes(app: FastifyInstance) {
     '/resend-verification',
     {
       preHandler: [authIdentityGuard],
-      config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+      config: { rateLimit: authCredentialRateLimit() },
     },
     async (request, reply) => {
       try {
