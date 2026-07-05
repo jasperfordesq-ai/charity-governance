@@ -693,6 +693,48 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
+  if (areaId === 'legalAndCompliance') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const legalMarkersByCheck = {
+      'privacy-policy-approved': ['privacy policy', 'approved for production'],
+      'terms-approved': ['terms', 'approved for production'],
+      'retention-policy-approved': ['data retention policy', 'approved for production'],
+      'support-deletion-contact': ['support contact', 'data deletion contact', 'published'],
+      'solicitor-governance-privacy-review': [
+        'solicitor review',
+        'governance review',
+        'privacy review',
+        'review-ready',
+        'source-cited',
+        'not a substitute for legal advice',
+      ],
+    };
+
+    for (const marker of legalMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'securityReview') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const securityMarkersByCheck = {
+      'penetration-test-complete': ['external penetration test', 'testing provider', 'completed before real charity data'],
+      'critical-high-findings': ['critical and high findings', 'remediated or formally accepted', 'accountable owner'],
+      'retest-evidence': ['retest evidence', 'fixed findings'],
+      'report-reference': ['penetration test report', 'report reference', 'stored outside git'],
+    };
+
+    for (const marker of securityMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
   if (areaId === 'jobs' && checkId === 'scheduler-command') {
     const text = evidenceText(actualCheck.evidence);
     const requiredJobCommands = [

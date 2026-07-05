@@ -203,7 +203,7 @@ Evidence:
 - [ ] Data retention policy is approved for production.
 - [ ] Support and data deletion contact path is published.
 - [ ] Solicitor, governance, and privacy review confirms the production wording remains review-ready, source-cited, and clear that CharityPilot is not a substitute for legal advice.
-- [ ] Machine-readable launch evidence includes `legalAndCompliance.checks.solicitor-governance-privacy-review` with non-secret external review evidence.
+- [ ] Machine-readable launch evidence includes the approved privacy policy, terms/service agreement, data-retention policy, support/data-deletion contact, and `legalAndCompliance.checks.solicitor-governance-privacy-review` evidence.
 
 Evidence:
 
@@ -232,10 +232,10 @@ Evidence:
 
 ## 11. External Security Review
 
-- [ ] External penetration test is complete before handling real charity data.
+- [ ] External penetration test is complete before handling real charity data, with the testing provider recorded.
 - [ ] Critical and high findings are remediated or formally accepted by the accountable owner.
 - [ ] Retest evidence exists for fixed findings.
-- [ ] Report reference is stored outside git.
+- [ ] Report reference is stored outside git and referenced in the machine-readable launch evidence.
 
 Evidence:
 

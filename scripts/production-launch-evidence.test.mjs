@@ -116,6 +116,45 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'legalAndCompliance' && checkId === 'privacy-policy-approved') {
+    entry.description = 'privacy policy approved for production by the accountable legal/compliance owner.';
+  }
+
+  if (areaId === 'legalAndCompliance' && checkId === 'terms-approved') {
+    entry.description = 'terms or service agreement approved for production by the accountable legal/compliance owner.';
+  }
+
+  if (areaId === 'legalAndCompliance' && checkId === 'retention-policy-approved') {
+    entry.description = 'data retention policy approved for production by the accountable legal/compliance owner.';
+  }
+
+  if (areaId === 'legalAndCompliance' && checkId === 'support-deletion-contact') {
+    entry.description = 'support contact and data deletion contact published for production users.';
+  }
+
+  if (areaId === 'legalAndCompliance' && checkId === 'solicitor-governance-privacy-review') {
+    entry.description = [
+      'solicitor review, governance review, and privacy review completed for production wording.',
+      'Review confirms CharityPilot remains review-ready, source-cited, and not a substitute for legal advice.',
+    ].join(' ');
+  }
+
+  if (areaId === 'securityReview' && checkId === 'penetration-test-complete') {
+    entry.description = 'external penetration test by named testing provider completed before real charity data.';
+  }
+
+  if (areaId === 'securityReview' && checkId === 'critical-high-findings') {
+    entry.description = 'critical and high findings were remediated or formally accepted by the accountable owner.';
+  }
+
+  if (areaId === 'securityReview' && checkId === 'retest-evidence') {
+    entry.description = 'retest evidence exists for fixed findings from the external penetration test.';
+  }
+
+  if (areaId === 'securityReview' && checkId === 'report-reference') {
+    entry.description = 'penetration test report reference stored outside git in the approved evidence vault.';
+  }
+
   if (areaId === 'observability' && checkId === 'observability-check') {
     entry.type = 'command-output';
     entry.description = [
@@ -826,6 +865,66 @@ test('production launch evidence validator requires solicitor governance and pri
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /legalAndCompliance\.checks\.solicitor-governance-privacy-review is required/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete legal and policy approval evidence', async () => {
+  const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'approval',
+    reference: 'https://evidence.charitypilot.ie/launch/legal/generic-review',
+    description: 'Legal checklist reviewed by accountable owner',
+    capturedAt,
+  };
+  evidence.areas.legalAndCompliance.checks['privacy-policy-approved'].evidence = [genericEvidence];
+  evidence.areas.legalAndCompliance.checks['terms-approved'].evidence = [genericEvidence];
+  evidence.areas.legalAndCompliance.checks['retention-policy-approved'].evidence = [genericEvidence];
+  evidence.areas.legalAndCompliance.checks['support-deletion-contact'].evidence = [genericEvidence];
+  evidence.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].evidence = [genericEvidence];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.privacy-policy-approved\.evidence must include privacy policy/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.terms-approved\.evidence must include approved for production/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include data retention policy/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include data deletion contact/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include solicitor review/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include not a substitute for legal advice/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete external security review evidence', async () => {
+  const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'report',
+    reference: 'https://evidence.charitypilot.ie/launch/security/generic-review',
+    description: 'Security review completed',
+    capturedAt,
+  };
+  evidence.areas.securityReview.checks['penetration-test-complete'].evidence = [genericEvidence];
+  evidence.areas.securityReview.checks['critical-high-findings'].evidence = [genericEvidence];
+  evidence.areas.securityReview.checks['retest-evidence'].evidence = [genericEvidence];
+  evidence.areas.securityReview.checks['report-reference'].evidence = [genericEvidence];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include external penetration test/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include completed before real charity data/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.critical-high-findings\.evidence must include remediated or formally accepted/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.retest-evidence\.evidence must include fixed findings/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include stored outside git/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
