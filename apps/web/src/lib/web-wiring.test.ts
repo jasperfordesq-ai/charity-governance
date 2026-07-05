@@ -594,11 +594,13 @@ test('principle detail back and retry controls use HeroUI Button primitives', ()
 
 test('principle detail standard editor card is extracted from the oversized route file', () => {
   const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const listSrc = optionalDash('compliance/[principleId]/principle-standard-list.tsx');
   const cardPath = dashPath('compliance/[principleId]/standard-editor-card.tsx');
   assert.ok(existsSync(cardPath), 'standard editor card should be split out of page.tsx');
   const cardSrc = readFileSync(cardPath, 'utf8');
+  const standardEditorSurface = [pageSrc, listSrc].join('\n');
 
-  assert.match(pageSrc, /StandardEditorCard/);
+  assert.match(standardEditorSurface, /StandardEditorCard/);
   assert.doesNotMatch(pageSrc, /Action Taken/);
   assert.doesNotMatch(pageSrc, /Internal Notes/);
   assert.doesNotMatch(pageSrc, /Save failed/);
@@ -606,6 +608,19 @@ test('principle detail standard editor card is extracted from the oversized rout
   assert.match(cardSrc, /Internal Notes/);
   assert.match(cardSrc, /Save failed/);
   assert.match(cardSrc, /onRetrySave/);
+});
+
+test('principle detail standard list is extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const listPath = dashPath('compliance/[principleId]/principle-standard-list.tsx');
+  assert.ok(existsSync(listPath), 'principle standard list should be split out of page.tsx');
+  const listSrc = readFileSync(listPath, 'utf8');
+
+  assert.match(pageSrc, /PrincipleStandardList/);
+  assert.doesNotMatch(pageSrc, /StandardEditorCard/);
+  assert.match(listSrc, /StandardEditorCard/);
+  assert.match(listSrc, /sortOrder/);
+  assert.match(listSrc, /onRetrySave/);
 });
 
 test('principle detail evidence readiness panel is extracted from the oversized route file', () => {

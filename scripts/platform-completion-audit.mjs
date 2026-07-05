@@ -91,6 +91,7 @@ const fixedInThisAuditBranch = [
   'The register operational record list sections are split out of the oversized registers route behind a wiring regression test.',
   'The register workflow loading, stale-request guard, save mutations, and priority derivation are split into a route-local hook behind a wiring regression test.',
   'The compliance principle standard editor card and save-state UI are split out of the oversized compliance detail route behind a wiring regression test.',
+  'The compliance principle standard list is split out of the oversized compliance detail route behind a wiring regression test.',
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.',

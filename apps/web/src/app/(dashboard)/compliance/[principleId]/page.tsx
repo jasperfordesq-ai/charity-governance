@@ -11,7 +11,7 @@ import { AppPage } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { PrincipleEvidencePanel } from './principle-evidence-panel';
-import { StandardEditorCard, type SaveState, type StandardFormState } from './standard-editor-card';
+import { PrincipleStandardList, type SaveState, type StandardFormState } from './principle-standard-list';
 import type {
   GovernancePrincipleResponse,
   ComplianceRecordResponse,
@@ -351,32 +351,17 @@ export default function PrincipleDetailPage() {
         missingExplanations={principleMissingExplanations}
       />
 
-      {/* Standards */}
-      <div className="space-y-6">
-        {principle.standards
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((standard) => {
-            const form = formState[standard.id];
-            if (!form) return null;
-
-            const save = saveState[standard.id] ?? 'idle';
-
-            return (
-              <StandardEditorCard
-                key={standard.id}
-                standard={standard}
-                form={form}
-                save={save}
-                updateField={updateField}
-                flushSave={flushSave}
-                onRetrySave={(standardId, retryForm) => {
-                  pendingSaveData.current[standardId] = retryForm;
-                  void flushSave(standardId);
-                }}
-              />
-            );
-          })}
-      </div>
+      <PrincipleStandardList
+        standards={principle.standards}
+        formState={formState}
+        saveState={saveState}
+        updateField={updateField}
+        flushSave={flushSave}
+        onRetrySave={(standardId, retryForm) => {
+          pendingSaveData.current[standardId] = retryForm;
+          void flushSave(standardId);
+        }}
+      />
     </AppPage>
   );
 }
