@@ -4,7 +4,7 @@ Generated: 2026-07-04
 
 Branch: `master`
 
-Working-tree base commit when generated: `07b828e`
+Working-tree base commit when generated: `5d5229b`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -29,9 +29,11 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.
 - Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.
 - Sensitive public auth and invite throttles now have regression coverage proving one email/token identifier does not block a different identifier from the same caller.
+- Registration throttling now has regression coverage proving normalized email identifiers share a throttle bucket without blocking a different email from the same caller.
 - Optional in-process cron logging now serializes errors through the redacted logger helper.
 - Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
 - API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
+- The export workflow now surfaces source counts, professional-review flags, and not-yet-commenced monitoring metadata before report generation or board sign-off.
 - Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, confirms in-app navigation while saves are pending, and exposes a retry action for failed saves.
 - Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.
 - Production hostname defaults and launch/runtime validators now consistently require app.charitypilot.ie for the web app and api.charitypilot.ie for the API.
@@ -155,7 +157,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 395 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 254 | yes | no obvious static risk; verify in browser |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 333 | yes | no obvious static risk; verify in browser |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 336 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 136 | yes | no obvious static risk; verify in browser |
