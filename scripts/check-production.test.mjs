@@ -2083,6 +2083,14 @@ test('production runbook documents deployed browser QA evidence commands', () =>
   assert.match(runbook, /production-launch-evidence\.json/);
 });
 
+test('production browser QA checklist points accessibility evidence at the dedicated launch slot', () => {
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
+
+  assert.match(browserQa, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
+  assert.match(browserQa, /browserQa\.checks\.accessibility-coverage/);
+  assert.match(browserQa, /light and dark/);
+});
+
 test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
 
