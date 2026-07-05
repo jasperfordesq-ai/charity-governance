@@ -19,7 +19,10 @@ const component = (p: string) => readFileSync(join(WEB, 'src', 'components', p),
 const lib = (p: string) => readFileSync(join(WEB, 'src', 'lib', p), 'utf8');
 
 test('dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)', () => {
-  const src = dash('dashboard/page.tsx');
+  const src = [
+    dash('dashboard/page.tsx'),
+    optionalDash('dashboard/use-dashboard-workflow.ts'),
+  ].join('\n');
   assert.match(src, /from '@\/lib\/plan-feature'/);
   assert.ok(src.includes('isPlanFeatureUnavailable'), 'hides the registers card on a plan denial');
   assert.ok(src.includes('isSubscriptionLapseError'), 'shows the subscription-lapse banner');
@@ -339,13 +342,15 @@ test('route-group loading screens use the shared LoadingState primitive', () => 
 
 test('the dashboard renders an explicit error card on a load failure (not a blank/empty screen)', () => {
   const src = dash('dashboard/page.tsx');
+  const workflowSrc = optionalDash('dashboard/use-dashboard-workflow.ts');
   const progressSrc = dash('dashboard/dashboard-progress-panels.tsx');
   const dashboardSurface = [src, progressSrc].join('\n');
+  const dashboardWorkflowSurface = [src, workflowSrc].join('\n');
   assert.match(src, /from '@\/components\/ui\/states'/);
   assert.match(src, /ErrorState/);
   assert.match(src, /ReviewWarningState/);
   assert.match(dashboardSurface, /EmptyState/);
-  assert.match(src, /fetchDashboard/);
+  assert.match(dashboardWorkflowSurface, /fetchDashboard/);
   assert.doesNotMatch(dashboardSurface, /border-red-200/);
   assert.doesNotMatch(dashboardSurface, /border-amber-200/);
   assert.match(src, /Failed to load dashboard data/i);
@@ -419,6 +424,24 @@ test('dashboard loading and empty states use shared primitives instead of route-
   assert.doesNotMatch(actionListsSrc, /Everything looks good!/);
 });
 
+test('dashboard workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('dashboard/page.tsx');
+  const workflowPath = dashPath('dashboard/use-dashboard-workflow.ts');
+  assert.ok(existsSync(workflowPath), 'dashboard API loading, retry, and derived alert state should be split out of page.tsx');
+  const workflowSrc = readFileSync(workflowPath, 'utf8');
+
+  assert.match(pageSrc, /useDashboardWorkflow/);
+  assert.doesNotMatch(pageSrc, /const fetchDashboard =/);
+  assert.doesNotMatch(pageSrc, /setCompliance/);
+  assert.doesNotMatch(pageSrc, /setBoardAlerts/);
+  assert.doesNotMatch(pageSrc, /setSubscriptionLapsed/);
+  assert.match(workflowSrc, /export function useDashboardWorkflow/);
+  assert.match(workflowSrc, /const fetchDashboard =/);
+  assert.match(workflowSrc, /setCompliance/);
+  assert.match(workflowSrc, /setBoardAlerts/);
+  assert.match(workflowSrc, /setSubscriptionLapsed/);
+});
+
 test('dashboard binary filters use HeroUI Switch instead of route-local switch markup', () => {
   const sources = [
     dash('board/board-member-list-panel.tsx'),
@@ -469,9 +492,10 @@ test('the per-standard compliance editor announces its save state (Saving / Save
 
 test('phase 6A workflows surface approval-readiness and evidence-led review guidance', () => {
   const dashboard = dash('dashboard/page.tsx');
+  const dashboardWorkflow = optionalDash('dashboard/use-dashboard-workflow.ts');
   const dashboardProgress = optionalDash('dashboard/dashboard-progress-panels.tsx');
-  const dashboardSurface = [dashboard, dashboardProgress].join('\n');
-  assert.match(dashboard, /approval-readiness\?year=\$\{currentYear\}/);
+  const dashboardSurface = [dashboard, dashboardWorkflow, dashboardProgress].join('\n');
+  assert.match(dashboardWorkflow, /approval-readiness\?year=\$\{currentYear\}/);
   assert.match(dashboard, /AppPage/);
   assert.match(dashboardSurface, /AppSection/);
   assert.match(dashboard, /missingExplanations/);
