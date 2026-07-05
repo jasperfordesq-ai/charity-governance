@@ -61,6 +61,7 @@ export default function RegistersPage() {
     updateForm,
     year,
   } = useRegistersWorkflow();
+  const registersDataReady = !loading && !loadError && hasLoadedSelectedYear;
 
   if (!loading && planUnavailable) {
     return (
@@ -108,16 +109,18 @@ export default function RegistersPage() {
         {registerSavingLabel}
       </div>
 
-      <RegisterOverviewPanel
-        openRegisterCount={openRegisterCount}
-        highRiskCount={highRisks.length}
-        annualReportReadinessPercent={summaryForSelectedYear?.annualReportReadinessPercent ?? 0}
-        financialControlsPercent={summaryForSelectedYear?.financialControlsPercent ?? 0}
-      />
+      {registersDataReady && (
+        <RegisterOverviewPanel
+          openRegisterCount={openRegisterCount}
+          highRiskCount={highRisks.length}
+          annualReportReadinessPercent={summaryForSelectedYear?.annualReportReadinessPercent ?? 0}
+          financialControlsPercent={summaryForSelectedYear?.financialControlsPercent ?? 0}
+        />
+      )}
 
       {loading ? (
         <LoadingState title="Loading governance registers" description="Checking Complete-plan register records for this reporting year." />
-      ) : loadError || !hasLoadedSelectedYear ? (
+      ) : !registersDataReady ? (
         <ErrorState
           title="Governance registers could not be loaded"
           description={loadError || 'Governance registers are not loaded for this reporting year. Refresh to try again.'}
