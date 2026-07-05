@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `38cacf3`
+Working-tree base commit when generated: `3cfa021`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -76,6 +76,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.
 - The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.
 - The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.
+- The organisation complexity guidance modal is split out of the oversized organisation route behind a wiring regression test.
 - The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.
 - The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.
 - Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.
@@ -168,7 +169,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 136 | yes | no obvious static risk; verify in browser |
-| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 352 | yes | no obvious static risk; verify in browser |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 320 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 260 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |

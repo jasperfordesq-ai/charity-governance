@@ -199,11 +199,13 @@ test('organisation profile form is extracted from the oversized route file', () 
 
 test('organisation review warnings use the shared inline status primitive', () => {
   const pageSrc = dash('organisation/page.tsx');
+  const modalSrc = dash('organisation/organisation-complexity-modal.tsx');
   const profileSrc = dash('organisation/organisation-conditional-profile.tsx');
 
-  assert.match(pageSrc, /InlineStatus/);
+  assert.match(modalSrc, /InlineStatus/);
   assert.match(profileSrc, /InlineStatus/);
   assert.doesNotMatch(pageSrc, /border-amber-200 bg-amber-50/);
+  assert.doesNotMatch(modalSrc, /border-amber-200 bg-amber-50/);
   assert.doesNotMatch(profileSrc, /border-amber-200 bg-amber-50/);
 });
 
@@ -238,6 +240,21 @@ test('organisation complexity selector uses HeroUI RadioGroup controls', () => {
   assert.match(formSrc, /onValueChange=\{\(value\) => handleComplexityChange\(value as OrganisationComplexity\)\}/);
   assert.doesNotMatch(formSrc, /aria-pressed/);
   assert.doesNotMatch(formSrc, /<button[\s\S]*handleComplexityChange/);
+});
+
+test('organisation complexity guidance modal is extracted from the oversized route file', () => {
+  const pageSrc = dash('organisation/page.tsx');
+  const modalPath = dashPath('organisation/organisation-complexity-modal.tsx');
+  assert.ok(existsSync(modalPath), 'organisation complexity modal should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /OrganisationComplexityModal/);
+  assert.doesNotMatch(pageSrc, /<ModalHeader>Organisation complexity<\/ModalHeader>/);
+  assert.doesNotMatch(pageSrc, /Changing this setting affects which standards appear/);
+  assert.match(modalSrc, /Organisation complexity/);
+  assert.match(modalSrc, /Simple organisations/);
+  assert.match(modalSrc, /Complex organisations/);
+  assert.match(modalSrc, /Changing this setting affects which standards appear/);
 });
 
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,

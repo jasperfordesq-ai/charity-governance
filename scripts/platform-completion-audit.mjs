@@ -103,6 +103,7 @@ const fixedInThisAuditBranch = [
   'The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.',
   'The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.',
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',
+  'The organisation complexity guidance modal is split out of the oversized organisation route behind a wiring regression test.',
   'The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.',
   'The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.',
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
