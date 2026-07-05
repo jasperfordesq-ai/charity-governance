@@ -2135,6 +2135,8 @@ test('backend product audit records current launch and dependency posture', () =
 
 test('irish source log records current official-source recheck without legal certainty', () => {
   const sourceLog = readRepoFile('docs/product-revamp/irish-source-log.md');
+  const auditScript = readRepoFile('scripts/platform-completion-audit.mjs');
+  const platformAudit = readRepoFile('docs/platform-completion-audit.md');
 
   assert.match(sourceLog, /Date checked: 2026-07-05/);
   assert.match(sourceLog, /Official sources were rechecked by web search\/browsing on 2026-07-05/);
@@ -2146,6 +2148,10 @@ test('irish source log records current official-source recheck without legal cer
   assert.doesNotMatch(sourceLog, /legally guaranteed/i);
   assert.doesNotMatch(sourceLog, /legally bombproof/i);
   assert.doesNotMatch(sourceLog, /Date checked: 2026-07-03/);
+  assert.match(auditScript, /source metadata was refreshed.*2026-07-05/);
+  assert.doesNotMatch(auditScript, /source metadata was refreshed.*2026-07-04/);
+  assert.match(platformAudit, /source metadata was refreshed.*2026-07-05/);
+  assert.doesNotMatch(platformAudit, /source metadata was refreshed.*2026-07-04/);
 });
 
 test('production deploy preflight is wired for digest-pinned image promotion', () => {

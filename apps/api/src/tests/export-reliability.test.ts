@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
 
 // Set every env var the imported modules read at import/construction time, BEFORE imports.
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'export-reliability-test-secret';
@@ -115,7 +116,7 @@ test('Complete plan exports include governance registers', async () => {
     assert.match(response.body, /Source and professional-review appendix/);
     assert.match(response.body, /not legal advice/);
     assert.match(response.body, /not a certificate that the charity is compliant/);
-    assert.match(response.body, /Matrix last checked: 2026-07-04/);
+    assert.match(response.body, new RegExp(`Matrix last checked: ${IRISH_COMPLIANCE_MATRIX_LAST_CHECKED}`));
   } finally {
     await app.close();
   }

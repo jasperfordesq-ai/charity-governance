@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
 
 // JWT_SECRET is read at import/construction time by utils/jwt; set before imports.
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'compliance-reliability-test-secret';
@@ -257,7 +258,7 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
       profileIssues: [],
       conditionalReviewItems: [],
       matrixReviewItems: ok.json().data.matrixReviewItems,
-      matrixLastChecked: '2026-07-04',
+      matrixLastChecked: IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
     });
     assert.ok(ok.json().data.matrixReviewItems.length > 0);
 
