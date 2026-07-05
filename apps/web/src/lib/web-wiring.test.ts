@@ -104,6 +104,7 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'deadlines/deadline-delete-modal.tsx',
   ],
   'organisation/page.tsx': [
+    'organisation/use-organisation-workflow.ts',
     'organisation/organisation-profile-form.tsx',
   ],
   'export/page.tsx': [
@@ -142,13 +143,17 @@ test('document upload uses the shared file upload field instead of route-local f
 });
 
 test('organisation warns before discarding unsaved edits (no silent data loss)', () => {
-  const src = dash('organisation/page.tsx');
+  const src = [
+    dash('organisation/page.tsx'),
+    optionalDash('organisation/use-organisation-workflow.ts'),
+  ].join('\n');
   assert.match(src, /beforeunload/);
 });
 
 test('organisation captures conditional obligation facts for review-ready workflows', () => {
   const src = [
     dash('organisation/page.tsx'),
+    optionalDash('organisation/use-organisation-workflow.ts'),
     optionalDash('organisation/organisation-profile-form.tsx'),
     optionalDash('organisation/organisation-conditional-profile.tsx'),
   ].join('\n');
@@ -168,6 +173,7 @@ test('organisation captures conditional obligation facts for review-ready workfl
 
 test('organisation conditional obligation UX is extracted from the oversized route file', () => {
   const pageSrc = dash('organisation/page.tsx');
+  const hookSrc = optionalDash('organisation/use-organisation-workflow.ts');
   const formPath = dashPath('organisation/organisation-profile-form.tsx');
   assert.ok(existsSync(formPath), 'organisation profile form should own conditional profile rendering');
   const formSrc = readFileSync(formPath, 'utf8');
@@ -177,7 +183,7 @@ test('organisation conditional obligation UX is extracted from the oversized rou
 
   assert.doesNotMatch(pageSrc, /OrganisationConditionalProfileFields/);
   assert.match(formSrc, /OrganisationConditionalProfileFields/);
-  assert.match(pageSrc, /normaliseConditionalObligationProfile/);
+  assert.match(hookSrc, /normaliseConditionalObligationProfile/);
   assert.doesNotMatch(pageSrc, /CONDITIONAL_OBLIGATION_FIELDS/);
   assert.match(profileSrc, /CONDITIONAL_OBLIGATION_FIELDS/);
   assert.match(profileSrc, /Professional review/);
@@ -277,6 +283,28 @@ test('organisation complexity guidance modal is extracted from the oversized rou
   assert.match(modalSrc, /Simple organisations/);
   assert.match(modalSrc, /Complex organisations/);
   assert.match(modalSrc, /Changing this setting affects which standards appear/);
+});
+
+test('organisation workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('organisation/page.tsx');
+  const hookPath = dashPath('organisation/use-organisation-workflow.ts');
+  assert.ok(existsSync(hookPath), 'organisation workflow state should be split out of page.tsx');
+  const hookSrc = readFileSync(hookPath, 'utf8');
+
+  assert.match(pageSrc, /useOrganisationWorkflow/);
+  for (const pattern of [
+    /useAuth\(/,
+    /const handleSave =/,
+    /const handleComplexityChange =/,
+    /const handlePurposeChange =/,
+    /const handleConditionalFactChange =/,
+    /beforeunload/,
+    /initialised/,
+  ]) {
+    assert.doesNotMatch(pageSrc, pattern, `page.tsx should not own ${pattern}`);
+    assert.match(hookSrc, pattern, `organisation workflow hook should own ${pattern}`);
+  }
+  assert.match(hookSrc, /export function useOrganisationWorkflow/);
 });
 
 // Graceful degradation: error/empty states exist in the source (a clean state on failure,
@@ -876,6 +904,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     {
       file: 'organisation/page.tsx',
       extraFiles: [
+        'organisation/use-organisation-workflow.ts',
         'organisation/organisation-profile-form.tsx',
         'organisation/organisation-setup-summary.tsx',
       ],

@@ -113,6 +113,7 @@ const fixedInThisAuditBranch = [
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',
   'The organisation complexity guidance modal is split out of the oversized organisation route behind a wiring regression test.',
   'The organisation setup summary panel is split out of the oversized organisation route behind a wiring regression test.',
+  'The organisation workflow session hydration, dirty-state guard, validation, save mutation, and setup form state are split into a route-local hook behind a wiring regression test.',
   'The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.',
   'The dashboard annual sign-off and governance register summary cards are split out of the oversized dashboard route behind a wiring regression test.',
   'The dashboard overall progress and principle progress panels are split out of the oversized dashboard route behind a wiring regression test.',
