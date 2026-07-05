@@ -113,6 +113,7 @@ const fixedInThisAuditBranch = [
   'The export board-approval form panel is split out of the oversized export route behind a wiring regression test.',
   'The export workflow loading, approval-readiness refresh, board sign-off mutation, report-opening state, and blocker derivation are split into a route-local hook behind a wiring regression test.',
   'The compliance principle evidence-readiness panel is split out of the oversized compliance detail route behind a wiring regression test.',
+  'Compliance principle in-app navigation now uses a HeroUI save/leave confirmation modal instead of a bare browser confirm prompt.',
   'The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.',
   'The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.',
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',

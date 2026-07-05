@@ -33,6 +33,10 @@ export function usePrincipleDetailWorkflow() {
   const [approvalReadiness, setApprovalReadiness] = useState<ApprovalReadiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [navigationConfirmOpen, setNavigationConfirmOpen] = useState(false);
+  const [navigationConfirmBusy, setNavigationConfirmBusy] = useState(false);
+  const [navigationConfirmError, setNavigationConfirmError] = useState('');
+  const [pendingNavigationHref, setPendingNavigationHref] = useState('/compliance');
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingSaveData = useRef<Record<string, StandardFormState>>({});
@@ -155,6 +159,21 @@ export function usePrincipleDetailWorkflow() {
     [saveStandardNow],
   );
 
+  const flushAllPendingComplianceSaves = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+      debounceTimers.current = {};
+
+      const pendingEntries = Object.entries({ ...pendingSaveData.current });
+      await Promise.all(
+        pendingEntries.map(([standardId, data]) =>
+          saveStandardNow(standardId, data, options),
+        ),
+      );
+    },
+    [saveStandardNow],
+  );
+
   const autoSave = useCallback(
     (standardId: string, data: StandardFormState) => {
       pendingSaveData.current[standardId] = data;
@@ -185,17 +204,10 @@ export function usePrincipleDetailWorkflow() {
   };
 
   useEffect(() => {
-    const timers = debounceTimers.current;
-    const pending = pendingSaveData.current;
     return () => {
-      Object.values(timers).forEach(clearTimeout);
-      void Promise.all(
-        Object.entries(pending).map(([standardId, data]) =>
-          saveStandardNow(standardId, data, { silent: true }),
-        ),
-      );
+      void flushAllPendingComplianceSaves({ silent: true });
     };
-  }, [saveStandardNow]);
+  }, [flushAllPendingComplianceSaves]);
 
   const hasPendingComplianceSaves = useCallback(() => {
     const hasPending = Object.keys(pendingSaveData.current).length > 0;
@@ -203,10 +215,48 @@ export function usePrincipleDetailWorkflow() {
     return hasPending || hasSaving;
   }, [saveState]);
 
-  const confirmComplianceNavigation = useCallback(() => {
-    if (!hasPendingComplianceSaves()) return true;
-    return window.confirm('CharityPilot is still saving compliance edits. Leave this page only if you are happy to rely on the last saved state.');
-  }, [hasPendingComplianceSaves]);
+  const requestComplianceNavigation = useCallback(
+    (href = '/compliance') => {
+      if (!hasPendingComplianceSaves()) {
+        router.push(href);
+        return;
+      }
+
+      setNavigationConfirmError('');
+      setPendingNavigationHref(href);
+      setNavigationConfirmOpen(true);
+    },
+    [hasPendingComplianceSaves, router],
+  );
+
+  const stayOnCompliancePage = useCallback(() => {
+    if (navigationConfirmBusy) return;
+    setNavigationConfirmError('');
+    setNavigationConfirmOpen(false);
+  }, [navigationConfirmBusy]);
+
+  const leaveWithoutSaving = useCallback(() => {
+    setNavigationConfirmError('');
+    setNavigationConfirmOpen(false);
+    router.push(pendingNavigationHref);
+  }, [pendingNavigationHref, router]);
+
+  const saveAndContinueNavigation = useCallback(async () => {
+    setNavigationConfirmBusy(true);
+    try {
+      await flushAllPendingComplianceSaves();
+      if (Object.keys(pendingSaveData.current).length > 0) {
+        setNavigationConfirmError('Could not save every pending edit. Please retry or keep editing.');
+        return;
+      }
+
+      setNavigationConfirmError('');
+      setNavigationConfirmOpen(false);
+      router.push(pendingNavigationHref);
+    } finally {
+      setNavigationConfirmBusy(false);
+    }
+  }, [flushAllPendingComplianceSaves, pendingNavigationHref, router]);
 
   useEffect(() => {
     const handleInAppNavigationClick = (event: MouseEvent) => {
@@ -227,15 +277,16 @@ export function usePrincipleDetailWorkflow() {
         destination.pathname === current.pathname &&
         destination.search === current.search &&
         destination.hash.length > 0;
-      if (isSamePageHash || confirmComplianceNavigation()) return;
+      if (isSamePageHash || !hasPendingComplianceSaves()) return;
 
       event.preventDefault();
       event.stopPropagation();
+      requestComplianceNavigation(`${destination.pathname}${destination.search}${destination.hash}`);
     };
 
     document.addEventListener('click', handleInAppNavigationClick, true);
     return () => document.removeEventListener('click', handleInAppNavigationClick, true);
-  }, [confirmComplianceNavigation]);
+  }, [hasPendingComplianceSaves, requestComplianceNavigation]);
 
   useEffect(() => {
     const warnIfUnsaved = (event: BeforeUnloadEvent) => {
@@ -250,10 +301,8 @@ export function usePrincipleDetailWorkflow() {
   }, [hasPendingComplianceSaves]);
 
   const navigateBackToCompliance = useCallback(() => {
-    if (confirmComplianceNavigation()) {
-      router.push('/compliance');
-    }
-  }, [confirmComplianceNavigation, router]);
+    requestComplianceNavigation('/compliance');
+  }, [requestComplianceNavigation]);
 
   const principleMatrixEntries = principle
     ? Array.from(
@@ -280,14 +329,20 @@ export function usePrincipleDetailWorkflow() {
     currentYear,
     flushSave,
     formState,
+    leaveWithoutSaving,
     loadError,
     loading,
     navigateBackToCompliance,
+    navigationConfirmBusy,
+    navigationConfirmError,
+    navigationConfirmOpen,
     principle,
     principleMatrixEntries,
     principleMissingExplanations,
     retrySave,
     saveState,
+    saveAndContinueNavigation,
+    stayOnCompliancePage,
     updateField,
   };
 }

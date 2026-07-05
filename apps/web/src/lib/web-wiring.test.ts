@@ -646,23 +646,32 @@ test('principle detail refreshes approval-readiness after successful autosave', 
   );
 });
 
-test('principle detail confirms in-app navigation while saves are pending', () => {
+test('principle detail uses an in-app confirmation dialog while saves are pending', () => {
   const src = [
     dash('compliance/[principleId]/page.tsx'),
     optionalDash('compliance/[principleId]/use-principle-detail-workflow.ts'),
+    optionalDash('compliance/[principleId]/principle-navigation-confirm-modal.tsx'),
   ].join('\n');
   for (const term of [
     'hasPendingComplianceSaves',
-    'confirmComplianceNavigation',
+    'requestComplianceNavigation',
     'handleInAppNavigationClick',
     "closest('a[href]')",
-    "window.confirm('CharityPilot is still saving compliance edits. Leave this page only if you are happy to rely on the last saved state.')",
+    'PrincipleNavigationConfirmModal',
+    'navigationConfirmOpen',
+    'navigationConfirmError',
+    'saveAndContinueNavigation',
+    'leaveWithoutSaving',
+    'stayOnCompliancePage',
+    'Could not save every pending edit',
+    'Save now and leave',
+    'Leave without waiting',
+    'Keep editing',
     "document.addEventListener('click', handleInAppNavigationClick, true)",
     "document.removeEventListener('click', handleInAppNavigationClick, true)",
     'event.preventDefault()',
     'event.stopPropagation()',
     'navigateBackToCompliance',
-    "router.push('/compliance')",
   ]) {
     assert.match(
       src,
@@ -670,6 +679,7 @@ test('principle detail confirms in-app navigation while saves are pending', () =
       `principle detail must include ${term}`,
     );
   }
+  assert.doesNotMatch(src, /window\.confirm/);
   assert.doesNotMatch(src, /onPress=\{\(\) => router\.push\('\/compliance'\)\}/);
   assert.doesNotMatch(src, /onClick=\{\(\) => router\.push\('\/compliance'\)\}/);
 });
