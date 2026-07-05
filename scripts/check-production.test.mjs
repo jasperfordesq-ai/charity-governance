@@ -1569,8 +1569,10 @@ test('reliability report emits ASCII-safe operator output', () => {
 test('production todo reflects current launch blockers without overclaiming local smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
 
-  assert.match(productionTodo, /Current local status checked 2026-07-04/);
+  assert.match(productionTodo, /Current local status checked 2026-07-05/);
   assert.match(productionTodo, /23 production values still require real data/);
+  assert.match(productionTodo, /81 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
   assert.doesNotMatch(productionTodo, /full Docker stack smoke all pass/i);
   assert.doesNotMatch(productionTodo, /Everything verifiable without external accounts now passes/i);
 });
