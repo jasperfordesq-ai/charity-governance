@@ -1,6 +1,7 @@
 'use client';
 
 import { AppSection } from '@/components/ui/app-page';
+import { SourceReferenceNote } from '@/components/ui/source-reference';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
 
@@ -96,18 +97,7 @@ export function DeadlineOverviewPanels({
               <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
               <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.detail}</p>
               {item.source ? (
-                <p className="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
-                  Source:{' '}
-                  <a
-                    href={item.source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-teal-primary underline-offset-4 hover:underline dark:text-teal-bright"
-                  >
-                    {item.source.name}
-                  </a>{' '}
-                  (checked {item.source.lastChecked}).
-                </p>
+                <SourceReferenceNote source={item.source} className="mt-3" />
               ) : null}
             </div>
           ))}

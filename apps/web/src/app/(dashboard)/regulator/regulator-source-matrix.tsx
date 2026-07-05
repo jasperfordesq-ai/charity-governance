@@ -2,6 +2,7 @@
 
 import { AppSection } from '@/components/ui/app-page';
 import { DataListItems } from '@/components/ui/data-list';
+import { SourceReferenceLink } from '@/components/ui/source-reference';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   IRISH_COMPLIANCE_MATRIX,
@@ -63,15 +64,10 @@ export function RegulatorSourceMatrix({
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Official source</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {item.sourceRefs.map((source) => (
-                      <a
+                      <SourceReferenceLink
                         key={`${item.id}-${source.url}`}
-                        href={source.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-teal-dark transition-colors hover:border-teal-primary hover:bg-teal-primary/10 dark:border-gray-700 dark:text-teal-bright dark:hover:border-teal-bright"
-                      >
-                        {source.name}
-                      </a>
+                        source={source}
+                      />
                     ))}
                   </div>
                 </div>

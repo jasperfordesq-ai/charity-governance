@@ -849,6 +849,7 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
     ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
     ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
     ['ui/data-list.tsx', ['DataList', 'DataListTable', 'DataListItems']],
+    ['ui/source-reference.tsx', ['SourceReferenceLink', 'SourceReferenceNote']],
     ['governance/evidence-readiness.tsx', ['EvidenceReadiness', 'EvidencePromptList', 'EvidenceSourceList']],
   ];
 
@@ -1782,13 +1783,18 @@ test('deadlines overview and regulatory cadence panels are extracted from the ov
 });
 
 test('deadlines regulatory cadence surfaces the annual report source metadata', () => {
-  const overviewSrc = optionalDash('deadlines/deadline-overview-panels.tsx');
+  const overviewSrc = [
+    optionalDash('deadlines/deadline-overview-panels.tsx'),
+    component('ui/source-reference.tsx'),
+  ].join('\n');
 
+  assert.match(overviewSrc, /SourceReferenceNote/);
   assert.match(overviewSrc, /IRISH_COMPLIANCE_MATRIX/);
   assert.match(overviewSrc, /Annual report - how to submit/);
   assert.match(overviewSrc, /https:\/\/www\.charitiesregulator\.ie\/en\/information-for-charities\/annual-report-how-to-submit/);
   assert.match(overviewSrc, /lastChecked/);
-  assert.match(overviewSrc, /Source:/);
+  assert.match(overviewSrc, /label = 'Source'/);
+  assert.match(overviewSrc, /\{label\}:/);
   assert.doesNotMatch(overviewSrc, /legally guaranteed/i);
 });
 
@@ -2044,8 +2050,10 @@ test('regulator official-source links use compact link styling rather than pill 
   const src = [
     dash('regulator/page.tsx'),
     optionalDash('regulator/regulator-source-matrix.tsx'),
+    component('ui/source-reference.tsx'),
   ].join('\n');
 
+  assert.match(src, /SourceReferenceLink/);
   assert.doesNotMatch(src, /rounded-full\s+border/, 'regulator source links should not read as pill badges');
   assert.match(src, /rounded-md border border-gray-200 px-2.5 py-1/);
 });
