@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `7bb00a3`
+Working-tree base commit when generated: `38cacf3`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -68,6 +68,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.
 - The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.
 - The deadline list panel, status classifier, and summary helper are split out of the oversized deadlines route behind a wiring regression test.
+- The deadline delete confirmation modal is split out of the deadlines route behind a wiring regression test.
 - The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.
 - The board member add/edit modal is split out of the oversized board route behind a wiring regression test.
 - The board member list, mobile cards, desktop table, and status-toggle states are split out of the oversized board route behind a wiring regression test.
@@ -161,7 +162,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 361 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 400 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 437 | yes | no obvious static risk; verify in browser |
-| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 402 | yes | no obvious static risk; verify in browser |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 372 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 263 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 367 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |

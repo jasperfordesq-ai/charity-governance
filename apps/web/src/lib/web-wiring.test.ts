@@ -97,6 +97,11 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'documents/document-link-modal.tsx',
     'documents/document-delete-modal.tsx',
   ],
+  'deadlines/page.tsx': [
+    'deadlines/deadline-form-modal.tsx',
+    'deadlines/deadline-list-panel.tsx',
+    'deadlines/deadline-delete-modal.tsx',
+  ],
   'organisation/page.tsx': [
     'organisation/organisation-profile-form.tsx',
   ],
@@ -1390,6 +1395,21 @@ test('deadlines list panel is extracted from the oversized route file', () => {
   assert.match(panelSrc, /No deadlines yet/);
   assert.match(panelSrc, /classifyDeadline/);
   assert.match(panelSrc, /DeadlineBadge/);
+});
+
+test('deadlines delete confirmation modal is extracted from the oversized route file', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const modalPath = dashPath('deadlines/deadline-delete-modal.tsx');
+  assert.ok(existsSync(modalPath), 'deadline delete modal should be split out of page.tsx');
+  const modalSrc = readFileSync(modalPath, 'utf8');
+
+  assert.match(pageSrc, /DeadlineDeleteModal/);
+  assert.doesNotMatch(pageSrc, /<Modal isOpen=\{deleteModal\.isOpen\}/);
+  assert.doesNotMatch(pageSrc, /<ModalHeader>Delete deadline<\/ModalHeader>/);
+  assert.doesNotMatch(pageSrc, /This cannot be undone/);
+  assert.match(modalSrc, /Delete deadline/);
+  assert.match(modalSrc, /Remove \{selectedDeadline \?/);
+  assert.match(modalSrc, /This cannot be undone/);
 });
 
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {

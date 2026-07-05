@@ -5,11 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDocumentTitle } from '@/lib/use-title';
 import {
   Button,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
   useDisclosure,
 } from '@heroui/react';
 import { Plus } from 'lucide-react';
@@ -19,6 +14,7 @@ import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
+import { DeadlineDeleteModal } from './deadline-delete-modal';
 import { DeadlineFormModal } from './deadline-form-modal';
 import { DeadlineListPanel, summarizeDeadlines } from './deadline-list-panel';
 import { DeadlineProfilePromptsPanel, buildDeadlineProfilePrompts } from './deadline-profile-prompts';
@@ -361,41 +357,15 @@ export default function DeadlinesPage() {
         saving={saving}
       />
 
-      <Modal isOpen={deleteModal.isOpen} onOpenChange={deleteModal.onOpenChange} size="sm">
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>Delete deadline</ModalHeader>
-              <ModalBody>
-                <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
-                  Remove {selectedDeleteDeadline ? <strong>{selectedDeleteDeadline.title}</strong> : 'this deadline'} from the governance calendar?
-                  This cannot be undone.
-                </p>
-              </ModalBody>
-              <ModalFooter>
-                <Button
-                  variant="flat"
-                  onPress={() => {
-                    setDeleteDeadlineId(null);
-                    onClose();
-                  }}
-                  isDisabled={Boolean(deletingDeadlineId)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  color="danger"
-                  onPress={handleDeleteDeadline}
-                  isLoading={deletingDeadlineId === deleteDeadlineId}
-                  isDisabled={!deleteDeadlineId || Boolean(deletingDeadlineId)}
-                >
-                  Delete deadline
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
+      <DeadlineDeleteModal
+        isOpen={deleteModal.isOpen}
+        onOpenChange={deleteModal.onOpenChange}
+        selectedDeadline={selectedDeleteDeadline}
+        deleting={Boolean(deletingDeadlineId) && deletingDeadlineId === deleteDeadlineId}
+        deleteDisabled={!deleteDeadlineId || Boolean(deletingDeadlineId)}
+        onCancel={() => setDeleteDeadlineId(null)}
+        onDelete={handleDeleteDeadline}
+      />
     </AppPage>
   );
 }
