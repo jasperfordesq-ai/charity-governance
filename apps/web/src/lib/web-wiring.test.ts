@@ -1654,7 +1654,10 @@ test('registers overview waits for the selected year to load before showing summ
 });
 
 test('phase 6C regulator page presents source-cited readiness without legal certainty claims', () => {
-  const src = dash('regulator/page.tsx');
+  const src = [
+    dash('regulator/page.tsx'),
+    optionalDash('regulator/regulator-readiness-overview.tsx'),
+  ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
     ['@/components/ui/status', ['ReviewFlag', 'StatusChip', 'statusPanelClassName']],
@@ -1736,6 +1739,21 @@ test('regulator official-source links use compact link styling rather than pill 
 
   assert.doesNotMatch(src, /rounded-full\s+border/, 'regulator source links should not read as pill badges');
   assert.match(src, /rounded-md border border-gray-200 px-2.5 py-1/);
+});
+
+test('regulator readiness overview is extracted from the oversized route file', () => {
+  const pageSrc = dash('regulator/page.tsx');
+  const overviewPath = dashPath('regulator/regulator-readiness-overview.tsx');
+  assert.ok(existsSync(overviewPath), 'regulator readiness overview should be split out of page.tsx');
+  const overviewSrc = readFileSync(overviewPath, 'utf8');
+
+  assert.match(pageSrc, /RegulatorReadinessOverview/);
+  assert.doesNotMatch(pageSrc, /Review-ready guidance map/);
+  assert.doesNotMatch(pageSrc, /Readiness operating model/);
+  assert.match(overviewSrc, /export function RegulatorReadinessOverview/);
+  assert.match(overviewSrc, /Review-ready guidance map/);
+  assert.match(overviewSrc, /Readiness operating model/);
+  assert.match(overviewSrc, /ReadinessTile/);
 });
 
 test('platform audit distinguishes decorative pills from functional toggles and status dots', () => {
