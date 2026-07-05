@@ -14,7 +14,7 @@ import {
 import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
-import { StatusChip } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 import { BoardEvidenceChips } from './board-evidence';
 
@@ -116,7 +116,7 @@ export function BoardMemberListPanel({
             <DataListItems divided={false}>
               <div className="space-y-3 p-3">
                 {displayMembers.map((member) => (
-                  <article key={member.id} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                  <article key={member.id} className={statusPanelClassName('neutral', 'p-4')}>
                     <div className="flex flex-col gap-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">

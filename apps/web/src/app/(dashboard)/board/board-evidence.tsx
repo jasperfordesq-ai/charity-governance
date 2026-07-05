@@ -1,7 +1,7 @@
 'use client';
 
 import { AppSection } from '@/components/ui/app-page';
-import { EvidenceChip, ReviewFlag } from '@/components/ui/status';
+import { EvidenceChip, ReviewFlag, statusPanelClassName } from '@/components/ui/status';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 
 const trusteeEvidencePrompts = [
@@ -42,7 +42,7 @@ export function TrusteeEvidencePromptCards() {
     >
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {trusteeEvidencePrompts.map((prompt) => (
-          <div key={prompt.title} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div key={prompt.title} className={statusPanelClassName('neutral', 'p-4')}>
             <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{prompt.title}</h3>
             <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{prompt.detail}</p>
           </div>

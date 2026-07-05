@@ -757,6 +757,16 @@ test('board summary UX is extracted from the oversized route file', () => {
   assert.doesNotMatch(summarySrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
 });
 
+test('board evidence and mobile member cards use shared status panel tones', () => {
+  const evidenceSrc = dash('board/board-evidence.tsx');
+  const listPanelSrc = dash('board/board-member-list-panel.tsx');
+
+  assert.match(evidenceSrc, /statusPanelClassName/);
+  assert.match(listPanelSrc, /statusPanelClassName/);
+  assert.doesNotMatch(evidenceSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+  assert.doesNotMatch(listPanelSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+});
+
 test('board member form modal is extracted from the oversized route file', () => {
   const pageSrc = dash('board/page.tsx');
   const modalPath = dashPath('board/board-member-modal.tsx');
