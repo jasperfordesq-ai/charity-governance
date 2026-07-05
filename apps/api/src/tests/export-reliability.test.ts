@@ -113,6 +113,10 @@ test('Complete plan exports include governance registers', async () => {
     assert.equal(response.statusCode, 200);
     assert.match(response.body, /Governance registers/);
     assert.match(response.body, /Visible trustee/);
+    assert.match(response.body, /Annual Report deadline basis/);
+    assert.match(response.body, /10 months after financial year end/);
+    assert.match(response.body, /Annual report - how to submit/);
+    assert.match(response.body, /https:\/\/www\.charitiesregulator\.ie\/en\/information-for-charities\/annual-report-how-to-submit/);
     assert.match(response.body, /Source and professional-review appendix/);
     assert.match(response.body, /not legal advice/);
     assert.match(response.body, /not a certificate that the charity is compliant/);

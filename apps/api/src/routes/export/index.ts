@@ -121,6 +121,14 @@ type GovernanceRegistersForExport = {
   };
 };
 
+const annualReportSource = IRISH_COMPLIANCE_MATRIX
+  .flatMap((entry) => entry.sourceRefs)
+  .find((source) => source.name === 'Annual report - how to submit');
+
+const annualReportDeadlineBasis = annualReportSource
+  ? `10 months after financial year end. Source: ${annualReportSource.name} (${annualReportSource.url}, checked ${annualReportSource.lastChecked}). Review as a planning prompt, not legal advice.`
+  : '10 months after financial year end. Review as a planning prompt, not legal advice.';
+
 function buildComplianceReportHtml(
   org: { name: string; rcnNumber: string | null },
   principles: Array<{
@@ -229,6 +237,7 @@ function buildComplianceReportHtml(
         ['Area', 'Current position'],
         [
           ['Annual Report filing status', registers.annualReport?.filingStatus ?? 'Not started'],
+          ['Annual Report deadline basis', annualReportDeadlineBasis],
           ['Financial statements approved', yesNo(registers.annualReport?.financialStatementsApproved)],
           ['Annual Report uploaded', yesNo(registers.annualReport?.annualReportUploaded)],
           ['Trustee details reviewed', yesNo(registers.annualReport?.trusteeDetailsReviewed)],
