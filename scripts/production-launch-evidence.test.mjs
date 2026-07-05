@@ -49,6 +49,27 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'database' && checkId === 'postgres-provisioned') {
+    entry.description = 'production PostgreSQL database provisioned on the approved managed provider.';
+  }
+
+  if (areaId === 'database' && checkId === 'database-url-secret-store') {
+    entry.description = 'DATABASE_URL is stored only in the production secret store.';
+  }
+
+  if (areaId === 'database' && checkId === 'migrations-deployed') {
+    entry.type = 'command-output';
+    entry.description = 'npm run db:migrate:deploy -w @charitypilot/api completed against production.';
+  }
+
+  if (areaId === 'database' && checkId === 'backups-enabled') {
+    entry.description = 'managed backups or PITR are enabled for the production PostgreSQL database.';
+  }
+
+  if (areaId === 'database' && checkId === 'restore-tested') {
+    entry.description = 'restore test evidence exists with an accountable owner and recovery notes.';
+  }
+
   if (areaId === 'secretsAndEnv' && checkId === 'real-production-values') {
     entry.description = '.env.production was materialized from the approved secret source with real production values.';
   }
@@ -113,12 +134,62 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'hostingDnsTls' && checkId === 'web-origin') {
+    entry.description = 'Web app deployed at https://app.charitypilot.ie.';
+  }
+
+  if (areaId === 'hostingDnsTls' && checkId === 'api-origin') {
+    entry.description = 'API deployed at https://api.charitypilot.ie.';
+  }
+
+  if (areaId === 'hostingDnsTls' && checkId === 'dns-owner') {
+    entry.description = 'DNS owner is the approved owner for charitypilot.ie production records.';
+  }
+
+  if (areaId === 'hostingDnsTls' && checkId === 'tls-certificates') {
+    entry.description = 'TLS certificate evidence confirms valid certificates for web and API origins.';
+  }
+
+  if (areaId === 'hostingDnsTls' && checkId === 'cors-approved-origins') {
+    entry.description = 'CORS allows https://app.charitypilot.ie and rejects all non-approved browser origins; only approved origins pass.';
+  }
+
+  if (areaId === 'hostingDnsTls' && checkId === 'security-headers') {
+    entry.description = [
+      'API response headers include X-Content-Type-Options, X-Frame-Options, Content-Security-Policy, and Strict-Transport-Security.',
+    ].join(' ');
+  }
+
   if (areaId === 'supabaseStorage' && checkId === 'supabase-check') {
     entry.type = 'command-output';
     entry.description = [
       'npm run check:production:supabase -- --production-env-file=.env.production',
       'Production Supabase storage check passed: private bucket, service-role probe upload, signed URL creation, anonymous access denial, and probe cleanup verified.',
     ].join(' ');
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'separate-production-project') {
+    entry.description = 'production Supabase project is separate from local and staging projects.';
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'documents-bucket-exists') {
+    entry.description = 'documents bucket exists in the production Supabase project.';
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'bucket-private') {
+    entry.description = 'private bucket setting verified for the production documents bucket.';
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'readiness-storage-configured') {
+    entry.description = 'Keyed readiness response reports storageConfigured: true.';
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'readiness-storage-reachable') {
+    entry.description = 'Keyed readiness response reports storageBucketReachable: true.';
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'document-upload-download') {
+    entry.description = 'document upload and signed download were verified through the deployed app.';
   }
 
   if (areaId === 'billingAndEmail' && checkId === 'providers-check') {
@@ -676,6 +747,66 @@ test('production launch evidence validator requires concrete secrets and environ
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.stripe-live-keys\.evidence must include Stripe live mode/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.resend-domain\.evidence must include verified/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-service-role-secret-store\.evidence must include API secret store/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete hosting database and Supabase evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/ops/reviewed',
+    description: 'Production infrastructure reviewed by operator',
+    capturedAt,
+  };
+  for (const checkId of [
+    'web-origin',
+    'api-origin',
+    'dns-owner',
+    'tls-certificates',
+    'cors-approved-origins',
+    'security-headers',
+  ]) {
+    evidence.areas.hostingDnsTls.checks[checkId].evidence = [genericEvidence];
+  }
+  for (const checkId of [
+    'postgres-provisioned',
+    'database-url-secret-store',
+    'migrations-deployed',
+    'backups-enabled',
+    'restore-tested',
+  ]) {
+    evidence.areas.database.checks[checkId].evidence = [genericEvidence];
+  }
+  for (const checkId of [
+    'separate-production-project',
+    'documents-bucket-exists',
+    'bucket-private',
+    'readiness-storage-configured',
+    'readiness-storage-reachable',
+    'document-upload-download',
+  ]) {
+    evidence.areas.supabaseStorage.checks[checkId].evidence = [genericEvidence];
+  }
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.web-origin\.evidence must include https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.api-origin\.evidence must include https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.dns-owner\.evidence must include approved owner/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.security-headers\.evidence must include Strict-Transport-Security/);
+    assert.match(result.stderr, /areas\.database\.checks\.postgres-provisioned\.evidence must include production PostgreSQL/);
+    assert.match(result.stderr, /areas\.database\.checks\.database-url-secret-store\.evidence must include DATABASE_URL/);
+    assert.match(result.stderr, /areas\.database\.checks\.backups-enabled\.evidence must include managed backups or PITR/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.separate-production-project\.evidence must include production Supabase project/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.bucket-private\.evidence must include private bucket/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.readiness-storage-reachable\.evidence must include storageBucketReachable: true/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.document-upload-download\.evidence must include signed download/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -97,6 +97,7 @@ Evidence:
 - [ ] API CORS allows only the canonical `FRONTEND_URL` origin.
 - [ ] Security headers are present on API responses.
 - [ ] `npm run check:production:hosting -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
+- [ ] Machine-readable launch evidence names the canonical web/API origins, DNS owner, TLS validity, CORS restriction, and security headers.
 
 Evidence:
 
@@ -115,6 +116,7 @@ Evidence:
 - [ ] `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel` completed from a trusted shell and recorded redacted backup/restore evidence.
 - [ ] Managed backups or point-in-time recovery are enabled.
 - [ ] Restore test evidence exists and has an owner.
+- [ ] Machine-readable launch evidence names PostgreSQL provisioning, secret-store ownership, migration output, backup/PITR coverage, and restore-test ownership.
 
 Evidence:
 
@@ -133,6 +135,7 @@ Evidence:
 - [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and signed download are verified through the deployed app.
+- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, and deployed upload/download proof.
 
 Evidence:
 

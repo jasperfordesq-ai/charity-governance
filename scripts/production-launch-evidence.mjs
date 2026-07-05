@@ -642,9 +642,65 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
+  if (areaId === 'hostingDnsTls') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const hostingMarkersByCheck = {
+      'web-origin': ['https://app.charitypilot.ie'],
+      'api-origin': ['https://api.charitypilot.ie'],
+      'dns-owner': ['DNS owner', 'approved owner'],
+      'tls-certificates': ['TLS certificate', 'valid'],
+      'cors-approved-origins': ['CORS', 'https://app.charitypilot.ie', 'only approved'],
+      'security-headers': ['X-Content-Type-Options', 'X-Frame-Options', 'Content-Security-Policy', 'Strict-Transport-Security'],
+    };
+
+    for (const marker of hostingMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
   if (areaId === 'database' && checkId === 'database-check') {
     if (!evidenceText(actualCheck.evidence).includes('--expect-operational-sentinel')) {
       issues.push(`${checkPath}.evidence must show check:production:database was run with --expect-operational-sentinel`);
+    }
+  }
+
+  if (areaId === 'database') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const databaseMarkersByCheck = {
+      'postgres-provisioned': ['production PostgreSQL', 'provisioned'],
+      'database-url-secret-store': ['DATABASE_URL', 'secret store'],
+      'migrations-deployed': ['db:migrate:deploy', 'production'],
+      'backups-enabled': ['managed backups or PITR'],
+      'restore-tested': ['restore test', 'owner'],
+    };
+
+    for (const marker of databaseMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'supabaseStorage') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const supabaseMarkersByCheck = {
+      'separate-production-project': ['production Supabase project', 'separate'],
+      'documents-bucket-exists': ['documents bucket'],
+      'bucket-private': ['private bucket'],
+      'readiness-storage-configured': ['storageConfigured: true'],
+      'readiness-storage-reachable': ['storageBucketReachable: true'],
+      'document-upload-download': ['document upload', 'signed download', 'deployed app'],
+    };
+
+    for (const marker of supabaseMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
     }
   }
 
