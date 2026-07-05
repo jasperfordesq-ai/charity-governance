@@ -5,9 +5,10 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'auth-throttling-test-secret'
 process.env.RESEND_API_KEY = process.env.RESEND_API_KEY ?? 're_auth_throttling_test_key';
 process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? 'noreply@example.org';
 
-const [{ default: Fastify }, { default: rateLimit }, { authRoutes }, { teamRoutes }] = await Promise.all([
+const [{ default: Fastify }, { default: rateLimit }, { default: cookie }, { authRoutes }, { teamRoutes }] = await Promise.all([
   import('fastify'),
   import('@fastify/rate-limit'),
+  import('@fastify/cookie'),
   import('../routes/auth/index.js'),
   import('../routes/team/index.js'),
 ]);
@@ -53,6 +54,14 @@ const sensitiveAuthCases: SensitiveAuthCase[] = [
     expectedCode: 'UNAUTHORIZED',
   },
   {
+    name: 'refresh',
+    url: '/auth/refresh',
+    payload: { refreshToken: 'invalid-refresh-token-a' },
+    alternatePayload: { refreshToken: 'invalid-refresh-token-b' },
+    expectedStatusCode: 401,
+    expectedCode: 'INVALID_REFRESH_TOKEN',
+  },
+  {
     name: 'accept-invite',
     url: '/team/accept-invite',
     payload: { token: 'invalid-invite-token', name: 'Invitee', password: 'NewPassword1' },
@@ -72,9 +81,12 @@ async function buildSensitiveRoutesApp(prismaOverrides: Record<string, unknown> 
     teamInvite: {
       findUnique: async () => null,
     },
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
     ...prismaOverrides,
   } as never);
   await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+  await app.register(cookie);
   await app.register(authRoutes, { prefix: '/auth' });
   await app.register(teamRoutes, { prefix: '/team' });
   return app;
@@ -254,6 +266,39 @@ test('resend-verification throttling is keyed by caller credential', { concurren
     });
     assert.equal(otherCredentialRes.statusCode, 401, otherCredentialRes.body);
     assert.equal(otherCredentialRes.json().code, 'UNAUTHORIZED');
+  } finally {
+    await app.close();
+  }
+});
+
+test('logout throttling is keyed by refresh token identifier', { concurrency: false }, async () => {
+  const app = await buildSensitiveRoutesApp();
+
+  try {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/logout',
+        payload: { refreshToken: 'invalid-logout-token-a' },
+      });
+      assert.equal(res.statusCode, 200, res.body);
+      assert.deepEqual(res.json(), { ok: true });
+    }
+
+    const sameTokenRes = await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      payload: { refreshToken: 'invalid-logout-token-a' },
+    });
+    assert.equal(sameTokenRes.statusCode, 429, sameTokenRes.body);
+
+    const otherTokenRes = await app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      payload: { refreshToken: 'invalid-logout-token-b' },
+    });
+    assert.equal(otherTokenRes.statusCode, 200, otherTokenRes.body);
+    assert.deepEqual(otherTokenRes.json(), { ok: true });
   } finally {
     await app.close();
   }

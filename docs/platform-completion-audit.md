@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `2abb96d`
+Working-tree base commit when generated: `7bb00a3`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -28,6 +28,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.
 - Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.
 - Sensitive auth and invite throttles now use body-aware identifier keys for email or token attempts while preserving request-level protection where needed.
+- Refresh and logout throttles now key by hashed refresh-token identifiers from the request body or refresh cookie, so one token cannot exhaust the same-IP bucket for another token.
 - Sensitive public auth and invite throttles now have regression coverage proving one email/token identifier does not block a different identifier from the same caller.
 - Registration throttling now has regression coverage proving normalized email identifiers share a throttle bucket without blocking a different email from the same caller.
 - Resend-verification throttling now keys by hashed bearer/access-cookie credentials at the request hook, so one invalid credential cannot burn the same-IP bucket for another credential.

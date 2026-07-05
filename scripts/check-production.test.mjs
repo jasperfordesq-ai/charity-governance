@@ -2599,15 +2599,15 @@ test('public API user and organisation responses omit internal provider and cred
 
 test('refresh and logout auth endpoints have route-specific throttles', () => {
   const authRoutes = readRepoFile('apps/api/src/routes/auth/index.ts');
+  const identifierRateLimit = readRepoFile('apps/api/src/utils/identifier-rate-limit.ts');
 
-  assert.match(
-    authRoutes,
-    /app\.post\(\s*'\/refresh',\s*\{\s*config:\s*\{\s*rateLimit:\s*\{\s*max:\s*5,\s*timeWindow:\s*'1 minute'\s*\}\s*\}\s*\}/,
-  );
-  assert.match(
-    authRoutes,
-    /app\.post\(\s*'\/logout',\s*\{\s*config:\s*\{\s*rateLimit:\s*\{\s*max:\s*10,\s*timeWindow:\s*'1 minute'\s*\}\s*\}\s*\}/,
-  );
+  assert.match(authRoutes, /refreshTokenRateLimit/);
+  assert.match(authRoutes, /app\.post\(\s*'\/refresh',\s*\{\s*config:\s*\{\s*rateLimit:\s*refreshTokenRateLimit\(5\)\s*\}\s*\}/);
+  assert.match(authRoutes, /app\.post\(\s*'\/logout',\s*\{\s*config:\s*\{\s*rateLimit:\s*refreshTokenRateLimit\(10\)\s*\}\s*\}/);
+  assert.match(identifierRateLimit, /REFRESH_TOKEN_COOKIE/);
+  assert.match(identifierRateLimit, /body\.refreshToken/);
+  assert.match(identifierRateLimit, /export function refreshTokenRateLimit\(max = 5\)/);
+  assert.match(identifierRateLimit, /hook:\s*'preHandler'/);
 });
 
 test('API access tokens pin their JWT algorithm', () => {

@@ -17,7 +17,7 @@ import {
   setAuthCookies,
 } from '../../utils/auth-cookies.js';
 import { publicUser } from '../../utils/public-dtos.js';
-import { authCredentialRateLimit, bodyIdentifierRateLimit } from '../../utils/identifier-rate-limit.js';
+import { authCredentialRateLimit, bodyIdentifierRateLimit, refreshTokenRateLimit } from '../../utils/identifier-rate-limit.js';
 
 function formatZodError(error: ZodError) {
   return {
@@ -74,7 +74,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/refresh',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    { config: { rateLimit: refreshTokenRateLimit(5) } },
     async (request, reply) => {
       try {
         const body = refreshSchema.parse(request.body ?? {});
@@ -101,7 +101,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     '/logout',
-    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    { config: { rateLimit: refreshTokenRateLimit(10) } },
     async (request, reply) => {
       try {
         const body = refreshSchema.partial().parse(request.body ?? {});
