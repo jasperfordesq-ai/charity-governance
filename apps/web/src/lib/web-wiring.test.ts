@@ -369,6 +369,11 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(exportSurface, /missingEvidence/);
   assert.match(exportSurface, /profileIssues/);
   assert.match(exportSurface, /conditionalReviewItems/);
+  assert.match(exportPage, /MatrixSourceSummary/);
+  assert.match(exportSurface, /matrixReviewItems/);
+  assert.match(exportSurface, /matrixLastChecked/);
+  assert.match(exportSurface, /not_commenced/);
+  assert.match(exportSurface, /compliance certificate/i);
   assert.match(exportPage, /COMPLIANCE_APPROVAL_INCOMPLETE/);
   assert.match(exportPage, /fetchApprovalReadiness/);
   assert.match(exportPage, /freshApprovalReadiness/);

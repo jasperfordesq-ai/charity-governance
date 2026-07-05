@@ -133,3 +133,70 @@ export function ConditionalReviewPrompts({
     </AppSection>
   );
 }
+
+export function MatrixSourceSummary({ readiness }: { readiness: ApprovalReadiness | null }) {
+  if (!readiness || readiness.matrixReviewItems.length === 0) return null;
+
+  const commencementStatuses = [
+    ...new Set(readiness.matrixReviewItems.map((item) => item.commencementStatus)),
+  ].sort();
+  const professionalReview = [
+    ...new Set(readiness.matrixReviewItems.flatMap((item) => item.professionalReview)),
+  ].sort();
+  const sourceRefs = [
+    ...new Map(
+      readiness.matrixReviewItems
+        .flatMap((item) => item.sourceRefs)
+        .map((source) => [source.url, source] as const),
+    ).values(),
+  ].sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name));
+  const notCommencedCount = readiness.matrixReviewItems.filter(
+    (item) => item.commencementStatus === 'not_commenced',
+  ).length;
+
+  return (
+    <AppSection
+      title="Source And Review Matrix"
+      description={`Matrix last checked ${readiness.matrixLastChecked}. This metadata supports trustee review and professional sign-off; it is not legal advice or a compliance certificate.`}
+    >
+      <Card className="border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Official sources</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-950 dark:text-gray-50">{sourceRefs.length}</p>
+            <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
+              Source-cited regulator, statutory, and specialist guidance references are included in the export appendix.
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Professional review flags</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-950 dark:text-gray-50">{professionalReview.length}</p>
+            <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
+              Flags include solicitor, accounting, privacy, employment, safeguarding, and governance review where mapped.
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Not commenced monitoring</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-950 dark:text-gray-50">{notCommencedCount}</p>
+            <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
+              Not-yet-commenced provisions remain visible for monitoring after professional review.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {commencementStatuses.map((status) => (
+            <StatusChip key={status} tone={status === 'not_commenced' ? 'warning' : 'neutral'}>
+              {readable(status)}
+            </StatusChip>
+          ))}
+          {professionalReview.slice(0, 8).map((flag) => (
+            <ReviewFlag key={flag} tone="draft">
+              {readable(flag)}
+            </ReviewFlag>
+          ))}
+        </div>
+      </Card>
+    </AppSection>
+  );
+}

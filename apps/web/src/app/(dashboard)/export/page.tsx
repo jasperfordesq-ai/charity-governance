@@ -16,6 +16,7 @@ import { ComplianceSignoffStatus } from '@charitypilot/shared';
 import {
   ApprovalReadinessIssues,
   ConditionalReviewPrompts,
+  MatrixSourceSummary,
   approvalReadinessBlockerCodes,
   countApprovalReadinessBlockers,
 } from './export-approval-readiness';
@@ -226,6 +227,8 @@ export default function ExportPage() {
       <ApprovalReadinessIssues readiness={approvalReadiness} />
 
       <ConditionalReviewPrompts items={conditionalReviewItems} />
+
+      <MatrixSourceSummary readiness={approvalReadiness} />
 
       <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
