@@ -88,6 +88,7 @@ const DOUBLE_SUBMIT_GUARDED = [
 ];
 const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
   'board/page.tsx': [
+    'board/use-board-workflow.ts',
     'board/board-member-list-panel.tsx',
   ],
   'documents/page.tsx': [
@@ -773,7 +774,10 @@ test('principle detail workflow state is extracted from the oversized route file
 });
 
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {
-  const src = dash('board/page.tsx');
+  const src = [
+    dash('board/page.tsx'),
+    optionalDash('board/use-board-workflow.ts'),
+  ].join('\n');
   assert.match(src, /toast\(/);
   assert.match(src, /logClientError/);
 });
@@ -879,7 +883,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'board/page.tsx',
-      extraFiles: ['board/board-member-modal.tsx', 'board/board-member-list-panel.tsx'],
+      extraFiles: ['board/use-board-workflow.ts', 'board/board-member-modal.tsx', 'board/board-member-list-panel.tsx'],
       imports: [
         ['@/components/ui/app-page', ['AppPage']],
         ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
@@ -952,6 +956,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
 
 test('board trustee evidence UX is extracted from the oversized route file', () => {
   const pageSrc = dash('board/page.tsx');
+  const workflowSrc = optionalDash('board/use-board-workflow.ts');
   const listPanelSrc = optionalDash('board/board-member-list-panel.tsx');
   const evidencePath = dashPath('board/board-evidence.tsx');
   assert.ok(existsSync(evidencePath), 'board trustee evidence helpers should be split out of page.tsx');
@@ -959,8 +964,9 @@ test('board trustee evidence UX is extracted from the oversized route file', () 
 
   assert.match(pageSrc, /TrusteeEvidencePromptCards/);
   assert.match(listPanelSrc, /BoardEvidenceChips/);
-  assert.match(pageSrc, /getTrusteeEvidence/);
+  assert.match(workflowSrc, /getTrusteeEvidence/);
   assert.doesNotMatch(pageSrc, /trusteeEvidencePrompts/);
+  assert.doesNotMatch(pageSrc, /getTrusteeEvidence/);
   assert.match(evidenceSrc, /AppSection/);
   assert.match(evidenceSrc, /EvidenceChip/);
   assert.match(evidenceSrc, /ReviewFlag/);
@@ -985,10 +991,31 @@ test('board summary UX is extracted from the oversized route file', () => {
 
 test('board summary waits for a successful load instead of showing zero-count placeholders', () => {
   const pageSrc = dash('board/page.tsx');
+  const workflowSrc = optionalDash('board/use-board-workflow.ts');
 
-  assert.match(pageSrc, /const boardDataReady = !loading && !loadError/);
+  assert.match(workflowSrc, /const boardDataReady = !loading && !loadError/);
   assert.match(pageSrc, /\{boardDataReady && \(\s*<BoardSummaryPanel summary=\{summary\} \/>/);
   assert.match(pageSrc, /\{boardDataReady && <TrusteeEvidencePromptCards \/>/);
+});
+
+test('board workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('board/page.tsx');
+  const workflowPath = dashPath('board/use-board-workflow.ts');
+  assert.ok(existsSync(workflowPath), 'board loading, form, and mutation state should be split out of page.tsx');
+  const workflowSrc = readFileSync(workflowPath, 'utf8');
+
+  assert.match(pageSrc, /useBoardWorkflow/);
+  assert.doesNotMatch(pageSrc, /const fetchMembers =/);
+  assert.doesNotMatch(pageSrc, /const handleSave =/);
+  assert.doesNotMatch(pageSrc, /const toggleActive =/);
+  assert.doesNotMatch(pageSrc, /const resetForm =/);
+  assert.doesNotMatch(pageSrc, /useDisclosure/);
+  assert.match(workflowSrc, /export function useBoardWorkflow/);
+  assert.match(workflowSrc, /const fetchMembers =/);
+  assert.match(workflowSrc, /const handleSave =/);
+  assert.match(workflowSrc, /const toggleActive =/);
+  assert.match(workflowSrc, /const resetForm =/);
+  assert.match(workflowSrc, /useDisclosure/);
 });
 
 test('board evidence and mobile member cards use shared status panel tones', () => {

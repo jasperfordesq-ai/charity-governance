@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `d3b3963`
+Working-tree base commit when generated: `4a40c06`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -77,6 +77,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The board trustee evidence prompt cards and evidence chips are split out of the oversized board route behind a wiring regression test.
 - The board member add/edit modal is split out of the oversized board route behind a wiring regression test.
 - The board member list, mobile cards, desktop table, and status-toggle states are split out of the oversized board route behind a wiring regression test.
+- The board workflow loading, summary derivation, add/edit/toggle mutations, and trustee form state are split into a route-local hook behind a wiring regression test.
 - The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.
 - The export controls and readiness-warning panel are split out of the oversized export route behind a wiring regression test.
 - The export board-approval form panel is split out of the oversized export route behind a wiring regression test.
@@ -175,7 +176,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
-| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 262 | yes | no obvious static risk; verify in browser |
+| P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 204 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 83 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 244 | yes | no obvious static risk; verify in browser |
