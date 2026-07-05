@@ -855,6 +855,10 @@ test('export loading, warning, and sign-off error states use shared primitives',
   assert.match(pageSrc, /setLoadError\('Could not load export data/);
   assert.match(pageSrc, /loadError && !loading/);
   assert.match(pageSrc, /onPress=\{fetchSummary\}/);
+  assert.match(pageSrc, /const nextSummary = summaryRes\.data as ComplianceSummary \| null/);
+  assert.match(pageSrc, /const nextSignoff = signoffRes\.data as ComplianceSignoffResponse \| null/);
+  assert.match(pageSrc, /if \(!nextSummary \|\| !nextSignoff\)/);
+  assert.match(pageSrc, /throw new Error\('Export data response missing summary or sign-off payload'\)/);
   assert.doesNotMatch(pageSrc, /CircleAlert/);
   assert.doesNotMatch(pageSrc, /role="alert" className=/);
   assert.doesNotMatch(pageSrc, /bg-red-50/);

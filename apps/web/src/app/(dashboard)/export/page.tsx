@@ -81,9 +81,13 @@ export default function ExportPage() {
         api.get(`/compliance/summary?year=${year}`),
         api.get(`/compliance/signoff?year=${year}`),
       ]);
+      const nextSummary = summaryRes.data as ComplianceSummary | null;
+      const nextSignoff = signoffRes.data as ComplianceSignoffResponse | null;
+      if (!nextSummary || !nextSignoff) {
+        throw new Error('Export data response missing summary or sign-off payload');
+      }
       await fetchApprovalReadiness();
-      const nextSignoff = signoffRes.data as ComplianceSignoffResponse;
-      setSummary(summaryRes.data);
+      setSummary(nextSummary);
       setSignoff(nextSignoff);
       setSignoffForm({
         status: nextSignoff.status,
