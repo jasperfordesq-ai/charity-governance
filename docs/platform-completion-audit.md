@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `7ac30ce`
+Working-tree base commit when generated: `06e8067`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -83,6 +83,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.
 - The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.
 - The organisation complexity guidance modal is split out of the oversized organisation route behind a wiring regression test.
+- The organisation setup summary panel is split out of the oversized organisation route behind a wiring regression test.
 - The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.
 - The dashboard annual sign-off and governance register summary cards are split out of the oversized dashboard route behind a wiring regression test.
 - The dashboard overall progress and principle progress panels are split out of the oversized dashboard route behind a wiring regression test.
@@ -181,7 +182,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 136 | yes | no obvious static risk; verify in browser |
-| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 320 | yes | no obvious static risk; verify in browser |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 300 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 260 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |

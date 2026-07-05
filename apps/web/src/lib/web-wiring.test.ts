@@ -213,11 +213,29 @@ test('organisation review warnings use the shared inline status primitive', () =
 });
 
 test('organisation setup summary uses shared status panel tones', () => {
-  const pageSrc = dash('organisation/page.tsx');
+  const pageSrc = [
+    dash('organisation/page.tsx'),
+    optionalDash('organisation/organisation-setup-summary.tsx'),
+  ].join('\n');
 
   assert.match(pageSrc, /statusPanelClassName/);
   assert.doesNotMatch(pageSrc, /rounded-lg border border-teal-primary\/20 bg-white p-5/);
   assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
+});
+
+test('organisation setup summary is extracted from the oversized route file', () => {
+  const pageSrc = dash('organisation/page.tsx');
+  const summaryPath = dashPath('organisation/organisation-setup-summary.tsx');
+  assert.ok(existsSync(summaryPath), 'organisation setup summary should be split out of page.tsx');
+  const summarySrc = readFileSync(summaryPath, 'utf8');
+
+  assert.match(pageSrc, /OrganisationSetupSummary/);
+  assert.doesNotMatch(pageSrc, /First setup step/);
+  assert.doesNotMatch(pageSrc, /Make the charity profile easy to review/);
+  assert.match(summarySrc, /export function OrganisationSetupSummary/);
+  assert.match(summarySrc, /First setup step/);
+  assert.match(summarySrc, /Make the charity profile easy to review/);
+  assert.match(summarySrc, /StatusChip/);
 });
 
 test('organisation setup checkbox groups use HeroUI Checkbox controls', () => {
@@ -827,7 +845,10 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     },
     {
       file: 'organisation/page.tsx',
-      extraFiles: ['organisation/organisation-profile-form.tsx'],
+      extraFiles: [
+        'organisation/organisation-profile-form.tsx',
+        'organisation/organisation-setup-summary.tsx',
+      ],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
         ['@/components/ui/states', ['ErrorState']],
