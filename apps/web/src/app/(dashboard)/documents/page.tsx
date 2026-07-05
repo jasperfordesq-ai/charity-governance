@@ -75,6 +75,7 @@ export default function DocumentsPage() {
     uploadNextReviewDate,
     uploadOwner,
   } = useDocumentsWorkflow();
+  const documentDataReady = !loading && !loadError;
 
   return (
     <AppPage
@@ -91,98 +92,106 @@ export default function DocumentsPage() {
         </Button>
       )}
     >
-      <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl">
-            <StatusChip tone="brand">Evidence-led governance</StatusChip>
-            <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
-              Keep board evidence close to the standard it supports.
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
-              Uploaded files are kept as private evidence until a signed download URL is requested.
-              Link documents to standards with plain names, owners, review dates, and minute references.
-            </p>
+      {documentDataReady && (
+        <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-3xl">
+              <StatusChip tone="brand">Evidence-led governance</StatusChip>
+              <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">
+                Keep board evidence close to the standard it supports.
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                Uploaded files are kept as private evidence until a signed download URL is requested.
+                Link documents to standards with plain names, owners, review dates, and minute references.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-80">
+              <div className={statusPanelClassName('neutral', 'p-3')}>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Documents</p>
+                <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{documents.length}</p>
+              </div>
+              <div className={statusPanelClassName('neutral', 'p-3')}>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Linked standards</p>
+                <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{linkedStandardsCount}</p>
+              </div>
+              <div className={statusPanelClassName('neutral', 'p-3')}>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Evidence gaps</p>
+                <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{missingEvidenceCount}</p>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-80">
-            <div className={statusPanelClassName('neutral', 'p-3')}>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Documents</p>
-              <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{documents.length}</p>
-            </div>
-            <div className={statusPanelClassName('neutral', 'p-3')}>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Linked standards</p>
-              <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{linkedStandardsCount}</p>
-            </div>
-            <div className={statusPanelClassName('neutral', 'p-3')}>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Evidence gaps</p>
-              <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{missingEvidenceCount}</p>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <AppSection
-        title="Evidence pack"
-        description="Use these prompts as a practical checklist for the documents trustees usually expect to see before annual review."
-        actions={(
-          <StatusChip tone={missingEvidenceCount === 0 ? 'success' : 'warning'}>
-            {missingEvidenceCount === 0 ? 'Checklist covered' : `${missingEvidenceCount} evidence areas missing`}
-          </StatusChip>
-        )}
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {evidencePackItems.map((item) => {
-            const count = documentCounts[item.category] ?? 0;
-            return (
+      {documentDataReady && (
+        <AppSection
+          title="Evidence pack"
+          description="Use these prompts as a practical checklist for the documents trustees usually expect to see before annual review."
+          actions={(
+            <StatusChip tone={missingEvidenceCount === 0 ? 'success' : 'warning'}>
+              {missingEvidenceCount === 0 ? 'Checklist covered' : `${missingEvidenceCount} evidence areas missing`}
+            </StatusChip>
+          )}
+        >
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {evidencePackItems.map((item) => {
+              const count = documentCounts[item.category] ?? 0;
+              return (
+                <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
+                      <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
+                    </div>
+                    <EvidenceChip status={count > 0 ? 'ready' : 'missing'}>
+                      {count > 0 ? `${count} file${count === 1 ? '' : 's'}` : 'Needed'}
+                    </EvidenceChip>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </AppSection>
+      )}
+
+      {documentDataReady && (
+        <DocumentProfilePromptsPanel
+          conditionalProfile={conditionalProfile}
+          prompts={conditionalObligationPrompts}
+          missingCount={missingConditionalEvidenceCount}
+          error={organisationProfileError}
+          onRetry={fetchOrganisationProfile}
+        />
+      )}
+
+      {documentDataReady && (
+        <AppSection
+          title="Operational register signals"
+          description="These checks look for named registers and policies in titles or descriptions, so upload names should be easy for trustees to scan."
+          actions={(
+            <StatusChip tone={missingSignalCount === 0 ? 'success' : 'warning'}>
+              {missingSignalCount === 0 ? 'Signals covered' : `${missingSignalCount} signals missing`}
+            </StatusChip>
+          )}
+        >
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {signalCoverage.map((item) => (
               <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
+                    <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.why}</p>
                     <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
                   </div>
-                  <EvidenceChip status={count > 0 ? 'ready' : 'missing'}>
-                    {count > 0 ? `${count} file${count === 1 ? '' : 's'}` : 'Needed'}
+                  <EvidenceChip status={item.covered ? 'ready' : 'review'}>
+                    {item.covered ? 'Found' : 'Review'}
                   </EvidenceChip>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </AppSection>
-
-      <DocumentProfilePromptsPanel
-        conditionalProfile={conditionalProfile}
-        prompts={conditionalObligationPrompts}
-        missingCount={missingConditionalEvidenceCount}
-        error={organisationProfileError}
-        onRetry={fetchOrganisationProfile}
-      />
-
-      <AppSection
-        title="Operational register signals"
-        description="These checks look for named registers and policies in titles or descriptions, so upload names should be easy for trustees to scan."
-        actions={(
-          <StatusChip tone={missingSignalCount === 0 ? 'success' : 'warning'}>
-            {missingSignalCount === 0 ? 'Signals covered' : `${missingSignalCount} signals missing`}
-          </StatusChip>
-        )}
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {signalCoverage.map((item) => (
-            <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
-                  <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.why}</p>
-                  <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
-                </div>
-                <EvidenceChip status={item.covered ? 'ready' : 'review'}>
-                  {item.covered ? 'Found' : 'Review'}
-                </EvidenceChip>
-              </div>
-            </div>
-          ))}
-        </div>
-      </AppSection>
+            ))}
+          </div>
+        </AppSection>
+      )}
 
       <DocumentListPanel
         documents={documents}

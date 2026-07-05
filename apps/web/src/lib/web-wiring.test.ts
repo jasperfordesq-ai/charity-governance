@@ -948,6 +948,16 @@ test('documents summary and evidence cards use shared status panel tones', () =>
   assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-4/);
 });
 
+test('documents summary waits for a successful load instead of showing zero-count placeholders', () => {
+  const pageSrc = dash('documents/page.tsx');
+
+  assert.match(pageSrc, /const documentDataReady = !loading && !loadError/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<AppSection\s+title="Evidence pack"/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentProfilePromptsPanel/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<AppSection\s+title="Operational register signals"/);
+});
+
 test('documents profile-triggered evidence UX is extracted from the oversized route file', () => {
   const pageSrc = dash('documents/page.tsx');
   const hookSrc = optionalDash('documents/use-documents-workflow.ts');
