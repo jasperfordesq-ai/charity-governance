@@ -18,7 +18,7 @@ import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { DeadlineFormModal } from './deadline-form-modal';
 import { DeadlineListPanel, summarizeDeadlines } from './deadline-list-panel';
 import { DeadlineProfilePromptsPanel, buildDeadlineProfilePrompts } from './deadline-profile-prompts';
@@ -266,7 +266,7 @@ export default function DeadlinesPage() {
         </Button>
       )}
     >
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+      <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
             <ReviewFlag tone="draft">Review-ready schedule</ReviewFlag>
@@ -278,19 +278,19 @@ export default function DeadlinesPage() {
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[28rem]">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('neutral', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">Open</p>
               <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{summary.open}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('danger', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">Overdue</p>
               <p className="text-xl font-bold text-rose-700 dark:text-rose-300">{summary.overdue}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('warning', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">Due soon</p>
               <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{summary.dueSoon}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('info', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">System</p>
               <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{summary.system}</p>
             </div>
@@ -304,7 +304,7 @@ export default function DeadlinesPage() {
       >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
           {regulatoryMilestones.map((item) => (
-            <div key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+            <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
               <StatusChip tone="brand">{item.cadence}</StatusChip>
               <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
               <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.detail}</p>

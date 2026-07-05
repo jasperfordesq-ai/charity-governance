@@ -3,7 +3,7 @@
 import { Button } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
 import { EmptyState, ErrorState } from '@/components/ui/states';
-import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   CONDITIONAL_OBLIGATION_REVIEW_RULES,
   getMatrixEntriesForStandard,
@@ -111,7 +111,10 @@ export function DeadlineProfilePromptsPanel({
               : 'Irish compliance matrix';
 
             return (
-              <div key={item.profileKey} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <div
+                key={item.profileKey}
+                className={statusPanelClassName(item.reviewDateAlreadyScheduled ? 'success' : 'warning', 'p-4')}
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.label}</h3>

@@ -1289,6 +1289,17 @@ test('deadlines profile-triggered review-date UX is extracted from the oversized
   assert.match(panelSrc, /Profile-triggered review dates/);
 });
 
+test('deadlines summary and profile cards use shared status panel tones', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const panelSrc = optionalDash('deadlines/deadline-profile-prompts.tsx');
+
+  assert.match(pageSrc, /statusPanelClassName/);
+  assert.match(panelSrc, /statusPanelClassName/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+  assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+});
+
 test('deadlines form modal is extracted from the oversized route file', () => {
   const pageSrc = dash('deadlines/page.tsx');
   const modalPath = dashPath('deadlines/deadline-form-modal.tsx');
