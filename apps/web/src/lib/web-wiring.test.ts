@@ -2281,6 +2281,7 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
     optionalDash('team/team-display.ts'),
     optionalDash('team/team-invites-panel.tsx'),
     optionalDash('team/team-members-panel.tsx'),
+    optionalDash('team/team-role-guidance-panel.tsx'),
   ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -2363,6 +2364,21 @@ test('team invite form and pending invite list are extracted from the oversized 
   assert.match(panelSrc, /isDisabled=\{!canInvite/);
   assert.match(panelSrc, /aria-describedby="team-invite-disabled-hint"/);
   assert.match(displaySrc, /export function inviteStatus/);
+});
+
+test('team role guidance panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('team/page.tsx');
+  const panelPath = dashPath('team/team-role-guidance-panel.tsx');
+  assert.ok(existsSync(panelPath), 'team role guidance should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /TeamRoleGuidancePanel/);
+  assert.doesNotMatch(pageSrc, /Keep invite authority separate from owner-only role control/);
+  assert.doesNotMatch(pageSrc, /Object\.values\(UserRole\)\.map/);
+  assert.match(panelSrc, /Keep invite authority separate from owner-only role control/);
+  assert.match(panelSrc, /Object\.values\(UserRole\)\.map/);
+  assert.match(panelSrc, /ROLE_META/);
+  assert.match(panelSrc, /Role guidance/);
 });
 
 test('team feedback uses the shared inline status primitive instead of route-local alert styling', () => {
