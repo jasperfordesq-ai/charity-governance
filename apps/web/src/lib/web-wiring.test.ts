@@ -502,9 +502,11 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(dashboard, /missingExplanations/);
 
   const compliance = dash('compliance/page.tsx');
-  assert.match(compliance, /approval-readiness\?year=\$\{year\}/);
+  const complianceWorkflow = optionalDash('compliance/use-compliance-overview-workflow.ts');
+  const complianceSurface = [compliance, complianceWorkflow].join('\n');
+  assert.match(complianceWorkflow, /approval-readiness\?year=\$\{year\}/);
   assert.match(compliance, /EvidenceReadiness/);
-  assert.match(compliance, /IRISH_COMPLIANCE_MATRIX/);
+  assert.match(complianceSurface, /IRISH_COMPLIANCE_MATRIX/);
   assert.match(compliance, /review-ready/i);
 
   const principleDetail = dash('compliance/[principleId]/page.tsx');
@@ -547,6 +549,7 @@ test('compliance overview uses shared loading and error state primitives', () =>
   const src = [
     dash('compliance/page.tsx'),
     optionalDash('compliance/compliance-principle-list.tsx'),
+    optionalDash('compliance/use-compliance-overview-workflow.ts'),
   ].join('\n');
 
   assert.match(src, /from '@\/components\/ui\/states'/);
@@ -584,6 +587,24 @@ test('compliance overview principle list is extracted from the oversized route f
   assert.match(listSrc, /Edit Compliance Records/);
   assert.match(listSrc, /primaryActionButtonClassName/);
   assert.match(listSrc, /ChevronDown/);
+});
+
+test('compliance overview workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/page.tsx');
+  const workflowPath = dashPath('compliance/use-compliance-overview-workflow.ts');
+  assert.ok(existsSync(workflowPath), 'compliance overview API loading, readiness, year, and disclosure state should be split out of page.tsx');
+  const workflowSrc = readFileSync(workflowPath, 'utf8');
+
+  assert.match(pageSrc, /useComplianceOverviewWorkflow/);
+  assert.doesNotMatch(pageSrc, /const fetchData =/);
+  assert.doesNotMatch(pageSrc, /setPrinciples/);
+  assert.doesNotMatch(pageSrc, /setApprovalReadiness/);
+  assert.doesNotMatch(pageSrc, /const evidencePrompts =/);
+  assert.match(workflowSrc, /export function useComplianceOverviewWorkflow/);
+  assert.match(workflowSrc, /const fetchData =/);
+  assert.match(workflowSrc, /setPrinciples/);
+  assert.match(workflowSrc, /setApprovalReadiness/);
+  assert.match(workflowSrc, /const evidencePrompts =/);
 });
 
 test('shell recovery and disclosure actions use HeroUI Button primitives', () => {

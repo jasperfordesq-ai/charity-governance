@@ -121,6 +121,7 @@ const fixedInThisAuditBranch = [
   'The dashboard overall progress and principle progress panels are split out of the oversized dashboard route behind a wiring regression test.',
   'The dashboard workflow API loading, approval-readiness fetch, subscription-lapse handling, and derived board-alert state are split into a route-local hook behind a wiring regression test.',
   'The compliance overview principle list and disclosure cards are split out of the oversized compliance route behind a wiring regression test.',
+  'The compliance overview workflow API loading, approval-readiness fetch, year/filter state, and evidence-prompt derivation are split into a route-local hook behind a wiring regression test.',
   'The billing plan gates, Stripe checkout cards, and billing notes are split out of the oversized billing route behind a wiring regression test.',
   'The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.',
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
