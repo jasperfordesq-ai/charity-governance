@@ -220,7 +220,7 @@ Evidence:
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e -- tests/accessibility.spec.ts` command output with the same deployed QA environment.
 - [ ] Desktop browser coverage is recorded with deployed responsive-smoke evidence for the desktop light/dark route matrix.
 - [ ] Mobile browser coverage is recorded with deployed responsive-smoke evidence for the mobile light/dark route matrix.
-- [ ] Auth, dashboard, billing, document upload, signed download, logout, and error states are covered.
+- [ ] Auth, dashboard, billing, document upload, signed download, logout, and error states are covered in `docs/production-browser-qa.md` and the machine-readable launch evidence.
 
 Evidence:
 

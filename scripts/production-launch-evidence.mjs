@@ -796,6 +796,15 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'E2E_OWNER_EMAIL',
       'E2E_OWNER_PASSWORD',
       'npm run test:e2e -- tests/accessibility.spec.ts',
+      'docs/production-browser-qa.md',
+      'auth flow',
+      'dashboard flow',
+      'billing flow',
+      'document upload',
+      'signed download',
+      'logout',
+      'error states',
+      'zero critical or high-severity browser QA defects',
     ];
     for (const marker of requiredMarkers) {
       if (!text.includes(marker)) {

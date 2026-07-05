@@ -280,6 +280,8 @@ function evidenceEntry(areaId, checkId) {
       'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
       'npm run test:e2e -- tests/accessibility.spec.ts',
       'accessibility.spec.ts passed against deployed HTTPS production URL in light and dark themes',
+      'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
+      'zero critical or high-severity browser QA defects remain unresolved.',
     ].join(' ');
   }
 
@@ -628,6 +630,10 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include mobile light and dark/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include docs\/production-browser-qa\.md/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include document upload/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include zero critical or high-severity browser QA defects/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
