@@ -902,6 +902,14 @@ test('documents workflow state is extracted from the oversized route file', () =
   assert.match(hookSrc, /linkDisabledReason/);
 });
 
+test('documents summary and evidence cards use shared status panel tones', () => {
+  const pageSrc = dash('documents/page.tsx');
+
+  assert.match(pageSrc, /statusPanelClassName/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-white p-4/);
+});
+
 test('documents profile-triggered evidence UX is extracted from the oversized route file', () => {
   const pageSrc = dash('documents/page.tsx');
   const hookSrc = optionalDash('documents/use-documents-workflow.ts');

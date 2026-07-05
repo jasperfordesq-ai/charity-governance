@@ -6,7 +6,7 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { evidencePackItems } from '@/lib/regulator-guidance';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { AppPage, AppSection } from '@/components/ui/app-page';
-import { EvidenceChip, StatusChip } from '@/components/ui/status';
+import { EvidenceChip, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { DocumentDeleteModal } from './document-delete-modal';
 import { DocumentListPanel } from './document-list-panel';
 import { DocumentLinkModal } from './document-link-modal';
@@ -91,7 +91,7 @@ export default function DocumentsPage() {
         </Button>
       )}
     >
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+      <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
             <StatusChip tone="brand">Evidence-led governance</StatusChip>
@@ -104,15 +104,15 @@ export default function DocumentsPage() {
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-80">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('neutral', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">Documents</p>
               <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{documents.length}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('neutral', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">Linked standards</p>
               <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{linkedStandardsCount}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className={statusPanelClassName('neutral', 'p-3')}>
               <p className="text-xs text-gray-500 dark:text-gray-400">Evidence gaps</p>
               <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{missingEvidenceCount}</p>
             </div>
@@ -133,7 +133,7 @@ export default function DocumentsPage() {
           {evidencePackItems.map((item) => {
             const count = documentCounts[item.category] ?? 0;
             return (
-              <div key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+              <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
@@ -168,7 +168,7 @@ export default function DocumentsPage() {
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {signalCoverage.map((item) => (
-            <div key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+            <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
