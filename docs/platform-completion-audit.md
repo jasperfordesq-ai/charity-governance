@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `8a14c88`
+Working-tree base commit when generated: `4ca0247`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -86,6 +86,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The dashboard annual sign-off and governance register summary cards are split out of the oversized dashboard route behind a wiring regression test.
 - The dashboard overall progress and principle progress panels are split out of the oversized dashboard route behind a wiring regression test.
 - The compliance overview principle list and disclosure cards are split out of the oversized compliance route behind a wiring regression test.
+- The billing plan gates, Stripe checkout cards, and billing notes are split out of the oversized billing route behind a wiring regression test.
 - The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.
 - Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.
 - Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.
@@ -165,7 +166,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 166 | yes | no obvious static risk; verify in browser |
-| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 351 | yes | no obvious static risk; verify in browser |
+| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 262 | yes | no obvious static risk; verify in browser |

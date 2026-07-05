@@ -2508,7 +2508,10 @@ test('web email verification flow supports generic registration and unverified s
 });
 
 test('billing page fails closed without exposing internal production setup gaps', () => {
-  const billingPage = readRepoFile('apps/web/src/app/(dashboard)/billing/page.tsx');
+  const billingPage = [
+    readRepoFile('apps/web/src/app/(dashboard)/billing/page.tsx'),
+    readRepoFile('apps/web/src/app/(dashboard)/billing/billing-plan-sections.tsx'),
+  ].join('\n');
 
   assert.doesNotMatch(billingPage, /Stripe is not production-ready yet/);
   assert.doesNotMatch(billingPage, /secret key|webhook secret|price IDs/i);

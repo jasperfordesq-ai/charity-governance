@@ -113,6 +113,7 @@ const fixedInThisAuditBranch = [
   'The dashboard annual sign-off and governance register summary cards are split out of the oversized dashboard route behind a wiring regression test.',
   'The dashboard overall progress and principle progress panels are split out of the oversized dashboard route behind a wiring regression test.',
   'The compliance overview principle list and disclosure cards are split out of the oversized compliance route behind a wiring regression test.',
+  'The billing plan gates, Stripe checkout cards, and billing notes are split out of the oversized billing route behind a wiring regression test.',
   'The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.',
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
   'Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.',

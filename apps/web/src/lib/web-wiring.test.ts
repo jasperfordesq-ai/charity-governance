@@ -2007,7 +2007,10 @@ test('team feedback uses the shared inline status primitive instead of route-loc
 });
 
 test('phase 6C billing preserves Stripe redirect validation while clarifying plan gates', () => {
-  const src = dash('billing/page.tsx');
+  const src = [
+    dash('billing/page.tsx'),
+    optionalDash('billing/billing-plan-sections.tsx'),
+  ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
     ['@/components/ui/states', ['LoadingState', 'ErrorState', 'ReviewWarningState']],
@@ -2039,6 +2042,23 @@ test('phase 6C billing preserves Stripe redirect validation while clarifying pla
   assert.match(src, /Monthly \(\\u20ac\$\{plan\.monthlyPrice\}\/mo\)/);
   assert.match(src, /<StatusTile\b/);
   assert.doesNotMatch(src, /function GateTile/);
+});
+
+test('billing plan gates and notes are extracted from the oversized route file', () => {
+  const pageSrc = dash('billing/page.tsx');
+  const sectionsPath = dashPath('billing/billing-plan-sections.tsx');
+  assert.ok(existsSync(sectionsPath), 'billing plan sections should be split out of page.tsx');
+  const sectionsSrc = readFileSync(sectionsPath, 'utf8');
+
+  assert.match(pageSrc, /BillingPlanSections/);
+  assert.doesNotMatch(pageSrc, /Complete-only register gates/);
+  assert.doesNotMatch(pageSrc, /Get \$\{plan\.name\} yearly/);
+  assert.doesNotMatch(pageSrc, /Can I cancel at any time\?/);
+  assert.match(sectionsSrc, /export function BillingPlanSections/);
+  assert.match(sectionsSrc, /Complete-only register gates/);
+  assert.match(sectionsSrc, /Get \$\{plan\.name\} yearly/);
+  assert.match(sectionsSrc, /Can I cancel at any time\?/);
+  assert.match(sectionsSrc, /primaryActionButtonClassName/);
 });
 
 test('dashboard navigation manages mobile sidebar focus and meaningful breadcrumbs', () => {
