@@ -32,6 +32,43 @@ export function SourceReferenceLink({
   );
 }
 
+export function SourceReferenceList({
+  sources,
+  label = 'Sources',
+  max = 3,
+  className,
+}: {
+  sources: SourceReference[];
+  label?: string;
+  max?: number;
+  className?: string;
+}) {
+  const visibleSources = sources.slice(0, max);
+  const remainingCount = Math.max(0, sources.length - visibleSources.length);
+
+  if (visibleSources.length === 0) {
+    return (
+      <p className={classes('text-xs leading-5 text-gray-500 dark:text-gray-400', className)}>
+        {label}: current guidance
+      </p>
+    );
+  }
+
+  return (
+    <div className={classes('flex flex-wrap items-center gap-2 text-xs leading-5', className)}>
+      <span className="font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}:</span>
+      {visibleSources.map((source) => (
+        <SourceReferenceLink key={source.url} source={source} />
+      ))}
+      {remainingCount > 0 ? (
+        <span className="rounded-md border border-gray-200 px-2.5 py-1 font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400">
+          +{remainingCount} more
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function SourceReferenceNote({
   source,
   label = 'Source',

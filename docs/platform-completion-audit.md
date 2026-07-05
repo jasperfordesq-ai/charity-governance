@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `3852388`
+Working-tree base commit when generated: `a8e4ee3`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -60,6 +60,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The deadlines regulatory cadence panel now cites the Charities Regulator Annual Report source and last-checked metadata for the 10-month filing prompt.
 - Deadline and regulator official-source links now share reusable source-reference primitives behind a wiring regression test.
 - Regulator profile-triggered priority source links now use the shared source-reference primitive instead of route-local anchor styling.
+- Profile-triggered document, deadline, register, and export prompts now render official sources as shared clickable source-reference lists.
 - The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.
 - Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.
 - The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.

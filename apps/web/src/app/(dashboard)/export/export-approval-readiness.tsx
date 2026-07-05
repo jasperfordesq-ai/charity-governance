@@ -2,6 +2,7 @@
 
 import { Card } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
+import { SourceReferenceList } from '@/components/ui/source-reference';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
 
@@ -112,7 +113,6 @@ export function ConditionalReviewPrompts({
       <div className="grid gap-3 lg:grid-cols-2">
         {items.map((item) => {
           const professionalReviewLabel = item.professionalReview.map(readable).join(', ') || 'trustee review';
-          const sourceLabel = item.sourceRefs.map((source) => source.name).join(', ') || 'current guidance';
 
           return (
             <Card key={item.profileKey} className={statusPanelClassName('warning', 'p-4 shadow-sm')}>
@@ -124,8 +124,8 @@ export function ConditionalReviewPrompts({
               <div className="mt-3 flex flex-wrap gap-2">
                 <StatusChip tone="brand">Standards {item.standardCodes.join(', ')}</StatusChip>
                 <ReviewFlag tone="draft">Review: {professionalReviewLabel}</ReviewFlag>
-                <ReviewFlag tone="draft">Sources: {sourceLabel}</ReviewFlag>
               </div>
+              <SourceReferenceList sources={item.sourceRefs} className="mt-3" />
             </Card>
           );
         })}

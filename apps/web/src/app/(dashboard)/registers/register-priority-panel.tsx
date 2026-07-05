@@ -2,6 +2,7 @@
 
 import { Button } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
+import { SourceReferenceList } from '@/components/ui/source-reference';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { EvidenceChip, ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
@@ -217,9 +218,6 @@ export function RegisterPriorityPanel({
             const professionalReviewLabel = item.professionalReview.length
               ? item.professionalReview.map(formatReviewFlag).join(', ')
               : 'Board judgement';
-            const sourceLabel = item.sourceRefs.length
-              ? item.sourceRefs.slice(0, 2).map((source) => source.owner).join(', ')
-              : 'Irish compliance matrix';
 
             return (
               <div
@@ -241,8 +239,8 @@ export function RegisterPriorityPanel({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <StatusChip tone="brand">Standards {item.standardCodes.join(', ')}</StatusChip>
                   <ReviewFlag tone="needs-review">Professional review: {professionalReviewLabel}</ReviewFlag>
-                  <ReviewFlag tone="draft">Sources: {sourceLabel}</ReviewFlag>
                 </div>
+                <SourceReferenceList sources={item.sourceRefs} className="mt-3" />
               </div>
             );
           })}

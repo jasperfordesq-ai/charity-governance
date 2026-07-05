@@ -849,7 +849,7 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
     ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
     ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
     ['ui/data-list.tsx', ['DataList', 'DataListTable', 'DataListItems']],
-    ['ui/source-reference.tsx', ['SourceReferenceLink', 'SourceReferenceNote']],
+    ['ui/source-reference.tsx', ['SourceReferenceLink', 'SourceReferenceList', 'SourceReferenceNote']],
     ['governance/evidence-readiness.tsx', ['EvidenceReadiness', 'EvidencePromptList', 'EvidenceSourceList']],
   ];
 
@@ -1796,6 +1796,20 @@ test('deadlines regulatory cadence surfaces the annual report source metadata', 
   assert.match(overviewSrc, /label = 'Source'/);
   assert.match(overviewSrc, /\{label\}:/);
   assert.doesNotMatch(overviewSrc, /legally guaranteed/i);
+});
+
+test('profile-triggered workflow prompts render source references as shared links', () => {
+  const files = [
+    optionalDash('documents/document-profile-prompts.tsx'),
+    optionalDash('deadlines/deadline-profile-prompts.tsx'),
+    optionalDash('registers/register-priority-panel.tsx'),
+    optionalDash('export/export-approval-readiness.tsx'),
+  ];
+
+  for (const file of files) {
+    assert.match(file, /SourceReferenceList/);
+    assert.doesNotMatch(file, /Sources: \{sourceLabel\}/);
+  }
 });
 
 test('deadlines summary waits for a successful load instead of showing zero-count placeholders', () => {
