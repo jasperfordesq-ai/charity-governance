@@ -4,7 +4,7 @@ import { Button, Checkbox } from '@heroui/react';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
-import { DeadlineBadge, StatusChip } from '@/components/ui/status';
+import { DeadlineBadge, StatusChip, type StatusTone, statusPanelClassName } from '@/components/ui/status';
 import type { DeadlineResponse } from '@charitypilot/shared';
 
 type DeadlineDueState = 'complete' | 'overdue' | 'due-soon' | 'upcoming';
@@ -56,14 +56,13 @@ const classifyDeadline = (deadline: DeadlineResponse) => {
     badgeLabel,
     priorityLabel,
     badgeTone: dueState,
-    rowClass:
+    rowTone: (
       dueState === 'overdue'
-        ? 'border-rose-200 bg-rose-50/70 dark:border-rose-800 dark:bg-rose-950/30'
+        ? 'danger'
         : dueState === 'due-soon'
-          ? 'border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/30'
-          : dueState === 'complete'
-            ? 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/70'
-            : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900',
+          ? 'warning'
+          : 'neutral'
+    ) satisfies StatusTone,
   };
 };
 
@@ -154,7 +153,7 @@ export function DeadlineListPanel({
               {sortedDeadlines.map((deadline) => {
                 const meta = classifyDeadline(deadline);
                 return (
-                  <article key={deadline.id} className={`rounded-lg border p-4 ${meta.rowClass}`}>
+                  <article key={deadline.id} className={statusPanelClassName(meta.rowTone, 'p-4')}>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex min-w-0 gap-3">
                         <Checkbox

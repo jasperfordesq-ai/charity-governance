@@ -21,6 +21,15 @@ const dotToneClasses: Record<StatusTone, string> = {
   brand: 'bg-teal-primary dark:bg-teal-bright',
 };
 
+const panelToneClasses: Record<StatusTone, string> = {
+  neutral: 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900',
+  success: 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30',
+  warning: 'border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/30',
+  danger: 'border-rose-200 bg-rose-50/70 dark:border-rose-800 dark:bg-rose-950/30',
+  info: 'border-sky-200 bg-sky-50/70 dark:border-sky-800 dark:bg-sky-950/30',
+  brand: 'border-teal-primary/20 bg-white dark:border-teal-light/20 dark:bg-gray-900',
+};
+
 const sizeClasses: Record<Size, string> = {
   sm: 'min-h-6 px-2 py-0.5 text-xs',
   md: 'min-h-7 px-2.5 py-1 text-sm',
@@ -28,6 +37,10 @@ const sizeClasses: Record<Size, string> = {
 
 function classes(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
+}
+
+export function statusPanelClassName(tone: StatusTone = 'neutral', className?: string) {
+  return classes('rounded-lg border', panelToneClasses[tone], className);
 }
 
 export type StatusChipProps = {
@@ -70,7 +83,7 @@ export function StatusTile({
   tone?: StatusTone;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+    <div className={statusPanelClassName('neutral', 'p-4')}>
       <StatusChip tone={tone}>{title}</StatusChip>
       <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{detail}</p>
     </div>

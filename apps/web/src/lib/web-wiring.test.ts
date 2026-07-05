@@ -330,6 +330,18 @@ test('deadline completion uses HeroUI Checkbox instead of a button with checkbox
   assert.doesNotMatch(src, /aria-checked=/);
 });
 
+test('deadline list rows use shared status panel tones instead of route-local warning cards', () => {
+  const listSrc = dash('deadlines/deadline-list-panel.tsx');
+  const statusSrc = component('ui/status.tsx');
+
+  assert.match(statusSrc, /statusPanelClassName/);
+  assert.match(listSrc, /statusPanelClassName/);
+  assert.doesNotMatch(listSrc, /border-rose-200 bg-rose-50/);
+  assert.doesNotMatch(listSrc, /border-amber-200 bg-amber-50/);
+  assert.doesNotMatch(listSrc, /dark:bg-rose-950/);
+  assert.doesNotMatch(listSrc, /dark:bg-amber-950/);
+});
+
 test('the per-standard compliance editor announces its save state (Saving / Saved / Save failed)', () => {
   const src = [
     dash('compliance/[principleId]/page.tsx'),
