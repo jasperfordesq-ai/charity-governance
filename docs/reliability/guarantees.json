@@ -204,6 +204,18 @@
     "surface": "api"
   },
   {
+    "id": "auth-input-validation-17a",
+    "group": "auth",
+    "concern": "input-validation",
+    "guarantee": "resend-verification throttling is keyed by the caller credential (Authorization bearer token or access cookie, hashed with the caller IP), so repeated attempts with one invalid credential cannot exhaust the same-IP bucket for a different credential.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/auth-throttling.test.ts",
+    "testTitle": "resend-verification throttling is keyed by caller credential",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
     "id": "auth-authz-boundary-18",
     "group": "auth",
     "concern": "authz-boundary",

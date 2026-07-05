@@ -15,13 +15,13 @@ Generated: 2026-07-05 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 256 | 0 | 0 | 15 | 271 |
+| API | 257 | 0 | 0 | 15 | 272 |
 | Web | 95 | 0 | 0 | 7 | 102 |
-| **Total** | **351** | **0** | **0** | **22** | **373** |
+| **Total** | **352** | **0** | **0** | **22** | **374** |
 
-**API suite:** 411 passing, 0 failing. **Web suite:** 168 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 416 passing, 0 failing. **Web suite:** 179 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
 
-**Linkage:** 351/351 covered guarantees verified against a passing/linked test.
+**Linkage:** 352/352 covered guarantees verified against a passing/linked test.
 
 **Overall: GREEN**
 
@@ -51,11 +51,11 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (271 guarantees)
+## API surface - the matrix (272 guarantees)
 
 ### auth - `/api/v1/auth`
 
-_20 guarantees - covered 18  n/a 2_
+_21 guarantees - covered 19  n/a 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -77,6 +77,7 @@ _20 guarantees - covered 18  n/a 2_
 | Input validation | forgot-password is enumeration-safe: it returns the same generic message for both known and unknown accounts, storing a hashed (sha256) reset token only for a known account and sending nothing for an unknown one. | covered | `forgotPassword sends a reset link for a known account and returns the generic message`<br/><sub>auth-service-flows.test.ts</sub> |
 | Input validation | login is enumeration-safe: an unknown email returns the generic 401 INVALID_CREDENTIALS ('Invalid email or password') and the no-user path still spends a full bcrypt comparison so latency does not reveal account existence. | covered | `login returns the generic INVALID_CREDENTIALS error for unknown accounts`<br/><sub>auth-login-timing.test.ts</sub> |
 | Input validation | Sensitive auth endpoints (forgot-password, reset-password, verify-email, resend-verification) enforce per-route throttling stricter than the global limit, returning 429 on the 6th request within the window. | covered | `forgot-password has route-specific throttling below the global limit`<br/><sub>auth-throttling.test.ts</sub> |
+| Input validation | resend-verification throttling is keyed by the caller credential (Authorization bearer token or access cookie, hashed with the caller IP), so repeated attempts with one invalid credential cannot exhaust the same-IP bucket for a different credential. | covered | `resend-verification throttling is keyed by caller credential`<br/><sub>auth-throttling.test.ts</sub> |
 | Subscription / plan gating | Subscription/plan gating (subscriptionGuard, requireCompletePlan) on auth endpoints. | n/a | _No auth endpoint registers subscriptionGuard or requireCompletePlan; /me and /resend-verification use only authIdentityGuard, and the remaining endpoints are public. register deliberately provisions a_ |
 | Tenant isolation | Cross-organisation resource isolation: a user in org A cannot read or mutate an org-B resource through any auth endpoint. | n/a | _The auth route group operates exclusively on the caller's own identity: getMe and resendEmailVerification key on request.user.userId (set by the guard from the verified session), while login/forgotPas_ |
 
