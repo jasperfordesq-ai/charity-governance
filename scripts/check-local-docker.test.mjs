@@ -459,6 +459,20 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /legal\/compliance final approval/);
 });
 
+test('product revamp page inventory is not stale pre-revamp guidance', () => {
+  const pageInventory = readRepoFile('docs/product-revamp/page-inventory.md');
+
+  assert.match(pageInventory, /Superseded by the generated platform completion audit/);
+  assert.match(pageInventory, /docs\/platform-completion-audit\.md/);
+  assert.match(pageInventory, /25 page routes scanned/);
+  assert.match(pageInventory, /0 route files are 450\+ lines/);
+  assert.match(pageInventory, /Deployed browser QA remains the proof gate/);
+  assert.doesNotMatch(pageInventory, /manual inline SVG/i);
+  assert.doesNotMatch(pageInventory, /light-only/i);
+  assert.doesNotMatch(pageInventory, /largest route.*804/i);
+  assert.doesNotMatch(pageInventory, /dark mode: missing/i);
+});
+
 test('responsive route smoke is runnable as a focused launch QA command', () => {
   const rootPackage = packageJson();
   const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');
