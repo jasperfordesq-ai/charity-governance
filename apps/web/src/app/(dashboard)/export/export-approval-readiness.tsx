@@ -2,7 +2,7 @@
 
 import { Card } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
-import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
 
 type ApprovalReadiness = ComplianceApprovalReadinessResponse;
@@ -44,7 +44,7 @@ function ReadinessIssueCard({
   label?: string;
 }) {
   return (
-    <Card className="border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <Card className={statusPanelClassName('warning', 'p-4 shadow-sm')}>
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
         <StatusChip tone="warning">{label}</StatusChip>
@@ -115,7 +115,7 @@ export function ConditionalReviewPrompts({
           const sourceLabel = item.sourceRefs.map((source) => source.name).join(', ') || 'current guidance';
 
           return (
-            <Card key={item.profileKey} className="border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <Card key={item.profileKey} className={statusPanelClassName('warning', 'p-4 shadow-sm')}>
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.label}</h3>
                 <ReviewFlag tone="needs-review">Professional review</ReviewFlag>
@@ -159,7 +159,7 @@ export function MatrixSourceSummary({ readiness }: { readiness: ApprovalReadines
       title="Source And Review Matrix"
       description={`Matrix last checked ${readiness.matrixLastChecked}. This metadata supports trustee review and professional sign-off; it is not legal advice or a compliance certificate.`}
     >
-      <Card className="border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <Card className={statusPanelClassName('neutral', 'p-4 shadow-sm')}>
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Official sources</p>

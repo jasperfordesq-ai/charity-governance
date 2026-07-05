@@ -3,6 +3,7 @@
 import { Card, Chip } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
 import { LoadingState } from '@/components/ui/states';
+import { statusPanelClassName, type StatusTone } from '@/components/ui/status';
 import { GOVERNANCE_PRINCIPLES, type ComplianceSummary } from '@charitypilot/shared';
 import type { ReactNode } from 'react';
 import { Building2, CircleCheck, FileText, ListChecks, ShieldCheck, UsersRound } from 'lucide-react';
@@ -29,6 +30,18 @@ const scoreLabel = (pct: number) => {
   return 'Not started';
 };
 
+const scoreTone = (pct: number): StatusTone => {
+  if (pct >= 80) return 'success';
+  if (pct >= 50) return 'warning';
+  return 'danger';
+};
+
+const signoffTone = (color: SignoffChipColor): StatusTone => {
+  if (color === 'success') return 'success';
+  if (color === 'warning') return 'warning';
+  return 'neutral';
+};
+
 const previewIconClassName = 'h-5 w-5 text-teal-primary';
 
 function PreviewIcon({ children }: { children: ReactNode }) {
@@ -41,7 +54,7 @@ function PreviewIcon({ children }: { children: ReactNode }) {
 
 function PreviewCard({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
   return (
-    <Card className="border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <Card className={statusPanelClassName('neutral', 'p-5 shadow-sm')}>
       <div className="mb-2 flex items-center gap-2">
         <PreviewIcon>{icon}</PreviewIcon>
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
@@ -76,7 +89,7 @@ export function ExportReportPreview({
           />
 
           {summary ? (
-            <Card className="border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <Card className={statusPanelClassName(scoreTone(summary.percentComplete), 'p-5 shadow-sm')}>
               <div className="mb-2 flex items-center gap-2">
                 <PreviewIcon>
                   <CircleCheck className={previewIconClassName} strokeWidth={1.5} />
@@ -99,7 +112,7 @@ export function ExportReportPreview({
             </Card>
           ) : null}
 
-          <Card className="border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <Card className={statusPanelClassName('neutral', 'p-5 shadow-sm')}>
             <div className="mb-3 flex items-center gap-2">
               <PreviewIcon>
                 <ListChecks className={previewIconClassName} strokeWidth={1.5} />
@@ -155,7 +168,7 @@ export function ExportReportPreview({
             description="Active board members with roles, appointment dates, conduct signed status, and induction status."
           />
 
-          <Card className="border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <Card className={statusPanelClassName(signoffTone(signoffChipColor), 'p-5 shadow-sm')}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="mb-2 flex items-center gap-2">

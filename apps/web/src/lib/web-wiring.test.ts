@@ -830,6 +830,8 @@ test('export report preview UI is extracted from the oversized route file', () =
   assert.match(previewSrc, /GOVERNANCE_PRINCIPLES\.map/);
   assert.match(previewSrc, /Report Preview/);
   assert.match(previewSrc, /Board Approval Record/);
+  assert.match(previewSrc, /statusPanelClassName/);
+  assert.doesNotMatch(previewSrc, /border border-gray-200 bg-white p-5 shadow-sm/);
 });
 
 test('export loading, warning, and sign-off error states use shared primitives', () => {
@@ -870,6 +872,8 @@ test('export approval-readiness issue UI is extracted and uses shared review pri
   assert.match(readinessSrc, /from '@\/components\/ui\/status'/);
   assert.match(readinessSrc, /ReviewFlag/);
   assert.match(readinessSrc, /StatusChip/);
+  assert.match(readinessSrc, /statusPanelClassName/);
+  assert.doesNotMatch(readinessSrc, /border border-gray-200 bg-white p-4 shadow-sm/);
   assert.doesNotMatch(readinessSrc, /border-amber-200/);
   assert.doesNotMatch(readinessSrc, /bg-amber-50/);
 });
