@@ -19,7 +19,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AppPage } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
-import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { ConditionalObligationProfile, UpdateOrganisationRequest } from '@charitypilot/shared';
 import {
   CHARITABLE_PURPOSE_LABELS,
@@ -252,7 +252,7 @@ export default function OrganisationPage() {
       title="Organisation Profile"
       description="Start here: these details drive review-ready reports, annual deadlines, and the standards shown across CharityPilot. This is workflow support, not legal advice."
     >
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+      <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
             <ReviewFlag tone="draft">First setup step</ReviewFlag>
@@ -265,7 +265,7 @@ export default function OrganisationPage() {
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:min-w-[28rem]">
             {completionItems.map((item) => (
-              <div key={item.label} className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+              <div key={item.label} className={statusPanelClassName(item.ready ? 'success' : 'warning', 'p-3')}>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
                 <StatusChip tone={item.ready ? 'success' : 'warning'}>{item.ready ? 'Set' : 'Review'}</StatusChip>
               </div>

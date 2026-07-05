@@ -202,6 +202,14 @@ test('organisation review warnings use the shared inline status primitive', () =
   assert.doesNotMatch(profileSrc, /border-amber-200 bg-amber-50/);
 });
 
+test('organisation setup summary uses shared status panel tones', () => {
+  const pageSrc = dash('organisation/page.tsx');
+
+  assert.match(pageSrc, /statusPanelClassName/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-teal-primary\/20 bg-white p-5/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
+});
+
 test('organisation setup checkbox groups use HeroUI Checkbox controls', () => {
   const formSrc = dash('organisation/organisation-profile-form.tsx');
   const profileSrc = dash('organisation/organisation-conditional-profile.tsx');
