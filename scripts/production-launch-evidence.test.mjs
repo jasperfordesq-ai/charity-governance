@@ -249,6 +249,16 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'billingAndEmail' && checkId === 'stripe-products-prices') {
+    entry.description = [
+      'Stripe product and price evidence confirms active live recurring Stripe prices for:',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+    ].join(' ');
+  }
+
   if (areaId === 'billingAndEmail' && checkId === 'stripe-webhook-endpoint') {
     entry.description = [
       'Stripe live webhook endpoint verified for https://api.charitypilot.ie/api/v1/billing/webhooks.',
@@ -946,6 +956,7 @@ test('production launch evidence validator requires concrete billing and email p
     type: 'command-output',
     description: 'npm run check:production:providers -- --production-env-file=.env.production Production provider check passed',
   }];
+  evidence.areas.billingAndEmail.checks['stripe-products-prices'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['stripe-webhook-endpoint'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['stripe-webhook-secret'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['resend-send'].evidence = [genericEvidence];
@@ -956,6 +967,9 @@ test('production launch evidence validator requires concrete billing and email p
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-products-prices\.evidence must include STRIPE_ESSENTIALS_MONTHLY_PRICE_ID/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-products-prices\.evidence must include STRIPE_COMPLETE_YEARLY_PRICE_ID/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-products-prices\.evidence must include active live recurring Stripe prices/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include required subscription events/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include checkout\.session\.completed/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-endpoint\.evidence must include https:\/\/api\.charitypilot\.ie\/api\/v1\/billing\/webhooks/);
@@ -1392,6 +1406,16 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.releaseGate.checks.audit.requiredEvidenceHints,
       ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities'],
+    );
+    assert.ok(
+      template.areas.billingAndEmail.checks['stripe-products-prices'].requiredEvidenceHints.includes(
+        'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+      ),
+    );
+    assert.ok(
+      template.areas.billingAndEmail.checks['stripe-products-prices'].requiredEvidenceHints.includes(
+        'active live recurring Stripe prices',
+      ),
     );
     assert.ok(
       template.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].requiredEvidenceHints.includes(

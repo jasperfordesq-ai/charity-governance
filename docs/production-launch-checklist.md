@@ -175,6 +175,7 @@ Evidence:
 - [ ] Resend API key can send from `EMAIL_FROM`, with an accepted message id or equivalent provider delivery reference recorded outside git.
 - [ ] Password reset and verification email links point to the production frontend origin.
 - [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
+- [ ] Machine-readable launch evidence identifies all four active live recurring Stripe price IDs without recording raw secret values.
 
 Evidence:
 

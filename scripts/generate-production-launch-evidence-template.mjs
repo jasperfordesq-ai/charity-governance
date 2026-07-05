@@ -30,6 +30,13 @@ const evidenceHintsByCheck = new Map([
     'dist/jobs/send-deadline-reminders.js',
     'dist/jobs/cleanup-document-storage.js',
   ]],
+  ['billingAndEmail.stripe-products-prices', [
+    'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+    'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+    'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+    'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+    'active live recurring Stripe prices',
+  ]],
   ['billingAndEmail.stripe-webhook-endpoint', [
     'https://api.charitypilot.ie/api/v1/billing/webhooks',
     'checkout.session.completed',

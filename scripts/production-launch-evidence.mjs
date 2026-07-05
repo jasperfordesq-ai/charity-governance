@@ -765,6 +765,21 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
   if (areaId === 'billingAndEmail') {
     const text = evidenceText(actualCheck.evidence);
 
+    if (checkId === 'stripe-products-prices') {
+      const requiredMarkers = [
+        'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+        'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+        'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+        'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+        'active live recurring Stripe prices',
+      ];
+      for (const marker of requiredMarkers) {
+        if (!text.includes(marker)) {
+          issues.push(`${checkPath}.evidence must include ${marker}`);
+        }
+      }
+    }
+
     if (checkId === 'providers-check') {
       for (const marker of [
         'required subscription events',
