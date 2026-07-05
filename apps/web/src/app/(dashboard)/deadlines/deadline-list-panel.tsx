@@ -8,6 +8,14 @@ import { DeadlineBadge, StatusChip, type StatusTone, statusPanelClassName } from
 import type { DeadlineResponse } from '@charitypilot/shared';
 
 type DeadlineDueState = 'complete' | 'overdue' | 'due-soon' | 'upcoming';
+type DeadlineMeta = {
+  daysUntil: number;
+  dueState: DeadlineDueState;
+  badgeLabel: string;
+  priorityLabel: string;
+  badgeTone: DeadlineDueState;
+  rowTone: StatusTone;
+};
 
 const formatDate = (value: string) => {
   return new Date(value).toLocaleDateString('en-IE', {
@@ -26,7 +34,7 @@ const daysBetweenTodayAnd = (value: string) => {
   return Math.round((dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-const classifyDeadline = (deadline: DeadlineResponse) => {
+const classifyDeadline = (deadline: DeadlineResponse): DeadlineMeta => {
   const daysUntil = daysBetweenTodayAnd(deadline.dueDate);
   let dueState: DeadlineDueState = 'upcoming';
   let badgeLabel = `${daysUntil} days left`;
@@ -50,19 +58,20 @@ const classifyDeadline = (deadline: DeadlineResponse) => {
     priorityLabel = 'Due soon';
   }
 
+  const rowTone: StatusTone =
+    dueState === 'overdue'
+      ? 'danger'
+      : dueState === 'due-soon'
+        ? 'warning'
+        : 'neutral';
+
   return {
     daysUntil,
     dueState,
     badgeLabel,
     priorityLabel,
     badgeTone: dueState,
-    rowTone: (
-      dueState === 'overdue'
-        ? 'danger'
-        : dueState === 'due-soon'
-          ? 'warning'
-          : 'neutral'
-    ) satisfies StatusTone,
+    rowTone,
   };
 };
 
