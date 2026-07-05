@@ -1,8 +1,6 @@
 'use client';
 
-import { ReviewFlag } from '@/components/ui/status';
-
-type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'info' | 'brand';
+import { ReviewFlag, type StatusTone, statusPanelClassName } from '@/components/ui/status';
 
 export function RegisterOverviewPanel({
   openRegisterCount,
@@ -16,7 +14,7 @@ export function RegisterOverviewPanel({
   financialControlsPercent: number;
 }) {
   return (
-    <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+    <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-3xl">
           <ReviewFlag tone="draft">Review-ready register set</ReviewFlag>
@@ -38,7 +36,7 @@ export function RegisterOverviewPanel({
   );
 }
 
-function SummaryTile({ label, value, tone }: { label: string; value: string | number; tone: Tone }) {
+function SummaryTile({ label, value, tone }: { label: string; value: string | number; tone: StatusTone }) {
   const colour =
     tone === 'success'
       ? 'text-emerald-700 dark:text-emerald-300'
@@ -48,7 +46,7 @@ function SummaryTile({ label, value, tone }: { label: string; value: string | nu
           ? 'text-amber-700 dark:text-amber-300'
           : 'text-gray-950 dark:text-gray-50';
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+    <div className={statusPanelClassName(tone, 'p-3')}>
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`mt-1 text-xl font-bold ${colour}`}>{value}</p>
     </div>

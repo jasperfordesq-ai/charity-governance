@@ -1581,6 +1581,8 @@ test('registers overview summary panel is extracted from the oversized route fil
   assert.match(panelSrc, /Review-ready register set/);
   assert.match(panelSrc, /Open records/);
   assert.match(panelSrc, /function SummaryTile/);
+  assert.match(panelSrc, /statusPanelClassName/);
+  assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
 });
 
 test('registers modal record forms are extracted from the oversized route file', () => {
