@@ -1422,7 +1422,7 @@ test('phase 6C regulator page presents source-cited readiness without legal cert
   const src = dash('regulator/page.tsx');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
-    ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+    ['@/components/ui/status', ['ReviewFlag', 'StatusChip', 'statusPanelClassName']],
   ];
 
   for (const [moduleName, importedNames] of imports) {
@@ -1444,6 +1444,15 @@ test('phase 6C regulator page presents source-cited readiness without legal cert
   ]) {
     assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `regulator must include ${term}`);
   }
+});
+
+test('regulator readiness cards use shared status panel tones', () => {
+  const src = dash('regulator/page.tsx');
+
+  assert.match(src, /statusPanelClassName/);
+  assert.doesNotMatch(src, /rounded-lg border border-teal-primary\/20 bg-white p-5/);
+  assert.doesNotMatch(src, /rounded-lg border border-gray-200 bg-gray-50 p-3/);
+  assert.doesNotMatch(src, /rounded-lg border border-gray-200 bg-white p-4/);
 });
 
 test('regulator guide prioritises profile-triggered obligations without legal certainty claims', () => {

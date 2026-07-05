@@ -11,7 +11,7 @@ import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { DataListItems } from '@/components/ui/data-list';
 import { EmptyState, ErrorState } from '@/components/ui/states';
-import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   evidencePackItems,
   officialGuidanceLinks,
@@ -130,7 +130,7 @@ export default function RegulatorGuidePage() {
         </>
       )}
     >
-      <section className="rounded-lg border border-teal-primary/20 bg-white p-5 shadow-sm dark:border-teal-light/20 dark:bg-gray-900">
+      <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
             <ReviewFlag tone="draft">Review-ready guidance map</ReviewFlag>
@@ -156,7 +156,7 @@ export default function RegulatorGuidePage() {
       >
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
           {regulatorOperatingModel.map((item) => (
-            <article key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <article key={item.title} className={statusPanelClassName('neutral', 'p-4 shadow-sm')}>
               <StatusChip tone="brand">{item.cadence}</StatusChip>
               <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
               <p className="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">{item.owner}</p>
@@ -202,7 +202,7 @@ export default function RegulatorGuidePage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {profileTriggeredRegulatorPriorities.map((item) => (
-              <article key={item.profileKey} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <article key={item.profileKey} className={statusPanelClassName('warning', 'p-4 shadow-sm')}>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusChip tone="warning">Profile-triggered</StatusChip>
                   <StatusChip tone="neutral">Standards {item.standardCodes.join(', ')}</StatusChip>
@@ -256,7 +256,7 @@ export default function RegulatorGuidePage() {
             {regulatorMatrixEntries.map((item) => {
               const meta = statusMeta[item.commencementStatus];
               return (
-                <article key={item.id} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                <article key={item.id} className={statusPanelClassName(meta.tone, 'p-4')}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -309,7 +309,7 @@ export default function RegulatorGuidePage() {
       >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           {evidencePackItems.map((item) => (
-            <article key={item.title} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <article key={item.title} className={statusPanelClassName('neutral', 'p-4 shadow-sm')}>
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
                 <StatusChip tone="neutral">{item.category.replace(/_/g, ' ')}</StatusChip>
@@ -327,7 +327,10 @@ export default function RegulatorGuidePage() {
       >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {productAuditMap.map((item) => (
-            <article key={item.area} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <article
+              key={item.area}
+              className={statusPanelClassName(item.status === 'Missing' || item.status === 'Thin' ? 'warning' : 'success', 'p-4 shadow-sm')}
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.area}</h3>
                 <StatusChip tone={item.status === 'Missing' || item.status === 'Thin' ? 'warning' : 'success'}>
@@ -354,7 +357,10 @@ export default function RegulatorGuidePage() {
               href={item.href}
               target="_blank"
               rel="noreferrer"
-              className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:border-teal-primary/50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-teal-light/50"
+              className={statusPanelClassName(
+                'neutral',
+                'p-4 shadow-sm transition-colors hover:border-teal-primary/50 dark:hover:border-teal-light/50',
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
@@ -388,7 +394,7 @@ function ReadinessTile({
           : 'text-gray-950 dark:text-gray-50';
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950">
+    <div className={statusPanelClassName(tone, 'p-3')}>
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`mt-1 text-xl font-bold ${colour}`}>{value}</p>
     </div>
