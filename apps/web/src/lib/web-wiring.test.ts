@@ -100,6 +100,8 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'documents/document-list-panel.tsx',
     'documents/document-link-modal.tsx',
     'documents/document-delete-modal.tsx',
+    'documents/document-evidence-pack-panel.tsx',
+    'documents/document-operational-signals-panel.tsx',
   ],
   'deadlines/page.tsx': [
     'deadlines/use-deadlines-workflow.ts',
@@ -876,6 +878,8 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'documents/document-link-modal.tsx',
         'documents/document-delete-modal.tsx',
         'documents/document-list-panel.tsx',
+        'documents/document-evidence-pack-panel.tsx',
+        'documents/document-operational-signals-panel.tsx',
       ],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -1292,7 +1296,11 @@ test('documents workflow state is extracted from the oversized route file', () =
 });
 
 test('documents summary and evidence cards use shared status panel tones', () => {
-  const pageSrc = dash('documents/page.tsx');
+  const pageSrc = [
+    dash('documents/page.tsx'),
+    optionalDash('documents/document-evidence-pack-panel.tsx'),
+    optionalDash('documents/document-operational-signals-panel.tsx'),
+  ].join('\n');
   const panelSrc = optionalDash('documents/document-profile-prompts.tsx');
 
   assert.match(pageSrc, /statusPanelClassName/);
@@ -1307,9 +1315,32 @@ test('documents summary waits for a successful load instead of showing zero-coun
 
   assert.match(pageSrc, /const documentDataReady = !loading && !loadError/);
   assert.match(pageSrc, /\{documentDataReady && \(\s*<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
-  assert.match(pageSrc, /\{documentDataReady && \(\s*<AppSection\s+title="Evidence pack"/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentEvidencePackPanel/);
   assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentProfilePromptsPanel/);
-  assert.match(pageSrc, /\{documentDataReady && \(\s*<AppSection\s+title="Operational register signals"/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentOperationalSignalsPanel/);
+});
+
+test('documents evidence pack and operational signals are extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const evidencePath = dashPath('documents/document-evidence-pack-panel.tsx');
+  const signalsPath = dashPath('documents/document-operational-signals-panel.tsx');
+  assert.ok(existsSync(evidencePath), 'document evidence pack panel should be split out of page.tsx');
+  assert.ok(existsSync(signalsPath), 'document operational signals panel should be split out of page.tsx');
+  const evidenceSrc = readFileSync(evidencePath, 'utf8');
+  const signalsSrc = readFileSync(signalsPath, 'utf8');
+
+  assert.match(pageSrc, /DocumentEvidencePackPanel/);
+  assert.match(pageSrc, /DocumentOperationalSignalsPanel/);
+  assert.doesNotMatch(pageSrc, /Evidence pack/);
+  assert.doesNotMatch(pageSrc, /Operational register signals/);
+  assert.match(evidenceSrc, /Evidence pack/);
+  assert.match(evidenceSrc, /evidencePackItems/);
+  assert.match(evidenceSrc, /StatusChip/);
+  assert.match(evidenceSrc, /EvidenceChip/);
+  assert.match(signalsSrc, /Operational register signals/);
+  assert.match(signalsSrc, /signalCoverage/);
+  assert.match(signalsSrc, /StatusChip/);
+  assert.match(signalsSrc, /EvidenceChip/);
 });
 
 test('documents profile-triggered evidence UX is extracted from the oversized route file', () => {

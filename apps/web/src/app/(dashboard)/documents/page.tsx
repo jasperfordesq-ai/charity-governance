@@ -3,13 +3,14 @@
 import { Button } from '@heroui/react';
 import { Plus } from 'lucide-react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { evidencePackItems } from '@/lib/regulator-guidance';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { AppPage, AppSection } from '@/components/ui/app-page';
-import { EvidenceChip, StatusChip, statusPanelClassName } from '@/components/ui/status';
+import { AppPage } from '@/components/ui/app-page';
+import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { DocumentDeleteModal } from './document-delete-modal';
+import { DocumentEvidencePackPanel } from './document-evidence-pack-panel';
 import { DocumentListPanel } from './document-list-panel';
 import { DocumentLinkModal } from './document-link-modal';
+import { DocumentOperationalSignalsPanel } from './document-operational-signals-panel';
 import { DocumentProfilePromptsPanel } from './document-profile-prompts';
 import { DocumentUploadModal } from './document-upload-modal';
 import { useDocumentsWorkflow } from './use-documents-workflow';
@@ -124,34 +125,10 @@ export default function DocumentsPage() {
       )}
 
       {documentDataReady && (
-        <AppSection
-          title="Evidence pack"
-          description="Use these prompts as a practical checklist for the documents trustees usually expect to see before annual review."
-          actions={(
-            <StatusChip tone={missingEvidenceCount === 0 ? 'success' : 'warning'}>
-              {missingEvidenceCount === 0 ? 'Checklist covered' : `${missingEvidenceCount} evidence areas missing`}
-            </StatusChip>
-          )}
-        >
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {evidencePackItems.map((item) => {
-              const count = documentCounts[item.category] ?? 0;
-              return (
-                <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
-                      <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
-                    </div>
-                    <EvidenceChip status={count > 0 ? 'ready' : 'missing'}>
-                      {count > 0 ? `${count} file${count === 1 ? '' : 's'}` : 'Needed'}
-                    </EvidenceChip>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </AppSection>
+        <DocumentEvidencePackPanel
+          documentCounts={documentCounts}
+          missingEvidenceCount={missingEvidenceCount}
+        />
       )}
 
       {documentDataReady && (
@@ -165,32 +142,10 @@ export default function DocumentsPage() {
       )}
 
       {documentDataReady && (
-        <AppSection
-          title="Operational register signals"
-          description="These checks look for named registers and policies in titles or descriptions, so upload names should be easy for trustees to scan."
-          actions={(
-            <StatusChip tone={missingSignalCount === 0 ? 'success' : 'warning'}>
-              {missingSignalCount === 0 ? 'Signals covered' : `${missingSignalCount} signals missing`}
-            </StatusChip>
-          )}
-        >
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {signalCoverage.map((item) => (
-              <div key={item.title} className={statusPanelClassName('neutral', 'p-4')}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
-                    <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.why}</p>
-                    <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
-                  </div>
-                  <EvidenceChip status={item.covered ? 'ready' : 'review'}>
-                    {item.covered ? 'Found' : 'Review'}
-                  </EvidenceChip>
-                </div>
-              </div>
-            ))}
-          </div>
-        </AppSection>
+        <DocumentOperationalSignalsPanel
+          missingSignalCount={missingSignalCount}
+          signalCoverage={signalCoverage}
+        />
       )}
 
       <DocumentListPanel

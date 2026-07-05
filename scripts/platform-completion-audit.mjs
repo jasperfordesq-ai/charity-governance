@@ -78,6 +78,7 @@ const fixedInThisAuditBranch = [
   'The document standard-link modal is split out of the oversized documents route behind a wiring regression test.',
   'The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.',
   'The uploaded-document list panel is split out of the oversized documents route behind a wiring regression test.',
+  'The document evidence-pack checklist and operational signal panels are split out of the documents route behind a wiring regression test.',
   'The document workflow loading, organisation-profile prompts, upload/link/delete/download mutations, and trusted download handling are split into a route-local hook behind a wiring regression test.',
   'Shared loading, empty, error, locked-feature, review-warning, and inline-status primitives now contain long text and actions within narrow/mobile layouts.',
   'Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.',
