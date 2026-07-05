@@ -60,7 +60,7 @@ test('team surfaces the server\'s specific error message (apiErrorMessage), not 
 test('profile-triggered workflows treat missing organisation profiles as setup state', () => {
   const consumers = [
     'documents/use-documents-workflow.ts',
-    'deadlines/page.tsx',
+    'deadlines/use-deadlines-workflow.ts',
     'registers/use-registers-workflow.ts',
     'regulator/page.tsx',
   ];
@@ -98,6 +98,7 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'documents/document-delete-modal.tsx',
   ],
   'deadlines/page.tsx': [
+    'deadlines/use-deadlines-workflow.ts',
     'deadlines/deadline-form-modal.tsx',
     'deadlines/deadline-list-panel.tsx',
     'deadlines/deadline-delete-modal.tsx',
@@ -820,6 +821,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
     {
       file: 'deadlines/page.tsx',
       extraFiles: [
+        'deadlines/use-deadlines-workflow.ts',
         'deadlines/deadline-form-modal.tsx',
         'deadlines/deadline-list-panel.tsx',
         'deadlines/deadline-overview-panels.tsx',
@@ -1523,6 +1525,7 @@ test('platform audit no longer asks to clean route inline SVGs after route pages
 test('deadlines workflow surfaces conditional obligation review dates from the organisation profile', () => {
   const src = [
     dash('deadlines/page.tsx'),
+    optionalDash('deadlines/use-deadlines-workflow.ts'),
     optionalDash('deadlines/deadline-profile-prompts.tsx'),
   ].join('\n');
   for (const term of [
@@ -1551,12 +1554,13 @@ test('deadlines workflow surfaces conditional obligation review dates from the o
 
 test('deadlines profile-triggered review-date UX is extracted from the oversized route file', () => {
   const pageSrc = dash('deadlines/page.tsx');
+  const hookSrc = optionalDash('deadlines/use-deadlines-workflow.ts');
   const panelPath = dashPath('deadlines/deadline-profile-prompts.tsx');
   assert.ok(existsSync(panelPath), 'deadline profile prompts should be split out of page.tsx');
   const panelSrc = readFileSync(panelPath, 'utf8');
 
   assert.match(pageSrc, /DeadlineProfilePromptsPanel/);
-  assert.match(pageSrc, /buildDeadlineProfilePrompts/);
+  assert.match(hookSrc, /buildDeadlineProfilePrompts/);
   assert.doesNotMatch(pageSrc, /formatReviewFlag/);
   assert.match(panelSrc, /formatReviewFlag/);
   assert.match(panelSrc, /reviewDateAlreadyScheduled/);
@@ -1592,10 +1596,11 @@ test('deadlines overview and regulatory cadence panels are extracted from the ov
 
 test('deadlines summary waits for a successful load instead of showing zero-count placeholders', () => {
   const pageSrc = dash('deadlines/page.tsx');
+  const hookSrc = optionalDash('deadlines/use-deadlines-workflow.ts');
   const overviewSrc = optionalDash('deadlines/deadline-overview-panels.tsx');
-  const deadlineSurface = [pageSrc, overviewSrc].join('\n');
+  const deadlineSurface = [pageSrc, hookSrc, overviewSrc].join('\n');
 
-  assert.match(pageSrc, /const deadlineDataReady = !loading && !loadError/);
+  assert.match(hookSrc, /const deadlineDataReady = !loading && !loadError/);
   assert.match(pageSrc, /\{deadlineDataReady && \(\s*<DeadlineOverviewPanels/);
   assert.match(deadlineSurface, /<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
   assert.match(deadlineSurface, /<AppSection\s+title="Regulatory cadence"/);
@@ -1646,6 +1651,37 @@ test('deadlines delete confirmation modal is extracted from the oversized route 
   assert.match(modalSrc, /Delete deadline/);
   assert.match(modalSrc, /Remove \{selectedDeadline \?/);
   assert.match(modalSrc, /This cannot be undone/);
+});
+
+test('deadlines workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('deadlines/page.tsx');
+  const hookPath = dashPath('deadlines/use-deadlines-workflow.ts');
+  assert.ok(existsSync(hookPath), 'deadline workflow state should be split out of page.tsx');
+  const hookSrc = readFileSync(hookPath, 'utf8');
+
+  assert.match(pageSrc, /useDeadlinesWorkflow/);
+  const ownedWorkflowPatterns = [
+    /const fetchDeadlines =/,
+    /const fetchOrganisationProfile =/,
+    /const scheduleConditionalDeadline =/,
+    /const handleSaveDeadline =/,
+    /const toggleComplete =/,
+    /const handleDeleteDeadline =/,
+  ];
+  for (const pattern of ownedWorkflowPatterns) {
+    assert.doesNotMatch(pageSrc, pattern, `page.tsx should not own ${pattern}`);
+  }
+  for (const term of [
+    'fetchDeadlines',
+    'fetchOrganisationProfile',
+    'scheduleConditionalDeadline',
+    'handleSaveDeadline',
+    'toggleComplete',
+    'handleDeleteDeadline',
+  ]) {
+    assert.match(hookSrc, new RegExp(term), `deadline workflow hook should own ${term}`);
+  }
+  assert.match(hookSrc, /export function useDeadlinesWorkflow/);
 });
 
 test('phase 6C registers keeps Complete gating and adds operational review-ready UX primitives', () => {
