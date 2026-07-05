@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `8be616e`
+Working-tree base commit when generated: `54875de`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -57,6 +57,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The document workflow loading, organisation-profile prompts, upload/link/delete/download mutations, and trusted download handling are split into a route-local hook behind a wiring regression test.
 - Shared loading, empty, error, locked-feature, review-warning, and inline-status primitives now contain long text and actions within narrow/mobile layouts.
 - Deadlines now surface profile-triggered review-date prompts from the conditional obligation profile, including source references, professional-review flags, and one-click review deadline prefills.
+- The deadlines regulatory cadence panel now cites the Charities Regulator Annual Report source and last-checked metadata for the 10-month filing prompt.
 - The regulator guide now prioritises conditional obligation profile triggers with source references, workflow areas, and professional-review flags without legal-certainty claims.
 - Governance registers now prioritise conditional obligation profile triggers with register-evidence signals, source references, and professional-review flags.
 - The register profile-priority model and panel are split out of the oversized registers route behind a wiring regression test.
@@ -189,7 +190,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 143 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 98 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 100 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 131 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 127 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 195 | yes | no obvious static risk; verify in browser |

@@ -2,27 +2,42 @@
 
 import { AppSection } from '@/components/ui/app-page';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
+import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
+
+const annualReportSource = IRISH_COMPLIANCE_MATRIX
+  .flatMap((entry) => entry.sourceRefs)
+  .find((source) => source.name === 'Annual report - how to submit');
+
+const annualReportSourceNote = {
+  name: annualReportSource?.name ?? 'Annual report - how to submit',
+  url: annualReportSource?.url ?? 'https://www.charitiesregulator.ie/en/information-for-charities/annual-report-how-to-submit',
+  lastChecked: annualReportSource?.lastChecked ?? '2026-07-05',
+};
 
 const regulatoryMilestones = [
   {
     title: 'Annual Report filing',
     cadence: '10 months after financial year end',
     detail: 'Use the organisation profile year-end date so the app can generate this deadline automatically.',
+    source: annualReportSourceNote,
   },
   {
     title: 'Compliance Record Form approval',
     cadence: 'Before Annual Report submission',
     detail: 'The board should approve the annual Governance Code position and keep the record as evidence.',
+    source: null,
   },
   {
     title: 'Financial controls review',
     cadence: 'At least annually',
     detail: 'Review budgets, reconciliations, reserves, approval limits, restricted funds, and management accounts.',
+    source: null,
   },
   {
     title: 'Risk and insurance review',
     cadence: 'At least annually',
     detail: 'Refresh the risk register and confirm insurance cover remains appropriate for activities.',
+    source: null,
   },
 ];
 
@@ -80,6 +95,20 @@ export function DeadlineOverviewPanels({
               <StatusChip tone="brand">{item.cadence}</StatusChip>
               <h3 className="mt-3 text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
               <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.detail}</p>
+              {item.source ? (
+                <p className="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                  Source:{' '}
+                  <a
+                    href={item.source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-teal-primary underline-offset-4 hover:underline dark:text-teal-bright"
+                  >
+                    {item.source.name}
+                  </a>{' '}
+                  (checked {item.source.lastChecked}).
+                </p>
+              ) : null}
             </div>
           ))}
         </div>

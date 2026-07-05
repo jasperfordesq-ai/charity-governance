@@ -1781,6 +1781,17 @@ test('deadlines overview and regulatory cadence panels are extracted from the ov
   assert.match(overviewSrc, /statusPanelClassName/);
 });
 
+test('deadlines regulatory cadence surfaces the annual report source metadata', () => {
+  const overviewSrc = optionalDash('deadlines/deadline-overview-panels.tsx');
+
+  assert.match(overviewSrc, /IRISH_COMPLIANCE_MATRIX/);
+  assert.match(overviewSrc, /Annual report - how to submit/);
+  assert.match(overviewSrc, /https:\/\/www\.charitiesregulator\.ie\/en\/information-for-charities\/annual-report-how-to-submit/);
+  assert.match(overviewSrc, /lastChecked/);
+  assert.match(overviewSrc, /Source:/);
+  assert.doesNotMatch(overviewSrc, /legally guaranteed/i);
+});
+
 test('deadlines summary waits for a successful load instead of showing zero-count placeholders', () => {
   const pageSrc = dash('deadlines/page.tsx');
   const hookSrc = optionalDash('deadlines/use-deadlines-workflow.ts');
