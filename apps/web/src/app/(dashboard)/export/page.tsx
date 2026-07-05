@@ -10,7 +10,7 @@ import { useToast } from '@/components/toast';
 import { AppPage } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
-import { ReviewWarningState } from '@/components/ui/states';
+import { ErrorState, ReviewWarningState } from '@/components/ui/states';
 import type { ComplianceApprovalReadinessResponse, ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
 import {
@@ -55,6 +55,7 @@ export default function ExportPage() {
     approvalNotes: '',
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [savingSignoff, setSavingSignoff] = useState(false);
   const [signoffError, setSignoffError] = useState('');
 
@@ -74,6 +75,7 @@ export default function ExportPage() {
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [summaryRes, signoffRes] = await Promise.all([
         api.get(`/compliance/summary?year=${year}`),
@@ -92,8 +94,13 @@ export default function ExportPage() {
         approvalNotes: nextSignoff.approvalNotes ?? '',
       });
       setSignoffError('');
+      setLoadError('');
     } catch (err) {
       logClientError('Failed to load compliance summary', err);
+      setSummary(null);
+      setSignoff(null);
+      setApprovalReadiness(null);
+      setLoadError('Could not load export data for this reporting year. Try again before generating or approving the report.');
     } finally {
       setLoading(false);
     }
@@ -175,6 +182,26 @@ export default function ExportPage() {
   const conditionalReviewItems = approvalReadiness?.conditionalReviewItems ?? [];
   const readinessBlockerCount = countApprovalReadinessBlockers(approvalReadiness);
   const readinessBlockerCodes = approvalReadinessBlockerCodes(approvalReadiness);
+
+  if (loadError && !loading) {
+    return (
+      <AppPage
+        eyebrow={`Reporting year ${year}`}
+        title="Export Compliance Report"
+        description="Generate a review-ready, evidence-led report for trustee review and filing records. CharityPilot supports workflow preparation; it is not legal advice."
+      >
+        <ErrorState
+          title="Export data could not be loaded"
+          description={loadError}
+          action={(
+            <Button size="sm" variant="flat" onPress={fetchSummary}>
+              Try again
+            </Button>
+          )}
+        />
+      </AppPage>
+    );
+  }
 
   return (
     <AppPage

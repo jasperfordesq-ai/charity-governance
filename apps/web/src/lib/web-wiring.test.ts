@@ -840,8 +840,13 @@ test('export loading, warning, and sign-off error states use shared primitives',
 
   assert.match(pageSrc, /from '@\/components\/ui\/form-alert'/);
   assert.match(pageSrc, /FormAlert/);
+  assert.match(pageSrc, /ErrorState/);
   assert.match(pageSrc, /ReviewWarningState/);
   assert.match(pageSrc, /Before exporting/);
+  assert.match(pageSrc, /const \[loadError, setLoadError\]/);
+  assert.match(pageSrc, /setLoadError\('Could not load export data/);
+  assert.match(pageSrc, /loadError && !loading/);
+  assert.match(pageSrc, /onPress=\{fetchSummary\}/);
   assert.doesNotMatch(pageSrc, /CircleAlert/);
   assert.doesNotMatch(pageSrc, /role="alert" className=/);
   assert.doesNotMatch(pageSrc, /bg-red-50/);
