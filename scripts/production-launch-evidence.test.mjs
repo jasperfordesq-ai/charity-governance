@@ -49,6 +49,54 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'secretsAndEnv' && checkId === 'real-production-values') {
+    entry.description = '.env.production was materialized from the approved secret source with real production values.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'secret-source-excluded-from-git') {
+    entry.description = 'Production secret store path is excluded from git and .env.production remains uncommitted.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'node-env-production') {
+    entry.description = 'NODE_ENV=production is configured for API, web, migration, and scheduled job runtimes.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'jwt-secret-entropy') {
+    entry.description = 'JWT_SECRET is high entropy and at least 32 characters in the production secret store.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'frontend-api-origins') {
+    entry.description = 'Production origins are fixed to https://app.charitypilot.ie and https://api.charitypilot.ie.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'supabase-public-origin') {
+    entry.description = 'SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL use the same HTTPS Supabase project.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'web-compose-api-origin') {
+    entry.description = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL matches NEXT_PUBLIC_API_URL in the production secret source.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'web-compose-supabase-origin') {
+    entry.description = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL matches NEXT_PUBLIC_SUPABASE_URL in the production secret source.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'auth-cookie-domain') {
+    entry.description = 'AUTH_COOKIE_DOMAIN=.charitypilot.ie covers the canonical web and API subdomains.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'stripe-live-keys') {
+    entry.description = 'STRIPE_SECRET_KEY and related billing values were verified as Stripe live mode production keys.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'resend-domain') {
+    entry.description = 'Resend sender domain is verified for the production EMAIL_FROM address.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'supabase-service-role-secret-store') {
+    entry.description = 'SUPABASE_SERVICE_ROLE_KEY is stored only in the API secret store.';
+  }
+
   if (areaId === 'releaseGate' && checkId === 'check-production') {
     entry.type = 'command-output';
     entry.description = [
@@ -593,6 +641,41 @@ test('production launch evidence validator requires executable checker command t
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-check\.evidence must include the check:production:supabase command/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include Production provider check passed/);
     assert.match(result.stderr, /areas\.observability\.checks\.observability-check\.evidence must include the check:production:observability command/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires concrete secrets and environment evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const genericEvidence = {
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/secrets/env-reviewed',
+    description: 'Production environment reviewed by operator',
+    capturedAt,
+  };
+  for (const checkId of Object.keys(evidence.areas.secretsAndEnv.checks)) {
+    evidence.areas.secretsAndEnv.checks[checkId].evidence = [genericEvidence];
+  }
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.real-production-values\.evidence must include \.env\.production/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.secret-source-excluded-from-git\.evidence must include secret store/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.node-env-production\.evidence must include NODE_ENV=production/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.jwt-secret-entropy\.evidence must include high entropy/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.frontend-api-origins\.evidence must include https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-public-origin\.evidence must include same HTTPS Supabase project/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.web-compose-api-origin\.evidence must include CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.web-compose-supabase-origin\.evidence must include CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.auth-cookie-domain\.evidence must include AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.stripe-live-keys\.evidence must include Stripe live mode/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.resend-domain\.evidence must include verified/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-service-role-secret-store\.evidence must include API secret store/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

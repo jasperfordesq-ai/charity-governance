@@ -78,6 +78,7 @@ Evidence:
 - [ ] Stripe keys are live-mode production keys.
 - [ ] Resend sender domain is verified for production sending.
 - [ ] Supabase service role key is stored only in the API secret store.
+- [ ] Machine-readable launch evidence names each required secret/origin fact without recording raw secret values.
 
 Evidence:
 

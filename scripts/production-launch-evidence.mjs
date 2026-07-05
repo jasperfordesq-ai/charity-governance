@@ -617,6 +617,31 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues);
   }
 
+  if (areaId === 'secretsAndEnv') {
+    const text = evidenceText(actualCheck.evidence);
+
+    const secretsMarkersByCheck = {
+      'real-production-values': ['.env.production', 'real production values'],
+      'secret-source-excluded-from-git': ['secret store', 'excluded from git'],
+      'node-env-production': ['NODE_ENV=production'],
+      'jwt-secret-entropy': ['JWT_SECRET', '32 characters', 'high entropy'],
+      'frontend-api-origins': ['https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
+      'supabase-public-origin': ['SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'same HTTPS Supabase project'],
+      'web-compose-api-origin': ['CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_API_URL'],
+      'web-compose-supabase-origin': ['CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'],
+      'auth-cookie-domain': ['AUTH_COOKIE_DOMAIN=.charitypilot.ie'],
+      'stripe-live-keys': ['STRIPE_SECRET_KEY', 'Stripe live mode'],
+      'resend-domain': ['Resend sender domain', 'verified'],
+      'supabase-service-role-secret-store': ['SUPABASE_SERVICE_ROLE_KEY', 'API secret store'],
+    };
+
+    for (const marker of secretsMarkersByCheck[checkId] ?? []) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
   if (areaId === 'database' && checkId === 'database-check') {
     if (!evidenceText(actualCheck.evidence).includes('--expect-operational-sentinel')) {
       issues.push(`${checkPath}.evidence must show check:production:database was run with --expect-operational-sentinel`);
