@@ -1558,7 +1558,10 @@ test('regulator readiness cards use shared status panel tones', () => {
 });
 
 test('regulator guide prioritises profile-triggered obligations without legal certainty claims', () => {
-  const src = dash('regulator/page.tsx');
+  const src = [
+    dash('regulator/page.tsx'),
+    optionalDash('regulator/regulator-profile-priorities.tsx'),
+  ].join('\n');
   for (const term of [
     'OrganisationResponse',
     'CONDITIONAL_OBLIGATION_REVIEW_RULES',
@@ -1578,6 +1581,21 @@ test('regulator guide prioritises profile-triggered obligations without legal ce
       `regulator page must include ${term}`,
     );
   }
+});
+
+test('regulator profile-triggered priorities section is extracted from the oversized route file', () => {
+  const pageSrc = dash('regulator/page.tsx');
+  const panelPath = dashPath('regulator/regulator-profile-priorities.tsx');
+  assert.ok(existsSync(panelPath), 'regulator profile-triggered priorities should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /RegulatorProfilePrioritiesSection/);
+  assert.doesNotMatch(pageSrc, /Profile-triggered regulator priorities/);
+  assert.doesNotMatch(pageSrc, /Complete the conditional obligation profile/);
+  assert.match(panelSrc, /Profile-triggered regulator priorities/);
+  assert.match(panelSrc, /Complete the conditional obligation profile/);
+  assert.match(panelSrc, /Professional review:/);
+  assert.match(panelSrc, /Source references/);
 });
 
 test('regulator official-source links use compact link styling rather than pill badges', () => {
