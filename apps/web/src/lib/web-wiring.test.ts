@@ -112,6 +112,7 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'organisation/organisation-profile-form.tsx',
   ],
   'export/page.tsx': [
+    'export/use-export-workflow.ts',
     'export/export-board-approval-panel.tsx',
   ],
 };
@@ -515,9 +516,10 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(principleDetailSurface, /legal advice/i);
 
   const exportPage = dash('export/page.tsx');
+  const exportWorkflow = optionalDash('export/use-export-workflow.ts');
   const exportReadiness = optionalDash('export/export-approval-readiness.tsx');
-  const exportSurface = [exportPage, exportReadiness].join('\n');
-  assert.match(exportPage, /approval-readiness\?year=\$\{year\}/);
+  const exportSurface = [exportPage, exportWorkflow, exportReadiness].join('\n');
+  assert.match(exportWorkflow, /approval-readiness\?year=\$\{year\}/);
   assert.match(exportSurface, /missingExplanations/);
   assert.match(exportSurface, /missingRecords/);
   assert.match(exportSurface, /missingEvidence/);
@@ -528,13 +530,13 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(exportSurface, /matrixLastChecked/);
   assert.match(exportSurface, /not_commenced/);
   assert.match(exportSurface, /compliance certificate/i);
-  assert.match(exportPage, /COMPLIANCE_APPROVAL_INCOMPLETE/);
-  assert.match(exportPage, /fetchApprovalReadiness/);
-  assert.match(exportPage, /freshApprovalReadiness/);
-  assert.match(exportPage, /freshApprovalReadiness\?\.ready === false/);
-  assert.doesNotMatch(exportPage, /freshApprovalReadiness\?\.missingExplanations/);
+  assert.match(exportSurface, /COMPLIANCE_APPROVAL_INCOMPLETE/);
+  assert.match(exportSurface, /fetchApprovalReadiness/);
+  assert.match(exportSurface, /freshApprovalReadiness/);
+  assert.match(exportSurface, /freshApprovalReadiness\?\.ready === false/);
+  assert.doesNotMatch(exportSurface, /freshApprovalReadiness\?\.missingExplanations/);
   assert.doesNotMatch(
-    exportPage,
+    exportSurface,
     /const missingExplanations = approvalReadiness\?\.missingExplanations \?\? \[\];[\s\S]*?setSignoffError\(approvalIncompleteMessage\);[\s\S]*?return;[\s\S]*?setSavingSignoff\(true\);/,
   );
   assert.match(exportPage, /review-ready/i);
@@ -1146,6 +1148,7 @@ test('export board approval form is extracted from the oversized route file', ()
 test('export loading, warning, and sign-off error states use shared primitives', () => {
   const pageSrc = [
     dash('export/page.tsx'),
+    optionalDash('export/use-export-workflow.ts'),
     optionalDash('export/export-board-approval-panel.tsx'),
   ].join('\n');
   const previewSrc = dash('export/export-report-preview.tsx');
@@ -1174,14 +1177,16 @@ test('export loading, warning, and sign-off error states use shared primitives',
 
 test('export approval-readiness issue UI is extracted and uses shared review primitives', () => {
   const pageSrc = dash('export/page.tsx');
+  const workflowSrc = optionalDash('export/use-export-workflow.ts');
+  const pageWorkflowSurface = [pageSrc, workflowSrc].join('\n');
   const readinessPath = dashPath('export/export-approval-readiness.tsx');
   assert.ok(existsSync(readinessPath), 'export approval-readiness UI should be split out of page.tsx');
   const readinessSrc = readFileSync(readinessPath, 'utf8');
 
   assert.match(pageSrc, /ApprovalReadinessIssues/);
   assert.match(pageSrc, /ConditionalReviewPrompts/);
-  assert.match(pageSrc, /countApprovalReadinessBlockers/);
-  assert.match(pageSrc, /approvalReadinessBlockerCodes/);
+  assert.match(pageWorkflowSurface, /countApprovalReadinessBlockers/);
+  assert.match(pageWorkflowSurface, /approvalReadinessBlockerCodes/);
   assert.doesNotMatch(pageSrc, /border-amber-200/);
   assert.doesNotMatch(pageSrc, /bg-amber-50/);
   assert.doesNotMatch(pageSrc, /evidenceGapLabel/);
@@ -1197,6 +1202,26 @@ test('export approval-readiness issue UI is extracted and uses shared review pri
   assert.doesNotMatch(readinessSrc, /border border-gray-200 bg-white p-4 shadow-sm/);
   assert.doesNotMatch(readinessSrc, /border-amber-200/);
   assert.doesNotMatch(readinessSrc, /bg-amber-50/);
+});
+
+test('export workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('export/page.tsx');
+  const workflowPath = dashPath('export/use-export-workflow.ts');
+  assert.ok(existsSync(workflowPath), 'export loading, sign-off, readiness, and report-opening state should be split out of page.tsx');
+  const workflowSrc = readFileSync(workflowPath, 'utf8');
+
+  assert.match(pageSrc, /useExportWorkflow/);
+  assert.doesNotMatch(pageSrc, /const fetchSummary =/);
+  assert.doesNotMatch(pageSrc, /const fetchApprovalReadiness =/);
+  assert.doesNotMatch(pageSrc, /const handleSaveSignoff =/);
+  assert.doesNotMatch(pageSrc, /const handleExport =/);
+  assert.doesNotMatch(pageSrc, /api\.get\(`/);
+  assert.match(workflowSrc, /export function useExportWorkflow/);
+  assert.match(workflowSrc, /const fetchSummary =/);
+  assert.match(workflowSrc, /const fetchApprovalReadiness =/);
+  assert.match(workflowSrc, /const handleSaveSignoff =/);
+  assert.match(workflowSrc, /const handleExport =/);
+  assert.match(workflowSrc, /api\.get\(`/);
 });
 
 test('documents workflow surfaces conditional obligation evidence prompts from the organisation profile', () => {

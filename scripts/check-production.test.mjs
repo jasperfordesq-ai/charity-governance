@@ -2837,7 +2837,10 @@ test('web proxy transitions legacy query auth tokens to URL fragments before ren
 });
 
 test('web export opens the API-rendered report directly with opener isolation', () => {
-  const exportPage = readRepoFile('apps/web/src/app/(dashboard)/export/page.tsx');
+  const exportPage = [
+    readRepoFile('apps/web/src/app/(dashboard)/export/page.tsx'),
+    readRepoFile('apps/web/src/app/(dashboard)/export/use-export-workflow.ts'),
+  ].join('\n');
 
   assert.match(exportPage, /api\.getUri\(\{\s*url:\s*`\/export\/compliance-report\?year=\$\{year\}`\s*\}\)/);
   assert.match(exportPage, /window\.open\([^)]*'noopener,noreferrer'[^)]*\)/);
