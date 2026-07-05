@@ -460,6 +460,34 @@ test('principle detail confirms in-app navigation while saves are pending', () =
   assert.doesNotMatch(src, /onClick=\{\(\) => router\.push\('\/compliance'\)\}/);
 });
 
+test('principle detail navigation guard preserves expected browser link behaviour', () => {
+  const src = dash('compliance/[principleId]/page.tsx');
+  for (const term of [
+    'event.defaultPrevented',
+    'event.button !== 0',
+    'event.metaKey',
+    'event.ctrlKey',
+    'event.shiftKey',
+    'event.altKey',
+    "anchor.hasAttribute('download')",
+    "anchor.target && anchor.target !== '_self'",
+    'destination.origin !== window.location.origin',
+    'isSamePageHash',
+    'destination.pathname === current.pathname',
+    'destination.search === current.search',
+    'destination.hash.length > 0',
+    'window.addEventListener(\'beforeunload\', warnIfUnsaved)',
+    'window.removeEventListener(\'beforeunload\', warnIfUnsaved)',
+    "event.returnValue = ''",
+  ]) {
+    assert.match(
+      src,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `principle detail navigation guard must include ${term}`,
+    );
+  }
+});
+
 test('principle detail back and retry controls use HeroUI Button primitives', () => {
   const pageSrc = dash('compliance/[principleId]/page.tsx');
   const cardSrc = dash('compliance/[principleId]/standard-editor-card.tsx');
