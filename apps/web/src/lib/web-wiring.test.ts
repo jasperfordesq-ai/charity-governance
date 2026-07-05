@@ -102,6 +102,7 @@ const DOUBLE_SUBMIT_EXTRA_FILES: Record<string, string[]> = {
     'documents/document-delete-modal.tsx',
     'documents/document-evidence-pack-panel.tsx',
     'documents/document-operational-signals-panel.tsx',
+    'documents/document-summary-panel.tsx',
   ],
   'deadlines/page.tsx': [
     'deadlines/use-deadlines-workflow.ts',
@@ -880,6 +881,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'documents/document-list-panel.tsx',
         'documents/document-evidence-pack-panel.tsx',
         'documents/document-operational-signals-panel.tsx',
+        'documents/document-summary-panel.tsx',
       ],
       imports: [
         ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -1312,12 +1314,30 @@ test('documents summary and evidence cards use shared status panel tones', () =>
 
 test('documents summary waits for a successful load instead of showing zero-count placeholders', () => {
   const pageSrc = dash('documents/page.tsx');
+  const summarySrc = optionalDash('documents/document-summary-panel.tsx');
+  const surfaceSrc = [pageSrc, summarySrc].join('\n');
 
   assert.match(pageSrc, /const documentDataReady = !loading && !loadError/);
-  assert.match(pageSrc, /\{documentDataReady && \(\s*<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
+  assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentSummaryPanel/);
+  assert.match(surfaceSrc, /<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
   assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentEvidencePackPanel/);
   assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentProfilePromptsPanel/);
   assert.match(pageSrc, /\{documentDataReady && \(\s*<DocumentOperationalSignalsPanel/);
+});
+
+test('documents summary panel is extracted from the oversized route file', () => {
+  const pageSrc = dash('documents/page.tsx');
+  const panelPath = dashPath('documents/document-summary-panel.tsx');
+  assert.ok(existsSync(panelPath), 'document summary panel should be split out of page.tsx');
+  const panelSrc = readFileSync(panelPath, 'utf8');
+
+  assert.match(pageSrc, /DocumentSummaryPanel/);
+  assert.doesNotMatch(pageSrc, /Keep board evidence close to the standard it supports/);
+  assert.doesNotMatch(pageSrc, /Evidence-led governance/);
+  assert.match(panelSrc, /Keep board evidence close to the standard it supports/);
+  assert.match(panelSrc, /Evidence-led governance/);
+  assert.match(panelSrc, /linkedStandardsCount/);
+  assert.match(panelSrc, /missingEvidenceCount/);
 });
 
 test('documents evidence pack and operational signals are extracted from the oversized route file', () => {

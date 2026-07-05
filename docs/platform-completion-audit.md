@@ -4,7 +4,7 @@ Generated: 2026-07-05
 
 Branch: `master`
 
-Working-tree base commit when generated: `60fcd4e`
+Working-tree base commit when generated: `c9a1486`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -47,6 +47,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Auth routes now use lucide-react password visibility, validation, mail, and alert icons instead of route-local inline SVG markup behind a wiring regression test.
 - Marketing routes now use lucide-react feature, pricing, FAQ, and share/navigation icons instead of route-local inline SVG markup behind a wiring regression test.
 - Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.
+- The document summary panel is split out of the oversized documents route behind a wiring regression test while preserving successful-load gating.
 - The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.
 - The document standard-link modal is split out of the oversized documents route behind a wiring regression test.
 - The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.
@@ -188,7 +189,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 83 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 131 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 127 | yes | no obvious static risk; verify in browser |
-| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 218 | yes | no obvious static risk; verify in browser |
+| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 195 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 116 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |

@@ -74,6 +74,7 @@ const fixedInThisAuditBranch = [
   'Auth routes now use lucide-react password visibility, validation, mail, and alert icons instead of route-local inline SVG markup behind a wiring regression test.',
   'Marketing routes now use lucide-react feature, pricing, FAQ, and share/navigation icons instead of route-local inline SVG markup behind a wiring regression test.',
   'Documents now surface profile-triggered evidence prompts from the conditional obligation profile, including linked standard counts, source references, and professional-review flags.',
+  'The document summary panel is split out of the oversized documents route behind a wiring regression test while preserving successful-load gating.',
   'The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.',
   'The document standard-link modal is split out of the oversized documents route behind a wiring regression test.',
   'The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.',
