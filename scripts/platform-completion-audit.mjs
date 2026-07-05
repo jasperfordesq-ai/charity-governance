@@ -93,6 +93,7 @@ const fixedInThisAuditBranch = [
   'The compliance principle standard editor card and save-state UI are split out of the oversized compliance detail route behind a wiring regression test.',
   'The compliance principle standard list is split out of the oversized compliance detail route behind a wiring regression test.',
   'The compliance principle loading and error states are split out of the oversized compliance detail route behind a wiring regression test.',
+  'The compliance principle workflow hook now owns loading, autosave, approval-readiness refresh, and pending-navigation guards behind a wiring regression test.',
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.',

@@ -454,9 +454,10 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
 
   const principleDetail = dash('compliance/[principleId]/page.tsx');
   const principleEvidencePanel = optionalDash('compliance/[principleId]/principle-evidence-panel.tsx');
-  const principleDetailSurface = [principleDetail, principleEvidencePanel].join('\n');
+  const principleWorkflow = optionalDash('compliance/[principleId]/use-principle-detail-workflow.ts');
+  const principleDetailSurface = [principleDetail, principleEvidencePanel, principleWorkflow].join('\n');
   assert.match(principleDetailSurface, /EvidenceReadiness/);
-  assert.match(principleDetail, /getMatrixEntriesForStandard/);
+  assert.match(principleDetailSurface, /getMatrixEntriesForStandard/);
   assert.match(principleDetailSurface, /legal advice/i);
 
   const exportPage = dash('export/page.tsx');
@@ -550,7 +551,10 @@ test('shell recovery and disclosure actions use HeroUI Button primitives', () =>
 });
 
 test('principle detail refreshes approval-readiness after successful autosave', () => {
-  const src = dash('compliance/[principleId]/page.tsx');
+  const src = [
+    dash('compliance/[principleId]/page.tsx'),
+    optionalDash('compliance/[principleId]/use-principle-detail-workflow.ts'),
+  ].join('\n');
   assert.match(src, /refreshApprovalReadiness/);
   assert.match(src, /readinessRequestSeq/);
   assert.match(src, /const requestSeq = \+\+readinessRequestSeq\.current/);
@@ -563,7 +567,10 @@ test('principle detail refreshes approval-readiness after successful autosave', 
 });
 
 test('principle detail confirms in-app navigation while saves are pending', () => {
-  const src = dash('compliance/[principleId]/page.tsx');
+  const src = [
+    dash('compliance/[principleId]/page.tsx'),
+    optionalDash('compliance/[principleId]/use-principle-detail-workflow.ts'),
+  ].join('\n');
   for (const term of [
     'hasPendingComplianceSaves',
     'confirmComplianceNavigation',
@@ -588,7 +595,10 @@ test('principle detail confirms in-app navigation while saves are pending', () =
 });
 
 test('principle detail navigation guard preserves expected browser link behaviour', () => {
-  const src = dash('compliance/[principleId]/page.tsx');
+  const src = [
+    dash('compliance/[principleId]/page.tsx'),
+    optionalDash('compliance/[principleId]/use-principle-detail-workflow.ts'),
+  ].join('\n');
   for (const term of [
     'event.defaultPrevented',
     'event.button !== 0',
@@ -686,6 +696,7 @@ test('principle detail uses shared loading and error state primitives', () => {
   const src = [
     dash('compliance/[principleId]/page.tsx'),
     optionalDash('compliance/[principleId]/principle-detail-states.tsx'),
+    optionalDash('compliance/[principleId]/use-principle-detail-workflow.ts'),
   ].join('\n');
 
   assert.match(src, /from '@\/components\/ui\/states'/);
@@ -713,6 +724,23 @@ test('principle detail loading and error states are extracted from the oversized
   assert.match(statesSrc, /Loading compliance principle/);
   assert.match(statesSrc, /Principle not found/);
   assert.match(statesSrc, /primaryActionButtonClassName/);
+});
+
+test('principle detail workflow state is extracted from the oversized route file', () => {
+  const pageSrc = dash('compliance/[principleId]/page.tsx');
+  const hookPath = dashPath('compliance/[principleId]/use-principle-detail-workflow.ts');
+  assert.ok(existsSync(hookPath), 'principle detail workflow state should be split out of page.tsx');
+  const hookSrc = readFileSync(hookPath, 'utf8');
+
+  assert.match(pageSrc, /usePrincipleDetailWorkflow/);
+  assert.doesNotMatch(pageSrc, /debounceTimers/);
+  assert.doesNotMatch(pageSrc, /pendingSaveData/);
+  assert.doesNotMatch(pageSrc, /handleInAppNavigationClick/);
+  assert.match(hookSrc, /export function usePrincipleDetailWorkflow/);
+  assert.match(hookSrc, /debounceTimers/);
+  assert.match(hookSrc, /pendingSaveData/);
+  assert.match(hookSrc, /handleInAppNavigationClick/);
+  assert.match(hookSrc, /refreshApprovalReadiness/);
 });
 
 test('a board mutation failure shows a toast and keeps the existing list (no partial data loss)', () => {
