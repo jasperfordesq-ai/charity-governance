@@ -106,7 +106,7 @@ export async function complianceRoutes(app: FastifyInstance) {
     }
   });
 
-  // GET /approval-readiness?year=2026 - missing explanations that block board approval
+  // GET /approval-readiness?year=2026 - records, evidence, profile facts, and prompts for board approval readiness
   app.get('/approval-readiness', async (request, reply) => {
     try {
       const { year } = complianceQuerySchema.parse(request.query);

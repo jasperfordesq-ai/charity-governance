@@ -2152,6 +2152,33 @@ test('backend product audit records current launch and dependency posture', () =
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
 
+test('governance docs describe the broadened approval-readiness model', () => {
+  const governanceArchitecture = readRepoFile('docs/architecture/08-governance-domain.md');
+  const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
+  const combined = `${governanceArchitecture}\n${backendAudit}`;
+
+  for (const term of [
+    'missingRecords',
+    'missingEvidence',
+    'missingExplanations',
+    'profileIssues',
+    'conditionalReviewItems',
+    'matrixReviewItems',
+    'matrixLastChecked',
+  ]) {
+    assert.match(combined, new RegExp(term), `docs must describe ${term}`);
+  }
+
+  assert.match(combined, /missing standard records/i);
+  assert.match(combined, /missing action\/evidence fields/i);
+  assert.match(combined, /conditional obligation profile/i);
+  assert.match(combined, /conditional review prompts/i);
+  assert.match(combined, /not legal certification/i);
+  assert.doesNotMatch(combined, /returns \{ ready, missingExplanations \}/);
+  assert.doesNotMatch(combined, /warning section when explanations are incomplete/);
+  assert.doesNotMatch(combined, /specific approval-readiness warning/);
+});
+
 test('irish source log records current official-source recheck without legal certainty', () => {
   const sourceLog = readRepoFile('docs/product-revamp/irish-source-log.md');
   const auditScript = readRepoFile('scripts/platform-completion-audit.mjs');

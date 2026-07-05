@@ -115,7 +115,7 @@ The annual board approval is a single `ComplianceSignoff` per organisation per y
 
 (Source: `apps/api/prisma/schema.prisma:243-264`.)
 
-`getSignoff()` returns a synthetic default object with `status: DRAFT` and null fields when no row exists yet, so the client always has a shape to render (`apps/api/src/services/compliance.service.ts:235-274`). `getApprovalReadiness()` reports any in-scope `NOT_APPLICABLE` or `EXPLAIN` records whose `explanationIfNA` is blank after trimming (`apps/api/src/services/compliance.service.ts:152-170`). `upsertSignoff()` checks that readiness only when `data.status === 'APPROVED'`: incomplete readiness raises `400 COMPLIANCE_APPROVAL_INCOMPLETE` before writing; otherwise it writes the row and stamps `approvedAt` for `APPROVED`, clearing it for non-approved states (`apps/api/src/services/compliance.service.ts:278-336`).
+`getSignoff()` returns a synthetic default object with `status: DRAFT` and null fields when no row exists yet, so the client always has a shape to render (`apps/api/src/services/compliance.service.ts`). `getApprovalReadiness()` evaluates the in-scope standards for a reporting year and returns missing standard records, missing action/evidence fields, missing comply-or-explain explanations, missing conditional obligation profile facts, conditional review prompts, matrix review metadata and the matrix last-checked date. `upsertSignoff()` checks that readiness only when `data.status === 'APPROVED'`: incomplete readiness raises `400 COMPLIANCE_APPROVAL_INCOMPLETE` before writing; otherwise it writes the row and stamps `approvedAt` for `APPROVED`, clearing it for non-approved states.
 
 `ComplianceSignoffStatus` has three states (`apps/api/prisma/schema.prisma:37-41`):
 
@@ -138,9 +138,26 @@ stateDiagram-v2
 
 ### Approval-readiness enforcement
 
-Approval readiness is a service-level check, not a schema-only validation rule, because it depends on the organisation's records for a reporting year. The HTTP route `GET /approval-readiness?year=` calls `getApprovalReadiness()` and returns `{ ready, missingExplanations }` for authenticated subscribed users (`apps/api/src/routes/compliance/index.ts:109-119`). A missing explanation means an in-scope record is marked `NOT_APPLICABLE` or `EXPLAIN` and has no non-whitespace `explanationIfNA`.
+Approval readiness is a service-level check, not a schema-only validation rule, because it depends on the organisation's records, in-scope standards and profile facts for a reporting year. The HTTP route `GET /approval-readiness?year=` calls `getApprovalReadiness()` for authenticated subscribed users and returns the full readiness shape:
 
-Draft editing remains deliberately flexible: admins can autosave records without explanations and can move the annual signoff to `BOARD_REVIEW`. The hard gate is limited to `APPROVED`, where `upsertSignoff()` raises `COMPLIANCE_APPROVAL_INCOMPLETE` before the database upsert if readiness is incomplete. This makes the product review-ready for the mechanical comply-or-explain completeness check without certifying the legal sufficiency of the explanations or evidence.
+```json
+{
+  "data": {
+    "ready": false,
+    "missingRecords": [],
+    "missingEvidence": [],
+    "missingExplanations": [],
+    "profileIssues": [],
+    "conditionalReviewItems": [],
+    "matrixReviewItems": [],
+    "matrixLastChecked": "2026-07-05"
+  }
+}
+```
+
+`missingRecords` lists in-scope standards with no captured Compliance Record status. `missingEvidence` lists `COMPLIANT` and `WORKING_TOWARDS` records missing action/evidence fields. `missingExplanations` lists `NOT_APPLICABLE` and `EXPLAIN` records with blank `explanationIfNA`. `profileIssues` currently flags a missing conditional obligation profile before board approval. `conditionalReviewItems` are generated from selected organisation profile facts such as paid staff, fundraising, safeguarding, personal-data processing and data processors. `matrixReviewItems` and `matrixLastChecked` carry source metadata, commencement status, board-approval prompts and professional-review flags from the Irish compliance matrix.
+
+Draft editing remains deliberately flexible: admins can autosave records without complete evidence and can move the annual signoff to `BOARD_REVIEW`. The hard gate is limited to `APPROVED`, where `upsertSignoff()` raises `COMPLIANCE_APPROVAL_INCOMPLETE` before the database upsert if readiness is incomplete. Conditional review prompts and matrix review metadata are professional-review prompts, not legal certification and not automatic blockers unless they also create a missing profile/record/evidence/explanation issue.
 
 ### Linking standards to evidence documents
 
