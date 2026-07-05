@@ -2120,6 +2120,19 @@ test('frontend architecture docs describe current public theme support', () => {
   assert.match(frontendArchitecture, /pre-paint inline script applies the user's light\/dark preference across public and protected route groups/);
 });
 
+test('backend product audit records current launch and dependency posture', () => {
+  const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
+
+  assert.match(backendAudit, /Date checked: 2026-07-05/);
+  assert.match(backendAudit, /Fresh production dependency audit on 2026-07-05/);
+  assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
+  assert.match(backendAudit, /found 0 vulnerabilities/);
+  assert.match(backendAudit, /23 production values still require real data/);
+  assert.match(backendAudit, /81 machine-readable launch evidence checks/);
+  assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
+  assert.doesNotMatch(backendAudit, /Phase 7 current/);
+});
+
 test('production deploy preflight is wired for digest-pinned image promotion', () => {
   const packageJson = JSON.parse(readRepoFile('package.json'));
   const runbook = readRepoFile('docs/production-runbook.md');

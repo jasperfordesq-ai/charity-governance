@@ -1,8 +1,8 @@
 # Backend Audit
 
-Date checked: 2026-07-03
+Date checked: 2026-07-05
 
-Scope: Phase 7 backend/dependency hardening refresh. Runtime API, shared, dependency, and operational-readiness surfaces were inspected; no runtime code or package files were edited in this pass. Recommended phases refer to the approved full product revamp phases, not commits in this task.
+Scope: current backend/dependency hardening refresh. Runtime API, shared, dependency, and operational-readiness surfaces were inspected; no runtime code or package files were edited in this pass. Launch status still reports that 23 production values still require real data, and the external launch ledger still needs all 81 machine-readable launch evidence checks before real charity data.
 
 ## Findings
 
@@ -24,7 +24,7 @@ Scope: Phase 7 backend/dependency hardening refresh. Runtime API, shared, depend
 | Email/Resend degradation | `EmailService` is used for auth/team/reminders; reliability docs cover graceful failure and operational alerts. Readiness checks `new EmailService().isConfigured()`. | Good baseline with external provider assumptions. | Preserve neutral auth flows and invite/reminder degradation. Production requires verified Resend/domain evidence outside code. | Phase 7-8 |
 | Health/readiness checks | `apps/api/src/routes/health/index.ts` exposes public `/health` and protected `/health/readiness` using `x-charitypilot-readiness-key`; checks database, billing, email, storage configuration, and storage bucket reachability. | Strong operational baseline. Readiness is protected and uses timing-safe comparison. | Preserve. Production runbook should document readiness key and expected checks. | Phase 8 |
 | Production/backup/restore assumptions | `PRODUCTION_TODO.md` still has open items for external penetration test, Supabase production project/private bucket/backups/restore testing/retention, hosting/DNS/TLS/secrets/observability, production browser QA, and production env checks. | Product cannot be claimed production-launched or legally complete from code alone. | Keep launch claims constrained. Source-cited product revamp can proceed, but final launch report must reference external evidence. | Phase 8 |
-| Dependency posture and migration caution | Stack context checked 2026-07-03: Next.js 16 canary, React 19, Tailwind CSS 4, HeroUI v2, Fastify 5, Prisma 6, PostgreSQL, shared Zod schemas, Supabase, Stripe, Resend. `npm audit --omit=dev --audit-level=moderate` returned `found 0 vulnerabilities`. | Current production dependency audit is clean. Avoid churn: HeroUI v3, Prisma/Zod/Fastify/Stripe major changes should remain separate migrations with focused tests. | Do not edit package files without a concrete defect. Re-run production audit before release and after any dependency changes. | Phase 7 current |
+| Dependency posture and migration caution | Stack context checked 2026-07-05: Next.js 16 canary, React 19, Tailwind CSS 4, HeroUI v2, Fastify 5, Prisma 6, PostgreSQL, shared Zod schemas, Supabase, Stripe, Resend. Fresh production dependency audit on 2026-07-05: `npm audit --omit=dev --audit-level=moderate` returned `found 0 vulnerabilities`. | Current production dependency audit is clean. Avoid churn: HeroUI v3, Prisma/Zod/Fastify/Stripe major changes should remain separate migrations with focused tests. | Do not edit package files without a concrete defect. Re-run production audit before release and after any dependency changes. | Current launch hardening |
 | Legal copy and claims | Product docs prohibit "legally guaranteed", "legally bombproof", and "substitute for legal advice." Marketing/terms files contain static copy that should be reviewed during UI phases. | Legal copy must stay review-ready and source-cited. | Add source drawers, last-checked dates, and professional-review flags. Avoid legal certainty language in UI/export. | All phases |
 
 ## API Route Baseline
@@ -87,5 +87,5 @@ The approval gate checks for the presence of a trimmed explanation. It does not 
 1. Phase 2: Source-cited Irish compliance matrix is present in shared/domain code, with commencement status and conditional/professional-review flags.
 2. Phase 3: Approval-readiness service, API route, signoff enforcement, and export warning coverage are implemented and tested.
 3. Phase 6: UI pages are wired to readiness and source/review flags.
-4. Phase 7: Dependency posture was rechecked on 2026-07-03 with zero production audit vulnerabilities; major migration deferrals remain deliberate.
+4. Dependency posture was rechecked on 2026-07-05 with zero production audit vulnerabilities; major migration deferrals remain deliberate.
 5. Phase 8: Final readiness still depends on external evidence, backup/restore assumptions, provider configuration, browser QA, observability, and legal/professional review.
