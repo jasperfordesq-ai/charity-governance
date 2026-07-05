@@ -228,6 +228,10 @@ function requireHeader(response, name, pattern, issues, label) {
 function requireSecurityHeaders(response, issues, label) {
   requireHeader(response, 'strict-transport-security', /max-age=/i, issues, label);
   requireHeader(response, 'x-content-type-options', /^nosniff$/i, issues, label);
+  requireHeader(response, 'x-frame-options', /^DENY$/i, issues, label);
+  requireHeader(response, 'referrer-policy', /strict-origin-when-cross-origin/i, issues, label);
+  requireHeader(response, 'permissions-policy', /camera=\(\).*microphone=\(\).*geolocation=\(\).*payment=\(\)/i, issues, label);
+  requireHeader(response, 'content-security-policy', /frame-ancestors 'none'/i, issues, label);
 }
 
 async function checkOrigin({ entry, resolveHost, inspectTlsCertificate, fetchImpl, minTlsDays, now }) {

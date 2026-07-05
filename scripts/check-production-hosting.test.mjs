@@ -53,6 +53,10 @@ function secureHeaders() {
   return {
     'strict-transport-security': 'max-age=31536000; includeSubDomains',
     'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    'content-security-policy': "default-src 'self'; frame-ancestors 'none'",
   };
 }
 
@@ -171,6 +175,38 @@ test('production hosting checker fails when HTTPS reachability or security heade
     assert.equal(result.status, 1);
     assert.match(result.stderr, /web origin must include strict-transport-security/);
     assert.match(result.stderr, /API health must return 2xx/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production hosting checker requires the full baseline response security headers', async () => {
+  const runProductionHostingCheckFromArgs = await loadHostingRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+
+  try {
+    const result = await runProductionHostingCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        resolveHost: async () => [{ address: '8.8.4.4', family: 4 }],
+        inspectTlsCertificate: async () => ({ authorized: true, validTo: '2030-01-01T00:00:00.000Z' }),
+        fetchImpl: async () => response(200, {
+          'strict-transport-security': 'max-age=31536000; includeSubDomains',
+          'x-content-type-options': 'nosniff',
+        }),
+        now: () => Date.parse('2026-06-08T12:00:00.000Z'),
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /web origin must include x-frame-options/);
+    assert.match(result.stderr, /web origin must include referrer-policy/);
+    assert.match(result.stderr, /web origin must include permissions-policy/);
+    assert.match(result.stderr, /web origin must include content-security-policy/);
+    assert.match(result.stderr, /API health must include x-frame-options/);
+    assert.match(result.stderr, /API health must include referrer-policy/);
+    assert.match(result.stderr, /API health must include permissions-policy/);
+    assert.match(result.stderr, /API health must include content-security-policy/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
