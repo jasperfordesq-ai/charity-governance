@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
+import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 
 const ENV_FILE_FLAG = '--production-env-file=';
 const READINESS_PATH = '/api/v1/health/readiness';
@@ -231,7 +232,8 @@ export async function runProductionDeploySmokeFromArgs(
   try {
     fileEnv = parseEnvFile(options.productionEnvFile);
   } catch (error) {
-    return result(1, '', `Production deploy smoke failed: ${error.message}\n`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    return result(1, '', `Production deploy smoke failed: ${message}\n`);
   }
 
   const config = smokeConfig({ ...processEnv, ...fileEnv });
@@ -267,7 +269,8 @@ export async function runProductionDeploySmokeFromArgs(
       ].join('\n'));
     }
   } catch (error) {
-    return result(1, '', `Production deploy smoke failed: ${error.message}\n`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    return result(1, '', `Production deploy smoke failed: ${message}\n`);
   }
 
   return result(0, 'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.\n');

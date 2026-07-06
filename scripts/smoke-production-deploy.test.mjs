@@ -340,6 +340,37 @@ test('production deploy smoke fails when keyed readiness is not ready', async ()
   }
 });
 
+test('production deploy smoke redacts thrown request failure transcripts', async () => {
+  const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-redacted-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeSmokeEnv());
+
+  try {
+    const result = await runProductionDeploySmokeFromArgs(
+      ['--production-env-file', envPath],
+      {
+        processEnv: cleanEnv(),
+        fetchImpl: async () => {
+          throw new Error(
+            'request failed with READINESS_API_KEY=configured-readiness-key-32-chars and Bearer configured-readiness-key-32-chars at https://api.charitypilot.ie/api/v1/health/readiness?token=secret-token',
+          );
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Production deploy smoke failed/);
+    assert.match(result.stderr, /READINESS_API_KEY=\[redacted\]/);
+    assert.match(result.stderr, /Bearer \[redacted\]/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.doesNotMatch(result.stderr, /configured-readiness-key-32-chars|secret-token/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production deploy smoke rejects unapproved production hostnames before fetching', async () => {
   const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-unapproved-host-'));
