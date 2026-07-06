@@ -78,8 +78,8 @@ export function SessionTimeout() {
       <ModalContent>
         <ModalHeader>Session Expiring Soon</ModalHeader>
         <ModalBody>
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
+          <div className="text-center" role="status" aria-live="polite">
+            <div className="w-16 h-16 rounded-lg bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
               <Clock className="w-8 h-8 text-amber-500 dark:text-amber-300" strokeWidth={1.5} aria-hidden="true" />
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">

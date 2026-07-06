@@ -2173,6 +2173,10 @@ test('shared workflow chrome avoids decorative round icon containers', () => {
 
   assert.doesNotMatch(cookieConsent, /rounded-full bg-white\/10/);
   assert.doesNotMatch(sessionTimeout, /rounded-full bg-amber-50/);
+  assert.doesNotMatch(sessionTimeout, /rounded-xl/);
+  assert.match(sessionTimeout, /rounded-lg/);
+  assert.match(sessionTimeout, /role="status"/);
+  assert.match(sessionTimeout, /aria-live="polite"/);
   assert.doesNotMatch(dashboardLayout, /rounded-full bg-teal-primary\/10/);
 });
 
