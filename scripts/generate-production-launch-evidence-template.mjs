@@ -132,7 +132,27 @@ const evidenceHintsByCheck = new Map([
   ['securityReview.penetration-test-complete', [
     'external penetration test',
     'testing provider',
+    'testing scope',
+    'https://app.charitypilot.ie',
+    'https://api.charitypilot.ie',
+    'release commit',
     'completed before real charity data',
+  ]],
+  ['securityReview.critical-high-findings', [
+    'critical and high findings',
+    'remediated or formally accepted',
+    'accountable owner',
+    'finding tracker',
+    'risk acceptance approver',
+    'acceptance date',
+  ]],
+  ['securityReview.retest-evidence', ['retest evidence', 'fixed findings', 'retest date', 'retest result']],
+  ['securityReview.report-reference', [
+    'penetration test report',
+    'report reference',
+    'stored outside git',
+    'report version',
+    'report date',
   ]],
 ]);
 

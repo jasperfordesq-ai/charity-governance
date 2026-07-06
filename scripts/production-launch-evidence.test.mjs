@@ -324,19 +324,25 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'securityReview' && checkId === 'penetration-test-complete') {
-    entry.description = 'external penetration test by named testing provider completed before real charity data.';
+    entry.description = [
+      'external penetration test by named testing provider completed before real charity data.',
+      'testing scope covered https://app.charitypilot.ie and https://api.charitypilot.ie at the release commit under review.',
+    ].join(' ');
   }
 
   if (areaId === 'securityReview' && checkId === 'critical-high-findings') {
-    entry.description = 'critical and high findings were remediated or formally accepted by the accountable owner.';
+    entry.description = [
+      'critical and high findings were remediated or formally accepted by the accountable owner.',
+      'finding tracker, risk acceptance approver, and acceptance date are recorded outside git.',
+    ].join(' ');
   }
 
   if (areaId === 'securityReview' && checkId === 'retest-evidence') {
-    entry.description = 'retest evidence exists for fixed findings from the external penetration test.';
+    entry.description = 'retest evidence exists for fixed findings from the external penetration test, with retest date and retest result recorded.';
   }
 
   if (areaId === 'securityReview' && checkId === 'report-reference') {
-    entry.description = 'penetration test report reference stored outside git in the approved evidence vault.';
+    entry.description = 'penetration test report reference stored outside git in the approved evidence vault, with report version and report date recorded.';
   }
 
   if (areaId === 'observability' && checkId === 'observability-check') {
@@ -1505,10 +1511,21 @@ test('production launch evidence validator requires concrete external security r
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include external penetration test/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include testing scope/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include release commit/);
     assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include completed before real charity data/);
     assert.match(result.stderr, /areas\.securityReview\.checks\.critical-high-findings\.evidence must include remediated or formally accepted/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.critical-high-findings\.evidence must include finding tracker/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.critical-high-findings\.evidence must include risk acceptance approver/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.critical-high-findings\.evidence must include acceptance date/);
     assert.match(result.stderr, /areas\.securityReview\.checks\.retest-evidence\.evidence must include fixed findings/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.retest-evidence\.evidence must include retest date/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.retest-evidence\.evidence must include retest result/);
     assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include stored outside git/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include report version/);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include report date/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

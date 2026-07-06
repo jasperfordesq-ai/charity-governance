@@ -940,10 +940,25 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const text = evidenceText(actualCheck.evidence);
 
     const securityMarkersByCheck = {
-      'penetration-test-complete': ['external penetration test', 'testing provider', 'completed before real charity data'],
-      'critical-high-findings': ['critical and high findings', 'remediated or formally accepted', 'accountable owner'],
-      'retest-evidence': ['retest evidence', 'fixed findings'],
-      'report-reference': ['penetration test report', 'report reference', 'stored outside git'],
+      'penetration-test-complete': [
+        'external penetration test',
+        'testing provider',
+        'testing scope',
+        'https://app.charitypilot.ie',
+        'https://api.charitypilot.ie',
+        'release commit',
+        'completed before real charity data',
+      ],
+      'critical-high-findings': [
+        'critical and high findings',
+        'remediated or formally accepted',
+        'accountable owner',
+        'finding tracker',
+        'risk acceptance approver',
+        'acceptance date',
+      ],
+      'retest-evidence': ['retest evidence', 'fixed findings', 'retest date', 'retest result'],
+      'report-reference': ['penetration test report', 'report reference', 'stored outside git', 'report version', 'report date'],
     };
 
     for (const marker of securityMarkersByCheck[checkId] ?? []) {
