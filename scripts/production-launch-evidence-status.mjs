@@ -105,7 +105,7 @@ function summarizeEvidence(evidence) {
 
 function renderStatus(evidence) {
   const summary = summarizeEvidence(evidence);
-  const launchComplete =
+  const evidenceStatusesComplete =
     evidence?.approvedForLaunch === true &&
     evidence?.finalSignoff?.status === 'approved' &&
     summary.completedChecks === summary.totalChecks;
@@ -113,7 +113,7 @@ function renderStatus(evidence) {
     'CharityPilot production launch evidence status',
     '==============================================',
     '',
-    `Launch gate complete: ${launchComplete ? 'yes' : 'no'}`,
+    `Evidence statuses complete: ${evidenceStatusesComplete ? 'yes' : 'no'}`,
     `approvedForLaunch: ${evidence?.approvedForLaunch === true ? 'true' : 'false'}`,
     `finalSignoff: ${statusOf(evidence?.finalSignoff?.status)}`,
     `Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}`,

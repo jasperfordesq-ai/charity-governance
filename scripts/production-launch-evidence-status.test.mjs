@@ -38,7 +38,7 @@ test('production launch evidence status reports pending template progress withou
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /CharityPilot production launch evidence status/);
-    assert.match(result.stdout, /Launch gate complete: no/);
+    assert.match(result.stdout, /Evidence statuses complete: no/);
     assert.match(result.stdout, /Checklist checks complete: 0 \/ 81/);
     assert.match(result.stdout, /releaseGate: 0 \/ 18 complete/);
     assert.match(result.stdout, /approvedForLaunch: false/);
