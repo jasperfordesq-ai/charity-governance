@@ -49,6 +49,7 @@ test('production launch evidence status reports pending template progress withou
     assert.match(result.stdout, /legalCompliance: pending/);
     assert.match(result.stdout, /Next incomplete checks:/);
     assert.match(result.stdout, /releaseGate\.npm-ci/);
+    assert.match(result.stdout, /evidence hints: npm ci; exit 0/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -108,6 +109,11 @@ test('production launch evidence status renders non-secret JSON for automation',
       ['operations', 'security', 'legalCompliance', 'business'],
     );
     assert.match(payload.nextIncompleteChecks[0], /^releaseGate\.db-generate/);
+    assert.equal(payload.nextIncompleteCheckDetails[0].path, 'releaseGate.db-generate');
+    assert.deepEqual(payload.nextIncompleteCheckDetails[0].requiredEvidenceHints, [
+      'npm run db:generate -w @charitypilot/api',
+      'exit 0',
+    ]);
     assert.equal(payload.areas.find((area) => area.id === 'releaseGate').completed, 1);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

@@ -80,6 +80,7 @@ function statusOf(value) {
 export function summarizeEvidence(evidence) {
   const areaSummaries = [];
   const incompleteChecks = [];
+  const incompleteCheckDetails = [];
   let completedChecks = 0;
   let approvedFinalSignoffRoles = 0;
 
@@ -94,7 +95,18 @@ export function summarizeEvidence(evidence) {
         completedChecks += 1;
         areaCompleted += 1;
       } else {
-        incompleteChecks.push(`${area.id}.${check.id} (${statusOf(actualCheck?.status)})`);
+        const path = `${area.id}.${check.id}`;
+        const status = statusOf(actualCheck?.status);
+        const hints = Array.isArray(actualCheck?.requiredEvidenceHints)
+          ? actualCheck.requiredEvidenceHints.filter((hint) => typeof hint === 'string' && hint.trim().length > 0)
+          : [];
+        incompleteChecks.push(`${path} (${status})`);
+        incompleteCheckDetails.push({
+          path,
+          label: check.label,
+          status,
+          requiredEvidenceHints: hints,
+        });
       }
     }
 
@@ -125,6 +137,7 @@ export function summarizeEvidence(evidence) {
     approvedFinalSignoffRoles,
     completedChecks,
     finalSignoffApprovals,
+    incompleteCheckDetails,
     incompleteChecks,
     totalFinalSignoffRoles: FINAL_SIGNOFF_ROLES.length,
     totalChecks: countChecks(),
@@ -161,8 +174,13 @@ function renderStatus(evidence) {
 
   if (summary.incompleteChecks.length > 0) {
     lines.push('', 'Next incomplete checks:');
-    for (const check of summary.incompleteChecks.slice(0, 10)) {
+    const nextDetails = summary.incompleteCheckDetails.slice(0, 10);
+    for (const [index, check] of summary.incompleteChecks.slice(0, 10).entries()) {
       lines.push(`  - ${check}`);
+      const hints = nextDetails[index]?.requiredEvidenceHints ?? [];
+      if (hints.length > 0) {
+        lines.push(`    evidence hints: ${hints.slice(0, 6).join('; ')}`);
+      }
     }
     if (summary.incompleteChecks.length > 10) {
       lines.push(`  ... ${summary.incompleteChecks.length - 10} more`);
@@ -203,6 +221,7 @@ function renderJsonStatus(evidence) {
           status: approval.status,
         })),
       nextIncompleteChecks: summary.incompleteChecks.slice(0, 10),
+      nextIncompleteCheckDetails: summary.incompleteCheckDetails.slice(0, 10),
       incompleteCheckCount: summary.incompleteChecks.length,
     },
     null,
