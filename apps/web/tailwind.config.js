@@ -1,5 +1,5 @@
 /**
- * Tailwind config — required so HeroUI v2's theme plugin is registered and so the
+ * Tailwind config - required so HeroUI v2's theme plugin is registered and so the
  * `.dark` CLASS (toggled by the ThemeToggle + the FOUC script in app/layout.tsx)
  * drives dark mode. Loaded from globals.css via `@config "../../tailwind.config.js"`.
  *

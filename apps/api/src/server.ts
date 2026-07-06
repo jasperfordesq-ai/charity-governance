@@ -46,7 +46,7 @@ const app = Fastify({
   trustProxy: trustedProxyAddresses.length > 0 ? trustedProxyAddresses : false,
 });
 
-// ── Plugins ──
+// Plugins
 
 await app.register(errorHandlerPlugin);
 await app.register(securityHeadersPlugin);
@@ -65,7 +65,7 @@ await app.register(multipart, {
 
 await app.register(prismaPlugin);
 
-// ── Routes ──
+// Routes
 
 await app.register(authRoutes, { prefix: '/api/v1/auth' });
 await app.register(organisationRoutes, { prefix: '/api/v1/organisation' });
@@ -80,9 +80,9 @@ await app.register(governanceRegisterRoutes, { prefix: '/api/v1/governance-regis
 await app.register(teamRoutes, { prefix: '/api/v1/team' });
 await app.register(healthRoutes, { prefix: '/api/v1/health' });
 
-// ── Health check ──
+// Health check
 
-// ── Start ──
+// Start
 
 const port = parsePort(process.env.PORT, 3002);
 const host = process.env.HOST ?? '0.0.0.0';
@@ -91,7 +91,7 @@ try {
   await app.listen({ port, host });
   app.log.info(`CharityPilot API running on http://${host}:${port}`);
 
-  // ── Cron jobs ──
+  // Cron jobs
   const deadlineRemindersService = new DeadlineRemindersService(app.prisma);
   startCronJobs(deadlineRemindersService);
 } catch (err) {

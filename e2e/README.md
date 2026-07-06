@@ -1,7 +1,7 @@
 # CharityPilot end-to-end tests
 
 [Playwright](https://playwright.dev/) tests that drive a real Chromium browser
-against the **local Docker stack** — no external providers. Document storage uses
+against the **local Docker stack** - no external providers. Document storage uses
 the local filesystem driver, Stripe/Resend are unconfigured (test mode / no-op),
 and one-time tokens are read or injected via the database rather than a mailbox.
 
@@ -12,16 +12,16 @@ monorepo, so Playwright never enters the API/web production installs or images.
 
 | Spec | Journey |
 | --- | --- |
-| `tests/auth.spec.ts` | register → email-verify (real `/verify-email` flow) → log in → dashboard; plus an invalid-token case |
-| `tests/compliance.spec.ts` | record a governance standard's status (auto-saved) → board sign-off on the Export page |
-| `tests/documents.spec.ts` | upload a document → download it and verify the bytes |
-| `tests/deadlines-team.spec.ts` | create a deadline → mark it complete; team invite → accept → join the workspace |
+| `tests/auth.spec.ts` | register -> email-verify (real `/verify-email` flow) -> log in -> dashboard; plus an invalid-token case |
+| `tests/compliance.spec.ts` | record a governance standard's status (auto-saved) -> board sign-off on the Export page |
+| `tests/documents.spec.ts` | upload a document -> download it and verify the bytes |
+| `tests/deadlines-team.spec.ts` | create a deadline -> mark it complete; team invite -> accept -> join the workspace |
 | `tests/billing.spec.ts` | billing page renders tier + trial + Complete-plan feature gating (Stripe test mode) |
 | `tests/tenant-isolation.spec.ts` | an unknown/foreign principle id renders a clean not-found, never leaked content |
-| `tests/auth-session.spec.ts` | an unauthenticated visit to a protected route → `/login?next=`; an expired/cleared session → login |
+| `tests/auth-session.spec.ts` | an unauthenticated visit to a protected route -> `/login?next=`; an expired/cleared session -> login |
 | `tests/authz.spec.ts` | a MEMBER sees admin-only team controls disabled/hidden (affordance; the API enforces it too) |
 | `tests/validation.spec.ts` | register blocks a long-but-weak password inline and sends no guaranteed-400 request |
-| `tests/accessibility.spec.ts` | axe — 0 serious/critical WCAG 2.1 AA violations on every key page, light + dark |
+| `tests/accessibility.spec.ts` | axe - 0 serious/critical WCAG 2.1 AA violations on every key page, light + dark |
 
 ## Prerequisites
 
@@ -83,7 +83,7 @@ The expected cache should include `icudtl.dat` under the Playwright
   sets `workers: 1` and `fullyParallel: false`.
 - **Reset at the start of every run.** `global-setup.ts` waits for the stack to be
   reachable, then truncates all tenant/app tables (preserving the seeded governance
-  reference data — `GovernancePrinciple` / `GovernanceStandard`). See
+  reference data - `GovernancePrinciple` / `GovernanceStandard`). See
   `helpers/db.ts` for the exact table list.
 - **Unique data per test.** Emails, deadline titles and document names are suffixed
   with a timestamp so reruns never collide.
@@ -101,13 +101,13 @@ Locally, email delivery is a no-op (`RESEND_API_KEY` is a placeholder) and the
 verify/invite tokens are stored **sha256-hashed**, so the plaintext that a user
 would click in an email is unrecoverable. The harness therefore:
 
-- **Email verification** — injects a known token: sets `User.verifyToken =
+- **Email verification** - injects a known token: sets `User.verifyToken =
   sha256(known)` and drives the real `/verify-email#token=<known>` page
-  (`helpers/db.ts` → `injectVerifyToken`).
-- **Team invite** — sends a real invite via the UI, then overwrites that invite's
+  (`helpers/db.ts` -> `injectVerifyToken`).
+- **Team invite** - sends a real invite via the UI, then overwrites that invite's
   hashed token with a known one (`setInviteToken`) and drives
   `/accept-invite#token=<known>`.
-- **Reset / lookups** — `resetDb`, `getUserAndOrg`, `getPrincipleIdByNumber`, and
+- **Reset / lookups** - `resetDb`, `getUserAndOrg`, `getPrincipleIdByNumber`, and
   read-back helpers for assertions.
 
 Connection: `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypilot`

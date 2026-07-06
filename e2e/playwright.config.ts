@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
  * These drive a real Chromium browser against the LOCAL Docker stack:
  *   docker compose -f compose.yml -f compose.local.yml up
  *
- * They use NO external providers — document storage is the local filesystem
+ * They use NO external providers - document storage is the local filesystem
  * driver, Stripe/Resend are unconfigured (test mode / no-op), and one-time
  * tokens are read or injected via the database rather than a real mailbox.
  *
