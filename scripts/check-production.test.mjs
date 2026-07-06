@@ -2240,6 +2240,9 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.match(browserQa, /test:e2e:responsive:public:mobile/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
+  assert.match(browserQa, /E2E_SKIP_ROUTE_WARMING=true/);
+  assert.match(browserQa, /E2E_ROUTE_WARM_TIMEOUT_MS/);
+  assert.match(readRepoFile('e2e/global-setup.ts'), /Route warming skipped because E2E_SKIP_ROUTE_WARMING=true/);
   assert.match(launchChecklist, /all four focused responsive route chunk transcripts/);
   assert.match(launchChecklist, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchChecklist, /browserQa\.checks\.ios-safari-device-coverage/);

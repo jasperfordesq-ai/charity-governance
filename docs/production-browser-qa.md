@@ -56,6 +56,13 @@ npm run test:e2e:responsive:dashboard:desktop
 npm run test:e2e:responsive:dashboard:mobile
 ```
 
+On constrained local Docker hosts, Next dev-mode route compilation can make the
+best-effort warm-up slower than the focused route evidence you are trying to
+collect. For local-only troubleshooting, set `E2E_SKIP_ROUTE_WARMING=true` or
+lower `E2E_ROUTE_WARM_TIMEOUT_MS` / `E2E_ROUTE_WARM_BUDGET_MS` before running a
+focused chunk. Do not use that as a substitute for deployed production QA; the
+launch ledger still requires deployed HTTPS evidence.
+
 Use the same `E2E_DEPLOYED_QA=true`, URL, and secret-store credential environment
 shown above when those chunks are run against production.
 

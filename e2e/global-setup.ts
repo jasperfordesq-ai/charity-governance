@@ -11,8 +11,9 @@ const DEPLOYED_STARTUP_HINT =
   'CharityPilot deployed QA expects E2E_DEPLOYED_QA=true plus E2E_WEB_URL, E2E_API_URL, E2E_OWNER_EMAIL, and E2E_OWNER_PASSWORD for an approved non-sensitive test workspace.';
 const STACK_READINESS_TIMEOUT_MS = 180_000;
 const WEB_READINESS_TIMEOUT_MS = 600_000;
-const ROUTE_WARM_TIMEOUT_MS = 60_000;
-const ROUTE_WARM_BUDGET_MS = 240_000;
+const ROUTE_WARM_TIMEOUT_MS = positiveIntEnv('E2E_ROUTE_WARM_TIMEOUT_MS', 60_000);
+const ROUTE_WARM_BUDGET_MS = positiveIntEnv('E2E_ROUTE_WARM_BUDGET_MS', 240_000);
+const SKIP_ROUTE_WARMING = process.env.E2E_SKIP_ROUTE_WARMING === 'true';
 const PUBLIC_ROUTES_TO_WARM = [
   '/',
   '/features',
@@ -28,6 +29,13 @@ const PUBLIC_ROUTES_TO_WARM = [
   '/accept-invite',
   '/verify-email',
 ] as const;
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -76,6 +84,12 @@ async function warmFetch(url: string, timeoutMs: number): Promise<void> {
 }
 
 async function warmRoutes(): Promise<void> {
+  if (SKIP_ROUTE_WARMING) {
+    // eslint-disable-next-line no-console
+    console.log('[e2e] Route warming skipped because E2E_SKIP_ROUTE_WARMING=true.');
+    return;
+  }
+
   // Compile the public routes the suite navigates to (login/register/etc.) without a
   // session. Protected pages are left to compile on their first authenticated hit, under
   // the generous per-navigation timeout - warming them here (an authenticated render of
@@ -84,8 +98,14 @@ async function warmRoutes(): Promise<void> {
   const deadline = Date.now() + ROUTE_WARM_BUDGET_MS;
   for (const route of PUBLIC_ROUTES_TO_WARM) {
     const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) return;
+    if (remainingMs <= 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[e2e] Route warming budget exhausted before ${route}; continuing to tests.`);
+      return;
+    }
     const timeoutMs = Math.min(ROUTE_WARM_TIMEOUT_MS, remainingMs);
+    // eslint-disable-next-line no-console
+    console.log(`[e2e] Warming ${route} (${timeoutMs}ms timeout).`);
     await warmFetch(`${WEB_BASE_URL}${route}`, timeoutMs);
   }
 }
@@ -114,5 +134,5 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   await warmRoutes();
 
   // eslint-disable-next-line no-console
-  console.log('[e2e] Stack reachable, database reset, routes warmed - starting tests.');
+  console.log('[e2e] Stack reachable, database reset, route warm-up complete - starting tests.');
 }

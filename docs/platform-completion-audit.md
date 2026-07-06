@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `6a51e29`
+Working-tree base commit when generated: `94b79dc`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -113,6 +113,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The billing plan gates, Stripe checkout cards, and billing notes are split out of the oversized billing route behind a wiring regression test.
 - The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.
 - Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.
+- Local e2e route warming now logs progress and can be skipped or time-boxed with E2E_SKIP_ROUTE_WARMING, E2E_ROUTE_WARM_TIMEOUT_MS, and E2E_ROUTE_WARM_BUDGET_MS for constrained Docker hosts.
 - Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.
 - Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.
 - Regulator official guidance cards now use the shared source-reference card primitive instead of route-local external-link card markup.
@@ -286,7 +287,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `documents` | `apps/api/src/routes/documents/index.ts` | 312 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `documents` | `apps/api/src/routes/documents/index.ts` | 314 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 90 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
