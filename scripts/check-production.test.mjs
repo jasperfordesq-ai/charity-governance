@@ -2519,10 +2519,15 @@ test('web config disables generated agent-rule files during local dev startup', 
   assert.match(fsRetry, /sourceFile === 'proxy\.js' && destinationFile === 'middleware\.js'/);
   assert.match(fsRetry, /distDir === '\.next' \|\| distDir\.startsWith\('\.next-build'\)/);
   assert.match(cleanup, /function resolveNextDistDir\(\)/);
+  assert.match(cleanup, /function sanitizeErrorMessage\(error\)/);
   assert.match(cleanup, /async function removeGeneratedArtifact/);
   assert.match(cleanup, /export-detail\.json/);
   assert.match(cleanup, /proxy\.js\.nft\.json/);
   assert.match(cleanup, /Refusing to clean unsafe Next export path/);
+  assert.match(cleanup, /path\.basename\(target\)/);
+  assert.match(cleanup, /Next cleanup failed: \$\{sanitizeErrorMessage\(error\)\}/);
+  assert.doesNotMatch(cleanup, /console\.error\(error\)/);
+  assert.doesNotMatch(cleanup, /\$\{error\.message\}/);
   assert.match(config, /agentRules:\s*false/);
   assert.match(config, /function resolveNextDistDir\(\): string/);
   assert.match(config, /NEXT_DIST_DIR\?\.trim\(\)/);

@@ -18,6 +18,12 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function sanitizeErrorMessage(error) {
+  const code = typeof error?.code === 'string' ? error.code : 'ERROR';
+  const syscall = typeof error?.syscall === 'string' ? ` during ${error.syscall}` : '';
+  return `${code}${syscall}`;
+}
+
 async function removeWithRetries(target) {
   let lastError;
 
@@ -40,7 +46,7 @@ async function removeGeneratedArtifact(target) {
     await removeWithRetries(target);
   } catch (error) {
     if (!retryableCodes.has(error?.code)) throw error;
-    console.warn(`Deferred cleanup could not remove ${target}: ${error.message}`);
+    console.warn(`Deferred cleanup could not remove ${path.basename(target)}: ${sanitizeErrorMessage(error)}`);
   }
 }
 
@@ -77,6 +83,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(`Next cleanup failed: ${sanitizeErrorMessage(error)}`);
   process.exit(1);
 });
