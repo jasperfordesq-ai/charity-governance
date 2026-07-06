@@ -75,7 +75,7 @@ export function CookieConsent() {
           <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
             <Button
               type="button"
-              radius="full"
+              radius="lg"
               onPress={handleAccept}
               className="bg-amber-accent px-5 font-semibold text-gray-900 hover:bg-amber-light whitespace-nowrap"
             >
@@ -83,7 +83,7 @@ export function CookieConsent() {
             </Button>
             <Button
               type="button"
-              radius="full"
+              radius="lg"
               variant="bordered"
               onPress={handleDecline}
               className="border-white/20 bg-white/10 px-5 font-semibold text-white hover:bg-white/20 whitespace-nowrap"

@@ -2158,6 +2158,13 @@ test('shared workflow chrome avoids decorative round icon containers', () => {
   assert.doesNotMatch(dashboardLayout, /rounded-full bg-teal-primary\/10/);
 });
 
+test('cookie consent actions use standard button radius instead of pill CTAs', () => {
+  const cookieConsent = component('cookie-consent.tsx');
+
+  assert.doesNotMatch(cookieConsent, /radius="full"/);
+  assert.match(cookieConsent, /radius="lg"/);
+});
+
 test('marketing feature copy avoids legal-certainty compliance claims', () => {
   const features = app('(marketing)/features/page.tsx');
 
