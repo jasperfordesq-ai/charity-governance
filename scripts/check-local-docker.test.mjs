@@ -467,7 +467,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.match(auditLedger, /6\/6 selected release gates/);
-  assert.match(auditLedger, /49 passed and 1 retry-pass flaky Playwright route smoke checks/);
+  assert.match(auditLedger, /latest local attempt after local Chromium\/Next dev resource exhaustion/);
+  assert.match(auditLedger, /focused dashboard desktop light\/dark route smoke passed after E2E harness hardening/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
 

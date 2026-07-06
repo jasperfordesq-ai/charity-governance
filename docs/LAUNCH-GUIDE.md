@@ -18,8 +18,7 @@ no obvious static route-level UI risks, but the release checks below must still
 be rerun against the final production configuration:
 
 `npm run launch:status` currently reports that 23 production values still require real data.
-local responsive browser QA completed with 49 passed and 1 retry-pass flaky,
-and local accessibility QA passed 16/16 on the local stack, but deployed production QA remains a launch gate
+latest full local responsive browser QA did not complete cleanly after local Chromium/Next dev resource exhaustion; a focused dashboard desktop light/dark smoke passed after E2E harness hardening, and local accessibility QA passed 16/16 on the local stack, but full local and deployed production QA remain launch gates
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all

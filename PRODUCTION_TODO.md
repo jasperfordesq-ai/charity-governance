@@ -11,8 +11,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > or the approved production secret store. Do not put real charity data into
 > CharityPilot until those values, provider checks, deployed QA, legal/privacy
 > review, external security review, backup/restore evidence, all 81 machine-readable launch evidence checks, and final signoffs are complete.
-> local responsive browser QA completed with 49 passed and 1 retry-pass flaky,
-> and local accessibility QA passed 16/16 on the local stack, but deployed production QA still remains open and
+> latest full local responsive browser QA did not complete cleanly after local Chromium/Next dev resource exhaustion; a focused dashboard desktop light/dark smoke passed after E2E harness hardening, and local accessibility QA passed 16/16 on the local stack, but full local and deployed production QA still remain open and
 > must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in
 > `browserQa.checks.accessibility-coverage`.
