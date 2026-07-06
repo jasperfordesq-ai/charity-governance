@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `b0d740a`
+Working-tree base commit when generated: `ee9892e`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -34,6 +34,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Registration throttling now has regression coverage proving normalized email identifiers share a throttle bucket without blocking a different email from the same caller.
 - Resend-verification throttling now keys by hashed bearer/access-cookie credentials at the request hook, so one invalid credential cannot burn the same-IP bucket for another credential.
 - Optional in-process cron logging now serializes errors through the redacted logger helper.
+- Deadline reminder and optional cron runtime logs now route through injectable logger contracts instead of direct console.log calls.
+- Email delivery degradation logs now route through an injectable logger contract instead of direct console warn/error calls.
 - Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
 - API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
 - The export workflow now surfaces source counts, professional-review flags, and not-yet-commenced monitoring metadata before report generation or board sign-off.
@@ -145,6 +147,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Document uploads now use a shared HeroUI-backed file upload field instead of route-local file input styling.
 - Marketing blog search and trial CTA now use HeroUI Input and Button primitives instead of route-local form/link styling.
 - Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.
+- Billing plan feature lists and FAQ disclosure controls now use lucide-react Check and ChevronDown icons instead of decorative dot/text affordances.
 - Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.
 - Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.
 - Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.

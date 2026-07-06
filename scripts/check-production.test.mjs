@@ -2595,9 +2595,10 @@ test('storage API unavailable errors do not expose internal Supabase configurati
 
 test('email delivery logs do not include recipient or subject PII', () => {
   const emailService = readRepoFile('apps/api/src/services/email.service.ts');
-  const logStatements = emailService.match(/console\.(?:warn|error)\([^;]+;/g) ?? [];
+  const logStatements = emailService.match(/this\.logger\.(?:warn|error)\([^;]+;/g) ?? [];
 
   assert.ok(logStatements.length > 0, 'email service should keep operational delivery logs');
+  assert.doesNotMatch(emailService, /console\.(?:warn|error)\(/);
   for (const statement of logStatements) {
     assert.doesNotMatch(statement, /\bsubject\b/);
     assert.doesNotMatch(statement, /\$\{to\}/);
