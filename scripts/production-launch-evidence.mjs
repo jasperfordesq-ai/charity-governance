@@ -1237,6 +1237,9 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'signed download',
       'logout',
       'error states',
+      'Launch-Critical Route Inventory',
+      'every route',
+      'desktop, mobile, light-mode, and dark-mode evidence',
       'zero critical or high-severity browser QA defects',
     ];
     for (const marker of requiredMarkers) {
