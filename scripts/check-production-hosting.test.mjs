@@ -180,6 +180,35 @@ test('production hosting checker fails when HTTPS reachability or security heade
   }
 });
 
+test('production hosting checker redacts thrown request failure transcripts', async () => {
+  const runProductionHostingCheckFromArgs = await loadHostingRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+
+  try {
+    const result = await runProductionHostingCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        resolveHost: async () => [{ address: '8.8.4.4', family: 4 }],
+        inspectTlsCertificate: async () => ({ authorized: true, validTo: '2030-01-01T00:00:00.000Z' }),
+        fetchImpl: async () => {
+          throw new Error(
+            'fetch failed with Authorization Bearer configured-readiness-key-32-chars at https://api.charitypilot.ie/api/v1/health?token=secret-token',
+          );
+        },
+        now: () => Date.parse('2026-06-08T12:00:00.000Z'),
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /hosting check request failed/);
+    assert.match(result.stderr, /Bearer \[redacted\]/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.doesNotMatch(result.stderr, /configured-readiness-key-32-chars|secret-token/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production hosting checker requires the full baseline response security headers', async () => {
   const runProductionHostingCheckFromArgs = await loadHostingRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

@@ -206,6 +206,7 @@ const fixedInThisAuditBranch = [
   'The production Supabase checker now redacts bearer keys, apikey values, signed URL tokens, storage object paths, and probe identifiers from request-failure launch transcripts.',
   'Production deploy, preflight, and rollback transcripts now redact database URLs, secret env assignments, bearer/apikey values, and signed token query parameters before surfacing command, smoke, or rollback failures.',
   'Production deploy smoke now redacts readiness keys, bearer values, and signed token query parameters from thrown request-failure launch transcripts.',
+  'Production hosting checks now redact bearer values and signed token query parameters from thrown DNS/TLS/fetch failure launch transcripts.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
@@ -235,6 +236,7 @@ const localVerificationEvidence = [
   '`node --check scripts\\check-production-supabase.mjs`, `node --test scripts\\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.',
   '`node --check scripts\\production-deploy-preflight.mjs scripts\\production-compose-deploy.mjs scripts\\production-compose-rollback.mjs`, focused deploy/rollback tests, and `npm run test:production-check` passed locally after deploy transcript-redaction hardening.',
   '`node --check scripts\\smoke-production-deploy.mjs`, focused smoke/deploy tests, and `npm run test:production-check` passed locally after production deploy smoke transcript-redaction hardening.',
+  '`node --check scripts\\check-production-hosting.mjs`, focused hosting/smoke tests, and `npm run test:production-check` passed locally after production hosting transcript-redaction hardening.',
   'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
 ];
 

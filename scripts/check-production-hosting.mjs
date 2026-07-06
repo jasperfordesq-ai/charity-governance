@@ -6,6 +6,7 @@ import tls from 'node:tls';
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
+import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 
 const DEFAULT_MIN_TLS_DAYS = 14;
 
@@ -288,7 +289,8 @@ export async function runProductionHostingCheckFromArgs(
   try {
     env = parseEnvFile(options.productionEnvFile);
   } catch (error) {
-    return result(1, '', `Production hosting check failed: ${error.message}\n`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    return result(1, '', `Production hosting check failed: ${message}\n`);
   }
 
   const config = hostingConfig(env);
@@ -317,7 +319,8 @@ export async function runProductionHostingCheckFromArgs(
       }));
     }
   } catch (error) {
-    issues.push(`hosting check request failed: ${error.message}`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    issues.push(`hosting check request failed: ${message}`);
   }
 
   if (issues.length > 0) {
