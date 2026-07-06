@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptsDir, '..');
 const evidenceScriptPath = join(scriptsDir, 'production-launch-evidence.mjs');
 const evidenceTemplateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
 const capturedAt = '2026-06-08T12:00:00.000Z';
@@ -1280,6 +1281,15 @@ test('production launch evidence validator requires every launch-critical route 
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test('production launch evidence route inventory matches the browser QA checklist', async () => {
+  const { LAUNCH_CRITICAL_ROUTES } = await loadEvidenceRunner();
+  const browserQa = readFileSync(join(repoRoot, 'docs', 'production-browser-qa.md'), 'utf8');
+  const routeRows = Array.from(browserQa.matchAll(/^\| `([^`]+)` \|/gm), (match) => match[1]);
+
+  assert.deepEqual(LAUNCH_CRITICAL_ROUTES, launchCriticalRoutes);
+  assert.deepEqual(routeRows, launchCriticalRoutes);
 });
 
 test('production launch evidence validator treats the root route as an explicit route token', async () => {

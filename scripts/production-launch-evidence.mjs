@@ -187,7 +187,7 @@ export const FINAL_SIGNOFF_ROLES = [
   ['legalCompliance', 'Legal/compliance owner'],
   ['business', 'Business owner'],
 ].map(([id, label]) => ({ id, label }));
-const launchCriticalRoutes = [
+export const LAUNCH_CRITICAL_ROUTES = [
   '/',
   '/features',
   '/pricing',
@@ -1283,7 +1283,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
     }
-    for (const route of launchCriticalRoutes) {
+    for (const route of LAUNCH_CRITICAL_ROUTES) {
       if (!hasRouteToken(text, route)) {
         issues.push(`${checkPath}.evidence must include launch route ${route}`);
       }
