@@ -167,6 +167,14 @@ function formatCommand(command, args) {
   return [command, ...args].map(quoteForDisplay).join(' ');
 }
 
+export function redactPostgresTranscript(value) {
+  return String(value)
+    .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
+    .replace(/DATABASE_URL=[^\s'")]+/gi, 'DATABASE_URL=[redacted]')
+    .replace(/--database-url=[^\s'")]+/gi, '--database-url=[redacted]')
+    .replace(/[A-Za-z0-9._%+-]+:[^@\s'")]+@/g, '[redacted-credentials]@');
+}
+
 function ensureDockerAvailable() {
   const result = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], {
     encoding: 'utf8',
@@ -287,7 +295,7 @@ function cleanupRestoreContainer(containerName, dryRun) {
     runCommand('docker', ['rm', '-f', containerName], { dryRun });
   } catch (error) {
     if (!dryRun) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = redactPostgresTranscript(error instanceof Error ? error.message : String(error));
       console.error(`Restore verification cleanup failed for ${containerName}: ${message}`);
     }
   }
@@ -973,7 +981,7 @@ export async function runPostgresBackupFromArgs(args = process.argv.slice(2), en
 
     return result(0, output.stdout, output.stderr);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(redactPostgresTranscript(error instanceof Error ? error.message : String(error)));
     console.error(usage().trim());
     return result(1, output.stdout, output.stderr);
   } finally {

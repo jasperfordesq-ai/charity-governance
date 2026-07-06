@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { runPostgresBackupFromArgs } from './postgres-backup.mjs';
+import { redactPostgresTranscript, runPostgresBackupFromArgs } from './postgres-backup.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -25,6 +25,24 @@ function cleanEnv() {
 function runBackupCli(args, env = {}) {
   return runPostgresBackupFromArgs(args, { ...cleanEnv(), ...env });
 }
+
+test('postgres backup transcript redaction removes database credentials from evidence output', () => {
+  const transcript = [
+    'pg_restore failed for postgresql://backup-user:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+    'DATABASE_URL=postgresql://backup-user:secret@db.charitypilot.ie:5432/charitypilot',
+    '--database-url=postgres://backup-user:secret@db.charitypilot.ie:5432/charitypilot',
+    'connection string backup-user:secret@db.charitypilot.ie was rejected',
+  ].join('\n');
+
+  const redacted = redactPostgresTranscript(transcript);
+
+  assert.match(redacted, /\[redacted-database-url\]/);
+  assert.match(redacted, /DATABASE_URL=\[redacted\]/);
+  assert.match(redacted, /--database-url=\[redacted\]/);
+  assert.match(redacted, /\[redacted-credentials\]@db\.charitypilot\.ie/);
+  assert.doesNotMatch(redacted, /backup-user:secret/);
+  assert.doesNotMatch(redacted, /postgresql:\/\/backup-user/);
+});
 
 test('postgres backup CLI fails safely without a database URL or local database container', async () => {
   const result = await runBackupCli(['backup', '--dry-run']);
