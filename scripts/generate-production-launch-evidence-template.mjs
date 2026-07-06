@@ -26,6 +26,8 @@ const evidenceHintsByCheck = new Map([
   ['database.database-check', ['--expect-operational-sentinel']],
   ['supabaseStorage.readiness-storage-configured', ['storageConfigured: true']],
   ['supabaseStorage.readiness-storage-reachable', ['storageBucketReachable: true']],
+  ['supabaseStorage.supabase-backups-enabled', ['Supabase backup policy', 'managed backups or PITR']],
+  ['supabaseStorage.supabase-restore-tested', ['Supabase restore test', 'owner']],
   ['jobs.scheduler-command', [
     'dist/jobs/production-scheduler.js',
     'dist/jobs/send-deadline-reminders.js',

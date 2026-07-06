@@ -17,7 +17,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 | Secrets and env | Passing preflight against real secret source | Open |
 | Hosting and DNS/TLS | Public web/API URLs with valid TLS | Open |
 | Database | Production migration and backup evidence | Open |
-| Supabase storage | Private bucket and signed URL verification | Open |
+| Supabase storage | Private bucket, signed URL, backup, and restore verification | Open |
 | Jobs | Scheduler or explicit in-process job decision | Open |
 | Billing and email | Live Stripe webhook and Resend send evidence | Open |
 | Observability | Alert destination and test alert evidence | Open |
@@ -138,7 +138,9 @@ Evidence:
 - [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and signed download are verified through the deployed app.
-- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, and deployed upload/download proof.
+- [ ] Supabase backup policy or PITR evidence is recorded outside git.
+- [ ] Supabase restore test evidence exists and has an owner.
+- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested`.
 
 Evidence:
 
@@ -147,6 +149,8 @@ Evidence:
 | Setup guide | `docs/supabase-production-setup.md` |
 | Readiness output location | |
 | Document QA evidence location | |
+| Backup policy location | |
+| Restore test location | |
 
 ## 6. Jobs
 

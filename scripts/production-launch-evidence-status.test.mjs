@@ -39,7 +39,7 @@ test('production launch evidence status reports pending template progress withou
     assert.equal(result.status, 0);
     assert.match(result.stdout, /CharityPilot production launch evidence status/);
     assert.match(result.stdout, /Evidence statuses complete: no/);
-    assert.match(result.stdout, /Checklist checks complete: 0 \/ 83/);
+    assert.match(result.stdout, /Checklist checks complete: 0 \/ 85/);
     assert.match(result.stdout, /releaseGate: 0 \/ 18 complete/);
     assert.match(result.stdout, /approvedForLaunch: false/);
     assert.match(result.stdout, /finalSignoff: pending/);
@@ -68,7 +68,7 @@ test('production launch evidence status counts completed checks and keeps final 
     const result = runProductionLaunchEvidenceStatusFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /Checklist checks complete: 1 \/ 83/);
+    assert.match(result.stdout, /Checklist checks complete: 1 \/ 85/);
     assert.match(result.stdout, /releaseGate: 1 \/ 18 complete/);
     assert.match(result.stdout, /finalSignoff: pending/);
     assert.match(result.stdout, /releaseGate\.db-generate/);

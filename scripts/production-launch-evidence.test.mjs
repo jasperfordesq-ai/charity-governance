@@ -238,6 +238,14 @@ function evidenceEntry(areaId, checkId) {
     entry.description = 'document upload and signed download were verified through the deployed app.';
   }
 
+  if (areaId === 'supabaseStorage' && checkId === 'supabase-backups-enabled') {
+    entry.description = 'Supabase backup policy evidence confirms managed backups or PITR are enabled for the production Supabase project.';
+  }
+
+  if (areaId === 'supabaseStorage' && checkId === 'supabase-restore-tested') {
+    entry.description = 'Supabase restore test evidence exists with an accountable owner and recovery notes for the production Supabase project.';
+  }
+
   if (areaId === 'billingAndEmail' && checkId === 'providers-check') {
     entry.type = 'command-output';
     entry.description = [
@@ -702,7 +710,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /83 check\(s\)/);
+    assert.match(result.stdout, /85 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -936,6 +944,15 @@ test('production launch evidence validator requires concrete secrets and environ
 
 test('production launch evidence validator requires concrete hosting database and Supabase evidence', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const supabaseArea = REQUIRED_LAUNCH_AREAS.find((area) => area.id === 'supabaseStorage');
+  assert.ok(
+    supabaseArea?.checks.some((check) => check.id === 'supabase-backups-enabled'),
+    'supabaseStorage must include backup policy evidence',
+  );
+  assert.ok(
+    supabaseArea?.checks.some((check) => check.id === 'supabase-restore-tested'),
+    'supabaseStorage must include restore-test evidence',
+  );
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
   const genericEvidence = {
     type: 'artifact',
@@ -969,6 +986,8 @@ test('production launch evidence validator requires concrete hosting database an
     'readiness-storage-configured',
     'readiness-storage-reachable',
     'document-upload-download',
+    'supabase-backups-enabled',
+    'supabase-restore-tested',
   ]) {
     evidence.areas.supabaseStorage.checks[checkId].evidence = [genericEvidence];
   }
@@ -991,6 +1010,8 @@ test('production launch evidence validator requires concrete hosting database an
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.bucket-private\.evidence must include private bucket/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.readiness-storage-reachable\.evidence must include storageBucketReachable: true/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.document-upload-download\.evidence must include signed download/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include Supabase backup policy/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include Supabase restore test/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1531,6 +1552,16 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.releaseGate.checks.audit.requiredEvidenceHints,
       ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities'],
+    );
+    assert.ok(
+      template.areas.supabaseStorage.checks['supabase-backups-enabled'].requiredEvidenceHints.includes(
+        'Supabase backup policy',
+      ),
+    );
+    assert.ok(
+      template.areas.supabaseStorage.checks['supabase-restore-tested'].requiredEvidenceHints.includes(
+        'Supabase restore test',
+      ),
     );
     assert.ok(
       template.areas.billingAndEmail.checks['stripe-products-prices'].requiredEvidenceHints.includes(

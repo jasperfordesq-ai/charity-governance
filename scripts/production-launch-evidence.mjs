@@ -83,6 +83,8 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['readiness-storage-configured', 'readiness reports storageConfigured true'],
       ['readiness-storage-reachable', 'readiness reports storageBucketReachable true'],
       ['document-upload-download', 'document upload and signed download verified through deployed app'],
+      ['supabase-backups-enabled', 'Supabase backup policy or PITR enabled'],
+      ['supabase-restore-tested', 'Supabase restore test evidence exists and has an owner'],
     ],
   },
   {
@@ -809,6 +811,8 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'readiness-storage-configured': ['storageConfigured: true'],
       'readiness-storage-reachable': ['storageBucketReachable: true'],
       'document-upload-download': ['document upload', 'signed download', 'deployed app'],
+      'supabase-backups-enabled': ['Supabase backup policy', 'managed backups or PITR'],
+      'supabase-restore-tested': ['Supabase restore test', 'owner'],
     };
 
     for (const marker of supabaseMarkersByCheck[checkId] ?? []) {

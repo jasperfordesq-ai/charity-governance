@@ -1594,7 +1594,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
   assert.match(productionTodo, /deployed production QA still remains open/i);
-  assert.match(productionTodo, /83 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /85 machine-readable launch evidence checks/);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
   assert.match(productionTodo, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
@@ -2077,6 +2077,8 @@ test('production operations docs keep detailed readiness checks behind the inter
 
   assert.match(browserQa, /without `x-charitypilot-readiness-key` returns `401`/);
   assert.match(supabaseSetup, /without `x-charitypilot-readiness-key` should return `401`/);
+  assert.match(supabaseSetup, /supabaseStorage\.checks\.supabase-backups-enabled/);
+  assert.match(supabaseSetup, /supabaseStorage\.checks\.supabase-restore-tested/);
   assert.match(runbook, /Public monitoring can check `\/api\/v1\/health`/);
   assert.doesNotMatch(supabaseSetup, /curl -i https:\/\/api\.charitypilot\.ie\/api\/v1\/health\/readiness/);
 });
@@ -2147,7 +2149,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
-  assert.match(launchGuide, /83 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /85 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
@@ -2178,7 +2180,7 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
   assert.match(backendAudit, /23 production values still require real data/);
-  assert.match(backendAudit, /83 machine-readable launch evidence checks/);
+  assert.match(backendAudit, /85 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
@@ -2355,6 +2357,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/);
   assert.match(launchChecklist, /Operational sentinel restore test location/);
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
+  assert.match(launchChecklist, /supabaseStorage\.checks\.supabase-backups-enabled/);
+  assert.match(launchChecklist, /supabaseStorage\.checks\.supabase-restore-tested/);
   assert.match(launchChecklist, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:evidence:init/);
   assert.match(launchChecklist, /\.charitypilot-launch-evidence\/production-launch-evidence\.json/);

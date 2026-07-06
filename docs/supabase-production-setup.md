@@ -126,6 +126,8 @@ Evidence:
 - [ ] Repeat restore testing quarterly.
 - [ ] Confirm document storage retention aligns with the approved data retention policy.
 - [ ] Record the retention policy reference in `docs/production-launch-checklist.md`.
+- [ ] Record backup/PITR evidence in `supabaseStorage.checks.supabase-backups-enabled`.
+- [ ] Record restore-test owner and recovery notes in `supabaseStorage.checks.supabase-restore-tested`.
 
 Evidence:
 

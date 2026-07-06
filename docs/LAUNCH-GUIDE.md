@@ -22,7 +22,7 @@ local responsive browser QA completed as four focused route chunks with 47 first
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all
-83 machine-readable launch evidence checks, including the deployed accessibility
+85 machine-readable launch evidence checks, including the deployed accessibility
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
