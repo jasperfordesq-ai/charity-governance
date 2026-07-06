@@ -135,9 +135,23 @@ E2E_API_URL=https://api.charitypilot.ie \
 E2E_OWNER_EMAIL=<secret-store-reference> \
 E2E_OWNER_PASSWORD=<secret-store-reference> \
 npm run test:e2e -- tests/accessibility.spec.ts
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=<secret-store-reference> \
+E2E_OWNER_PASSWORD=<secret-store-reference> \
+npm run test:e2e:deployed:responsive:cross-browser
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=<secret-store-reference> \
+E2E_OWNER_PASSWORD=<secret-store-reference> \
+npm run test:e2e:deployed:accessibility:cross-browser
 ```
 
-The launch evidence validator requires both deployed command transcripts, `E2E_DEPLOYED_QA=true`, the canonical web/API URLs, and references showing `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` came from the approved secret store.
+The launch evidence validator requires deployed responsive and accessibility command transcripts, `E2E_DEPLOYED_QA=true`, the canonical web/API URLs, and references showing `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` came from the approved secret store. Record the deployed accessibility transcript in `browserQa.checks.accessibility-coverage`, the cross-browser transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
 
 ## Incident Basics
 

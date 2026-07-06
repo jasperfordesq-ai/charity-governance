@@ -2109,6 +2109,10 @@ test('production runbook documents deployed browser QA evidence commands', () =>
   assert.match(runbook, /E2E_OWNER_PASSWORD/);
   assert.match(runbook, /npm run test:e2e:responsive/);
   assert.match(runbook, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
+  assert.match(runbook, /npm run test:e2e:deployed:responsive:cross-browser/);
+  assert.match(runbook, /npm run test:e2e:deployed:accessibility:cross-browser/);
+  assert.match(runbook, /browserQa\.checks\.cross-browser-coverage/);
+  assert.match(runbook, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(runbook, /production-launch-evidence\.json/);
 });
 
