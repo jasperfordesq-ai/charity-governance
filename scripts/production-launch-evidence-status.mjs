@@ -178,6 +178,7 @@ function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(evidence
     evidence?.approvedForLaunch === true &&
     evidence?.finalSignoff?.status === 'approved' &&
     summary.completedChecks === summary.totalChecks &&
+    summary.areaSummaries.every((area) => area.status === 'complete') &&
     summary.approvedFinalSignoffRoles === summary.totalFinalSignoffRoles
   );
 }

@@ -114,6 +114,39 @@ test('production launch evidence status renders non-secret JSON for automation',
   }
 });
 
+test('production launch evidence status complete flag requires area statuses', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = await launchEvidenceTemplate();
+  evidence.approvedForLaunch = true;
+  evidence.finalSignoff.status = 'approved';
+
+  for (const area of Object.values(evidence.areas)) {
+    area.status = 'complete';
+    for (const check of Object.values(area.checks)) {
+      check.status = 'complete';
+    }
+  }
+  for (const approval of Object.values(evidence.finalSignoff.approvals)) {
+    approval.status = 'approved';
+  }
+  evidence.areas.releaseGate.status = 'pending';
+
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.completedChecks, 85);
+    assert.equal(payload.approvedFinalSignoffRoles, 5);
+    assert.equal(payload.evidenceStatusesComplete, false);
+    assert.equal(payload.areas.find((area) => area.id === 'releaseGate').status, 'pending');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence status fails closed when evidence file is missing', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
 
