@@ -24,6 +24,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > selected-gate `npm run release:ready -- --no-e2e` run is useful for local
 > operator checks, but it is not a full release-ready result because deployed
 > E2E, provider evidence, legal review, pentest, and final signoffs remain open.
+> Latest local selected-gate check on 2026-07-06 at `ec0a52d`: `npm run
+> release:ready -- --no-e2e` passed 6/6 selected gates and skipped Playwright
+> E2E by request.
 
 ## Security and Auth
 
