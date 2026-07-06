@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { Check, CircleAlert } from 'lucide-react';
+import { Check, CircleAlert, Info } from 'lucide-react';
 
 interface Toast {
   id: number;
@@ -35,28 +35,32 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      {/* Toast container */}
-      <div className="fixed bottom-4 right-4 z-[200] flex flex-col gap-2 pointer-events-none" aria-live="polite">
+      <div className="fixed inset-x-4 bottom-4 z-[200] flex flex-col items-end gap-2 pointer-events-none sm:left-auto sm:right-4">
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="alert"
+            role={t.type === 'error' ? 'alert' : 'status'}
+            aria-live={t.type === 'error' ? 'assertive' : 'polite'}
             className={`
-              pointer-events-auto px-4 py-3 rounded-xl shadow-lg text-sm font-medium
+              pointer-events-auto w-full max-w-[calc(100vw-2rem)] rounded-lg border px-4 py-3 shadow-lg text-sm font-medium
               animate-[slideIn_0.2s_ease-out]
-              ${t.type === 'success' ? 'bg-green-600 text-white' : ''}
-              ${t.type === 'error' ? 'bg-red-600 text-white' : ''}
-              ${t.type === 'info' ? 'bg-gray-800 text-white border border-gray-700' : ''}
+              sm:w-auto sm:max-w-sm
+              ${t.type === 'success' ? 'border-green-200 bg-white text-green-900 dark:border-green-800 dark:bg-gray-900 dark:text-green-100' : ''}
+              ${t.type === 'error' ? 'border-red-200 bg-white text-red-900 dark:border-red-800 dark:bg-gray-900 dark:text-red-100' : ''}
+              ${t.type === 'info' ? 'border-gray-200 bg-white text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100' : ''}
             `}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-start gap-2">
               {t.type === 'success' && (
-                <Check className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} aria-hidden="true" />
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-300" strokeWidth={2.5} aria-hidden="true" />
               )}
               {t.type === 'error' && (
-                <CircleAlert className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden="true" />
+                <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-300" strokeWidth={2} aria-hidden="true" />
               )}
-              {t.message}
+              {t.type === 'info' && (
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" strokeWidth={2} aria-hidden="true" />
+              )}
+              <span className="min-w-0 break-words">{t.message}</span>
             </div>
           </div>
         ))}

@@ -1487,7 +1487,7 @@ test('shared UI chrome uses lucide icons instead of inline svg', () => {
     ['breadcrumbs.tsx', ['ChevronRight']],
     ['copy-link-button.tsx', ['Check', 'Link2']],
     ['theme-toggle.tsx', ['Monitor', 'Moon', 'Sun']],
-    ['toast.tsx', ['Check', 'CircleAlert']],
+    ['toast.tsx', ['Check', 'CircleAlert', 'Info']],
     ['ui/states.tsx', ['CircleAlert', 'Clock', 'LoaderCircle', 'LockKeyhole', 'TriangleAlert']],
   ];
 
@@ -1499,6 +1499,19 @@ test('shared UI chrome uses lucide icons instead of inline svg', () => {
     }
     assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
   }
+});
+
+test('shared toast feedback is accessible and contained on narrow screens', () => {
+  const src = component('toast.tsx');
+
+  assert.match(src, /role=\{t\.type === 'error' \? 'alert' : 'status'\}/);
+  assert.match(src, /aria-live=\{t\.type === 'error' \? 'assertive' : 'polite'\}/);
+  assert.match(src, /max-w-\[calc\(100vw-2rem\)\]/);
+  assert.match(src, /break-words/);
+  assert.doesNotMatch(src, /rounded-xl/);
+  assert.match(src, /rounded-lg/);
+  assert.match(src, /bg-white/);
+  assert.match(src, /dark:bg-gray-900/);
 });
 
 test('shared utility icon controls use HeroUI Button rather than raw button markup', () => {
