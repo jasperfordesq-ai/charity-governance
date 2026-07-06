@@ -2118,6 +2118,20 @@ test('backend architecture docs describe hardened storage keys and Stripe custom
   assert.doesNotMatch(billingDoc, /Lazily creates a Stripe customer if `organisation\.stripeCustomerId` is null/);
 });
 
+test('export API route delegates report rendering to a dedicated module', () => {
+  const route = readRepoFile('apps/api/src/routes/export/index.ts');
+  const renderer = readRepoFile('apps/api/src/routes/export/compliance-report-html.ts');
+
+  assert.match(route, /buildComplianceReportHtml/);
+  assert.match(route, /loadGovernanceRegisters/);
+  assert.doesNotMatch(route, /function buildSourceReviewAppendixHtml/);
+  assert.doesNotMatch(route, /IRISH_COMPLIANCE_MATRIX_LAST_CHECKED/);
+  assert.match(renderer, /export function buildComplianceReportHtml/);
+  assert.match(renderer, /export type GovernanceRegistersForExport/);
+  assert.match(renderer, /function buildSourceReviewAppendixHtml/);
+  assert.match(renderer, /IRISH_COMPLIANCE_MATRIX_LAST_CHECKED/);
+});
+
 test('production operations docs keep detailed readiness checks behind the internal header', () => {
   const runbook = readRepoFile('docs/production-runbook.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');

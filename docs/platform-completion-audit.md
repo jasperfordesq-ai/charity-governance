@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `cd535e0`
+Working-tree base commit when generated: `a3745ec`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -38,6 +38,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Email delivery degradation logs now route through an injectable logger contract instead of direct console warn/error calls.
 - Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.
 - API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.
+- The API export route now delegates source-cited HTML report rendering to a dedicated module behind a production tooling regression test.
 - The export workflow now surfaces source counts, professional-review flags, and not-yet-commenced monitoring metadata before report generation or board sign-off.
 - Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, confirms in-app navigation while saves are pending, and exposes a retry action for failed saves.
 - Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.
@@ -285,7 +286,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `documents` | `apps/api/src/routes/documents/index.ts` | 382 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `export` | `apps/api/src/routes/export/index.ts` | 470 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
+| `export` | `apps/api/src/routes/export/index.ts` | 90 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |

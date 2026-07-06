@@ -67,6 +67,7 @@ const fixedInThisAuditBranch = [
   'Email delivery degradation logs now route through an injectable logger contract instead of direct console warn/error calls.',
   'Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.',
   'API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.',
+  'The API export route now delegates source-cited HTML report rendering to a dedicated module behind a production tooling regression test.',
   'The export workflow now surfaces source counts, professional-review flags, and not-yet-commenced monitoring metadata before report generation or board sign-off.',
   'Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, confirms in-app navigation while saves are pending, and exposes a retry action for failed saves.',
   'Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.',
