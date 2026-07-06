@@ -75,6 +75,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   assert.equal(s.phase, 'ENV_COMPLETE');
   assert.equal(s.remainingKeys.length, 0);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
+  assert.ok(s.nextActions.some((a) => a.includes('check:production:evidence:status')));
   assertExternalLaunchEvidenceGates(s);
   assert.ok(
     s.nextActions.some((a) => /penetration test|sign-off|checklist/i.test(a)),

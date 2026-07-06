@@ -71,6 +71,7 @@ export function assessLaunchState(state) {
     nextActions: [
       'Run:  npm run check:production -- --production-env-file=.env.production',
       'If it passes, follow docs/production-runbook.md to deploy.',
+      'Track launch evidence progress with:  npm run check:production:evidence:status -- --evidence-file=production-launch-evidence.json',
       'Remember the non-code gates in docs/production-launch-checklist.md:',
       '  legal policy approval, external penetration test, and the five sign-offs.',
     ],
