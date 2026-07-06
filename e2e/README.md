@@ -121,11 +121,17 @@ Connection: `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypi
 | `E2E_API_URL` | `http://localhost:3002` |
 | `E2E_DATABASE_URL` | `postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypilot` |
 | `E2E_ARTIFACT_DIR` | OS temp directory (`charitypilot-e2e-artifacts`) |
+| `CHARITYPILOT_LOCAL_WEB_NODE_OPTIONS` | `--max-old-space-size=6144` for the local Docker web container |
 
 By default local Playwright screenshots, traces, videos, and HTML reports are
 written outside the repository so Next.js dev does not watch the artifacts and
 recompile routes during browser QA. CI sets `E2E_ARTIFACT_DIR=playwright-artifacts`
 and uploads `e2e/playwright-artifacts/html-report`.
+
+The local Docker web container gives Next.js dev enough heap for cold route
+compiles during responsive and accessibility QA. Keep the default unless the host
+has materially less memory; lowering it can make local browser QA restart the dev
+server mid-test.
 
 ## Deployed browser QA mode
 

@@ -45,7 +45,7 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /api:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /web:[\s\S]*user:\s+\$\{CHARITYPILOT_LOCAL_CONTAINER_USER:-root\}/);
   assert.match(compose, /NODE_ENV:\s+development/);
-  assert.match(compose, /web:[\s\S]*NODE_OPTIONS:\s+\$\{CHARITYPILOT_LOCAL_WEB_NODE_OPTIONS:---max-old-space-size=4096\}/);
+  assert.match(compose, /web:[\s\S]*NODE_OPTIONS:\s+\$\{CHARITYPILOT_LOCAL_WEB_NODE_OPTIONS:---max-old-space-size=6144\}/);
   assert.match(compose, /DOCUMENT_STORAGE_DRIVER:\s+local/);
   assert.match(compose, /LOCAL_FILE_STORAGE_DIR:\s+\/app\/\.charitypilot-local-storage\/documents/);
   assert.match(compose, /SEED_LOCAL_ADMIN:\s+"true"/);

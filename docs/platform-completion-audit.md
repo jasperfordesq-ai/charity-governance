@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `d3cf7e4`
+Working-tree base commit when generated: `a48bed7`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -194,7 +194,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
 - Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.
-- Local Docker web QA now gives Next dev a configurable heap ceiling and ignores Playwright report/test-result artifacts so route smoke output does not trigger repeated recompiles.
+- Local Docker web QA now gives Next dev a 6144 MiB default configurable heap ceiling and ignores Playwright report/test-result artifacts so route smoke output does not trigger repeated recompiles.
 - Local Playwright screenshots, traces, videos, and HTML reports now default outside the repository, while CI writes them to an explicit uploaded artifact directory.
 - Local Playwright QA now creates external artifact directories before reporters run, keeping early setup failures readable.
 - Browser auth helpers now pre-seed the cookie-consent preference before registration, login, and invite acceptance so setup submissions are not competing with the consent dialog.
@@ -228,6 +228,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after production launch evidence status JSON hardening.
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after aligning status completion with area statuses.
 - `node --check scripts\launch-status.mjs scripts\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.
+- `npm run test:e2e -- tests/accessibility.spec.ts` passed locally after restarting the local web container with a larger Next dev heap: 16 accessibility titles covered, with 2 timeout retry-passes and no serious/critical axe violations.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
