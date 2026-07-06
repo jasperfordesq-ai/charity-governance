@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
@@ -269,7 +270,8 @@ export async function runProductionObservabilityCheckFromArgs(
   try {
     env = parseEnvFile(resolve(process.cwd(), options.productionEnvFile));
   } catch (error) {
-    return result(1, '', `Production observability check failed: ${error.message}\n`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    return result(1, '', `Production observability check failed: ${message}\n`);
   }
 
   const issues = [];
@@ -286,7 +288,9 @@ export async function runProductionObservabilityCheckFromArgs(
         issues.push(`test alert webhook request failed with HTTP ${response?.status ?? 'unknown'}`);
       }
     } catch (error) {
-      issues.push(`test alert webhook request failed: ${error instanceof Error ? error.name : 'unknown error'}`);
+      const name = error instanceof Error ? error.name : 'unknown error';
+      const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+      issues.push(`test alert webhook request failed: ${name}${message ? `: ${message}` : ''}`);
     }
   }
 

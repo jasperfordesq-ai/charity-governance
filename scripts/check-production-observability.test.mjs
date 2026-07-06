@@ -162,3 +162,30 @@ test('production observability checker fails when webhook delivery is not accept
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production observability checker redacts thrown webhook failure transcripts', async () => {
+  const runProductionObservabilityCheckFromArgs = await loadObservabilityRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+
+  try {
+    const result = await runProductionObservabilityCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        resolveHost: async () => [{ address: '1.1.1.1', family: 4 }],
+        fetchImpl: async () => {
+          throw new Error(
+            'delivery failed for https://alerts.charitypilot.ie/hooks/charitypilot?token=secret-token with Bearer configured-alert-secret',
+          );
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /test alert webhook request failed: Error/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.match(result.stderr, /Bearer \[redacted\]/);
+    assert.doesNotMatch(result.stderr, /secret-token|configured-alert-secret/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

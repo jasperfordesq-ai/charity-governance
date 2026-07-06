@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `c6eb98e`
+Working-tree base commit when generated: `0c9c306`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -178,6 +178,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production deploy, preflight, and rollback transcripts now redact database URLs, secret env assignments, bearer/apikey values, and signed token query parameters before surfacing command, smoke, or rollback failures.
 - Production deploy smoke now redacts readiness keys, bearer values, and signed token query parameters from thrown request-failure launch transcripts.
 - Production hosting checks now redact bearer values and signed token query parameters from thrown DNS/TLS/fetch failure launch transcripts.
+- Production observability checks now retain sanitized webhook delivery exception detail while redacting bearer values and signed token query parameters from launch transcripts.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
@@ -204,6 +205,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --check scripts\production-deploy-preflight.mjs scripts\production-compose-deploy.mjs scripts\production-compose-rollback.mjs`, focused deploy/rollback tests, and `npm run test:production-check` passed locally after deploy transcript-redaction hardening.
 - `node --check scripts\smoke-production-deploy.mjs`, focused smoke/deploy tests, and `npm run test:production-check` passed locally after production deploy smoke transcript-redaction hardening.
 - `node --check scripts\check-production-hosting.mjs`, focused hosting/smoke tests, and `npm run test:production-check` passed locally after production hosting transcript-redaction hardening.
+- `node --check scripts\check-production-observability.mjs`, focused observability/provider/hosting tests, and `npm run test:production-check` passed locally after production observability transcript-redaction hardening.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
