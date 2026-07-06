@@ -253,6 +253,7 @@ function completeProductionEnv(overrides = {}) {
 test('fails clearly when the explicit production env file is missing', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-missing-'));
   const envPath = join(tempDir, 'missing-production.env');
+  const tokenEnvPath = `${envPath}?token=secret-token`;
 
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
@@ -261,6 +262,14 @@ test('fails clearly when the explicit production env file is missing', () => {
 
     assert.equal(result.status, 1);
     assert.ok(result.stderr.includes(`Production preflight failed: environment file not found: ${envPath}`));
+
+    const redactedResult = runPreflight([`--production-env-file=${tokenEnvPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+    });
+
+    assert.equal(redactedResult.status, 1);
+    assert.match(redactedResult.stderr, /token=\[redacted\]/);
+    assert.doesNotMatch(redactedResult.stderr, /secret-token/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

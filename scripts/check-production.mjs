@@ -463,9 +463,25 @@ function result(status, stdout = '', stderr = '', issues = []) {
   return { status, stdout, stderr, issues };
 }
 
+function redactPreflightTranscript(value) {
+  return String(value)
+    .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
+    .replace(
+      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      '$1[redacted]',
+    )
+    .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
+    .replace(/\bwhsec_[A-Za-z0-9_=-]+/g, '[redacted-stripe-webhook-secret]')
+    .replace(/\bre_[A-Za-z0-9_=-]+/g, '[redacted-resend-key]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
+    .replace(/([?&](?:token|signature|key|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
+    .replace(/[A-Za-z0-9._%+-]+:[^@\s'")]+@/g, '[redacted-credentials]@');
+}
+
 export function runProductionPreflight({ envFile = '.env.production', processEnv = process.env } = {}) {
   if (!existsSync(envFile)) {
-    return result(1, '', `Production preflight failed: environment file not found: ${envFile}\n`);
+    return result(1, '', `Production preflight failed: environment file not found: ${redactPreflightTranscript(envFile)}\n`);
   }
 
   const env = parseEnvFile(envFile);
