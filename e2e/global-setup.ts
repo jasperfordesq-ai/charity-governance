@@ -10,8 +10,9 @@ const LOCAL_STARTUP_HINT =
 const DEPLOYED_STARTUP_HINT =
   'CharityPilot deployed QA expects E2E_DEPLOYED_QA=true plus E2E_WEB_URL, E2E_API_URL, E2E_OWNER_EMAIL, and E2E_OWNER_PASSWORD for an approved non-sensitive test workspace.';
 const STACK_READINESS_TIMEOUT_MS = 180_000;
-const WEB_READINESS_TIMEOUT_MS = 360_000;
-const ROUTE_WARM_TIMEOUT_MS = 420_000;
+const WEB_READINESS_TIMEOUT_MS = 600_000;
+const ROUTE_WARM_TIMEOUT_MS = 60_000;
+const ROUTE_WARM_BUDGET_MS = 240_000;
 const PUBLIC_ROUTES_TO_WARM = [
   '/',
   '/features',
@@ -66,9 +67,9 @@ async function waitForOk(url: string, label: string, timeoutMs = STACK_READINESS
  * of inside a bounded test navigation) keeps the per-test cold-compile from flaking
  * under host load. Best-effort: failures are ignored - the tests still gate correctness.
  */
-async function warmFetch(url: string): Promise<void> {
+async function warmFetch(url: string, timeoutMs: number): Promise<void> {
   try {
-    await fetchWithTimeout(url, ROUTE_WARM_TIMEOUT_MS);
+    await fetchWithTimeout(url, timeoutMs);
   } catch {
     // Ignore - warming is an optimisation, not a gate.
   }
@@ -80,8 +81,12 @@ async function warmRoutes(): Promise<void> {
   // the generous per-navigation timeout - warming them here (an authenticated render of
   // every dashboard page) proved to spike host load and destabilise the browser, so we
   // keep warm-up light and lean on the navigation timeout instead.
+  const deadline = Date.now() + ROUTE_WARM_BUDGET_MS;
   for (const route of PUBLIC_ROUTES_TO_WARM) {
-    await warmFetch(`${WEB_BASE_URL}${route}`);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) return;
+    const timeoutMs = Math.min(ROUTE_WARM_TIMEOUT_MS, remainingMs);
+    await warmFetch(`${WEB_BASE_URL}${route}`, timeoutMs);
   }
 }
 

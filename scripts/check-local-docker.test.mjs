@@ -231,12 +231,15 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
   const globalSetup = readRepoFile('e2e/global-setup.ts');
 
   assert.match(globalSetup, /const STACK_READINESS_TIMEOUT_MS = 180_000/);
-  assert.match(globalSetup, /const WEB_READINESS_TIMEOUT_MS = 360_000/);
-  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = 420_000/);
+  assert.match(globalSetup, /const WEB_READINESS_TIMEOUT_MS = 600_000/);
+  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = 60_000/);
+  assert.match(globalSetup, /const ROUTE_WARM_BUDGET_MS = 240_000/);
   assert.match(globalSetup, /async function fetchWithTimeout\(url: string,\s*timeoutMs: number\): Promise<Response>/);
   assert.match(globalSetup, /const remainingMs = Math\.max\(1,\s*deadline - Date\.now\(\)\)/);
   assert.match(globalSetup, /await fetchWithTimeout\(url,\s*remainingMs\)/);
-  assert.match(globalSetup, /await fetchWithTimeout\(url,\s*ROUTE_WARM_TIMEOUT_MS\)/);
+  assert.match(globalSetup, /const deadline = Date\.now\(\) \+ ROUTE_WARM_BUDGET_MS/);
+  assert.match(globalSetup, /const timeoutMs = Math\.min\(ROUTE_WARM_TIMEOUT_MS,\s*remainingMs\)/);
+  assert.match(globalSetup, /await fetchWithTimeout\(url,\s*timeoutMs\)/);
   assert.match(globalSetup, /waitForOk\(`\$\{WEB_BASE_URL\}\/`,\s*'Web app',\s*WEB_READINESS_TIMEOUT_MS\)/);
   assert.match(globalSetup, /finally\s*\{\s*clearTimeout\(timer\);\s*\}/);
   assert.doesNotMatch(globalSetup, /await fetch\(url,\s*\{\s*redirect:\s*'manual'\s*\}\)/);
@@ -333,14 +336,28 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(fixtures, /const POST_LOGIN_DASHBOARD_TIMEOUT_MS = IS_DEPLOYED_QA \? 60_000 : 180_000/);
   assert.match(fixtures, /const \{ userId, organisationId \} = await createVerifiedOwner/);
-  assert.match(fixtures, /await loginViaUi\(page,\s*email,\s*password\)/);
+  assert.match(fixtures, /if \(IS_DEPLOYED_QA\) \{[\s\S]*await loginViaUi\(page,\s*existingOwner\.email,\s*existingOwner\.password\)/);
+  assert.match(
+    fixtures,
+    /const storageState = await createAuthenticatedStorageState\(\{\s*userId,\s*organisationId,\s*role:\s*'OWNER',\s*\}\)/,
+  );
+  assert.doesNotMatch(fixtures, /await loginViaUi\(page,\s*email,\s*password\)/);
   assert.doesNotMatch(fixtures, /await registerViaUi\(page,\s*\{\s*email,\s*name:\s*'Shared Owner'/);
   assert.doesNotMatch(fixtures, /await markEmailVerified/);
   assert.match(fixtures, /waitForResponse\(/);
   assert.match(fixtures, /api\\\/v1\\\/auth\\\/login/);
+  assert.match(fixtures, /formPath: string/);
+  assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*formPath,\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
   assert.match(fixtures, /page\.waitForURL\(expectedUrl,\s*\{\s*timeout:\s*60_000\s*\}\)/);
   assert.match(fixtures, /expect\(page\)\.toHaveURL\(expectedUrl,\s*\{\s*timeout:\s*60_000\s*\}\)/);
+  assert.match(fixtures, /page\.getByRole\('heading', \{ name: \/Welcome back\/ \}\)/);
+  assert.match(fixtures, /toBeVisible\(\{\s*timeout:\s*POST_LOGIN_DASHBOARD_TIMEOUT_MS,\s*\}\)/);
+  assert.doesNotMatch(
+    fixtures,
+    /expect\(page\.getByRole\('heading', \{ name: \/Welcome back\/ \}\)\)\.toBeVisible\(\);/,
+  );
   assert.match(fixtures, /const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 900_000/);
   assert.match(fixtures, /\{\s*scope:\s*'worker',\s*timeout:\s*AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS\s*\}/);
 });

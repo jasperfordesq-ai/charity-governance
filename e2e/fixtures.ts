@@ -26,6 +26,7 @@ export async function reliableFill(locator: Locator, value: string): Promise<voi
 export const TEST_PASSWORD = 'TestPass123';
 const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 900_000;
 const AUTH_FORM_HEADING_TIMEOUT_MS = 60_000;
+const POST_LOGIN_DASHBOARD_TIMEOUT_MS = IS_DEPLOYED_QA ? 60_000 : 180_000;
 
 async function suppressCookieConsent(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -62,6 +63,7 @@ async function fillAndSubmit(
   submitName: string,
   expectedUrl: RegExp,
   formUrl: RegExp,
+  formPath: string,
   submitRequest?: { url: RegExp; method: string },
 ): Promise<void> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -77,7 +79,7 @@ async function fillAndSubmit(
     await page.getByRole('button', { name: submitName }).click({ noWaitAfter: true });
     const submitResponse = await submitted;
     if (submitRequest && !submitResponse) {
-      await page.waitForLoadState('domcontentloaded');
+      await gotoWithDevServerRetry(page, formPath, { waitUntil: 'domcontentloaded' });
       continue;
     }
     if (submitResponse && !submitResponse.ok()) {
@@ -92,7 +94,7 @@ async function fillAndSubmit(
     } catch {
       if (expectedUrl.test(page.url())) return;
       if (!formUrl.test(page.url())) throw new Error(`Unexpected navigation to ${page.url()}`);
-      await page.waitForLoadState('domcontentloaded'); // native submit reloaded the form; retry.
+      await gotoWithDevServerRetry(page, formPath, { waitUntil: 'domcontentloaded' });
     }
   }
   await expect(page).toHaveURL(expectedUrl, { timeout: 60_000 });
@@ -141,6 +143,7 @@ export async function registerViaUi(
     'Create account',
     /\/verify-email/,
     /\/register/,
+    '/register',
     { url: /\/api\/v1\/auth\/register/, method: 'POST' },
   );
 
@@ -169,9 +172,12 @@ export async function loginViaUi(page: Page, email: string, password: string): P
     'Sign in',
     /\/dashboard/,
     /\/login/,
+    '/login',
     { url: /\/api\/v1\/auth\/login/, method: 'POST' },
   );
-  await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible({
+    timeout: POST_LOGIN_DASHBOARD_TIMEOUT_MS,
+  });
 }
 
 /**
@@ -236,6 +242,7 @@ export async function acceptInviteViaUi(
     'Join Workspace',
     /\/dashboard/,
     /\/accept-invite/,
+    `/accept-invite#token=${token}`,
     { url: /\/api\/v1\/team\/accept-invite/, method: 'POST' },
   );
 }
@@ -253,10 +260,9 @@ interface WorkerFixtures {
 export const test = base.extend<Fixtures, WorkerFixtures>({
   owner: [
     async ({ browser }, use) => {
-      const context = await browser.newContext();
-      const page = await context.newPage();
-
       if (IS_DEPLOYED_QA) {
+        const context = await browser.newContext();
+        const page = await context.newPage();
         const existingOwner = deployedQaOwnerCredentials();
         await loginViaUi(page, existingOwner.email, existingOwner.password);
 
@@ -280,9 +286,11 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
       const name = 'Shared Owner';
       const organisationName = 'Shared E2E Charity';
       const { userId, organisationId } = await createVerifiedOwner({ email, password, name, organisationName });
-      await loginViaUi(page, email, password);
-      const storageState = await context.storageState();
-      await context.close();
+      const storageState = await createAuthenticatedStorageState({
+        userId,
+        organisationId,
+        role: 'OWNER',
+      });
 
       await use({
         email,
