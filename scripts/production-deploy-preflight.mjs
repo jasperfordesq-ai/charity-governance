@@ -168,6 +168,22 @@ function commandLine(command) {
   return command.map(shellQuote).join(' ');
 }
 
+export function redactProductionDeployTranscript(value) {
+  return String(value)
+    .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
+    .replace(
+      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      '$1[redacted]',
+    )
+    .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
+    .replace(/\bwhsec_[A-Za-z0-9_=-]+/g, '[redacted-stripe-webhook-secret]')
+    .replace(/\bre_[A-Za-z0-9_=-]+/g, '[redacted-resend-key]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
+    .replace(/([?&](?:token|signature|key|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
+    .replace(/[A-Za-z0-9._%+-]+:[^@\s'")]+@/g, '[redacted-credentials]@');
+}
+
 function runCommand(command, env) {
   const result = spawnSync(command[0], command.slice(1), {
     cwd: repoRoot,
@@ -288,7 +304,8 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
       runCommand(command, commandEnv);
     }
   } catch (error) {
-    return result(1, '', `Production deploy preflight failed: ${error.message}\n`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    return result(1, '', `Production deploy preflight failed: ${message}\n`);
   }
 
   return result(0, 'Production deploy preflight passed: env, compose config, and image signatures verified.\n');

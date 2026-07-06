@@ -1,7 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runProductionDeployPreflightFromArgs } from './production-deploy-preflight.mjs';
+import {
+  redactProductionDeployTranscript,
+  runProductionDeployPreflightFromArgs,
+} from './production-deploy-preflight.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -156,7 +159,7 @@ export function runProductionComposeDeployFromArgs(
     return result(
       1,
       preflightResult.stdout,
-      `Production compose deploy failed: preflight failed.\n${preflightResult.stderr}`,
+      `Production compose deploy failed: preflight failed.\n${redactProductionDeployTranscript(preflightResult.stderr)}`,
     );
   }
 
@@ -191,7 +194,8 @@ export function runProductionComposeDeployFromArgs(
   try {
     runCommand(command, commandEnv);
   } catch (error) {
-    return result(1, preflightResult.stdout, `Production compose deploy failed: ${error.message}\n`);
+    const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
+    return result(1, preflightResult.stdout, `Production compose deploy failed: ${message}\n`);
   }
 
   const smokeResult = runSmoke(smokeArgs, commandEnv);
@@ -199,7 +203,7 @@ export function runProductionComposeDeployFromArgs(
     return result(
       1,
       `${preflightResult.stdout}${smokeResult.stdout}`,
-      `Production compose deploy failed: post-deploy smoke failed.\n${smokeResult.stderr}`,
+      `Production compose deploy failed: post-deploy smoke failed.\n${redactProductionDeployTranscript(smokeResult.stderr)}`,
     );
   }
 

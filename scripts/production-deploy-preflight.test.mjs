@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { runProductionDeployPreflightFromArgs } from './production-deploy-preflight.mjs';
+import {
+  redactProductionDeployTranscript,
+  runProductionDeployPreflightFromArgs,
+} from './production-deploy-preflight.mjs';
 
 const digest = 'a'.repeat(64);
 
@@ -59,6 +62,31 @@ function runPreflight(args, env = {}) {
     ...env,
   });
 }
+
+test('deploy transcript redaction removes production secret fragments', () => {
+  const transcript = [
+    'DATABASE_URL=postgresql://user:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+    'STRIPE_SECRET_KEY=sk_live_superSecret',
+    'STRIPE_WEBHOOK_SECRET=whsec_superSecret',
+    'RESEND_API_KEY=re_superSecret',
+    'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
+    'ERROR_ALERT_WEBHOOK_URL=https://hooks.example/alert?token=secret-token',
+    'Authorization: Bearer configured-service-role-key',
+    'apikey=configured-service-role-key',
+  ].join('\n');
+
+  const redacted = redactProductionDeployTranscript(transcript);
+
+  assert.match(redacted, /DATABASE_URL=\[redacted\]/);
+  assert.match(redacted, /STRIPE_SECRET_KEY=\[redacted\]/);
+  assert.match(redacted, /STRIPE_WEBHOOK_SECRET=\[redacted\]/);
+  assert.match(redacted, /RESEND_API_KEY=\[redacted\]/);
+  assert.match(redacted, /SUPABASE_SERVICE_ROLE_KEY=\[redacted\]/);
+  assert.match(redacted, /ERROR_ALERT_WEBHOOK_URL=\[redacted\]/);
+  assert.match(redacted, /Bearer \[redacted\]/);
+  assert.match(redacted, /apikey=\[redacted\]/);
+  assert.doesNotMatch(redacted, /user:secret|sk_live_superSecret|whsec_superSecret|re_superSecret|secret-token|configured-service-role-key/);
+});
 
 test('deploy preflight rejects mutable tag images before promotion', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-tag-'));

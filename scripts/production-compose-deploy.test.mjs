@@ -203,6 +203,48 @@ test('production deploy fails after compose up when public smoke fails', async (
   assert.match(result.stderr, /keyed readiness must return 200 ready/);
 });
 
+test('production deploy redacts command and smoke failure transcripts', async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  const envPath = join(tmpdir(), 'charitypilot-redacted-production.env');
+  const secret = 'sk_live_deploySecret';
+
+  const commandResult = runProductionComposeDeployFromArgs(
+    ['--production-env-file', envPath],
+    {
+      processEnv: cleanEnv(),
+      runPreflight: () => ({ status: 0, stdout: 'preflight ok\n', stderr: '' }),
+      runCommand: () => {
+        throw new Error(`docker compose failed with STRIPE_SECRET_KEY=${secret} and DATABASE_URL=postgresql://user:pass@db.charitypilot.ie:5432/app`);
+      },
+      runSmoke: () => ({ status: 0, stdout: '', stderr: '' }),
+    },
+  );
+
+  assert.equal(commandResult.status, 1);
+  assert.match(commandResult.stderr, /STRIPE_SECRET_KEY=\[redacted\]/);
+  assert.match(commandResult.stderr, /DATABASE_URL=\[redacted\]/);
+  assert.doesNotMatch(commandResult.stderr, /sk_live_deploySecret|user:pass/);
+
+  const smokeResult = runProductionComposeDeployFromArgs(
+    ['--production-env-file', envPath],
+    {
+      processEnv: cleanEnv(),
+      runPreflight: () => ({ status: 0, stdout: 'preflight ok\n', stderr: '' }),
+      runCommand: () => {},
+      runSmoke: () => ({
+        status: 1,
+        stdout: '',
+        stderr: `readiness failed with Bearer configured-service-role-key and ERROR_ALERT_WEBHOOK_URL=https://hooks.example/alert?token=secret-token\n`,
+      }),
+    },
+  );
+
+  assert.equal(smokeResult.status, 1);
+  assert.match(smokeResult.stderr, /Bearer \[redacted\]/);
+  assert.match(smokeResult.stderr, /ERROR_ALERT_WEBHOOK_URL=\[redacted\]/);
+  assert.doesNotMatch(smokeResult.stderr, /configured-service-role-key|secret-token/);
+});
+
 test('production deploy rejects invalid wait timeouts before preflight', async () => {
   const runProductionComposeDeployFromArgs = await loadDeployRunner();
   let preflightCalled = false;

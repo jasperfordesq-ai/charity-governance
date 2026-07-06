@@ -225,6 +225,37 @@ test('production rollback propagates deploy failures from the shared deploy path
   }
 });
 
+test('production rollback redacts deployment failure transcripts', async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-rollback-redacted-'));
+  const envPath = join(tempDir, 'production.env');
+  const manifestPath = join(tempDir, 'release-image-digests.previous.env');
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(manifestPath, rollbackManifest());
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      ['--production-env-file', envPath, '--rollback-digest-file', manifestPath],
+      {
+        processEnv: cleanEnv(),
+        runDeploy: () => ({
+          status: 1,
+          stdout: 'preflight ok\n',
+          stderr: 'rollback smoke failed with JWT_SECRET=super-secret-jwt and STRIPE_WEBHOOK_SECRET=whsec_rollbackSecret\n',
+        }),
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /JWT_SECRET=\[redacted\]/);
+    assert.match(result.stderr, /STRIPE_WEBHOOK_SECRET=\[redacted\]/);
+    assert.doesNotMatch(result.stderr, /super-secret-jwt|whsec_rollbackSecret/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production rollback requires an explicit rollback digest manifest', async () => {
   const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
 

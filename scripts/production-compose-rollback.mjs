@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runProductionComposeDeployFromArgs } from './production-compose-deploy.mjs';
+import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -236,7 +237,7 @@ export function runProductionComposeRollbackFromArgs(
       return result(
         deployResult.status,
         `${stdoutPrefix}${deployResult.stdout}`,
-        `Production compose rollback failed: deployment failed.\n${deployResult.stderr}`,
+        `Production compose rollback failed: deployment failed.\n${redactProductionDeployTranscript(deployResult.stderr)}`,
       );
     }
 
