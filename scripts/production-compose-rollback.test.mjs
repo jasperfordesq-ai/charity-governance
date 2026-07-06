@@ -256,6 +256,42 @@ test('production rollback redacts deployment failure transcripts', async () => {
   }
 });
 
+test('production rollback redacts thrown deploy exceptions', async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-rollback-throw-redacted-'));
+  const envPath = join(tempDir, 'production.env');
+  const manifestPath = join(tempDir, 'release-image-digests.previous.env');
+  let mergedEnvPath = null;
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(manifestPath, rollbackManifest());
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      ['--production-env-file', envPath, '--rollback-digest-file', manifestPath],
+      {
+        processEnv: cleanEnv(),
+        runDeploy: (args) => {
+          mergedEnvPath = args[1];
+          throw new Error(
+            'rollback crashed with DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require and Bearer sk_live_configuredSecret&token=secret-token',
+          );
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Production compose rollback failed:/);
+    assert.match(result.stderr, /DATABASE_URL=\[redacted\]/);
+    assert.match(result.stderr, /Bearer \[redacted-stripe-key\]/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.doesNotMatch(result.stderr, /user:pass|postgresql:\/\/|sk_live_configuredSecret|secret-token/);
+    assert.equal(existsSync(mergedEnvPath), false, 'temporary merged env file must be removed after throw');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production rollback requires an explicit rollback digest manifest', async () => {
   const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
 

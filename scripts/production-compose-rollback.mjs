@@ -208,7 +208,11 @@ export function runProductionComposeRollbackFromArgs(
     rollbackEnv = parseEnvFile(rollbackDigestPath, 'rollback digest manifest');
     validateRollbackImages(rollbackEnv);
   } catch (error) {
-    return result(1, '', `Production compose rollback failed: ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Production compose rollback failed: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`,
+    );
   }
 
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-rollback-'));
@@ -245,6 +249,12 @@ export function runProductionComposeRollbackFromArgs(
       0,
       `${stdoutPrefix}${deployResult.stdout}Production compose rollback completed.\n`,
       deployResult.stderr,
+    );
+  } catch (error) {
+    return result(
+      1,
+      '',
+      `Production compose rollback failed: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`,
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
