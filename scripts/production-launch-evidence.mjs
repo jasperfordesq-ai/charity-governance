@@ -842,10 +842,12 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
 
     if (checkId === 'providers-check') {
       for (const marker of [
+        'enabled live billing webhook endpoint',
         'required subscription events',
         'checkout.session.completed',
         'customer.subscription.updated',
         'customer.subscription.deleted',
+        'verified Resend sender domain',
       ]) {
         if (!text.includes(marker)) {
           issues.push(`${checkPath}.evidence must include ${marker}`);
@@ -885,6 +887,8 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         'EMAIL_FROM',
         'Resend test send',
         'accepted message id',
+        'production sender domain',
+        'verified Resend sender domain',
       ];
       for (const marker of requiredMarkers) {
         if (!text.includes(marker)) {

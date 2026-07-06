@@ -178,9 +178,9 @@ Evidence:
 - [ ] Stripe live products and prices match the four expected price IDs.
 - [ ] Stripe webhook points to the deployed API webhook endpoint and is subscribed to `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
 - [ ] Stripe webhook signing secret matches `STRIPE_WEBHOOK_SECRET` in the production secret store without recording the raw secret.
-- [ ] Resend API key can send from `EMAIL_FROM`, with an accepted message id or equivalent provider delivery reference recorded outside git.
+- [ ] Resend API key can send from `EMAIL_FROM` on the verified production sender domain, with an accepted message id or equivalent provider delivery reference recorded outside git.
 - [ ] Password reset and verification email links point to the production frontend origin.
-- [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
+- [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence proving active live recurring Stripe prices, an enabled live billing webhook endpoint, required subscription events, and verified Resend sender domain.
 - [ ] Machine-readable launch evidence identifies all four active live recurring Stripe price IDs without recording raw secret values.
 
 Evidence:

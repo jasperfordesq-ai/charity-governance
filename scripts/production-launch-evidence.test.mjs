@@ -288,6 +288,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'billingAndEmail' && checkId === 'resend-send') {
     entry.description = [
       'Resend test send completed from EMAIL_FROM using the production sender domain.',
+      'The verified Resend sender domain matches the production EMAIL_FROM address.',
       'Operator recorded the accepted message id and delivery log reference without raw API keys.',
     ].join(' ');
   }
@@ -1047,11 +1048,15 @@ test('production launch evidence validator requires concrete billing and email p
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-products-prices\.evidence must include active live recurring Stripe prices/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include required subscription events/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include checkout\.session\.completed/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include enabled live billing webhook endpoint/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include verified Resend sender domain/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-endpoint\.evidence must include https:\/\/api\.charitypilot\.ie\/api\/v1\/billing\/webhooks/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-secret\.evidence must include STRIPE_WEBHOOK_SECRET/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-secret\.evidence must include Stripe signing secret/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include Resend test send/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include accepted message id/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include production sender domain/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include verified Resend sender domain/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include password reset/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include email verification/);

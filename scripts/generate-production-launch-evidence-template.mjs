@@ -46,6 +46,23 @@ const evidenceHintsByCheck = new Map([
     'customer.subscription.updated',
     'customer.subscription.deleted',
   ]],
+  ['billingAndEmail.providers-check', [
+    'npm run check:production:providers -- --production-env-file=.env.production',
+    'Production provider check passed',
+    'enabled live billing webhook endpoint',
+    'required subscription events',
+    'checkout.session.completed',
+    'customer.subscription.updated',
+    'customer.subscription.deleted',
+    'verified Resend sender domain',
+  ]],
+  ['billingAndEmail.resend-send', [
+    'EMAIL_FROM',
+    'Resend test send',
+    'accepted message id',
+    'production sender domain',
+    'verified Resend sender domain',
+  ]],
   ['observability.internal-readiness-monitoring', ['/api/v1/health/readiness', 'x-charitypilot-readiness-key']],
   ['legalAndCompliance.solicitor-governance-privacy-review', [
     'solicitor review',
