@@ -10,11 +10,17 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
-import { decodeJsonFile, summarizeEvidence } from './production-launch-evidence-status.mjs';
+import {
+  decodeJsonFile,
+  isEvidenceStatusComplete,
+  summarizeEvidence,
+} from './production-launch-evidence-status.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const DEFAULT_EVIDENCE_FILE = '.charitypilot-launch-evidence/production-launch-evidence.json';
+const EVIDENCE_STATUS_COMMAND = `npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
+const EVIDENCE_STATUS_JSON_COMMAND = `npm run check:production:evidence:status -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
@@ -122,6 +128,8 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
       exists: false,
       headline: `${DEFAULT_EVIDENCE_FILE} has not been created yet.`,
       nextAction: 'Create it with:  npm run check:production:evidence:init',
+      statusCommand: EVIDENCE_STATUS_COMMAND,
+      jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
     };
   }
 
@@ -133,6 +141,7 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
       completedChecks: summary.completedChecks,
       approvedForLaunch: evidence?.approvedForLaunch === true,
       approvedFinalSignoffRoles: summary.approvedFinalSignoffRoles,
+      evidenceStatusesComplete: isEvidenceStatusComplete(evidence, summary),
       finalSignoffStatus:
         typeof evidence?.finalSignoff?.status === 'string' && evidence.finalSignoff.status.trim().length > 0
           ? evidence.finalSignoff.status
@@ -141,13 +150,17 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
       totalFinalSignoffRoles: summary.totalFinalSignoffRoles,
       totalChecks: summary.totalChecks,
       headline: `${DEFAULT_EVIDENCE_FILE} exists. Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}.`,
-      nextAction: `Track progress with:  npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`,
+      nextAction: `Track progress with:  ${EVIDENCE_STATUS_COMMAND}`,
+      statusCommand: EVIDENCE_STATUS_COMMAND,
+      jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
     };
   } catch {
     return {
       exists: true,
       headline: `${DEFAULT_EVIDENCE_FILE} exists but is not valid launch evidence JSON yet.`,
       nextAction: `Fix the file or recreate it with:  npm run check:production:evidence:init -- --force`,
+      statusCommand: EVIDENCE_STATUS_COMMAND,
+      jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
     };
   }
 }
@@ -202,7 +215,8 @@ export function assessLaunchState(state) {
     nextActions: [
       'Run:  npm run check:production -- --production-env-file=.env.production',
       'If it passes, follow docs/production-runbook.md to deploy.',
-      'Track launch evidence progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+      `Track launch evidence progress with:  ${EVIDENCE_STATUS_COMMAND}`,
+      `For dashboards or operator handoff automation:  ${EVIDENCE_STATUS_JSON_COMMAND}`,
       'Remember the non-code gates in docs/production-launch-checklist.md:',
       '  legal policy approval, external penetration test, and the five sign-offs.',
     ],

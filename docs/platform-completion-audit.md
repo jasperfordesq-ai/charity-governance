@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `bd4c08f`
+Working-tree base commit when generated: `d3cf7e4`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -189,6 +189,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence status and strict validation now redact token-bearing evidence-file path failures before operator handoff transcripts are stored.
 - Production launch evidence status now has a non-secret JSON output mode for CI dashboards and operator handoff automation while preserving the strict final validator.
 - Production launch evidence status completion now requires area statuses as well as all checks and final approval roles, reducing operator/validator drift.
+- Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
@@ -226,6 +227,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --check scripts\production-launch-evidence.mjs scripts\production-launch-evidence-status.mjs`, focused launch-evidence/status tests, and `npm run test:production-check` passed locally after production launch evidence path-redaction hardening.
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after production launch evidence status JSON hardening.
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after aligning status completion with area statuses.
+- `node --check scripts\launch-status.mjs scripts\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work

@@ -41,6 +41,8 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assert.ok(s.nextActions.some((a) => a.includes('setup:production-env')));
   assert.equal(s.evidenceLedger.exists, false);
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:init/);
+  assert.match(s.evidenceLedger.statusCommand, /check:production:evidence:status/);
+  assert.match(s.evidenceLedger.jsonStatusCommand, /--json/);
   assertExternalLaunchEvidenceGates(s);
 });
 
@@ -106,6 +108,7 @@ test('reports launch evidence completion counts when the evidence ledger exists'
   assert.equal(s.evidenceLedger.completedChecks, 0);
   assert.equal(s.evidenceLedger.totalChecks, 85);
   assert.equal(s.evidenceLedger.approvedForLaunch, false);
+  assert.equal(s.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(s.evidenceLedger.approvedFinalSignoffRoles, 0);
   assert.equal(s.evidenceLedger.finalSignoffStatus, 'pending');
   assert.equal(s.evidenceLedger.totalFinalSignoffRoles, 5);
@@ -137,8 +140,11 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.equal(payload.evidenceLedger.completedChecks, 0);
   assert.equal(payload.evidenceLedger.totalChecks, 85);
   assert.equal(payload.evidenceLedger.approvedForLaunch, false);
+  assert.equal(payload.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(payload.evidenceLedger.approvedFinalSignoffRoles, 0);
   assert.equal(payload.evidenceLedger.totalFinalSignoffRoles, 5);
+  assert.match(payload.evidenceLedger.statusCommand, /check:production:evidence:status/);
+  assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
   assert.equal(payload.remainingKeyGroups[0].label, 'PostgreSQL');
@@ -168,6 +174,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   assert.equal(s.remainingKeys.length, 0);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assert.ok(s.nextActions.some((a) => a.includes('check:production:evidence:status')));
+  assert.ok(s.nextActions.some((a) => a.includes('--json')));
   assertExternalLaunchEvidenceGates(s);
   assert.ok(
     s.nextActions.some((a) => /penetration test|sign-off|checklist/i.test(a)),

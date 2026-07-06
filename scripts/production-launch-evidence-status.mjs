@@ -173,7 +173,7 @@ function renderStatus(evidence) {
   return lines.join('\n');
 }
 
-function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(evidence)) {
+export function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(evidence)) {
   return (
     evidence?.approvedForLaunch === true &&
     evidence?.finalSignoff?.status === 'approved' &&
