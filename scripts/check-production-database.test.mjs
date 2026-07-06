@@ -206,3 +206,31 @@ test('production database checker keeps the backup only when explicitly requeste
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production database checker redacts thrown backup helper failures', async () => {
+  const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+
+  try {
+    const result = await runProductionDatabaseCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        makeTempDir: () => join(tempDir, 'thrown-failure'),
+        runPostgresBackupFromArgs: async () => {
+          throw new Error(
+            'backup crashed with DATABASE_URL=postgresql://backup-user:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require and --database-url=postgresql://backup-user:secret@db.charitypilot.ie/db',
+          );
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Production database check failed:/);
+    assert.match(result.stderr, /DATABASE_URL=\[redacted\]/);
+    assert.match(result.stderr, /--database-url=\[redacted\]/);
+    assert.doesNotMatch(result.stderr, /backup-user:secret|postgresql:\/\//);
+    assert.equal(existsSync(join(tempDir, 'thrown-failure')), false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

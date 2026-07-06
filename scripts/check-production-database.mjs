@@ -4,7 +4,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { runPostgresBackupFromArgs as defaultRunPostgresBackupFromArgs } from './postgres-backup.mjs';
+import {
+  redactPostgresTranscript,
+  runPostgresBackupFromArgs as defaultRunPostgresBackupFromArgs,
+} from './postgres-backup.mjs';
 
 const DEFAULT_DUMP_FILE = 'production-check.dump';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
@@ -148,11 +151,7 @@ function defaultMakeTempDir() {
 }
 
 function redact(value) {
-  return String(value)
-    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[redacted-database-url]')
-    .replace(/DATABASE_URL=[^\s]+/gi, 'DATABASE_URL=[redacted]')
-    .replace(/--database-url=[^\s]+/gi, '--database-url=[redacted]')
-    .replace(/[A-Za-z0-9._%+-]+:[^@\s]+@/g, '[redacted-credentials]@');
+  return redactPostgresTranscript(value);
 }
 
 function failed(label, commandResult) {
@@ -201,7 +200,11 @@ export async function runProductionDatabaseCheckFromArgs(
   try {
     env = parseEnvFile(resolve(process.cwd(), options.productionEnvFile));
   } catch (error) {
-    return result(1, '', `Production database check failed: ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Production database check failed: ${redact(error instanceof Error ? error.message : String(error))}\n`,
+    );
   }
 
   const issues = databaseUrlIssues(env.DATABASE_URL);
@@ -243,6 +246,12 @@ export async function runProductionDatabaseCheckFromArgs(
       0,
       `Production database check passed: production PostgreSQL backup completed and restore verification succeeded${options.expectOperationalSentinel ? ' with operational sentinel checks' : ''}.\n`,
       '',
+    );
+  } catch (error) {
+    return result(
+      1,
+      '',
+      `Production database check failed: ${redact(error instanceof Error ? error.message : String(error))}\n`,
     );
   } finally {
     if (!options.keepBackup) {
