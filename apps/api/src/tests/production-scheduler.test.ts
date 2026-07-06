@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   productionSchedulerConfigFromEnv,
   runDeadlineReminders,
@@ -9,6 +11,7 @@ import {
 import type { ErrorAlertPayload } from '../services/error-alerts.service.js';
 
 const ORIGINAL_ENV = { ...process.env };
+const API_SRC = join(process.cwd(), 'src');
 
 afterEach(() => {
   for (const key of Object.keys(process.env)) {
@@ -51,6 +54,19 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     documentStorageCleanupLimit: 25,
     runOnce: false,
   });
+});
+
+test('production job entrypoints use the scheduler logger contract instead of direct console.log', () => {
+  const jobFiles = [
+    'jobs/send-deadline-reminders.ts',
+    'jobs/cleanup-document-storage.ts',
+    'jobs/production-scheduler.ts',
+  ];
+
+  for (const file of jobFiles) {
+    const source = readFileSync(join(API_SRC, file), 'utf8');
+    assert.doesNotMatch(source, /console\.log\(/, `${file} should route production messages through logger.info`);
+  }
 });
 
 test('runProductionSchedulerOnce runs reminders and document cleanup without overlapping API startup', async () => {

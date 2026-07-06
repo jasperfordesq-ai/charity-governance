@@ -7,18 +7,19 @@ process.env.NODE_ENV ??= 'production';
 validateDeadlineRemindersEnv();
 
 const prisma = new PrismaClient();
+const logger = console;
 
 try {
   const service = new DeadlineRemindersService(prisma);
   await service.sendDueReminders();
-  console.log('Deadline reminders job completed successfully.');
+  logger.info('Deadline reminders job completed successfully.');
 } catch (error) {
-  logSchedulerError(console, 'Deadline reminders job failed:', error);
+  logSchedulerError(logger, 'Deadline reminders job failed:', error);
   await sendJobFailureAlert({
     job: 'deadline-reminders',
     code: 'DEADLINE_REMINDERS_FAILED',
     error,
-    logger: console,
+    logger,
   });
   process.exitCode = 1;
 } finally {

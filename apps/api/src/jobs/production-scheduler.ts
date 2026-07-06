@@ -241,7 +241,7 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    console.log('Production scheduler run-once completed successfully.');
+    logger.info('Production scheduler run-once completed successfully.');
     return;
   }
 
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
   });
 
   const shutdown = async (signal: NodeJS.Signals) => {
-    console.log(`[ProductionScheduler] Received ${signal}; shutting down.`);
+    logger.info(`[ProductionScheduler] Received ${signal}; shutting down.`);
     stopDeadlineReminders();
     stopDocumentStorageCleanup();
     await prisma.$disconnect();
