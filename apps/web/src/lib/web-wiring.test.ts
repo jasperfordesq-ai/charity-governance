@@ -2548,6 +2548,20 @@ test('billing plan gates and notes are extracted from the oversized route file',
   assert.match(sectionsSrc, /primaryActionButtonClassName/);
 });
 
+test('billing plan feature lists use icon-library checks instead of decorative dot bullets', () => {
+  const sectionsSrc = dash('billing/billing-plan-sections.tsx');
+
+  assert.match(sectionsSrc, /from 'lucide-react'/);
+  assert.match(sectionsSrc, /\bCheck\b/);
+  assert.match(sectionsSrc, /\bChevronDown\b/);
+  assert.doesNotMatch(
+    sectionsSrc,
+    /h-1\.5 w-1\.5 shrink-0 rounded-full bg-teal-primary/,
+    'billing feature lists should not use tiny decorative dot bullets',
+  );
+  assert.doesNotMatch(sectionsSrc, />v<\/span>/, 'billing FAQ disclosure should use a chevron icon, not text v');
+});
+
 test('dashboard navigation manages mobile sidebar focus and meaningful breadcrumbs', () => {
   const dashboardLayout = app('(dashboard)/layout.tsx');
   for (const term of [

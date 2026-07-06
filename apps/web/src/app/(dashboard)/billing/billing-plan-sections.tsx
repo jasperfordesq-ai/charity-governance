@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@heroui/react';
+import { Check, ChevronDown } from 'lucide-react';
 import { AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { StatusChip, StatusTile } from '@/components/ui/status';
@@ -111,7 +112,7 @@ export function BillingPlanSections({
                 <ul className="mt-5 space-y-2">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-primary dark:bg-teal-bright" aria-hidden="true" />
+                      <Check className="mt-1 h-4 w-4 shrink-0 text-teal-primary dark:text-teal-bright" aria-hidden="true" />
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -176,7 +177,7 @@ export function BillingPlanSections({
             <details key={q} className="group rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
               <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800">
                 {q}
-                <span className="text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true">v</span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true" />
               </summary>
               <p className="px-4 pb-4 text-sm leading-6 text-gray-600 dark:text-gray-300">{a}</p>
             </details>
