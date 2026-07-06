@@ -331,3 +331,35 @@ test('production release run checker rejects non-release workflow evidence befor
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production release run checker redacts GitHub request failure transcripts', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence());
+
+  try {
+    const result = await runProductionReleaseRunEvidenceFromArgs(['--evidence-file', evidencePath], {
+      fetchImpl: async () => {
+        throw new Error(
+          [
+            'GitHub request failed with Bearer ghp_not_printed_token',
+            'GITHUB_TOKEN=github_pat_secretToken_123456',
+            'download=https://api.github.com/artifact.zip?token=secret-download-token',
+          ].join(' '),
+        );
+      },
+      processEnv: { GITHUB_TOKEN: 'ghp_not_printed_token' },
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Production release run evidence failed:/);
+    assert.match(result.stderr, /Bearer \[redacted\]/);
+    assert.match(result.stderr, /GITHUB_TOKEN=\[redacted\]/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.doesNotMatch(
+      result.stderr,
+      /ghp_not_printed_token|github_pat_secretToken_123456|secret-download-token/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

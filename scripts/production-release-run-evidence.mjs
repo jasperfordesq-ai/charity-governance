@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
+import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 
 const repository = 'jasperfordesq-ai/charity-governance';
 const releaseWorkflowFile = '.github/workflows/release-images.yml';
@@ -15,6 +16,13 @@ function usage() {
 
 function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
+}
+
+function redactReleaseRunTranscript(value) {
+  return redactProductionDeployTranscript(value)
+    .replace(/\b(GITHUB_TOKEN=)[^\s'")]+/gi, '$1[redacted]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_=-]+/g, '[redacted-github-token]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_=-]+/g, '[redacted-github-token]');
 }
 
 function parseArgs(argv) {
@@ -82,7 +90,7 @@ function githubHeaders(processEnv) {
 async function fetchJson(fetchImpl, url, headers, label) {
   const response = await fetchImpl(url, { headers });
   if (!response.ok) {
-    throw new Error(`${label} request failed with HTTP ${response.status} ${response.statusText}`);
+    throw new Error(`${label} request failed with HTTP ${response.status} ${redactReleaseRunTranscript(response.statusText)}`);
   }
   return response.json();
 }
@@ -90,7 +98,7 @@ async function fetchJson(fetchImpl, url, headers, label) {
 async function fetchBytes(fetchImpl, url, headers, label) {
   const response = await fetchImpl(url, { headers });
   if (!response.ok) {
-    throw new Error(`${label} request failed with HTTP ${response.status} ${response.statusText}`);
+    throw new Error(`${label} request failed with HTTP ${response.status} ${redactReleaseRunTranscript(response.statusText)}`);
   }
   if (typeof response.arrayBuffer !== 'function') {
     throw new Error(`${label} response did not include binary artifact content`);
@@ -331,7 +339,7 @@ export async function runProductionReleaseRunEvidenceFromArgs(
     validateWorkflowRun(workflowRun, evidence.release, issues);
     releaseDigestArtifact = validateArtifacts(artifacts, issues);
   } catch (error) {
-    return result(1, '', `Production release run evidence failed: ${error.message}\n`);
+    return result(1, '', `Production release run evidence failed: ${redactReleaseRunTranscript(error.message)}\n`);
   }
 
   if (issues.length === 0 && releaseDigestArtifact) {
@@ -339,7 +347,7 @@ export async function runProductionReleaseRunEvidenceFromArgs(
       const artifactArchive = await fetchBytes(fetchImpl, releaseDigestArtifact.archive_download_url, headers, 'release-image-digests artifact');
       validateArtifactManifest(extractZipFile(artifactArchive, 'release-image-digests.env'), evidence.release, issues);
     } catch (error) {
-      return result(1, '', `Production release run evidence failed: ${error.message}\n`);
+      return result(1, '', `Production release run evidence failed: ${redactReleaseRunTranscript(error.message)}\n`);
     }
   }
 
