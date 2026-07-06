@@ -47,11 +47,13 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
       exists: true,
       completedChecks: summary.completedChecks,
       approvedForLaunch: evidence?.approvedForLaunch === true,
+      approvedFinalSignoffRoles: summary.approvedFinalSignoffRoles,
       finalSignoffStatus:
         typeof evidence?.finalSignoff?.status === 'string' && evidence.finalSignoff.status.trim().length > 0
           ? evidence.finalSignoff.status
           : 'missing',
       nextIncompleteChecks: summary.incompleteChecks.slice(0, 5),
+      totalFinalSignoffRoles: summary.totalFinalSignoffRoles,
       totalChecks: summary.totalChecks,
       headline: `${DEFAULT_EVIDENCE_FILE} exists. Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}.`,
       nextAction: `Track progress with:  npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`,
@@ -148,6 +150,9 @@ function main() {
   if (state.evidenceLedger.exists && typeof state.evidenceLedger.approvedForLaunch === 'boolean') {
     console.log(`  approvedForLaunch: ${state.evidenceLedger.approvedForLaunch ? 'true' : 'false'}`);
     console.log(`  finalSignoff: ${state.evidenceLedger.finalSignoffStatus}`);
+    console.log(
+      `  Final approval roles approved: ${state.evidenceLedger.approvedFinalSignoffRoles} / ${state.evidenceLedger.totalFinalSignoffRoles}`,
+    );
   }
   if (state.evidenceLedger.nextIncompleteChecks?.length > 0) {
     console.log('  Next incomplete checks:');

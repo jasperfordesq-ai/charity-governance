@@ -149,6 +149,7 @@ const fixedInThisAuditBranch = [
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
   'Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 85 checks.',
   'Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.',
+  'Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.',
   'Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.',
@@ -510,6 +511,7 @@ function render() {
   if (launch.evidenceLedger.exists && typeof launch.evidenceLedger.approvedForLaunch === 'boolean') {
     md += `- approvedForLaunch: ${launch.evidenceLedger.approvedForLaunch ? 'true' : 'false'}\n`;
     md += `- finalSignoff: ${launch.evidenceLedger.finalSignoffStatus}\n`;
+    md += `- Final approval roles approved: ${launch.evidenceLedger.approvedFinalSignoffRoles} / ${launch.evidenceLedger.totalFinalSignoffRoles}\n`;
   }
   if (launch.evidenceLedger.nextIncompleteChecks?.length > 0) {
     md += `- Next incomplete checks:\n`;

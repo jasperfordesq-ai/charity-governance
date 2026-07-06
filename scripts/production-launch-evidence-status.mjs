@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { REQUIRED_LAUNCH_AREAS } from './production-launch-evidence.mjs';
+import { FINAL_SIGNOFF_ROLES, REQUIRED_LAUNCH_AREAS } from './production-launch-evidence.mjs';
 
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
@@ -72,6 +72,7 @@ export function summarizeEvidence(evidence) {
   const areaSummaries = [];
   const incompleteChecks = [];
   let completedChecks = 0;
+  let approvedFinalSignoffRoles = 0;
 
   for (const area of REQUIRED_LAUNCH_AREAS) {
     const actualArea = evidence?.areas?.[area.id];
@@ -97,10 +98,26 @@ export function summarizeEvidence(evidence) {
     });
   }
 
+  const finalSignoffApprovals = FINAL_SIGNOFF_ROLES.map((role) => {
+    const approval = evidence?.finalSignoff?.approvals?.[role.id];
+    const status = statusOf(approval?.status);
+    const approved = status === 'approved';
+    if (approved) approvedFinalSignoffRoles += 1;
+    return {
+      id: role.id,
+      label: role.label,
+      status,
+      approved,
+    };
+  });
+
   return {
     areaSummaries,
+    approvedFinalSignoffRoles,
     completedChecks,
+    finalSignoffApprovals,
     incompleteChecks,
+    totalFinalSignoffRoles: FINAL_SIGNOFF_ROLES.length,
     totalChecks: countChecks(),
   };
 }
@@ -118,6 +135,7 @@ function renderStatus(evidence) {
     `Evidence statuses complete: ${evidenceStatusesComplete ? 'yes' : 'no'}`,
     `approvedForLaunch: ${evidence?.approvedForLaunch === true ? 'true' : 'false'}`,
     `finalSignoff: ${statusOf(evidence?.finalSignoff?.status)}`,
+    `Final approval roles approved: ${summary.approvedFinalSignoffRoles} / ${summary.totalFinalSignoffRoles}`,
     `Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}`,
     '',
     'Areas:',
@@ -125,6 +143,14 @@ function renderStatus(evidence) {
 
   for (const area of summary.areaSummaries) {
     lines.push(`  - ${area.id}: ${area.completed} / ${area.total} complete (${area.status})`);
+  }
+
+  const pendingApprovals = summary.finalSignoffApprovals.filter((approval) => !approval.approved);
+  if (pendingApprovals.length > 0) {
+    lines.push('', 'Final approval roles still pending:');
+    for (const approval of pendingApprovals) {
+      lines.push(`  - ${approval.id}: ${approval.status}`);
+    }
   }
 
   if (summary.incompleteChecks.length > 0) {

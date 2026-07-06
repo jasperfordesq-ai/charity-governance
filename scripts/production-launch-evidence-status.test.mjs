@@ -40,9 +40,13 @@ test('production launch evidence status reports pending template progress withou
     assert.match(result.stdout, /CharityPilot production launch evidence status/);
     assert.match(result.stdout, /Evidence statuses complete: no/);
     assert.match(result.stdout, /Checklist checks complete: 0 \/ 85/);
+    assert.match(result.stdout, /Final approval roles approved: 0 \/ 5/);
     assert.match(result.stdout, /releaseGate: 0 \/ 18 complete/);
     assert.match(result.stdout, /approvedForLaunch: false/);
     assert.match(result.stdout, /finalSignoff: pending/);
+    assert.match(result.stdout, /Final approval roles still pending:/);
+    assert.match(result.stdout, /engineering: pending/);
+    assert.match(result.stdout, /legalCompliance: pending/);
     assert.match(result.stdout, /Next incomplete checks:/);
     assert.match(result.stdout, /releaseGate\.npm-ci/);
   } finally {
@@ -69,6 +73,7 @@ test('production launch evidence status counts completed checks and keeps final 
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /Checklist checks complete: 1 \/ 85/);
+    assert.match(result.stdout, /Final approval roles approved: 0 \/ 5/);
     assert.match(result.stdout, /releaseGate: 1 \/ 18 complete/);
     assert.match(result.stdout, /finalSignoff: pending/);
     assert.match(result.stdout, /releaseGate\.db-generate/);

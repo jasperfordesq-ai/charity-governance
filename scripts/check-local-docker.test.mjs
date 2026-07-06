@@ -481,8 +481,10 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /85 machine-readable launch evidence checks/);
   assert.match(auditGenerator, /launch evidence ledger status/);
   assert.match(auditGenerator, /launch evidence approval state, final signoff state, and the next incomplete checks/);
+  assert.match(auditGenerator, /final approval role progress separately from checklist completion/);
   assert.match(auditGenerator, /approvedForLaunch/);
   assert.match(auditGenerator, /finalSignoff/);
+  assert.match(auditGenerator, /Final approval roles approved/);
   assert.match(auditGenerator, /Next incomplete checks/);
   assert.match(auditGenerator, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
@@ -490,8 +492,10 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /85 machine-readable launch evidence checks/);
   assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
+  assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /approvedForLaunch: false/);
   assert.match(auditLedger, /finalSignoff: pending/);
+  assert.match(auditLedger, /Final approval roles approved: 0 \/ 5/);
   assert.match(auditLedger, /Next incomplete checks/);
   assert.match(auditLedger, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditLedger, /legal\/compliance final approval/);
