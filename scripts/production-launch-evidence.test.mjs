@@ -1724,6 +1724,16 @@ test('production launch evidence template covers every required area and final s
       ),
     );
     assert.ok(
+      template.areas.browserQa.checks['critical-flows-covered'].requiredEvidenceHints.includes(
+        'Launch-Critical Route Inventory',
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['critical-flows-covered'].requiredEvidenceHints.includes(
+        'desktop, mobile, light-mode, and dark-mode evidence',
+      ),
+    );
+    assert.ok(
       template.areas.securityReview.checks['penetration-test-complete'].requiredEvidenceHints.includes(
         'completed before real charity data',
       ),
