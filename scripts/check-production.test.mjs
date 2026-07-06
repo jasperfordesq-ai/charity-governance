@@ -2056,6 +2056,16 @@ test('request lifecycle docs describe identifier-aware auth throttles', () => {
   assert.doesNotMatch(docs, /token-refresh endpoint, for example, caps at `5` requests per minute/);
 });
 
+test('module dependency graph describes auth public boundary and identifier throttles', () => {
+  const docs = readRepoFile('docs/architecture/02-module-dependency-graph.md');
+
+  assert.match(docs, /Public or partial-auth by design/);
+  assert.match(docs, /do not require an existing organisation session/);
+  assert.match(docs, /identifier-aware `rateLimit` buckets/);
+  assert.match(docs, /email, reset\/verify token, refresh token, or bearer\/access-cookie credentials/);
+  assert.doesNotMatch(docs, /No org-level guards/);
+});
+
 test('production API runtime leaves scheduled jobs to dedicated job containers', () => {
   const compose = readRepoFile('compose.production.yml');
   const cron = readRepoFile('apps/api/src/utils/cron.ts');

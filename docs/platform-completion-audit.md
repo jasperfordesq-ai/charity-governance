@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `dac114b`
+Working-tree base commit when generated: `16987b6`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -187,6 +187,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production Supabase checks now redact service-role env assignments as well as bearer/apikey values, signed URL tokens, and storage probe paths from launch transcripts.
 - Backend architecture docs now describe UUID-backed document storage keys and Stripe customer reconciliation instead of stale pre-hardening behavior.
 - Request lifecycle docs now describe identifier-aware auth throttles for email, token, refresh-token, and credential buckets.
+- Module dependency docs now describe auth as a public or partial-auth boundary with identifier-aware throttles instead of a missing organisation-guard concern.
 - Production deploy preflight now redacts env-file failure transcripts before they are copied into release-gate evidence.
 - Production environment preflight now redacts token-bearing env-file path failures before they are copied into release-gate evidence.
 - Production launch evidence status and strict validation now redact token-bearing evidence-file path failures before operator handoff transcripts are stored.
