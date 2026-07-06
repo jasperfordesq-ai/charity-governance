@@ -9,6 +9,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import { decodeJsonFile, summarizeEvidence } from './production-launch-evidence-status.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +72,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
     ],
   },
 ]);
+const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
 
 function placeholderKeys(envContent) {
   const keys = [];
@@ -89,11 +91,20 @@ export function groupRemainingKeys(keys) {
     const groupKeys = group.keys.filter((key) => remaining.has(key));
     if (groupKeys.length === 0) continue;
     for (const key of groupKeys) remaining.delete(key);
-    groups.push({ label: group.label, keys: groupKeys });
+    groups.push({
+      label: group.label,
+      keys: groupKeys,
+      items: groupKeys.map((key) => ({ key, hint: OPERATOR_SUPPLIED_HINTS.get(key) ?? 'Operator-supplied production value' })),
+    });
   }
 
   if (remaining.size > 0) {
-    groups.push({ label: 'Other', keys: [...remaining].sort() });
+    const keys = [...remaining].sort();
+    groups.push({
+      label: 'Other',
+      keys,
+      items: keys.map((key) => ({ key, hint: OPERATOR_SUPPLIED_HINTS.get(key) ?? 'Operator-supplied production value' })),
+    });
   }
 
   return groups;
@@ -214,7 +225,10 @@ function main() {
     console.log('');
     console.log('Values still needed by source:');
     for (const group of state.remainingKeyGroups ?? []) {
-      console.log(`  ${group.label}: ${group.keys.join(', ')}`);
+      console.log(`  ${group.label}:`);
+      for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
+        console.log(`    - ${item.key}: ${item.hint}`);
+      }
     }
     console.log('');
   }

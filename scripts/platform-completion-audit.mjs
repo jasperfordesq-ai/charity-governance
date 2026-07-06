@@ -527,7 +527,10 @@ function render() {
     if (launch.remainingKeyGroups.length > 0) {
       md += `Grouped by source:\n\n`;
       for (const group of launch.remainingKeyGroups) {
-        md += `- ${group.label}: ${group.keys.map((key) => `\`${key}\``).join(', ')}\n`;
+        md += `- ${group.label}:\n`;
+        for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
+          md += `  - \`${item.key}\`: ${item.hint}\n`;
+        }
       }
       md += `\n`;
     }

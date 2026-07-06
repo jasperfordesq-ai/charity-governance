@@ -502,6 +502,9 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /Grouped by source/);
   assert.match(auditLedger, /Stripe billing/);
   assert.match(auditLedger, /Release image promotion/);
+  assert.match(auditLedger, /Live Stripe secret key/);
+  assert.match(auditLedger, /Digest-pinned web image ref/);
+  assert.match(auditLedger, /Reverse-proxy IP\/CIDR/);
   assert.match(auditLedger, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditLedger, /legal\/compliance final approval/);
 });

@@ -55,10 +55,12 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
-  assert.deepEqual(s.remainingKeyGroups, [
+  assert.deepEqual(s.remainingKeyGroups.map((group) => ({ label: group.label, keys: group.keys })), [
     { label: 'PostgreSQL', keys: ['DATABASE_URL'] },
     { label: 'Stripe billing', keys: ['STRIPE_SECRET_KEY'] },
   ]);
+  assert.match(s.remainingKeyGroups[0].items[0].hint, /PostgreSQL URL/);
+  assert.match(s.remainingKeyGroups[1].items[0].hint, /Live Stripe secret key/);
   assert.equal(s.evidenceLedger.exists, true);
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
@@ -66,22 +68,26 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
 });
 
 test('groups missing production values by operator source', () => {
-  assert.deepEqual(
-    groupRemainingKeys([
-      'CHARITYPILOT_WEB_IMAGE',
-      'SUPABASE_SERVICE_ROLE_KEY',
-      'UNKNOWN_VALUE',
-      'STRIPE_WEBHOOK_SECRET',
-      'TRUSTED_PROXY_ADDRESSES',
-    ]),
-    [
-      { label: 'Hosting, DNS, TLS, and proxy', keys: ['TRUSTED_PROXY_ADDRESSES'] },
-      { label: 'Stripe billing', keys: ['STRIPE_WEBHOOK_SECRET'] },
-      { label: 'Supabase storage', keys: ['SUPABASE_SERVICE_ROLE_KEY'] },
-      { label: 'Release image promotion', keys: ['CHARITYPILOT_WEB_IMAGE'] },
-      { label: 'Other', keys: ['UNKNOWN_VALUE'] },
-    ],
-  );
+  const groups = groupRemainingKeys([
+    'CHARITYPILOT_WEB_IMAGE',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'UNKNOWN_VALUE',
+    'STRIPE_WEBHOOK_SECRET',
+    'TRUSTED_PROXY_ADDRESSES',
+  ]);
+
+  assert.deepEqual(groups.map((group) => ({ label: group.label, keys: group.keys })), [
+    { label: 'Hosting, DNS, TLS, and proxy', keys: ['TRUSTED_PROXY_ADDRESSES'] },
+    { label: 'Stripe billing', keys: ['STRIPE_WEBHOOK_SECRET'] },
+    { label: 'Supabase storage', keys: ['SUPABASE_SERVICE_ROLE_KEY'] },
+    { label: 'Release image promotion', keys: ['CHARITYPILOT_WEB_IMAGE'] },
+    { label: 'Other', keys: ['UNKNOWN_VALUE'] },
+  ]);
+  assert.match(groups[0].items[0].hint, /Reverse-proxy IP\/CIDR/);
+  assert.match(groups[1].items[0].hint, /webhook signing secret/);
+  assert.match(groups[2].items[0].hint, /service role key/);
+  assert.match(groups[3].items[0].hint, /Digest-pinned web image ref/);
+  assert.match(groups[4].items[0].hint, /Operator-supplied production value/);
 });
 
 test('reports launch evidence completion counts when the evidence ledger exists', () => {

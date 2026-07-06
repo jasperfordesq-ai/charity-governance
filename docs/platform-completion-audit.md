@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `9ee1224`
+Working-tree base commit when generated: `141f803`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -298,13 +298,36 @@ The local non-committed production env still needs 23 real value(s):
 
 Grouped by source:
 
-- Hosting, DNS, TLS, and proxy: `TRUSTED_PROXY_ADDRESSES`, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`
-- PostgreSQL: `DATABASE_URL`
-- Stripe billing: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`, `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`, `STRIPE_COMPLETE_MONTHLY_PRICE_ID`, `STRIPE_COMPLETE_YEARLY_PRICE_ID`
-- Resend email: `RESEND_API_KEY`
-- Supabase storage: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
-- Observability: `ERROR_ALERT_WEBHOOK_URL`
-- Release image promotion: `CHARITYPILOT_API_IMAGE`, `CHARITYPILOT_WEB_IMAGE`, `CHARITYPILOT_MIGRATION_IMAGE`, `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`, `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
+- Hosting, DNS, TLS, and proxy:
+  - `TRUSTED_PROXY_ADDRESSES`: Reverse-proxy IP/CIDR in front of the API (Step 4)
+  - `FRONTEND_URL`: Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)
+  - `NEXT_PUBLIC_API_URL`: Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)
+  - `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`: Docker Compose web runtime API origin; must match NEXT_PUBLIC_API_URL (Step 4/6)
+- PostgreSQL:
+  - `DATABASE_URL`: Managed production PostgreSQL URL with sslmode=require (Step 3)
+- Stripe billing:
+  - `STRIPE_SECRET_KEY`: Live Stripe secret key sk_live_... (Step 2)
+  - `STRIPE_WEBHOOK_SECRET`: Live Stripe webhook signing secret whsec_... (Step 2)
+  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Live Stripe publishable key pk_live_... (Step 2)
+  - `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`: Live Stripe Essentials monthly price ID price_... (Step 2)
+  - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Live Stripe Essentials yearly price ID price_... (Step 2)
+  - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Live Stripe Complete monthly price ID price_... (Step 2)
+  - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Live Stripe Complete yearly price ID price_... (Step 2)
+- Resend email:
+  - `RESEND_API_KEY`: Resend production API key re_... (Step 2)
+- Supabase storage:
+  - `SUPABASE_URL`: Same Supabase project URL (Step 2)
+  - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
+  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://<ref>.supabase.co (Step 2)
+  - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`: Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)
+- Observability:
+  - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)
+- Release image promotion:
+  - `CHARITYPILOT_API_IMAGE`: Digest-pinned API image ref from release-image-digests.env (Step 6)
+  - `CHARITYPILOT_WEB_IMAGE`: Digest-pinned web image ref from release-image-digests.env (Step 6)
+  - `CHARITYPILOT_MIGRATION_IMAGE`: Digest-pinned migration image ref from release-image-digests.env (Step 6)
+  - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`: Web image build API origin copied from release-image-digests.env (Step 6)
+  - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`: Web image build Supabase origin copied from release-image-digests.env (Step 6)
 
 ## Irish Compliance Source Posture
 
