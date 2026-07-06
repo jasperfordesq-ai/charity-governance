@@ -2081,6 +2081,21 @@ test('document storage deletion has a durable retry outbox and production job', 
   assert.doesNotMatch(cleanupJob, /validateProductionEnv/);
 });
 
+test('backend architecture docs describe hardened storage keys and Stripe customer reconciliation', () => {
+  const storageDoc = readRepoFile('docs/architecture/06-document-storage.md');
+  const billingDoc = readRepoFile('docs/architecture/05-billing.md');
+
+  assert.match(storageDoc, /<organisationId>\/<epoch-ms>-<uuid>-<sanitised-filename>/);
+  assert.match(storageDoc, /same-millisecond uploads with the same original filename still produce distinct object keys/);
+  assert.doesNotMatch(storageDoc, /<organisationId>\/<epoch-ms>-<sanitised-filename>/);
+
+  assert.match(billingDoc, /Reconciles the Stripe customer before checkout/);
+  assert.match(billingDoc, /stored `organisation\.stripeCustomerId` is retrieved and accepted only when its Stripe metadata still belongs to the same organisation/);
+  assert.match(billingDoc, /organisation-scoped idempotency key/);
+  assert.match(billingDoc, /runs the same customer reconciliation before opening the Stripe portal/);
+  assert.doesNotMatch(billingDoc, /Lazily creates a Stripe customer if `organisation\.stripeCustomerId` is null/);
+});
+
 test('production operations docs keep detailed readiness checks behind the internal header', () => {
   const runbook = readRepoFile('docs/production-runbook.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');

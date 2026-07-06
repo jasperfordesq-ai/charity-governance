@@ -214,6 +214,7 @@ const fixedInThisAuditBranch = [
   'Production database checks now catch and redact thrown backup-helper failures while still removing temporary backup directories unless retention is explicitly requested.',
   'Production rollback checks now redact manifest validation failures and thrown deploy exceptions while still deleting temporary merged env files.',
   'Production Supabase checks now redact service-role env assignments as well as bearer/apikey values, signed URL tokens, and storage probe paths from launch transcripts.',
+  'Backend architecture docs now describe UUID-backed document storage keys and Stripe customer reconciliation instead of stale pre-hardening behavior.',
   'Production deploy preflight now redacts env-file failure transcripts before they are copied into release-gate evidence.',
   'Production environment preflight now redacts token-bearing env-file path failures before they are copied into release-gate evidence.',
   'Production launch evidence status and strict validation now redact token-bearing evidence-file path failures before operator handoff transcripts are stored.',

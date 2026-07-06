@@ -51,12 +51,13 @@ The authenticated scope applies `authGuard` via an `onRequest` hook (`apps/api/s
 
 1. Loads the organisation (`findUniqueOrThrow`) and obtains the Stripe client via `getStripe()`, which throws `503 BILLING_NOT_CONFIGURED` if `STRIPE_SECRET_KEY` is unset/placeholder (`apps/api/src/services/billing.service.ts:90-98`).
 2. Resolves the price ID with `getPriceId(plan, interval)`.
-3. Lazily creates a Stripe customer if `organisation.stripeCustomerId` is null — tagging it with `metadata.organisationId`, the organisation name and contact email — then persists the new `stripeCustomerId` on the organisation (`apps/api/src/services/billing.service.ts:336-348`).
-4. Creates a `mode: 'subscription'` Checkout session with a single line item, success/cancel URLs under the primary frontend origin (`/billing?success=true` / `/billing?cancelled=true`), and `metadata: { organisationId, plan }`. The metadata is later re-checked by the webhook handler. Returns `{ url }`.
+3. Reconciles the Stripe customer before checkout: a stored `organisation.stripeCustomerId` is retrieved and accepted only when its Stripe metadata still belongs to the same organisation; stale, deleted, missing, or wrong-organisation IDs are repaired by searching Stripe customers for `metadata.organisationId`.
+4. Creates a Stripe customer only when reconciliation cannot find a valid one, tagging it with `metadata.organisationId`, the organisation name and contact email, using an organisation-scoped idempotency key, and persisting the resulting `stripeCustomerId`.
+5. Creates a `mode: 'subscription'` Checkout session with a single line item, success/cancel URLs under the primary frontend origin (`/billing?success=true` / `/billing?cancelled=true`), and `metadata: { organisationId, plan }`. The metadata is later re-checked by the webhook handler. Returns `{ url }`.
 
 The frontend origin comes from `getPrimaryFrontendOrigin()`, which takes the first comma-separated entry of `FRONTEND_URL` (defaulting to `http://localhost:3000`) with trailing slashes stripped (`apps/api/src/utils/frontend-origin.ts:1-8`). Production validation keeps that first entry canonical: `https://app.charitypilot.ie`.
 
-The billing-portal session (`createPortalSession`) requires an existing `stripeCustomerId`, otherwise it throws `400 NO_STRIPE_CUSTOMER`, and returns a portal URL with `return_url` set to `/billing` (`apps/api/src/services/billing.service.ts:362-377`).
+The billing-portal session (`createPortalSession`) runs the same customer reconciliation before opening the Stripe portal. It rejects the request with `400 NO_STRIPE_CUSTOMER` only when no stored or metadata-searchable Stripe customer can be verified for the organisation, and returns a portal URL with `return_url` set to `/billing`.
 
 ## Webhook handling
 

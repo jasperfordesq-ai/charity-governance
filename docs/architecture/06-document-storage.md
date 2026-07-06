@@ -21,7 +21,7 @@ When the Supabase credentials are not configured, `getSupabaseClient()` raises a
 
 ### Path keying and traversal guards
 
-Every storage object is keyed by organisation. On upload the path is built as `<organisationId>/<epoch-ms>-<sanitised-filename>` (`apps/api/src/services/storage.service.ts:145-146`). `sanitiseFilename` lower-cases, replaces any character outside `[a-z0-9.\-_]` with `-`, collapses repeats and trims leading/trailing dashes (`apps/api/src/services/storage.service.ts:65-71`).
+Every storage object is keyed by organisation. On upload the path is built as `<organisationId>/<epoch-ms>-<uuid>-<sanitised-filename>`, so same-millisecond uploads with the same original filename still produce distinct object keys (`apps/api/src/services/storage.service.ts`). `sanitiseFilename` lower-cases, replaces any character outside `[a-z0-9.\-_]` with `-`, collapses repeats and trims leading/trailing dashes.
 
 Read/sign/delete operations re-validate ownership through `assertOrganisationStoragePath`, which rejects (with `403 STORAGE_PATH_FORBIDDEN`) any path containing `..`, any path that does not begin with `<organisationId>/`, or one with no remainder after the prefix (`apps/api/src/services/storage.service.ts:73-87`). The local driver additionally resolves the absolute path and confirms it stays under the storage root before touching the filesystem (`apps/api/src/services/storage.service.ts:89-99`).
 
@@ -77,7 +77,7 @@ sequenceDiagram
     Route->>Route: parse metadata (uploadDocumentSchema)
     Route->>Route: verify extension + magic bytes
     Route->>Storage: uploadFile(orgId, filename, buffer, mime)
-    Storage->>Store: write at "orgId/epoch-name"
+    Storage->>Store: write at "orgId/epoch-uuid-name"
     Store-->>Storage: ok
     Storage-->>Route: { storagePath }
     Route->>Doc: create(orgId, userId, { fileUrl: storagePath, fileSize, ... })
