@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 import { getLocalAdminSeedConfig, type LocalAdminSeedConfig } from '../src/services/local-admin-seed.js';
+import { serializeErrorForLog } from '../src/utils/logger.js';
 
 const prisma = new PrismaClient();
 const DEFAULT_LOCAL_STORAGE_DIR = '.charitypilot-local-storage/documents';
@@ -617,7 +618,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (e) => {
-    console.error(e);
+    console.error('Prisma seed failed:', serializeErrorForLog(e));
     await prisma.$disconnect();
     process.exit(1);
   });

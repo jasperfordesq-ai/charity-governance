@@ -88,6 +88,14 @@ test('local admin seed reports the configured admin account', () => {
   assert.doesNotMatch(seedScript, /DEMO_ORG_NAME/);
 });
 
+test('local admin seed sanitizes fatal errors before logging', () => {
+  const seedScript = readRepoFile('apps/api/prisma/seed.ts');
+
+  assert.match(seedScript, /import \{ serializeErrorForLog \} from '\.\.\/src\/utils\/logger\.js'/);
+  assert.match(seedScript, /console\.error\('Prisma seed failed:',\s*serializeErrorForLog\(e\)\)/);
+  assert.doesNotMatch(seedScript, /console\.error\(e\)/);
+});
+
 test('local admin seed stores starter documents in organisation-scoped local storage', () => {
   const seedScript = readRepoFile('apps/api/prisma/seed.ts');
 
