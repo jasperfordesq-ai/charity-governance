@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `2a5dbde`
+Working-tree base commit when generated: `eefb632`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -186,6 +186,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production Supabase checks now redact service-role env assignments as well as bearer/apikey values, signed URL tokens, and storage probe paths from launch transcripts.
 - Production deploy preflight now redacts env-file failure transcripts before they are copied into release-gate evidence.
 - Production environment preflight now redacts token-bearing env-file path failures before they are copied into release-gate evidence.
+- Production launch evidence status and strict validation now redact token-bearing evidence-file path failures before operator handoff transcripts are stored.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
@@ -220,6 +221,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --check scripts\check-production-supabase.mjs`, focused Supabase/production-config tests, and `npm run test:production-check` passed locally after production Supabase transcript-redaction hardening.
 - `node --check scripts\production-deploy-preflight.mjs`, focused deploy/preflight/rollback tests, and `npm run test:production-check` passed locally after production deploy preflight env-failure transcript hardening.
 - `node --check scripts\check-production.mjs`, focused production/preflight tests, and `npm run test:production-check` passed locally after production environment preflight path-redaction hardening.
+- `node --check scripts\production-launch-evidence.mjs scripts\production-launch-evidence-status.mjs`, focused launch-evidence/status tests, and `npm run test:production-check` passed locally after production launch evidence path-redaction hardening.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work

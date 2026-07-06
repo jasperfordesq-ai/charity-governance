@@ -93,3 +93,17 @@ test('production launch evidence status fails closed when evidence file is missi
   assert.equal(result.status, 1);
   assert.match(result.stderr, /evidence file not found/);
 });
+
+test('production launch evidence status redacts token-bearing evidence paths', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+
+  const result = runProductionLaunchEvidenceStatusFromArgs([
+    '--evidence-file',
+    join(tmpdir(), 'missing-production-launch-evidence.json?token=secret-token&GITHUB_TOKEN=ghp_secretToken'),
+  ]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /token=\[redacted\]/);
+  assert.match(result.stderr, /GITHUB_TOKEN=\[redacted\]/);
+  assert.doesNotMatch(result.stderr, /secret-token|ghp_secretToken/);
+});

@@ -1423,6 +1423,24 @@ function countChecks() {
   return REQUIRED_LAUNCH_AREAS.reduce((total, area) => total + area.checks.length, 0);
 }
 
+export function redactLaunchEvidenceTranscript(value) {
+  return String(value)
+    .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
+    .replace(
+      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY|GITHUB_TOKEN)=)[^\s'")]+/gi,
+      '$1[redacted]',
+    )
+    .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
+    .replace(/\bwhsec_[A-Za-z0-9_=-]+/g, '[redacted-stripe-webhook-secret]')
+    .replace(/\bre_[A-Za-z0-9_=-]+/g, '[redacted-resend-key]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_=-]+/g, '[redacted-github-token]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_=-]+/g, '[redacted-github-token]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
+    .replace(/([?&](?:token|signature|key|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
+    .replace(/[A-Za-z0-9._%+-]+:[^@\s'")]+@/g, '[redacted-credentials]@');
+}
+
 export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)) {
   let options;
   try {
@@ -1433,14 +1451,18 @@ export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)
 
   const evidencePath = resolve(process.cwd(), options.evidenceFile);
   if (!existsSync(evidencePath)) {
-    return result(1, '', `Production launch evidence failed: evidence file not found: ${options.evidenceFile}\n`);
+    return result(1, '', `Production launch evidence failed: evidence file not found: ${redactLaunchEvidenceTranscript(options.evidenceFile)}\n`);
   }
 
   let evidence;
   try {
     evidence = JSON.parse(decodeJsonFile(evidencePath));
   } catch (error) {
-    return result(1, '', `Production launch evidence failed: evidence file is not valid JSON. ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Production launch evidence failed: evidence file is not valid JSON. ${redactLaunchEvidenceTranscript(error instanceof Error ? error.message : String(error))}\n`,
+    );
   }
 
   const issues = validateLaunchEvidence(evidence);

@@ -3,7 +3,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { FINAL_SIGNOFF_ROLES, REQUIRED_LAUNCH_AREAS } from './production-launch-evidence.mjs';
+import {
+  FINAL_SIGNOFF_ROLES,
+  REQUIRED_LAUNCH_AREAS,
+  redactLaunchEvidenceTranscript,
+} from './production-launch-evidence.mjs';
 
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
@@ -177,14 +181,18 @@ export function runProductionLaunchEvidenceStatusFromArgs(args = process.argv.sl
 
   const evidencePath = resolve(process.cwd(), options.evidenceFile);
   if (!existsSync(evidencePath)) {
-    return result(1, '', `Production launch evidence status failed: evidence file not found: ${options.evidenceFile}\n`);
+    return result(1, '', `Production launch evidence status failed: evidence file not found: ${redactLaunchEvidenceTranscript(options.evidenceFile)}\n`);
   }
 
   let evidence;
   try {
     evidence = JSON.parse(decodeJsonFile(evidencePath));
   } catch (error) {
-    return result(1, '', `Production launch evidence status failed: evidence file is not valid JSON. ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Production launch evidence status failed: evidence file is not valid JSON. ${redactLaunchEvidenceTranscript(error instanceof Error ? error.message : String(error))}\n`,
+    );
   }
 
   return result(0, renderStatus(evidence));

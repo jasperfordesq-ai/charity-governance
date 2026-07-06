@@ -1511,6 +1511,16 @@ test('production launch evidence validator fails closed when evidence file is mi
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Production launch evidence failed/);
   assert.match(result.stderr, /evidence file not found/);
+
+  const redactedResult = runProductionLaunchEvidenceFromArgs([
+    '--evidence-file',
+    join(tmpdir(), 'missing-launch-evidence.json?token=secret-token&GITHUB_TOKEN=ghp_secretToken'),
+  ]);
+
+  assert.equal(redactedResult.status, 1);
+  assert.match(redactedResult.stderr, /token=\[redacted\]/);
+  assert.match(redactedResult.stderr, /GITHUB_TOKEN=\[redacted\]/);
+  assert.doesNotMatch(redactedResult.stderr, /secret-token|ghp_secretToken/);
 });
 
 test('production launch evidence validator requires every checklist check to be complete', async () => {
