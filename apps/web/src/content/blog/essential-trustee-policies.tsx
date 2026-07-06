@@ -1,4 +1,5 @@
 import type { PostMeta } from '@/lib/blog';
+import { CheckCircle2 } from 'lucide-react';
 
 export const meta: PostMeta = {
   slug: 'essential-trustee-policies',
@@ -50,7 +51,7 @@ export default function EssentialTrusteePolicies() {
         of interests</strong>, updated at least annually, in which each trustee records their
         relevant roles, relationships, and financial interests.
       </p>
-      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-r-lg mb-6">
+      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-lg mb-6">
         <p className="text-sm text-teal-700 leading-relaxed">
           The register of interests is not simply a form to be completed and filed. The board chair
           should review it regularly, and it should be referenced at every board meeting before
@@ -109,7 +110,7 @@ export default function EssentialTrusteePolicies() {
           'How to escalate concerns to Tusla (the Child and Family Agency) or An Garda Síochána',
         ].map((item) => (
           <li key={item} className="flex gap-3">
-            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-teal-600 mt-2" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-teal-600" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-base leading-relaxed text-gray-700">{item}</p>
           </li>
         ))}
@@ -166,7 +167,7 @@ export default function EssentialTrusteePolicies() {
           'Whether your charity is required to appoint a Data Protection Officer (DPO) — mandatory only for certain types of large-scale processing, but advisable to consider for charities handling sensitive data such as health information or criminal records',
         ].map((item) => (
           <li key={item} className="flex gap-3">
-            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-teal-600 mt-2" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-teal-600" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-base leading-relaxed text-gray-700">{item}</p>
           </li>
         ))}
@@ -200,7 +201,7 @@ export default function EssentialTrusteePolicies() {
           'Procurement — how contracts and significant purchases are tendered or justified',
         ].map((item) => (
           <li key={item} className="flex gap-3">
-            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-teal-600 mt-2" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-teal-600" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-base leading-relaxed text-gray-700">{item}</p>
           </li>
         ))}
@@ -259,7 +260,7 @@ export default function EssentialTrusteePolicies() {
           'Strategic opportunities — some charities deliberately hold reserves to be able to respond quickly to new opportunities or crises without waiting for grant funding',
         ].map((item) => (
           <li key={item} className="flex gap-3">
-            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-teal-600 mt-2" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-teal-600" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-base leading-relaxed text-gray-700">{item}</p>
           </li>
         ))}
@@ -298,7 +299,7 @@ export default function EssentialTrusteePolicies() {
       </p>
 
       {/* CharityPilot callout */}
-      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-r-lg mt-8 mb-6">
+      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-lg mt-8 mb-6">
         <p className="text-sm font-semibold text-teal-800 mb-1">
           CharityPilot's Document Vault
         </p>

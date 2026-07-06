@@ -1,4 +1,5 @@
 import type { PostMeta } from '@/lib/blog';
+import { CheckCircle2, TriangleAlert } from 'lucide-react';
 
 export const meta: PostMeta = {
   slug: 'annual-reporting-guide-irish-charities',
@@ -56,7 +57,7 @@ export default function AnnualReportingGuide() {
       </p>
 
       {/* Callout */}
-      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-r-lg mb-6">
+      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-lg mb-6">
         <p className="text-sm font-semibold text-teal-800 mb-1">Key Deadline</p>
         <p className="text-sm text-teal-700 leading-relaxed">
           Annual report due = financial year-end + 10 months. Mark this date in your board calendar
@@ -235,7 +236,7 @@ export default function AnnualReportingGuide() {
           },
         ].map(({ title, detail }) => (
           <li key={title} className="flex gap-3">
-            <span className="mt-1 flex-shrink-0 w-2 h-2 rounded-full bg-teal-600 mt-2" />
+            <CheckCircle2 className="mt-1 h-4 w-4 flex-shrink-0 text-teal-600" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-base leading-relaxed text-gray-700">
               <span className="font-semibold text-gray-900">{title}</span> {detail}
             </p>
@@ -261,7 +262,7 @@ export default function AnnualReportingGuide() {
           'Potential personal liability for trustees if the organisation continues to hold itself out as a charity after removal',
         ].map((item) => (
           <li key={item} className="flex gap-3">
-            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-red-500 mt-2" />
+            <TriangleAlert className="mt-1 h-4 w-4 flex-shrink-0 text-red-500" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-base leading-relaxed text-gray-700">{item}</p>
           </li>
         ))}
@@ -291,7 +292,7 @@ export default function AnnualReportingGuide() {
       </p>
 
       {/* Closing callout */}
-      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-r-lg mt-8 mb-6">
+      <div className="border-l-4 border-teal-600 bg-teal-50 px-5 py-4 rounded-lg mt-8 mb-6">
         <p className="text-sm font-semibold text-teal-800 mb-1">In Summary</p>
         <p className="text-sm text-teal-700 leading-relaxed">
           File within 10 months of your financial year-end. Match your accounts to the correct

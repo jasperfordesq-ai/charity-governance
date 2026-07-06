@@ -16,6 +16,7 @@ const dash = (p: string) => readFileSync(dashPath(p), 'utf8');
 const optionalDash = (p: string) => (existsSync(dashPath(p)) ? readFileSync(dashPath(p), 'utf8') : '');
 const app = (p: string) => readFileSync(join(WEB, 'src', 'app', p), 'utf8');
 const component = (p: string) => readFileSync(join(WEB, 'src', 'components', p), 'utf8');
+const content = (p: string) => readFileSync(join(WEB, 'src', 'content', p), 'utf8');
 const lib = (p: string) => readFileSync(join(WEB, 'src', 'lib', p), 'utf8');
 
 test('dashboard applies the plan-feature + subscription-lapse helpers (gracefully gates, never errors)', () => {
@@ -1719,6 +1720,22 @@ test('marketing routes use lucide icons instead of route-local inline svg', () =
       assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
     }
     assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
+test('blog article content avoids decorative dot bullets and oversized cards', () => {
+  const articles = [
+    'blog/annual-reporting-guide-irish-charities.tsx',
+    'blog/essential-trustee-policies.tsx',
+    'blog/simple-vs-complex-charity-classification.tsx',
+    'blog/understanding-the-charities-governance-code.tsx',
+  ];
+
+  for (const file of articles) {
+    const src = content(file);
+    assert.doesNotMatch(src, /w-2 h-2 rounded-full/, `${file} should not use decorative dot bullets`);
+    assert.doesNotMatch(src, /rounded-xl/, `${file} should use standard-radius content cards`);
+    assert.match(src, /rounded-lg/, `${file} should use standard-radius callouts/cards`);
   }
 });
 

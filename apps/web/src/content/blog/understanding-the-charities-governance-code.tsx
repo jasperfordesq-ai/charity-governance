@@ -189,7 +189,7 @@ export default function UnderstandingTheCharitiesGovernanceCode() {
         The Code recognises that governance expectations must be proportionate to an organisation's
         size and complexity. It therefore divides its standards into two tiers.
       </p>
-      <div className="bg-teal-primary/10 rounded-xl p-6 mb-6">
+      <div className="bg-teal-primary/10 rounded-lg p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">
           32 Core Standards — Apply to All Registered Charities
         </h3>
@@ -201,7 +201,7 @@ export default function UnderstandingTheCharitiesGovernanceCode() {
           modest income is expected to have these foundations in place.
         </p>
       </div>
-      <div className="bg-amber-accent/10 rounded-xl p-6 mb-6">
+      <div className="bg-amber-accent/10 rounded-lg p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">
           17 Additional Standards — Apply to Complex Charities (49 Total)
         </h3>

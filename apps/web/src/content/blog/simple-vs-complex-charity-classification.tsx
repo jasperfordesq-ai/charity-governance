@@ -58,7 +58,7 @@ export default function SimpleVsComplexCharityClassification() {
       </h2>
 
       {/* Criterion 1 */}
-      <div className="bg-teal-primary/10 rounded-xl p-6 mb-5">
+      <div className="bg-teal-primary/10 rounded-lg p-6 mb-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
           1. Scale, Income, and Financial Complexity
         </h3>
@@ -71,7 +71,7 @@ export default function SimpleVsComplexCharityClassification() {
       </div>
 
       {/* Criterion 2 */}
-      <div className="bg-teal-primary/10 rounded-xl p-6 mb-5">
+      <div className="bg-teal-primary/10 rounded-lg p-6 mb-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
           2. Paid Staff, Volunteers, and Delegated Work
         </h3>
@@ -84,7 +84,7 @@ export default function SimpleVsComplexCharityClassification() {
       </div>
 
       {/* Criterion 3 */}
-      <div className="bg-teal-primary/10 rounded-xl p-6 mb-5">
+      <div className="bg-teal-primary/10 rounded-lg p-6 mb-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
           3. Complex Activities, Structures, or Risk
         </h3>
@@ -248,7 +248,7 @@ export default function SimpleVsComplexCharityClassification() {
         CharityPilot's two plans are designed precisely around this classification framework.
       </p>
       <div className="grid sm:grid-cols-2 gap-5 mb-6">
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-5">
           <h3 className="text-base font-semibold text-gray-900 mb-2">Essentials Plan</h3>
           <p className="text-sm leading-relaxed text-gray-700">
             Covers all 32 core standards. Designed for non-complex charities: volunteer-run
@@ -256,7 +256,7 @@ export default function SimpleVsComplexCharityClassification() {
             and annual filing reminders.
           </p>
         </div>
-        <div className="bg-teal-primary/10 border border-teal-primary/30 rounded-xl p-5">
+        <div className="bg-teal-primary/10 border border-teal-primary/30 rounded-lg p-5">
           <h3 className="text-base font-semibold text-gray-900 mb-2">Complete Plan</h3>
           <p className="text-sm leading-relaxed text-gray-700">
             Covers all 49 standards. Designed for complex charities and for any non-complex charity
