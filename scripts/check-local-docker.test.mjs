@@ -296,6 +296,12 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
+  assert.match(responsiveSpec, /const FONT_SETTLE_TIMEOUT_MS = 5_000/);
+  assert.match(responsiveSpec, /Promise\.race\(\[/);
+  assert.match(responsiveSpec, /setTimeout\(resolve,\s*timeoutMs\)/);
+  assert.match(responsiveSpec, /\},\s*FONT_SETTLE_TIMEOUT_MS\)/);
+  assert.match(responsiveSpec, /localStorage\.setItem\('cookie-consent', 'declined'\)/);
+  assert.match(responsiveSpec, /await suppressCookieConsent\(page\)/);
   assert.match(navigationHelper, /DEV_SERVER_RESTART_ERROR_PATTERNS = \[/);
   assert.match(navigationHelper, /net::ERR_EMPTY_RESPONSE/);
   assert.match(navigationHelper, /net::ERR_CONNECTION_RESET/);
@@ -308,6 +314,7 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   assert.match(navigationHelper, /return await page\.goto\(url,\s*gotoOptions\)/);
   assert.match(responsiveSpec, /import \{ gotoWithDevServerRetry \} from '\.\.\/helpers\/navigation'/);
   assert.match(fixtures, /import \{ gotoWithDevServerRetry \} from '\.\/helpers\/navigation'/);
+  assert.doesNotMatch(responsiveSpec, /document\.fonts\.ready\.then\(\(\) => undefined\)\)/);
   assert.doesNotMatch(responsiveSpec, /(?:page|ownerPage)\.goto\(.*waitUntil:\s*'commit'/);
   assert.doesNotMatch(fixtures, /await page\.goto\('\/(?:register|login)'/);
 });
