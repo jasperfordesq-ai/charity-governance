@@ -2185,6 +2185,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
+  assert.match(launchGuide, /Launch-Critical Route Inventory/);
+  assert.match(launchGuide, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);
   assert.match(launchGuide, /five named approvals/i);
   assert.match(launchGuide, /engineering, operations, security, legal\/compliance, and business/);

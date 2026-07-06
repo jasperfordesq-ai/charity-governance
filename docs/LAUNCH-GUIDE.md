@@ -26,6 +26,7 @@ The machine-readable launch evidence file must also pass all
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
+The deployed browser evidence must also complete the Launch-Critical Route Inventory in `docs/production-browser-qa.md`, proving every route in desktop, mobile, light-mode, and dark-mode evidence before launch signoff.
 
 | Check | Result |
 | --- | --- |
