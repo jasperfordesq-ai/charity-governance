@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `a3745ec`
+Working-tree base commit when generated: `6a51e29`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -25,6 +25,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Strict shared ISO date validation now rejects impossible calendar dates before they can normalize into filing, board, document, register, or deadline records.
 - Organisation profile date changes and derived auto-deadline regeneration now run inside one Prisma transaction.
 - Document storage paths now include a UUID segment to avoid same-millisecond same-filename collisions.
+- The documents API route now delegates upload MIME, signature, extension, and multipart-limit validation helpers to a dedicated module behind a production tooling regression test.
 - Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.
 - Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.
 - Stored Stripe customer IDs are now verified against Stripe customer metadata before checkout or portal reuse, and stale or wrong-organisation IDs are repaired through metadata reconciliation.
@@ -285,7 +286,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `documents` | `apps/api/src/routes/documents/index.ts` | 382 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `documents` | `apps/api/src/routes/documents/index.ts` | 312 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 90 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |

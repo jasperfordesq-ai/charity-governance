@@ -2132,6 +2132,20 @@ test('export API route delegates report rendering to a dedicated module', () => 
   assert.match(renderer, /IRISH_COMPLIANCE_MATRIX_LAST_CHECKED/);
 });
 
+test('documents API route delegates upload validation helpers to a dedicated module', () => {
+  const route = readRepoFile('apps/api/src/routes/documents/index.ts');
+  const validation = readRepoFile('apps/api/src/routes/documents/document-upload-validation.ts');
+
+  assert.match(route, /document-upload-validation\.js/);
+  assert.match(route, /hasAllowedMimeType/);
+  assert.match(route, /DOCUMENT_UPLOAD_MULTIPART_LIMITS/);
+  assert.doesNotMatch(route, /const ALLOWED_MIME_TYPES = new Set/);
+  assert.doesNotMatch(route, /function hasZipSignature/);
+  assert.match(validation, /const ALLOWED_MIME_TYPES = new Set/);
+  assert.match(validation, /export function hasValidSignature/);
+  assert.match(validation, /export function isMultipartLimitError/);
+});
+
 test('production operations docs keep detailed readiness checks behind the internal header', () => {
   const runbook = readRepoFile('docs/production-runbook.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');

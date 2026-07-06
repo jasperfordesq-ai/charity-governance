@@ -54,6 +54,7 @@ const fixedInThisAuditBranch = [
   'Strict shared ISO date validation now rejects impossible calendar dates before they can normalize into filing, board, document, register, or deadline records.',
   'Organisation profile date changes and derived auto-deadline regeneration now run inside one Prisma transaction.',
   'Document storage paths now include a UUID segment to avoid same-millisecond same-filename collisions.',
+  'The documents API route now delegates upload MIME, signature, extension, and multipart-limit validation helpers to a dedicated module behind a production tooling regression test.',
   'Stripe customer creation now uses an organisation-scoped idempotency key to reduce orphan/duplicate external customers after retries.',
   'Stripe checkout now reconciles an existing Stripe customer by organisation metadata before creating a new customer.',
   'Stored Stripe customer IDs are now verified against Stripe customer metadata before checkout or portal reuse, and stale or wrong-organisation IDs are repaired through metadata reconciliation.',
