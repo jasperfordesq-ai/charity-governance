@@ -32,6 +32,14 @@ import {
 /* ------------------------------------------------------------------ */
 
 const navIconClassName = 'w-5 h-5';
+const sidebarFocusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 const NAV_ITEMS = [
   {
@@ -150,14 +158,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const firstLink = sidebarRef.current?.querySelector<HTMLElement>('a[href]');
     firstLink?.focus();
 
-    const handleEscape = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         closeSidebar(true);
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusable = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(sidebarFocusableSelector) ?? [],
+      ).filter((element) => element.offsetParent !== null);
+      const firstFocusable = focusable[0];
+      const lastFocusable = focusable.at(-1);
+
+      if (!firstFocusable || !lastFocusable) {
+        event.preventDefault();
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+        return;
+      }
+
+      if (!event.shiftKey && document.activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
       }
     };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [closeSidebar, sidebarOpen]);
 
   // Redirect unauthenticated users

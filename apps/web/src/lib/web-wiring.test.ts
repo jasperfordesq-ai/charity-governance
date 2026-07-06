@@ -2602,6 +2602,7 @@ test('dashboard navigation manages mobile sidebar focus and meaningful breadcrum
     'menuButtonRef',
     'sidebarRef',
     'sidebarId',
+    'sidebarFocusableSelector',
     'navInteractive',
     'aria-controls={sidebarId}',
     'aria-expanded={sidebarOpen}',
@@ -2609,8 +2610,12 @@ test('dashboard navigation manages mobile sidebar focus and meaningful breadcrum
     'aria-hidden={!navInteractive ? true : undefined}',
     'tabIndex={navInteractive ? undefined : -1}',
     "event.key === 'Escape'",
+    "event.key !== 'Tab'",
+    "event.shiftKey && document.activeElement === firstFocusable",
+    "!event.shiftKey && document.activeElement === lastFocusable",
     'menuButtonRef.current?.focus()',
     "querySelector<HTMLElement>('a[href]')",
+    'querySelectorAll<HTMLElement>(sidebarFocusableSelector)',
   ]) {
     assert.match(
       dashboardLayout,
