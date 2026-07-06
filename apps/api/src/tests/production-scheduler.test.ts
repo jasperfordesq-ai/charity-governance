@@ -84,6 +84,19 @@ test('production reminder runtime avoids direct console.log calls', () => {
   }
 });
 
+test('production notification services use logger contracts instead of direct console calls', () => {
+  const notificationFiles = ['services/email.service.ts'];
+
+  for (const file of notificationFiles) {
+    const source = readFileSync(join(API_SRC, file), 'utf8');
+    assert.doesNotMatch(
+      source,
+      /console\.(?:log|warn|error)\(/,
+      `${file} should route operational logging through an injectable logger contract`,
+    );
+  }
+});
+
 test('runProductionSchedulerOnce runs reminders and document cleanup without overlapping API startup', async () => {
   const events: string[] = [];
   const deleted: Array<{ organisationId: string; storagePath: string }> = [];

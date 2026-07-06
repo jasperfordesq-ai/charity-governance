@@ -86,12 +86,26 @@ function formatEmailDeliveryError(err: unknown): string {
   return 'unknown error';
 }
 
+type EmailLogger = {
+  warn(message: string): void;
+  error(message: string): void;
+};
+
+const silentEmailLogger: EmailLogger = {
+  warn: () => undefined,
+  error: () => undefined,
+};
+
+function defaultEmailLogger(): EmailLogger {
+  return process.env.NODE_ENV === 'test' ? silentEmailLogger : console;
+}
+
 export class EmailService {
   private resend: Resend;
   private from: string;
   private frontendUrl: string;
 
-  constructor() {
+  constructor(private logger: EmailLogger = defaultEmailLogger()) {
     this.resend = new Resend(process.env.RESEND_API_KEY);
     this.from = process.env.EMAIL_FROM ?? 'noreply@charitypilot.ie';
     this.frontendUrl = getPrimaryFrontendOrigin();
@@ -240,7 +254,7 @@ export class EmailService {
 
   private async _send(to: string, subject: string, html: string): Promise<boolean> {
     if (!this.isConfigured()) {
-      console.warn('[EmailService] Email not sent because delivery is not configured');
+      this.logger.warn('[EmailService] Email not sent because delivery is not configured');
       return false;
     }
 
@@ -248,7 +262,7 @@ export class EmailService {
       await this.resend.emails.send({ from: this.from, to, subject, html });
       return true;
     } catch (err) {
-      console.error(`[EmailService] Failed to send email: ${formatEmailDeliveryError(err)}`);
+      this.logger.error(`[EmailService] Failed to send email: ${formatEmailDeliveryError(err)}`);
       // Do not rethrow — email failure must not break the calling flow
       return false;
     }
