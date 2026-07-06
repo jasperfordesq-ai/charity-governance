@@ -25,6 +25,7 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /npm run test:e2e:responsive/);
   assert.match(gates, /Launch-Critical Route Inventory/);
   assert.match(gates, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
+  assert.match(gates, /release\.commitSha/);
   assert.match(gates, /solicitor\/governance\/privacy review/);
   assert.match(gates, /external penetration test/);
 }
