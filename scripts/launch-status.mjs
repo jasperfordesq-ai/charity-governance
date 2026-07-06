@@ -15,7 +15,7 @@ const repoRoot = resolve(scriptsDir, '..');
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
-  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, accessibility output must be recorded in browserQa.checks.accessibility-coverage, cross-browser output in browserQa.checks.cross-browser-coverage, and real iOS Safari evidence in browserQa.checks.ios-safari-device-coverage.',
+  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, accessibility output must be recorded in browserQa.checks.accessibility-coverage, cross-browser output in browserQa.checks.cross-browser-coverage, and real iOS Safari evidence in browserQa.checks.ios-safari-device-coverage.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
 ]);
