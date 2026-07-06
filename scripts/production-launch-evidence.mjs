@@ -187,6 +187,33 @@ export const FINAL_SIGNOFF_ROLES = [
   ['legalCompliance', 'Legal/compliance owner'],
   ['business', 'Business owner'],
 ].map(([id, label]) => ({ id, label }));
+const launchCriticalRoutes = [
+  '/',
+  '/features',
+  '/pricing',
+  '/blog',
+  '/blog/[slug]',
+  '/privacy',
+  '/terms',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/accept-invite',
+  '/dashboard',
+  '/compliance',
+  '/compliance/[principleId]',
+  '/documents',
+  '/deadlines',
+  '/board',
+  '/registers',
+  '/regulator',
+  '/organisation',
+  '/team',
+  '/billing',
+  '/export',
+];
 
 function usage() {
   return 'Usage: node scripts/production-launch-evidence.mjs --evidence-file <path>\n';
@@ -1245,6 +1272,11 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     for (const marker of requiredMarkers) {
       if (!text.includes(marker)) {
         issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+    for (const route of launchCriticalRoutes) {
+      if (!text.includes(route)) {
+        issues.push(`${checkPath}.evidence must include launch route ${route}`);
       }
     }
   }
