@@ -1932,6 +1932,7 @@ test('production launch evidence validator rejects placeholders, local URLs, and
   evidence.areas.securityReview.checks['report-reference'].evidence[0].reference = 'https://unapproved-audit-vault.invalid/report';
   evidence.areas.legalAndCompliance.checks['privacy-policy-approved'].evidence[0].reference =
     'https://evidence.charitypilot.ie/launch/legal/privacy?token=temporary-secret';
+  evidence.finalSignoff.approvals.engineering.evidence[0].reference = 'https://github.com/other-owner/other-repo/actions/runs/1';
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
   try {
@@ -1941,6 +1942,7 @@ test('production launch evidence validator rejects placeholders, local URLs, and
     assert.match(result.stderr, /hostingDnsTls\.checks\.web-origin\.evidence\[0\]\.reference must be an https URL when a URL is provided/);
     assert.match(result.stderr, /securityReview\.checks\.report-reference\.evidence\[0\]\.reference must be an https URL on an approved evidence host/);
     assert.match(result.stderr, /legalAndCompliance\.checks\.privacy-policy-approved\.evidence\[0\]\.reference must not contain token-bearing query parameters/);
+    assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.evidence\[0\]\.reference must use the canonical charity-governance GitHub repository when github\.com is used/);
     assert.match(result.stderr, /observability\.checks\.incident-owner\.evidence\[0\]\.reference must not be a placeholder or local reference/);
     assert.match(result.stderr, /billingAndEmail\.checks\.stripe-webhook-secret\.evidence\[0\]\.description must not contain raw secret-looking values/);
   } finally {

@@ -324,6 +324,9 @@ function validateEvidenceReference(value, path, issues) {
     if (url.protocol !== 'https:' || !approvedHost) {
       issues.push(`${path} must be an https URL on an approved evidence host`);
     }
+    if (hostname === 'github.com' && !url.pathname.startsWith('/jasperfordesq-ai/charity-governance/')) {
+      issues.push(`${path} must use the canonical charity-governance GitHub repository when github.com is used`);
+    }
     for (const key of url.searchParams.keys()) {
       const normalisedKey = key.toLowerCase();
       if (sensitiveEvidenceReferenceQueryKeys.has(normalisedKey) || /(?:token|secret|signature)/.test(normalisedKey)) {

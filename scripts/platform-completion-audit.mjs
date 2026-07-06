@@ -235,6 +235,7 @@ const fixedInThisAuditBranch = [
   'Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.',
   'Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.',
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
+  'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
