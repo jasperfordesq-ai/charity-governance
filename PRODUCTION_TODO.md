@@ -6,11 +6,14 @@ Status marks reflect completed repository hardening work. Open items require rea
 > first - it explains, in plain English, what is already done and the exact
 > human steps (accounts, hosting, legal, security review) that remain.
 
-> **Current local status checked 2026-07-05:** `npm run launch:status` still
+> **Current local status checked 2026-07-06:** `npm run launch:status` still
 > reports that 23 production values still require real data in `.env.production`
 > or the approved production secret store. Do not put real charity data into
 > CharityPilot until those values, provider checks, deployed QA, legal/privacy
 > review, external security review, backup/restore evidence, all 81 machine-readable launch evidence checks, and final signoffs are complete.
+> local responsive browser QA passed 50/50 and local accessibility QA passed 16/16
+> on the local stack, but deployed production QA still remains open and
+> must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in
 > `browserQa.checks.accessibility-coverage`.
 >

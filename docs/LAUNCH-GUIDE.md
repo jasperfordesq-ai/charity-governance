@@ -1,6 +1,6 @@
 # CharityPilot - Plain-English Launch Guide
 
-*Last updated: 2026-07-05. This is the human-friendly companion to the dense
+*Last updated: 2026-07-06. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
@@ -13,11 +13,15 @@
 The codebase is substantially hardened, but launch readiness is not complete
 until the final release gate, deployed browser QA, external provider evidence,
 legal/privacy approval, and independent security review are all recorded.
-As of 2026-07-05, the local platform audit shows strong automated coverage and
+As of 2026-07-06, the local platform audit shows strong automated coverage and
 no obvious static route-level UI risks, but the release checks below must still
 be rerun against the final production configuration:
 
 `npm run launch:status` currently reports that 23 production values still require real data.
+local responsive browser QA passed 50/50 and local accessibility QA passed 16/16
+on the local stack, but deployed production QA remains a launch gate
+because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
+live provider integration.
 The machine-readable launch evidence file must also pass all
 81 machine-readable launch evidence checks, including the deployed accessibility
 transcript in `browserQa.checks.accessibility-coverage`.

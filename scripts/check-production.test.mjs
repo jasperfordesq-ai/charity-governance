@@ -1585,11 +1585,14 @@ test('reliability report emits ASCII-safe operator output', () => {
   assert.match(result.stdout, /OVERALL|--no-run/);
 });
 
-test('production todo reflects current launch blockers without overclaiming local smoke', () => {
+test('production todo reflects current launch blockers without overclaiming local browser smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
 
-  assert.match(productionTodo, /Current local status checked 2026-07-05/);
+  assert.match(productionTodo, /Current local status checked 2026-07-06/);
   assert.match(productionTodo, /23 production values still require real data/);
+  assert.match(productionTodo, /local responsive browser QA passed 50\/50/);
+  assert.match(productionTodo, /local accessibility QA passed 16\/16/);
+  assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /81 machine-readable launch evidence checks/);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
   assert.doesNotMatch(productionTodo, /full Docker stack smoke all pass/i);
@@ -2116,8 +2119,11 @@ test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
-  assert.match(launchGuide, /Last updated: 2026-07-05/);
+  assert.match(launchGuide, /Last updated: 2026-07-06/);
   assert.match(launchGuide, /23 production values still require real data/);
+  assert.match(launchGuide, /local responsive browser QA passed 50\/50/);
+  assert.match(launchGuide, /local accessibility QA passed 16\/16/);
+  assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /81 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);
