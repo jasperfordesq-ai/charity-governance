@@ -193,14 +193,14 @@ Evidence:
 
 ## 8. Observability And Incidents
 
-- [ ] API logs are captured by the production platform.
-- [ ] Web logs or platform events are captured.
-- [ ] Error alert destination is configured and tested.
+- [ ] API logs are captured by the production platform with log-sink and retention evidence.
+- [ ] Web logs or platform events are captured with log-sink and retention evidence.
+- [ ] Error alert destination is configured and tested with sanitized test-alert delivery and incident-system confirmation.
 - [ ] `npm run check:production:observability -- --production-env-file=.env.production` completed from a trusted shell and the received test alert was confirmed in the incident system.
-- [ ] Public uptime monitoring checks `/api/v1/health`.
-- [ ] Internal readiness monitoring checks `/api/v1/health/readiness` with `x-charitypilot-readiness-key`.
-- [ ] Incident owner and escalation path are recorded outside git.
-- [ ] Machine-readable launch evidence names API/web log capture, error alert testing, uptime/readiness monitors, incident owner, and escalation path.
+- [ ] Public uptime monitoring checks `/api/v1/health` and records the monitor owner plus alert route.
+- [ ] Internal readiness monitoring checks `/api/v1/health/readiness` with `x-charitypilot-readiness-key`, with monitor owner and secret-store reference recorded outside git.
+- [ ] Primary incident owner, backup owner, and escalation path are recorded outside git.
+- [ ] Machine-readable launch evidence names API/web log capture and retention, sanitized test-alert confirmation, uptime/readiness monitor owners, incident owner, backup owner, and escalation path.
 
 Evidence:
 

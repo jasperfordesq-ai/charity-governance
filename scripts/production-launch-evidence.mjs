@@ -1007,12 +1007,23 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const text = evidenceText(actualCheck.evidence);
 
     const observabilityMarkersByCheck = {
-      'api-logs': ['API logs', 'captured'],
-      'web-logs': ['web logs', 'captured'],
-      'error-alert-tested': ['error alert', 'tested'],
-      'uptime-health': ['/api/v1/health', 'uptime monitoring'],
-      'internal-readiness-monitoring': ['/api/v1/health/readiness', 'x-charitypilot-readiness-key'],
-      'incident-owner': ['incident owner', 'escalation path', 'outside git'],
+      'api-logs': ['API logs', 'captured', 'log sink', 'retention'],
+      'web-logs': ['web logs', 'captured', 'platform events', 'retention'],
+      'error-alert-tested': [
+        'error alert',
+        'tested',
+        'Production observability check passed',
+        'sanitized test alert',
+        'incident system confirmation',
+      ],
+      'uptime-health': ['/api/v1/health', 'uptime monitoring', 'monitor owner', 'alert route'],
+      'internal-readiness-monitoring': [
+        '/api/v1/health/readiness',
+        'x-charitypilot-readiness-key',
+        'readiness monitor owner',
+        'secret store',
+      ],
+      'incident-owner': ['incident owner', 'escalation path', 'outside git', 'primary incident owner', 'backup owner'],
     };
 
     for (const marker of observabilityMarkersByCheck[checkId] ?? []) {
