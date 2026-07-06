@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `53182c5`
+Working-tree base commit when generated: `fa05902`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -174,6 +174,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The Prisma seed script now serializes fatal seed errors through the shared redacted logger helper before printing them.
 - The Next build cleanup helper now reports sanitized error codes instead of raw filesystem error objects in release transcripts.
 - The PostgreSQL backup and restore helper now redacts database URLs, DATABASE_URL assignments, --database-url arguments, and user:password credentials from launch evidence transcripts.
+- The production Supabase checker now redacts bearer keys, apikey values, signed URL tokens, storage object paths, and probe identifiers from request-failure launch transcripts.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
@@ -196,6 +197,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
+- `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work

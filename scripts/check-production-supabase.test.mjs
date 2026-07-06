@@ -15,6 +15,11 @@ async function loadSupabaseRunner() {
   return module.runProductionSupabaseCheckFromArgs;
 }
 
+async function loadSupabaseModule() {
+  assert.ok(existsSync(supabaseScriptPath), 'production Supabase checker script must exist');
+  return import(pathToFileURL(supabaseScriptPath).href);
+}
+
 function productionEnv(overrides = {}) {
   const values = {
     SUPABASE_URL: 'https://production-project.supabase.co',
@@ -144,6 +149,37 @@ test('production Supabase checker cleans up the probe object when signed URL ver
     assert.deepEqual(methods, ['GET', 'POST', 'POST', 'DELETE']);
     assert.match(result.stderr, /signed URL creation failed/);
     assert.doesNotMatch(result.stderr, /charitypilot-production-check|configured-service-role-key/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production Supabase checker redacts request failure transcripts', async () => {
+  const module = await loadSupabaseModule();
+  assert.equal(typeof module.redactSupabaseTranscript, 'function');
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+  const secret = 'configured-service-role-key';
+  const signedUrl =
+    'https://production-project.supabase.co/storage/v1/object/sign/documents/charitypilot-production-check/1786000000000-abc123.txt?token=secret-token&signature=secret-signature';
+
+  try {
+    const result = await module.runProductionSupabaseCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async () => {
+          throw new Error(`network failed for ${signedUrl} with Bearer ${secret} and apikey=${secret}`);
+        },
+        now: () => 1_786_000_000_000,
+        randomBytes: () => 'abc123',
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Supabase request failed/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.match(result.stderr, /Bearer \[redacted\]/);
+    assert.match(result.stderr, /apikey=\[redacted\]/);
+    assert.doesNotMatch(result.stderr, /configured-service-role-key|secret-token|secret-signature|1786000000000-abc123/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

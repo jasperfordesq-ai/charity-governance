@@ -122,6 +122,15 @@ function joinUrl(origin, path) {
   return `${origin.replace(/\/+$/, '')}${path}`;
 }
 
+export function redactSupabaseTranscript(value) {
+  return String(value)
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
+    .replace(/([?&](?:token|signature|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
+    .replace(/\/storage\/v1\/object\/(?:sign|public)?\/?[^?\s'")]+/gi, '/storage/v1/object/[redacted]')
+    .replace(/charitypilot-production-check\/[A-Za-z0-9._~:/=-]+/gi, 'charitypilot-production-check/[redacted]');
+}
+
 function encodeStoragePath(path) {
   return path.split('/').map((part) => encodeURIComponent(part)).join('/');
 }
@@ -293,7 +302,8 @@ export async function runProductionSupabaseCheckFromArgs(
       signedUrlTtlSeconds: options.signedUrlTtlSeconds,
     });
   } catch (error) {
-    issues = [`Supabase request failed: ${error.message}`];
+    const message = redactSupabaseTranscript(error instanceof Error ? error.message : String(error));
+    issues = [`Supabase request failed: ${message}`];
   }
 
   if (issues.length > 0) {
