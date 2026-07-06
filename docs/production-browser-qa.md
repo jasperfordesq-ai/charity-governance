@@ -94,6 +94,38 @@ Record the cross-browser command output in `browserQa.checks.cross-browser-cover
 | Mobile | iOS Safari | Open | Manual device or cloud-device evidence required; Playwright WebKit desktop is not a substitute for real iOS Safari. |
 | Mobile | Android Chrome | Open | Covered by `deployed-chromium-mobile` as a mobile Chrome emulation baseline; real-device evidence is still preferred. |
 
+## Launch-Critical Route Inventory
+
+Every route below must have desktop, mobile, light-mode, and dark-mode evidence before browser QA can close. Automated responsive smoke can supply this evidence for rendered routes; manual notes should cover route-specific workflow checks, permission states, empty states, and any production-only provider behavior.
+
+| Route | Area | Required evidence |
+| --- | --- | --- |
+| `/` | Marketing | Public landing page renders, navigation works, and CTAs point at production routes. |
+| `/features` | Marketing | Feature content renders without layout overlap. |
+| `/pricing` | Marketing | Public plan messaging and billing entry points render safely. |
+| `/blog` | Marketing | Blog index renders with filters/search usable on mobile. |
+| `/blog/[slug]` | Marketing | Blog detail renders with source/navigation links usable. |
+| `/privacy` | Legal/policy | Production policy page renders and matches approved policy reference. |
+| `/terms` | Legal/policy | Production terms page renders and matches approved policy reference. |
+| `/login` | Auth | Login form, validation, cookie-consent interaction, and error state work. |
+| `/register` | Auth | Registration form, validation, password controls, and success path work. |
+| `/forgot-password` | Auth | Reset request form submits and points email links at production frontend. |
+| `/reset-password` | Auth | Reset-token form renders safely and handles invalid/expired token states. |
+| `/verify-email` | Auth | Verification page handles success, pending, and invalid-token states. |
+| `/accept-invite` | Auth/team | Invite acceptance handles valid, invalid, expired, and signed-in states. |
+| `/dashboard` | Dashboard | Summary, actions, plan status, and empty/progress states render after login. |
+| `/compliance` | Compliance | Principle overview, filters, review warnings, and source flags render. |
+| `/compliance/[principleId]` | Compliance | Standard editor, autosave, retry, pending-navigation confirmation, and invalid principle states work. |
+| `/documents` | Documents | Upload, list, link, download, delete, empty, and permission states work. |
+| `/deadlines` | Deadlines | Generated/custom deadlines, completion toggle, add/edit/delete, and empty states work. |
+| `/board` | Board | Trustee list, add/edit, conduct/induction evidence, tenure flags, and empty states work. |
+| `/registers` | Registers | Complete-plan gate, register lists, forms, review prompts, and empty states work. |
+| `/regulator` | Regulator | Source-cited readiness matrix and priority prompts render. |
+| `/organisation` | Organisation | Charity profile, complexity, conditional obligations, dirty-state guard, and validation work. |
+| `/team` | Team | Invite form, pending invites, role controls, loading/error/empty states, and role gates work. |
+| `/billing` | Billing | Plan state, checkout/portal actions, degradation state, and provider-safe errors work. |
+| `/export` | Export | Readiness blockers, report preview, board approval, export action, and not-legal-advice wording render. |
+
 ## Network And Security Basics
 
 - [ ] Web URL loads over HTTPS with a valid certificate.

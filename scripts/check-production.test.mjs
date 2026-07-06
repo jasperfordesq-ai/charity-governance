@@ -2121,6 +2121,33 @@ test('production runbook documents deployed browser QA evidence commands', () =>
 test('production browser QA checklist points browser evidence at the dedicated launch slots', () => {
   const browserQa = readRepoFile('docs/production-browser-qa.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
+  const requiredRouteLabels = [
+    '/',
+    '/features',
+    '/pricing',
+    '/blog',
+    '/blog/[slug]',
+    '/privacy',
+    '/terms',
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-email',
+    '/accept-invite',
+    '/dashboard',
+    '/compliance',
+    '/compliance/[principleId]',
+    '/documents',
+    '/deadlines',
+    '/board',
+    '/registers',
+    '/regulator',
+    '/organisation',
+    '/team',
+    '/billing',
+    '/export',
+  ];
 
   assert.match(browserQa, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
   assert.match(browserQa, /browserQa\.checks\.accessibility-coverage/);
@@ -2137,6 +2164,11 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.match(launchChecklist, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(launchChecklist, /public\/auth and dashboard desktop light\/dark route matrices/);
   assert.match(launchChecklist, /public\/auth and dashboard mobile light\/dark route matrices/);
+  assert.match(browserQa, /Launch-Critical Route Inventory/);
+  assert.match(browserQa, /Every route below must have desktop, mobile, light-mode, and dark-mode evidence/);
+  for (const route of requiredRouteLabels) {
+    assert.match(browserQa, new RegExp(String.raw`\| \`${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\` \|`));
+  }
 });
 
 test('plain English launch guide names every final approval role', () => {
