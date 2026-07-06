@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { assessLaunchState, groupRemainingKeys, renderLaunchStatusJson } from './launch-status.mjs';
+import { renderProductionLaunchEvidenceTemplate } from './generate-production-launch-evidence-template.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -117,6 +118,17 @@ test('reports launch evidence completion counts when the evidence ledger exists'
     'releaseGate.db-generate (missing)',
     'releaseGate.prisma-validate (missing)',
   ]);
+  assert.deepEqual(
+    s.evidenceLedger.nextIncompleteCheckDetails.slice(0, 2).map((check) => ({
+      path: check.path,
+      status: check.status,
+      hints: check.requiredEvidenceHints,
+    })),
+    [
+      { path: 'releaseGate.npm-ci', status: 'missing', hints: [] },
+      { path: 'releaseGate.db-generate', status: 'missing', hints: [] },
+    ],
+  );
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
 });
 
@@ -129,7 +141,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
       'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
     ].join('\n'),
     evidenceFileExists: true,
-    evidenceContent: JSON.stringify({ approvedForLaunch: false, finalSignoff: { status: 'pending' }, areas: {} }),
+    evidenceContent: renderProductionLaunchEvidenceTemplate(),
   });
 
   const payload = JSON.parse(renderLaunchStatusJson(state));
@@ -143,6 +155,9 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.equal(payload.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(payload.evidenceLedger.approvedFinalSignoffRoles, 0);
   assert.equal(payload.evidenceLedger.totalFinalSignoffRoles, 5);
+  assert.equal(payload.evidenceLedger.nextIncompleteCheckDetails[0].path, 'releaseGate.npm-ci');
+  assert.equal(payload.evidenceLedger.nextIncompleteCheckDetails[0].status, 'pending');
+  assert.deepEqual(payload.evidenceLedger.nextIncompleteCheckDetails[0].requiredEvidenceHints, ['npm ci', 'exit 0']);
   assert.match(payload.evidenceLedger.statusCommand, /check:production:evidence:status/);
   assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));

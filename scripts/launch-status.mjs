@@ -147,6 +147,7 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
           ? evidence.finalSignoff.status
           : 'missing',
       nextIncompleteChecks: summary.incompleteChecks.slice(0, 5),
+      nextIncompleteCheckDetails: summary.incompleteCheckDetails.slice(0, 5),
       totalFinalSignoffRoles: summary.totalFinalSignoffRoles,
       totalChecks: summary.totalChecks,
       headline: `${DEFAULT_EVIDENCE_FILE} exists. Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}.`,
@@ -268,7 +269,14 @@ function renderLaunchStatusText(state) {
   }
   if (state.evidenceLedger.nextIncompleteChecks?.length > 0) {
     lines.push('  Next incomplete checks:');
-    for (const check of state.evidenceLedger.nextIncompleteChecks) lines.push(`    - ${check}`);
+    const nextDetails = state.evidenceLedger.nextIncompleteCheckDetails ?? [];
+    for (const [index, check] of state.evidenceLedger.nextIncompleteChecks.entries()) {
+      lines.push(`    - ${check}`);
+      const hints = nextDetails[index]?.requiredEvidenceHints ?? [];
+      if (hints.length > 0) {
+        lines.push(`      evidence hints: ${hints.slice(0, 6).join('; ')}`);
+      }
+    }
   }
   lines.push(`  ${state.evidenceLedger.nextAction}`, '', 'External launch evidence still required:');
   for (const gate of state.externalEvidenceGates) lines.push(`  - ${gate}`);
