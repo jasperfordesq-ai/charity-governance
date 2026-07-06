@@ -192,7 +192,8 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'hostingDnsTls' && checkId === 'tls-certificates') {
-    entry.description = 'TLS certificate evidence confirms valid certificates for web and API origins.';
+    entry.description =
+      'TLS certificate evidence confirms valid certificates for https://app.charitypilot.ie and https://api.charitypilot.ie.';
   }
 
   if (areaId === 'hostingDnsTls' && checkId === 'cors-approved-origins') {
@@ -666,6 +667,14 @@ function writeEvidenceFile(content) {
   return { tempDir, evidencePath };
 }
 
+function writeUtf16EvidenceFile(content) {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-launch-evidence-'));
+  const evidencePath = join(tempDir, 'production-launch-evidence.json');
+  const json = `${JSON.stringify(content, null, 2)}\n`;
+  writeFileSync(evidencePath, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, 'utf16le')]));
+  return { tempDir, evidencePath };
+}
+
 test('production launch evidence validator accepts complete dated external evidence', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const { tempDir, evidencePath } = writeEvidenceFile(completeEvidence(REQUIRED_LAUNCH_AREAS));
@@ -677,6 +686,22 @@ test('production launch evidence validator accepts complete dated external evide
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
     assert.match(result.stdout, /81 check\(s\)/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator accepts UTF-16 JSON emitted by Windows shells', async () => {
+  const { runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const { renderProductionLaunchEvidenceTemplate } = await loadEvidenceTemplateGenerator();
+  const { tempDir, evidencePath } = writeUtf16EvidenceFile(JSON.parse(renderProductionLaunchEvidenceTemplate()));
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stderr, /not valid JSON/);
+    assert.match(result.stderr, /approvedForLaunch must be true/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -939,6 +964,8 @@ test('production launch evidence validator requires concrete hosting database an
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.web-origin\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.api-origin\.evidence must include https:\/\/api\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.dns-owner\.evidence must include approved owner/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.tls-certificates\.evidence must include https:\/\/app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.tls-certificates\.evidence must include https:\/\/api\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.security-headers\.evidence must include Strict-Transport-Security/);
     assert.match(result.stderr, /areas\.database\.checks\.postgres-provisioned\.evidence must include production PostgreSQL/);
     assert.match(result.stderr, /areas\.database\.checks\.database-url-secret-store\.evidence must include DATABASE_URL/);
@@ -1417,6 +1444,10 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.secretsAndEnv.checks['frontend-api-origins'].requiredEvidenceHints,
       ['https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
+    );
+    assert.deepEqual(
+      template.areas.hostingDnsTls.checks['tls-certificates'].requiredEvidenceHints,
+      ['TLS certificate', 'valid', 'https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
     );
     assert.deepEqual(
       template.areas.releaseGate.checks['npm-ci'].requiredEvidenceHints,

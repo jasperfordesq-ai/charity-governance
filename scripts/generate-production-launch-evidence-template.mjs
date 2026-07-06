@@ -22,6 +22,7 @@ const evidenceHintsByCheck = new Map([
   ['secretsAndEnv.frontend-api-origins', ['https://app.charitypilot.ie', 'https://api.charitypilot.ie']],
   ['hostingDnsTls.web-origin', ['https://app.charitypilot.ie']],
   ['hostingDnsTls.api-origin', ['https://api.charitypilot.ie']],
+  ['hostingDnsTls.tls-certificates', ['TLS certificate', 'valid', 'https://app.charitypilot.ie', 'https://api.charitypilot.ie']],
   ['database.database-check', ['--expect-operational-sentinel']],
   ['supabaseStorage.readiness-storage-configured', ['storageConfigured: true']],
   ['supabaseStorage.readiness-storage-reachable', ['storageBucketReachable: true']],

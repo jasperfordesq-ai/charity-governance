@@ -9,8 +9,9 @@
 #
 # Prerequisites:
 #   1. A server with a public IP and ports 80 + 443 open to the internet.
-#   2. DNS A/AAAA records for your web + api domains pointing at that server.
-#   3. Set CADDY_ACME_EMAIL (and, if not using the defaults, the domain vars).
+#   2. DNS A/AAAA records for app.charitypilot.ie and api.charitypilot.ie pointing at that server.
+#   3. Set CADDY_ACME_EMAIL and keep the domain vars on their canonical defaults unless the
+#      production validators and launch evidence model are deliberately changed first.
 #   4. Set TRUSTED_PROXY_ADDRESSES so the API trusts this proxy's forwarded IPs.
 #
 # Run:

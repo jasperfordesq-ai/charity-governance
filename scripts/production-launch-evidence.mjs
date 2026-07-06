@@ -215,6 +215,27 @@ function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
 }
 
+function decodeJsonFile(path) {
+  const bytes = readFileSync(path);
+
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return bytes.subarray(2).toString('utf16le');
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    const swapped = Buffer.alloc(bytes.length - 2);
+    for (let index = 2; index + 1 < bytes.length; index += 2) {
+      swapped[index - 2] = bytes[index + 1];
+      swapped[index - 1] = bytes[index];
+    }
+    return swapped.toString('utf16le');
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return bytes.subarray(3).toString('utf8');
+  }
+
+  return bytes.toString('utf8');
+}
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -708,7 +729,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'web-origin': ['https://app.charitypilot.ie'],
       'api-origin': ['https://api.charitypilot.ie'],
       'dns-owner': ['DNS owner', 'approved owner'],
-      'tls-certificates': ['TLS certificate', 'valid'],
+      'tls-certificates': ['TLS certificate', 'valid', 'https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
       'cors-approved-origins': ['CORS', 'https://app.charitypilot.ie', 'only approved'],
       'security-headers': ['X-Content-Type-Options', 'X-Frame-Options', 'Content-Security-Policy', 'Strict-Transport-Security'],
     };
@@ -1219,7 +1240,7 @@ export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)
 
   let evidence;
   try {
-    evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+    evidence = JSON.parse(decodeJsonFile(evidencePath));
   } catch (error) {
     return result(1, '', `Production launch evidence failed: evidence file is not valid JSON. ${error.message}\n`);
   }
