@@ -42,6 +42,8 @@
     "db:restore:verify": "node scripts/postgres-backup.mjs verify-restore",
     "test:e2e": "cd e2e && npm test",
     "test:e2e:responsive": "cd e2e && npm test -- tests/responsive-smoke.spec.ts",
+    "test:e2e:deployed:responsive:cross-browser": "cd e2e && npm run test:deployed:responsive:cross-browser",
+    "test:e2e:deployed:accessibility:cross-browser": "cd e2e && npm run test:deployed:accessibility:cross-browser",
     "test:e2e:responsive:public:desktop": "cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep \"launch-critical public/auth route .* renders in desktop light and dark\"",
     "test:e2e:responsive:public:mobile": "cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep \"launch-critical public/auth route .* renders in mobile light and dark\"",
     "test:e2e:responsive:dashboard:desktop": "cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep \"launch-critical dashboard route .* renders in desktop light and dark\"",

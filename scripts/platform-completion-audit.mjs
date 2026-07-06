@@ -152,6 +152,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.',
   'Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.',
   'Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.',
+  'Deployed browser QA now has cross-browser responsive and accessibility script wiring for Chromium desktop, Chromium mobile emulation, Firefox, and WebKit evidence runs while keeping real iOS Safari as manual or cloud-device evidence.',
   'The team member list, role edit controls, loading/error/empty states, and shared role display metadata are split out of the team route behind a wiring regression test.',
   'The team invite form and pending-invite list are split out of the team route behind a wiring regression test while preserving invite role gates and revoke states.',
   'The team role guidance panel is split out of the team route behind a wiring regression test and now uses shared status panel styling.',

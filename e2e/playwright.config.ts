@@ -20,6 +20,7 @@ import { join, resolve } from 'node:path';
 
 export const WEB_BASE_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
 export const API_BASE_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
+const isDeployedQa = process.env.E2E_DEPLOYED_QA === 'true';
 const ARTIFACT_ROOT = resolve(
   process.cwd(),
   process.env.E2E_ARTIFACT_DIR ?? join(tmpdir(), 'charitypilot-e2e-artifacts'),
@@ -54,10 +55,29 @@ export default defineConfig({
     // compiles generous headroom; warm hits are still fast (see global-setup warm-up).
     navigationTimeout: 150_000,
   },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  projects: isDeployedQa
+    ? [
+        {
+          name: 'deployed-chromium-desktop',
+          use: { ...devices['Desktop Chrome'] },
+        },
+        {
+          name: 'deployed-chromium-mobile',
+          use: { ...devices['Pixel 7'] },
+        },
+        {
+          name: 'deployed-firefox-desktop',
+          use: { ...devices['Desktop Firefox'] },
+        },
+        {
+          name: 'deployed-webkit-desktop',
+          use: { ...devices['Desktop Safari'] },
+        },
+      ]
+    : [
+        {
+          name: 'chromium',
+          use: { ...devices['Desktop Chrome'] },
+        },
+      ],
 });

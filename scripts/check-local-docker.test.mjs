@@ -601,6 +601,42 @@ test('responsive route smoke covers every shipped page route', () => {
   }
 });
 
+test('deployed browser QA matrix is runnable as focused launch evidence commands', () => {
+  const rootPackage = packageJson();
+  const e2ePackageJson = JSON.parse(readRepoFile('e2e/package.json'));
+  const playwrightConfig = readRepoFile('e2e/playwright.config.ts');
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
+  const e2eReadme = readRepoFile('e2e/README.md');
+
+  assert.equal(
+    rootPackage.scripts['test:e2e:deployed:responsive:cross-browser'],
+    'cd e2e && npm run test:deployed:responsive:cross-browser',
+  );
+  assert.equal(
+    rootPackage.scripts['test:e2e:deployed:accessibility:cross-browser'],
+    'cd e2e && npm run test:deployed:accessibility:cross-browser',
+  );
+  assert.equal(
+    e2ePackageJson.scripts['test:deployed:responsive:cross-browser'],
+    'playwright test tests/responsive-smoke.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop',
+  );
+  assert.equal(
+    e2ePackageJson.scripts['test:deployed:accessibility:cross-browser'],
+    'playwright test tests/accessibility.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop',
+  );
+  assert.match(e2ePackageJson.scripts['install:browsers'], /chromium firefox webkit/);
+  assert.match(playwrightConfig, /deployed-chromium-desktop/);
+  assert.match(playwrightConfig, /deployed-chromium-mobile/);
+  assert.match(playwrightConfig, /deployed-firefox-desktop/);
+  assert.match(playwrightConfig, /deployed-webkit-desktop/);
+  assert.match(playwrightConfig, /E2E_DEPLOYED_QA/);
+  assert.match(browserQa, /test:e2e:deployed:responsive:cross-browser/);
+  assert.match(browserQa, /test:e2e:deployed:accessibility:cross-browser/);
+  assert.match(e2eReadme, /test:e2e:deployed:responsive:cross-browser/);
+  assert.match(e2eReadme, /Desktop Firefox/);
+  assert.match(e2eReadme, /Desktop WebKit/);
+});
+
 test('local Docker migrations stop running app services before refreshing dependencies', () => {
   const migrationScript = readRepoFile('scripts/migrate-local-docker.mjs');
 

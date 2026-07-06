@@ -5,11 +5,13 @@
   "description": "End-to-end Playwright tests for CharityPilot, driven against the local Docker stack. Intentionally NOT a root workspace, so Playwright never enters the API/web production installs or images.",
   "scripts": {
     "test": "playwright test",
+    "test:deployed:responsive:cross-browser": "playwright test tests/responsive-smoke.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop",
+    "test:deployed:accessibility:cross-browser": "playwright test tests/accessibility.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
-    "install:browsers": "playwright install chromium",
-    "install:browsers:ci": "playwright install --with-deps chromium"
+    "install:browsers": "playwright install chromium firefox webkit",
+    "install:browsers:ci": "playwright install --with-deps chromium firefox webkit"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",

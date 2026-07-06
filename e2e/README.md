@@ -156,6 +156,19 @@ Use the same environment for `npm run test:e2e -- tests/accessibility.spec.ts`.
 If the deployed responsive matrix needs chunking, run the same four
 `test:e2e:responsive:*` commands with the deployed environment variables above
 and keep the four transcripts together as one browser-QA evidence set.
+
+For cross-browser launch evidence on a runner with the required browsers
+installed, use:
+
+```bash
+npm run test:e2e:deployed:responsive:cross-browser
+npm run test:e2e:deployed:accessibility:cross-browser
+```
+
+Those commands run the deployed-safe rendering/accessibility specs through
+Desktop Chrome, mobile Chromium/Android Chrome emulation, Desktop Firefox, and
+Desktop WebKit. Keep manual or cloud-device evidence for real iOS Safari where
+the launch checklist requires it.
 Do not run the full local deterministic suite in deployed QA mode; specs that
 exercise registration, token injection, invites, document mutation, or DB
 assertions remain local-stack tests unless a dedicated production-safe variant is
