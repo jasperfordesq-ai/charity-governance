@@ -1930,6 +1930,8 @@ test('production launch evidence validator rejects placeholders, local URLs, and
   evidence.areas.billingAndEmail.checks['stripe-webhook-secret'].evidence[0].description = 'whsec_rawWebhookSecretMustNotAppear';
   evidence.areas.observability.checks['incident-owner'].evidence[0].reference = 'TBD';
   evidence.areas.securityReview.checks['report-reference'].evidence[0].reference = 'https://unapproved-audit-vault.invalid/report';
+  evidence.areas.legalAndCompliance.checks['privacy-policy-approved'].evidence[0].reference =
+    'https://evidence.charitypilot.ie/launch/legal/privacy?token=temporary-secret';
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
   try {
@@ -1938,6 +1940,7 @@ test('production launch evidence validator rejects placeholders, local URLs, and
     assert.equal(result.status, 1);
     assert.match(result.stderr, /hostingDnsTls\.checks\.web-origin\.evidence\[0\]\.reference must be an https URL when a URL is provided/);
     assert.match(result.stderr, /securityReview\.checks\.report-reference\.evidence\[0\]\.reference must be an https URL on an approved evidence host/);
+    assert.match(result.stderr, /legalAndCompliance\.checks\.privacy-policy-approved\.evidence\[0\]\.reference must not contain token-bearing query parameters/);
     assert.match(result.stderr, /observability\.checks\.incident-owner\.evidence\[0\]\.reference must not be a placeholder or local reference/);
     assert.match(result.stderr, /billingAndEmail\.checks\.stripe-webhook-secret\.evidence\[0\]\.description must not contain raw secret-looking values/);
   } finally {

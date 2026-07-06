@@ -174,6 +174,20 @@ const allowedEvidenceTypes = new Set([
 const placeholderOrLocalPattern = /\b(todo|tbd|pending|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|file:\/\//i;
 const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|RESEND_API_KEY=)\b/;
 const approvedEvidenceReferenceHosts = ['charitypilot.ie', 'github.com'];
+const sensitiveEvidenceReferenceQueryKeys = new Set([
+  'access_token',
+  'apikey',
+  'jwt',
+  'key',
+  'refresh_token',
+  'secret',
+  'signature',
+  'sig',
+  'token',
+  'x-amz-credential',
+  'x-amz-signature',
+  'x-goog-signature',
+]);
 const imageRepositories = {
   apiImage: 'ghcr.io/jasperfordesq-ai/charity-governance-api',
   webImage: 'ghcr.io/jasperfordesq-ai/charity-governance-web',
@@ -309,6 +323,13 @@ function validateEvidenceReference(value, path, issues) {
     const approvedHost = approvedEvidenceReferenceHosts.some((host) => hostname === host || hostname.endsWith(`.${host}`));
     if (url.protocol !== 'https:' || !approvedHost) {
       issues.push(`${path} must be an https URL on an approved evidence host`);
+    }
+    for (const key of url.searchParams.keys()) {
+      const normalisedKey = key.toLowerCase();
+      if (sensitiveEvidenceReferenceQueryKeys.has(normalisedKey) || /(?:token|secret|signature)/.test(normalisedKey)) {
+        issues.push(`${path} must not contain token-bearing query parameters`);
+        break;
+      }
     }
   } catch {
     issues.push(`${path} must be a valid external evidence URL`);
