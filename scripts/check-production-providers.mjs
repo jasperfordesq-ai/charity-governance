@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
 
 const stripePriceEnvNames = [
@@ -170,8 +171,12 @@ async function fetchJson(fetchImpl, url, options, label, issues) {
   let response;
   try {
     response = await fetchImpl(url, options);
-  } catch {
-    issues.push(`${label} request failed`);
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : 'unknown error';
+    const errorMessage = redactProductionDeployTranscript(
+      error instanceof Error ? error.message : String(error),
+    );
+    issues.push(`${label} request failed: ${errorName}${errorMessage ? `: ${errorMessage}` : ''}`);
     return null;
   }
 
@@ -298,7 +303,11 @@ export async function runProductionProvidersCheckFromArgs(
   try {
     fileEnv = parseEnvFile(resolve(process.cwd(), options.productionEnvFile));
   } catch (error) {
-    return result(1, '', `Production provider check failed: ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Production provider check failed: ${redactProductionDeployTranscript(error.message)}\n`,
+    );
   }
 
   const env = {

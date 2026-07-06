@@ -299,3 +299,40 @@ test('production provider checker fails before network calls when provider env i
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production provider checker redacts thrown provider request transcripts', async () => {
+  const runProductionProvidersCheckFromArgs = await loadProviderRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+
+  try {
+    const result = await runProductionProvidersCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async () => {
+          throw new Error(
+            [
+              'provider failed with Bearer sk_live_configuredSecret',
+              'RESEND_API_KEY=re_configuredSecret',
+              'at https://api.stripe.com/v1/prices/price_essentialsMonthly?token=secret-token',
+            ].join(' '),
+          );
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /STRIPE_ESSENTIALS_MONTHLY_PRICE_ID Stripe price lookup request failed: Error:/,
+    );
+    assert.match(result.stderr, /Bearer \[redacted-stripe-key\]/);
+    assert.match(result.stderr, /RESEND_API_KEY=\[redacted\]/);
+    assert.match(result.stderr, /token=\[redacted\]/);
+    assert.doesNotMatch(
+      result.stderr,
+      /sk_live_configuredSecret|re_configuredSecret|secret-token/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
