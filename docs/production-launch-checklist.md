@@ -117,9 +117,9 @@ Evidence:
 - [ ] Production `DATABASE_URL` is present only in the secret store.
 - [ ] `npm run db:migrate:deploy -w @charitypilot/api` completed against production.
 - [ ] `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel` completed from a trusted shell and recorded redacted backup/restore evidence.
-- [ ] Managed backups or point-in-time recovery are enabled.
-- [ ] Restore test evidence exists and has an owner.
-- [ ] Machine-readable launch evidence names PostgreSQL provisioning, secret-store ownership, migration output, backup/PITR coverage, and restore-test ownership.
+- [ ] Managed backups or point-in-time recovery are enabled with backup window, retention period, and backup owner recorded outside git.
+- [ ] Restore test evidence exists with owner, restore date, recovery notes, and operational sentinel verification.
+- [ ] Machine-readable launch evidence names PostgreSQL provisioning, secret-store ownership, migration output, backup/PITR coverage, backup ownership, restore date, recovery notes, and operational sentinel proof.
 
 Evidence:
 
@@ -127,7 +127,9 @@ Evidence:
 | --- | --- |
 | Migration output location | |
 | Backup policy location | |
+| Backup window/retention/owner | |
 | Operational sentinel restore test location | |
+| Restore date/recovery notes | |
 
 ## 5. Supabase Storage
 
@@ -138,9 +140,9 @@ Evidence:
 - [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and signed download are verified through the deployed app.
-- [ ] Supabase backup policy or PITR evidence is recorded outside git.
-- [ ] Supabase restore test evidence exists and has an owner.
-- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested`.
+- [ ] Supabase backup policy or PITR evidence is recorded outside git with backup window, retention period, and backup owner.
+- [ ] Supabase restore test evidence exists with owner, restore date, and recovery notes.
+- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested` with owner/date/recovery details.
 
 Evidence:
 

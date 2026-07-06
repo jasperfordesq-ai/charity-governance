@@ -63,11 +63,14 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'database' && checkId === 'backups-enabled') {
-    entry.description = 'managed backups or PITR are enabled for the production PostgreSQL database.';
+    entry.description = [
+      'managed backups or PITR are enabled for the production PostgreSQL database.',
+      'backup window, retention period, and backup owner are recorded outside git.',
+    ].join(' ');
   }
 
   if (areaId === 'database' && checkId === 'restore-tested') {
-    entry.description = 'restore test evidence exists with an accountable owner and recovery notes.';
+    entry.description = 'restore test evidence exists with an accountable owner, restore date, recovery notes, and operational sentinel verification.';
   }
 
   if (areaId === 'secretsAndEnv' && checkId === 'real-production-values') {
@@ -239,11 +242,14 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'supabaseStorage' && checkId === 'supabase-backups-enabled') {
-    entry.description = 'Supabase backup policy evidence confirms managed backups or PITR are enabled for the production Supabase project.';
+    entry.description = [
+      'Supabase backup policy evidence confirms managed backups or PITR are enabled for the production Supabase project.',
+      'backup window, retention period, and backup owner are recorded outside git.',
+    ].join(' ');
   }
 
   if (areaId === 'supabaseStorage' && checkId === 'supabase-restore-tested') {
-    entry.description = 'Supabase restore test evidence exists with an accountable owner and recovery notes for the production Supabase project.';
+    entry.description = 'Supabase restore test evidence exists with an accountable owner, restore date, and recovery notes for the production Supabase project.';
   }
 
   if (areaId === 'billingAndEmail' && checkId === 'providers-check') {
@@ -1029,12 +1035,23 @@ test('production launch evidence validator requires concrete hosting database an
     assert.match(result.stderr, /areas\.database\.checks\.postgres-provisioned\.evidence must include production PostgreSQL/);
     assert.match(result.stderr, /areas\.database\.checks\.database-url-secret-store\.evidence must include DATABASE_URL/);
     assert.match(result.stderr, /areas\.database\.checks\.backups-enabled\.evidence must include managed backups or PITR/);
+    assert.match(result.stderr, /areas\.database\.checks\.backups-enabled\.evidence must include backup window/);
+    assert.match(result.stderr, /areas\.database\.checks\.backups-enabled\.evidence must include retention period/);
+    assert.match(result.stderr, /areas\.database\.checks\.backups-enabled\.evidence must include backup owner/);
+    assert.match(result.stderr, /areas\.database\.checks\.restore-tested\.evidence must include restore date/);
+    assert.match(result.stderr, /areas\.database\.checks\.restore-tested\.evidence must include recovery notes/);
+    assert.match(result.stderr, /areas\.database\.checks\.restore-tested\.evidence must include operational sentinel/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.separate-production-project\.evidence must include production Supabase project/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.bucket-private\.evidence must include private bucket/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.readiness-storage-reachable\.evidence must include storageBucketReachable: true/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.document-upload-download\.evidence must include signed download/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include Supabase backup policy/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include backup window/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include retention period/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include backup owner/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include Supabase restore test/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include restore date/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include recovery notes/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

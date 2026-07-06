@@ -790,8 +790,8 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'postgres-provisioned': ['production PostgreSQL', 'provisioned'],
       'database-url-secret-store': ['DATABASE_URL', 'secret store'],
       'migrations-deployed': ['db:migrate:deploy', 'production'],
-      'backups-enabled': ['managed backups or PITR'],
-      'restore-tested': ['restore test', 'owner'],
+      'backups-enabled': ['managed backups or PITR', 'backup window', 'retention period', 'backup owner'],
+      'restore-tested': ['restore test', 'owner', 'restore date', 'recovery notes', 'operational sentinel'],
     };
 
     for (const marker of databaseMarkersByCheck[checkId] ?? []) {
@@ -811,8 +811,14 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'readiness-storage-configured': ['storageConfigured: true'],
       'readiness-storage-reachable': ['storageBucketReachable: true'],
       'document-upload-download': ['document upload', 'signed download', 'deployed app'],
-      'supabase-backups-enabled': ['Supabase backup policy', 'managed backups or PITR'],
-      'supabase-restore-tested': ['Supabase restore test', 'owner'],
+      'supabase-backups-enabled': [
+        'Supabase backup policy',
+        'managed backups or PITR',
+        'backup window',
+        'retention period',
+        'backup owner',
+      ],
+      'supabase-restore-tested': ['Supabase restore test', 'owner', 'restore date', 'recovery notes'],
     };
 
     for (const marker of supabaseMarkersByCheck[checkId] ?? []) {
