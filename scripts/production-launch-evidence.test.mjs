@@ -373,6 +373,7 @@ function evidenceEntry(areaId, checkId) {
     entry.description = [
       'external penetration test by named testing provider completed before real charity data.',
       'testing scope covered https://app.charitypilot.ie and https://api.charitypilot.ie at the release commit under review.',
+      `Promoted release commit: ${commitSha}.`,
     ].join(' ');
   }
 
@@ -1688,6 +1689,25 @@ test('production launch evidence validator requires concrete external security r
     assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include stored outside git/);
     assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include report version/);
     assert.match(result.stderr, /areas\.securityReview\.checks\.report-reference\.evidence must include report date/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator binds penetration test evidence to the promoted commit', async () => {
+  const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.securityReview.checks['penetration-test-complete'].evidence[0].description = [
+    'external penetration test by named testing provider completed before real charity data.',
+    'testing scope covered https://app.charitypilot.ie and https://api.charitypilot.ie at the release commit under review.',
+  ].join(' ');
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.securityReview\.checks\.penetration-test-complete\.evidence must include release\.commitSha/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

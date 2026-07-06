@@ -231,6 +231,7 @@ const evidenceHintsByCheck = new Map([
     'https://app.charitypilot.ie',
     'https://api.charitypilot.ie',
     'release commit',
+    'release.commitSha',
     'completed before real charity data',
   ]],
   ['securityReview.critical-high-findings', [

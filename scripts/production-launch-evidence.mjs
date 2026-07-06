@@ -1051,6 +1051,9 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
     }
+    if (checkId === 'penetration-test-complete' && typeof release?.commitSha === 'string') {
+      requireEvidenceText(text, release.commitSha, `${checkPath}.evidence must include release.commitSha`, issues);
+    }
   }
 
   if (areaId === 'jobs' && checkId === 'scheduler-command') {

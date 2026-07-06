@@ -258,7 +258,7 @@ Evidence:
 
 ## 11. External Security Review
 
-- [ ] External penetration test is complete before handling real charity data, with the testing provider, testing scope, tested production web/API origins, and release commit recorded.
+- [ ] External penetration test is complete before handling real charity data, with the testing provider, testing scope, tested production web/API origins, and exact promoted `release.commitSha` recorded.
 - [ ] Critical and high findings are remediated or formally accepted by the accountable owner, with finding tracker, risk acceptance approver, and acceptance date recorded outside git.
 - [ ] Retest evidence exists for fixed findings, with retest date and retest result recorded.
 - [ ] Report reference is stored outside git and referenced in the machine-readable launch evidence with report version and report date.
