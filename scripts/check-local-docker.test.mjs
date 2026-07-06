@@ -322,6 +322,8 @@ test('web dev server ignores Playwright artifacts during local browser QA', () =
   assert.match(playwrightConfig, /process\.env\.E2E_ARTIFACT_DIR \?\? join\(tmpdir\(\), 'charitypilot-e2e-artifacts'\)/);
   assert.match(playwrightConfig, /outputDir:\s*join\(ARTIFACT_ROOT, 'test-results'\)/);
   assert.match(playwrightConfig, /outputFolder:\s*join\(ARTIFACT_ROOT, 'html-report'\)/);
+  assert.match(playwrightConfig, /mkdirSync\(join\(ARTIFACT_ROOT, 'test-results'\), \{ recursive: true \}\)/);
+  assert.match(playwrightConfig, /mkdirSync\(join\(ARTIFACT_ROOT, 'html-report'\), \{ recursive: true \}\)/);
   assert.match(e2eReadme, /written outside the repository so Next\.js dev does not watch the artifacts/);
   assert.match(e2eWorkflow, /E2E_ARTIFACT_DIR:\s*playwright-artifacts/);
   assert.match(e2eWorkflow, /path:\s*e2e\/playwright-artifacts\/html-report\//);

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -23,6 +24,9 @@ const ARTIFACT_ROOT = resolve(
   process.cwd(),
   process.env.E2E_ARTIFACT_DIR ?? join(tmpdir(), 'charitypilot-e2e-artifacts'),
 );
+
+mkdirSync(join(ARTIFACT_ROOT, 'test-results'), { recursive: true });
+mkdirSync(join(ARTIFACT_ROOT, 'html-report'), { recursive: true });
 
 export default defineConfig({
   testDir: './tests',
