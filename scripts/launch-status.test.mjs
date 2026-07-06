@@ -36,9 +36,11 @@ test('launch status script text is ASCII-safe for operator transcripts', () => {
 });
 
 test('reports NO_ENV and points at the generator when .env.production is absent', () => {
-  const s = assessLaunchState({ envExists: false });
+  const s = assessLaunchState({ envExists: false, evidenceFileExists: false });
   assert.equal(s.phase, 'NO_ENV');
   assert.ok(s.nextActions.some((a) => a.includes('setup:production-env')));
+  assert.equal(s.evidenceLedger.exists, false);
+  assert.match(s.evidenceLedger.nextAction, /check:production:evidence:init/);
   assertExternalLaunchEvidenceGates(s);
 });
 
@@ -50,9 +52,11 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
     'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
     'EMAIL_FROM=noreply@charitypilot.ie',
   ].join('\n');
-  const s = assessLaunchState({ envExists: true, envContent: env });
+  const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.equal(s.evidenceLedger.exists, true);
+  assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assertExternalLaunchEvidenceGates(s);
 });

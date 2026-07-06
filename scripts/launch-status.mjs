@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
+const DEFAULT_EVIDENCE_FILE = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
@@ -29,16 +30,33 @@ function placeholderKeys(envContent) {
   return keys;
 }
 
+function evidenceLedgerStatus(evidenceFileExists) {
+  return evidenceFileExists
+    ? {
+        exists: true,
+        headline: `${DEFAULT_EVIDENCE_FILE} exists and is ready for non-secret external evidence references.`,
+        nextAction: `Track progress with:  npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`,
+      }
+    : {
+        exists: false,
+        headline: `${DEFAULT_EVIDENCE_FILE} has not been created yet.`,
+        nextAction: 'Create it with:  npm run check:production:evidence:init',
+      };
+}
+
 /**
  * Decide the current launch phase from local state.
- * @param {{ envExists: boolean, envContent?: string }} state
+ * @param {{ envExists: boolean, envContent?: string, evidenceFileExists?: boolean }} state
  */
 export function assessLaunchState(state) {
+  const evidenceLedger = evidenceLedgerStatus(state.evidenceFileExists === true);
+
   if (!state.envExists) {
     return {
       phase: 'NO_ENV',
       headline: 'You have not created a production environment file yet.',
       remainingKeys: [],
+      evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
         'Run:  npm run setup:production-env',
@@ -54,6 +72,7 @@ export function assessLaunchState(state) {
       phase: 'ENV_INCOMPLETE',
       headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
       remainingKeys,
+      evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
         'Open .env.production and replace each REPLACE_ME value listed below.',
@@ -67,6 +86,7 @@ export function assessLaunchState(state) {
     phase: 'ENV_COMPLETE',
     headline: '.env.production has no remaining placeholders. Validate it next.',
     remainingKeys: [],
+    evidenceLedger,
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
       'Run:  npm run check:production -- --production-env-file=.env.production',
@@ -80,10 +100,12 @@ export function assessLaunchState(state) {
 
 function main() {
   const envPath = join(repoRoot, '.env.production');
+  const evidencePath = join(repoRoot, DEFAULT_EVIDENCE_FILE);
   const envExists = existsSync(envPath);
   const state = assessLaunchState({
     envExists,
     envContent: envExists ? readFileSync(envPath, 'utf8') : '',
+    evidenceFileExists: existsSync(evidencePath),
   });
 
   console.log('CharityPilot launch status');
@@ -98,6 +120,10 @@ function main() {
   }
   console.log('Next:');
   for (const action of state.nextActions) console.log(`  ${action}`);
+  console.log('');
+  console.log('Evidence ledger:');
+  console.log(`  ${state.evidenceLedger.headline}`);
+  console.log(`  ${state.evidenceLedger.nextAction}`);
   console.log('');
   console.log('External launch evidence still required:');
   for (const gate of state.externalEvidenceGates) console.log(`  - ${gate}`);
