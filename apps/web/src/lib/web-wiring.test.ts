@@ -2165,6 +2165,13 @@ test('cookie consent actions use standard button radius instead of pill CTAs', (
   assert.match(cookieConsent, /radius="lg"/);
 });
 
+test('cookie consent responsive actions use generated Tailwind breakpoints', () => {
+  const cookieConsent = component('cookie-consent.tsx');
+
+  assert.doesNotMatch(cookieConsent, /\bxs:/);
+  assert.match(cookieConsent, /min-\[\d+px\]:flex-row/);
+});
+
 test('marketing feature copy avoids legal-certainty compliance claims', () => {
   const features = app('(marketing)/features/page.tsx');
 

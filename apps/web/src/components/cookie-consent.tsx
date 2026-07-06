@@ -72,7 +72,7 @@ export function CookieConsent() {
           </p>
 
           {/* Buttons */}
-          <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
+          <div className="flex flex-col min-[380px]:flex-row gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
             <Button
               type="button"
               radius="lg"
