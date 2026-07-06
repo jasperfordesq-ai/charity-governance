@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `16987b6`
+Working-tree base commit when generated: `f7b9af3`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -129,6 +129,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
+- Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.
 - Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.
 - Deployed browser QA now has cross-browser responsive and accessibility script wiring for Chromium desktop, Chromium mobile emulation, Firefox, and WebKit evidence runs while keeping real iOS Safari as manual or cloud-device evidence.
 - Supabase launch evidence now requires backup policy or PITR evidence and restore-test ownership in addition to private bucket, signed URL, and readiness proof.
@@ -248,7 +249,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 166 | yes | no obvious static risk; verify in browser |
-| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
+| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 198 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |

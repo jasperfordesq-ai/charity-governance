@@ -78,6 +78,7 @@ export function BillingPlanSections({
             const isCurrent = billing?.plan === plan.plan && isActive;
             const yearlyKey = `${plan.plan}-yearly`;
             const monthlyKey = `${plan.plan}-monthly`;
+            const actionHintId = `${plan.plan.toLowerCase()}-billing-action-hint`;
 
             return (
               <article
@@ -125,6 +126,7 @@ export function BillingPlanSections({
                     onPress={() => onCheckout(plan.plan, 'yearly')}
                     isLoading={checkoutLoading === yearlyKey}
                     isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
+                    aria-describedby={!billingConfigured || isCurrent ? actionHintId : undefined}
                   >
                     {isCurrent ? 'Current plan' : `Get ${plan.name} yearly`}
                   </Button>
@@ -134,17 +136,18 @@ export function BillingPlanSections({
                     onPress={() => onCheckout(plan.plan, 'monthly')}
                     isLoading={checkoutLoading === monthlyKey}
                     isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
+                    aria-describedby={!billingConfigured || isCurrent ? actionHintId : undefined}
                   >
                     {isCurrent ? 'Current plan' : `Monthly (\u20ac${plan.monthlyPrice}/mo)`}
                   </Button>
                 </div>
 
                 {!billingConfigured ? (
-                  <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  <p id={actionHintId} className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
                     Checkout is disabled until billing setup is available.
                   </p>
                 ) : isCurrent ? (
-                  <p className="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                  <p id={actionHintId} className="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">
                     This is the current plan for the workspace.
                   </p>
                 ) : null}

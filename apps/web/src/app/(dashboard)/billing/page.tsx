@@ -175,6 +175,7 @@ export default function BillingPage() {
                   onPress={openPortal}
                   isLoading={portalLoading}
                   isDisabled={!billingConfigured || portalLoading}
+                  aria-describedby={!billingConfigured ? 'provider-degraded' : undefined}
                 >
                   Manage subscription
                 </Button>

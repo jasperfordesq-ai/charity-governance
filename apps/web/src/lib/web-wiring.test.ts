@@ -2580,6 +2580,9 @@ test('billing plan gates and notes are extracted from the oversized route file',
   assert.match(sectionsSrc, /Get \$\{plan\.name\} yearly/);
   assert.match(sectionsSrc, /Can I cancel at any time\?/);
   assert.match(sectionsSrc, /primaryActionButtonClassName/);
+  assert.match(sectionsSrc, /actionHintId/);
+  assert.match(sectionsSrc, /aria-describedby=\{!billingConfigured \|\| isCurrent \? actionHintId : undefined\}/);
+  assert.match(pageSrc, /aria-describedby=\{!billingConfigured \? 'provider-degraded' : undefined\}/);
 });
 
 test('billing plan feature lists use icon-library checks instead of decorative dot bullets', () => {
