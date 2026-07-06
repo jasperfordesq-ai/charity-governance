@@ -36,6 +36,14 @@ Status marks reflect completed repository hardening work. Open items require rea
 > Rerun every release gate on the final release ref and record the exact command
 > transcripts, commit SHA, workflow run, and digest manifest in the non-committed
 > launch evidence ledger before treating the platform as ready for real charity data.
+> The latest repository hardening on `master` constrains launch evidence references
+> to approved hosts and the canonical GitHub repository, lets the evidence package
+> be prepared before evidence is collected while requiring every checklist item to
+> predate final signoff, and aligns the deploy-smoke evidence hint with the actual
+> `node scripts/smoke-production-deploy.mjs` command. A local
+> `npm run release:ready -- --no-e2e` run passed the selected non-E2E gates on
+> 2026-07-06, but this still does not replace deployed QA, real provider checks,
+> legal/privacy review, pentest, or final production signoffs.
 
 ## Security and Auth
 

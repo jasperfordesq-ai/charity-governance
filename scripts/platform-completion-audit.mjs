@@ -239,6 +239,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
   'Production launch evidence chronology now lets operators prepare the package before collecting evidence while requiring all checklist evidence before final signoff approval.',
   'Production launch evidence deploy-smoke hints now name the real smoke-production-deploy command that the validator accepts.',
+  'Platform audit generation now falls back to reading .git metadata directly when shelling out to git is unavailable.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
@@ -309,6 +310,40 @@ function shell(command) {
   } catch {
     return '';
   }
+}
+
+function readGitHead() {
+  const headPath = join(repoRoot, '.git', 'HEAD');
+  if (!existsSync(headPath)) return { branch: '', commit: '' };
+
+  const head = readFileSync(headPath, 'utf8').trim();
+  const refPrefix = 'ref: ';
+  if (!head.startsWith(refPrefix)) return { branch: '', commit: head };
+
+  const ref = head.slice(refPrefix.length);
+  const refPath = join(repoRoot, '.git', ...ref.split('/'));
+  const branch = ref.split('/').at(-1) ?? '';
+  if (existsSync(refPath)) {
+    return { branch, commit: readFileSync(refPath, 'utf8').trim() };
+  }
+
+  const packedRefsPath = join(repoRoot, '.git', 'packed-refs');
+  if (existsSync(packedRefsPath)) {
+    const packed = readFileSync(packedRefsPath, 'utf8')
+      .split(/\r?\n/)
+      .find((line) => line.endsWith(` ${ref}`));
+    if (packed) return { branch, commit: packed.split(' ')[0] };
+  }
+
+  return { branch, commit: '' };
+}
+
+function currentGitBranchAndCommit() {
+  const fallback = readGitHead();
+  return {
+    branch: shell('git branch --show-current') || fallback.branch || 'unknown',
+    commit: shell('git rev-parse --short HEAD') || fallback.commit.slice(0, 7) || 'unknown',
+  };
 }
 
 function walk(dir, predicate, files = []) {
@@ -490,8 +525,7 @@ function render() {
   const compliance = readComplianceSummary();
   const launch = readLaunchSummary();
   const tests = readTestSurfaceSummary();
-  const branch = shell('git branch --show-current') || 'unknown';
-  const commit = shell('git rev-parse --short HEAD') || 'unknown';
+  const { branch, commit } = currentGitBranchAndCommit();
 
   const oversizedRoutes = routes
     .filter((route) => route.lines >= 450)
