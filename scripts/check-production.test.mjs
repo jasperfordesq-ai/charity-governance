@@ -1595,6 +1595,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /85 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
+  assert.match(productionTodo, /release\s+image promotion/i);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
   assert.match(productionTodo, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
@@ -1626,6 +1628,7 @@ test('production secret env files are ignored by git without hiding the template
 
 test('production env template documents the compose runtime web public origins', () => {
   const template = readRepoFile('.env.production.example');
+  const generator = readRepoFile('scripts/generate-production-env.mjs');
 
   assert.match(template, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
@@ -1639,6 +1642,10 @@ test('production env template documents the compose runtime web public origins',
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /Docker Compose/);
+  assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
+  assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(generator, /CHARITYPILOT_API_IMAGE/);
+  assert.match(generator, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL/);
 });
 
 test('production TLS defaults use the canonical app and API hostnames', () => {

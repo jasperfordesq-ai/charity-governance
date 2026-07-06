@@ -15,6 +15,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
 > operators can continue from the first real missing proof without changing the
 > strict final validator.
+> Missing production values are grouped by provider/source in that output:
+> hosting/proxy, PostgreSQL, Stripe, Resend, Supabase, observability, and release image promotion.
+> This is the handoff order for filling the real secret store.
 > local responsive browser QA completed as four focused route chunks with 47 first-pass checks and 3 retry-pass flaky checks across desktop/mobile and light/dark; local accessibility QA passed 16/16 on the local stack, but deployed production QA still remains open and must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in `browserQa.checks.accessibility-coverage`,
 > cross-browser QA in `browserQa.checks.cross-browser-coverage`, and real iOS Safari device QA in

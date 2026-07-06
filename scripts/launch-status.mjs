@@ -22,6 +22,56 @@ const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
 ]);
 
+const MISSING_VALUE_GROUPS = Object.freeze([
+  {
+    label: 'Hosting, DNS, TLS, and proxy',
+    keys: ['TRUSTED_PROXY_ADDRESSES', 'FRONTEND_URL', 'NEXT_PUBLIC_API_URL', 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL'],
+  },
+  {
+    label: 'PostgreSQL',
+    keys: ['DATABASE_URL'],
+  },
+  {
+    label: 'Stripe billing',
+    keys: [
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
+      'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+      'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+      'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+      'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+    ],
+  },
+  {
+    label: 'Resend email',
+    keys: ['RESEND_API_KEY'],
+  },
+  {
+    label: 'Supabase storage',
+    keys: [
+      'SUPABASE_URL',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'NEXT_PUBLIC_SUPABASE_URL',
+      'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
+    ],
+  },
+  {
+    label: 'Observability',
+    keys: ['ERROR_ALERT_WEBHOOK_URL'],
+  },
+  {
+    label: 'Release image promotion',
+    keys: [
+      'CHARITYPILOT_API_IMAGE',
+      'CHARITYPILOT_WEB_IMAGE',
+      'CHARITYPILOT_MIGRATION_IMAGE',
+      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL',
+      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
+    ],
+  },
+]);
+
 function placeholderKeys(envContent) {
   const keys = [];
   for (const line of envContent.split('\n')) {
@@ -29,6 +79,24 @@ function placeholderKeys(envContent) {
     if (m && /REPLACE_ME/.test(m[2])) keys.push(m[1]);
   }
   return keys;
+}
+
+export function groupRemainingKeys(keys) {
+  const remaining = new Set(keys);
+  const groups = [];
+
+  for (const group of MISSING_VALUE_GROUPS) {
+    const groupKeys = group.keys.filter((key) => remaining.has(key));
+    if (groupKeys.length === 0) continue;
+    for (const key of groupKeys) remaining.delete(key);
+    groups.push({ label: group.label, keys: groupKeys });
+  }
+
+  if (remaining.size > 0) {
+    groups.push({ label: 'Other', keys: [...remaining].sort() });
+  }
+
+  return groups;
 }
 
 function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
@@ -79,6 +147,7 @@ export function assessLaunchState(state) {
       phase: 'NO_ENV',
       headline: 'You have not created a production environment file yet.',
       remainingKeys: [],
+      remainingKeyGroups: [],
       evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -95,6 +164,7 @@ export function assessLaunchState(state) {
       phase: 'ENV_INCOMPLETE',
       headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
       remainingKeys,
+      remainingKeyGroups: groupRemainingKeys(remainingKeys),
       evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -109,6 +179,7 @@ export function assessLaunchState(state) {
     phase: 'ENV_COMPLETE',
     headline: '.env.production has no remaining placeholders. Validate it next.',
     remainingKeys: [],
+    remainingKeyGroups: [],
     evidenceLedger,
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
@@ -140,6 +211,11 @@ function main() {
   if (state.remainingKeys.length > 0) {
     console.log('Values still needed:');
     for (const key of state.remainingKeys) console.log(`  - ${key}`);
+    console.log('');
+    console.log('Values still needed by source:');
+    for (const group of state.remainingKeyGroups ?? []) {
+      console.log(`  ${group.label}: ${group.keys.join(', ')}`);
+    }
     console.log('');
   }
   console.log('Next:');

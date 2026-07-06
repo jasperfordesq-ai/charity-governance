@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { assessLaunchState } from './launch-status.mjs';
+import { assessLaunchState, groupRemainingKeys } from './launch-status.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -55,10 +55,33 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.deepEqual(s.remainingKeyGroups, [
+    { label: 'PostgreSQL', keys: ['DATABASE_URL'] },
+    { label: 'Stripe billing', keys: ['STRIPE_SECRET_KEY'] },
+  ]);
   assert.equal(s.evidenceLedger.exists, true);
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assertExternalLaunchEvidenceGates(s);
+});
+
+test('groups missing production values by operator source', () => {
+  assert.deepEqual(
+    groupRemainingKeys([
+      'CHARITYPILOT_WEB_IMAGE',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'UNKNOWN_VALUE',
+      'STRIPE_WEBHOOK_SECRET',
+      'TRUSTED_PROXY_ADDRESSES',
+    ]),
+    [
+      { label: 'Hosting, DNS, TLS, and proxy', keys: ['TRUSTED_PROXY_ADDRESSES'] },
+      { label: 'Stripe billing', keys: ['STRIPE_WEBHOOK_SECRET'] },
+      { label: 'Supabase storage', keys: ['SUPABASE_SERVICE_ROLE_KEY'] },
+      { label: 'Release image promotion', keys: ['CHARITYPILOT_WEB_IMAGE'] },
+      { label: 'Other', keys: ['UNKNOWN_VALUE'] },
+    ],
+  );
 });
 
 test('reports launch evidence completion counts when the evidence ledger exists', () => {

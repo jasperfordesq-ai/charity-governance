@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `7372f00`
+Working-tree base commit when generated: `9ee1224`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -121,6 +121,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 85 checks.
 - Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.
 - Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.
+- Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.
 - Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
 - Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
@@ -294,6 +295,16 @@ The local non-committed production env still needs 23 real value(s):
 - `CHARITYPILOT_MIGRATION_IMAGE`
 - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`
 - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
+
+Grouped by source:
+
+- Hosting, DNS, TLS, and proxy: `TRUSTED_PROXY_ADDRESSES`, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`
+- PostgreSQL: `DATABASE_URL`
+- Stripe billing: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`, `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`, `STRIPE_COMPLETE_MONTHLY_PRICE_ID`, `STRIPE_COMPLETE_YEARLY_PRICE_ID`
+- Resend email: `RESEND_API_KEY`
+- Supabase storage: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
+- Observability: `ERROR_ALERT_WEBHOOK_URL`
+- Release image promotion: `CHARITYPILOT_API_IMAGE`, `CHARITYPILOT_WEB_IMAGE`, `CHARITYPILOT_MIGRATION_IMAGE`, `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`, `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
 
 ## Irish Compliance Source Posture
 

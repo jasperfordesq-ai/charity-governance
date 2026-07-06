@@ -70,6 +70,7 @@ test('works against the real .env.production.example, changing only the auto-key
   const example = readFileSync(join(repoRoot, '.env.production.example'), 'utf8');
   const before = parseEnv(example);
   const after = parseEnv(buildProductionEnv(example));
+  const operatorSuppliedKeys = new Set(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
 
   for (const key of AUTO_GENERATED_KEYS) {
     assert.ok(after[key] && after[key].length >= 32, `${key} should be auto-generated`);
@@ -89,6 +90,12 @@ test('works against the real .env.production.example, changing only the auto-key
   // Every operator-supplied key is still present for the operator to fill.
   for (const [key] of OPERATOR_SUPPLIED_KEYS) {
     assert.ok(key in after, `${key} must remain in the generated file`);
+  }
+
+  for (const [key, value] of Object.entries(after)) {
+    if (/REPLACE_ME/.test(value)) {
+      assert.ok(operatorSuppliedKeys.has(key), `${key} placeholder must be named in OPERATOR_SUPPLIED_KEYS`);
+    }
   }
 });
 

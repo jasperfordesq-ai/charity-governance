@@ -150,6 +150,7 @@ const fixedInThisAuditBranch = [
   'Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 85 checks.',
   'Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.',
   'Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.',
+  'Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.',
   'Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.',
@@ -406,6 +407,7 @@ function readLaunchSummary() {
     phase: state.phase,
     headline: state.headline,
     remainingKeys: state.remainingKeys ?? [],
+    remainingKeyGroups: state.remainingKeyGroups ?? [],
     evidenceLedger: state.evidenceLedger,
   };
 }
@@ -522,6 +524,13 @@ function render() {
     md += `### Local Production Environment Placeholders\n\n`;
     md += `The local non-committed production env still needs ${launch.remainingKeys.length} real value(s):\n\n`;
     md += `${markdownList(launch.remainingKeys.map((key) => `\`${key}\``))}\n\n`;
+    if (launch.remainingKeyGroups.length > 0) {
+      md += `Grouped by source:\n\n`;
+      for (const group of launch.remainingKeyGroups) {
+        md += `- ${group.label}: ${group.keys.map((key) => `\`${key}\``).join(', ')}\n`;
+      }
+      md += `\n`;
+    }
   }
 
   md += `## Irish Compliance Source Posture\n\n`;
