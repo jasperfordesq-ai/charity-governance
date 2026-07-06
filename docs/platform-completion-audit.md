@@ -179,7 +179,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
-- `npm run test:e2e:responsive` passed locally with 50/50 Playwright route smoke checks across desktop/mobile and light/dark themes.
+- `npm run test:e2e:responsive` completed locally with 49 passed and 1 retry-pass flaky Playwright route smoke checks across desktop/mobile and light/dark themes.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work

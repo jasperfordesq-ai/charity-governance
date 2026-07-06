@@ -1590,7 +1590,7 @@ test('production todo reflects current launch blockers without overclaiming loca
 
   assert.match(productionTodo, /Current local status checked 2026-07-06/);
   assert.match(productionTodo, /23 production values still require real data/);
-  assert.match(productionTodo, /local responsive browser QA passed 50\/50/);
+  assert.match(productionTodo, /local responsive browser QA completed with 49 passed and 1 retry-pass flaky/);
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /81 machine-readable launch evidence checks/);
@@ -2123,7 +2123,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-06/);
   assert.match(launchGuide, /23 production values still require real data/);
-  assert.match(launchGuide, /local responsive browser QA passed 50\/50/);
+  assert.match(launchGuide, /local responsive browser QA completed with 49 passed and 1 retry-pass flaky/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /81 machine-readable launch evidence checks/);

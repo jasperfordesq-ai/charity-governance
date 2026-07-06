@@ -443,7 +443,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.match(auditLedger, /6\/6 selected release gates/);
-  assert.match(auditLedger, /50\/50 Playwright route smoke checks/);
+  assert.match(auditLedger, /49 passed and 1 retry-pass flaky Playwright route smoke checks/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
 
