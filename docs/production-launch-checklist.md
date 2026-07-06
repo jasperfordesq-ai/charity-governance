@@ -43,14 +43,14 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env` rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence.
 - [ ] `cosign signature verification` passed for all promoted image digests.
 - [ ] The release workflow evidence identifies `.github/workflows/release-images.yml` and a release ref of `refs/heads/master` or `refs/tags/v*`.
-- [ ] `npm run check:production:release-run -- --evidence-file=production-launch-evidence.json` verified the GitHub Actions run metadata and `release-image-digests` artifact through the GitHub API.
+- [ ] `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` verified the GitHub Actions run metadata and `release-image-digests` artifact through the GitHub API.
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 - [ ] The release manifest's web image build origins match the promoted production public origins.
-- [ ] `npm run --silent check:production:evidence:template > production-launch-evidence.json` was used as the starting schema for the non-committed external launch evidence ledger.
-- [ ] `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
+- [ ] `npm run check:production:evidence:init` was used to create `.charitypilot-launch-evidence/production-launch-evidence.json` as the starting schema for the non-committed external launch evidence ledger.
+- [ ] `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
 - [ ] Machine-readable launch evidence includes command-output entries for `npm ci`, Prisma generation/validation, lint, tests, workspace builds, and production dependency audit.
 
-Progress helper: while filling the non-committed evidence file, run `npm run check:production:evidence:status -- --evidence-file=production-launch-evidence.json` to see area-by-area completion and the next incomplete checks. This is not a launch gate; the strict validator above remains the gate.
+Progress helper: while filling the non-committed evidence file, run `npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` to see area-by-area completion and the next incomplete checks. This is not a launch gate; the strict validator above remains the gate.
 
 Evidence:
 
@@ -258,7 +258,7 @@ Evidence:
 
 ## Final Signoff
 
-The machine-readable `production-launch-evidence.json` must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and role-specific non-secret external evidence references that include that approval role and launch approval.
+The machine-readable `.charitypilot-launch-evidence/production-launch-evidence.json` file must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and role-specific non-secret external evidence references that include that approval role and launch approval.
 
 | Role | Name | Date | Evidence reference |
 | --- | --- | --- | --- |

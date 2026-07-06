@@ -5,13 +5,15 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { REQUIRED_LAUNCH_AREAS } from './production-launch-evidence.mjs';
 
+const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
+
 function usage() {
   return 'Usage: node scripts/production-launch-evidence-status.mjs --evidence-file <path>\n';
 }
 
 function parseArgs(argv) {
   const options = {
-    evidenceFile: 'production-launch-evidence.json',
+    evidenceFile: defaultEvidenceFile,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -135,7 +137,7 @@ function renderStatus(evidence) {
     }
   }
 
-  lines.push('', 'Final validator: npm run check:production:evidence -- --evidence-file=production-launch-evidence.json', '');
+  lines.push('', `Final validator: npm run check:production:evidence -- --evidence-file=${defaultEvidenceFile}`, '');
   return lines.join('\n');
 }
 

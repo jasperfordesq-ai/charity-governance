@@ -175,6 +175,7 @@ const imageRepositories = {
   migrationImage: 'ghcr.io/jasperfordesq-ai/charity-governance-migrations',
 };
 const releaseWorkflowFile = '.github/workflows/release-images.yml';
+const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 export const FINAL_SIGNOFF_ROLES = [
   ['engineering', 'Engineering owner'],
   ['operations', 'Operations owner'],
@@ -189,7 +190,7 @@ function usage() {
 
 function parseArgs(argv) {
   const options = {
-    evidenceFile: 'production-launch-evidence.json',
+    evidenceFile: defaultEvidenceFile,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -686,7 +687,7 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     }
     requireEvidenceText(
       text,
-      'npm run check:production:release-run -- --evidence-file=production-launch-evidence.json',
+      `npm run check:production:release-run -- --evidence-file=${defaultEvidenceFile}`,
       `${checkPath}.evidence must include the check:production:release-run command`,
       issues,
     );

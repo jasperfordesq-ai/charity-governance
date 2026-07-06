@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `6127ebe`
+Working-tree base commit when generated: `600bd71`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -120,6 +120,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
 - Launch status and production readiness TODO now name all 81 machine-readable launch evidence checks and the browserQa.checks.accessibility-coverage evidence slot.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
+- Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.

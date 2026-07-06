@@ -379,7 +379,7 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.reference = releaseWorkflowRunUrl;
     entry.description = [
-      'npm run check:production:release-run -- --evidence-file=production-launch-evidence.json',
+      'npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
       'Production release run evidence passed',
       releaseWorkflowRunUrl,
       'release-image-digests',

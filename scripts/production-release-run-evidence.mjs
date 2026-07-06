@@ -7,6 +7,7 @@ import { inflateRawSync } from 'node:zlib';
 
 const repository = 'jasperfordesq-ai/charity-governance';
 const releaseWorkflowFile = '.github/workflows/release-images.yml';
+const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
 function usage() {
   return 'Usage: node scripts/production-release-run-evidence.mjs --evidence-file <path>\n';
@@ -18,7 +19,7 @@ function result(status, stdout = '', stderr = '') {
 
 function parseArgs(argv) {
   const options = {
-    evidenceFile: 'production-launch-evidence.json',
+    evidenceFile: defaultEvidenceFile,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
