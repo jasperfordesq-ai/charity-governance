@@ -1825,6 +1825,18 @@ test('production launch evidence template covers every required area and final s
       template.areas.releaseGate.checks.audit.requiredEvidenceHints,
       ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities'],
     );
+    assert.deepEqual(
+      template.areas.releaseGate.checks['deploy-smoke'].requiredEvidenceHints,
+      [
+        'node scripts/smoke-production-deploy.mjs --production-env-file .env.production',
+        'https://app.charitypilot.ie',
+        'https://api.charitypilot.ie',
+      ],
+    );
+    assert.doesNotMatch(
+      JSON.stringify(template.areas.releaseGate.checks['deploy-smoke'].requiredEvidenceHints),
+      /smoke:production-deploy/,
+    );
     assert.ok(
       template.areas.supabaseStorage.checks['supabase-backups-enabled'].requiredEvidenceHints.includes(
         'Supabase backup policy',
