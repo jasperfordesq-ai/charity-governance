@@ -97,7 +97,7 @@ export function SessionTimeout() {
           <Button
             className="bg-teal-primary hover:bg-teal-dark dark:hover:bg-teal-light text-white font-semibold"
             onPress={handleExtend}
-            radius="full"
+            radius="lg"
           >
             Stay signed in
           </Button>

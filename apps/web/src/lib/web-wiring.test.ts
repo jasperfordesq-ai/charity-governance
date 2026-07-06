@@ -2172,6 +2172,26 @@ test('cookie consent responsive actions use generated Tailwind breakpoints', () 
   assert.match(cookieConsent, /min-\[\d+px\]:flex-row/);
 });
 
+test('text CTAs use standard radius while icon-only controls may stay circular', () => {
+  const textActionSources = [
+    app('(marketing)/features/page.tsx'),
+    app('(auth)/verify-email/page.tsx'),
+    component('session-timeout.tsx'),
+  ].join('\n');
+
+  assert.doesNotMatch(textActionSources, /radius="full"/);
+  assert.match(textActionSources, /radius="lg"/);
+
+  for (const source of [
+    component('back-to-top.tsx'),
+    component('copy-link-button.tsx'),
+    component('ui/password-visibility-button.tsx'),
+  ]) {
+    assert.match(source, /isIconOnly/);
+    assert.match(source, /radius="full"/);
+  }
+});
+
 test('marketing feature copy avoids legal-certainty compliance claims', () => {
   const features = app('(marketing)/features/page.tsx');
 

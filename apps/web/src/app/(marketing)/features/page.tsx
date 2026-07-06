@@ -228,7 +228,7 @@ export default function FeaturesPage() {
               href="/register"
               size="lg"
               className="bg-amber-accent text-gray-900 font-bold text-base px-10 hover:bg-amber-light"
-              radius="full"
+              radius="lg"
             >
               Start your free trial
             </Button>
@@ -238,7 +238,7 @@ export default function FeaturesPage() {
               size="lg"
               variant="bordered"
               className="border-white/30 text-white font-semibold text-base px-10 hover:bg-white/10"
-              radius="full"
+              radius="lg"
             >
               View pricing
             </Button>

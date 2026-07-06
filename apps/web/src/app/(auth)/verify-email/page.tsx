@@ -110,7 +110,7 @@ function VerifyEmailContent() {
                       onPress={handleResend}
                       isLoading={isResending}
                       className={primaryActionButtonClasses('font-semibold')}
-                      radius="full"
+                      radius="lg"
                     >
                       Resend verification email
                     </Button>
