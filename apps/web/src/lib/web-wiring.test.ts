@@ -1804,6 +1804,7 @@ test('profile-triggered workflow prompts render source references as shared link
     optionalDash('deadlines/deadline-profile-prompts.tsx'),
     optionalDash('registers/register-priority-panel.tsx'),
     optionalDash('export/export-approval-readiness.tsx'),
+    optionalDash('regulator/regulator-profile-priorities.tsx'),
   ];
 
   for (const file of files) {

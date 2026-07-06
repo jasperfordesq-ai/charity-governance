@@ -2,7 +2,7 @@
 
 import { Button } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
-import { SourceReferenceLink } from '@/components/ui/source-reference';
+import { SourceReferenceList } from '@/components/ui/source-reference';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { OrganisationResponse, ProfessionalReviewFlag } from '@charitypilot/shared';
@@ -94,15 +94,7 @@ export function RegulatorProfilePrioritiesSection({
                 ))}
               </div>
               <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-800">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Source references</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {item.sourceRefs.slice(0, 3).map((source) => (
-                    <SourceReferenceLink
-                      key={`${item.profileKey}-${source.url}`}
-                      source={source}
-                    />
-                  ))}
-                </div>
+                <SourceReferenceList sources={item.sourceRefs} label="Source references" className="mt-0" />
               </div>
             </article>
           ))}
