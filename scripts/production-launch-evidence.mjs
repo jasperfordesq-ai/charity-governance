@@ -429,6 +429,15 @@ function requireEvidenceText(text, needle, message, issues) {
   }
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasRouteToken(text, route) {
+  const routePattern = new RegExp(`(?:^|[\\s,(])${escapeRegExp(route)}(?=$|[\\s,.)])`);
+  return routePattern.test(text);
+}
+
 const responsiveFullCommand = 'npm run test:e2e:responsive';
 const responsiveChunkCommands = {
   all: [
@@ -1275,7 +1284,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       }
     }
     for (const route of launchCriticalRoutes) {
-      if (!text.includes(route)) {
+      if (!hasRouteToken(text, route)) {
         issues.push(`${checkPath}.evidence must include launch route ${route}`);
       }
     }

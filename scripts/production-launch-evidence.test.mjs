@@ -1282,6 +1282,31 @@ test('production launch evidence validator requires every launch-critical route 
   }
 });
 
+test('production launch evidence validator treats the root route as an explicit route token', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.browserQa.checks['critical-flows-covered'].evidence[0].description = [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
+    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
+    'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
+    `Routes covered: ${launchCriticalRoutes.filter((route) => route !== '/').join(', ')}.`,
+    'zero critical or high-severity browser QA defects remain unresolved.',
+  ].join(' ');
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include launch route \//);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires concrete observability and scheduler evidence', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
