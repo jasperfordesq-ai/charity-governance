@@ -1339,6 +1339,14 @@ function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {
   }
 }
 
+function validateFinalSignoffEvidence(finalSignoff, release, issues) {
+  const text = evidenceText(finalSignoff.evidence);
+  requireEvidenceText(text, 'launch approval', 'finalSignoff.evidence must include launch approval', issues);
+  if (typeof release?.commitSha === 'string') {
+    requireEvidenceText(text, release.commitSha, 'finalSignoff.evidence must include release.commitSha', issues);
+  }
+}
+
 function validateLaunchEvidence(evidence) {
   const issues = [];
 
@@ -1419,6 +1427,7 @@ function validateLaunchEvidence(evidence) {
       notAfter: approvedAt,
       notAfterLabel: 'finalSignoff.approvedAt',
     });
+    validateFinalSignoffEvidence(evidence.finalSignoff, evidence.release, issues);
     validateFinalSignoffApprovals(evidence.finalSignoff, preparedAt, issues);
   }
 

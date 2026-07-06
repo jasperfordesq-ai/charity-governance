@@ -295,6 +295,7 @@ function evidenceTemplate() {
       status: 'pending',
       owner: 'REPLACE_WITH_ACCOUNTABLE_OWNER',
       approvedAt: placeholderTimestamp,
+      requiredEvidenceHints: ['launch approval', 'release.commitSha'],
       approvals: Object.fromEntries(FINAL_SIGNOFF_ROLES.map((role) => [
         role.id,
         {

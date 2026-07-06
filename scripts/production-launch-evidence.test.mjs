@@ -744,7 +744,7 @@ function completeEvidence(requiredAreas) {
         {
           type: 'approval',
           reference: 'https://evidence.charitypilot.ie/launch/final-signoff/approval',
-          description: 'Accountable owner launch approval',
+          description: `Accountable owner launch approval for release ${commitSha}`,
           capturedAt,
         },
       ],
@@ -1566,6 +1566,22 @@ test('production launch evidence validator requires every final signoff role app
   }
 });
 
+test('production launch evidence validator binds final signoff evidence to the promoted commit', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.finalSignoff.evidence[0].description = 'Accountable owner launch approval';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /finalSignoff\.evidence must include release\.commitSha/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires role-specific final approval evidence', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
@@ -1873,6 +1889,7 @@ test('production launch evidence template covers every required area and final s
       template.finalSignoff.approvals.legalCompliance.requiredEvidenceHints,
       ['Legal/compliance owner', 'launch approval'],
     );
+    assert.deepEqual(template.finalSignoff.requiredEvidenceHints, ['launch approval', 'release.commitSha']);
     assert.doesNotMatch(JSON.stringify(template), /sk_live_|whsec_|re_[A-Za-z0-9]|postgres(?:ql)?:\/\/|SUPABASE_SERVICE_ROLE_KEY=/);
 
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
