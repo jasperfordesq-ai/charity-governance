@@ -18,6 +18,8 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /81 machine-readable checks/);
   assert.match(gates, /browserQa\.checks\.accessibility-coverage/);
   assert.match(gates, /E2E_DEPLOYED_QA=true/);
+  assert.match(gates, /all four focused route chunks/);
+  assert.match(gates, /npm run test:e2e:responsive/);
   assert.match(gates, /solicitor\/governance\/privacy review/);
   assert.match(gates, /external penetration test/);
 }
