@@ -13,7 +13,8 @@ These local checks do not replace deployed production QA, but they should be gre
 - [ ] Deployed browser QA credentials exist for an approved non-sensitive test workspace with owner/admin access.
 - [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store, either as one full run or as all four focused route chunks below.
 - [ ] Deployed accessibility smoke completed with the same deployed QA environment, and the transcript is recorded in `browserQa.checks.accessibility-coverage`.
-- [ ] Cross-browser deployed responsive and accessibility smoke completed where runner support exists for Chromium desktop, Chromium mobile, Firefox, and WebKit.
+- [ ] Cross-browser deployed responsive and accessibility smoke completed where runner support exists for Chromium desktop, Chromium mobile, Firefox, and WebKit, with evidence recorded in `browserQa.checks.cross-browser-coverage`.
+- [ ] Real-device or cloud-device iOS Safari evidence completed and recorded in `browserQa.checks.ios-safari-device-coverage`.
 
 Example deployed responsive smoke command:
 
@@ -70,6 +71,7 @@ npm run test:e2e -- tests/accessibility.spec.ts
 ```
 
 Record the accessibility command output in `browserQa.checks.accessibility-coverage`, including the light and dark theme coverage summary.
+Record the cross-browser command output in `browserQa.checks.cross-browser-coverage`, and keep separate real-device or cloud-device iOS Safari evidence in `browserQa.checks.ios-safari-device-coverage`.
 
 ## QA Run
 

@@ -79,6 +79,21 @@ const evidenceHintsByCheck = new Map([
     'npm run test:e2e -- tests/accessibility.spec.ts',
     'light and dark',
   ]],
+  ['browserQa.cross-browser-coverage', [
+    'E2E_DEPLOYED_QA=true',
+    'npm run test:e2e:deployed:responsive:cross-browser',
+    'npm run test:e2e:deployed:accessibility:cross-browser',
+    'deployed-chromium-desktop',
+    'deployed-chromium-mobile',
+    'deployed-firefox-desktop',
+    'deployed-webkit-desktop',
+  ]],
+  ['browserQa.ios-safari-device-coverage', [
+    'real iOS Safari',
+    'manual or cloud-device evidence',
+    'https://app.charitypilot.ie',
+    'mobile light and dark',
+  ]],
   ['securityReview.penetration-test-complete', [
     'external penetration test',
     'testing provider',

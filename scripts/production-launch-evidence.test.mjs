@@ -529,6 +529,23 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'browserQa' && checkId === 'cross-browser-coverage') {
+    entry.type = 'command-output';
+    entry.description = [
+      'E2E_DEPLOYED_QA=true',
+      'npm run test:e2e:deployed:responsive:cross-browser completed against deployed HTTPS production URL.',
+      'npm run test:e2e:deployed:accessibility:cross-browser completed against deployed HTTPS production URL.',
+      'Projects covered: deployed-chromium-desktop, deployed-chromium-mobile, deployed-firefox-desktop, deployed-webkit-desktop.',
+    ].join(' ');
+  }
+
+  if (areaId === 'browserQa' && checkId === 'ios-safari-device-coverage') {
+    entry.description = [
+      'real iOS Safari manual or cloud-device evidence recorded for https://app.charitypilot.ie.',
+      'The run covered mobile light and dark rendering, navigation, login, dashboard, documents, and sign-out.',
+    ].join(' ');
+  }
+
   if (areaId === 'browserQa' && checkId === 'critical-flows-covered') {
     entry.type = 'command-output';
     entry.description = [
@@ -685,7 +702,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /81 check\(s\)/);
+    assert.match(result.stdout, /83 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1029,6 +1046,14 @@ test('production launch evidence validator requires deployed browser QA command 
     browserQaArea?.checks.some((check) => check.id === 'accessibility-coverage'),
     'browserQa must include a dedicated deployed accessibility evidence check',
   );
+  assert.ok(
+    browserQaArea?.checks.some((check) => check.id === 'cross-browser-coverage'),
+    'browserQa must include deployed cross-browser evidence',
+  );
+  assert.ok(
+    browserQaArea?.checks.some((check) => check.id === 'ios-safari-device-coverage'),
+    'browserQa must include real-device or cloud-device iOS Safari evidence',
+  );
 
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
   const genericBrowserEvidence = {
@@ -1041,6 +1066,8 @@ test('production launch evidence validator requires deployed browser QA command 
   evidence.areas.browserQa.checks['desktop-coverage'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['mobile-coverage'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['accessibility-coverage'].evidence = [genericBrowserEvidence];
+  evidence.areas.browserQa.checks['cross-browser-coverage'].evidence = [genericBrowserEvidence];
+  evidence.areas.browserQa.checks['ios-safari-device-coverage'].evidence = [genericBrowserEvidence];
   evidence.areas.browserQa.checks['critical-flows-covered'].evidence = [genericBrowserEvidence];
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
@@ -1062,6 +1089,11 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include light and dark/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include test:e2e:deployed:responsive:cross-browser/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include deployed-firefox-desktop/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include deployed-webkit-desktop/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.ios-safari-device-coverage\.evidence must include real iOS Safari/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.ios-safari-device-coverage\.evidence must include manual or cloud-device evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include docs\/production-browser-qa\.md/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
@@ -1537,6 +1569,16 @@ test('production launch evidence template covers every required area and final s
     );
     assert.ok(
       template.areas.browserQa.checks['accessibility-coverage'].requiredEvidenceHints.includes('light and dark'),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['cross-browser-coverage'].requiredEvidenceHints.includes(
+        'deployed-firefox-desktop',
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['ios-safari-device-coverage'].requiredEvidenceHints.includes(
+        'real iOS Safari',
+      ),
     );
     assert.ok(
       template.areas.securityReview.checks['penetration-test-complete'].requiredEvidenceHints.includes(

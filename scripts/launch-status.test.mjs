@@ -15,8 +15,10 @@ function assertExternalLaunchEvidenceGates(state) {
   );
   const gates = state.externalEvidenceGates.join('\n');
   assert.match(gates, /production-launch-evidence\.json/);
-  assert.match(gates, /81 machine-readable checks/);
+  assert.match(gates, /83 machine-readable checks/);
   assert.match(gates, /browserQa\.checks\.accessibility-coverage/);
+  assert.match(gates, /browserQa\.checks\.cross-browser-coverage/);
+  assert.match(gates, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(gates, /E2E_DEPLOYED_QA=true/);
   assert.match(gates, /all four focused route chunks/);
   assert.match(gates, /npm run test:e2e:responsive/);

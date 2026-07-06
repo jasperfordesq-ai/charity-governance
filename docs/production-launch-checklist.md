@@ -229,6 +229,8 @@ Evidence:
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e:responsive` command output with `E2E_DEPLOYED_QA=true`, canonical web/API URLs, and secret-store owner credential references, or all four focused responsive route chunk transcripts from the same deployed QA environment.
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e -- tests/accessibility.spec.ts` command output with the same deployed QA environment.
 - [ ] Machine-readable launch evidence records that command output in the dedicated `browserQa.checks.accessibility-coverage` check.
+- [ ] Machine-readable launch evidence includes deployed cross-browser responsive/accessibility transcripts in `browserQa.checks.cross-browser-coverage`.
+- [ ] Machine-readable launch evidence includes real-device or cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
 - [ ] Desktop browser coverage is recorded with deployed responsive-smoke evidence for both the public/auth and dashboard desktop light/dark route matrices.
 - [ ] Mobile browser coverage is recorded with deployed responsive-smoke evidence for both the public/auth and dashboard mobile light/dark route matrices.
 - [ ] Auth, dashboard, billing, document upload, signed download, logout, and error states are covered in `docs/production-browser-qa.md` and the machine-readable launch evidence.

@@ -139,6 +139,8 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['desktop-coverage', 'desktop browser coverage recorded'],
       ['mobile-coverage', 'mobile browser coverage recorded'],
       ['accessibility-coverage', 'deployed accessibility coverage recorded'],
+      ['cross-browser-coverage', 'deployed cross-browser automation coverage recorded'],
+      ['ios-safari-device-coverage', 'real iOS Safari device coverage recorded'],
       ['critical-flows-covered', 'critical production flows covered'],
     ],
   },
@@ -1087,6 +1089,43 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'accessibility.spec.ts',
       'light and dark',
       'https://app.charitypilot.ie',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'browserQa' && checkId === 'cross-browser-coverage') {
+    if (!hasEvidenceType(actualCheck, 'command-output')) {
+      issues.push(`${checkPath}.evidence must include command-output evidence`);
+    }
+
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'E2E_DEPLOYED_QA=true',
+      'test:e2e:deployed:responsive:cross-browser',
+      'test:e2e:deployed:accessibility:cross-browser',
+      'deployed-chromium-desktop',
+      'deployed-chromium-mobile',
+      'deployed-firefox-desktop',
+      'deployed-webkit-desktop',
+    ];
+    for (const marker of requiredMarkers) {
+      if (!text.includes(marker)) {
+        issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+  }
+
+  if (areaId === 'browserQa' && checkId === 'ios-safari-device-coverage') {
+    const text = evidenceText(actualCheck.evidence);
+    const requiredMarkers = [
+      'real iOS Safari',
+      'manual or cloud-device evidence',
+      'https://app.charitypilot.ie',
+      'mobile light and dark',
     ];
     for (const marker of requiredMarkers) {
       if (!text.includes(marker)) {

@@ -145,7 +145,7 @@ const fixedInThisAuditBranch = [
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
-  'Launch status and production readiness TODO now name all 81 machine-readable launch evidence checks and the browserQa.checks.accessibility-coverage evidence slot.',
+  'Launch status and production readiness TODO now name all 83 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.',
   'Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.',

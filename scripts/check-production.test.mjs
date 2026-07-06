@@ -1594,8 +1594,10 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
   assert.match(productionTodo, /deployed production QA still remains open/i);
-  assert.match(productionTodo, /81 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /83 machine-readable launch evidence checks/);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
+  assert.match(productionTodo, /browserQa\.checks\.cross-browser-coverage/);
+  assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
   assert.doesNotMatch(productionTodo, /--no-build --no-e2e/);
   assert.doesNotMatch(productionTodo, /full Docker stack smoke all pass/i);
@@ -2110,12 +2112,14 @@ test('production runbook documents deployed browser QA evidence commands', () =>
   assert.match(runbook, /production-launch-evidence\.json/);
 });
 
-test('production browser QA checklist points accessibility evidence at the dedicated launch slot', () => {
+test('production browser QA checklist points browser evidence at the dedicated launch slots', () => {
   const browserQa = readRepoFile('docs/production-browser-qa.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
 
   assert.match(browserQa, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
   assert.match(browserQa, /browserQa\.checks\.accessibility-coverage/);
+  assert.match(browserQa, /browserQa\.checks\.cross-browser-coverage/);
+  assert.match(browserQa, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(browserQa, /light and dark/);
   assert.match(browserQa, /all four focused route chunks/);
   assert.match(browserQa, /test:e2e:responsive:public:desktop/);
@@ -2123,6 +2127,8 @@ test('production browser QA checklist points accessibility evidence at the dedic
   assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
   assert.match(launchChecklist, /all four focused responsive route chunk transcripts/);
+  assert.match(launchChecklist, /browserQa\.checks\.cross-browser-coverage/);
+  assert.match(launchChecklist, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(launchChecklist, /public\/auth and dashboard desktop light\/dark route matrices/);
   assert.match(launchChecklist, /public\/auth and dashboard mobile light\/dark route matrices/);
 });
@@ -2137,8 +2143,10 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
-  assert.match(launchGuide, /81 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /83 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
+  assert.match(launchGuide, /browserQa\.checks\.cross-browser-coverage/);
+  assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);
   assert.match(launchGuide, /five named approvals/i);
   assert.match(launchGuide, /engineering, operations, security, legal\/compliance, and business/);
@@ -2166,7 +2174,7 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
   assert.match(backendAudit, /23 production values still require real data/);
-  assert.match(backendAudit, /81 machine-readable launch evidence checks/);
+  assert.match(backendAudit, /83 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
