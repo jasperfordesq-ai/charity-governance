@@ -1,9 +1,14 @@
 import type { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
 import { serializeErrorForLog } from './logger.js';
 
-export function startCronJobs(deadlineService: DeadlineRemindersService): void {
+type CronLogger = {
+  info(message: string): void;
+  error(message: string, error?: unknown): void;
+};
+
+export function startCronJobs(deadlineService: DeadlineRemindersService, logger: CronLogger = console): void {
   if (process.env.NODE_ENV === 'production' && process.env.ENABLE_IN_PROCESS_JOBS !== 'true') {
-    console.log('[CRON] In-process jobs disabled. Run deadline reminders through the dedicated job entrypoint.');
+    logger.info('[CRON] In-process jobs disabled. Run deadline reminders through the dedicated job entrypoint.');
     return;
   }
 
@@ -12,8 +17,8 @@ export function startCronJobs(deadlineService: DeadlineRemindersService): void {
     try {
       await deadlineService.sendDueReminders();
     } catch (err) {
-      console.error('[CRON] Deadline reminder failed:', serializeErrorForLog(err));
+      logger.error('[CRON] Deadline reminder failed:', serializeErrorForLog(err));
     }
   }, INTERVAL_MS);
-  console.log('[CRON] Deadline reminder scheduler started (interval: 24h)');
+  logger.info('[CRON] Deadline reminder scheduler started (interval: 24h)');
 }

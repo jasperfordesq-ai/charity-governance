@@ -5,6 +5,18 @@ import { hasSubscriptionAccess, pastDueGraceCutoff } from '../utils/subscription
 const REMINDER_RESERVATION_ERROR = 'Reserved before delivery';
 const REMINDER_RESERVATION_STALE_MS = 15 * 60 * 1000;
 
+type ReminderLogger = {
+  info(message: string): void;
+};
+
+const silentReminderLogger: ReminderLogger = {
+  info: () => undefined,
+};
+
+function defaultReminderLogger(): ReminderLogger {
+  return process.env.NODE_ENV === 'test' ? silentReminderLogger : console;
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'P2002');
 }
@@ -22,6 +34,7 @@ export class DeadlineRemindersService {
   constructor(
     private prisma: PrismaClient,
     emailService?: EmailService,
+    private logger: ReminderLogger = defaultReminderLogger(),
   ) {
     this.emailService = emailService ?? new EmailService();
   }
@@ -236,7 +249,7 @@ export class DeadlineRemindersService {
       }
     }
 
-    console.log(
+    this.logger.info(
       `[DeadlineReminders] Run complete - ${sent} reminder(s) sent, ${failed} failed, ${skipped} deadline(s) skipped`,
     );
   }

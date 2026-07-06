@@ -497,6 +497,40 @@ test('deadline reminder lookup is scoped to entitled subscriptions and verified 
   assert.deepEqual(users.where, { role: 'OWNER', emailVerified: true });
 });
 
+test('deadline reminder default logger is silent in test environment', async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalInfo = console.info;
+  let infoCalls = 0;
+
+  process.env.NODE_ENV = 'test';
+  console.info = ((..._args: unknown[]) => {
+    infoCalls += 1;
+  }) as typeof console.info;
+
+  try {
+    const prisma = {
+      deadline: {
+        findMany: async () => [],
+      },
+    };
+
+    const service = new DeadlineRemindersService(prisma as never, {
+      sendDeadlineReminder: async () => true,
+    } as never);
+
+    await service.sendDueReminders();
+
+    assert.equal(infoCalls, 0);
+  } finally {
+    console.info = originalInfo;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  }
+});
+
 test('deadline reminders skip ineligible tenants and unverified owner emails returned by the database', async () => {
   const emailCalls: unknown[] = [];
   const prisma = {

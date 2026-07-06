@@ -69,6 +69,21 @@ test('production job entrypoints use the scheduler logger contract instead of di
   }
 });
 
+test('production reminder runtime avoids direct console.log calls', () => {
+  const runtimeFiles = [
+    'jobs/send-deadline-reminders.ts',
+    'jobs/cleanup-document-storage.ts',
+    'jobs/production-scheduler.ts',
+    'services/deadline-reminders.service.ts',
+    'utils/cron.ts',
+  ];
+
+  for (const file of runtimeFiles) {
+    const source = readFileSync(join(API_SRC, file), 'utf8');
+    assert.doesNotMatch(source, /console\.log\(/, `${file} should use a logger contract or operator CLI logging`);
+  }
+});
+
 test('runProductionSchedulerOnce runs reminders and document cleanup without overlapping API startup', async () => {
   const events: string[] = [];
   const deleted: Array<{ organisationId: string; storagePath: string }> = [];
