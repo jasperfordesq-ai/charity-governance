@@ -65,7 +65,7 @@ const forbiddenWebRuntimePackages = [
 ];
 
 function readRepoFile(path) {
-  return readFileSync(join(repoRoot, path), 'utf8');
+  return readFileSync(join(repoRoot, path), 'utf8').replace(/\r\n/g, '\n');
 }
 
 function escapeRegExp(value) {
@@ -2264,8 +2264,8 @@ test('plain English launch guide names every final approval role', () => {
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-06/);
-  assert.match(launchGuide, /23 production values still require real data/);
-  assert.match(launchGuide, /local responsive browser QA completed as four focused route chunks/);
+  assert.match(launchGuide, /23 production values needing real data/);
+  assert.match(launchGuide, /Local responsive browser QA completed as four focused route chunks/);
   assert.match(launchGuide, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);

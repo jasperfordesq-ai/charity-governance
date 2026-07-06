@@ -506,16 +506,17 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /group missing production values by provider\/source/);
-  assert.match(auditLedger, /approvedForLaunch: false/);
-  assert.match(auditLedger, /finalSignoff: pending/);
-  assert.match(auditLedger, /Final approval roles approved: 0 \/ 5/);
-  assert.match(auditLedger, /Next incomplete checks/);
-  assert.match(auditLedger, /Grouped by source/);
-  assert.match(auditLedger, /Stripe billing/);
-  assert.match(auditLedger, /Release image promotion/);
-  assert.match(auditLedger, /Live Stripe secret key/);
-  assert.match(auditLedger, /Digest-pinned web image ref/);
-  assert.match(auditLedger, /Reverse-proxy IP\/CIDR/);
+  assert.match(auditLedger, /Local-state note/);
+  assert.match(auditLedger, /Local Production Environment State/);
+  assert.match(auditLedger, /non-committed/);
+  assert.ok(
+    /approvedForLaunch: false/.test(auditLedger) || /production-launch-evidence\.json has not been created yet/.test(auditLedger),
+    'audit ledger should report either local launch-evidence progress or missing local launch evidence',
+  );
+  assert.ok(
+    /Grouped by source/.test(auditLedger) || /Phase: `NO_ENV`/.test(auditLedger),
+    'audit ledger should report either local placeholder groups or the fresh-clone NO_ENV state',
+  );
   assert.match(auditLedger, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditLedger, /legal\/compliance final approval/);
 });

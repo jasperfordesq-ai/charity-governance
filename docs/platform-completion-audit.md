@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `5cb28cb`
+Working-tree base commit when generated: `e370aa9`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -16,7 +16,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- |
 | Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| Launch operations | You have not created a production environment file yet. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-06; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
 | Verification surface | 16 web unit test files, 44 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
@@ -211,6 +211,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence chronology now lets operators prepare the package before collecting evidence while requiring all checklist evidence before final signoff approval.
 - Production launch evidence deploy-smoke hints now name the real smoke-production-deploy command that the validator accepts.
 - Platform audit generation now falls back to reading .git metadata directly when shelling out to git is unavailable.
+- The plain-English launch guide and platform audit now describe launch status as local non-committed state, so fresh clones and partially configured production workstations do not contradict each other.
 - Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
 - Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
 - Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
@@ -316,80 +317,18 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
 - Solicitor/governance/privacy review and external penetration test are required before real charity data.
 
+Local-state note: This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.
+
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 0 / 85.
-- approvedForLaunch: false
-- finalSignoff: pending
-- Final approval roles approved: 0 / 5
-- Next incomplete checks:
-  - releaseGate.npm-ci (pending)
-  - releaseGate.db-generate (pending)
-  - releaseGate.prisma-validate (pending)
-  - releaseGate.lint (pending)
-  - releaseGate.test (pending)
-- Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
+- .charitypilot-launch-evidence/production-launch-evidence.json has not been created yet.
+- Create it with:  npm run check:production:evidence:init
 
-### Local Production Environment Placeholders
+### Local Production Environment State
 
-The local non-committed production env still needs 23 real value(s):
-
-- `TRUSTED_PROXY_ADDRESSES`
-- `DATABASE_URL`
-- `FRONTEND_URL`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
-- `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`
-- `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`
-- `STRIPE_COMPLETE_MONTHLY_PRICE_ID`
-- `STRIPE_COMPLETE_YEARLY_PRICE_ID`
-- `RESEND_API_KEY`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `ERROR_ALERT_WEBHOOK_URL`
-- `NEXT_PUBLIC_API_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_API_IMAGE`
-- `CHARITYPILOT_WEB_IMAGE`
-- `CHARITYPILOT_MIGRATION_IMAGE`
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
-
-Grouped by source:
-
-- Hosting, DNS, TLS, and proxy:
-  - `TRUSTED_PROXY_ADDRESSES`: Reverse-proxy IP/CIDR in front of the API (Step 4)
-  - `FRONTEND_URL`: Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)
-  - `NEXT_PUBLIC_API_URL`: Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)
-  - `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`: Docker Compose web runtime API origin; must match NEXT_PUBLIC_API_URL (Step 4/6)
-- PostgreSQL:
-  - `DATABASE_URL`: Managed production PostgreSQL URL with sslmode=require (Step 3)
-- Stripe billing:
-  - `STRIPE_SECRET_KEY`: Stripe live secret key from the Stripe secret store (Step 2)
-  - `STRIPE_WEBHOOK_SECRET`: Stripe live webhook signing secret from the Stripe dashboard (Step 2)
-  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Stripe live publishable key from the Stripe dashboard (Step 2)
-  - `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`: Stripe live Essentials monthly recurring price ID (Step 2)
-  - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Stripe live Essentials yearly recurring price ID (Step 2)
-  - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Stripe live Complete monthly recurring price ID (Step 2)
-  - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Stripe live Complete yearly recurring price ID (Step 2)
-- Resend email:
-  - `RESEND_API_KEY`: Resend production API key from the secret store (Step 2)
-- Supabase storage:
-  - `SUPABASE_URL`: Same Supabase project URL (Step 2)
-  - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
-  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://<ref>.supabase.co (Step 2)
-  - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`: Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)
-- Observability:
-  - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)
-- Release image promotion:
-  - `CHARITYPILOT_API_IMAGE`: Digest-pinned API image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_WEB_IMAGE`: Digest-pinned web image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_MIGRATION_IMAGE`: Digest-pinned migration image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`: Web image build API origin copied from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`: Web image build Supabase origin copied from release-image-digests.env (Step 6)
+- Phase: `NO_ENV`
+- You have not created a production environment file yet.
+- This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.
 
 ## Irish Compliance Source Posture
 

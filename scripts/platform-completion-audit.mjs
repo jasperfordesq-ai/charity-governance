@@ -240,6 +240,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence chronology now lets operators prepare the package before collecting evidence while requiring all checklist evidence before final signoff approval.',
   'Production launch evidence deploy-smoke hints now name the real smoke-production-deploy command that the validator accepts.',
   'Platform audit generation now falls back to reading .git metadata directly when shelling out to git is unavailable.',
+  'The plain-English launch guide and platform audit now describe launch status as local non-committed state, so fresh clones and partially configured production workstations do not contradict each other.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
@@ -508,6 +509,18 @@ function readLaunchSummary() {
   };
 }
 
+function localLaunchStateNote(launch) {
+  if (launch.phase === 'NO_ENV') {
+    return 'This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.';
+  }
+
+  if (launch.phase === 'ENV_INCOMPLETE') {
+    return 'This generated section reflects the local non-committed `.env.production`; the listed placeholders are not committed and may differ on another operator workstation or secret-store checkout.';
+  }
+
+  return 'This generated section reflects the local non-committed `.env.production`; launch still depends on external evidence and final signoffs, even when local placeholders are filled.';
+}
+
 function readTestSurfaceSummary() {
   const e2eTests = walk(join(repoRoot, 'e2e', 'tests'), (file) => file.endsWith('.spec.ts')).length;
   const apiTests = walk(join(repoRoot, 'apps', 'api', 'src', 'tests'), (file) => file.endsWith('.test.ts')).length;
@@ -603,6 +616,7 @@ function render() {
 
   md += `\n## Launch Evidence Blockers\n\n`;
   md += `${markdownList(launchBlockers)}\n\n`;
+  md += `Local-state note: ${localLaunchStateNote(launch)}\n\n`;
   md += `### Launch Evidence Ledger\n\n`;
   md += `- ${launch.evidenceLedger.headline}\n`;
   if (launch.evidenceLedger.exists && typeof launch.evidenceLedger.approvedForLaunch === 'boolean') {
@@ -615,6 +629,11 @@ function render() {
     for (const check of launch.evidenceLedger.nextIncompleteChecks) md += `  - ${check}\n`;
   }
   md += `- ${launch.evidenceLedger.nextAction}\n\n`;
+  md += `### Local Production Environment State\n\n`;
+  md += `- Phase: \`${launch.phase}\`\n`;
+  md += `- ${launch.headline}\n`;
+  md += `- ${localLaunchStateNote(launch)}\n\n`;
+
   if (launch.remainingKeys.length > 0) {
     md += `### Local Production Environment Placeholders\n\n`;
     md += `The local non-committed production env still needs ${launch.remainingKeys.length} real value(s):\n\n`;
