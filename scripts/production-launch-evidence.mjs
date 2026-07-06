@@ -764,10 +764,23 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const hostingMarkersByCheck = {
       'web-origin': ['https://app.charitypilot.ie'],
       'api-origin': ['https://api.charitypilot.ie'],
-      'dns-owner': ['DNS owner', 'approved owner'],
-      'tls-certificates': ['TLS certificate', 'valid', 'https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
-      'cors-approved-origins': ['CORS', 'https://app.charitypilot.ie', 'only approved'],
-      'security-headers': ['X-Content-Type-Options', 'X-Frame-Options', 'Content-Security-Policy', 'Strict-Transport-Security'],
+      'dns-owner': ['DNS owner', 'approved owner', 'DNS record', 'app.charitypilot.ie', 'api.charitypilot.ie'],
+      'tls-certificates': [
+        'TLS certificate',
+        'valid',
+        'https://app.charitypilot.ie',
+        'https://api.charitypilot.ie',
+        'certificate issuer',
+        'expiry date',
+      ],
+      'cors-approved-origins': ['CORS', 'https://app.charitypilot.ie', 'only approved', 'rejected unapproved origin'],
+      'security-headers': [
+        'X-Content-Type-Options',
+        'X-Frame-Options',
+        'Content-Security-Policy',
+        'Strict-Transport-Security',
+        'HSTS max-age',
+      ],
     };
 
     for (const marker of hostingMarkersByCheck[checkId] ?? []) {

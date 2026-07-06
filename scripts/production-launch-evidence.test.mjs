@@ -191,21 +191,23 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'hostingDnsTls' && checkId === 'dns-owner') {
-    entry.description = 'DNS owner is the approved owner for charitypilot.ie production records.';
+    entry.description =
+      'DNS owner is the approved owner for charitypilot.ie production records. DNS record evidence covers app.charitypilot.ie and api.charitypilot.ie.';
   }
 
   if (areaId === 'hostingDnsTls' && checkId === 'tls-certificates') {
     entry.description =
-      'TLS certificate evidence confirms valid certificates for https://app.charitypilot.ie and https://api.charitypilot.ie.';
+      'TLS certificate evidence confirms valid certificates for https://app.charitypilot.ie and https://api.charitypilot.ie with certificate issuer and expiry date recorded.';
   }
 
   if (areaId === 'hostingDnsTls' && checkId === 'cors-approved-origins') {
-    entry.description = 'CORS allows https://app.charitypilot.ie and rejects all non-approved browser origins; only approved origins pass.';
+    entry.description = 'CORS allows https://app.charitypilot.ie and rejected unapproved origin probes; only approved origins pass.';
   }
 
   if (areaId === 'hostingDnsTls' && checkId === 'security-headers') {
     entry.description = [
       'API response headers include X-Content-Type-Options, X-Frame-Options, Content-Security-Policy, and Strict-Transport-Security.',
+      'HSTS max-age is recorded in the hosting evidence.',
     ].join(' ');
   }
 
@@ -1029,9 +1031,16 @@ test('production launch evidence validator requires concrete hosting database an
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.web-origin\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.api-origin\.evidence must include https:\/\/api\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.dns-owner\.evidence must include approved owner/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.dns-owner\.evidence must include DNS record/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.dns-owner\.evidence must include app\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.dns-owner\.evidence must include api\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.tls-certificates\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.tls-certificates\.evidence must include https:\/\/api\.charitypilot\.ie/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.tls-certificates\.evidence must include certificate issuer/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.tls-certificates\.evidence must include expiry date/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.cors-approved-origins\.evidence must include rejected unapproved origin/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.security-headers\.evidence must include Strict-Transport-Security/);
+    assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.security-headers\.evidence must include HSTS max-age/);
     assert.match(result.stderr, /areas\.database\.checks\.postgres-provisioned\.evidence must include production PostgreSQL/);
     assert.match(result.stderr, /areas\.database\.checks\.database-url-secret-store\.evidence must include DATABASE_URL/);
     assert.match(result.stderr, /areas\.database\.checks\.backups-enabled\.evidence must include managed backups or PITR/);
@@ -1624,7 +1633,14 @@ test('production launch evidence template covers every required area and final s
     );
     assert.deepEqual(
       template.areas.hostingDnsTls.checks['tls-certificates'].requiredEvidenceHints,
-      ['TLS certificate', 'valid', 'https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
+      [
+        'TLS certificate',
+        'valid',
+        'https://app.charitypilot.ie',
+        'https://api.charitypilot.ie',
+        'certificate issuer',
+        'expiry date',
+      ],
     );
     assert.deepEqual(
       template.areas.releaseGate.checks['npm-ci'].requiredEvidenceHints,

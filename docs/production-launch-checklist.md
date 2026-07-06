@@ -95,10 +95,10 @@ Evidence:
 
 - [ ] Web app is deployed at `https://app.charitypilot.ie`.
 - [ ] API is deployed at `https://api.charitypilot.ie`.
-- [ ] DNS records are managed by the approved owner.
-- [ ] TLS certificates are valid for the web and API origins.
-- [ ] API CORS allows only the canonical `FRONTEND_URL` origin.
-- [ ] Security headers are present on API responses.
+- [ ] DNS records are managed by the approved owner, with `app.charitypilot.ie` and `api.charitypilot.ie` record evidence.
+- [ ] TLS certificates are valid for the web and API origins, with certificate issuer and expiry date recorded.
+- [ ] API CORS allows only the canonical `FRONTEND_URL` origin and rejects an unapproved origin probe.
+- [ ] Security headers are present on API responses, including HSTS max-age evidence.
 - [ ] `npm run check:production:hosting -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 - [ ] Machine-readable launch evidence names the canonical web/API origins, DNS owner, TLS validity, CORS restriction, and security headers.
 
@@ -109,7 +109,11 @@ Evidence:
 | Web URL | |
 | API URL | |
 | DNS owner | |
+| DNS record evidence | |
 | TLS evidence location | |
+| TLS issuer/expiry | |
+| CORS rejection evidence | |
+| Security header/HSTS evidence | |
 
 ## 4. Database And Migrations
 
