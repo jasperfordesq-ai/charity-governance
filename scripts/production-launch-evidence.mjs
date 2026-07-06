@@ -915,14 +915,29 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const text = evidenceText(actualCheck.evidence);
 
     const legalMarkersByCheck = {
-      'privacy-policy-approved': ['privacy policy', 'approved for production'],
-      'terms-approved': ['terms', 'approved for production'],
-      'retention-policy-approved': ['data retention policy', 'approved for production'],
-      'support-deletion-contact': ['support contact', 'data deletion contact', 'published'],
+      'privacy-policy-approved': [
+        'privacy policy',
+        'approved for production',
+        'policy version',
+        'effective date',
+        'privacy approver',
+      ],
+      'terms-approved': ['terms', 'approved for production', 'terms version', 'effective date'],
+      'retention-policy-approved': [
+        'data retention policy',
+        'approved for production',
+        'retention schedule',
+        'deletion workflow',
+      ],
+      'support-deletion-contact': ['support contact', 'data deletion contact', 'published', 'published URL', 'support mailbox'],
       'solicitor-governance-privacy-review': [
         'solicitor review',
         'governance review',
         'privacy review',
+        'named solicitor',
+        'named governance reviewer',
+        'named privacy reviewer',
+        'review date',
         'review-ready',
         'source-cited',
         'not a substitute for legal advice',

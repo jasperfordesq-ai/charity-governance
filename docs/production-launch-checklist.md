@@ -212,20 +212,23 @@ Evidence:
 
 ## 9. Legal And Compliance
 
-- [ ] Privacy policy is approved for production.
-- [ ] Terms or service agreement is approved for production.
-- [ ] Data retention policy is approved for production.
-- [ ] Support and data deletion contact path is published.
-- [ ] Solicitor, governance, and privacy review confirms the production wording remains review-ready, source-cited, and clear that CharityPilot is not a substitute for legal advice.
-- [ ] Machine-readable launch evidence includes the approved privacy policy, terms/service agreement, data-retention policy, support/data-deletion contact, and `legalAndCompliance.checks.solicitor-governance-privacy-review` evidence.
+- [ ] Privacy policy is approved for production with policy version, effective date, and privacy approver recorded outside git.
+- [ ] Terms or service agreement is approved for production with terms version and effective date recorded outside git.
+- [ ] Data retention policy is approved for production with retention schedule and deletion workflow evidence.
+- [ ] Support and data deletion contact path is published with published URL and support mailbox evidence.
+- [ ] Solicitor, governance, and privacy review confirms the production wording remains review-ready, source-cited, and clear that CharityPilot is not a substitute for legal advice, with named reviewers and review date recorded outside git.
+- [ ] Machine-readable launch evidence includes the approved privacy policy, terms/service agreement, data-retention policy, support/data-deletion contact, and `legalAndCompliance.checks.solicitor-governance-privacy-review` evidence with version/date/reviewer details.
 
 Evidence:
 
 | Field | Value |
 | --- | --- |
 | Policy location | |
+| Policy versions/effective dates | |
 | Approver | |
 | Approval date | |
+| Published support/data deletion URL | |
+| Named solicitor/governance/privacy reviewers | |
 
 ## 10. Browser QA
 

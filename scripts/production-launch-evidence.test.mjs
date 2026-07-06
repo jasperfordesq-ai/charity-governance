@@ -301,24 +301,34 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'legalAndCompliance' && checkId === 'privacy-policy-approved') {
-    entry.description = 'privacy policy approved for production by the accountable legal/compliance owner.';
+    entry.description = [
+      'privacy policy approved for production by the accountable legal/compliance owner.',
+      'policy version, effective date, and privacy approver are recorded outside git.',
+    ].join(' ');
   }
 
   if (areaId === 'legalAndCompliance' && checkId === 'terms-approved') {
-    entry.description = 'terms or service agreement approved for production by the accountable legal/compliance owner.';
+    entry.description = [
+      'terms or service agreement approved for production by the accountable legal/compliance owner.',
+      'terms version and effective date are recorded outside git.',
+    ].join(' ');
   }
 
   if (areaId === 'legalAndCompliance' && checkId === 'retention-policy-approved') {
-    entry.description = 'data retention policy approved for production by the accountable legal/compliance owner.';
+    entry.description = [
+      'data retention policy approved for production by the accountable legal/compliance owner.',
+      'retention schedule and deletion workflow evidence are recorded outside git.',
+    ].join(' ');
   }
 
   if (areaId === 'legalAndCompliance' && checkId === 'support-deletion-contact') {
-    entry.description = 'support contact and data deletion contact published for production users.';
+    entry.description = 'support contact and data deletion contact published for production users at the published URL with support mailbox evidence.';
   }
 
   if (areaId === 'legalAndCompliance' && checkId === 'solicitor-governance-privacy-review') {
     entry.description = [
       'solicitor review, governance review, and privacy review completed for production wording.',
+      'named solicitor, named governance reviewer, named privacy reviewer, and review date are recorded outside git.',
       'Review confirms CharityPilot remains review-ready, source-cited, and not a substitute for legal advice.',
     ].join(' ');
   }
@@ -1481,10 +1491,23 @@ test('production launch evidence validator requires concrete legal and policy ap
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.privacy-policy-approved\.evidence must include privacy policy/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.privacy-policy-approved\.evidence must include policy version/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.privacy-policy-approved\.evidence must include effective date/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.privacy-policy-approved\.evidence must include privacy approver/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.terms-approved\.evidence must include approved for production/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.terms-approved\.evidence must include terms version/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.terms-approved\.evidence must include effective date/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include data retention policy/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include retention schedule/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include deletion workflow/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include data deletion contact/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include published URL/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include support mailbox/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include solicitor review/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include named solicitor/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include named governance reviewer/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include named privacy reviewer/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include review date/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include not a substitute for legal advice/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
