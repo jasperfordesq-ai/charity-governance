@@ -104,5 +104,6 @@ test('operator-facing production env generator text is ASCII-safe', () => {
 
   assert.doesNotMatch(source, /[^\x00-\x7F]/);
   assert.match(source, /gitignored - never commit it/);
-  assert.match(source, /sk_live_\.\.\./);
+  assert.match(source, /Stripe live secret key from the Stripe secret store/);
+  assert.doesNotMatch(source, /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
 });

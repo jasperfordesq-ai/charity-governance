@@ -63,7 +63,8 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
     { label: 'Stripe billing', keys: ['STRIPE_SECRET_KEY'] },
   ]);
   assert.match(s.remainingKeyGroups[0].items[0].hint, /PostgreSQL URL/);
-  assert.match(s.remainingKeyGroups[1].items[0].hint, /Live Stripe secret key/);
+  assert.match(s.remainingKeyGroups[1].items[0].hint, /Stripe live secret key/);
+  assert.doesNotMatch(JSON.stringify(s.remainingKeyGroups), /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
   assert.equal(s.evidenceLedger.exists, true);
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));

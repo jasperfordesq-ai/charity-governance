@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `380ac2c`
+Working-tree base commit when generated: `f2637b7`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -361,15 +361,15 @@ Grouped by source:
 - PostgreSQL:
   - `DATABASE_URL`: Managed production PostgreSQL URL with sslmode=require (Step 3)
 - Stripe billing:
-  - `STRIPE_SECRET_KEY`: Live Stripe secret key sk_live_... (Step 2)
-  - `STRIPE_WEBHOOK_SECRET`: Live Stripe webhook signing secret whsec_... (Step 2)
-  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Live Stripe publishable key pk_live_... (Step 2)
-  - `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`: Live Stripe Essentials monthly price ID price_... (Step 2)
-  - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Live Stripe Essentials yearly price ID price_... (Step 2)
-  - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Live Stripe Complete monthly price ID price_... (Step 2)
-  - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Live Stripe Complete yearly price ID price_... (Step 2)
+  - `STRIPE_SECRET_KEY`: Stripe live secret key from the Stripe secret store (Step 2)
+  - `STRIPE_WEBHOOK_SECRET`: Stripe live webhook signing secret from the Stripe dashboard (Step 2)
+  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Stripe live publishable key from the Stripe dashboard (Step 2)
+  - `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`: Stripe live Essentials monthly recurring price ID (Step 2)
+  - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Stripe live Essentials yearly recurring price ID (Step 2)
+  - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Stripe live Complete monthly recurring price ID (Step 2)
+  - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Stripe live Complete yearly recurring price ID (Step 2)
 - Resend email:
-  - `RESEND_API_KEY`: Resend production API key re_... (Step 2)
+  - `RESEND_API_KEY`: Resend production API key from the secret store (Step 2)
 - Supabase storage:
   - `SUPABASE_URL`: Same Supabase project URL (Step 2)
   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
