@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `58cc94c`
+Working-tree base commit when generated: `0affa7e`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -170,6 +170,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.
 - Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.
 - Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.
+- Pricing metadata is ASCII-safe and pricing feature/comparison icons now use lucide-react directly without route-local wrappers.
 - The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.
 - The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.
 - The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.
@@ -275,7 +276,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 136 | yes | no obvious static risk; verify in browser |
 | P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 148 | yes | no obvious static risk; verify in browser |
-| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 260 | no | no obvious static risk; verify in browser |
+| P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 252 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 184 | yes | no obvious static risk; verify in browser |

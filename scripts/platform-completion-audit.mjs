@@ -199,6 +199,7 @@ const fixedInThisAuditBranch = [
   'Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.',
   'Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.',
   'Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.',
+  'Pricing metadata is ASCII-safe and pricing feature/comparison icons now use lucide-react directly without route-local wrappers.',
   'The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.',
   'The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.',
   'The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.',

@@ -4,7 +4,7 @@ import { Check, ChevronDown, X } from 'lucide-react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 
 export const metadata: Metadata = {
-  title: 'Pricing — CharityPilot',
+  title: 'Pricing - CharityPilot',
   description:
     'Simple, honest pricing for Irish charity governance compliance. Start with a free 14-day trial.',
 };
@@ -70,21 +70,13 @@ const comparisonRows = [
   { feature: 'Support', essentials: 'Email', complete: 'Priority email' },
 ];
 
-function CheckIcon() {
-  return (
-    <Check className="w-5 h-5 text-teal-primary" aria-hidden="true" />
-  );
-}
-
-function CrossIcon() {
-  return (
-    <X className="w-5 h-5 text-gray-400 dark:text-gray-400" aria-hidden="true" />
-  );
-}
-
 function renderCell(value: boolean | string) {
   if (typeof value === 'boolean') {
-    return value ? <CheckIcon /> : <CrossIcon />;
+    return value ? (
+      <Check className="w-5 h-5 text-teal-primary" aria-hidden="true" />
+    ) : (
+      <X className="w-5 h-5 text-gray-400 dark:text-gray-400" aria-hidden="true" />
+    );
   }
   return <span className="text-sm text-gray-700 dark:text-gray-300">{value}</span>;
 }
@@ -157,7 +149,7 @@ export default function PricingPage() {
                   <ul className="mt-8 space-y-3">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
-                        <CheckIcon />
+                        <Check className="w-5 h-5 text-teal-primary" aria-hidden="true" />
                         <span>{feature}</span>
                       </li>
                     ))}

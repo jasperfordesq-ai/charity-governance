@@ -1721,6 +1721,10 @@ test('marketing routes use lucide icons instead of route-local inline svg', () =
     }
     assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
   }
+
+  const pricing = app('(marketing)/pricing/page.tsx');
+  assert.doesNotMatch(pricing, /function\s+(?:CheckIcon|CrossIcon)\b/, 'pricing should use lucide icons directly instead of route-local wrappers');
+  assert.match(pricing, /title: 'Pricing - CharityPilot'/, 'pricing metadata should stay ASCII-safe');
 });
 
 test('blog article content avoids decorative dot bullets and oversized cards', () => {
