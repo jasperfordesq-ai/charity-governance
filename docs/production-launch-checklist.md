@@ -47,9 +47,10 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 - [ ] The release manifest's web image build origins match the promoted production public origins.
 - [ ] `npm run --silent check:production:evidence:template > production-launch-evidence.json` was used as the starting schema for the non-committed external launch evidence ledger.
-- [ ] `npm run check:production:evidence:status -- --evidence-file=production-launch-evidence.json` was used during evidence gathering to identify remaining incomplete checks.
 - [ ] `npm run check:production:evidence -- --evidence-file=production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
 - [ ] Machine-readable launch evidence includes command-output entries for `npm ci`, Prisma generation/validation, lint, tests, workspace builds, and production dependency audit.
+
+Progress helper: while filling the non-committed evidence file, run `npm run check:production:evidence:status -- --evidence-file=production-launch-evidence.json` to see area-by-area completion and the next incomplete checks. This is not a launch gate; the strict validator above remains the gate.
 
 Evidence:
 
