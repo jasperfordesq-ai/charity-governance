@@ -213,6 +213,7 @@ const fixedInThisAuditBranch = [
   'Production database checks now catch and redact thrown backup-helper failures while still removing temporary backup directories unless retention is explicitly requested.',
   'Production rollback checks now redact manifest validation failures and thrown deploy exceptions while still deleting temporary merged env files.',
   'Production Supabase checks now redact service-role env assignments as well as bearer/apikey values, signed URL tokens, and storage probe paths from launch transcripts.',
+  'Production deploy preflight now redacts env-file failure transcripts before they are copied into release-gate evidence.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
@@ -249,6 +250,7 @@ const localVerificationEvidence = [
   '`node --check scripts\\check-production-database.mjs`, focused database/backup tests, and `npm run test:production-check` passed locally after production database checker thrown-failure redaction hardening.',
   '`node --check scripts\\production-compose-rollback.mjs`, focused rollback/deploy/preflight tests, and `npm run test:production-check` passed locally after production rollback transcript-redaction hardening.',
   '`node --check scripts\\check-production-supabase.mjs`, focused Supabase/production-config tests, and `npm run test:production-check` passed locally after production Supabase transcript-redaction hardening.',
+  '`node --check scripts\\production-deploy-preflight.mjs`, focused deploy/preflight/rollback tests, and `npm run test:production-check` passed locally after production deploy preflight env-failure transcript hardening.',
   'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
 ];
 

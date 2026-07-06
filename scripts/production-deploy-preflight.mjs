@@ -241,7 +241,11 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
   try {
     fileEnv = parseEnvFile(envPath);
   } catch (error) {
-    return result(1, '', `Production deploy preflight failed: ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Production deploy preflight failed: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`,
+    );
   }
 
   const deploymentEnv = { ...processEnv, ...fileEnv };

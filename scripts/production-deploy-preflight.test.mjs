@@ -246,3 +246,15 @@ test('deploy preflight rejects TLS proxy hostname drift from canonical productio
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('deploy preflight redacts env file failure transcripts', () => {
+  const result = runPreflight([
+    '--production-env-file',
+    'missing-production.env?token=secret-token',
+  ]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Production deploy preflight failed:/);
+  assert.match(result.stderr, /token=\[redacted\]/);
+  assert.doesNotMatch(result.stderr, /secret-token/);
+});
