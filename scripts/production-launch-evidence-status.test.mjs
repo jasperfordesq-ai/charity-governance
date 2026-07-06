@@ -120,6 +120,37 @@ test('production launch evidence status renders non-secret JSON for automation',
   }
 });
 
+test('production launch evidence status falls back to current hints for older ledgers', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = {
+    approvedForLaunch: false,
+    finalSignoff: { status: 'pending', approvals: {} },
+    areas: {
+      releaseGate: {
+        status: 'pending',
+        checks: {
+          'npm-ci': {
+            status: 'pending',
+            evidence: [],
+          },
+        },
+      },
+    },
+  };
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.nextIncompleteCheckDetails[0].path, 'releaseGate.npm-ci');
+    assert.deepEqual(payload.nextIncompleteCheckDetails[0].requiredEvidenceHints, ['npm ci', 'exit 0']);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence status complete flag requires area statuses', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
   const evidence = await launchEvidenceTemplate();

@@ -8,6 +8,7 @@ import {
   REQUIRED_LAUNCH_AREAS,
   redactLaunchEvidenceTranscript,
 } from './production-launch-evidence.mjs';
+import { evidenceHints as defaultEvidenceHints } from './generate-production-launch-evidence-template.mjs';
 
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
@@ -97,9 +98,10 @@ export function summarizeEvidence(evidence) {
       } else {
         const path = `${area.id}.${check.id}`;
         const status = statusOf(actualCheck?.status);
-        const hints = Array.isArray(actualCheck?.requiredEvidenceHints)
+        const storedHints = Array.isArray(actualCheck?.requiredEvidenceHints)
           ? actualCheck.requiredEvidenceHints.filter((hint) => typeof hint === 'string' && hint.trim().length > 0)
           : [];
+        const hints = storedHints.length > 0 ? storedHints : defaultEvidenceHints(area.id, check.id);
         incompleteChecks.push(`${path} (${status})`);
         incompleteCheckDetails.push({
           path,

@@ -125,8 +125,8 @@ test('reports launch evidence completion counts when the evidence ledger exists'
       hints: check.requiredEvidenceHints,
     })),
     [
-      { path: 'releaseGate.npm-ci', status: 'missing', hints: [] },
-      { path: 'releaseGate.db-generate', status: 'missing', hints: [] },
+      { path: 'releaseGate.npm-ci', status: 'missing', hints: ['npm ci', 'exit 0'] },
+      { path: 'releaseGate.db-generate', status: 'missing', hints: ['npm run db:generate -w @charitypilot/api', 'exit 0'] },
     ],
   );
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);

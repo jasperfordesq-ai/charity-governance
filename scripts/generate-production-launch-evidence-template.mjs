@@ -251,7 +251,7 @@ const evidenceHintsByCheck = new Map([
   ]],
 ]);
 
-function evidenceHints(areaId, checkId) {
+export function evidenceHints(areaId, checkId) {
   return evidenceHintsByCheck.get(`${areaId}.${checkId}`) ?? [];
 }
 

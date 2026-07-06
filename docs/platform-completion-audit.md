@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `46d2374`
+Working-tree base commit when generated: `380ac2c`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -133,6 +133,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.
 - Launch status now includes the next launch-evidence hint details in text and JSON output so operator dashboards can show the next proof to collect.
 - Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.
+- Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.
 - Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
