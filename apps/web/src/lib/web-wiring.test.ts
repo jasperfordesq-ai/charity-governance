@@ -2148,6 +2148,16 @@ test('marketing navigation CTAs avoid pill-badge styling', () => {
   assert.match(mobileNav, /rounded-md/);
 });
 
+test('shared workflow chrome avoids decorative round icon containers', () => {
+  const cookieConsent = component('cookie-consent.tsx');
+  const sessionTimeout = component('session-timeout.tsx');
+  const dashboardLayout = dash('layout.tsx');
+
+  assert.doesNotMatch(cookieConsent, /rounded-full bg-white\/10/);
+  assert.doesNotMatch(sessionTimeout, /rounded-full bg-amber-50/);
+  assert.doesNotMatch(dashboardLayout, /rounded-full bg-teal-primary\/10/);
+});
+
 test('marketing feature copy avoids legal-certainty compliance claims', () => {
   const features = app('(marketing)/features/page.tsx');
 

@@ -303,7 +303,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{user.name}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">{user.organisation?.name ?? ''}</p>
             </div>
-            <div className="w-8 h-8 rounded-full bg-teal-primary/10 text-teal-primary flex items-center justify-center text-sm font-semibold">
+            <div className="w-8 h-8 rounded-lg bg-teal-primary/10 text-teal-primary flex items-center justify-center text-sm font-semibold">
               {user.name?.charAt(0)?.toUpperCase() ?? 'U'}
             </div>
             <Button

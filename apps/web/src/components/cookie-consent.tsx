@@ -51,7 +51,7 @@ export function CookieConsent() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
           {/* Icon */}
-          <div className="shrink-0 hidden sm:flex w-10 h-10 rounded-full bg-white/10 items-center justify-center">
+          <div className="shrink-0 hidden sm:flex w-10 h-10 rounded-lg bg-white/10 items-center justify-center">
             <CircleAlert className="w-5 h-5 text-amber-accent" strokeWidth={1.5} aria-hidden="true" />
           </div>
 
