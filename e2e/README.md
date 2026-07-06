@@ -52,6 +52,20 @@ npm run report                 # open the last HTML report
 npx playwright test tests/auth.spec.ts   # a single spec
 ```
 
+The responsive route matrix can also be run in four focused chunks from the repo
+root. Use these when a local browser host or deployed QA runner cannot keep the
+full 50-test matrix stable in one process:
+
+```bash
+npm run test:e2e:responsive:public:desktop
+npm run test:e2e:responsive:public:mobile
+npm run test:e2e:responsive:dashboard:desktop
+npm run test:e2e:responsive:dashboard:mobile
+```
+
+Keep all four transcripts together if they are used as launch browser-QA
+evidence.
+
 ## How it stays deterministic
 
 - **Single worker, serial.** The suite shares one database, so `playwright.config.ts`
@@ -128,6 +142,9 @@ npm run test:e2e:responsive
 ```
 
 Use the same environment for `npm run test:e2e -- tests/accessibility.spec.ts`.
+If the deployed responsive matrix needs chunking, run the same four
+`test:e2e:responsive:*` commands with the deployed environment variables above
+and keep the four transcripts together as one browser-QA evidence set.
 Do not run the full local deterministic suite in deployed QA mode; specs that
 exercise registration, token injection, invites, document mutation, or DB
 assertions remain local-stack tests unless a dedicated production-safe variant is

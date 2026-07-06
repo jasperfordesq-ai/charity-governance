@@ -8,10 +8,10 @@ Do not use real charity records for launch QA. Use an approved non-sensitive tes
 
 These local checks do not replace deployed production QA, but they should be green before booking a production browser run:
 
-- [ ] `npm run test:e2e:responsive` completed against the local Docker stack.
+- [ ] `npm run test:e2e:responsive` completed against the local Docker stack, or all four focused route chunks below completed and their transcripts were kept together as one local responsive evidence set.
 - [ ] `npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
 - [ ] Deployed browser QA credentials exist for an approved non-sensitive test workspace with owner/admin access.
-- [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store.
+- [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store, either as one full run or as all four focused route chunks below.
 - [ ] Deployed accessibility smoke completed with the same deployed QA environment, and the transcript is recorded in `browserQa.checks.accessibility-coverage`.
 
 Example deployed responsive smoke command:
@@ -24,6 +24,20 @@ E2E_OWNER_EMAIL=qa-owner@example.com \
 E2E_OWNER_PASSWORD='from-secret-store' \
 npm run test:e2e:responsive
 ```
+
+If the full route matrix is too large for the local browser host or deployed QA
+runner, run the four focused chunks instead and keep all four command transcripts
+together under the same browser QA evidence reference:
+
+```bash
+npm run test:e2e:responsive:public:desktop
+npm run test:e2e:responsive:public:mobile
+npm run test:e2e:responsive:dashboard:desktop
+npm run test:e2e:responsive:dashboard:mobile
+```
+
+Use the same `E2E_DEPLOYED_QA=true`, URL, and secret-store credential environment
+shown above when those chunks are run against production.
 
 Example deployed accessibility smoke command:
 

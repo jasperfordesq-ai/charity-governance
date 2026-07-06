@@ -2112,10 +2112,19 @@ test('production runbook documents deployed browser QA evidence commands', () =>
 
 test('production browser QA checklist points accessibility evidence at the dedicated launch slot', () => {
   const browserQa = readRepoFile('docs/production-browser-qa.md');
+  const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
 
   assert.match(browserQa, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
   assert.match(browserQa, /browserQa\.checks\.accessibility-coverage/);
   assert.match(browserQa, /light and dark/);
+  assert.match(browserQa, /all four focused route chunks/);
+  assert.match(browserQa, /test:e2e:responsive:public:desktop/);
+  assert.match(browserQa, /test:e2e:responsive:public:mobile/);
+  assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
+  assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
+  assert.match(launchChecklist, /all four focused responsive route chunk transcripts/);
+  assert.match(launchChecklist, /public\/auth and dashboard desktop light\/dark route matrices/);
+  assert.match(launchChecklist, /public\/auth and dashboard mobile light\/dark route matrices/);
 });
 
 test('plain English launch guide names every final approval role', () => {

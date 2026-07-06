@@ -504,9 +504,27 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   const rootPackage = packageJson();
   const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');
   assert.equal(rootPackage.scripts['test:e2e:responsive'], 'cd e2e && npm test -- tests/responsive-smoke.spec.ts');
+  assert.equal(
+    rootPackage.scripts['test:e2e:responsive:public:desktop'],
+    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical public/auth route .* renders in desktop light and dark"',
+  );
+  assert.equal(
+    rootPackage.scripts['test:e2e:responsive:public:mobile'],
+    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical public/auth route .* renders in mobile light and dark"',
+  );
+  assert.equal(
+    rootPackage.scripts['test:e2e:responsive:dashboard:desktop'],
+    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route .* renders in desktop light and dark"',
+  );
+  assert.equal(
+    rootPackage.scripts['test:e2e:responsive:dashboard:mobile'],
+    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route .* renders in mobile light and dark"',
+  );
   assert.equal(existsSync(responsiveSpecPath), true, 'responsive-smoke.spec.ts must exist');
 
   const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
+  const e2eReadme = readRepoFile('e2e/README.md');
   assert.match(responsiveSpec, /mobile light and dark/);
   assert.match(responsiveSpec, /desktop light and dark/);
   assert.match(responsiveSpec, /horizontal page overflow/);
@@ -530,6 +548,14 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.doesNotMatch(responsiveSpec, /launch-critical dashboard routes render/);
   assert.doesNotMatch(responsiveSpec, /launch-critical dashboard route \$\{testLabel\}/);
   assert.doesNotMatch(responsiveSpec, /waitForLoadState\('networkidle'\)/);
+  assert.match(browserQa, /all four focused route chunks/);
+  assert.match(browserQa, /test:e2e:responsive:public:desktop/);
+  assert.match(browserQa, /test:e2e:responsive:public:mobile/);
+  assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
+  assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
+  assert.match(e2eReadme, /full 50-test matrix/);
+  assert.match(e2eReadme, /test:e2e:responsive:public:desktop/);
+  assert.match(e2eReadme, /test:e2e:responsive:dashboard:mobile/);
 });
 
 test('responsive route smoke covers every shipped page route', () => {
