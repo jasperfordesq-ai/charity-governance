@@ -12,16 +12,21 @@ import {
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
 function usage() {
-  return 'Usage: node scripts/production-launch-evidence-status.mjs --evidence-file <path>\n';
+  return 'Usage: node scripts/production-launch-evidence-status.mjs [--json] [--evidence-file <path>]\n';
 }
 
 function parseArgs(argv) {
   const options = {
     evidenceFile: defaultEvidenceFile,
+    json: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
     if (arg === '--evidence-file') {
       const value = argv[index + 1];
       if (!value) throw new Error('--evidence-file requires a value');
@@ -128,10 +133,7 @@ export function summarizeEvidence(evidence) {
 
 function renderStatus(evidence) {
   const summary = summarizeEvidence(evidence);
-  const evidenceStatusesComplete =
-    evidence?.approvedForLaunch === true &&
-    evidence?.finalSignoff?.status === 'approved' &&
-    summary.completedChecks === summary.totalChecks;
+  const evidenceStatusesComplete = isEvidenceStatusComplete(evidence, summary);
   const lines = [
     'CharityPilot production launch evidence status',
     '==============================================',
@@ -171,6 +173,42 @@ function renderStatus(evidence) {
   return lines.join('\n');
 }
 
+function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(evidence)) {
+  return (
+    evidence?.approvedForLaunch === true &&
+    evidence?.finalSignoff?.status === 'approved' &&
+    summary.completedChecks === summary.totalChecks &&
+    summary.approvedFinalSignoffRoles === summary.totalFinalSignoffRoles
+  );
+}
+
+function renderJsonStatus(evidence) {
+  const summary = summarizeEvidence(evidence);
+  return `${JSON.stringify(
+    {
+      approvedForLaunch: evidence?.approvedForLaunch === true,
+      completedChecks: summary.completedChecks,
+      evidenceStatusesComplete: isEvidenceStatusComplete(evidence, summary),
+      finalSignoffStatus: statusOf(evidence?.finalSignoff?.status),
+      approvedFinalSignoffRoles: summary.approvedFinalSignoffRoles,
+      totalChecks: summary.totalChecks,
+      totalFinalSignoffRoles: summary.totalFinalSignoffRoles,
+      areas: summary.areaSummaries,
+      pendingFinalSignoffRoles: summary.finalSignoffApprovals
+        .filter((approval) => !approval.approved)
+        .map((approval) => ({
+          id: approval.id,
+          label: approval.label,
+          status: approval.status,
+        })),
+      nextIncompleteChecks: summary.incompleteChecks.slice(0, 10),
+      incompleteCheckCount: summary.incompleteChecks.length,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 export function runProductionLaunchEvidenceStatusFromArgs(args = process.argv.slice(2)) {
   let options;
   try {
@@ -195,7 +233,7 @@ export function runProductionLaunchEvidenceStatusFromArgs(args = process.argv.sl
     );
   }
 
-  return result(0, renderStatus(evidence));
+  return result(0, options.json ? renderJsonStatus(evidence) : renderStatus(evidence));
 }
 
 function main() {

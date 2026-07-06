@@ -82,6 +82,38 @@ test('production launch evidence status counts completed checks and keeps final 
   }
 });
 
+test('production launch evidence status renders non-secret JSON for automation', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = await launchEvidenceTemplate();
+  evidence.areas.releaseGate.checks['npm-ci'].status = 'complete';
+  evidence.finalSignoff.approvals.engineering.status = 'approved';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.evidenceStatusesComplete, false);
+    assert.equal(payload.approvedForLaunch, false);
+    assert.equal(payload.completedChecks, 1);
+    assert.equal(payload.totalChecks, 85);
+    assert.equal(payload.approvedFinalSignoffRoles, 1);
+    assert.equal(payload.totalFinalSignoffRoles, 5);
+    assert.equal(payload.incompleteCheckCount, 84);
+    assert.deepEqual(
+      payload.pendingFinalSignoffRoles.map((role) => role.id),
+      ['operations', 'security', 'legalCompliance', 'business'],
+    );
+    assert.match(payload.nextIncompleteChecks[0], /^releaseGate\.db-generate/);
+    assert.equal(payload.areas.find((area) => area.id === 'releaseGate').completed, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence status fails closed when evidence file is missing', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
 

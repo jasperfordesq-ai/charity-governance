@@ -216,6 +216,7 @@ const fixedInThisAuditBranch = [
   'Production deploy preflight now redacts env-file failure transcripts before they are copied into release-gate evidence.',
   'Production environment preflight now redacts token-bearing env-file path failures before they are copied into release-gate evidence.',
   'Production launch evidence status and strict validation now redact token-bearing evidence-file path failures before operator handoff transcripts are stored.',
+  'Production launch evidence status now has a non-secret JSON output mode for CI dashboards and operator handoff automation while preserving the strict final validator.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
@@ -255,6 +256,7 @@ const localVerificationEvidence = [
   '`node --check scripts\\production-deploy-preflight.mjs`, focused deploy/preflight/rollback tests, and `npm run test:production-check` passed locally after production deploy preflight env-failure transcript hardening.',
   '`node --check scripts\\check-production.mjs`, focused production/preflight tests, and `npm run test:production-check` passed locally after production environment preflight path-redaction hardening.',
   '`node --check scripts\\production-launch-evidence.mjs scripts\\production-launch-evidence-status.mjs`, focused launch-evidence/status tests, and `npm run test:production-check` passed locally after production launch evidence path-redaction hardening.',
+  '`node --check scripts\\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after production launch evidence status JSON hardening.',
   'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
 ];
 

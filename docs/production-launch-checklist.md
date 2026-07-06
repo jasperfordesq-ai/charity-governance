@@ -50,7 +50,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` passed against the machine-readable external launch evidence ledger.
 - [ ] Machine-readable launch evidence includes command-output entries for `npm ci`, Prisma generation/validation, lint, tests, workspace builds, and production dependency audit.
 
-Progress helper: while filling the non-committed evidence file, run `npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` to see area-by-area completion and the next incomplete checks. This is not a launch gate; the strict validator above remains the gate.
+Progress helper: while filling the non-committed evidence file, run `npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` to see area-by-area completion and the next incomplete checks. Use `npm run check:production:evidence:status -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` for CI dashboards or operator handoff automation. These are not launch gates; the strict validator above remains the gate.
 
 Evidence:
 
