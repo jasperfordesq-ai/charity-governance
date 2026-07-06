@@ -74,6 +74,12 @@ const MISSING_VALUE_GROUPS = Object.freeze([
 ]);
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
 
+function parseArgs(argv) {
+  return {
+    json: argv.includes('--json'),
+  };
+}
+
 function placeholderKeys(envContent) {
   const keys = [];
   for (const line of envContent.split('\n')) {
@@ -203,7 +209,62 @@ export function assessLaunchState(state) {
   };
 }
 
-function main() {
+export function renderLaunchStatusJson(state) {
+  return `${JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      phase: state.phase,
+      headline: state.headline,
+      remainingKeys: state.remainingKeys,
+      remainingKeyGroups: state.remainingKeyGroups,
+      nextActions: state.nextActions,
+      evidenceLedger: state.evidenceLedger,
+      externalEvidenceGates: state.externalEvidenceGates,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function renderLaunchStatusText(state) {
+  const lines = [];
+
+  lines.push('CharityPilot launch status', '==========================', '', state.headline, '');
+  if (state.remainingKeys.length > 0) {
+    lines.push('Values still needed:');
+    for (const key of state.remainingKeys) lines.push(`  - ${key}`);
+    lines.push('', 'Values still needed by source:');
+    for (const group of state.remainingKeyGroups ?? []) {
+      lines.push(`  ${group.label}:`);
+      for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
+        lines.push(`    - ${item.key}: ${item.hint}`);
+      }
+    }
+    lines.push('');
+  }
+  lines.push('Next:');
+  for (const action of state.nextActions) lines.push(`  ${action}`);
+  lines.push('', 'Evidence ledger:', `  ${state.evidenceLedger.headline}`);
+  if (state.evidenceLedger.exists && typeof state.evidenceLedger.approvedForLaunch === 'boolean') {
+    lines.push(`  approvedForLaunch: ${state.evidenceLedger.approvedForLaunch ? 'true' : 'false'}`);
+    lines.push(`  finalSignoff: ${state.evidenceLedger.finalSignoffStatus}`);
+    lines.push(
+      `  Final approval roles approved: ${state.evidenceLedger.approvedFinalSignoffRoles} / ${state.evidenceLedger.totalFinalSignoffRoles}`,
+    );
+  }
+  if (state.evidenceLedger.nextIncompleteChecks?.length > 0) {
+    lines.push('  Next incomplete checks:');
+    for (const check of state.evidenceLedger.nextIncompleteChecks) lines.push(`    - ${check}`);
+  }
+  lines.push(`  ${state.evidenceLedger.nextAction}`, '', 'External launch evidence still required:');
+  for (const gate of state.externalEvidenceGates) lines.push(`  - ${gate}`);
+  lines.push('', 'Full map: docs/LAUNCH-GUIDE.md', '');
+
+  return lines.join('\n');
+}
+
+function main(argv = process.argv.slice(2)) {
+  const options = parseArgs(argv);
   const envPath = join(repoRoot, '.env.production');
   const evidencePath = join(repoRoot, DEFAULT_EVIDENCE_FILE);
   const envExists = existsSync(envPath);
@@ -214,46 +275,7 @@ function main() {
     evidenceFileExists: existsSync(evidencePath),
   });
 
-  console.log('CharityPilot launch status');
-  console.log('==========================');
-  console.log('');
-  console.log(state.headline);
-  console.log('');
-  if (state.remainingKeys.length > 0) {
-    console.log('Values still needed:');
-    for (const key of state.remainingKeys) console.log(`  - ${key}`);
-    console.log('');
-    console.log('Values still needed by source:');
-    for (const group of state.remainingKeyGroups ?? []) {
-      console.log(`  ${group.label}:`);
-      for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
-        console.log(`    - ${item.key}: ${item.hint}`);
-      }
-    }
-    console.log('');
-  }
-  console.log('Next:');
-  for (const action of state.nextActions) console.log(`  ${action}`);
-  console.log('');
-  console.log('Evidence ledger:');
-  console.log(`  ${state.evidenceLedger.headline}`);
-  if (state.evidenceLedger.exists && typeof state.evidenceLedger.approvedForLaunch === 'boolean') {
-    console.log(`  approvedForLaunch: ${state.evidenceLedger.approvedForLaunch ? 'true' : 'false'}`);
-    console.log(`  finalSignoff: ${state.evidenceLedger.finalSignoffStatus}`);
-    console.log(
-      `  Final approval roles approved: ${state.evidenceLedger.approvedFinalSignoffRoles} / ${state.evidenceLedger.totalFinalSignoffRoles}`,
-    );
-  }
-  if (state.evidenceLedger.nextIncompleteChecks?.length > 0) {
-    console.log('  Next incomplete checks:');
-    for (const check of state.evidenceLedger.nextIncompleteChecks) console.log(`    - ${check}`);
-  }
-  console.log(`  ${state.evidenceLedger.nextAction}`);
-  console.log('');
-  console.log('External launch evidence still required:');
-  for (const gate of state.externalEvidenceGates) console.log(`  - ${gate}`);
-  console.log('');
-  console.log('Full map: docs/LAUNCH-GUIDE.md');
+  process.stdout.write(options.json ? renderLaunchStatusJson(state) : renderLaunchStatusText(state));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

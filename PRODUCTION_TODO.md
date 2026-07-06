@@ -15,6 +15,8 @@ Status marks reflect completed repository hardening work. Open items require rea
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
 > operators can continue from the first real missing proof without changing the
 > strict final validator.
+> `npm run launch:status -- --json` returns the same non-secret state as JSON for
+> CI summaries, release handoffs, or operations dashboards.
 > Missing production values are grouped by provider/source in that output:
 > hosting/proxy, PostgreSQL, Stripe, Resend, Supabase, observability, and release image promotion.
 > This is the handoff order for filling the real secret store.

@@ -5,6 +5,9 @@
 
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
 > your local setup and tells you the single next action to take.
+> For CI, handoff notes, or an operations dashboard, run
+> `npm run launch:status -- --json` to get the same missing-value and evidence
+> ledger state as machine-readable JSON without exposing secret values.
 
 ---
 

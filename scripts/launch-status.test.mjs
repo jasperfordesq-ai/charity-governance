@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { assessLaunchState, groupRemainingKeys } from './launch-status.mjs';
+import { assessLaunchState, groupRemainingKeys, renderLaunchStatusJson } from './launch-status.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -115,6 +115,34 @@ test('reports launch evidence completion counts when the evidence ledger exists'
     'releaseGate.prisma-validate (missing)',
   ]);
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
+});
+
+test('renders machine-readable launch status for operator dashboards', () => {
+  const state = assessLaunchState({
+    envExists: true,
+    envContent: [
+      'NODE_ENV=production',
+      'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+      'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
+    ].join('\n'),
+    evidenceFileExists: true,
+    evidenceContent: JSON.stringify({ approvedForLaunch: false, finalSignoff: { status: 'pending' }, areas: {} }),
+  });
+
+  const payload = JSON.parse(renderLaunchStatusJson(state));
+
+  assert.match(payload.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(payload.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(payload.remainingKeys, ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.equal(payload.evidenceLedger.completedChecks, 0);
+  assert.equal(payload.evidenceLedger.totalChecks, 85);
+  assert.equal(payload.evidenceLedger.approvedForLaunch, false);
+  assert.equal(payload.evidenceLedger.approvedFinalSignoffRoles, 0);
+  assert.equal(payload.evidenceLedger.totalFinalSignoffRoles, 5);
+  assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
+  assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
+  assert.equal(payload.remainingKeyGroups[0].label, 'PostgreSQL');
+  assert.equal(payload.remainingKeyGroups[1].label, 'Stripe billing');
 });
 
 test('reports ENV_INCOMPLETE for CRLF production env files', () => {
