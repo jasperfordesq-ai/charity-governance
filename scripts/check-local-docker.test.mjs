@@ -240,8 +240,11 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
 
   assert.match(globalSetup, /const STACK_READINESS_TIMEOUT_MS = 180_000/);
   assert.match(globalSetup, /const WEB_READINESS_TIMEOUT_MS = 600_000/);
-  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = 60_000/);
-  assert.match(globalSetup, /const ROUTE_WARM_BUDGET_MS = 240_000/);
+  assert.match(globalSetup, /const ROUTE_WARM_TIMEOUT_MS = positiveIntEnv\('E2E_ROUTE_WARM_TIMEOUT_MS',\s*60_000\)/);
+  assert.match(globalSetup, /const ROUTE_WARM_BUDGET_MS = positiveIntEnv\('E2E_ROUTE_WARM_BUDGET_MS',\s*240_000\)/);
+  assert.match(globalSetup, /const SKIP_ROUTE_WARMING = process\.env\.E2E_SKIP_ROUTE_WARMING === 'true'/);
+  assert.match(globalSetup, /function positiveIntEnv\(name: string,\s*fallback: number\): number/);
+  assert.match(globalSetup, /Route warming skipped because E2E_SKIP_ROUTE_WARMING=true/);
   assert.match(globalSetup, /async function fetchWithTimeout\(url: string,\s*timeoutMs: number\): Promise<Response>/);
   assert.match(globalSetup, /const remainingMs = Math\.max\(1,\s*deadline - Date\.now\(\)\)/);
   assert.match(globalSetup, /await fetchWithTimeout\(url,\s*remainingMs\)/);

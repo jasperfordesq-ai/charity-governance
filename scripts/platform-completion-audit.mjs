@@ -143,6 +143,7 @@ const fixedInThisAuditBranch = [
   'The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.',
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
   'Local e2e route warming now logs progress and can be skipped or time-boxed with E2E_SKIP_ROUTE_WARMING, E2E_ROUTE_WARM_TIMEOUT_MS, and E2E_ROUTE_WARM_BUDGET_MS for constrained Docker hosts.',
+  'The production readiness TODO now requires final-release-ref command transcripts, commit SHA, workflow run, and digest manifest evidence instead of preserving stale local selected-gate commit claims.',
   'Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.',
   'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
   'Regulator official guidance cards now use the shared source-reference card primitive instead of route-local external-link card markup.',
