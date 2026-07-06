@@ -397,6 +397,37 @@ function requireEvidenceText(text, needle, message, issues) {
   }
 }
 
+const responsiveFullCommand = 'npm run test:e2e:responsive';
+const responsiveChunkCommands = {
+  all: [
+    'npm run test:e2e:responsive:public:desktop',
+    'npm run test:e2e:responsive:public:mobile',
+    'npm run test:e2e:responsive:dashboard:desktop',
+    'npm run test:e2e:responsive:dashboard:mobile',
+  ],
+  desktop: [
+    'npm run test:e2e:responsive:public:desktop',
+    'npm run test:e2e:responsive:dashboard:desktop',
+  ],
+  mobile: [
+    'npm run test:e2e:responsive:public:mobile',
+    'npm run test:e2e:responsive:dashboard:mobile',
+  ],
+};
+
+function hasEveryMarker(text, markers) {
+  return markers.every((marker) => text.includes(marker));
+}
+
+function requireResponsiveCommandEvidence(text, checkPath, issues, mode = 'all') {
+  if (text.includes(responsiveFullCommand) || hasEveryMarker(text, responsiveChunkCommands[mode])) {
+    return;
+  }
+
+  const chunkLabel = mode === 'all' ? 'all four focused responsive route chunks' : `both ${mode} focused responsive route chunks`;
+  issues.push(`${checkPath}.evidence must include ${responsiveFullCommand} or ${chunkLabel}`);
+}
+
 function releaseImageRefs(release) {
   return [
     ['apiImage', release?.imageDigestManifest?.apiImage],
@@ -992,13 +1023,13 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'E2E_API_URL=https://api.charitypilot.ie',
       'E2E_OWNER_EMAIL',
       'E2E_OWNER_PASSWORD',
-      'npm run test:e2e:responsive',
     ];
     for (const marker of requiredMarkers) {
       if (!text.includes(marker)) {
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
     }
+    requireResponsiveCommandEvidence(text, checkPath, issues);
   }
 
   if (areaId === 'browserQa' && checkId === 'desktop-coverage') {
@@ -1009,7 +1040,6 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const text = evidenceText(actualCheck.evidence);
     const requiredMarkers = [
       'E2E_DEPLOYED_QA=true',
-      'npm run test:e2e:responsive',
       'desktop light and dark',
       'https://app.charitypilot.ie',
     ];
@@ -1018,6 +1048,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
     }
+    requireResponsiveCommandEvidence(text, checkPath, issues, 'desktop');
   }
 
   if (areaId === 'browserQa' && checkId === 'mobile-coverage') {
@@ -1028,7 +1059,6 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const text = evidenceText(actualCheck.evidence);
     const requiredMarkers = [
       'E2E_DEPLOYED_QA=true',
-      'npm run test:e2e:responsive',
       'mobile light and dark',
       'https://app.charitypilot.ie',
     ];
@@ -1037,6 +1067,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
     }
+    requireResponsiveCommandEvidence(text, checkPath, issues, 'mobile');
   }
 
   if (areaId === 'browserQa' && checkId === 'accessibility-coverage') {

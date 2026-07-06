@@ -1054,7 +1054,7 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_API_URL=https:\/\/api\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_EMAIL/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_PASSWORD/);
-    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run test:e2e:responsive/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run test:e2e:responsive or all four focused responsive route chunks/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include desktop light and dark/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include command-output evidence/);
@@ -1067,6 +1067,49 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include document upload/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include zero critical or high-severity browser QA defects/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator accepts complete chunked responsive QA transcripts', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+
+  evidence.areas.browserQa.checks['browser-qa-completed'].evidence[0].description = [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
+    'npm run test:e2e:responsive:public:desktop',
+    'npm run test:e2e:responsive:public:mobile',
+    'npm run test:e2e:responsive:dashboard:desktop',
+    'npm run test:e2e:responsive:dashboard:mobile',
+    'all four focused responsive route chunks passed against deployed HTTPS production URL',
+  ].join(' ');
+  evidence.areas.browserQa.checks['desktop-coverage'].evidence[0].description = [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'npm run test:e2e:responsive:public:desktop',
+    'npm run test:e2e:responsive:dashboard:desktop',
+    'desktop light and dark route coverage completed',
+  ].join(' ');
+  evidence.areas.browserQa.checks['mobile-coverage'].evidence[0].description = [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'npm run test:e2e:responsive:public:mobile',
+    'npm run test:e2e:responsive:dashboard:mobile',
+    'mobile light and dark route coverage completed',
+  ].join(' ');
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production launch evidence passed/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1475,6 +1518,21 @@ test('production launch evidence template covers every required area and final s
     assert.ok(
       template.areas.browserQa.checks['accessibility-coverage'].requiredEvidenceHints.includes(
         'npm run test:e2e -- tests/accessibility.spec.ts',
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['browser-qa-completed'].requiredEvidenceHints.some((hint) =>
+        hint.includes('test:e2e:responsive:dashboard:mobile'),
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['desktop-coverage'].requiredEvidenceHints.some((hint) =>
+        hint.includes('test:e2e:responsive:dashboard:desktop'),
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['mobile-coverage'].requiredEvidenceHints.some((hint) =>
+        hint.includes('test:e2e:responsive:dashboard:mobile'),
       ),
     );
     assert.ok(

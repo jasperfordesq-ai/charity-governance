@@ -58,6 +58,17 @@ const evidenceHintsByCheck = new Map([
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
     'npm run test:e2e:responsive',
+    'or all four focused responsive chunks: test:e2e:responsive:public:desktop, test:e2e:responsive:public:mobile, test:e2e:responsive:dashboard:desktop, test:e2e:responsive:dashboard:mobile',
+  ]],
+  ['browserQa.desktop-coverage', [
+    'desktop light and dark',
+    'npm run test:e2e:responsive',
+    'or both desktop chunks: test:e2e:responsive:public:desktop and test:e2e:responsive:dashboard:desktop',
+  ]],
+  ['browserQa.mobile-coverage', [
+    'mobile light and dark',
+    'npm run test:e2e:responsive',
+    'or both mobile chunks: test:e2e:responsive:public:mobile and test:e2e:responsive:dashboard:mobile',
   ]],
   ['browserQa.accessibility-coverage', [
     'E2E_DEPLOYED_QA=true',
