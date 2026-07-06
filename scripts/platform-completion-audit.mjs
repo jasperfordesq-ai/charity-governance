@@ -197,7 +197,10 @@ const fixedInThisAuditBranch = [
   'The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.',
   'The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.',
   'The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.',
+  'Launch status now has a non-secret JSON output mode for CI summaries, release handoffs, and operations dashboards.',
   'The release readiness command now reports full local success as repository release gates passed instead of implying production launch readiness.',
+  'The standalone Next production web server now serializes caught request and shutdown errors before logging them.',
+  'The Prisma seed script now serializes fatal seed errors through the shared redacted logger helper before printing them.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',
   'Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.',
   'Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.',
@@ -221,6 +224,7 @@ const localVerificationEvidence = [
   '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
   '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.',
   'Local responsive browser QA completed with the `npm run test:e2e:responsive:*` focused chunk commands after reinstalling the corrupted Playwright Chromium cache: public desktop 13 passed, public mobile 12 passed with 1 retry-pass flaky check, dashboard desktop 10 passed with 2 retry-pass flaky checks, and dashboard mobile 12 passed.',
+  '`npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.',
   'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
 ];
 
