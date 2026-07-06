@@ -9,6 +9,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { decodeJsonFile, summarizeEvidence } from './production-launch-evidence-status.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -30,26 +31,39 @@ function placeholderKeys(envContent) {
   return keys;
 }
 
-function evidenceLedgerStatus(evidenceFileExists) {
-  return evidenceFileExists
-    ? {
-        exists: true,
-        headline: `${DEFAULT_EVIDENCE_FILE} exists and is ready for non-secret external evidence references.`,
-        nextAction: `Track progress with:  npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`,
-      }
-    : {
-        exists: false,
-        headline: `${DEFAULT_EVIDENCE_FILE} has not been created yet.`,
-        nextAction: 'Create it with:  npm run check:production:evidence:init',
-      };
+function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
+  if (!evidenceFileExists) {
+    return {
+      exists: false,
+      headline: `${DEFAULT_EVIDENCE_FILE} has not been created yet.`,
+      nextAction: 'Create it with:  npm run check:production:evidence:init',
+    };
+  }
+
+  try {
+    const summary = summarizeEvidence(JSON.parse(evidenceContent ?? '{}'));
+    return {
+      exists: true,
+      completedChecks: summary.completedChecks,
+      totalChecks: summary.totalChecks,
+      headline: `${DEFAULT_EVIDENCE_FILE} exists. Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}.`,
+      nextAction: `Track progress with:  npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`,
+    };
+  } catch {
+    return {
+      exists: true,
+      headline: `${DEFAULT_EVIDENCE_FILE} exists but is not valid launch evidence JSON yet.`,
+      nextAction: `Fix the file or recreate it with:  npm run check:production:evidence:init -- --force`,
+    };
+  }
 }
 
 /**
  * Decide the current launch phase from local state.
- * @param {{ envExists: boolean, envContent?: string, evidenceFileExists?: boolean }} state
+ * @param {{ envExists: boolean, envContent?: string, evidenceFileExists?: boolean, evidenceContent?: string }} state
  */
 export function assessLaunchState(state) {
-  const evidenceLedger = evidenceLedgerStatus(state.evidenceFileExists === true);
+  const evidenceLedger = evidenceLedgerStatus(state.evidenceFileExists === true, state.evidenceContent);
 
   if (!state.envExists) {
     return {
@@ -105,6 +119,7 @@ function main() {
   const state = assessLaunchState({
     envExists,
     envContent: envExists ? readFileSync(envPath, 'utf8') : '',
+    evidenceContent: existsSync(evidencePath) ? decodeJsonFile(evidencePath) : '',
     evidenceFileExists: existsSync(evidencePath),
   });
 

@@ -39,7 +39,7 @@ function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
 }
 
-function decodeJsonFile(path) {
+export function decodeJsonFile(path) {
   const bytes = readFileSync(path);
 
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
@@ -68,7 +68,7 @@ function statusOf(value) {
   return typeof value === 'string' && value.trim().length > 0 ? value : 'missing';
 }
 
-function summarizeEvidence(evidence) {
+export function summarizeEvidence(evidence) {
   const areaSummaries = [];
   const incompleteChecks = [];
   let completedChecks = 0;

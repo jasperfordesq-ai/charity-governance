@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `8189774`
+Working-tree base commit when generated: `0246a55`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -253,7 +253,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json exists and is ready for non-secret external evidence references.
+- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 0 / 85.
 - Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 
 ### Local Production Environment Placeholders

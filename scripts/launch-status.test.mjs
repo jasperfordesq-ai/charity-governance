@@ -61,6 +61,24 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assertExternalLaunchEvidenceGates(s);
 });
 
+test('reports launch evidence completion counts when the evidence ledger exists', () => {
+  const env = [
+    'NODE_ENV=production',
+    'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+  ].join('\n');
+  const s = assessLaunchState({
+    envExists: true,
+    envContent: env,
+    evidenceFileExists: true,
+    evidenceContent: JSON.stringify({ approvedForLaunch: false, finalSignoff: { status: 'pending' }, areas: {} }),
+  });
+
+  assert.equal(s.evidenceLedger.exists, true);
+  assert.equal(s.evidenceLedger.completedChecks, 0);
+  assert.equal(s.evidenceLedger.totalChecks, 85);
+  assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
+});
+
 test('reports ENV_INCOMPLETE for CRLF production env files', () => {
   const env = [
     'NODE_ENV=production',
