@@ -124,6 +124,7 @@ function joinUrl(origin, path) {
 
 export function redactSupabaseTranscript(value) {
   return String(value)
+    .replace(/\b(SUPABASE_SERVICE_ROLE_KEY=)[^\s'")]+/gi, '$1[redacted]')
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
     .replace(/([?&](?:token|signature|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
@@ -272,7 +273,11 @@ export async function runProductionSupabaseCheckFromArgs(
   try {
     fileEnv = parseEnvFile(resolve(process.cwd(), options.productionEnvFile));
   } catch (error) {
-    return result(1, '', `Supabase storage check failed: ${error.message}\n`);
+    return result(
+      1,
+      '',
+      `Supabase storage check failed: ${redactSupabaseTranscript(error instanceof Error ? error.message : String(error))}\n`,
+    );
   }
 
   const env = {

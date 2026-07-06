@@ -167,7 +167,7 @@ test('production Supabase checker redacts request failure transcripts', async ()
       ['--production-env-file', envPath],
       {
         fetchImpl: async () => {
-          throw new Error(`network failed for ${signedUrl} with Bearer ${secret} and apikey=${secret}`);
+          throw new Error(`network failed for ${signedUrl} with Bearer ${secret} and apikey=${secret} SUPABASE_SERVICE_ROLE_KEY=${secret}`);
         },
         now: () => 1_786_000_000_000,
         randomBytes: () => 'abc123',
@@ -179,6 +179,7 @@ test('production Supabase checker redacts request failure transcripts', async ()
     assert.match(result.stderr, /token=\[redacted\]/);
     assert.match(result.stderr, /Bearer \[redacted\]/);
     assert.match(result.stderr, /apikey=\[redacted\]/);
+    assert.match(result.stderr, /SUPABASE_SERVICE_ROLE_KEY=\[redacted\]/);
     assert.doesNotMatch(result.stderr, /configured-service-role-key|secret-token|secret-signature|1786000000000-abc123/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
