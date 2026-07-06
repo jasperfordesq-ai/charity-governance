@@ -214,6 +214,7 @@ const evidenceHintsByCheck = new Map([
     'Launch-Critical Route Inventory',
     'every route',
     'desktop, mobile, light-mode, and dark-mode evidence',
+    'release.commitSha',
     'routes: /, /features, /pricing, /blog, /blog/[slug], /privacy, /terms, /login, /register, /forgot-password, /reset-password, /verify-email, /accept-invite, /dashboard, /compliance, /compliance/[principleId], /documents, /deadlines, /board, /registers, /regulator, /organisation, /team, /billing, /export',
     'auth flow',
     'dashboard flow',

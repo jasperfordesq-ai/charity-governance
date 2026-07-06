@@ -627,6 +627,7 @@ function evidenceEntry(areaId, checkId) {
       'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
       'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
       'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
+      `Browser QA release commit: ${commitSha}.`,
       `Routes covered: ${launchCriticalRoutes.join(', ')}.`,
       'zero critical or high-severity browser QA defects remain unresolved.',
     ].join(' ');
@@ -1210,6 +1211,7 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include Launch-Critical Route Inventory/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include every route/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include desktop, mobile, light-mode, and dark-mode evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include zero critical or high-severity browser QA defects/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

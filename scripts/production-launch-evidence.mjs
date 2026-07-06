@@ -1291,6 +1291,9 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         issues.push(`${checkPath}.evidence must include launch route ${route}`);
       }
     }
+    if (typeof release?.commitSha === 'string') {
+      requireEvidenceText(text, release.commitSha, `${checkPath}.evidence must include release.commitSha`, issues);
+    }
   }
 }
 
