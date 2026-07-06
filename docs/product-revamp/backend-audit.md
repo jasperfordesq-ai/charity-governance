@@ -73,7 +73,7 @@ Readiness response shape:
     "profileIssues": [],
     "conditionalReviewItems": [],
     "matrixReviewItems": [],
-    "matrixLastChecked": "2026-07-05"
+    "matrixLastChecked": "2026-07-06"
   }
 }
 ```

@@ -150,7 +150,7 @@ Approval readiness is a service-level check, not a schema-only validation rule, 
     "profileIssues": [],
     "conditionalReviewItems": [],
     "matrixReviewItems": [],
-    "matrixLastChecked": "2026-07-05"
+    "matrixLastChecked": "2026-07-06"
   }
 }
 ```

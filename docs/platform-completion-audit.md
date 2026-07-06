@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `1b6a582`
+Working-tree base commit when generated: `f7ca7e8`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -17,7 +17,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Product UI | 25 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
-| Irish compliance model | 12 matrix entries; last checked 2026-07-05; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
+| Irish compliance model | 12 matrix entries; last checked 2026-07-06; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
 | Verification surface | 16 web unit test files, 44 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
@@ -167,7 +167,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Browser auth helpers now pre-seed the cookie-consent preference before registration, login, and invite acceptance so setup submissions are not competing with the consent dialog.
 - Compliance record autosave now recovers from concurrent create races on the organisation/standard/year key with a scoped update instead of leaking a 500.
 - Auth journey browser helpers now retry only local dev-server blank form loads after a Next.js restart while keeping deployed QA failures strict.
-- Irish compliance matrix source metadata was refreshed against official Charities Regulator, Irish Statute Book, and Revised Acts sources on 2026-07-05.
+- Irish compliance matrix source metadata was refreshed against official Charities Regulator, Irish Statute Book, and Revised Acts sources on 2026-07-06.
 
 ## Local Verification Evidence
 
