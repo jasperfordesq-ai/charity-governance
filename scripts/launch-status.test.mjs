@@ -76,6 +76,13 @@ test('reports launch evidence completion counts when the evidence ledger exists'
   assert.equal(s.evidenceLedger.exists, true);
   assert.equal(s.evidenceLedger.completedChecks, 0);
   assert.equal(s.evidenceLedger.totalChecks, 85);
+  assert.equal(s.evidenceLedger.approvedForLaunch, false);
+  assert.equal(s.evidenceLedger.finalSignoffStatus, 'pending');
+  assert.deepEqual(s.evidenceLedger.nextIncompleteChecks.slice(0, 3), [
+    'releaseGate.npm-ci (missing)',
+    'releaseGate.db-generate (missing)',
+    'releaseGate.prisma-validate (missing)',
+  ]);
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
 });
 

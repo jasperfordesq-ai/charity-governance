@@ -41,10 +41,17 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
   }
 
   try {
-    const summary = summarizeEvidence(JSON.parse(evidenceContent ?? '{}'));
+    const evidence = JSON.parse(evidenceContent ?? '{}');
+    const summary = summarizeEvidence(evidence);
     return {
       exists: true,
       completedChecks: summary.completedChecks,
+      approvedForLaunch: evidence?.approvedForLaunch === true,
+      finalSignoffStatus:
+        typeof evidence?.finalSignoff?.status === 'string' && evidence.finalSignoff.status.trim().length > 0
+          ? evidence.finalSignoff.status
+          : 'missing',
+      nextIncompleteChecks: summary.incompleteChecks.slice(0, 5),
       totalChecks: summary.totalChecks,
       headline: `${DEFAULT_EVIDENCE_FILE} exists. Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}.`,
       nextAction: `Track progress with:  npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`,
@@ -138,6 +145,14 @@ function main() {
   console.log('');
   console.log('Evidence ledger:');
   console.log(`  ${state.evidenceLedger.headline}`);
+  if (state.evidenceLedger.exists && typeof state.evidenceLedger.approvedForLaunch === 'boolean') {
+    console.log(`  approvedForLaunch: ${state.evidenceLedger.approvedForLaunch ? 'true' : 'false'}`);
+    console.log(`  finalSignoff: ${state.evidenceLedger.finalSignoffStatus}`);
+  }
+  if (state.evidenceLedger.nextIncompleteChecks?.length > 0) {
+    console.log('  Next incomplete checks:');
+    for (const check of state.evidenceLedger.nextIncompleteChecks) console.log(`    - ${check}`);
+  }
   console.log(`  ${state.evidenceLedger.nextAction}`);
   console.log('');
   console.log('External launch evidence still required:');
