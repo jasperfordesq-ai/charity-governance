@@ -444,6 +444,8 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       'npm run deploy:production -- --production-env-file=.env.production',
+      'compose.production.yml and compose.production-tls.yml were used for the production deploy.',
+      'release-image-digests.env supplied digest-pinned images for API, web, and migration services.',
       'Production deploy preflight passed: env, compose config, and image signatures verified.',
       'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
       'Production compose deploy completed.',
@@ -465,7 +467,9 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+      'Rollback used the previous signed digest manifest release-image-digests.previous.env.',
       'Production compose rollback completed.',
+      'Production deploy smoke passed after rollback.',
     ].join(' ');
   }
 
@@ -1392,9 +1396,16 @@ test('production launch evidence validator requires production deploy and rollba
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include the production deploy command/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include Production compose deploy completed/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include compose\.production\.yml/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include compose\.production-tls\.yml/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include release-image-digests\.env/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include digest-pinned images/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include the production rollback command/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include Production compose rollback completed/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include previous signed digest manifest/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include release-image-digests\.previous\.env/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include Production deploy smoke passed/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

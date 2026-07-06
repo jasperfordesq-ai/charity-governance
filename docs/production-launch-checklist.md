@@ -38,9 +38,9 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm audit --omit=dev --audit-level=moderate` completed with no moderate-or-higher production vulnerabilities.
 - [ ] `npm run check:production -- --production-env-file=.env.production` completed against the real production secret source.
 - [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with digest-pinned API, web, and migration images.
-- [ ] `npm run deploy:production -- --production-env-file=.env.production` completed on the production Docker host.
+- [ ] `npm run deploy:production -- --production-env-file=.env.production` completed on the production Docker host using `compose.production.yml`, `compose.production-tls.yml`, `release-image-digests.env`, and digest-pinned images.
 - [ ] The deploy command's post-deploy public HTTPS smoke completed against the production web and API origins.
-- [ ] `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env` rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence.
+- [ ] `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env` rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence, including post-rollback public HTTPS smoke proof.
 - [ ] `cosign signature verification` passed for all promoted image digests.
 - [ ] The release workflow evidence identifies `.github/workflows/release-images.yml` and a release ref of `refs/heads/master` or `refs/tags/v*`.
 - [ ] `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` verified the GitHub Actions run metadata and `release-image-digests` artifact through the GitHub API.

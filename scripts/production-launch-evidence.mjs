@@ -599,6 +599,14 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
       `${checkPath}.evidence must include Production compose deploy completed`,
       issues,
     );
+    for (const marker of [
+      'compose.production.yml',
+      'compose.production-tls.yml',
+      'release-image-digests.env',
+      'digest-pinned images',
+    ]) {
+      requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
+    }
   }
 
   if (checkId === 'deploy-smoke') {
@@ -643,6 +651,13 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
       `${checkPath}.evidence must include Production compose rollback completed`,
       issues,
     );
+    for (const marker of [
+      'previous signed digest manifest',
+      'release-image-digests.previous.env',
+      'Production deploy smoke passed',
+    ]) {
+      requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
+    }
   }
 
   if (checkId === 'cosign') {
