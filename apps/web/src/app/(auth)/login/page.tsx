@@ -106,7 +106,7 @@ export default function LoginPage() {
               />
 
               <div className="flex justify-end">
-                <Link href="/forgot-password" className="text-sm text-teal-primary font-medium hover:underline">
+                <Link href="/forgot-password" className="text-sm text-teal-primary dark:text-teal-bright font-medium hover:underline">
                   Forgot your password?
                 </Link>
               </div>

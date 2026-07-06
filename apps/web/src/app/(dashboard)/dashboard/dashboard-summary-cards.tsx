@@ -4,6 +4,7 @@ import { Button, Card, Chip } from '@heroui/react';
 import Link from 'next/link';
 import type { ComplianceSignoffResponse, GovernanceRegistersSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
+import { LoadingState } from '@/components/ui/states';
 
 type DashboardSummaryCardsProps = {
   loading: boolean;
@@ -12,6 +13,15 @@ type DashboardSummaryCardsProps = {
 };
 
 export function DashboardSummaryCards({ loading, registerSummary, signoff }: DashboardSummaryCardsProps) {
+  if (loading) {
+    return (
+      <LoadingState
+        title="Loading governance summaries"
+        description="Preparing board sign-off and register readiness for the selected compliance year."
+      />
+    );
+  }
+
   const signoffStatus = signoff?.status ?? ComplianceSignoffStatus.DRAFT;
   const signoffMeta = {
     [ComplianceSignoffStatus.APPROVED]: {
@@ -32,8 +42,6 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
       text: 'Record board approval before reporting the annual compliance position.',
     },
   }[signoffStatus];
-
-  if (loading) return null;
 
   return (
     <>

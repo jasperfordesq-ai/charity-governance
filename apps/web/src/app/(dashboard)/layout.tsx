@@ -243,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   ${active
-                    ? 'bg-teal-primary/10 text-teal-primary'
+                    ? 'bg-teal-primary/10 text-teal-primary dark:bg-teal-bright/10 dark:text-teal-bright'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }
                 `}

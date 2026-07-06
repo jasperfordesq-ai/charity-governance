@@ -406,6 +406,7 @@ test('dashboard loading and empty states use shared primitives instead of route-
   const pageSrc = dash('dashboard/page.tsx');
   const progressSrc = dash('dashboard/dashboard-progress-panels.tsx');
   const actionListsSrc = dash('dashboard/dashboard-action-lists.tsx');
+  const summaryCardsSrc = dash('dashboard/dashboard-summary-cards.tsx');
   const dashboardSurface = [pageSrc, progressSrc].join('\n');
 
   assert.match(pageSrc, /from '@\/components\/ui\/states'/);
@@ -426,6 +427,10 @@ test('dashboard loading and empty states use shared primitives instead of route-
   assert.doesNotMatch(actionListsSrc, /function SkeletonList/);
   assert.doesNotMatch(actionListsSrc, /animate-pulse/);
   assert.doesNotMatch(actionListsSrc, /Everything looks good!/);
+
+  assert.match(summaryCardsSrc, /from '@\/components\/ui\/states'/);
+  assert.match(summaryCardsSrc, /LoadingState/);
+  assert.doesNotMatch(summaryCardsSrc, /if \(loading\) return null/);
 });
 
 test('dashboard workflow state is extracted from the oversized route file', () => {
@@ -2719,6 +2724,22 @@ test('dashboard primary actions use the shared action button styling', () => {
       `${file} should not keep route-local primary button classes`,
     );
   }
+});
+
+test('dashboard and auth navigation links preserve dark-mode active polish', () => {
+  const dashboardLayout = app('(dashboard)/layout.tsx');
+  assert.match(
+    dashboardLayout,
+    /bg-teal-primary\/10 text-teal-primary dark:bg-teal-bright\/10 dark:text-teal-bright/,
+    'active dashboard navigation items should have explicit dark-mode active styling',
+  );
+
+  const loginPage = app('(auth)/login/page.tsx');
+  assert.match(
+    loginPage,
+    /href="\/forgot-password" className="[^"]*text-teal-primary[^"]*dark:text-teal-bright/,
+    'forgot-password auth link should match other auth links in dark mode',
+  );
 });
 
 test('public and auth primary CTAs use the shared action button styling', () => {
