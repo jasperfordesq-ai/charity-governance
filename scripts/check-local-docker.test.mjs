@@ -467,8 +467,9 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.match(auditLedger, /6\/6 selected release gates/);
-  assert.match(auditLedger, /latest local attempt after local Chromium\/Next dev resource exhaustion/);
-  assert.match(auditLedger, /focused dashboard desktop light\/dark route smoke passed after E2E harness hardening/);
+  assert.match(auditLedger, /Local responsive browser QA completed with the `npm run test:e2e:responsive:\*` focused chunk commands/);
+  assert.match(auditLedger, /public desktop 13 passed/);
+  assert.match(auditLedger, /dashboard desktop 10 passed with 2 retry-pass flaky checks/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
 
@@ -556,6 +557,9 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.match(e2eReadme, /full 50-test matrix/);
   assert.match(e2eReadme, /test:e2e:responsive:public:desktop/);
   assert.match(e2eReadme, /test:e2e:responsive:dashboard:mobile/);
+  assert.match(e2eReadme, /Invalid file descriptor to ICU data/);
+  assert.match(e2eReadme, /npm --prefix e2e exec playwright -- install chromium/);
+  assert.match(e2eReadme, /icudtl\.dat/);
 });
 
 test('responsive route smoke covers every shipped page route', () => {

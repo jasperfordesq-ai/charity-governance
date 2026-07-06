@@ -1590,10 +1590,10 @@ test('production todo reflects current launch blockers without overclaiming loca
 
   assert.match(productionTodo, /Current local status checked 2026-07-06/);
   assert.match(productionTodo, /23 production values still require real data/);
-  assert.match(productionTodo, /latest full local responsive browser QA did not complete cleanly after local Chromium\/Next dev resource exhaustion/);
-  assert.match(productionTodo, /focused dashboard desktop light\/dark smoke passed after E2E harness hardening/);
+  assert.match(productionTodo, /local responsive browser QA completed as four focused route chunks/);
+  assert.match(productionTodo, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
-  assert.match(productionTodo, /full local and deployed production QA still remain open/i);
+  assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /81 machine-readable launch evidence checks/);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
@@ -2133,10 +2133,10 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-06/);
   assert.match(launchGuide, /23 production values still require real data/);
-  assert.match(launchGuide, /latest full local responsive browser QA did not complete cleanly after local Chromium\/Next dev resource exhaustion/);
-  assert.match(launchGuide, /focused dashboard desktop light\/dark smoke passed after E2E harness hardening/);
+  assert.match(launchGuide, /local responsive browser QA completed as four focused route chunks/);
+  assert.match(launchGuide, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);
-  assert.match(launchGuide, /full local and deployed production QA remain launch gates/i);
+  assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /81 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);

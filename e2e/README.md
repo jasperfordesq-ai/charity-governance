@@ -66,6 +66,17 @@ npm run test:e2e:responsive:dashboard:mobile
 Keep all four transcripts together if they are used as launch browser-QA
 evidence.
 
+If Chromium fails before a page opens with `Invalid file descriptor to ICU data
+received`, the local Playwright browser cache is incomplete or corrupted. Rebuild
+it from the repo root:
+
+```bash
+npm --prefix e2e exec playwright -- install chromium
+```
+
+The expected cache should include `icudtl.dat` under the Playwright
+`chromium_headless_shell-*` directory.
+
 ## How it stays deterministic
 
 - **Single worker, serial.** The suite shares one database, so `playwright.config.ts`

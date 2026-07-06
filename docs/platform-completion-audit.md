@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `ee9892e`
+Working-tree base commit when generated: `8ae6eb4`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -179,7 +179,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
-- `npm run test:e2e:responsive` did not complete cleanly in the latest local attempt after local Chromium/Next dev resource exhaustion; a focused dashboard desktop light/dark route smoke passed after E2E harness hardening, but full local responsive QA remains open.
+- Local responsive browser QA completed with the `npm run test:e2e:responsive:*` focused chunk commands after reinstalling the corrupted Playwright Chromium cache: public desktop 13 passed, public mobile 12 passed with 1 retry-pass flaky check, dashboard desktop 10 passed with 2 retry-pass flaky checks, and dashboard mobile 12 passed.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
