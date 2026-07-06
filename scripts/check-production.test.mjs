@@ -2330,6 +2330,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /check:production:release-run/);
   assert.match(readRepoFile('scripts/production-launch-evidence-status.mjs'), /Checklist checks complete/);
   assert.match(readRepoFile('scripts/production-launch-evidence-status.mjs'), /Next incomplete checks/);
+  assert.match(readRepoFile('scripts/launch-status.mjs'), /approvedForLaunch/);
+  assert.match(readRepoFile('scripts/launch-status.mjs'), /finalSignoff/);
+  assert.match(readRepoFile('scripts/launch-status.mjs'), /Next incomplete checks/);
   assert.match(readRepoFile('scripts/production-release-run-evidence.mjs'), /api\.github\.com/);
   assert.match(readRepoFile('scripts/production-release-run-evidence.mjs'), /release-image-digests/);
   assert.match(readRepoFile('scripts/generate-production-launch-evidence-template.mjs'), /REQUIRED_LAUNCH_AREAS/);

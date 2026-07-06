@@ -11,6 +11,10 @@ Status marks reflect completed repository hardening work. Open items require rea
 > or the approved production secret store. Do not put real charity data into
 > CharityPilot until those values, provider checks, deployed QA, legal/privacy
 > review, external security review, backup/restore evidence, all 85 machine-readable launch evidence checks, and final signoffs are complete.
+> `npm run launch:status` also surfaces the current launch evidence ledger count,
+> `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
+> operators can continue from the first real missing proof without changing the
+> strict final validator.
 > local responsive browser QA completed as four focused route chunks with 47 first-pass checks and 3 retry-pass flaky checks across desktop/mobile and light/dark; local accessibility QA passed 16/16 on the local stack, but deployed production QA still remains open and must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in `browserQa.checks.accessibility-coverage`,
 > cross-browser QA in `browserQa.checks.cross-browser-coverage`, and real iOS Safari device QA in
