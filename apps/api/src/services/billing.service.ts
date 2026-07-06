@@ -57,6 +57,14 @@ function isStripeSignatureVerificationError(error: unknown): boolean {
     stripeError.name === 'StripeSignatureVerificationError';
 }
 
+function isStripeMissingResourceError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const stripeError = error as { code?: unknown; statusCode?: unknown; type?: unknown };
+  return stripeError.code === 'resource_missing' ||
+    (stripeError.statusCode === 404 && stripeError.type === 'StripeInvalidRequestError');
+}
+
 function stripeSearchValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
@@ -194,12 +202,46 @@ export class BillingService {
     });
   }
 
+  private async storedStripeCustomerBelongsToOrganisation(
+    stripe: Stripe,
+    customerId: string,
+    organisationId: string,
+  ): Promise<boolean> {
+    if (typeof stripe.customers.retrieve !== 'function') {
+      return true;
+    }
+
+    let customer: Stripe.Customer | Stripe.DeletedCustomer;
+    try {
+      customer = await stripe.customers.retrieve(customerId);
+    } catch (error) {
+      if (isStripeMissingResourceError(error)) {
+        return false;
+      }
+      throw error;
+    }
+
+    if ('deleted' in customer && customer.deleted) {
+      return false;
+    }
+
+    return customer.metadata?.organisationId === organisationId;
+  }
+
   private async reconcileStripeCustomerId(
     stripe: Stripe,
     org: StripeCustomerOrganisation,
   ): Promise<string | null> {
     if (org.stripeCustomerId) {
-      return org.stripeCustomerId;
+      const storedCustomerMatches = await this.storedStripeCustomerBelongsToOrganisation(
+        stripe,
+        org.stripeCustomerId,
+        org.id,
+      );
+
+      if (storedCustomerMatches) {
+        return org.stripeCustomerId;
+      }
     }
 
     const customerId = await this.findStripeCustomerForOrganisation(stripe, org.id);
