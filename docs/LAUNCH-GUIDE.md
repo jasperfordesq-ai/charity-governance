@@ -127,8 +127,8 @@ You need four external services. Create the **production/live** versions
   enabling the firewall, so you won't lock yourself out). Review it first; it
   makes system-level changes.
 
-- **TLS is now turnkey.** You no longer have to hand-configure certificates. The
-  repo ships an optional reverse proxy (`compose.production-tls.yml` +
+- **TLS is now turnkey by default.** You no longer have to hand-configure certificates. The
+  repo ships the default reverse proxy overlay (`compose.production-tls.yml` +
   `caddy/Caddyfile`) that obtains and renews HTTPS certificates automatically via
   Let's Encrypt. Once you have a server and DNS:
   1. Point DNS `A` records for `app.charitypilot.ie` **and** `api.charitypilot.ie` at
