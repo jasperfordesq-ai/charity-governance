@@ -2484,6 +2484,20 @@ test('web server awaits request handling and closes cleanly on termination signa
   assert.match(server, /process\.once\('SIGINT'/);
 });
 
+test('web server serializes caught production errors before logging them', () => {
+  const server = readRepoFile('apps/web/server.mjs');
+
+  assert.match(server, /function\s+serializeErrorForWebLog\(error\)/);
+  assert.match(server, /function\s+redactLogText\(value\)/);
+  assert.match(server, /\[redacted-email\]/);
+  assert.match(server, /\$1=\[redacted\]/);
+  assert.match(server, /\[redacted-path\]/);
+  assert.match(server, /console\.error\('Next request handler failed:',\s*serializeErrorForWebLog\(error\)\)/);
+  assert.match(server, /console\.error\('Graceful shutdown failed:',\s*serializeErrorForWebLog\(error\)\)/);
+  assert.doesNotMatch(server, /console\.error\('Next request handler failed:',\s*error\)/);
+  assert.doesNotMatch(server, /console\.error\('Graceful shutdown failed:',\s*error\)/);
+});
+
 test('web config disables generated agent-rule files during local dev startup', () => {
   const config = readRepoFile('apps/web/next.config.ts');
   const nextEnv = readRepoFile('apps/web/next-env.d.ts');

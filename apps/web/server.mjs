@@ -18,11 +18,32 @@ const handle = app.getRequestHandler();
 
 await app.prepare();
 
+function redactLogText(value) {
+  return String(value)
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[redacted-email]')
+    .replace(/\b(token|access_token|refresh_token|signature|secret)=([^&\s]+)/gi, '$1=[redacted]')
+    .replace(/\b[a-z0-9_-]+\/[^\s'"<>]+/gi, '[redacted-path]');
+}
+
+function serializeErrorForWebLog(error) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: redactLogText(error.message),
+    };
+  }
+
+  return {
+    name: 'NonError',
+    message: redactLogText(error),
+  };
+}
+
 const server = createServer(async (request, response) => {
   try {
     await handle(request, response);
   } catch (error) {
-    console.error('Next request handler failed:', error);
+    console.error('Next request handler failed:', serializeErrorForWebLog(error));
     if (!response.headersSent) {
       response.statusCode = 500;
       response.end('Internal Server Error');
@@ -45,7 +66,7 @@ function shutdown(signal) {
   console.log(`Received ${signal}, shutting down CharityPilot web`);
   server.close((error) => {
     if (error) {
-      console.error('Graceful shutdown failed:', error);
+      console.error('Graceful shutdown failed:', serializeErrorForWebLog(error));
       process.exit(1);
     }
     process.exit(0);
