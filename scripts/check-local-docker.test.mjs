@@ -479,10 +479,12 @@ test('platform audit ledger records launch evidence gate hardening', () => {
 
   assert.match(auditGenerator, /Launch status now separates missing production env values from external launch evidence gates/);
   assert.match(auditGenerator, /85 machine-readable launch evidence checks/);
+  assert.match(auditGenerator, /launch evidence ledger status/);
   assert.match(auditGenerator, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
   assert.match(auditLedger, /Launch status now separates missing production env values from external launch evidence gates/);
   assert.match(auditLedger, /85 machine-readable launch evidence checks/);
+  assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditLedger, /legal\/compliance final approval/);
 });

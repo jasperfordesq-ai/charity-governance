@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `c818a97`
+Working-tree base commit when generated: `8189774`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -118,6 +118,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
+- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 85 checks.
 - Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
 - Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
@@ -249,6 +250,11 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Stripe live products/prices/webhook and Resend sender-domain evidence are required.
 - Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
 - Solicitor/governance/privacy review and external penetration test are required before real charity data.
+
+### Launch Evidence Ledger
+
+- .charitypilot-launch-evidence/production-launch-evidence.json exists and is ready for non-secret external evidence references.
+- Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 
 ### Local Production Environment Placeholders
 

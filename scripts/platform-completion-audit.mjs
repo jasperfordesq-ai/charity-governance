@@ -9,6 +9,7 @@ import { assessLaunchState } from './launch-status.mjs';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const outputPath = join(repoRoot, 'docs', 'platform-completion-audit.md');
+const launchEvidencePath = join(repoRoot, '.charitypilot-launch-evidence', 'production-launch-evidence.json');
 
 const auditDate = new Date().toISOString().slice(0, 10);
 
@@ -145,6 +146,7 @@ const fixedInThisAuditBranch = [
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
+  'Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 85 checks.',
   'Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.',
@@ -393,11 +395,13 @@ function readLaunchSummary() {
   const state = assessLaunchState({
     envExists: existsSync(envPath),
     envContent: existsSync(envPath) ? readFileSync(envPath, 'utf8') : '',
+    evidenceFileExists: existsSync(launchEvidencePath),
   });
   return {
     phase: state.phase,
     headline: state.headline,
     remainingKeys: state.remainingKeys ?? [],
+    evidenceLedger: state.evidenceLedger,
   };
 }
 
@@ -497,6 +501,9 @@ function render() {
 
   md += `\n## Launch Evidence Blockers\n\n`;
   md += `${markdownList(launchBlockers)}\n\n`;
+  md += `### Launch Evidence Ledger\n\n`;
+  md += `- ${launch.evidenceLedger.headline}\n`;
+  md += `- ${launch.evidenceLedger.nextAction}\n\n`;
   if (launch.remainingKeys.length > 0) {
     md += `### Local Production Environment Placeholders\n\n`;
     md += `The local non-committed production env still needs ${launch.remainingKeys.length} real value(s):\n\n`;
