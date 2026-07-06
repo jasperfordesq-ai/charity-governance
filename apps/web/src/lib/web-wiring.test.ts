@@ -1984,6 +1984,7 @@ test('phase 6C regulator page presents source-cited readiness without legal cert
   const src = [
     dash('regulator/page.tsx'),
     optionalDash('regulator/regulator-readiness-overview.tsx'),
+    component('ui/source-reference.tsx'),
   ].join('\n');
   const imports: Array<[string, string[]]> = [
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
@@ -2062,16 +2063,21 @@ test('regulator profile-triggered priorities section is extracted from the overs
 });
 
 test('regulator official-source links use compact link styling rather than pill badges', () => {
+  const pageSrc = dash('regulator/page.tsx');
+  const sourceReferenceSrc = component('ui/source-reference.tsx');
   const src = [
-    dash('regulator/page.tsx'),
+    pageSrc,
     optionalDash('regulator/regulator-source-matrix.tsx'),
     optionalDash('regulator/regulator-profile-priorities.tsx'),
-    component('ui/source-reference.tsx'),
+    sourceReferenceSrc,
   ].join('\n');
 
   assert.match(src, /SourceReferenceLink/);
+  assert.match(sourceReferenceSrc, /SourceReferenceCard/);
+  assert.match(pageSrc, /SourceReferenceCard/);
   assert.doesNotMatch(src, /rounded-full\s+border/, 'regulator source links should not read as pill badges');
   assert.match(src, /rounded-md border border-gray-200 px-2.5 py-1/);
+  assert.doesNotMatch(pageSrc, /<a\s+[\s\S]*?key=\{item\.href\}/);
   assert.doesNotMatch(optionalDash('regulator/regulator-profile-priorities.tsx'), /href=\{source\.url\}/);
 });
 

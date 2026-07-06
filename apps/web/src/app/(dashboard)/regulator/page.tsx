@@ -9,6 +9,7 @@ import { logClientError } from '@/lib/client-logger';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
+import { SourceReferenceCard } from '@/components/ui/source-reference';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { RegulatorProfilePrioritiesSection } from './regulator-profile-priorities';
 import { RegulatorReadinessOverview } from './regulator-readiness-overview';
@@ -173,22 +174,12 @@ export default function RegulatorGuidePage() {
       >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {officialGuidanceLinks.map((item) => (
-            <a
+            <SourceReferenceCard
               key={item.href}
-              href={item.href}
-              target="_blank"
-              rel="noreferrer"
-              className={statusPanelClassName(
-                'neutral',
-                'p-4 shadow-sm transition-colors hover:border-teal-primary/50 dark:hover:border-teal-light/50',
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
-                <StatusChip tone="brand">Official source</StatusChip>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{item.note}</p>
-            </a>
+              source={{ name: item.title, url: item.href }}
+              description={item.note}
+              className={statusPanelClassName('neutral', 'p-4 shadow-sm')}
+            />
           ))}
         </div>
       </AppSection>

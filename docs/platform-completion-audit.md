@@ -4,7 +4,7 @@ Generated: 2026-07-06
 
 Branch: `master`
 
-Working-tree base commit when generated: `d0ab0c8`
+Working-tree base commit when generated: `1b6a582`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -109,6 +109,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.
 - Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.
 - Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.
+- Regulator official guidance cards now use the shared source-reference card primitive instead of route-local external-link card markup.
 - The regulator profile-triggered priorities section is split out of the oversized regulator route behind a wiring regression test.
 - The regulator readiness overview and operating-model cards are split out of the oversized regulator route behind a wiring regression test.
 - The regulator source-cited readiness matrix is split out of the oversized regulator route behind a wiring regression test.
@@ -208,7 +209,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 184 | yes | no obvious static risk; verify in browser |
-| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 198 | yes | no obvious static risk; verify in browser |
+| P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |

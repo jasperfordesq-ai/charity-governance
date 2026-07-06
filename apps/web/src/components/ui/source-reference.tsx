@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ExternalLink } from 'lucide-react';
 
 export type SourceReference = {
   name: ReactNode;
@@ -66,6 +67,41 @@ export function SourceReferenceList({
         </span>
       ) : null}
     </div>
+  );
+}
+
+export function SourceReferenceCard({
+  source,
+  description,
+  label = 'Official source',
+  className,
+}: {
+  source: SourceReference;
+  description?: ReactNode;
+  label?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <a
+      href={source.url}
+      target="_blank"
+      rel="noreferrer"
+      className={classes(
+        'block rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:border-teal-primary/50 hover:bg-teal-primary/5 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-teal-light/50 dark:hover:bg-teal-light/5',
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{source.name}</h3>
+        <span className="inline-flex items-center gap-1 rounded-md border border-teal-primary/20 px-2.5 py-1 text-xs font-medium text-teal-dark dark:border-teal-light/30 dark:text-teal-bright">
+          {label}
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+      </div>
+      {description ? (
+        <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
+      ) : null}
+    </a>
   );
 }
 

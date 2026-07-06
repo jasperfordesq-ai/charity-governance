@@ -136,6 +136,7 @@ const fixedInThisAuditBranch = [
   'Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.',
   'Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.',
   'Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.',
+  'Regulator official guidance cards now use the shared source-reference card primitive instead of route-local external-link card markup.',
   'The regulator profile-triggered priorities section is split out of the oversized regulator route behind a wiring regression test.',
   'The regulator readiness overview and operating-model cards are split out of the oversized regulator route behind a wiring regression test.',
   'The regulator source-cited readiness matrix is split out of the oversized regulator route behind a wiring regression test.',
