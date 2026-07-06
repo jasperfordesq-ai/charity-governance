@@ -2044,6 +2044,18 @@ test('API server enables trusted proxy handling for production rate limits', () 
   assert.doesNotMatch(server, /trustProxy:\s*process\.env\.TRUST_PROXY\s*===\s*'true'/);
 });
 
+test('request lifecycle docs describe identifier-aware auth throttles', () => {
+  const docs = readRepoFile('docs/architecture/04-request-lifecycle.md');
+
+  assert.match(docs, /identifier-aware per-route buckets/);
+  assert.match(docs, /normalised email body field/);
+  assert.match(docs, /normalised token body field/);
+  assert.match(docs, /hash of the refresh token from the body or refresh cookie/);
+  assert.match(docs, /hash of the bearer token or access cookie/);
+  assert.match(docs, /production trusted-proxy configuration still matters/);
+  assert.doesNotMatch(docs, /token-refresh endpoint, for example, caps at `5` requests per minute/);
+});
+
 test('production API runtime leaves scheduled jobs to dedicated job containers', () => {
   const compose = readRepoFile('compose.production.yml');
   const cron = readRepoFile('apps/api/src/utils/cron.ts');

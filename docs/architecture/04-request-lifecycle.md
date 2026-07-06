@@ -57,7 +57,16 @@ The allowed-origin set is built in `server.ts` from `FRONTEND_URL` (comma-separa
 
 ### 5. Rate limiting
 
-`@fastify/rate-limit` is registered globally with `max: 100` per `1 minute` window (`apps/api/src/server.ts:57-60`). Breaches surface as `429` and are mapped to code `RATE_LIMITED` by the error handler (`apps/api/src/plugins/error-handler.ts:25-30`). Individual routes can tighten this via per-route `config.rateLimit` — the token-refresh endpoint, for example, caps at `5` requests per minute (`apps/api/src/routes/auth/index.ts:76`).
+`@fastify/rate-limit` is registered globally with `max: 100` per `1 minute` window (`apps/api/src/server.ts:57-60`). Breaches surface as `429` and are mapped to code `RATE_LIMITED` by the error handler (`apps/api/src/plugins/error-handler.ts:25-30`).
+
+Sensitive auth routes also use identifier-aware per-route buckets from `apps/api/src/utils/identifier-rate-limit.ts`, always combined with `request.ip` so production trusted-proxy configuration still matters:
+
+- `register`, `login`, and `forgot-password` key by the normalised email body field.
+- `reset-password` and `verify-email` key by the normalised token body field.
+- `refresh` and `logout` key by a hash of the refresh token from the body or refresh cookie.
+- `resend-verification` keys by a hash of the bearer token or access cookie at the `onRequest` hook.
+
+This keeps one failing email, reset token, refresh token, or credential from exhausting the same-IP bucket for a different identifier while preserving the global request-level guard.
 
 ### 6. Multipart
 
