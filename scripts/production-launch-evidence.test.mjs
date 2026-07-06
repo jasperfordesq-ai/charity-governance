@@ -1735,6 +1735,12 @@ test('production launch evidence template covers every required area and final s
         Object.keys(template.areas[area.id].checks).sort(),
         area.checks.map((check) => check.id).sort(),
       );
+      for (const check of area.checks) {
+        assert.ok(
+          template.areas[area.id].checks[check.id].requiredEvidenceHints.length > 0,
+          `${area.id}.${check.id} must include operator evidence hints`,
+        );
+      }
     }
     assert.deepEqual(
       Object.keys(template.finalSignoff.approvals).sort(),
