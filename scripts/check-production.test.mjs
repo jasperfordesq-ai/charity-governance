@@ -1595,6 +1595,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /81 machine-readable launch evidence checks/);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
+  assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
+  assert.doesNotMatch(productionTodo, /--no-build --no-e2e/);
   assert.doesNotMatch(productionTodo, /full Docker stack smoke all pass/i);
   assert.doesNotMatch(productionTodo, /Everything verifiable without external accounts now passes/i);
 });

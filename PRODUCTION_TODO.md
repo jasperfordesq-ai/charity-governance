@@ -22,8 +22,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > image promotion scripts, rollback tooling, secret scanning, SAST scanning, and
 > launch evidence validation are wired in the repo. They must be rerun against
 > the final release ref and real production configuration before launch. A
-> skipped-gate `npm run release:ready -- --no-build --no-e2e` run is useful for
-> local operator checks, but it is not a full release-ready result.
+> selected-gate `npm run release:ready -- --no-e2e` run is useful for local
+> operator checks, but it is not a full release-ready result because deployed
+> E2E, provider evidence, legal review, pentest, and final signoffs remain open.
 
 ## Security and Auth
 
