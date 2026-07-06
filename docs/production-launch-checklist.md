@@ -6,6 +6,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 
 - Record owners, dates, command output locations, ticket links, deployment links, or report references.
 - Keep screenshots, private reports, and secrets out of the repository.
+- Machine-readable evidence entry references must use HTTPS URLs on approved evidence hosts, currently `*.charitypilot.ie` or `github.com`.
 - Run all checks against the deployed HTTPS production URL, not localhost.
 - Treat a passing code release gate as necessary but not sufficient for launch.
 

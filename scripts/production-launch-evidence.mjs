@@ -173,6 +173,7 @@ const allowedEvidenceTypes = new Set([
 
 const placeholderOrLocalPattern = /\b(todo|tbd|pending|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|file:\/\//i;
 const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|RESEND_API_KEY=)\b/;
+const approvedEvidenceReferenceHosts = ['charitypilot.ie', 'github.com'];
 const imageRepositories = {
   apiImage: 'ghcr.io/jasperfordesq-ai/charity-governance-api',
   webImage: 'ghcr.io/jasperfordesq-ai/charity-governance-web',
@@ -299,6 +300,21 @@ function validateExternalText(value, path, issues) {
   }
 }
 
+function validateEvidenceReference(value, path, issues) {
+  validateExternalText(value, path, issues);
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+    const approvedHost = approvedEvidenceReferenceHosts.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+    if (url.protocol !== 'https:' || !approvedHost) {
+      issues.push(`${path} must be an https URL on an approved evidence host`);
+    }
+  } catch {
+    issues.push(`${path} must be a valid external evidence URL`);
+  }
+}
+
 function validateReleaseWorkflowUrl(value, path, issues) {
   validateExternalText(value, path, issues);
 
@@ -402,7 +418,7 @@ function validateEvidenceEntries(entries, path, issues, options = {}) {
     if (!allowedEvidenceTypes.has(entry.type)) {
       issues.push(`${entryPath}.type must be one of ${Array.from(allowedEvidenceTypes).join(', ')}`);
     }
-    validateExternalText(entry.reference, `${entryPath}.reference`, issues);
+    validateEvidenceReference(entry.reference, `${entryPath}.reference`, issues);
     validateExternalText(entry.description, `${entryPath}.description`, issues);
     const capturedAt = isoTimestamp(entry.capturedAt);
     if (capturedAt === null) {
