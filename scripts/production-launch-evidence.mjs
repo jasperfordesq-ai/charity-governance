@@ -1403,6 +1403,7 @@ function validateLaunchEvidence(evidence) {
   if (preparedAt === null) {
     issues.push('preparedAt must be an ISO timestamp');
   }
+  const finalApprovedAt = isPlainObject(evidence.finalSignoff) ? isoTimestamp(evidence.finalSignoff.approvedAt) : null;
   if (evidence.approvedForLaunch !== true) {
     issues.push('approvedForLaunch must be true');
   }
@@ -1441,8 +1442,8 @@ function validateLaunchEvidence(evidence) {
         issues.push(`${checkPath}.status must be complete`);
       }
       validateEvidenceEntries(actualCheck.evidence, `${checkPath}.evidence`, issues, {
-        notAfter: preparedAt,
-        notAfterLabel: 'preparedAt',
+        notAfter: finalApprovedAt,
+        notAfterLabel: 'finalSignoff.approvedAt',
       });
       validateCheckSpecificEvidence(area.id, check.id, actualCheck, checkPath, issues, evidence.release);
     }

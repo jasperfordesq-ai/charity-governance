@@ -799,6 +799,24 @@ test('production launch evidence validator accepts UTF-16 JSON emitted by Window
   }
 });
 
+test('production launch evidence validator accepts evidence gathered after package preparation but before final approval', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.preparedAt = '2026-06-01T09:00:00.000Z';
+  evidence.areas.releaseGate.checks.test.evidence[0].capturedAt = '2026-06-08T12:00:00.000Z';
+  evidence.finalSignoff.approvedAt = '2026-06-09T12:00:00.000Z';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production launch evidence passed/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires concrete basic release gate command transcripts', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
@@ -1915,7 +1933,7 @@ test('production launch evidence validator rejects chronologically impossible ev
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /releaseGate\.checks\.test\.evidence\[0\]\.capturedAt must not be after preparedAt/);
+    assert.match(result.stderr, /releaseGate\.checks\.test\.evidence\[0\]\.capturedAt must not be after finalSignoff\.approvedAt/);
     assert.match(result.stderr, /finalSignoff\.approvedAt must not be before preparedAt/);
     assert.match(result.stderr, /finalSignoff\.evidence\[0\]\.capturedAt must not be after finalSignoff\.approvedAt/);
   } finally {

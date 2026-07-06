@@ -8,6 +8,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - Keep screenshots, private reports, and secrets out of the repository.
 - Machine-readable evidence entry references must use HTTPS URLs on approved evidence hosts, currently `*.charitypilot.ie` or the canonical `github.com/jasperfordesq-ai/charity-governance` repository.
 - Do not use signed URLs or token-bearing query strings as machine-readable evidence references.
+- Checklist evidence may be gathered after the package `preparedAt` timestamp, but every checklist evidence entry must be captured no later than `finalSignoff.approvedAt`.
 - Run all checks against the deployed HTTPS production URL, not localhost.
 - Treat a passing code release gate as necessary but not sufficient for launch.
 
