@@ -1597,8 +1597,9 @@ test('reliability report emits ASCII-safe operator output', () => {
 test('production todo reflects current launch blockers without overclaiming local browser smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
 
-  assert.match(productionTodo, /Current local status checked 2026-07-06/);
-  assert.match(productionTodo, /23 production values still require real data/);
+  assert.match(productionTodo, /Current launch status checked 2026-07-07/);
+  assert.match(productionTodo, /reports `NO_ENV`/);
+  assert.match(productionTodo, /23 production[\s\S]*values requiring real data/);
   assert.match(productionTodo, /local responsive browser QA completed as four focused route chunks/);
   assert.match(productionTodo, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
@@ -2263,8 +2264,9 @@ test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
-  assert.match(launchGuide, /Last updated: 2026-07-06/);
-  assert.match(launchGuide, /23 production values needing real data/);
+  assert.match(launchGuide, /Last updated: 2026-07-07/);
+  assert.match(launchGuide, /previews the operator-supplied hosting, provider, email, observability/);
+  assert.match(launchGuide, /23\s+production values needing real data/);
   assert.match(launchGuide, /Local responsive browser QA completed as four focused route chunks/);
   assert.match(launchGuide, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);

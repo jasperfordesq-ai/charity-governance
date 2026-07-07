@@ -22,17 +22,24 @@ npm run launch:status -- --json
 npm run audit:platform
 ```
 
-Known current state from `npm run launch:status -- --json` on 2026-07-07:
+Known current state from `npm run launch:status -- --json` in this checkout on 2026-07-07:
+
+- Phase: `NO_ENV`
+- `.env.production` is not present in this checkout.
+- The local launch evidence ledger is not present at `.charitypilot-launch-evidence/production-launch-evidence.json`.
+- `npm run launch:status -- --json` previews the operator-supplied hosting, provider, email, observability, and image-promotion values that will be needed after `npm run setup:production-env`.
+- Real charity data remains blocked.
+
+Previous partially configured production workstation state from 2026-07-07:
 
 - Phase: `ENV_INCOMPLETE`
-- `.env.production` exists but still has 23 values needing real production data.
-- Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
+- `.env.production` existed but still had 23 values needing real production data.
+- Launch evidence ledger existed at `.charitypilot-launch-evidence/production-launch-evidence.json`.
 - Machine-readable launch evidence completion: `0 / 85`.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
-- Real charity data remains blocked.
 
-The 23 missing production values are:
+The 23 missing production values in that partially configured state were:
 
 - `TRUSTED_PROXY_ADDRESSES`
 - `DATABASE_URL`

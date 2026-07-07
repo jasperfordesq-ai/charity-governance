@@ -1,6 +1,6 @@
 # CharityPilot - Plain-English Launch Guide
 
-*Last updated: 2026-07-06. This is the human-friendly companion to the dense
+*Last updated: 2026-07-07. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
@@ -16,15 +16,17 @@
 The codebase is substantially hardened, but launch readiness is not complete
 until the final release gate, deployed browser QA, external provider evidence,
 legal/privacy approval, and independent security review are all recorded.
-As of 2026-07-06, the local platform audit shows strong automated coverage and
+As of 2026-07-07, the local platform audit shows strong automated coverage and
 no obvious static route-level UI risks, but the release checks below must still
 be rerun against the final production configuration:
 
 `npm run launch:status` is the source of truth for the machine you are on. On
-a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`;
-on a partially configured production workstation it reports `ENV_INCOMPLETE`
-and lists the remaining real provider/hosting values. The last partially
-configured handoff still had 23 production values needing real data.
+a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`,
+and it now previews the operator-supplied hosting, provider, email, observability,
+and image-promotion values you will need before you create the file. On a partially
+configured production workstation it reports `ENV_INCOMPLETE` and lists the remaining
+real provider/hosting values. The last partially configured handoff still had 23
+production values needing real data.
 Local responsive browser QA completed as four focused route chunks with 47 first-pass checks and 3 retry-pass flaky checks across desktop/mobile and light/dark; local accessibility QA passed 16/16 on the local stack, but deployed production QA remains a launch gate
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.

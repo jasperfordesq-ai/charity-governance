@@ -52,7 +52,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
   },
   {
     label: 'Resend email',
-    keys: ['RESEND_API_KEY'],
+    keys: ['RESEND_API_KEY', 'EMAIL_FROM'],
   },
   {
     label: 'Supabase storage',
@@ -79,6 +79,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
   },
 ]);
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
+const ALL_OPERATOR_SUPPLIED_KEY_NAMES = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
 
 function parseArgs(argv) {
   return {
@@ -174,11 +175,13 @@ export function assessLaunchState(state) {
   const evidenceLedger = evidenceLedgerStatus(state.evidenceFileExists === true, state.evidenceContent);
 
   if (!state.envExists) {
+    const expectedProductionValueGroups = groupRemainingKeys(ALL_OPERATOR_SUPPLIED_KEY_NAMES);
     return {
       phase: 'NO_ENV',
       headline: 'You have not created a production environment file yet.',
       remainingKeys: [],
       remainingKeyGroups: [],
+      expectedProductionValueGroups,
       evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -232,6 +235,7 @@ export function renderLaunchStatusJson(state) {
       headline: state.headline,
       remainingKeys: state.remainingKeys,
       remainingKeyGroups: state.remainingKeyGroups,
+      expectedProductionValueGroups: state.expectedProductionValueGroups ?? [],
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
       externalEvidenceGates: state.externalEvidenceGates,
@@ -254,6 +258,13 @@ function renderLaunchStatusText(state) {
       for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
         lines.push(`    - ${item.key}: ${item.hint}`);
       }
+    }
+    lines.push('');
+  } else if (state.phase === 'NO_ENV' && state.expectedProductionValueGroups?.length > 0) {
+    lines.push('Production values you will need after creating .env.production:');
+    for (const group of state.expectedProductionValueGroups) {
+      lines.push(`  ${group.label}:`);
+      for (const item of group.items ?? []) lines.push(`    - ${item.key}: ${item.hint}`);
     }
     lines.push('');
   }

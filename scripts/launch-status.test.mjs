@@ -41,6 +41,21 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   const s = assessLaunchState({ envExists: false, evidenceFileExists: false });
   assert.equal(s.phase, 'NO_ENV');
   assert.ok(s.nextActions.some((a) => a.includes('setup:production-env')));
+  assert.ok(
+    s.expectedProductionValueGroups.some((group) => group.label === 'Stripe billing'),
+    'NO_ENV status should still preview the provider values operators must gather next',
+  );
+  assert.ok(
+    s.expectedProductionValueGroups.some((group) => group.keys.includes('CHARITYPILOT_API_IMAGE')),
+    'NO_ENV status should still preview release image promotion values',
+  );
+  const resendPreview = s.expectedProductionValueGroups.find((group) => group.label === 'Resend email');
+  assert.deepEqual(resendPreview?.keys, ['RESEND_API_KEY', 'EMAIL_FROM']);
+  assert.equal(
+    s.expectedProductionValueGroups.some((group) => group.label === 'Other'),
+    false,
+    'every known operator-supplied value should be grouped by source',
+  );
   assert.equal(s.evidenceLedger.exists, false);
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:init/);
   assert.match(s.evidenceLedger.statusCommand, /check:production:evidence:status/);
@@ -77,6 +92,7 @@ test('groups missing production values by operator source', () => {
     'CHARITYPILOT_WEB_IMAGE',
     'SUPABASE_SERVICE_ROLE_KEY',
     'UNKNOWN_VALUE',
+    'EMAIL_FROM',
     'STRIPE_WEBHOOK_SECRET',
     'TRUSTED_PROXY_ADDRESSES',
   ]);
@@ -84,15 +100,17 @@ test('groups missing production values by operator source', () => {
   assert.deepEqual(groups.map((group) => ({ label: group.label, keys: group.keys })), [
     { label: 'Hosting, DNS, TLS, and proxy', keys: ['TRUSTED_PROXY_ADDRESSES'] },
     { label: 'Stripe billing', keys: ['STRIPE_WEBHOOK_SECRET'] },
+    { label: 'Resend email', keys: ['EMAIL_FROM'] },
     { label: 'Supabase storage', keys: ['SUPABASE_SERVICE_ROLE_KEY'] },
     { label: 'Release image promotion', keys: ['CHARITYPILOT_WEB_IMAGE'] },
     { label: 'Other', keys: ['UNKNOWN_VALUE'] },
   ]);
   assert.match(groups[0].items[0].hint, /Reverse-proxy IP\/CIDR/);
   assert.match(groups[1].items[0].hint, /webhook signing secret/);
-  assert.match(groups[2].items[0].hint, /service role key/);
-  assert.match(groups[3].items[0].hint, /Digest-pinned web image ref/);
-  assert.match(groups[4].items[0].hint, /Operator-supplied production value/);
+  assert.match(groups[2].items[0].hint, /Verified sender/);
+  assert.match(groups[3].items[0].hint, /service role key/);
+  assert.match(groups[4].items[0].hint, /Digest-pinned web image ref/);
+  assert.match(groups[5].items[0].hint, /Operator-supplied production value/);
 });
 
 test('reports launch evidence completion counts when the evidence ledger exists', () => {
@@ -151,6 +169,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(payload.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(payload.remainingKeys, ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.deepEqual(payload.expectedProductionValueGroups, []);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
   assert.equal(payload.evidenceLedger.totalChecks, 85);
   assert.equal(payload.evidenceLedger.approvedForLaunch, false);

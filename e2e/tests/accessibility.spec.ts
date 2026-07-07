@@ -17,7 +17,8 @@ test.describe.configure({ retries: 2, timeout: ACCESSIBILITY_TEST_TIMEOUT_MS });
 /**
  * Concern: accessibility & resilience. A charity-sector product must clear a WCAG 2.1 AA
  * baseline. We assert ZERO serious/critical axe violations on every key page, in BOTH the
- * light and dark themes (dark mode is scoped to the dashboard app routes).
+ * light and dark themes so production launch evidence covers the same theme matrix that
+ * responsive route QA requires.
  */
 
 // Settle the page before scanning so axe never measures a transient state. HeroUI /
@@ -86,12 +87,17 @@ test.describe('Accessibility - dashboard (light + dark)', () => {
 
 test.describe('Accessibility - public & auth pages', () => {
   for (const path of ['/', '/pricing', '/login', '/register', '/forgot-password']) {
-    test(`${path} is axe-clean (0 serious/critical)`, async ({ page }) => {
+    test(`${path} is axe-clean in light and dark themes`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await gotoWithDevServerRetry(page, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
       await waitForDocumentShell(page);
+      await applyTheme(page, 'light');
       await settle(page);
-      expect(await seriousViolations(page), path).toEqual([]);
+      expect(await seriousViolations(page), `${path} (light)`).toEqual([]);
+
+      await applyTheme(page, 'dark');
+      await settle(page);
+      expect(await seriousViolations(page), `${path} (dark)`).toEqual([]);
     });
   }
 });

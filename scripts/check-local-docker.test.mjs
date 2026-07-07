@@ -298,6 +298,8 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   assert.match(accessibilitySpec, /gotoWithDevServerRetry\(page,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'light'\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'dark'\)/);
+  assert.match(accessibilitySpec, /await applyTheme\(page,\s*'light'\)/);
+  assert.match(accessibilitySpec, /await applyTheme\(page,\s*'dark'\)/);
   assert.doesNotMatch(accessibilitySpec, /waitForLoadState\('networkidle'\)/);
   assert.doesNotMatch(accessibilitySpec, /waitUntil:\s*'domcontentloaded'/);
 });

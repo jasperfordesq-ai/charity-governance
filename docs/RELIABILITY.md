@@ -510,7 +510,7 @@ _11 guarantees - covered 11_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Accessibility & resilience | The login/register/forgot-password pages are axe-clean (0 serious/critical). | covered | `${path} is axe-clean (0 serious/critical)` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Accessibility & resilience | The public authentication pages are axe-clean (0 serious/critical WCAG 2.1 AA) in both light and dark themes. | covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Auth & session integrity | register → verify-email → login is a working journey; the dashboard is only reachable once the email is verified. | covered | `register, verify email, then log in to the dashboard` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | An invalid/expired email-verification token shows a clean "Verification failed" state, not a crash. | covered | `an invalid verification token shows the failure state` <sup>e2e</sup><br/><sub>tests/auth.spec.ts</sub> |
 | Graceful degradation | A server 400/error on an auth form renders a safe specific message in the inline alert banner — never a raw error or stack. | covered | `apiErrorMessage surfaces the server error field first`<br/><sub>lib/errors.test.ts</sub> |

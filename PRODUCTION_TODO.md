@@ -6,10 +6,12 @@ Status marks reflect completed repository hardening work. Open items require rea
 > first - it explains, in plain English, what is already done and the exact
 > human steps (accounts, hosting, legal, security review) that remain.
 
-> **Current local status checked 2026-07-06:** `npm run launch:status` still
-> reports that 23 production values still require real data in `.env.production`
-> or the approved production secret store. Do not put real charity data into
-> CharityPilot until those values, provider checks, deployed QA, legal/privacy
+> **Current launch status checked 2026-07-07:** in this checkout, `npm run launch:status -- --json`
+> reports `NO_ENV` because `.env.production` and the local launch evidence ledger
+> are not present. On a partially configured production workstation, the same command
+> may report `ENV_INCOMPLETE`; the last handoff with an env file still had 23 production
+> values requiring real data in `.env.production` or the approved production secret store.
+> Do not put real charity data into CharityPilot until those values, provider checks, deployed QA, legal/privacy
 > review, external security review, backup/restore evidence, all 85 machine-readable launch evidence checks, and final signoffs are complete.
 > `npm run launch:status` also surfaces the current launch evidence ledger count,
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
