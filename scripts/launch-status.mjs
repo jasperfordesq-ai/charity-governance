@@ -79,6 +79,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
   },
 ]);
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
+const EXPECTED_PRODUCTION_VALUE_KEYS = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
 
 function parseArgs(argv) {
   return {
@@ -120,6 +121,10 @@ export function groupRemainingKeys(keys) {
   }
 
   return groups;
+}
+
+function expectedProductionValueGroups() {
+  return groupRemainingKeys(EXPECTED_PRODUCTION_VALUE_KEYS);
 }
 
 function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
@@ -179,6 +184,7 @@ export function assessLaunchState(state) {
       headline: 'You have not created a production environment file yet.',
       remainingKeys: [],
       remainingKeyGroups: [],
+      expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -196,6 +202,7 @@ export function assessLaunchState(state) {
       headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
       remainingKeys,
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
+      expectedProductionValueGroups: [],
       evidenceLedger,
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -211,6 +218,7 @@ export function assessLaunchState(state) {
     headline: '.env.production has no remaining placeholders. Validate it next.',
     remainingKeys: [],
     remainingKeyGroups: [],
+    expectedProductionValueGroups: [],
     evidenceLedger,
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
@@ -232,6 +240,7 @@ export function renderLaunchStatusJson(state) {
       headline: state.headline,
       remainingKeys: state.remainingKeys,
       remainingKeyGroups: state.remainingKeyGroups,
+      expectedProductionValueGroups: state.expectedProductionValueGroups ?? [],
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
       externalEvidenceGates: state.externalEvidenceGates,
@@ -250,6 +259,16 @@ function renderLaunchStatusText(state) {
     for (const key of state.remainingKeys) lines.push(`  - ${key}`);
     lines.push('', 'Values still needed by source:');
     for (const group of state.remainingKeyGroups ?? []) {
+      lines.push(`  ${group.label}:`);
+      for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
+        lines.push(`    - ${item.key}: ${item.hint}`);
+      }
+    }
+    lines.push('');
+  }
+  if ((state.expectedProductionValueGroups?.length ?? 0) > 0) {
+    lines.push('Production values you will need by source:');
+    for (const group of state.expectedProductionValueGroups) {
       lines.push(`  ${group.label}:`);
       for (const item of group.items ?? group.keys.map((key) => ({ key, hint: 'Operator-supplied production value' }))) {
         lines.push(`    - ${item.key}: ${item.hint}`);

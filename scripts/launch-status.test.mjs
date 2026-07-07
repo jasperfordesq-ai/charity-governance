@@ -45,6 +45,24 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:init/);
   assert.match(s.evidenceLedger.statusCommand, /check:production:evidence:status/);
   assert.match(s.evidenceLedger.jsonStatusCommand, /--json/);
+  assert.equal(s.expectedProductionValueGroups.length, 8);
+  assert.deepEqual(s.expectedProductionValueGroups.map((group) => group.label), [
+    'Hosting, DNS, TLS, and proxy',
+    'PostgreSQL',
+    'Stripe billing',
+    'Resend email',
+    'Supabase storage',
+    'Observability',
+    'Release image promotion',
+    'Other',
+  ]);
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('CHARITYPILOT_API_IMAGE')));
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
+  assert.match(JSON.stringify(s.expectedProductionValueGroups), /Stripe live secret key/);
+  assert.doesNotMatch(JSON.stringify(s.expectedProductionValueGroups), /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
+  const payload = JSON.parse(renderLaunchStatusJson(s));
+  assert.equal(payload.phase, 'NO_ENV');
+  assert.deepEqual(payload.expectedProductionValueGroups, s.expectedProductionValueGroups);
   assertExternalLaunchEvidenceGates(s);
 });
 
@@ -66,6 +84,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.match(s.remainingKeyGroups[0].items[0].hint, /PostgreSQL URL/);
   assert.match(s.remainingKeyGroups[1].items[0].hint, /Stripe live secret key/);
   assert.doesNotMatch(JSON.stringify(s.remainingKeyGroups), /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
+  assert.deepEqual(s.expectedProductionValueGroups, []);
   assert.equal(s.evidenceLedger.exists, true);
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
@@ -151,6 +170,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(payload.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(payload.remainingKeys, ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.deepEqual(payload.expectedProductionValueGroups, []);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
   assert.equal(payload.evidenceLedger.totalChecks, 85);
   assert.equal(payload.evidenceLedger.approvedForLaunch, false);
@@ -189,6 +209,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   const s = assessLaunchState({ envExists: true, envContent: env });
   assert.equal(s.phase, 'ENV_COMPLETE');
   assert.equal(s.remainingKeys.length, 0);
+  assert.deepEqual(s.expectedProductionValueGroups, []);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assert.ok(s.nextActions.some((a) => a.includes('check:production:evidence:status')));
   assert.ok(s.nextActions.some((a) => a.includes('--json')));
