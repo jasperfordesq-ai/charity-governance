@@ -52,6 +52,35 @@ function assertDeployedBrowserQaCommands(commands) {
   assert.match(commands.evidenceTarget, /browserQa\.checks/);
 }
 
+function assertProductionLaunchCommands(commands) {
+  assert.equal(commands.corePreflight, 'npm run check:production -- --production-env-file=.env.production');
+  assert.equal(commands.hosting, 'npm run check:production:hosting -- --production-env-file=.env.production');
+  assert.equal(
+    commands.database,
+    'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
+  );
+  assert.equal(commands.supabase, 'npm run check:production:supabase -- --production-env-file=.env.production');
+  assert.equal(commands.providers, 'npm run check:production:providers -- --production-env-file=.env.production');
+  assert.equal(
+    commands.observability,
+    'npm run check:production:observability -- --production-env-file=.env.production',
+  );
+  assert.equal(commands.deployPreflight, 'npm run deploy:preflight -- --production-env-file=.env.production');
+  assert.equal(commands.deployProduction, 'npm run deploy:production -- --production-env-file=.env.production');
+  assert.equal(
+    commands.rollbackRehearsal,
+    'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+  );
+  assert.equal(
+    commands.releaseRunEvidence,
+    'npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  );
+  assert.equal(
+    commands.finalEvidenceValidation,
+    'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  );
+}
+
 test('launch status script text is ASCII-safe for operator transcripts', () => {
   const source = readFileSync(join(repoRoot, 'scripts', 'launch-status.mjs'), 'utf8');
 
@@ -98,6 +127,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
     strictLaunchGates: 0,
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
+  assertProductionLaunchCommands(payload.productionLaunchCommands);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assertExternalLaunchEvidenceGates(s);
 });
@@ -280,6 +310,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
   assert.match(payload.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(payload.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
+  assertProductionLaunchCommands(payload.productionLaunchCommands);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));

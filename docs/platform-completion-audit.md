@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `51474b6`
+Working-tree base commit when generated: `f32ed9b`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -238,6 +238,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.
 - Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.
 - Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
+- Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.
 - Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.
 - Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.
 - Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.
@@ -391,6 +392,20 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Cross-browser accessibility: `npm run test:e2e:deployed:accessibility:cross-browser`
 - iOS Safari: Record real iOS Safari manual or cloud-device evidence for the promoted release.
 - Evidence target: Record outputs under browserQa.checks.* in the production launch evidence ledger.
+
+### Production Launch Command Sequence
+
+- Core preflight: `npm run check:production -- --production-env-file=.env.production`
+- Hosting/DNS/TLS: `npm run check:production:hosting -- --production-env-file=.env.production`
+- Database backup/restore: `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel`
+- Supabase storage: `npm run check:production:supabase -- --production-env-file=.env.production`
+- Stripe/Resend providers: `npm run check:production:providers -- --production-env-file=.env.production`
+- Observability alerting: `npm run check:production:observability -- --production-env-file=.env.production`
+- Deploy preflight: `npm run deploy:preflight -- --production-env-file=.env.production`
+- Deploy production: `npm run deploy:production -- --production-env-file=.env.production`
+- Rollback rehearsal: `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env`
+- Release-run evidence: `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
+- Final evidence validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 
 ### Local Production Environment State
 

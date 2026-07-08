@@ -47,6 +47,23 @@ const DEPLOYED_BROWSER_QA = Object.freeze({
   evidenceTarget: 'Record outputs under browserQa.checks.* in the production launch evidence ledger.',
 });
 
+const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
+  corePreflight: 'npm run check:production -- --production-env-file=.env.production',
+  hosting: 'npm run check:production:hosting -- --production-env-file=.env.production',
+  database: 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
+  supabase: 'npm run check:production:supabase -- --production-env-file=.env.production',
+  providers: 'npm run check:production:providers -- --production-env-file=.env.production',
+  observability: 'npm run check:production:observability -- --production-env-file=.env.production',
+  deployPreflight: 'npm run deploy:preflight -- --production-env-file=.env.production',
+  deployProduction: 'npm run deploy:production -- --production-env-file=.env.production',
+  rollbackRehearsal:
+    'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+  releaseRunEvidence:
+    'npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  finalEvidenceValidation:
+    'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+});
+
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence and bind that critical-flow evidence to release.commitSha, accessibility output must be recorded in browserQa.checks.accessibility-coverage, cross-browser output in browserQa.checks.cross-browser-coverage, and real iOS Safari evidence in browserQa.checks.ios-safari-device-coverage.',
@@ -280,6 +297,7 @@ export function assessLaunchState(state) {
       expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
+      productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
       launchProgress: buildLaunchProgress({ remainingKeys: EXPECTED_PRODUCTION_VALUE_KEYS, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -300,6 +318,7 @@ export function assessLaunchState(state) {
       expectedProductionValueGroups: [],
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
+      productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
       launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -318,6 +337,7 @@ export function assessLaunchState(state) {
     expectedProductionValueGroups: [],
     evidenceLedger,
     deployedBrowserQa: DEPLOYED_BROWSER_QA,
+    productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
     launchProgress: buildLaunchProgress({ remainingKeys: [], evidenceLedger }),
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
@@ -344,6 +364,7 @@ export function renderLaunchStatusJson(state) {
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
       deployedBrowserQa: state.deployedBrowserQa,
+      productionLaunchCommands: state.productionLaunchCommands,
       externalEvidenceGates: state.externalEvidenceGates,
     },
     null,
@@ -436,6 +457,20 @@ function renderLaunchStatusText(state) {
     lines.push(`  Cross-browser accessibility:  ${state.deployedBrowserQa.crossBrowserAccessibilityCommand}`);
     lines.push(`  iOS Safari:  ${state.deployedBrowserQa.iosSafariEvidence}`);
     lines.push(`  Evidence target:  ${state.deployedBrowserQa.evidenceTarget}`);
+  }
+  if (state.productionLaunchCommands) {
+    lines.push('', 'Production launch command sequence:');
+    lines.push(`  Core preflight:  ${state.productionLaunchCommands.corePreflight}`);
+    lines.push(`  Hosting/DNS/TLS:  ${state.productionLaunchCommands.hosting}`);
+    lines.push(`  Database backup/restore:  ${state.productionLaunchCommands.database}`);
+    lines.push(`  Supabase storage:  ${state.productionLaunchCommands.supabase}`);
+    lines.push(`  Stripe/Resend providers:  ${state.productionLaunchCommands.providers}`);
+    lines.push(`  Observability alerting:  ${state.productionLaunchCommands.observability}`);
+    lines.push(`  Deploy preflight:  ${state.productionLaunchCommands.deployPreflight}`);
+    lines.push(`  Deploy production:  ${state.productionLaunchCommands.deployProduction}`);
+    lines.push(`  Rollback rehearsal:  ${state.productionLaunchCommands.rollbackRehearsal}`);
+    lines.push(`  Release-run evidence:  ${state.productionLaunchCommands.releaseRunEvidence}`);
+    lines.push(`  Final evidence validation:  ${state.productionLaunchCommands.finalEvidenceValidation}`);
   }
   lines.push('', 'External launch evidence still required:');
   for (const gate of state.externalEvidenceGates) lines.push(`  - ${gate}`);

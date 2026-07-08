@@ -267,6 +267,7 @@ const fixedInThisAuditBranch = [
   'Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.',
   'Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.',
   'Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
+  'Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.',
   'Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.',
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
   'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
@@ -543,6 +544,7 @@ function readLaunchSummary() {
     launchProgress: state.launchProgress,
     evidenceLedger: state.evidenceLedger,
     deployedBrowserQa: state.deployedBrowserQa,
+    productionLaunchCommands: state.productionLaunchCommands,
   };
 }
 
@@ -689,6 +691,20 @@ function render() {
     md += `- Cross-browser accessibility: \`${launch.deployedBrowserQa.crossBrowserAccessibilityCommand}\`\n`;
     md += `- iOS Safari: ${launch.deployedBrowserQa.iosSafariEvidence}\n`;
     md += `- Evidence target: ${launch.deployedBrowserQa.evidenceTarget}\n\n`;
+  }
+  if (launch.productionLaunchCommands) {
+    md += `### Production Launch Command Sequence\n\n`;
+    md += `- Core preflight: \`${launch.productionLaunchCommands.corePreflight}\`\n`;
+    md += `- Hosting/DNS/TLS: \`${launch.productionLaunchCommands.hosting}\`\n`;
+    md += `- Database backup/restore: \`${launch.productionLaunchCommands.database}\`\n`;
+    md += `- Supabase storage: \`${launch.productionLaunchCommands.supabase}\`\n`;
+    md += `- Stripe/Resend providers: \`${launch.productionLaunchCommands.providers}\`\n`;
+    md += `- Observability alerting: \`${launch.productionLaunchCommands.observability}\`\n`;
+    md += `- Deploy preflight: \`${launch.productionLaunchCommands.deployPreflight}\`\n`;
+    md += `- Deploy production: \`${launch.productionLaunchCommands.deployProduction}\`\n`;
+    md += `- Rollback rehearsal: \`${launch.productionLaunchCommands.rollbackRehearsal}\`\n`;
+    md += `- Release-run evidence: \`${launch.productionLaunchCommands.releaseRunEvidence}\`\n`;
+    md += `- Final evidence validation: \`${launch.productionLaunchCommands.finalEvidenceValidation}\`\n\n`;
   }
   md += `### Local Production Environment State\n\n`;
   md += `- Phase: \`${launch.phase}\`\n`;
