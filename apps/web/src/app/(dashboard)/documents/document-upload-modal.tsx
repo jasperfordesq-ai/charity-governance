@@ -1,9 +1,9 @@
 'use client';
 
-import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Select, SelectItem, Textarea } from '@heroui/react';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, ValidationSummary } from '@/components/ui/forms';
 import { FileUploadField } from '@/components/ui/file-upload-field';
+import { ModalFormActions } from '@/components/ui/modal-form-actions';
+import { Input, Modal, ModalBody, ModalContent, ModalHeader, Select, SelectItem, Textarea } from '@heroui/react';
 import { DocumentCategory } from '@charitypilot/shared';
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -148,20 +148,17 @@ export function DocumentUploadModal({
                 />
               </FieldGroup>
             </ModalBody>
-            <ModalFooter>
-              <Button variant="flat" onPress={() => { resetUploadForm(); onClose(); }}>
-                Cancel
-              </Button>
-              <Button
-                className={primaryActionButtonClassName}
-                onPress={handleUpload}
-                isLoading={uploading}
-                isDisabled={Boolean(uploadDisabledReason) || uploading}
-                aria-describedby="document-upload-file-hint"
-              >
-                Upload
-              </Button>
-            </ModalFooter>
+            <ModalFormActions
+              onCancel={() => {
+                resetUploadForm();
+                onClose();
+              }}
+              onSubmit={handleUpload}
+              submitting={uploading}
+              submitDisabled={Boolean(uploadDisabledReason) || uploading}
+              submitAriaDescribedBy="document-upload-file-hint"
+              submitLabel="Upload"
+            />
           </>
         )}
       </ModalContent>

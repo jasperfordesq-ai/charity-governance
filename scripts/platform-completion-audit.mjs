@@ -87,6 +87,7 @@ const fixedInThisAuditBranch = [
   'The document summary panel is split out of the oversized documents route behind a wiring regression test while preserving successful-load gating.',
   'The document upload modal and oversize-file guard UI are split out of the oversized documents route behind a wiring regression test.',
   'The document standard-link modal is split out of the oversized documents route behind a wiring regression test.',
+  'Document upload and standard-link modals now share a HeroUI modal form-action footer primitive behind a wiring regression test.',
   'The document delete confirmation modal is split out of the oversized documents route behind a wiring regression test.',
   'The uploaded-document list panel is split out of the oversized documents route behind a wiring regression test.',
   'The document evidence-pack checklist and operational signal panels are split out of the documents route behind a wiring regression test.',

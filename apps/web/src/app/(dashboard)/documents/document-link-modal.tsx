@@ -1,17 +1,15 @@
 'use client';
 
 import {
-  Button,
   Modal,
   ModalBody,
   ModalContent,
-  ModalFooter,
   ModalHeader,
   Select,
   SelectItem,
 } from '@heroui/react';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormHint } from '@/components/ui/forms';
+import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import type { DocumentResponse, GovernanceStandardResponse } from '@charitypilot/shared';
 
 export function DocumentLinkModal({
@@ -67,27 +65,17 @@ export function DocumentLinkModal({
                 {linkDisabledReason || 'This document will appear as evidence on the selected standard.'}
               </FormHint>
             </ModalBody>
-            <ModalFooter>
-              <Button
-                variant="flat"
-                onPress={() => {
-                  setLinkStandardId('');
-                  onClose();
-                }}
-                isDisabled={linkingStandard}
-              >
-                Cancel
-              </Button>
-              <Button
-                className={primaryActionButtonClassName}
-                onPress={handleLinkStandard}
-                isLoading={linkingStandard}
-                isDisabled={Boolean(linkDisabledReason) || linkingStandard}
-                aria-describedby="link-disabled-hint"
-              >
-                Link
-              </Button>
-            </ModalFooter>
+            <ModalFormActions
+              onCancel={() => {
+                setLinkStandardId('');
+                onClose();
+              }}
+              onSubmit={handleLinkStandard}
+              submitting={linkingStandard}
+              submitDisabled={Boolean(linkDisabledReason) || linkingStandard}
+              submitAriaDescribedBy="link-disabled-hint"
+              submitLabel="Link"
+            />
           </>
         )}
       </ModalContent>

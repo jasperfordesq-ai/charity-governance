@@ -855,6 +855,8 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
     ['ui/status.tsx', ['StatusChip', 'StatusDot', 'EvidenceChip', 'ReviewFlag', 'DeadlineBadge']],
     ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
     ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
+    ['ui/modal-form-actions.tsx', ['ModalFormActions']],
+    ['ui/confirm-action-modal.tsx', ['ConfirmActionModal']],
     ['ui/data-list.tsx', ['DataList', 'DataListTable', 'DataListItems']],
     ['ui/source-reference.tsx', ['SourceReferenceLink', 'SourceReferenceList', 'SourceReferenceNote']],
     ['governance/evidence-readiness.tsx', ['EvidenceReadiness', 'EvidencePromptList', 'EvidenceSourceList']],
@@ -1411,6 +1413,8 @@ test('documents upload modal is extracted from the oversized route file', () => 
   assert.match(modalSrc, /document-upload-file/);
   assert.match(modalSrc, /File size exceeds the 10 MB limit/);
   assert.match(modalSrc, /MAX_FILE_SIZE/);
+  assert.match(modalSrc, /ModalFormActions/);
+  assert.doesNotMatch(modalSrc, /ModalFooter/);
 });
 
 test('documents standard-link modal is extracted from the oversized route file', () => {
@@ -1426,6 +1430,8 @@ test('documents standard-link modal is extracted from the oversized route file',
   assert.match(modalSrc, /<ModalHeader>Link standard<\/ModalHeader>/);
   assert.match(modalSrc, /link-disabled-hint/);
   assert.match(modalSrc, /This document will appear as evidence on the selected standard/);
+  assert.match(modalSrc, /ModalFormActions/);
+  assert.doesNotMatch(modalSrc, /ModalFooter/);
 });
 
 test('documents delete modal is extracted from the oversized route file', () => {
