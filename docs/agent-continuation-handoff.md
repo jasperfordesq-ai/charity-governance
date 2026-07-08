@@ -115,7 +115,7 @@ Correct posture:
   - file upload.
 - Lucide icons have replaced route-local inline SVGs across the main route chrome and key actions.
 - Pricing page metadata is ASCII-safe and pricing feature/comparison icons use `lucide-react` directly.
-- Marketing blog search uses the shared empty-state primitive for no-result filters; compliance standard autosave and organisation profile saving use the shared save-status primitive for saving/saved/error states.
+- Marketing blog search uses the shared empty-state primitive for no-result filters; compliance standard autosave, organisation profile saving, and governance register saving use the shared save-status primitive for saving/saved/error states.
 - Dashboard mobile navigation has explicit ARIA controls, Escape handling, focus recovery, and focus trapping.
 - Breadcrumbs and principle labels are source-backed and meaningful.
 
@@ -250,7 +250,7 @@ Recently successful checks in this workstream:
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
-  - Passed again with 289/289 production-tooling checks after the shared-state cleanup.
+  - Passed again with the production-tooling checks after the shared-state cleanup.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests

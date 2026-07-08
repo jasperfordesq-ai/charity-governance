@@ -404,11 +404,7 @@ export function useRegistersWorkflow() {
     return buildRegisterPriorities(organisation?.conditionalObligationProfile, registerSearchText);
   }, [organisation?.conditionalObligationProfile, registerSearchText]);
   const missingConditionalRegisterCount = conditionalRegisterPriorities.filter((item) => !item.registerEvidenceTracked).length;
-  const registerSavingLabel = saving
-    ? 'Saving register record'
-    : closingRecordId
-      ? 'Closing register record'
-      : 'Register records ready';
+  const registerSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = saving || closingRecordId ? 'saving' : 'idle';
 
   return {
     annual,
@@ -440,7 +436,7 @@ export function useRegistersWorkflow() {
     openRegisterCount,
     organisationProfileError,
     planUnavailable,
-    registerSavingLabel,
+    registerSaveStatus,
     risksForSelectedYear,
     saveAnnual,
     saveFinancial,

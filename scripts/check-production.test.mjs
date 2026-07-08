@@ -2344,6 +2344,17 @@ test('organisation profile form uses the shared save-status primitive', () => {
   assert.match(form, /<SaveStatusIndicator\s+status=\{profileSaveStatus\}/);
 });
 
+test('governance registers page uses the shared save-status primitive', () => {
+  const workflow = readRepoFile('apps/web/src/app/(dashboard)/registers/use-registers-workflow.ts');
+  const page = readRepoFile('apps/web/src/app/(dashboard)/registers/page.tsx');
+
+  assert.match(workflow, /registerSaveStatus/);
+  assert.match(page, /import \{ ErrorState, LoadingState, LockedFeatureState, SaveStatusIndicator \} from '@\/components\/ui\/states'/);
+  assert.match(page, /registerSaveStatus,/);
+  assert.match(page, /<SaveStatusIndicator\s+status=\{registerSaveStatus\}/);
+  assert.doesNotMatch(page, /registerSavingLabel/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 

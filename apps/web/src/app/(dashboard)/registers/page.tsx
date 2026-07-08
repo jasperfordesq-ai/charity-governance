@@ -9,7 +9,7 @@ import {
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { ErrorState, LoadingState, LockedFeatureState } from '@/components/ui/states';
+import { ErrorState, LoadingState, LockedFeatureState, SaveStatusIndicator } from '@/components/ui/states';
 import { RegisterPriorityPanel } from './register-priority-panel';
 import { AnnualReportCard, FinancialControlsCard } from './register-compliance-cards';
 import { RegisterOverviewPanel } from './register-overview-panel';
@@ -49,7 +49,7 @@ export default function RegistersPage() {
     openRegisterCount,
     organisationProfileError,
     planUnavailable,
-    registerSavingLabel,
+    registerSaveStatus,
     risksForSelectedYear,
     saveAnnual,
     saveFinancial,
@@ -90,25 +90,24 @@ export default function RegistersPage() {
       title="Governance Registers"
       description="Maintain review-ready operational records for conflicts, risk, complaints, fundraising, Annual Report readiness, and financial controls."
       actions={(
-        <Select
-          label="Reporting year"
-          className="w-44"
-          selectedKeys={new Set([String(year)])}
-          onSelectionChange={(keys) => {
-            const value = Array.from(keys)[0];
-            if (value) setYear(Number(value));
-          }}
-        >
-          {Array.from({ length: 5 }, (_, i) => currentYear - i).map((option) => (
-            <SelectItem key={String(option)}>{String(option)}</SelectItem>
-          ))}
-        </Select>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <SaveStatusIndicator status={registerSaveStatus} />
+          <Select
+            label="Reporting year"
+            className="w-44"
+            selectedKeys={new Set([String(year)])}
+            onSelectionChange={(keys) => {
+              const value = Array.from(keys)[0];
+              if (value) setYear(Number(value));
+            }}
+          >
+            {Array.from({ length: 5 }, (_, i) => currentYear - i).map((option) => (
+              <SelectItem key={String(option)}>{String(option)}</SelectItem>
+            ))}
+          </Select>
+        </div>
       )}
     >
-      <div aria-live="polite" className="sr-only">
-        {registerSavingLabel}
-      </div>
-
       {registersDataReady && (
         <RegisterOverviewPanel
           openRegisterCount={openRegisterCount}
