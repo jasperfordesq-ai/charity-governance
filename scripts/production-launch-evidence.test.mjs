@@ -631,7 +631,7 @@ function evidenceEntry(areaId, checkId) {
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
       'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
-      'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
+      'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
       'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
       `Browser QA release commit: ${commitSha}.`,
       `Routes covered: ${launchCriticalRoutes.join(', ')}.`,
@@ -1309,6 +1309,9 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include docs\/production-browser-qa\.md/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include document upload/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include pending-navigation confirmation/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include conditional obligations/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include readiness blockers/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include Launch-Critical Route Inventory/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include every route/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include desktop, mobile, light-mode, and dark-mode evidence/);
@@ -1373,7 +1376,7 @@ test('production launch evidence validator requires every launch-critical route 
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
     'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
-    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
+    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
     'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
     `Routes covered: ${launchCriticalRoutes.filter((route) => route !== '/export').join(', ')}.`,
     'zero critical or high-severity browser QA defects remain unresolved.',
@@ -1407,7 +1410,7 @@ test('production launch evidence validator treats the root route as an explicit 
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
     'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
-    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, and error states.',
+    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
     'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
     `Routes covered: ${launchCriticalRoutes.filter((route) => route !== '/').join(', ')}.`,
     'zero critical or high-severity browser QA defects remain unresolved.',

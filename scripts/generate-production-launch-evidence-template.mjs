@@ -235,6 +235,9 @@ const evidenceHintsByCheck = new Map([
     'signed download',
     'logout',
     'error states',
+    'pending-navigation confirmation',
+    'conditional obligations',
+    'readiness blockers',
     'zero critical or high-severity browser QA defects',
   ]],
   ['securityReview.penetration-test-complete', [
