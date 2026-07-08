@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `5c2aeb9`
+Working-tree base commit when generated: `dcd0c36`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -452,29 +452,29 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Strict launch gates complete: 18 / 118 (100 remaining, 15.3% complete)
 - approvedForLaunch: false
 
-### Local Production Environment Placeholders
+### Local Production Environment Issues
 
-The local non-committed production env still needs 19 real value(s):
+The local non-committed production env still has 19 unresolved value issue(s):
 
-- `TRUSTED_PROXY_ADDRESSES`
-- `DATABASE_URL`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
-- `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`
-- `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`
-- `STRIPE_COMPLETE_MONTHLY_PRICE_ID`
-- `STRIPE_COMPLETE_YEARLY_PRICE_ID`
-- `RESEND_API_KEY`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `ERROR_ALERT_WEBHOOK_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_API_IMAGE`
-- `CHARITYPILOT_WEB_IMAGE`
-- `CHARITYPILOT_MIGRATION_IMAGE`
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
+- `TRUSTED_PROXY_ADDRESSES` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `DATABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_SECRET_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_WEBHOOK_SECRET` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_ESSENTIALS_YEARLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_COMPLETE_MONTHLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_COMPLETE_YEARLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `RESEND_API_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `SUPABASE_SERVICE_ROLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `ERROR_ALERT_WEBHOOK_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `NEXT_PUBLIC_SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_API_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_WEB_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_MIGRATION_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
 
 Grouped by source:
 

@@ -190,6 +190,10 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.deepEqual(s.remainingKeyDetails, [
+    { key: 'DATABASE_URL', reason: 'placeholder', detail: 'Value still contains a REPLACE_ME placeholder.' },
+    { key: 'STRIPE_SECRET_KEY', reason: 'placeholder', detail: 'Value still contains a REPLACE_ME placeholder.' },
+  ]);
   assert.deepEqual(s.remainingKeyGroups.map((group) => ({ label: group.label, keys: group.keys })), [
     { label: 'PostgreSQL', keys: ['DATABASE_URL'] },
     { label: 'Stripe billing', keys: ['STRIPE_SECRET_KEY'] },
@@ -247,6 +251,13 @@ test('reports TLS and shared-cookie production drift before deploy preflight', (
 
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys, ['AUTH_COOKIE_DOMAIN', 'CHARITYPILOT_WEB_DOMAIN']);
+  assert.deepEqual(
+    s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason, expected: issue.expected })),
+    [
+      { key: 'AUTH_COOKIE_DOMAIN', reason: 'canonical-drift', expected: '.charitypilot.ie' },
+      { key: 'CHARITYPILOT_WEB_DOMAIN', reason: 'canonical-drift', expected: 'app.charitypilot.ie' },
+    ],
+  );
   assert.deepEqual(s.remainingKeyGroups.map((group) => ({ label: group.label, keys: group.keys })), [
     { label: 'Hosting, DNS, TLS, and proxy', keys: ['AUTH_COOKIE_DOMAIN', 'CHARITYPILOT_WEB_DOMAIN'] },
   ]);
@@ -357,6 +368,10 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(payload.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(payload.remainingKeys, ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
+  assert.deepEqual(payload.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })), [
+    { key: 'DATABASE_URL', reason: 'placeholder' },
+    { key: 'STRIPE_SECRET_KEY', reason: 'placeholder' },
+  ]);
   assert.equal(payload.expectedProductionValueGroups.length, 8);
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));

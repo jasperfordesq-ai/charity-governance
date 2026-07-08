@@ -553,6 +553,7 @@ function readLaunchSummary() {
     phase: state.phase,
     headline: state.headline,
     remainingKeys: state.remainingKeys ?? [],
+    remainingKeyDetails: state.remainingKeyDetails ?? [],
     remainingKeyGroups: state.remainingKeyGroups ?? [],
     launchProgress: state.launchProgress,
     evidenceLedger: state.evidenceLedger,
@@ -763,9 +764,13 @@ function render() {
   }
 
   if (launch.remainingKeys.length > 0) {
-    md += `### Local Production Environment Placeholders\n\n`;
-    md += `The local non-committed production env still needs ${launch.remainingKeys.length} real value(s):\n\n`;
-    md += `${markdownList(launch.remainingKeys.map((key) => `\`${key}\``))}\n\n`;
+    const issueByKey = new Map((launch.remainingKeyDetails ?? []).map((issue) => [issue.key, issue]));
+    md += `### Local Production Environment Issues\n\n`;
+    md += `The local non-committed production env still has ${launch.remainingKeys.length} unresolved value issue(s):\n\n`;
+    md += `${markdownList(launch.remainingKeys.map((key) => {
+      const issue = issueByKey.get(key);
+      return `\`${key}\`${issue?.reason ? ` (${issue.reason})` : ''}${issue?.detail ? `: ${issue.detail}` : ''}`;
+    }))}\n\n`;
     if (launch.remainingKeyGroups.length > 0) {
       md += `Grouped by source:\n\n`;
       for (const group of launch.remainingKeyGroups) {

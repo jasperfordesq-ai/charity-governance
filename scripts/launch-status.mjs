@@ -191,8 +191,16 @@ function productionEnvAssignments(envContent) {
   return assignments;
 }
 
-function productionValueIssueKeys(envContent) {
-  const keys = new Set(placeholderKeys(envContent));
+function productionValueIssueDetails(envContent) {
+  const issues = new Map();
+  for (const key of placeholderKeys(envContent)) {
+    issues.set(key, {
+      key,
+      reason: 'placeholder',
+      detail: 'Value still contains a REPLACE_ME placeholder.',
+    });
+  }
+
   const assignments = productionEnvAssignments(envContent);
   const expectedExactValues = [
     ['AUTH_COOKIE_DOMAIN', '.charitypilot.ie'],
@@ -202,15 +210,29 @@ function productionValueIssueKeys(envContent) {
 
   for (const [key, expectedValue] of expectedExactValues) {
     if (!assignments.has(key)) continue;
-    if (assignments.get(key) !== expectedValue) keys.add(key);
+    const actualValue = assignments.get(key);
+    if (actualValue !== expectedValue) {
+      issues.set(key, {
+        key,
+        reason: 'canonical-drift',
+        expected: expectedValue,
+        detail: `Value must match the canonical production setting: ${expectedValue}.`,
+      });
+    }
   }
 
   if (assignments.has('CADDY_ACME_EMAIL')) {
     const caddyEmail = assignments.get('CADDY_ACME_EMAIL') ?? '';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(caddyEmail)) keys.add('CADDY_ACME_EMAIL');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(caddyEmail)) {
+      issues.set('CADDY_ACME_EMAIL', {
+        key: 'CADDY_ACME_EMAIL',
+        reason: 'invalid-email',
+        detail: 'Value must be a real operations email address for certificate registration.',
+      });
+    }
   }
 
-  return [...keys];
+  return [...issues.values()];
 }
 
 export function groupRemainingKeys(keys) {
@@ -365,6 +387,7 @@ export function assessLaunchState(state) {
       phase: 'NO_ENV',
       headline: 'You have not created a production environment file yet.',
       remainingKeys: [],
+      remainingKeyDetails: [],
       remainingKeyGroups: [],
       expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
@@ -382,12 +405,14 @@ export function assessLaunchState(state) {
     };
   }
 
-  const remainingKeys = productionValueIssueKeys(state.envContent ?? '');
+  const remainingKeyDetails = productionValueIssueDetails(state.envContent ?? '');
+  const remainingKeys = remainingKeyDetails.map((issue) => issue.key);
   if (remainingKeys.length > 0) {
     return {
       phase: 'ENV_INCOMPLETE',
       headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
       remainingKeys,
+      remainingKeyDetails,
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
       expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
@@ -409,6 +434,7 @@ export function assessLaunchState(state) {
     phase: 'ENV_COMPLETE',
     headline: '.env.production has no remaining placeholders. Validate it next.',
     remainingKeys: [],
+    remainingKeyDetails: [],
     remainingKeyGroups: [],
     expectedProductionValueGroups: [],
     evidenceLedger,
@@ -436,6 +462,7 @@ export function renderLaunchStatusJson(state) {
       phase: state.phase,
       headline: state.headline,
       remainingKeys: state.remainingKeys,
+      remainingKeyDetails: state.remainingKeyDetails ?? [],
       remainingKeyGroups: state.remainingKeyGroups,
       expectedProductionValueGroups: state.expectedProductionValueGroups ?? [],
       launchProgress: state.launchProgress,
@@ -458,7 +485,11 @@ function renderLaunchStatusText(state) {
   lines.push('CharityPilot launch status', '==========================', '', state.headline, '');
   if (state.remainingKeys.length > 0) {
     lines.push('Values still needed:');
-    for (const key of state.remainingKeys) lines.push(`  - ${key}`);
+    const issueByKey = new Map((state.remainingKeyDetails ?? []).map((issue) => [issue.key, issue]));
+    for (const key of state.remainingKeys) {
+      const detail = issueByKey.get(key)?.detail;
+      lines.push(`  - ${key}${detail ? `: ${detail}` : ''}`);
+    }
     lines.push('', 'Values still needed by source:');
     for (const group of state.remainingKeyGroups ?? []) {
       lines.push(`  ${group.label}:`);
