@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { forgotPasswordSchema, firstSchemaError } from '@/lib/form-schemas';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
 import { FormAlert } from '@/components/ui/form-alert';
 
 export default function ForgotPasswordPage() {
@@ -42,9 +43,7 @@ export default function ForgotPasswordPage() {
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-lg bg-teal-primary/10 dark:bg-teal-bright/10 flex items-center justify-center mx-auto mb-5">
-                  <Mail className="w-7 h-7 text-teal-primary" aria-hidden="true" />
-                </div>
+                <AuthStatusIcon icon={Mail} />
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Check your email</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
                   If an account exists for <span className="font-medium text-gray-950 dark:text-white">{email}</span>,

@@ -6,6 +6,7 @@ import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { LegalAttribution } from '@/components/legal-attribution';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { SessionTimeout } from '@/components/session-timeout';
@@ -296,6 +297,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
           <div className="text-xs text-gray-400 dark:text-gray-400 text-center space-y-1">
             <p>CharityPilot v1.0</p>
+            <LegalAttribution className="leading-5" />
             <p className="hidden lg:block">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-[10px] font-mono">?</kbd> for shortcuts</p>
           </div>
         </div>

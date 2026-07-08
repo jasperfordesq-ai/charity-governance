@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { MobileNav } from './MobileNav';
 import { BackToTop } from '@/components/back-to-top';
+import { LegalAttribution } from '@/components/legal-attribution';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { ShieldCheck } from 'lucide-react';
 
@@ -44,6 +45,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                 className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
               >
                 Blog
+              </Link>
+              <Link
+                href="/about"
+                className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
+              >
+                About
               </Link>
               <Link
                 href="/login"
@@ -93,6 +100,11 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </p>
               <ul className="space-y-2 text-sm">
                 <li>
+                  <Link href="/about" className="hover:text-white dark:hover:text-teal-bright transition-colors">
+                    About
+                  </Link>
+                </li>
+                <li>
                   <Link href="/features" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Features
                   </Link>
@@ -136,7 +148,8 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           </div>
 
           <div className="pt-8 border-t border-gray-800 dark:border-gray-700 text-sm text-center text-gray-400 dark:text-gray-300">
-            <p>&copy; 2026 Project Nexus Ltd. All rights reserved.</p>
+            <p className="mb-2">A product of Project Nexus Ltd, Skibbereen, Co. Cork.</p>
+            <LegalAttribution />
           </div>
         </div>
       </footer>

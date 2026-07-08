@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
@@ -70,9 +71,7 @@ function ResetPasswordForm() {
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-lg bg-green-50 dark:bg-green-950/40 flex items-center justify-center mx-auto mb-5">
-                  <Check className="w-7 h-7 text-green-500" aria-hidden="true" />
-                </div>
+                <AuthStatusIcon icon={Check} tone="success" />
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Password reset</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
                   Your password has been reset successfully. You can now sign in with your new

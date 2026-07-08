@@ -1661,9 +1661,35 @@ test('auth routes use lucide icons instead of route-local inline svg', () => {
     const src = app(`(auth)/${file}`);
     assert.match(src, /from 'lucide-react'/, `${file} should use lucide-react for auth icons`);
     for (const icon of icons) {
-      assert.match(src, new RegExp(`<${icon}\\b`), `${file} should render ${icon} through lucide-react`);
+      assert.match(
+        src,
+        new RegExp(`(<${icon}\\b|icon=\\{${icon}\\})`),
+        `${file} should render ${icon} through lucide-react`,
+      );
     }
     assert.doesNotMatch(src, /<svg\b/, `${file} should not carry hand-drawn inline SVG markup`);
+  }
+});
+
+test('auth status illustrations use the shared status icon primitive', () => {
+  const primitive = component('ui/auth-status-icon.tsx');
+  assert.match(primitive, /export function AuthStatusIcon/);
+  assert.match(primitive, /type AuthStatusTone = 'brand' \| 'success' \| 'danger'/);
+  assert.match(primitive, /LucideIcon/);
+
+  const routes = [
+    '(auth)/forgot-password/page.tsx',
+    '(auth)/reset-password/page.tsx',
+    '(auth)/verify-email/page.tsx',
+  ];
+
+  for (const route of routes) {
+    const src = app(route);
+    assert.match(src, /AuthStatusIcon/, `${route} should use the shared auth status icon shell`);
+    assert.doesNotMatch(src, /w-14 h-14 rounded-lg/, `${route} should not duplicate auth status icon sizing`);
+    assert.doesNotMatch(src, /bg-green-50 dark:bg-green-950\/40/, `${route} should not duplicate success icon tones`);
+    assert.doesNotMatch(src, /bg-red-50 dark:bg-red-950\/40/, `${route} should not duplicate error icon tones`);
+    assert.doesNotMatch(src, /bg-teal-primary\/10 dark:bg-teal-bright\/10/, `${route} should not duplicate brand icon tones`);
   }
 });
 
@@ -2770,6 +2796,41 @@ test('public SEO and sharing URLs use the canonical production app origin', () =
   assert.match(app('robots.ts'), /sitemap:\s*absoluteSiteUrl\('\/sitemap\.xml'\)/);
   assert.match(component('json-ld.tsx'), /mainEntityOfPage:\s*absoluteSiteUrl\(`\/blog\/\$\{slug\}`\)/);
   assert.match(app('(marketing)/blog/[slug]/page.tsx'), /const canonicalUrl = absoluteSiteUrl\(`\/blog\/\$\{meta\.slug\}`\)/);
+});
+
+test('public attribution surfaces name Jasper Ford as IP holder and link to the GPL source repository', () => {
+  const rootPackage = repo('package.json');
+  assert.match(rootPackage, /"license": "GPL-3\.0-or-later"/);
+  assert.match(rootPackage, /"repository": \{[\s\S]*?"url": "https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\.git"/);
+
+  const notice = repo('NOTICE.md');
+  assert.match(notice, /Copyright \(C\) 2026 Jasper Ford/);
+  assert.match(notice, /GNU General Public License v3\.0 or later/);
+  assert.match(notice, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
+
+  const attribution = component('legal-attribution.tsx');
+  assert.match(attribution, /Jasper Ford/);
+  assert.match(attribution, /GPL-3\.0-or-later/);
+  assert.match(attribution, /no warranty/i);
+  assert.match(attribution, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
+
+  for (const file of ['(marketing)/layout.tsx', '(auth)/layout.tsx', '(dashboard)/layout.tsx']) {
+    const src = app(file);
+    assert.match(src, /LegalAttribution/, `${file} must show copyright/source attribution`);
+  }
+
+  const aboutPagePath = join(WEB, 'src', 'app', '(marketing)', 'about', 'page.tsx');
+  assert.ok(existsSync(aboutPagePath), 'public about page should exist');
+  const aboutPage = readFileSync(aboutPagePath, 'utf8');
+  assert.match(aboutPage, /Jasper Ford/);
+  assert.match(aboutPage, /IP holder/);
+  assert.match(aboutPage, /GPL-3\.0-or-later/);
+  assert.match(aboutPage, /no warranty/i);
+  assert.match(aboutPage, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
+
+  assert.match(app('(marketing)/layout.tsx'), /href="\/about"/);
+  assert.match(app('(marketing)/MobileNav.tsx'), /href: '\/about'/);
+  assert.match(app('sitemap.ts'), /absoluteSiteUrl\('\/about'\)/);
 });
 
 test('dashboard primary actions use the shared action button styling', () => {

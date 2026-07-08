@@ -1,6 +1,12 @@
 {
   "name": "charitypilot",
   "private": true,
+  "license": "GPL-3.0-or-later",
+  "author": "Jasper Ford",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jasperfordesq-ai/charity-governance.git"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"

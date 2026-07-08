@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { LegalAttribution } from '@/components/legal-attribution';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -32,16 +33,22 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
       {/* Minimal footer */}
       <footer className="text-center py-6 px-4 text-xs text-gray-500 dark:text-gray-300">
-        <p>
-          &copy; 2026 Project Nexus Ltd &mdash;{' '}
+        <div className="mx-auto max-w-xl space-y-2">
+          <LegalAttribution />
+          <p>
           <Link href="/privacy" className="hover:text-teal-primary dark:hover:text-teal-bright transition-colors">
             Privacy Policy
           </Link>{' '}
           &middot;{' '}
           <Link href="/terms" className="hover:text-teal-primary dark:hover:text-teal-bright transition-colors">
             Terms of Service
+          </Link>{' '}
+          &middot;{' '}
+          <Link href="/about" className="hover:text-teal-primary dark:hover:text-teal-bright transition-colors">
+            About
           </Link>
-        </p>
+          </p>
+        </div>
       </footer>
     </div>
   );

@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
 import { Check, CircleAlert, Mail } from 'lucide-react';
 import { FormAlert } from '@/components/ui/form-alert';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -99,9 +100,7 @@ function VerifyEmailContent() {
 
             {status === 'pending' && (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-lg bg-teal-primary/10 dark:bg-teal-bright/10 flex items-center justify-center mx-auto mb-5">
-                  <Mail className="w-7 h-7 text-teal-primary" aria-hidden="true" />
-                </div>
+                <AuthStatusIcon icon={Mail} />
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Check your email</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
                 <div className="flex flex-col items-center gap-3">
@@ -135,9 +134,7 @@ function VerifyEmailContent() {
 
             {status === 'success' && (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-lg bg-green-50 dark:bg-green-950/40 flex items-center justify-center mx-auto mb-5">
-                  <Check className="w-7 h-7 text-green-500" aria-hidden="true" />
-                </div>
+                <AuthStatusIcon icon={Check} tone="success" />
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Email verified</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">{message}</p>
                 <Link
@@ -151,9 +148,7 @@ function VerifyEmailContent() {
 
             {status === 'error' && (
               <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-lg bg-red-50 dark:bg-red-950/40 flex items-center justify-center mx-auto mb-5">
-                  <CircleAlert className="w-7 h-7 text-red-500" aria-hidden="true" />
-                </div>
+                <AuthStatusIcon icon={CircleAlert} tone="danger" />
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Verification failed</h1>
                 <div className="mb-6 text-left">
                   <FormAlert title="Verification could not be completed">{message}</FormAlert>
