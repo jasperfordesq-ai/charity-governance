@@ -3,7 +3,7 @@
 import { Button, Checkbox } from '@heroui/react';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { EmptyState, ErrorState, LoadingState, SaveStatusIndicator } from '@/components/ui/states';
 import { DeadlineBadge, StatusChip, type StatusTone, statusPanelClassName } from '@/components/ui/status';
 import type { DeadlineResponse } from '@charitypilot/shared';
 
@@ -114,10 +114,16 @@ export function DeadlineListPanel({
   onDelete: (deadline: DeadlineResponse) => void;
   onToggleComplete: (deadline: DeadlineResponse) => void | Promise<void>;
 }) {
+  const deadlineMutationStatus: 'idle' | 'saving' | 'saved' | 'error' =
+    toggleDeadlineId || deletingDeadlineId ? 'saving' : 'idle';
+
   return (
     <DataList
       title="Deadline list"
       description="Incomplete items appear first, then the nearest due date. Complete items stay visible for evidence history."
+      actions={deadlineMutationStatus === 'idle' ? undefined : (
+        <SaveStatusIndicator status={deadlineMutationStatus} />
+      )}
     >
       {loading ? (
         <LoadingState title="Loading deadlines" description="Checking your governance calendar." />
@@ -154,9 +160,6 @@ export function DeadlineListPanel({
               )}
             />
           ) : null}
-          <div aria-live="polite" className="sr-only">
-            {toggleDeadlineId ? 'Updating deadline status' : deletingDeadlineId ? 'Deleting deadline' : 'Deadline list ready'}
-          </div>
           <DataListItems divided={false}>
             <div className="space-y-3 p-3">
               {sortedDeadlines.map((deadline) => {

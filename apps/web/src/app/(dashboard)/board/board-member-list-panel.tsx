@@ -13,7 +13,7 @@ import {
 } from '@heroui/react';
 import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { EmptyState, ErrorState, LoadingState, SaveStatusIndicator } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 import { BoardEvidenceChips } from './board-evidence';
@@ -54,22 +54,27 @@ export function BoardMemberListPanel({
   setShowInactive,
   showInactive,
 }: BoardMemberListPanelProps) {
+  const boardMutationStatus: 'idle' | 'saving' | 'saved' | 'error' = mutatingMemberId || saving ? 'saving' : 'idle';
+
   return (
     <DataList
       title="Trustees"
       description="The active view is the default register. Toggle inactive members when you need historic appointment evidence."
       actions={(
-        <Switch
-          size="sm"
-          color="primary"
-          isSelected={showInactive}
-          onValueChange={setShowInactive}
-          classNames={{
-            label: 'text-sm text-gray-600 dark:text-gray-300',
-          }}
-        >
-          Show inactive
-        </Switch>
+        <>
+          <SaveStatusIndicator status={boardMutationStatus} />
+          <Switch
+            size="sm"
+            color="primary"
+            isSelected={showInactive}
+            onValueChange={setShowInactive}
+            classNames={{
+              label: 'text-sm text-gray-600 dark:text-gray-300',
+            }}
+          >
+            Show inactive
+          </Switch>
+        </>
       )}
     >
       {loading ? (
@@ -107,10 +112,6 @@ export function BoardMemberListPanel({
               )}
             />
           ) : null}
-          <div aria-live="polite" className="sr-only">
-            {mutatingMemberId ? 'Updating trustee status' : 'Board register ready'}
-          </div>
-
           {/* Keep table and mobile card views at field parity for trustee evidence review. */}
           <div className="sm:hidden">
             <DataListItems divided={false}>

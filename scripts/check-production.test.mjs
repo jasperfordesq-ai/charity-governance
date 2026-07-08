@@ -2355,6 +2355,21 @@ test('governance registers page uses the shared save-status primitive', () => {
   assert.doesNotMatch(page, /registerSavingLabel/);
 });
 
+test('deadline and board list mutations use the shared save-status primitive', () => {
+  const deadlineList = readRepoFile('apps/web/src/app/(dashboard)/deadlines/deadline-list-panel.tsx');
+  const boardList = readRepoFile('apps/web/src/app/(dashboard)/board/board-member-list-panel.tsx');
+
+  assert.match(deadlineList, /SaveStatusIndicator/);
+  assert.match(deadlineList, /const deadlineMutationStatus: 'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(deadlineList, /<SaveStatusIndicator\s+status=\{deadlineMutationStatus\}/);
+  assert.doesNotMatch(deadlineList, /Deadline list ready/);
+
+  assert.match(boardList, /SaveStatusIndicator/);
+  assert.match(boardList, /const boardMutationStatus: 'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(boardList, /<SaveStatusIndicator\s+status=\{boardMutationStatus\}/);
+  assert.doesNotMatch(boardList, /Board register ready/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 
