@@ -50,7 +50,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > every checklist item to predate final signoff, and aligns the deploy-smoke evidence
 > hint with the actual `node scripts/smoke-production-deploy.mjs` command. A local
 > `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
-> `e2a98ee`: security scan, lint, build, workspace tests, dependency audit, and
+> `db025c7`: security scan, lint, build, workspace tests, dependency audit, and
 > reliability ledger passed; only Playwright E2E was skipped. This still does not
 > replace deployed QA, real provider checks, legal/privacy review, pentest, or
 > final production signoffs.
