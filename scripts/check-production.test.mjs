@@ -2285,6 +2285,7 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.match(browserQa, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive:dashboard:mobile/);
   assert.match(browserQa, /SECRET_STORE_E2E_OWNER_EMAIL/);
   assert.match(browserQa, /SECRET_STORE_E2E_OWNER_PASSWORD/);
+  assert.doesNotMatch(browserQa, /qa-owner@example\.com|from-secret-store/);
   assert.doesNotMatch(browserQa, /<secret-store-reference>/);
   assert.match(browserQa, /E2E_SKIP_ROUTE_WARMING=true/);
   assert.match(browserQa, /E2E_ROUTE_WARM_TIMEOUT_MS/);

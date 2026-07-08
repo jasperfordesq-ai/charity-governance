@@ -22,8 +22,8 @@ Example deployed responsive smoke command:
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=qa-owner@example.com \
-E2E_OWNER_PASSWORD='from-secret-store' \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive
 ```
 
