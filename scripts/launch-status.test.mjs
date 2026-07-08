@@ -172,7 +172,9 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.match(s.remainingKeyGroups[0].items[0].hint, /PostgreSQL URL/);
   assert.match(s.remainingKeyGroups[1].items[0].hint, /Stripe live secret key/);
   assert.doesNotMatch(JSON.stringify(s.remainingKeyGroups), /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
-  assert.deepEqual(s.expectedProductionValueGroups, []);
+  assert.equal(s.expectedProductionValueGroups.length, 8);
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
   assert.equal(s.evidenceLedger.exists, true);
   assert.deepEqual(s.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
@@ -307,7 +309,9 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(payload.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(payload.remainingKeys, ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
-  assert.deepEqual(payload.expectedProductionValueGroups, []);
+  assert.equal(payload.expectedProductionValueGroups.length, 8);
+  assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
+  assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
   assert.deepEqual(payload.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
   assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 85, remaining: 85 });
   assert.deepEqual(payload.launchProgress.finalSignoffs, { approved: 0, total: 5, remaining: 5 });

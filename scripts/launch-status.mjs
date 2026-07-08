@@ -330,7 +330,7 @@ export function assessLaunchState(state) {
       headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
       remainingKeys,
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
-      expectedProductionValueGroups: [],
+      expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,

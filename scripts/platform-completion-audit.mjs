@@ -267,6 +267,7 @@ const fixedInThisAuditBranch = [
   'Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.',
   'Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.',
   'Strict launch-evidence JSON validation now includes the next incomplete checklist items and evidence hints so failing launch-gate output can drive operator work queues.',
+  'Launch status now keeps the full source-grouped production value checklist visible even after .env.production exists, while separately listing the currently missing values.',
   'Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
   'Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.',
   'Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.',
