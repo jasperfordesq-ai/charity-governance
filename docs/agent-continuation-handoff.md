@@ -101,6 +101,7 @@ Correct posture:
   - locked-feature states;
   - review warnings;
   - inline status;
+  - save status;
   - source references;
   - file upload;
   - form alerts;
@@ -114,6 +115,7 @@ Correct posture:
   - file upload.
 - Lucide icons have replaced route-local inline SVGs across the main route chrome and key actions.
 - Pricing page metadata is ASCII-safe and pricing feature/comparison icons use `lucide-react` directly.
+- Marketing blog search uses the shared empty-state primitive for no-result filters, and compliance standard autosave uses the shared save-status primitive for saving/saved/error retry states.
 - Dashboard mobile navigation has explicit ARIA controls, Escape handling, focus recovery, and focus trapping.
 - Breadcrumbs and principle labels are source-backed and meaningful.
 
@@ -243,6 +245,10 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-08 with 286/286 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
+- `npm run lint -w @charitypilot/web`
+  - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
+- `npm run build -w @charitypilot/web`
+  - Passed after the same shared-state cleanup.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests

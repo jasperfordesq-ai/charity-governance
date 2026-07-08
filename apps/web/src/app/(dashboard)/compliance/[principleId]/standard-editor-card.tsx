@@ -5,8 +5,8 @@ import {
   ComplianceStatus,
   type GovernancePrincipleResponse,
 } from '@charitypilot/shared';
-import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
 import { StatusChip, StatusDot, type StatusTone } from '@/components/ui/status';
+import { SaveStatusIndicator } from '@/components/ui/states';
 
 export interface StandardFormState {
   status: ComplianceStatus;
@@ -102,23 +102,10 @@ export function StandardEditorCard({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0" aria-live="polite">
-            {save === 'saving' && (
-              <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-400">
-                <LoaderCircle className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                Saving...
-              </span>
-            )}
-            {save === 'saved' && (
-              <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
-                <Check className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden="true" />
-                Saved
-              </span>
-            )}
-            {save === 'error' && (
-              <span className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 font-medium">
-                <CircleAlert className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
-                Save failed
+          <div className="flex shrink-0 justify-end">
+            <SaveStatusIndicator
+              status={save}
+              retryAction={
                 <Button
                   type="button"
                   size="sm"
@@ -129,8 +116,8 @@ export function StandardEditorCard({
                 >
                   Retry
                 </Button>
-              </span>
-            )}
+              }
+            />
           </div>
         </div>
 

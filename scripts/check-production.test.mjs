@@ -2311,6 +2311,27 @@ test('frontend architecture docs describe current public theme support', () => {
   assert.match(frontendArchitecture, /pre-paint inline script applies the user's light\/dark preference across public and protected route groups/);
 });
 
+test('marketing blog search uses the shared empty-state primitive', () => {
+  const blogClient = readRepoFile('apps/web/src/app/(marketing)/blog/BlogClient.tsx');
+
+  assert.match(blogClient, /import \{ EmptyState \} from '@\/components\/ui\/states'/);
+  assert.match(blogClient, /<EmptyState[\s\S]*title="No articles found"/);
+  assert.doesNotMatch(blogClient, /border-dashed border-gray-300/);
+  assert.doesNotMatch(blogClient, /<FileText/);
+});
+
+test('compliance standard editor uses the shared save-status primitive', () => {
+  const standardEditor = readRepoFile('apps/web/src/app/(dashboard)/compliance/[principleId]/standard-editor-card.tsx');
+  const statePrimitives = readRepoFile('apps/web/src/components/ui/states.tsx');
+
+  assert.match(statePrimitives, /export function SaveStatusIndicator/);
+  assert.match(standardEditor, /import \{ SaveStatusIndicator \} from '@\/components\/ui\/states'/);
+  assert.match(standardEditor, /<SaveStatusIndicator[\s\S]*status=\{save\}/);
+  assert.doesNotMatch(standardEditor, /LoaderCircle/);
+  assert.doesNotMatch(standardEditor, /CircleAlert/);
+  assert.doesNotMatch(standardEditor, /import \{ Check/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Button, Input } from '@heroui/react';
 import Link from 'next/link';
-import { ArrowRight, BookOpen, FileText, Search, ShieldCheck } from 'lucide-react';
+import { ArrowRight, BookOpen, Search, ShieldCheck } from 'lucide-react';
 import { getCategories, formatDate } from '@/lib/blog';
 import type { PostMeta } from '@/lib/blog';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { EmptyState } from '@/components/ui/states';
 
 function PostCard({ post, featured = false }: { post: PostMeta; featured?: boolean }) {
   return (
@@ -110,28 +111,25 @@ export function BlogClient({ posts }: { posts: PostMeta[] }) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-16 text-center dark:border-gray-700 dark:bg-gray-900">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white text-gray-400 dark:bg-gray-950 dark:text-gray-400">
-            <FileText className="h-7 w-7" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <p className="mb-1 font-semibold text-gray-950 dark:text-white">No articles found</p>
-          <p className="mx-auto max-w-sm text-sm text-gray-600 dark:text-gray-300">
-            Try a broader search term or switch back to all categories.
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            radius="md"
-            variant="bordered"
-            onPress={() => {
-              setSearch('');
-              setActiveCategory('All');
-            }}
-            className="mt-5 border-teal-primary font-semibold text-teal-primary hover:bg-teal-primary hover:text-white dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950"
-          >
-            Clear filters
-          </Button>
-        </div>
+        <EmptyState
+          title="No articles found"
+          description="Try a broader search term or switch back to all categories."
+          action={
+            <Button
+              type="button"
+              size="sm"
+              radius="md"
+              variant="bordered"
+              onPress={() => {
+                setSearch('');
+                setActiveCategory('All');
+              }}
+              className="border-teal-primary font-semibold text-teal-primary hover:bg-teal-primary hover:text-white dark:border-teal-bright dark:text-teal-bright dark:hover:bg-teal-bright dark:hover:text-gray-950"
+            >
+              Clear filters
+            </Button>
+          }
+        />
       ) : (
         <>
           {featured && (

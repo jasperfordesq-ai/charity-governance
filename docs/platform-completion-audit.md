@@ -166,6 +166,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.
 - Auth email and password-recovery status illustrations now use a shared dark-mode-aware status icon primitive instead of repeated route-local icon containers.
 - Auth invite, reset-password, and verify-email async fallbacks now use shared loading primitives instead of route-local skeleton or spinner markup.
+- Marketing blog search now uses the shared empty-state primitive for no-result filters instead of route-local dashed-panel markup.
+- Compliance standard autosave state now uses a shared save-status primitive for saving, saved, and failed retry states instead of route-local icon/status markup.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 - Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
@@ -244,6 +246,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
 - Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, and `npm run test:production-check` passed locally after the shared blog empty-state and compliance save-status primitive cleanup.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.

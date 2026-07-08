@@ -172,3 +172,45 @@ export function InlineStatus({
     </div>
   );
 }
+
+export function SaveStatusIndicator({
+  status,
+  retryAction,
+}: {
+  status: 'idle' | 'saving' | 'saved' | 'error';
+  retryAction?: ReactNode;
+}) {
+  if (status === 'idle') return null;
+
+  const content = {
+    saving: {
+      label: 'Saving...',
+      className: 'text-gray-500 dark:text-gray-400',
+      icon: <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />,
+    },
+    saved: {
+      label: 'Saved',
+      className: 'font-medium text-emerald-700 dark:text-emerald-300',
+      icon: <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />,
+    },
+    error: {
+      label: 'Save failed',
+      className: 'font-medium text-rose-600 dark:text-rose-300',
+      icon: <TriangleAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />,
+    },
+  }[status];
+
+  return (
+    <span
+      role={status === 'error' ? 'alert' : 'status'}
+      aria-live={status === 'error' ? 'assertive' : 'polite'}
+      className={classes('flex min-w-0 flex-wrap items-center justify-end gap-2 text-xs', content.className)}
+    >
+      <span className="flex min-w-0 items-center gap-1">
+        {content.icon}
+        <span>{content.label}</span>
+      </span>
+      {status === 'error' && retryAction ? retryAction : null}
+    </span>
+  );
+}
