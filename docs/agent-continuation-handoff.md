@@ -25,7 +25,7 @@ npm run audit:platform
 Known current state from `npm run launch:status -- --json` on 2026-07-08:
 
 - Phase: `ENV_INCOMPLETE`
-- `.env.production` exists but still has 23 values needing real production data.
+- `.env.production` exists but still has 19 values needing real production data.
 - Production values complete: `9 / 28`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
 - Machine-readable launch evidence completion: `9 / 85`.
@@ -34,11 +34,10 @@ Known current state from `npm run launch:status -- --json` on 2026-07-08:
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 
-The 23 missing production values are:
+The 19 missing production values are:
 
 - `TRUSTED_PROXY_ADDRESSES`
 - `DATABASE_URL`
-- `FRONTEND_URL`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
@@ -50,14 +49,11 @@ The 23 missing production values are:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ERROR_ALERT_WEBHOOK_URL`
-- `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`
 - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
 - `CHARITYPILOT_API_IMAGE`
 - `CHARITYPILOT_WEB_IMAGE`
 - `CHARITYPILOT_MIGRATION_IMAGE`
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`
 - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
 
 For release image promotion, `npm run launch:status` now also exposes the

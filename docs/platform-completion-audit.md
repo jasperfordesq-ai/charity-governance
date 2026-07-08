@@ -16,7 +16,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 45 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| Launch operations | .env.production exists but 19 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-08; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
 | Verification surface | 16 web unit test files, 45 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
@@ -441,7 +441,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Local Production Environment State
 
 - Phase: `ENV_INCOMPLETE`
-- .env.production exists but 23 value(s) still need real data.
+- .env.production exists but 19 value(s) still need real data.
 - This generated section reflects the local non-committed `.env.production`; the listed placeholders are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Progress Summary
@@ -454,11 +454,10 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Local Production Environment Placeholders
 
-The local non-committed production env still needs 23 real value(s):
+The local non-committed production env still needs 19 real value(s):
 
 - `TRUSTED_PROXY_ADDRESSES`
 - `DATABASE_URL`
-- `FRONTEND_URL`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
@@ -470,23 +469,17 @@ The local non-committed production env still needs 23 real value(s):
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ERROR_ALERT_WEBHOOK_URL`
-- `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`
 - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
 - `CHARITYPILOT_API_IMAGE`
 - `CHARITYPILOT_WEB_IMAGE`
 - `CHARITYPILOT_MIGRATION_IMAGE`
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`
 - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
 
 Grouped by source:
 
 - Hosting, DNS, TLS, and proxy:
   - `TRUSTED_PROXY_ADDRESSES`: Reverse-proxy IP/CIDR in front of the API (Step 4)
-  - `FRONTEND_URL`: Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)
-  - `NEXT_PUBLIC_API_URL`: Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)
-  - `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`: Docker Compose web runtime API origin; must match NEXT_PUBLIC_API_URL (Step 4/6)
 - PostgreSQL:
   - `DATABASE_URL`: Managed production PostgreSQL URL with sslmode=require (Step 3)
 - Stripe billing:
