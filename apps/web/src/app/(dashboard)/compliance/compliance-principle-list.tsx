@@ -86,7 +86,7 @@ export function CompliancePrincipleList({
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="flex flex-col items-end gap-2 flex-shrink-0 sm:flex-row sm:items-center sm:gap-3">
                           <div className="text-right">
                             <span className={`text-lg font-bold ${
                               pct >= 80 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-500 dark:text-amber-300' : 'text-gray-400 dark:text-gray-400'
@@ -99,6 +99,14 @@ export function CompliancePrincipleList({
                               {pct >= 80 ? 'Mostly recorded' : pct >= 50 ? 'Partly recorded' : pct > 0 ? 'Started' : 'Not started'}
                             </span>
                           </div>
+                          <Button
+                            as={Link}
+                            href={`/compliance/${principle.id}`}
+                            size="sm"
+                            className={primaryActionButtonClassName}
+                          >
+                            Edit records
+                          </Button>
                           <Button
                             type="button"
                             isIconOnly
@@ -177,12 +185,8 @@ export function CompliancePrincipleList({
                           </div>
                         )}
 
-                        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800">
-                          <Link href={`/compliance/${principle.id}`}>
-                            <Button size="sm" className={primaryActionButtonClassName}>
-                              Edit Compliance Records
-                            </Button>
-                          </Link>
+                        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+                          Select Edit records to update this principle's statuses, evidence, and explanations.
                         </div>
                       </div>
                     )}

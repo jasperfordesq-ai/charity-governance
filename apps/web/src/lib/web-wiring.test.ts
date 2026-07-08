@@ -639,6 +639,14 @@ test('compliance overview principle disclosures expose expanded state and panel 
   assert.match(src, /id=\{panelId\}/);
 });
 
+test('compliance overview exposes principle detail links before disclosure expansion', () => {
+  const src = optionalDash('compliance/compliance-principle-list.tsx');
+
+  assert.match(src, /<Button[\s\S]{0,160}as=\{Link\}[\s\S]{0,160}href=\{`\/compliance\/\$\{principle\.id\}`\}/);
+  assert.match(src, /Edit records/);
+  assert.doesNotMatch(src, /<Link href=\{`\/compliance\/\$\{principle\.id\}`\}>[\s\S]{0,160}<Button/);
+});
+
 test('compliance overview principle list is extracted from the oversized route file', () => {
   const pageSrc = dash('compliance/page.tsx');
   const listPath = dashPath('compliance/compliance-principle-list.tsx');
@@ -651,7 +659,7 @@ test('compliance overview principle list is extracted from the oversized route f
   assert.doesNotMatch(pageSrc, /const panelId = `principle-\$\{principle\.id\}-standards`/);
   assert.match(listSrc, /export function CompliancePrincipleList/);
   assert.match(listSrc, /Core Standards/);
-  assert.match(listSrc, /Edit Compliance Records/);
+  assert.match(listSrc, /Edit records/);
   assert.match(listSrc, /primaryActionButtonClassName/);
   assert.match(listSrc, /ChevronDown/);
   assert.match(listSrc, /from '@\/components\/ui\/status'/);
