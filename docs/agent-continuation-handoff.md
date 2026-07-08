@@ -1,6 +1,6 @@
 # CharityPilot Agent Continuation Handoff
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 This document exists so a new Codex, Claude, or other coding agent can continue the same CharityPilot production-completion goal without relying on chat memory or a pasted prompt.
 
@@ -22,10 +22,11 @@ npm run launch:status -- --json
 npm run audit:platform
 ```
 
-Known current state from `npm run launch:status -- --json` on 2026-07-07:
+Known current state from `npm run launch:status -- --json` on 2026-07-08:
 
 - Phase: `ENV_INCOMPLETE`
 - `.env.production` exists but still has 23 values needing real production data.
+- Production values complete: `1 / 24`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
 - Machine-readable launch evidence completion: `0 / 85`.
 - `approvedForLaunch`: `false`
@@ -231,6 +232,10 @@ node scripts/smoke-production-deploy.mjs --production-env-file .env.production
 
 Recently successful checks in this workstream:
 
+- `npm test -w @charitypilot/web`
+  - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
+- `npm run lint -w @charitypilot/web`
+  - Passed after the same auth/public trust-surface work.
 - `npm run release:ready -- --no-e2e`
   - 6 selected gates passed.
   - Playwright E2E intentionally skipped.
@@ -386,12 +391,14 @@ Strict launch evidence metric:
 
 - `85 / 85` machine-readable launch checks remain.
 - This means strict launch evidence is still 100% incomplete.
+- Final signoffs remain `0 / 5`.
+- Production values remain `1 / 24` complete, with 23 real provider/hosting/image-promotion values still missing.
 
 Whole-goal estimate:
 
-- Repo-side engineering is mostly complete.
-- External production launch evidence is not complete.
-- Approximate remaining work: 45% of the whole production launch goal.
+- Repo-side engineering and UI polish are substantially advanced.
+- Actual production launch readiness is still dominated by external provider setup, deployed evidence, legal/privacy/governance review, external security review, backup/restore proof, and final signoffs.
+- Evidence-based estimate: about 65-70% of the overall production-completion goal remains, even though the codebase itself is much further along.
 
 Repo-side-only estimate:
 

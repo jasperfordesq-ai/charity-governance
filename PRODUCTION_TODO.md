@@ -6,11 +6,15 @@ Status marks reflect completed repository hardening work. Open items require rea
 > first - it explains, in plain English, what is already done and the exact
 > human steps (accounts, hosting, legal, security review) that remain.
 
-> **Current local status checked 2026-07-06:** `npm run launch:status` still
-> reports that 23 production values still require real data in `.env.production`
-> or the approved production secret store. Do not put real charity data into
-> CharityPilot until those values, provider checks, deployed QA, legal/privacy
-> review, external security review, backup/restore evidence, all 85 machine-readable launch evidence checks, and final signoffs are complete.
+> **Current local status checked 2026-07-08:** `npm run launch:status -- --json`
+> still reports `ENV_INCOMPLETE`: 1 of 24 production values is complete and 23
+> production values still require real data in `.env.production` or the approved
+> production secret store. The launch evidence ledger remains 0 of 85 checks
+> complete, final signoffs remain 0 of 5 approved, and `approvedForLaunch` is
+> false. Do not put real charity data into CharityPilot until those values,
+> provider checks, deployed QA, legal/privacy review, external security review,
+> backup/restore evidence, all 85 machine-readable launch evidence checks, and
+> final signoffs are complete.
 > `npm run launch:status` also surfaces the current launch evidence ledger count,
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
 > operators can continue from the first real missing proof without changing the
@@ -37,10 +41,11 @@ Status marks reflect completed repository hardening work. Open items require rea
 > transcripts, commit SHA, workflow run, and digest manifest in the non-committed
 > launch evidence ledger before treating the platform as ready for real charity data.
 > The latest repository hardening on `master` constrains launch evidence references
-> to approved hosts and the canonical GitHub repository, lets the evidence package
-> be prepared before evidence is collected while requiring every checklist item to
-> predate final signoff, and aligns the deploy-smoke evidence hint with the actual
-> `node scripts/smoke-production-deploy.mjs` command. A local
+> to approved hosts and the canonical GitHub repository, adds visible GPL/source
+> attribution and no-warranty surfaces, shares auth status/loading primitives, lets
+> the evidence package be prepared before evidence is collected while requiring
+> every checklist item to predate final signoff, and aligns the deploy-smoke evidence
+> hint with the actual `node scripts/smoke-production-deploy.mjs` command. A local
 > `npm run release:ready -- --no-e2e` run passed the selected non-E2E gates on
 > 2026-07-06, but this still does not replace deployed QA, real provider checks,
 > legal/privacy review, pentest, or final production signoffs.
