@@ -1823,6 +1823,14 @@ test('marketing routes use lucide icons instead of route-local inline svg', () =
   assert.match(pricing, /title: 'Pricing - CharityPilot'/, 'pricing metadata should stay ASCII-safe');
 });
 
+test('marketing landing workflow signals use shared status panel styling', () => {
+  const page = app('(marketing)/page.tsx');
+
+  assert.match(page, /statusPanelClassName/);
+  assert.match(page, /className=\{statusPanelClassName\('neutral', 'p-4'\)\}/);
+  assert.doesNotMatch(page, /rounded-lg border border-gray-200 bg-gray-50 p-4/);
+});
+
 test('blog article content avoids decorative dot bullets and oversized cards', () => {
   const articles = [
     'blog/annual-reporting-guide-irish-charities.tsx',

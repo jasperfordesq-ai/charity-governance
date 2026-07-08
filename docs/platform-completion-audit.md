@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `5142127`
+Working-tree base commit when generated: `5c8980e`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -172,6 +172,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Auth email and password-recovery status illustrations now use a shared dark-mode-aware status icon primitive instead of repeated route-local icon containers.
 - Auth invite, reset-password, and verify-email async fallbacks now use shared loading primitives instead of route-local skeleton or spinner markup.
 - Marketing blog search now uses the shared empty-state primitive for no-result filters instead of route-local dashed-panel markup.
+- Marketing landing workflow signal tiles now use shared status panel styling instead of route-local grey card markup.
 - Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
@@ -284,7 +285,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Priority | Route | Area | File | Lines | Client | Static audit finding |
 | --- | --- | --- | --- | ---: | --- | --- |
-| P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
+| P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 365 | no | no obvious static risk; verify in browser |
 | P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 79 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 160 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 205 | yes | no obvious static risk; verify in browser |

@@ -2,6 +2,7 @@ import { Button, Card, CardBody, CardHeader, Link } from '@/components/heroui-cl
 import type { Metadata } from 'next';
 import { CalendarDays, ChevronDown, CircleCheck, Clock, FileText, FolderOpen, UsersRound } from 'lucide-react';
 import { OrganisationJsonLd, FaqJsonLd } from '@/components/json-ld';
+import { statusPanelClassName } from '@/components/ui/status';
 
 export const metadata: Metadata = {
   title: 'CharityPilot | Irish Charity Governance Software',
@@ -144,7 +145,7 @@ export default function LandingPage() {
 
           <div className="mt-14 grid gap-3 border-t border-gray-200 pt-6 dark:border-gray-800 sm:grid-cols-2 lg:grid-cols-4">
             {workflowSignals.map((item) => (
-              <div key={item.label} className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+              <div key={item.label} className={statusPanelClassName('neutral', 'p-4')}>
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {item.label}
                 </p>
