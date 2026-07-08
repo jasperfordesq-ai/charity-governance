@@ -81,6 +81,27 @@ function assertProductionLaunchCommands(commands) {
   );
 }
 
+function assertFinalSignoffRequirements(requirements) {
+  assert.deepEqual(requirements.requiredRoles, [
+    'engineering',
+    'operations',
+    'security',
+    'legalCompliance',
+    'business',
+  ]);
+  assert.deepEqual(requirements.externalReviews, [
+    'solicitor review',
+    'governance review',
+    'privacy review',
+    'external penetration test',
+    'critical/high findings remediated or formally accepted',
+  ]);
+  assert.match(requirements.releaseBinding, /release\.commitSha/);
+  assert.match(requirements.evidenceTarget, /finalSignoff/);
+  assert.match(requirements.legalPosture, /not legal advice/);
+  assert.doesNotMatch(requirements.legalPosture, /bombproof|guaranteed/i);
+}
+
 test('launch status script text is ASCII-safe for operator transcripts', () => {
   const source = readFileSync(join(repoRoot, 'scripts', 'launch-status.mjs'), 'utf8');
 
@@ -129,6 +150,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assertProductionLaunchCommands(payload.productionLaunchCommands);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
+  assertFinalSignoffRequirements(payload.finalSignoffRequirements);
   assertExternalLaunchEvidenceGates(s);
 });
 
@@ -312,6 +334,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assertProductionLaunchCommands(payload.productionLaunchCommands);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
+  assertFinalSignoffRequirements(payload.finalSignoffRequirements);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
   assert.equal(payload.remainingKeyGroups[0].label, 'PostgreSQL');

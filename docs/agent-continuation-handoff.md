@@ -195,6 +195,7 @@ Correct posture:
 - Launch status exposes both read-only launch-evidence progress commands and strict launch-evidence validation commands, including JSON variants.
 - Launch status exposes the deployed browser QA command set for responsive, accessibility, cross-browser, and iOS Safari evidence collection.
 - Launch status exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence.
+- Launch status exposes the final signoff role list, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture.
 - Production launch evidence initializes outside the repo root in `.charitypilot-launch-evidence/`.
 - Launch evidence status has read-only progress output and strict final validation.
 - The platform audit generator records launch evidence state and falls back to direct `.git` metadata reads if shelling out to git is unavailable.

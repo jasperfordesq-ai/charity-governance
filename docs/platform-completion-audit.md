@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `f32ed9b`
+Working-tree base commit when generated: `3be3d1d`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -239,6 +239,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.
 - Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
 - Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.
+- Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.
 - Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.
 - Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.
 - Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.
@@ -406,6 +407,19 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Rollback rehearsal: `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env`
 - Release-run evidence: `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Final evidence validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
+
+### Final Signoff Requirements
+
+- Required roles: `engineering`, `operations`, `security`, `legalCompliance`, `business`
+- External reviews:
+  - solicitor review
+  - governance review
+  - privacy review
+  - external penetration test
+  - critical/high findings remediated or formally accepted
+- Release binding: Every final signoff evidence entry must bind to release.commitSha for the promoted release.
+- Evidence target: Record approvals under finalSignoff and finalSignoff.approvals.* in the production launch evidence ledger.
+- Legal posture: Review-ready, source-cited, and not legal advice; no legal-certainty or guarantee claims.
 
 ### Local Production Environment State
 

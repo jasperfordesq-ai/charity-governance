@@ -64,6 +64,20 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
     'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
 });
 
+const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
+  requiredRoles: Object.freeze(['engineering', 'operations', 'security', 'legalCompliance', 'business']),
+  externalReviews: Object.freeze([
+    'solicitor review',
+    'governance review',
+    'privacy review',
+    'external penetration test',
+    'critical/high findings remediated or formally accepted',
+  ]),
+  releaseBinding: 'Every final signoff evidence entry must bind to release.commitSha for the promoted release.',
+  evidenceTarget: 'Record approvals under finalSignoff and finalSignoff.approvals.* in the production launch evidence ledger.',
+  legalPosture: 'Review-ready, source-cited, and not legal advice; no legal-certainty or guarantee claims.',
+});
+
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence and bind that critical-flow evidence to release.commitSha, accessibility output must be recorded in browserQa.checks.accessibility-coverage, cross-browser output in browserQa.checks.cross-browser-coverage, and real iOS Safari evidence in browserQa.checks.ios-safari-device-coverage.',
@@ -298,6 +312,7 @@ export function assessLaunchState(state) {
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+      finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
       launchProgress: buildLaunchProgress({ remainingKeys: EXPECTED_PRODUCTION_VALUE_KEYS, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -319,6 +334,7 @@ export function assessLaunchState(state) {
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+      finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
       launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -338,6 +354,7 @@ export function assessLaunchState(state) {
     evidenceLedger,
     deployedBrowserQa: DEPLOYED_BROWSER_QA,
     productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+    finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
     launchProgress: buildLaunchProgress({ remainingKeys: [], evidenceLedger }),
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
@@ -365,6 +382,7 @@ export function renderLaunchStatusJson(state) {
       evidenceLedger: state.evidenceLedger,
       deployedBrowserQa: state.deployedBrowserQa,
       productionLaunchCommands: state.productionLaunchCommands,
+      finalSignoffRequirements: state.finalSignoffRequirements,
       externalEvidenceGates: state.externalEvidenceGates,
     },
     null,
@@ -471,6 +489,15 @@ function renderLaunchStatusText(state) {
     lines.push(`  Rollback rehearsal:  ${state.productionLaunchCommands.rollbackRehearsal}`);
     lines.push(`  Release-run evidence:  ${state.productionLaunchCommands.releaseRunEvidence}`);
     lines.push(`  Final evidence validation:  ${state.productionLaunchCommands.finalEvidenceValidation}`);
+  }
+  if (state.finalSignoffRequirements) {
+    lines.push('', 'Final signoff requirements:');
+    lines.push(`  Required roles:  ${state.finalSignoffRequirements.requiredRoles.join(', ')}`);
+    lines.push('  External reviews:');
+    for (const review of state.finalSignoffRequirements.externalReviews) lines.push(`    - ${review}`);
+    lines.push(`  Release binding:  ${state.finalSignoffRequirements.releaseBinding}`);
+    lines.push(`  Evidence target:  ${state.finalSignoffRequirements.evidenceTarget}`);
+    lines.push(`  Legal posture:  ${state.finalSignoffRequirements.legalPosture}`);
   }
   lines.push('', 'External launch evidence still required:');
   for (const gate of state.externalEvidenceGates) lines.push(`  - ${gate}`);

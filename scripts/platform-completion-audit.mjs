@@ -268,6 +268,7 @@ const fixedInThisAuditBranch = [
   'Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.',
   'Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
   'Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.',
+  'Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.',
   'Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.',
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
   'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
@@ -545,6 +546,7 @@ function readLaunchSummary() {
     evidenceLedger: state.evidenceLedger,
     deployedBrowserQa: state.deployedBrowserQa,
     productionLaunchCommands: state.productionLaunchCommands,
+    finalSignoffRequirements: state.finalSignoffRequirements,
   };
 }
 
@@ -705,6 +707,15 @@ function render() {
     md += `- Rollback rehearsal: \`${launch.productionLaunchCommands.rollbackRehearsal}\`\n`;
     md += `- Release-run evidence: \`${launch.productionLaunchCommands.releaseRunEvidence}\`\n`;
     md += `- Final evidence validation: \`${launch.productionLaunchCommands.finalEvidenceValidation}\`\n\n`;
+  }
+  if (launch.finalSignoffRequirements) {
+    md += `### Final Signoff Requirements\n\n`;
+    md += `- Required roles: ${launch.finalSignoffRequirements.requiredRoles.map((role) => `\`${role}\``).join(', ')}\n`;
+    md += `- External reviews:\n`;
+    for (const review of launch.finalSignoffRequirements.externalReviews) md += `  - ${review}\n`;
+    md += `- Release binding: ${launch.finalSignoffRequirements.releaseBinding}\n`;
+    md += `- Evidence target: ${launch.finalSignoffRequirements.evidenceTarget}\n`;
+    md += `- Legal posture: ${launch.finalSignoffRequirements.legalPosture}\n\n`;
   }
   md += `### Local Production Environment State\n\n`;
   md += `- Phase: \`${launch.phase}\`\n`;
