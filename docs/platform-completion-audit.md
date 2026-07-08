@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `f990527`
+Working-tree base commit when generated: `b4168ae`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -264,7 +264,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit 6da2573: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
+- `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit 14dfe47: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
 - `npm run test:production-check` passed locally on 2026-07-08 with 304/304 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.

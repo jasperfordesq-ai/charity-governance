@@ -16,7 +16,7 @@ const auditDate = new Date().toISOString().slice(0, 10);
 const RECORDED_SELECTED_GATE_EVIDENCE = Object.freeze({
   command: 'npm run release:ready -- --no-e2e',
   date: '2026-07-08',
-  commit: '6da2573',
+  commit: '14dfe47',
   summary:
     'security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped',
 });
