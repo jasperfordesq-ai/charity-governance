@@ -1,9 +1,10 @@
 # CharityPilot
 
-Charity governance compliance platform for Irish registered charities. It
-digitises the Charities Regulator (CRA) **Governance Code Compliance Record
-Form** and the supporting governance registers, so a charity can track
-compliance, board members, documents, deadlines, and sign-off in one place.
+CharityPilot is the **Charity Governance Platform**, currently in early
+development for Irish registered charities. It digitises the Charities Regulator
+(CRA) **Governance Code Compliance Record Form** and the supporting governance
+registers, so a charity can track compliance, board members, documents,
+deadlines, and sign-off in one place.
 
 Created by **Jasper Ford**, the CharityPilot copyright and IP holder.
 Commercial SaaS operations may be provided by Project Nexus Ltd. Two tiers:
