@@ -296,7 +296,7 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   assert.match(accessibilitySpec, /async function applyTheme\(page: Page,\s*theme: Theme\): Promise<void>/);
   assert.match(accessibilitySpec, /Boolean\(document\.documentElement && document\.body\)/);
   assert.match(accessibilitySpec, /document\.documentElement\.classList\.toggle\('dark',\s*theme === 'dark'\)/);
-  assert.match(accessibilitySpec, /gotoWithDevServerRetry\(ownerPage,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
+  assert.match(accessibilitySpec, /gotoWithDevServerRetry\(ownerPage,\s*resolvedPath,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(accessibilitySpec, /gotoWithDevServerRetry\(page,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'light'\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'dark'\)/);
