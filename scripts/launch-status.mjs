@@ -64,6 +64,23 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
     'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
 });
 
+const RELEASE_IMAGE_PROMOTION = Object.freeze({
+  githubEnvironment: 'production',
+  requiredGitHubEnvironmentVariables: Object.freeze([
+    'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
+  ]),
+  configureCommands: Object.freeze([
+    'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co',
+  ]),
+  workflowCommand: 'gh workflow run release-images.yml --ref master',
+  watchCommand: 'gh run watch <release-run-id> --exit-status',
+  evidenceArtifact: 'release-image-digests.env',
+  evidenceTarget:
+    'Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.',
+});
+
 const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
   requiredRoles: Object.freeze(['engineering', 'operations', 'security', 'legalCompliance', 'business']),
   externalReviews: Object.freeze([
@@ -312,6 +329,7 @@ export function assessLaunchState(state) {
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+      releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
       finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
       launchProgress: buildLaunchProgress({ remainingKeys: EXPECTED_PRODUCTION_VALUE_KEYS, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
@@ -334,6 +352,7 @@ export function assessLaunchState(state) {
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+      releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
       finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
       launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
@@ -354,6 +373,7 @@ export function assessLaunchState(state) {
     evidenceLedger,
     deployedBrowserQa: DEPLOYED_BROWSER_QA,
     productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+    releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
     finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
     launchProgress: buildLaunchProgress({ remainingKeys: [], evidenceLedger }),
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
@@ -382,6 +402,7 @@ export function renderLaunchStatusJson(state) {
       evidenceLedger: state.evidenceLedger,
       deployedBrowserQa: state.deployedBrowserQa,
       productionLaunchCommands: state.productionLaunchCommands,
+      releaseImagePromotion: state.releaseImagePromotion,
       finalSignoffRequirements: state.finalSignoffRequirements,
       externalEvidenceGates: state.externalEvidenceGates,
     },
@@ -489,6 +510,18 @@ function renderLaunchStatusText(state) {
     lines.push(`  Rollback rehearsal:  ${state.productionLaunchCommands.rollbackRehearsal}`);
     lines.push(`  Release-run evidence:  ${state.productionLaunchCommands.releaseRunEvidence}`);
     lines.push(`  Final evidence validation:  ${state.productionLaunchCommands.finalEvidenceValidation}`);
+  }
+  if (state.releaseImagePromotion) {
+    lines.push('', 'Release image promotion:');
+    lines.push(`  GitHub environment:  ${state.releaseImagePromotion.githubEnvironment}`);
+    lines.push('  Required GitHub environment variables:');
+    for (const item of state.releaseImagePromotion.requiredGitHubEnvironmentVariables) lines.push(`    - ${item}`);
+    lines.push('  Configure with:');
+    for (const command of state.releaseImagePromotion.configureCommands) lines.push(`    - ${command}`);
+    lines.push(`  Workflow:  ${state.releaseImagePromotion.workflowCommand}`);
+    lines.push(`  Watch:  ${state.releaseImagePromotion.watchCommand}`);
+    lines.push(`  Digest artifact:  ${state.releaseImagePromotion.evidenceArtifact}`);
+    lines.push(`  Evidence target:  ${state.releaseImagePromotion.evidenceTarget}`);
   }
   if (state.finalSignoffRequirements) {
     lines.push('', 'Final signoff requirements:');

@@ -2327,6 +2327,11 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 85` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
+  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
+  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https:\/\/<project-ref>\.supabase\.co/);
+  assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
+  assert.match(launchGuide, /release-image-digests\.env/);
+  assert.match(launchGuide, /CHARITYPILOT_WEB_BUILD_\*/);
   assert.doesNotMatch(launchGuide, /optional reverse proxy/);
   assert.doesNotMatch(launchGuide, /four named approvals/i);
   assert.match(launchGuide, /five named approvals/i);
@@ -2606,6 +2611,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
+  assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
+  assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https:\/\/<project-ref>\.supabase\.co/);
+  assert.match(runbook, /gh workflow run release-images\.yml --ref master/);
+  assert.match(runbook, /gh run watch <release-run-id> --exit-status/);
   assert.match(runbook, /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/);
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);

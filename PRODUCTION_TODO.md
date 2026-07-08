@@ -26,6 +26,10 @@ Status marks reflect completed repository hardening work. Open items require rea
 > CI summaries, release handoffs, or operations dashboards.
 > Missing production values are grouped by provider/source in that output:
 > hosting/proxy, PostgreSQL, Stripe, Resend, Supabase, observability, and release image promotion.
+> Release image promotion also requires GitHub `production` environment
+> variables for `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SUPABASE_URL` before
+> `gh workflow run release-images.yml --ref master` can produce the
+> `release-image-digests.env` artifact used by deploy preflight.
 > The JSON output also keeps the full source-grouped production value checklist
 > visible after `.env.production` exists, while separately listing only the
 > currently missing values. This is the handoff order for filling the real secret store.

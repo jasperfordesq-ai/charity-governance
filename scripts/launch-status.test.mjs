@@ -81,6 +81,23 @@ function assertProductionLaunchCommands(commands) {
   );
 }
 
+function assertReleaseImagePromotion(promotion) {
+  assert.equal(promotion.githubEnvironment, 'production');
+  assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
+    'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
+  ]);
+  assert.deepEqual(promotion.configureCommands, [
+    'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co',
+  ]);
+  assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');
+  assert.equal(promotion.watchCommand, 'gh run watch <release-run-id> --exit-status');
+  assert.equal(promotion.evidenceArtifact, 'release-image-digests.env');
+  assert.match(promotion.evidenceTarget, /CHARITYPILOT_\*_IMAGE/);
+  assert.match(promotion.evidenceTarget, /CHARITYPILOT_WEB_BUILD_\*/);
+}
+
 function assertFinalSignoffRequirements(requirements) {
   assert.deepEqual(requirements.requiredRoles, [
     'engineering',
@@ -107,6 +124,7 @@ test('launch status script text is ASCII-safe for operator transcripts', () => {
 
   assert.doesNotMatch(source, /[^\x00-\x7F]/);
   assert.match(source, /external gates/);
+  assert.match(source, /Release image promotion/);
 });
 
 test('reports NO_ENV and points at the generator when .env.production is absent', () => {
@@ -149,6 +167,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assertProductionLaunchCommands(payload.productionLaunchCommands);
+  assertReleaseImagePromotion(payload.releaseImagePromotion);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assertFinalSignoffRequirements(payload.finalSignoffRequirements);
   assertExternalLaunchEvidenceGates(s);
@@ -337,6 +356,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(payload.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assertProductionLaunchCommands(payload.productionLaunchCommands);
+  assertReleaseImagePromotion(payload.releaseImagePromotion);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assertFinalSignoffRequirements(payload.finalSignoffRequirements);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));

@@ -187,11 +187,19 @@ You need four external services. Create the **production/live** versions
 - **What:** Run migrations against the production DB, then deploy the signed images.
   ```bash
   npm run db:migrate:deploy -w @charitypilot/api
+  gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie
+  gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co
+  gh workflow run release-images.yml --ref master
+  gh run watch <release-run-id> --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
   npm run deploy:production -- --production-env-file=.env.production
   ```
-- **Why:** The preflight verifies signed, digest-pinned images and renders the
-  compose file; the deploy brings the stack up and runs a public HTTPS smoke test
+- **Why:** The GitHub `production` environment variables let the release workflow
+  build the web image for the real API and Supabase origins. The workflow then
+  uploads `release-image-digests.env`; copy its digest-pinned image values and
+  `CHARITYPILOT_WEB_BUILD_*` origins into `.env.production` before preflight.
+  The preflight verifies signed, digest-pinned images and renders the compose
+  file; the deploy brings the stack up and runs a public HTTPS smoke test
   automatically.
 - **Effort:** ~1 hour first time. Full details in `docs/production-runbook.md`.
 

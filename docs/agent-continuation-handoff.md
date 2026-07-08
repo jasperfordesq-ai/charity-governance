@@ -60,6 +60,14 @@ The 23 missing production values are:
 - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`
 - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
 
+For release image promotion, `npm run launch:status` now also exposes the
+GitHub `production` environment variables required before `gh workflow run
+release-images.yml --ref master` can produce the `release-image-digests.env`
+artifact:
+
+- `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
+- `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
+
 ## Non-Negotiable Product Posture
 
 Do not claim CharityPilot is legally guaranteed, "100% legally bombproof", or a substitute for legal advice.
