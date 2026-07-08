@@ -1654,7 +1654,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /304\/304 production-tooling checks/);
+  assert.match(productionTodo, /311\/311 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /304\/304 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /300\/300 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /299\/299 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /298\/298 production-tooling checks/);
@@ -2344,7 +2345,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 304\/304/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 311\/311/);
+  assert.doesNotMatch(launchGuide, /304\/304 production-tooling checks|passed 304\/304/);
   assert.doesNotMatch(launchGuide, /300\/300 production-tooling checks|passed 300\/300/);
   assert.doesNotMatch(launchGuide, /299\/299 production-tooling checks|passed 299\/299/);
   assert.match(launchGuide, new RegExp(`commit\\s+\`${escapeRegExp(selectedGateCommit)}\``));
