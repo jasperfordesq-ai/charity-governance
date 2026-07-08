@@ -64,6 +64,16 @@ jobs:
             echo "NEXT_PUBLIC_SUPABASE_URL production variable is required." >&2
             exit 1
           fi
+          for var_name in NEXT_PUBLIC_API_URL NEXT_PUBLIC_SUPABASE_URL; do
+            value="${!var_name}"
+            normalized="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
+            case "${normalized}" in
+              *replace_me*|*placeholder*|*your_supabase_project_ref*)
+                echo "${var_name} production variable must not contain placeholder text." >&2
+                exit 1
+                ;;
+            esac
+          done
           node -e "const canonicalApiOrigin = 'https://api.charitypilot.ie'; const value = process.env.NEXT_PUBLIC_API_URL; const url = new URL(value); if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '') || url.origin !== canonicalApiOrigin) { console.error('NEXT_PUBLIC_API_URL must be the canonical production API origin https://api.charitypilot.ie.'); process.exit(1); }"
           node -e "const value = process.env.NEXT_PUBLIC_SUPABASE_URL; const url = new URL(value); if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '') || !url.hostname.toLowerCase().endsWith('.supabase.co')) { console.error('NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL.'); process.exit(1); }"
 
