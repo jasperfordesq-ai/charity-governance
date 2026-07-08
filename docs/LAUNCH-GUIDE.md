@@ -41,7 +41,7 @@ transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
 The deployed browser evidence must also complete the Launch-Critical Route Inventory in `docs/production-browser-qa.md`, proving every route in desktop, mobile, light-mode, and dark-mode evidence before launch signoff, and the critical-flow evidence must name the exact promoted `release.commitSha`.
 A local `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
-`db025c7`: security scan, lint, build, workspace tests, dependency audit, and
+`91baf75`: security scan, lint, build, workspace tests, dependency audit, and
 reliability ledger passed; only Playwright E2E was skipped. Treat this as local
 release-gate evidence, not as production launch approval.
 
@@ -50,7 +50,7 @@ release-gate evidence, not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 299/299 on 2026-07-08; rerun for the final release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 300/300 on 2026-07-08; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
