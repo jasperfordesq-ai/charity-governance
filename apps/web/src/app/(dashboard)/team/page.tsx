@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { canInviteMembers } from '@/lib/team-permissions';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage } from '@/components/ui/app-page';
-import { InlineStatus } from '@/components/ui/states';
+import { InlineStatus, SaveStatusIndicator } from '@/components/ui/states';
 import { StatusChip } from '@/components/ui/status';
 import type { TeamResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
@@ -52,6 +52,8 @@ export default function TeamPage() {
       ).length ?? 0,
     [team],
   );
+  const teamMutationStatus: 'idle' | 'saving' | 'saved' | 'error' =
+    saving || revokeInviteId || roleUpdateMemberId ? 'saving' : 'idle';
 
   const fetchTeam = useCallback(async () => {
     try {
@@ -145,15 +147,12 @@ export default function TeamPage() {
       description="Invite trustees, staff, and governance administrators with clear access levels for this charity workspace."
       actions={(
         <>
+          <SaveStatusIndicator status={teamMutationStatus} />
           <StatusChip tone="brand">{team?.members.length ?? 0} members</StatusChip>
           <StatusChip tone={activeInviteCount > 0 ? 'warning' : 'neutral'}>{activeInviteCount} pending invites</StatusChip>
         </>
       )}
     >
-      <div aria-live="polite" role={error ? 'alert' : 'status'} className="sr-only">
-        {error ?? message ?? 'Team permissions ready'}
-      </div>
-
       {(message || error) ? (
         <InlineStatus tone={error ? 'danger' : 'success'}>
           {error ?? message}

@@ -2370,6 +2370,15 @@ test('deadline and board list mutations use the shared save-status primitive', (
   assert.doesNotMatch(boardList, /Board register ready/);
 });
 
+test('team page mutations use the shared save-status primitive', () => {
+  const teamPage = readRepoFile('apps/web/src/app/(dashboard)/team/page.tsx');
+
+  assert.match(teamPage, /SaveStatusIndicator/);
+  assert.match(teamPage, /const teamMutationStatus: 'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(teamPage, /<SaveStatusIndicator\s+status=\{teamMutationStatus\}/);
+  assert.doesNotMatch(teamPage, /Team permissions ready/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 
