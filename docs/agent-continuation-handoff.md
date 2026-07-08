@@ -115,7 +115,7 @@ Correct posture:
   - file upload.
 - Lucide icons have replaced route-local inline SVGs across the main route chrome and key actions.
 - Pricing page metadata is ASCII-safe and pricing feature/comparison icons use `lucide-react` directly.
-- Marketing blog search uses the shared empty-state primitive for no-result filters; compliance standard autosave, organisation profile saving, governance register saving, and board/deadline/team mutations use the shared save-status primitive; billing checkout and portal handoffs use shared visible status instead of route-local hidden status markup.
+- Marketing blog search uses the shared empty-state primitive for no-result filters; compliance standard autosave, organisation profile saving, governance register saving, and board/deadline/team mutations use the shared save-status primitive; billing checkout and portal handoffs use shared visible status; team permission-denied messages use shared permission hints instead of route-local hidden or bespoke status markup.
 - Dashboard mobile navigation has explicit ARIA controls, Escape handling, focus recovery, and focus trapping.
 - Breadcrumbs and principle labels are source-backed and meaningful.
 

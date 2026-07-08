@@ -3,7 +3,7 @@ import type { TeamMemberResponse, TeamResponse, UserResponse } from '@charitypil
 import { UserRole } from '@charitypilot/shared';
 import { canEditMemberRole } from '@/lib/team-permissions';
 import { DataList, DataListItems } from '@/components/ui/data-list';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { EmptyState, ErrorState, LoadingState, PermissionHint } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import { ROLE_META, formatDate } from './team-display';
 
@@ -89,9 +89,9 @@ export function TeamMembersPanel({
                       <SelectItem key={UserRole.MEMBER}>Member</SelectItem>
                     </Select>
                   ) : (
-                    <div className="max-w-xs rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+                    <PermissionHint>
                       {roleDisabledReason}
-                    </div>
+                    </PermissionHint>
                   )}
                 </div>
               </article>

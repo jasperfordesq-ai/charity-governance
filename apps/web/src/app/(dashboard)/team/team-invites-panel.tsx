@@ -8,7 +8,7 @@ import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { AppSection } from '@/components/ui/app-page';
 import { DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, PermissionHint } from '@/components/ui/states';
 import { StatusChip } from '@/components/ui/status';
 import { ROLE_META, formatDate, inviteStatus } from './team-display';
 
@@ -127,7 +127,9 @@ export function TeamInvitesPanel({
                           Revoke
                         </Button>
                       ) : active ? (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{permissionDisabledReason}</p>
+                        <PermissionHint>
+                          {permissionDisabledReason}
+                        </PermissionHint>
                       ) : null}
                     </div>
                   </article>

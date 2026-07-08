@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `dd6458b`
+Working-tree base commit when generated: `0f6db7c`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -153,6 +153,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The team invite form and pending-invite list are split out of the team route behind a wiring regression test while preserving invite role gates and revoke states.
 - The team role guidance panel is split out of the team route behind a wiring regression test and now uses shared status panel styling.
 - Team feedback now uses the shared inline status primitive instead of route-local alert styling.
+- Team role-change and invite-revoke permission-denied messages now use a shared permission hint primitive instead of route-local grey boxes or text.
 - Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.
 - Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.
 - Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.
@@ -247,7 +248,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
 - Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team mutation-status and billing action-status cleanup; production-tooling checks passed 293/293.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team mutation-status, billing action-status, and team permission-hint cleanup; production-tooling checks passed 294/294.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.

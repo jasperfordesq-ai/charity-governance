@@ -173,6 +173,15 @@ export function InlineStatus({
   );
 }
 
+export function PermissionHint({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex max-w-xs min-w-0 items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+      <LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+      <p className="min-w-0 break-words">{children}</p>
+    </div>
+  );
+}
+
 export function SaveStatusIndicator({
   status,
   retryAction,

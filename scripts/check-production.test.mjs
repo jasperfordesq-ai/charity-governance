@@ -2388,6 +2388,21 @@ test('billing page uses shared visible status for Stripe actions', () => {
   assert.doesNotMatch(billingPage, /Billing ready/);
 });
 
+test('team permission-denied states use the shared permission hint primitive', () => {
+  const statePrimitives = readRepoFile('apps/web/src/components/ui/states.tsx');
+  const membersPanel = readRepoFile('apps/web/src/app/(dashboard)/team/team-members-panel.tsx');
+  const invitesPanel = readRepoFile('apps/web/src/app/(dashboard)/team/team-invites-panel.tsx');
+
+  assert.match(statePrimitives, /export function PermissionHint/);
+  assert.match(membersPanel, /import \{ EmptyState, ErrorState, LoadingState, PermissionHint \} from '@\/components\/ui\/states'/);
+  assert.match(membersPanel, /<PermissionHint>\s*\{roleDisabledReason\}\s*<\/PermissionHint>/);
+  assert.doesNotMatch(membersPanel, /max-w-xs rounded-lg border border-gray-200 bg-gray-50/);
+
+  assert.match(invitesPanel, /import \{ EmptyState, PermissionHint \} from '@\/components\/ui\/states'/);
+  assert.match(invitesPanel, /<PermissionHint>\s*\{permissionDisabledReason\}\s*<\/PermissionHint>/);
+  assert.doesNotMatch(invitesPanel, /<p className="text-xs text-gray-500 dark:text-gray-400">\{permissionDisabledReason\}<\/p>/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 
