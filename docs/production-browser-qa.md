@@ -134,6 +134,9 @@ promoted `release.commitSha`, including `browserQa.checks.browser-qa-completed`,
 `browserQa.checks.cross-browser-coverage`,
 `browserQa.checks.ios-safari-device-coverage`, and
 `browserQa.checks.critical-flows-covered`.
+The `browserQa.checks.critical-flows-covered` evidence must explicitly confirm
+pending-navigation confirmation, conditional obligations, and readiness blockers
+were exercised against the promoted production release.
 
 | Route | Area | Required evidence |
 | --- | --- | --- |

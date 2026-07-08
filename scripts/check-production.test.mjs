@@ -2328,6 +2328,9 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.match(launchChecklist, /browserQa\.checks\.critical-flows-covered/);
   assert.doesNotMatch(launchChecklist, /browserQa\.checks\.critical-flows(?!-covered)/);
   assert.match(browserQa, /browserQa\.checks\.critical-flows-covered/);
+  assert.match(browserQa, /browserQa\.checks\.critical-flows-covered[\s\S]{0,500}pending-navigation confirmation/);
+  assert.match(browserQa, /browserQa\.checks\.critical-flows-covered[\s\S]{0,500}conditional obligations/);
+  assert.match(browserQa, /browserQa\.checks\.critical-flows-covered[\s\S]{0,500}readiness blockers/);
   assert.doesNotMatch(browserQa, /browserQa\.checks\.critical-flows(?!-covered)/);
   assert.match(launchChecklist, /public\/auth and dashboard desktop light\/dark route matrices/);
   assert.match(launchChecklist, /public\/auth and dashboard mobile light\/dark route matrices/);
