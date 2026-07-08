@@ -119,6 +119,37 @@ test('production observability checker rejects missing, local, and non-HTTPS web
   }
 });
 
+test('production observability checker rejects copied placeholder webhook hosts before DNS or sending', async () => {
+  const runProductionObservabilityCheckFromArgs = await loadObservabilityRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    ERROR_ALERT_WEBHOOK_URL: 'https://your-alerts.charitypilot.ie/hooks/charitypilot',
+  }));
+  let called = false;
+
+  try {
+    const result = await runProductionObservabilityCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        resolveHost: async () => {
+          called = true;
+          return [{ address: '8.8.8.8', family: 4 }];
+        },
+        fetchImpl: async () => {
+          called = true;
+          return response(202);
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(called, false, 'checker must stop before resolving or sending to placeholder alert hosts');
+    assert.match(result.stderr, /ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value/);
+    assert.doesNotMatch(result.stderr, /your-alerts/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production observability checker rejects private or reserved webhook DNS', async () => {
   const runProductionObservabilityCheckFromArgs = await loadObservabilityRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

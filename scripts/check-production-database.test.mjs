@@ -135,6 +135,33 @@ test('production database checker rejects missing, local, and non-TLS database U
   }
 });
 
+test('production database checker rejects copied placeholder database hosts before backup', async () => {
+  const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    DATABASE_URL: 'postgresql://user:secret@your-db.charitypilot.ie:5432/charitypilot?sslmode=require',
+  }));
+  let called = false;
+
+  try {
+    const result = await runProductionDatabaseCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        runPostgresBackupFromArgs: async () => {
+          called = true;
+          return { status: 0, stdout: '', stderr: '' };
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(called, false, 'checker must stop before backing up a placeholder database host');
+    assert.match(result.stderr, /DATABASE_URL is missing or still contains a placeholder value/);
+    assert.doesNotMatch(result.stderr, /user:secret|your-db/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production database checker propagates backup and restore failures without leaking credentials', async () => {
   const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

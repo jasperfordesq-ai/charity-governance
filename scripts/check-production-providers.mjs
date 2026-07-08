@@ -95,7 +95,7 @@ function parseEnvFile(path) {
 }
 
 function isConfigured(value) {
-  return typeof value === 'string' && value.trim().length > 0 && !/REPLACE_ME|TODO|TBD|placeholder/i.test(value);
+  return typeof value === 'string' && value.trim().length > 0 && !/REPLACE_ME|change-me|your_|your-|project_ref|TODO|TBD|placeholder/i.test(value);
 }
 
 function parseApiOrigin(value, issues) {

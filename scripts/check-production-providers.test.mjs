@@ -300,6 +300,39 @@ test('production provider checker fails before network calls when provider env i
   }
 });
 
+test('production provider checker rejects live-looking placeholder provider values before network calls', async () => {
+  const runProductionProvidersCheckFromArgs = await loadProviderRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    STRIPE_SECRET_KEY: 'sk_live_your_stripe_secret',
+    STRIPE_WEBHOOK_SECRET: 'whsec_your_webhook_secret',
+    STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_your_essentials_monthly',
+    RESEND_API_KEY: 're_your_resend_key',
+  }));
+  let called = false;
+
+  try {
+    const result = await runProductionProvidersCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async () => {
+          called = true;
+          return response(200, {});
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(called, false, 'checker must stop before calling providers with placeholder values');
+    assert.match(result.stderr, /STRIPE_SECRET_KEY must use a live Stripe secret key/);
+    assert.match(result.stderr, /STRIPE_WEBHOOK_SECRET must be configured as a Stripe webhook signing secret/);
+    assert.match(result.stderr, /STRIPE_ESSENTIALS_MONTHLY_PRICE_ID must use a Stripe price ID/);
+    assert.match(result.stderr, /RESEND_API_KEY must be configured as a Resend API key/);
+    assert.doesNotMatch(result.stderr, /your_stripe|your_webhook|your_essentials|your_resend/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production provider checker redacts thrown provider request transcripts', async () => {
   const runProductionProvidersCheckFromArgs = await loadProviderRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());
