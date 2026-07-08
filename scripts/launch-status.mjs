@@ -25,6 +25,28 @@ const EVIDENCE_STATUS_JSON_COMMAND = `npm run check:production:evidence:status -
 const EVIDENCE_VALIDATION_COMMAND = `npm run check:production:evidence -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 const EVIDENCE_VALIDATION_JSON_COMMAND = `npm run check:production:evidence -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 
+const DEPLOYED_BROWSER_QA = Object.freeze({
+  requiredEnvironment: Object.freeze([
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'E2E_OWNER_EMAIL from the approved non-sensitive test workspace',
+    'E2E_OWNER_PASSWORD from the approved non-sensitive test workspace',
+  ]),
+  responsiveCommand: 'npm run test:e2e:responsive',
+  focusedResponsiveCommands: Object.freeze([
+    'npm run test:e2e:responsive:public:desktop',
+    'npm run test:e2e:responsive:public:mobile',
+    'npm run test:e2e:responsive:dashboard:desktop',
+    'npm run test:e2e:responsive:dashboard:mobile',
+  ]),
+  accessibilityCommand: 'npm run test:e2e -- tests/accessibility.spec.ts',
+  crossBrowserResponsiveCommand: 'npm run test:e2e:deployed:responsive:cross-browser',
+  crossBrowserAccessibilityCommand: 'npm run test:e2e:deployed:accessibility:cross-browser',
+  iosSafariEvidence: 'Record real iOS Safari manual or cloud-device evidence for the promoted release.',
+  evidenceTarget: 'Record outputs under browserQa.checks.* in the production launch evidence ledger.',
+});
+
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence and bind that critical-flow evidence to release.commitSha, accessibility output must be recorded in browserQa.checks.accessibility-coverage, cross-browser output in browserQa.checks.cross-browser-coverage, and real iOS Safari evidence in browserQa.checks.ios-safari-device-coverage.',
@@ -257,6 +279,7 @@ export function assessLaunchState(state) {
       remainingKeyGroups: [],
       expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
+      deployedBrowserQa: DEPLOYED_BROWSER_QA,
       launchProgress: buildLaunchProgress({ remainingKeys: EXPECTED_PRODUCTION_VALUE_KEYS, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -276,6 +299,7 @@ export function assessLaunchState(state) {
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
       expectedProductionValueGroups: [],
       evidenceLedger,
+      deployedBrowserQa: DEPLOYED_BROWSER_QA,
       launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
@@ -293,6 +317,7 @@ export function assessLaunchState(state) {
     remainingKeyGroups: [],
     expectedProductionValueGroups: [],
     evidenceLedger,
+    deployedBrowserQa: DEPLOYED_BROWSER_QA,
     launchProgress: buildLaunchProgress({ remainingKeys: [], evidenceLedger }),
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
@@ -318,6 +343,7 @@ export function renderLaunchStatusJson(state) {
       launchProgress: state.launchProgress,
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
+      deployedBrowserQa: state.deployedBrowserQa,
       externalEvidenceGates: state.externalEvidenceGates,
     },
     null,
@@ -398,6 +424,19 @@ function renderLaunchStatusText(state) {
   lines.push(`  ${state.evidenceLedger.nextAction}`);
   lines.push(`  Strict validation:  ${state.evidenceLedger.validationCommand}`);
   lines.push(`  Strict validation JSON:  ${state.evidenceLedger.jsonValidationCommand}`);
+  if (state.deployedBrowserQa) {
+    lines.push('', 'Deployed browser QA:');
+    lines.push('  Required environment:');
+    for (const item of state.deployedBrowserQa.requiredEnvironment) lines.push(`    - ${item}`);
+    lines.push(`  Responsive:  ${state.deployedBrowserQa.responsiveCommand}`);
+    lines.push('  Focused responsive chunks:');
+    for (const command of state.deployedBrowserQa.focusedResponsiveCommands) lines.push(`    - ${command}`);
+    lines.push(`  Accessibility:  ${state.deployedBrowserQa.accessibilityCommand}`);
+    lines.push(`  Cross-browser responsive:  ${state.deployedBrowserQa.crossBrowserResponsiveCommand}`);
+    lines.push(`  Cross-browser accessibility:  ${state.deployedBrowserQa.crossBrowserAccessibilityCommand}`);
+    lines.push(`  iOS Safari:  ${state.deployedBrowserQa.iosSafariEvidence}`);
+    lines.push(`  Evidence target:  ${state.deployedBrowserQa.evidenceTarget}`);
+  }
   lines.push('', 'External launch evidence still required:');
   for (const gate of state.externalEvidenceGates) lines.push(`  - ${gate}`);
   lines.push('', 'Full map: docs/LAUNCH-GUIDE.md', '');

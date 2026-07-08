@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `e2fa8cf`
+Working-tree base commit when generated: `51474b6`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -237,6 +237,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence status completion now requires area statuses as well as all checks and final approval roles, reducing operator/validator drift.
 - Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.
 - Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.
+- Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
 - Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.
 - Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.
 - Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.
@@ -370,6 +371,26 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 - Strict validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Strict validation JSON: `npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
+
+### Deployed Browser QA Commands
+
+- Required environment:
+  - `E2E_DEPLOYED_QA=true`
+  - `E2E_WEB_URL=https://app.charitypilot.ie`
+  - `E2E_API_URL=https://api.charitypilot.ie`
+  - `E2E_OWNER_EMAIL from the approved non-sensitive test workspace`
+  - `E2E_OWNER_PASSWORD from the approved non-sensitive test workspace`
+- Responsive: `npm run test:e2e:responsive`
+- Focused responsive chunks:
+  - `npm run test:e2e:responsive:public:desktop`
+  - `npm run test:e2e:responsive:public:mobile`
+  - `npm run test:e2e:responsive:dashboard:desktop`
+  - `npm run test:e2e:responsive:dashboard:mobile`
+- Accessibility: `npm run test:e2e -- tests/accessibility.spec.ts`
+- Cross-browser responsive: `npm run test:e2e:deployed:responsive:cross-browser`
+- Cross-browser accessibility: `npm run test:e2e:deployed:accessibility:cross-browser`
+- iOS Safari: Record real iOS Safari manual or cloud-device evidence for the promoted release.
+- Evidence target: Record outputs under browserQa.checks.* in the production launch evidence ledger.
 
 ### Local Production Environment State
 

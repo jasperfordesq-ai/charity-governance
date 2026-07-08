@@ -266,6 +266,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence status completion now requires area statuses as well as all checks and final approval roles, reducing operator/validator drift.',
   'Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.',
   'Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.',
+  'Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
   'Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.',
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
   'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
@@ -541,6 +542,7 @@ function readLaunchSummary() {
     remainingKeyGroups: state.remainingKeyGroups ?? [],
     launchProgress: state.launchProgress,
     evidenceLedger: state.evidenceLedger,
+    deployedBrowserQa: state.deployedBrowserQa,
   };
 }
 
@@ -675,6 +677,19 @@ function render() {
     md += `- Strict validation JSON: \`${launch.evidenceLedger.jsonValidationCommand}\`\n`;
   }
   md += `\n`;
+  if (launch.deployedBrowserQa) {
+    md += `### Deployed Browser QA Commands\n\n`;
+    md += `- Required environment:\n`;
+    for (const item of launch.deployedBrowserQa.requiredEnvironment) md += `  - \`${item}\`\n`;
+    md += `- Responsive: \`${launch.deployedBrowserQa.responsiveCommand}\`\n`;
+    md += `- Focused responsive chunks:\n`;
+    for (const command of launch.deployedBrowserQa.focusedResponsiveCommands) md += `  - \`${command}\`\n`;
+    md += `- Accessibility: \`${launch.deployedBrowserQa.accessibilityCommand}\`\n`;
+    md += `- Cross-browser responsive: \`${launch.deployedBrowserQa.crossBrowserResponsiveCommand}\`\n`;
+    md += `- Cross-browser accessibility: \`${launch.deployedBrowserQa.crossBrowserAccessibilityCommand}\`\n`;
+    md += `- iOS Safari: ${launch.deployedBrowserQa.iosSafariEvidence}\n`;
+    md += `- Evidence target: ${launch.deployedBrowserQa.evidenceTarget}\n\n`;
+  }
   md += `### Local Production Environment State\n\n`;
   md += `- Phase: \`${launch.phase}\`\n`;
   md += `- ${launch.headline}\n`;

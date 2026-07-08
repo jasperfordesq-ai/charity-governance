@@ -30,6 +30,28 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /external penetration test/);
 }
 
+function assertDeployedBrowserQaCommands(commands) {
+  assert.deepEqual(commands.requiredEnvironment, [
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'E2E_OWNER_EMAIL from the approved non-sensitive test workspace',
+    'E2E_OWNER_PASSWORD from the approved non-sensitive test workspace',
+  ]);
+  assert.equal(commands.responsiveCommand, 'npm run test:e2e:responsive');
+  assert.deepEqual(commands.focusedResponsiveCommands, [
+    'npm run test:e2e:responsive:public:desktop',
+    'npm run test:e2e:responsive:public:mobile',
+    'npm run test:e2e:responsive:dashboard:desktop',
+    'npm run test:e2e:responsive:dashboard:mobile',
+  ]);
+  assert.equal(commands.accessibilityCommand, 'npm run test:e2e -- tests/accessibility.spec.ts');
+  assert.equal(commands.crossBrowserResponsiveCommand, 'npm run test:e2e:deployed:responsive:cross-browser');
+  assert.equal(commands.crossBrowserAccessibilityCommand, 'npm run test:e2e:deployed:accessibility:cross-browser');
+  assert.match(commands.iosSafariEvidence, /real iOS Safari/);
+  assert.match(commands.evidenceTarget, /browserQa\.checks/);
+}
+
 test('launch status script text is ASCII-safe for operator transcripts', () => {
   const source = readFileSync(join(repoRoot, 'scripts', 'launch-status.mjs'), 'utf8');
 
@@ -76,6 +98,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
     strictLaunchGates: 0,
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
+  assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assertExternalLaunchEvidenceGates(s);
 });
 
@@ -257,6 +280,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
   assert.match(payload.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(payload.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
+  assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
   assert.equal(payload.remainingKeyGroups[0].label, 'PostgreSQL');
