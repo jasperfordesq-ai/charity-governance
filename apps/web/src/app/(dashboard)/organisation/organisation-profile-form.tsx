@@ -13,6 +13,7 @@ import { AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, StickyFormActions, ValidationSummary } from '@/components/ui/forms';
 import { StatusChip } from '@/components/ui/status';
+import { SaveStatusIndicator } from '@/components/ui/states';
 import type { ConditionalObligationProfile } from '@charitypilot/shared';
 import {
   CHARITABLE_PURPOSE_LABELS,
@@ -47,6 +48,7 @@ type OrganisationProfileFormProps = {
   legalFormOptions: Array<[string, string]>;
   name: string;
   purposeOptions: Array<[string, string]>;
+  profileSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   rcnNumber: string;
   readyCount: number;
   registeredAddress: string;
@@ -88,6 +90,7 @@ export function OrganisationProfileForm({
   legalFormOptions,
   name,
   purposeOptions,
+  profileSaveStatus,
   rcnNumber,
   readyCount,
   registeredAddress,
@@ -293,8 +296,9 @@ export function OrganisationProfileForm({
         </div>
 
         <StickyFormActions align="between">
-          <div aria-live="polite" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {dirtyStateLabel}
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{dirtyStateLabel}</span>
+            <SaveStatusIndicator status={profileSaveStatus} />
           </div>
           <Button
             className={primaryActionButtonClassName}

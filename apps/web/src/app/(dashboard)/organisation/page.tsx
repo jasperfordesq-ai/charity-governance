@@ -35,6 +35,7 @@ export default function OrganisationPage() {
     name,
     org,
     purposeOptions,
+    profileSaveStatus,
     rcnNumber,
     readyCount,
     refreshUser,
@@ -118,6 +119,7 @@ export default function OrganisationPage() {
         legalFormOptions={legalFormOptions}
         name={name}
         purposeOptions={purposeOptions}
+        profileSaveStatus={profileSaveStatus}
         rcnNumber={rcnNumber}
         readyCount={readyCount}
         registeredAddress={registeredAddress}

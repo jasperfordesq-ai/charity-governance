@@ -117,13 +117,14 @@ export function useOrganisationWorkflow() {
     return errors;
   }, [name, saveError]);
 
-  const dirtyStateLabel = saving
-    ? 'Saving changes'
+  const dirtyStateLabel = isDirty ? 'Unsaved changes' : 'Up to date';
+  const profileSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = saving
+    ? 'saving'
     : saved
-      ? 'Changes saved'
-      : isDirty
-        ? 'Unsaved changes'
-        : 'Up to date';
+      ? 'saved'
+      : saveError
+        ? 'error'
+        : 'idle';
 
   const completionItems = [
     { label: 'Registered Charity Number', ready: Boolean(rcnNumber.trim()) },
@@ -221,6 +222,7 @@ export function useOrganisationWorkflow() {
     name,
     org,
     purposeOptions,
+    profileSaveStatus,
     rcnNumber,
     readyCount,
     refreshUser,

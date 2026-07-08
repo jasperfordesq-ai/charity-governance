@@ -2332,6 +2332,18 @@ test('compliance standard editor uses the shared save-status primitive', () => {
   assert.doesNotMatch(standardEditor, /import \{ Check/);
 });
 
+test('organisation profile form uses the shared save-status primitive', () => {
+  const workflow = readRepoFile('apps/web/src/app/(dashboard)/organisation/use-organisation-workflow.ts');
+  const page = readRepoFile('apps/web/src/app/(dashboard)/organisation/page.tsx');
+  const form = readRepoFile('apps/web/src/app/(dashboard)/organisation/organisation-profile-form.tsx');
+
+  assert.match(workflow, /profileSaveStatus/);
+  assert.match(page, /profileSaveStatus=\{profileSaveStatus\}/);
+  assert.match(form, /import \{ SaveStatusIndicator \} from '@\/components\/ui\/states'/);
+  assert.match(form, /profileSaveStatus:\s*'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(form, /<SaveStatusIndicator\s+status=\{profileSaveStatus\}/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 
