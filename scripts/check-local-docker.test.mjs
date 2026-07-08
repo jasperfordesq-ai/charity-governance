@@ -485,7 +485,9 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /npm run test:e2e:responsive/);
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
-  assert.match(auditLedger, /6\/6 selected release gates/);
+  assert.match(auditLedger, /passed locally on 2026-07-08 at commit dc26da0/);
+  assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed/);
+  assert.match(auditLedger, /only Playwright E2E was skipped/);
   assert.match(auditLedger, /Local responsive browser QA completed cleanly on 2026-07-08/);
   assert.match(auditLedger, /public desktop 13\/13/);
   assert.match(auditLedger, /dashboard desktop 12\/12/);
