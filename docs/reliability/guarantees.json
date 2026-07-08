@@ -3513,7 +3513,7 @@
     "surface": "web",
     "group": "web-platform",
     "concern": "auth-session",
-    "guarantee": "In production the API base URL must be explicitly set, https, origin-only and an approved charitypilot.ie host — otherwise it is rejected.",
+    "guarantee": "In production the API base URL must be explicitly set, https, origin-only, and the canonical https://api.charitypilot.ie origin — otherwise it is rejected.",
     "status": "covered",
     "testType": "unit",
     "testFile": "apps/web/src/lib/api-config.test.ts",
