@@ -266,6 +266,26 @@ test('reports TLS and shared-cookie production drift before deploy preflight', (
   assert.ok(s.nextActions.some((a) => /correct drifted TLS\/cookie settings/.test(a)));
 });
 
+test('keeps placeholder issue reasons ahead of canonical drift checks', () => {
+  const env = [
+    'NODE_ENV=production',
+    'AUTH_COOKIE_DOMAIN=REPLACE_ME_SHARED_COOKIE_DOMAIN',
+    'CADDY_ACME_EMAIL=REPLACE_ME_ACME_EMAIL',
+    'CHARITYPILOT_WEB_DOMAIN=charitypilot.ie',
+  ].join('\n');
+
+  const s = assessLaunchState({ envExists: true, envContent: env });
+
+  assert.deepEqual(
+    s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason, expected: issue.expected })),
+    [
+      { key: 'AUTH_COOKIE_DOMAIN', reason: 'placeholder', expected: undefined },
+      { key: 'CADDY_ACME_EMAIL', reason: 'placeholder', expected: undefined },
+      { key: 'CHARITYPILOT_WEB_DOMAIN', reason: 'canonical-drift', expected: 'app.charitypilot.ie' },
+    ],
+  );
+});
+
 test('reports launch evidence completion counts when the evidence ledger exists', () => {
   const env = [
     'NODE_ENV=production',

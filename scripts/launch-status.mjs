@@ -212,18 +212,20 @@ function productionValueIssueDetails(envContent) {
     if (!assignments.has(key)) continue;
     const actualValue = assignments.get(key);
     if (actualValue !== expectedValue) {
-      issues.set(key, {
-        key,
-        reason: 'canonical-drift',
-        expected: expectedValue,
-        detail: `Value must match the canonical production setting: ${expectedValue}.`,
-      });
+      if (!issues.has(key)) {
+        issues.set(key, {
+          key,
+          reason: 'canonical-drift',
+          expected: expectedValue,
+          detail: `Value must match the canonical production setting: ${expectedValue}.`,
+        });
+      }
     }
   }
 
   if (assignments.has('CADDY_ACME_EMAIL')) {
     const caddyEmail = assignments.get('CADDY_ACME_EMAIL') ?? '';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(caddyEmail)) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(caddyEmail) && !issues.has('CADDY_ACME_EMAIL')) {
       issues.set('CADDY_ACME_EMAIL', {
         key: 'CADDY_ACME_EMAIL',
         reason: 'invalid-email',
