@@ -200,6 +200,25 @@ test('deploy preflight reports TLS proxy drift even when production env validati
   }
 });
 
+test('deploy preflight rejects placeholder TLS ACME contact emails', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-caddy-placeholder-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    CADDY_ACME_EMAIL: 'todo@example.com',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CADDY_ACME_EMAIL is required when the default TLS proxy overlay is enabled/);
+    assert.doesNotMatch(result.stdout, /cosign verify/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('deploy preflight dry-run emits production validation and signature verification commands', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-valid-'));
   const envPath = join(tempDir, 'production.env');

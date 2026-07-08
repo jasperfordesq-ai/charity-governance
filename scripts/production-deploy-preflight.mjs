@@ -39,6 +39,7 @@ const requiredWebBuildOrigins = [
 
 const cosignIdentityRegex = '^https://github.com/jasperfordesq-ai/charity-governance/\\.github/workflows/release-images\\.yml@refs/(heads/master|tags/v.*)$';
 const cosignIssuer = 'https://token.actions.githubusercontent.com';
+const placeholderContactPattern = /\b(?:replace_me|todo|tbd|pending|placeholder|change-me|your_|your-|example\.(?:com|org|net)|localhost)\b/i;
 
 function usage() {
   return 'Usage: node scripts/production-deploy-preflight.mjs --production-env-file <path> [--dry-run] [--no-tls-proxy]\n';
@@ -138,7 +139,7 @@ function tlsProxyIssues(deploymentEnv) {
   const expectedWebHostname = new URL(CANONICAL_PRODUCTION_WEB_ORIGIN).hostname;
   const expectedApiHostname = new URL(CANONICAL_PRODUCTION_API_ORIGIN).hostname;
 
-  if (!caddyEmail || caddyEmail.includes('REPLACE_ME')) {
+  if (!caddyEmail || placeholderContactPattern.test(caddyEmail)) {
     issues.push('CADDY_ACME_EMAIL is required when the default TLS proxy overlay is enabled');
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(caddyEmail)) {
     issues.push('CADDY_ACME_EMAIL must be a valid email address for ACME certificate registration');
