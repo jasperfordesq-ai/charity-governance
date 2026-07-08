@@ -1,17 +1,15 @@
 'use client';
 
 import {
-  Button,
   Checkbox,
   Input,
   Modal,
   ModalBody,
   ModalContent,
-  ModalFooter,
   ModalHeader,
 } from '@heroui/react';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
+import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 
 export function BoardMemberModal({
@@ -178,20 +176,17 @@ export function BoardMemberModal({
                 </FormHint>
               </FieldGroup>
             </ModalBody>
-            <ModalFooter>
-              <Button variant="flat" onPress={() => { resetForm(); onClose(); }} isDisabled={saving}>
-                Cancel
-              </Button>
-              <Button
-                className={primaryActionButtonClassName}
-                onPress={handleSave}
-                isLoading={saving}
-                isDisabled={Boolean(formDisabledReason) || saving}
-                aria-describedby="board-disabled-hint"
-              >
-                {editing ? 'Save trustee' : 'Add trustee'}
-              </Button>
-            </ModalFooter>
+            <ModalFormActions
+              onCancel={() => {
+                resetForm();
+                onClose();
+              }}
+              onSubmit={handleSave}
+              submitting={saving}
+              submitDisabled={Boolean(formDisabledReason) || saving}
+              submitAriaDescribedBy="board-disabled-hint"
+              submitLabel={editing ? 'Save trustee' : 'Add trustee'}
+            />
           </>
         )}
       </ModalContent>

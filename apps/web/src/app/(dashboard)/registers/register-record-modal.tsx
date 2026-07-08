@@ -1,8 +1,8 @@
 'use client';
 
-import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '@heroui/react';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
+import { Modal, ModalBody, ModalContent, ModalHeader } from '@heroui/react';
 import { FormHint, ValidationSummary } from '@/components/ui/forms';
+import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import {
   ComplaintForm,
   ConflictForm,
@@ -45,20 +45,14 @@ export function RegisterRecordModal({
             {formDisabledReason || 'Saving updates the register after the API confirms the record.'}
           </FormHint>
         </ModalBody>
-        <ModalFooter>
-          <Button variant="flat" onPress={closeModal} isDisabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            className={primaryActionButtonClassName}
-            onPress={handleCreate}
-            isLoading={saving}
-            isDisabled={Boolean(formDisabledReason) || saving}
-            aria-describedby="register-disabled-hint"
-          >
-            Save record
-          </Button>
-        </ModalFooter>
+        <ModalFormActions
+          onCancel={closeModal}
+          onSubmit={handleCreate}
+          submitting={saving}
+          submitDisabled={Boolean(formDisabledReason) || saving}
+          submitAriaDescribedBy="register-disabled-hint"
+          submitLabel="Save record"
+        />
       </ModalContent>
     </Modal>
   );

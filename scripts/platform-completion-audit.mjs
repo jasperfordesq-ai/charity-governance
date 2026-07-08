@@ -115,6 +115,7 @@ const fixedInThisAuditBranch = [
   'The document profile-triggered evidence prompt model and panel are split out of the oversized documents route behind a wiring regression test.',
   'The deadline profile-triggered review-date prompt model and panel are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline add/edit form modal is split out of the oversized deadlines route behind a wiring regression test.',
+  'Deadline, board trustee, and register record form modals now share the HeroUI modal form-action footer primitive behind wiring regression tests.',
   'The deadline list panel, status classifier, and summary helper are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline overview and regulatory cadence panels are split out of the oversized deadlines route behind a wiring regression test.',
   'The deadline delete confirmation modal is split out of the deadlines route behind a wiring regression test.',

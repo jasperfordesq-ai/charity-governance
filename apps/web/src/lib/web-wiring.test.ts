@@ -1114,6 +1114,8 @@ test('board member form modal is extracted from the oversized route file', () =>
   assert.match(modalSrc, /Trustee details/);
   assert.match(modalSrc, /board-disabled-hint/);
   assert.match(modalSrc, /Saving updates the trustee register after the API confirms the change/);
+  assert.match(modalSrc, /ModalFormActions/);
+  assert.doesNotMatch(modalSrc, /ModalFooter/);
 });
 
 test('board trustee evidence checkboxes use HeroUI Checkbox controls', () => {
@@ -1890,6 +1892,8 @@ test('deadlines form modal is extracted from the oversized route file', () => {
   assert.match(modalSrc, /Deadline details/);
   assert.match(modalSrc, /deadline-disabled-hint/);
   assert.match(modalSrc, /Default reminders are kept at 30, 7, and 1 day before the due date/);
+  assert.match(modalSrc, /ModalFormActions/);
+  assert.doesNotMatch(modalSrc, /ModalFooter/);
 });
 
 test('deadlines list panel is extracted from the oversized route file', () => {
@@ -2414,6 +2418,8 @@ test('registers record modal shell is extracted from the oversized route file', 
   assert.match(modalSrc, /Saving updates the register after the API confirms the record/);
   assert.match(modalSrc, /ConflictForm/);
   assert.match(modalSrc, /FundraisingForm/);
+  assert.match(modalSrc, /ModalFormActions/);
+  assert.doesNotMatch(modalSrc, /ModalFooter/);
 });
 
 test('registers operational record list sections are extracted from the oversized route file', () => {

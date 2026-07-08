@@ -1,17 +1,15 @@
 'use client';
 
 import {
-  Button,
   Input,
   Modal,
   ModalBody,
   ModalContent,
-  ModalFooter,
   ModalHeader,
   Textarea,
 } from '@heroui/react';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
+import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import type { DeadlineResponse } from '@charitypilot/shared';
 
 export function DeadlineFormModal({
@@ -83,27 +81,17 @@ export function DeadlineFormModal({
                 </FormHint>
               </FieldGroup>
             </ModalBody>
-            <ModalFooter>
-              <Button
-                variant="flat"
-                onPress={() => {
-                  resetForm();
-                  onClose();
-                }}
-                isDisabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button
-                className={primaryActionButtonClassName}
-                onPress={handleSaveDeadline}
-                isLoading={saving}
-                isDisabled={Boolean(formDisabledReason) || saving}
-                aria-describedby="deadline-disabled-hint"
-              >
-                {editingDeadline ? 'Save deadline' : 'Add deadline'}
-              </Button>
-            </ModalFooter>
+            <ModalFormActions
+              onCancel={() => {
+                resetForm();
+                onClose();
+              }}
+              onSubmit={handleSaveDeadline}
+              submitting={saving}
+              submitDisabled={Boolean(formDisabledReason) || saving}
+              submitAriaDescribedBy="deadline-disabled-hint"
+              submitLabel={editingDeadline ? 'Save deadline' : 'Add deadline'}
+            />
           </>
         )}
       </ModalContent>
