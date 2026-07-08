@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { evidenceHints as defaultEvidenceHints } from './generate-production-launch-evidence-template.mjs';
 
 export const REQUIRED_LAUNCH_AREAS = [
   {
@@ -1527,6 +1528,44 @@ function launchProgress(evidence) {
   };
 }
 
+function statusOf(value) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'missing';
+}
+
+function nextIncompleteCheckSummary(evidence) {
+  const incompleteChecks = [];
+  const incompleteCheckDetails = [];
+
+  for (const area of REQUIRED_LAUNCH_AREAS) {
+    const actualArea = evidence?.areas?.[area.id];
+    for (const check of area.checks) {
+      const actualCheck = actualArea?.checks?.[check.id];
+      if (actualCheck?.status === 'complete') continue;
+
+      const path = `${area.id}.${check.id}`;
+      const status = statusOf(actualCheck?.status);
+      const storedHints = Array.isArray(actualCheck?.requiredEvidenceHints)
+        ? actualCheck.requiredEvidenceHints.filter((hint) => typeof hint === 'string' && hint.trim().length > 0)
+        : [];
+      const requiredEvidenceHints = storedHints.length > 0 ? storedHints : defaultEvidenceHints(area.id, check.id);
+
+      incompleteChecks.push(`${path} (${status})`);
+      incompleteCheckDetails.push({
+        path,
+        label: check.label,
+        status,
+        requiredEvidenceHints,
+      });
+    }
+  }
+
+  return {
+    incompleteCheckCount: incompleteChecks.length,
+    nextIncompleteChecks: incompleteChecks.slice(0, 10),
+    nextIncompleteCheckDetails: incompleteCheckDetails.slice(0, 10),
+  };
+}
+
 function renderFailureProgress(evidence, evidenceFile) {
   const progress = launchProgress(evidence);
 
@@ -1538,6 +1577,7 @@ function renderFailureProgress(evidence, evidenceFile) {
 }
 
 function renderJsonStatus(evidence, issues) {
+  const incompleteCheckSummary = nextIncompleteCheckSummary(evidence);
   return `${JSON.stringify(
     {
       ok: issues.length === 0,
@@ -1546,6 +1586,7 @@ function renderJsonStatus(evidence, issues) {
       issueCount: issues.length,
       issues,
       progress: launchProgress(evidence),
+      ...incompleteCheckSummary,
     },
     null,
     2,

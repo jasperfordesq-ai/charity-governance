@@ -802,6 +802,19 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.equal(failurePayload.approvedForLaunch, false);
     assert.equal(failurePayload.issueCount, failurePayload.issues.length);
     assert.ok(failurePayload.issueCount > 0);
+    assert.deepEqual(failurePayload.nextIncompleteChecks.slice(0, 1), ['releaseGate.check-production (pending)']);
+    assert.deepEqual(failurePayload.nextIncompleteCheckDetails.slice(0, 1), [
+      {
+        path: 'releaseGate.check-production',
+        label: 'production env validation completed against real secrets',
+        status: 'pending',
+        requiredEvidenceHints: [
+          'npm run check:production -- --production-env-file=.env.production',
+          'Production configuration check passed',
+        ],
+      },
+    ]);
+    assert.equal(failurePayload.incompleteCheckCount, 1);
     assert.deepEqual(failurePayload.progress, {
       checklistChecks: {
         completed: 84,
