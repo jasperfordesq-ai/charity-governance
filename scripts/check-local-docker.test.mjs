@@ -553,6 +553,9 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /Local-state note/);
   assert.match(auditLedger, /Local Production Environment State/);
   assert.match(auditLedger, /Release Image Promotion/);
+  assert.match(auditLedger, /Protected Final Launch Evidence Workflow/);
+  assert.match(auditLedger, /\.github\/workflows\/production-launch-evidence\.yml/);
+  assert.match(auditLedger, /gh workflow run production-launch-evidence\.yml --ref master/);
   assert.match(auditLedger, /GitHub environment: `production`/);
   assert.match(auditLedger, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(auditLedger, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/YOUR_SUPABASE_PROJECT_REF\.supabase\.co/);

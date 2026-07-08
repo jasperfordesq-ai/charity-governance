@@ -559,6 +559,7 @@ function readLaunchSummary() {
     evidenceLedger: state.evidenceLedger,
     deployedBrowserQa: state.deployedBrowserQa,
     productionLaunchCommands: state.productionLaunchCommands,
+    finalLaunchEvidenceWorkflow: state.finalLaunchEvidenceWorkflow,
     releaseImagePromotion: state.releaseImagePromotion,
     finalSignoffRequirements: state.finalSignoffRequirements,
   };
@@ -721,6 +722,17 @@ function render() {
     md += `- Rollback rehearsal: \`${launch.productionLaunchCommands.rollbackRehearsal}\`\n`;
     md += `- Release-run evidence: \`${launch.productionLaunchCommands.releaseRunEvidence}\`\n`;
     md += `- Final evidence validation: \`${launch.productionLaunchCommands.finalEvidenceValidation}\`\n\n`;
+  }
+  if (launch.finalLaunchEvidenceWorkflow) {
+    md += `### Protected Final Launch Evidence Workflow\n\n`;
+    md += `- Workflow file: \`${launch.finalLaunchEvidenceWorkflow.workflowFile}\`\n`;
+    md += `- GitHub environment: \`${launch.finalLaunchEvidenceWorkflow.githubEnvironment}\`\n`;
+    md += `- Required input: \`${launch.finalLaunchEvidenceWorkflow.requiredInput}\`\n`;
+    md += `- Default evidence artifact: \`${launch.finalLaunchEvidenceWorkflow.defaultArtifactName}\`\n`;
+    md += `- Default evidence file: \`${launch.finalLaunchEvidenceWorkflow.defaultEvidenceFileName}\`\n`;
+    md += `- Validation artifact: \`${launch.finalLaunchEvidenceWorkflow.validationArtifactName}\`\n`;
+    md += `- Run: \`${launch.finalLaunchEvidenceWorkflow.runCommand}\`\n`;
+    md += `- Evidence target: ${launch.finalLaunchEvidenceWorkflow.evidenceTarget}\n\n`;
   }
   if (launch.releaseImagePromotion) {
     md += `### Release Image Promotion\n\n`;

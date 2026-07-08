@@ -64,6 +64,19 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
     'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
 });
 
+const FINAL_LAUNCH_EVIDENCE_WORKFLOW = Object.freeze({
+  workflowFile: '.github/workflows/production-launch-evidence.yml',
+  githubEnvironment: 'production',
+  requiredInput: 'evidence_artifact_run_id',
+  defaultArtifactName: 'production-launch-evidence',
+  defaultEvidenceFileName: 'production-launch-evidence.json',
+  validationArtifactName: 'production-launch-evidence-validation',
+  runCommand:
+    'gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json',
+  evidenceTarget:
+    'Record the protected workflow run URL and production-launch-evidence-validation artifact in the launch evidence ledger.',
+});
+
 const RELEASE_IMAGE_PROMOTION = Object.freeze({
   githubEnvironment: 'production',
   requiredGitHubEnvironmentVariables: Object.freeze([
@@ -395,6 +408,7 @@ export function assessLaunchState(state) {
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+      finalLaunchEvidenceWorkflow: FINAL_LAUNCH_EVIDENCE_WORKFLOW,
       releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
       finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
       launchProgress: buildLaunchProgress({ remainingKeys: EXPECTED_PRODUCTION_VALUE_KEYS, evidenceLedger }),
@@ -420,6 +434,7 @@ export function assessLaunchState(state) {
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+      finalLaunchEvidenceWorkflow: FINAL_LAUNCH_EVIDENCE_WORKFLOW,
       releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
       finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
       launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
@@ -442,6 +457,7 @@ export function assessLaunchState(state) {
     evidenceLedger,
     deployedBrowserQa: DEPLOYED_BROWSER_QA,
     productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
+    finalLaunchEvidenceWorkflow: FINAL_LAUNCH_EVIDENCE_WORKFLOW,
     releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
     finalSignoffRequirements: FINAL_SIGNOFF_REQUIREMENTS,
     launchProgress: buildLaunchProgress({ remainingKeys: [], evidenceLedger }),
@@ -472,6 +488,7 @@ export function renderLaunchStatusJson(state) {
       evidenceLedger: state.evidenceLedger,
       deployedBrowserQa: state.deployedBrowserQa,
       productionLaunchCommands: state.productionLaunchCommands,
+      finalLaunchEvidenceWorkflow: state.finalLaunchEvidenceWorkflow,
       releaseImagePromotion: state.releaseImagePromotion,
       finalSignoffRequirements: state.finalSignoffRequirements,
       externalEvidenceGates: state.externalEvidenceGates,
@@ -584,6 +601,17 @@ function renderLaunchStatusText(state) {
     lines.push(`  Rollback rehearsal:  ${state.productionLaunchCommands.rollbackRehearsal}`);
     lines.push(`  Release-run evidence:  ${state.productionLaunchCommands.releaseRunEvidence}`);
     lines.push(`  Final evidence validation:  ${state.productionLaunchCommands.finalEvidenceValidation}`);
+  }
+  if (state.finalLaunchEvidenceWorkflow) {
+    lines.push('', 'Protected final launch evidence workflow:');
+    lines.push(`  Workflow file:  ${state.finalLaunchEvidenceWorkflow.workflowFile}`);
+    lines.push(`  GitHub environment:  ${state.finalLaunchEvidenceWorkflow.githubEnvironment}`);
+    lines.push(`  Required input:  ${state.finalLaunchEvidenceWorkflow.requiredInput}`);
+    lines.push(`  Default evidence artifact:  ${state.finalLaunchEvidenceWorkflow.defaultArtifactName}`);
+    lines.push(`  Default evidence file:  ${state.finalLaunchEvidenceWorkflow.defaultEvidenceFileName}`);
+    lines.push(`  Validation artifact:  ${state.finalLaunchEvidenceWorkflow.validationArtifactName}`);
+    lines.push(`  Run:  ${state.finalLaunchEvidenceWorkflow.runCommand}`);
+    lines.push(`  Evidence target:  ${state.finalLaunchEvidenceWorkflow.evidenceTarget}`);
   }
   if (state.releaseImagePromotion) {
     lines.push('', 'Release image promotion:');

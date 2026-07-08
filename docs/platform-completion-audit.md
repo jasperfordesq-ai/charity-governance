@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `cddd0f7`
+Working-tree base commit when generated: `4bac158`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -410,6 +410,17 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Rollback rehearsal: `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env`
 - Release-run evidence: `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Final evidence validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
+
+### Protected Final Launch Evidence Workflow
+
+- Workflow file: `.github/workflows/production-launch-evidence.yml`
+- GitHub environment: `production`
+- Required input: `evidence_artifact_run_id`
+- Default evidence artifact: `production-launch-evidence`
+- Default evidence file: `production-launch-evidence.json`
+- Validation artifact: `production-launch-evidence-validation`
+- Run: `gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json`
+- Evidence target: Record the protected workflow run URL and production-launch-evidence-validation artifact in the launch evidence ledger.
 
 ### Release Image Promotion
 

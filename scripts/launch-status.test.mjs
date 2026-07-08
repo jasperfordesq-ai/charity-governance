@@ -85,6 +85,21 @@ function assertProductionLaunchCommands(commands) {
   );
 }
 
+function assertFinalLaunchEvidenceWorkflow(workflow) {
+  assert.equal(workflow.workflowFile, '.github/workflows/production-launch-evidence.yml');
+  assert.equal(workflow.githubEnvironment, 'production');
+  assert.equal(workflow.requiredInput, 'evidence_artifact_run_id');
+  assert.equal(workflow.defaultArtifactName, 'production-launch-evidence');
+  assert.equal(workflow.defaultEvidenceFileName, 'production-launch-evidence.json');
+  assert.equal(workflow.validationArtifactName, 'production-launch-evidence-validation');
+  assert.equal(
+    workflow.runCommand,
+    'gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json',
+  );
+  assert.match(workflow.evidenceTarget, /protected workflow run URL/);
+  assert.match(workflow.evidenceTarget, /production-launch-evidence-validation/);
+}
+
 function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.githubEnvironment, 'production');
   assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
@@ -173,6 +188,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assertProductionLaunchCommands(payload.productionLaunchCommands);
+  assertFinalLaunchEvidenceWorkflow(payload.finalLaunchEvidenceWorkflow);
   assertReleaseImagePromotion(payload.releaseImagePromotion);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assertFinalSignoffRequirements(payload.finalSignoffRequirements);
@@ -422,6 +438,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.match(payload.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(payload.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assertProductionLaunchCommands(payload.productionLaunchCommands);
+  assertFinalLaunchEvidenceWorkflow(payload.finalLaunchEvidenceWorkflow);
   assertReleaseImagePromotion(payload.releaseImagePromotion);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
   assertFinalSignoffRequirements(payload.finalSignoffRequirements);
