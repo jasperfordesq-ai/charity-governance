@@ -13,6 +13,15 @@ function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8');
 }
 
+function currentShortHead() {
+  const result = spawnSync('git', ['rev-parse', '--short', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
 function packageJson() {
   return JSON.parse(readRepoFile('package.json'));
 }
@@ -479,13 +488,15 @@ test('platform audit ledger records deployed browser QA hardening', () => {
 test('platform audit ledger records local browser evidence without closing deployed gates', () => {
   const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
+  const shortHead = currentShortHead();
 
   assert.match(auditGenerator, /Local Verification Evidence/);
   assert.match(auditGenerator, /npm run release:ready -- --no-e2e/);
   assert.match(auditGenerator, /npm run test:e2e:responsive/);
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
-  assert.match(auditLedger, /passed locally on 2026-07-08 at commit 73e8484/);
+  assert.match(auditLedger, new RegExp(`passed locally on 2026-07-08 at commit ${shortHead}`));
+  assert.doesNotMatch(auditLedger, /passed locally on 2026-07-08 at commit 73e8484/);
   assert.match(auditLedger, /9\/85 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/85 evidence checks/);
   assert.match(auditLedger, /300\/300 production-tooling checks/);

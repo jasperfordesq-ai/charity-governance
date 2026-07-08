@@ -53,9 +53,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > attribution and no-warranty surfaces, shares auth status/loading primitives, lets
 > the evidence package be prepared before evidence is collected while requiring
 > every checklist item to predate final signoff, and aligns the deploy-smoke evidence
-> hint with the actual `node scripts/smoke-production-deploy.mjs` command. A local
-> `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
-> `73e8484`: security scan, lint, build, workspace tests, dependency audit, and
+> hint with the actual `node scripts/smoke-production-deploy.mjs` command. A later
+> local `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
+> `91baf75`: security scan, lint, build, workspace tests, dependency audit, and
 > reliability ledger passed; only Playwright E2E was skipped. This still does not
 > replace deployed QA, real provider checks, legal/privacy review, pentest, or
 > final production signoffs.

@@ -295,36 +295,38 @@ const independentAuditFindings = [
   ['P0', 'Production launch', 'Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers.'],
 ];
 
-const localVerificationEvidence = [
-  '`npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit 73e8484: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.',
-  '`npm run test:production-check` passed locally on 2026-07-08 with 300/300 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.',
-  '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
-  '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
-  '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.',
-  'Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.',
-  '`npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.',
-  '`npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, and team permission-hint cleanup; production-tooling checks passed 300/300.',
-  '`node --check scripts\\clean-next-export.cjs`, `node --test scripts\\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.',
-  '`node --check scripts\\postgres-backup.mjs`, `node --test scripts\\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.',
-  '`node --check scripts\\check-production-supabase.mjs`, `node --test scripts\\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.',
-  '`node --check scripts\\production-deploy-preflight.mjs scripts\\production-compose-deploy.mjs scripts\\production-compose-rollback.mjs`, focused deploy/rollback tests, and `npm run test:production-check` passed locally after deploy transcript-redaction hardening.',
-  '`node --check scripts\\smoke-production-deploy.mjs`, focused smoke/deploy tests, and `npm run test:production-check` passed locally after production deploy smoke transcript-redaction hardening.',
-  '`node --check scripts\\check-production-hosting.mjs`, focused hosting/smoke tests, and `npm run test:production-check` passed locally after production hosting transcript-redaction hardening.',
-  '`node --check scripts\\check-production-observability.mjs`, focused observability/provider/hosting tests, and `npm run test:production-check` passed locally after production observability transcript-redaction hardening.',
-  '`node --check scripts\\check-production-providers.mjs`, focused provider/preflight tests, and `npm run test:production-check` passed locally after production provider transcript-redaction hardening.',
-  '`node --check scripts\\production-release-run-evidence.mjs`, focused release-run/preflight tests, and `npm run test:production-check` passed locally after production release-run transcript-redaction hardening.',
-  '`node --check scripts\\check-production-database.mjs`, focused database/backup tests, and `npm run test:production-check` passed locally after production database checker thrown-failure redaction hardening.',
-  '`node --check scripts\\production-compose-rollback.mjs`, focused rollback/deploy/preflight tests, and `npm run test:production-check` passed locally after production rollback transcript-redaction hardening.',
-  '`node --check scripts\\check-production-supabase.mjs`, focused Supabase/production-config tests, and `npm run test:production-check` passed locally after production Supabase transcript-redaction hardening.',
-  '`node --check scripts\\production-deploy-preflight.mjs`, focused deploy/preflight/rollback tests, and `npm run test:production-check` passed locally after production deploy preflight env-failure transcript hardening.',
-  '`node --check scripts\\check-production.mjs`, focused production/preflight tests, and `npm run test:production-check` passed locally after production environment preflight path-redaction hardening.',
-  '`node --check scripts\\production-launch-evidence.mjs scripts\\production-launch-evidence-status.mjs`, focused launch-evidence/status tests, and `npm run test:production-check` passed locally after production launch evidence path-redaction hardening.',
-  '`node --check scripts\\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after production launch evidence status JSON hardening.',
-  '`node --check scripts\\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after aligning status completion with area statuses.',
-  '`node --check scripts\\launch-status.mjs scripts\\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.',
-  '`npm run test:local-docker:smoke` passed locally on 2026-07-08 after stabilizing the local Docker QA stack, covering API health/readiness, registration, local admin document storage, and the web root over loopback.',
-  'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
-];
+function localVerificationEvidence(commit) {
+  return [
+    `\`npm run release:ready -- --no-e2e\` passed locally on 2026-07-08 at commit ${commit}: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.`,
+    '`npm run test:production-check` passed locally on 2026-07-08 with 300/300 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.',
+    '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
+    '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
+    '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.',
+    'Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.',
+    '`npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.',
+    '`npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, and team permission-hint cleanup; production-tooling checks passed 300/300.',
+    '`node --check scripts\\clean-next-export.cjs`, `node --test scripts\\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.',
+    '`node --check scripts\\postgres-backup.mjs`, `node --test scripts\\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.',
+    '`node --check scripts\\check-production-supabase.mjs`, `node --test scripts\\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.',
+    '`node --check scripts\\production-deploy-preflight.mjs scripts\\production-compose-deploy.mjs scripts\\production-compose-rollback.mjs`, focused deploy/rollback tests, and `npm run test:production-check` passed locally after deploy transcript-redaction hardening.',
+    '`node --check scripts\\smoke-production-deploy.mjs`, focused smoke/deploy tests, and `npm run test:production-check` passed locally after production deploy smoke transcript-redaction hardening.',
+    '`node --check scripts\\check-production-hosting.mjs`, focused hosting/smoke tests, and `npm run test:production-check` passed locally after production hosting transcript-redaction hardening.',
+    '`node --check scripts\\check-production-observability.mjs`, focused observability/provider/hosting tests, and `npm run test:production-check` passed locally after production observability transcript-redaction hardening.',
+    '`node --check scripts\\check-production-providers.mjs`, focused provider/preflight tests, and `npm run test:production-check` passed locally after production provider transcript-redaction hardening.',
+    '`node --check scripts\\production-release-run-evidence.mjs`, focused release-run/preflight tests, and `npm run test:production-check` passed locally after production release-run transcript-redaction hardening.',
+    '`node --check scripts\\check-production-database.mjs`, focused database/backup tests, and `npm run test:production-check` passed locally after production database checker thrown-failure redaction hardening.',
+    '`node --check scripts\\production-compose-rollback.mjs`, focused rollback/deploy/preflight tests, and `npm run test:production-check` passed locally after production rollback transcript-redaction hardening.',
+    '`node --check scripts\\check-production-supabase.mjs`, focused Supabase/production-config tests, and `npm run test:production-check` passed locally after production Supabase transcript-redaction hardening.',
+    '`node --check scripts\\production-deploy-preflight.mjs`, focused deploy/preflight/rollback tests, and `npm run test:production-check` passed locally after production deploy preflight env-failure transcript hardening.',
+    '`node --check scripts\\check-production.mjs`, focused production/preflight tests, and `npm run test:production-check` passed locally after production environment preflight path-redaction hardening.',
+    '`node --check scripts\\production-launch-evidence.mjs scripts\\production-launch-evidence-status.mjs`, focused launch-evidence/status tests, and `npm run test:production-check` passed locally after production launch evidence path-redaction hardening.',
+    '`node --check scripts\\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after production launch evidence status JSON hardening.',
+    '`node --check scripts\\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after aligning status completion with area statuses.',
+    '`node --check scripts\\launch-status.mjs scripts\\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.',
+    '`npm run test:local-docker:smoke` passed locally on 2026-07-08 after stabilizing the local Docker QA stack, covering API health/readiness, registration, local admin document storage, and the web root over loopback.',
+    'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
+  ];
+}
 
 const officialSources = [
   ['Charities Governance Code', 'Charities Regulator', 'https://www.charitiesregulator.ie/en/information-for-charities/charities-governance-code'],
@@ -633,7 +635,7 @@ function render() {
   md += `${markdownList(fixedInThisAuditBranch)}\n\n`;
 
   md += `## Local Verification Evidence\n\n`;
-  md += `${markdownList(localVerificationEvidence)}\n\n`;
+  md += `${markdownList(localVerificationEvidence(commit))}\n\n`;
 
   md += `## Independent Audit Findings Still Driving Next Work\n\n`;
   md += `| Priority | Area | Finding |\n`;
