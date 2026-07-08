@@ -235,6 +235,31 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assertExternalLaunchEvidenceGates(s);
 });
 
+test('reports ENV_INCOMPLETE for non-REPLACE_ME production placeholders', () => {
+  const env = [
+    'NODE_ENV=production',
+    'DATABASE_URL=postgresql://u:p@db.example.com:5432/cp?sslmode=require',
+    'STRIPE_SECRET_KEY=TODO_STRIPE_LIVE_SECRET_KEY',
+    'NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+    'CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:placeholder',
+  ].join('\n');
+
+  const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, [
+    'STRIPE_SECRET_KEY',
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'CHARITYPILOT_WEB_IMAGE',
+  ]);
+  assert.deepEqual(s.remainingKeyDetails, [
+    { key: 'STRIPE_SECRET_KEY', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
+    { key: 'NEXT_PUBLIC_SUPABASE_URL', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
+    { key: 'CHARITYPILOT_WEB_IMAGE', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
+  ]);
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 28, remaining: 3 });
+});
+
 test('groups missing production values by operator source', () => {
   const groups = groupRemainingKeys([
     'CHARITYPILOT_WEB_IMAGE',

@@ -178,6 +178,16 @@ const EXPECTED_PRODUCTION_VALUE_KEYS = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(
 const TOTAL_EXPECTED_PRODUCTION_VALUES = EXPECTED_PRODUCTION_VALUE_KEYS.length;
 const TOTAL_LAUNCH_EVIDENCE_CHECKS = 85;
 const TOTAL_FINAL_SIGNOFF_ROLES = 5;
+const PLACEHOLDER_TOKENS = Object.freeze([
+  'REPLACE_ME',
+  'change-me',
+  'your_',
+  'your-',
+  'project_ref',
+  'TODO',
+  'TBD',
+  'placeholder',
+]);
 
 function parseArgs(argv) {
   return {
@@ -185,13 +195,29 @@ function parseArgs(argv) {
   };
 }
 
-function placeholderKeys(envContent) {
-  const keys = [];
+function placeholderIssueForValue(key, value) {
+  const normalizedValue = String(value ?? '').toLowerCase();
+  const matchedToken = PLACEHOLDER_TOKENS.find((token) => normalizedValue.includes(token.toLowerCase()));
+  if (!matchedToken) return null;
+
+  return {
+    key,
+    reason: 'placeholder',
+    detail: matchedToken.toLowerCase() === 'replace_me'
+      ? 'Value still contains a REPLACE_ME placeholder.'
+      : 'Value still contains placeholder text.',
+  };
+}
+
+function placeholderIssues(envContent) {
+  const issues = [];
   for (const line of envContent.split('\n')) {
     const m = line.match(/^([A-Z0-9_]+)=(.*?)(\r?)$/);
-    if (m && /REPLACE_ME/.test(m[2])) keys.push(m[1]);
+    if (!m) continue;
+    const issue = placeholderIssueForValue(m[1], m[2]);
+    if (issue) issues.push(issue);
   }
-  return keys;
+  return issues;
 }
 
 function productionEnvAssignments(envContent) {
@@ -206,12 +232,8 @@ function productionEnvAssignments(envContent) {
 
 function productionValueIssueDetails(envContent) {
   const issues = new Map();
-  for (const key of placeholderKeys(envContent)) {
-    issues.set(key, {
-      key,
-      reason: 'placeholder',
-      detail: 'Value still contains a REPLACE_ME placeholder.',
-    });
+  for (const issue of placeholderIssues(envContent)) {
+    issues.set(issue.key, issue);
   }
 
   const assignments = productionEnvAssignments(envContent);
