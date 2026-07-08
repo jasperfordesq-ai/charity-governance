@@ -4,7 +4,7 @@ import { Card } from '@heroui/react';
 import Link from 'next/link';
 import type { BoardAlert, DeadlineResponse } from '@charitypilot/shared';
 import { EmptyState, LoadingState, ReviewWarningState } from '@/components/ui/states';
-import { StatusChip, type StatusTone } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 
 const stateActionClass = 'text-xs font-semibold text-teal-primary hover:underline dark:text-teal-bright';
 
@@ -29,7 +29,7 @@ export function DashboardActionLists({
             description="Checking filing dates and governance review actions."
           />
         ) : deadlines && deadlines.length > 0 ? (
-          <Card className="divide-y divide-gray-100 border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
+          <Card className={statusPanelClassName('neutral', 'divide-y divide-gray-100 shadow-sm dark:divide-gray-800')}>
             {deadlines
               .filter((d) => !d.isComplete)
               .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -92,7 +92,7 @@ export function DashboardActionLists({
             description="Checking trustee conduct, induction, and term-limit signals."
           />
         ) : boardAlerts && boardAlerts.length > 0 ? (
-          <Card className="divide-y divide-gray-100 border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
+          <Card className={statusPanelClassName('neutral', 'divide-y divide-gray-100 shadow-sm dark:divide-gray-800')}>
             {boardAlerts.slice(0, 8).map((alert, idx) => {
               const chipProps = {
                 conduct_unsigned: { tone: 'warning' as const, label: 'Conduct' },

@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `af821ac`
+Working-tree base commit when generated: `05b755e`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -180,6 +180,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 - Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.
 - Dashboard summary and progress cards now use shared status panel styling instead of route-local neutral card markup.
+- Dashboard deadline and board-alert action list cards now use shared status panel styling instead of route-local neutral card markup.
 - Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
 - Global recovery, not-found, dashboard mobile-menu, and compliance disclosure actions now use HeroUI Button primitives instead of bespoke route-local action markup.
 - Responsive browser-smoke QA now waits for the parsed document shell before applying light/dark theme checks after commit-stage navigations.

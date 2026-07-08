@@ -377,6 +377,14 @@ test('dashboard action lists are extracted from the oversized route file', () =>
   assert.match(actionListsSrc, /View board register/);
 });
 
+test('dashboard action list cards use shared status panel styling', () => {
+  const actionListsSrc = dash('dashboard/dashboard-action-lists.tsx');
+
+  assert.match(actionListsSrc, /statusPanelClassName/);
+  assert.match(actionListsSrc, /className=\{statusPanelClassName\('neutral', 'divide-y divide-gray-100 shadow-sm dark:divide-gray-800'\)\}/);
+  assert.doesNotMatch(actionListsSrc, /divide-y divide-gray-100 border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900/);
+});
+
 test('dashboard sign-off and register summary cards are extracted from the oversized route file', () => {
   const pageSrc = dash('dashboard/page.tsx');
   const summaryCardsPath = dashPath('dashboard/dashboard-summary-cards.tsx');
