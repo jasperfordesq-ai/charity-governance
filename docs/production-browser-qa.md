@@ -133,7 +133,7 @@ promoted `release.commitSha`, including `browserQa.checks.browser-qa-completed`,
 `browserQa.checks.accessibility-coverage`,
 `browserQa.checks.cross-browser-coverage`,
 `browserQa.checks.ios-safari-device-coverage`, and
-`browserQa.checks.critical-flows`.
+`browserQa.checks.critical-flows-covered`.
 
 | Route | Area | Required evidence |
 | --- | --- | --- |

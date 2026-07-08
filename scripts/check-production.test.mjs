@@ -2292,6 +2292,10 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.match(launchChecklist, /all four focused responsive route chunk transcripts/);
   assert.match(launchChecklist, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchChecklist, /browserQa\.checks\.ios-safari-device-coverage/);
+  assert.match(launchChecklist, /browserQa\.checks\.critical-flows-covered/);
+  assert.doesNotMatch(launchChecklist, /browserQa\.checks\.critical-flows(?!-covered)/);
+  assert.match(browserQa, /browserQa\.checks\.critical-flows-covered/);
+  assert.doesNotMatch(browserQa, /browserQa\.checks\.critical-flows(?!-covered)/);
   assert.match(launchChecklist, /public\/auth and dashboard desktop light\/dark route matrices/);
   assert.match(launchChecklist, /public\/auth and dashboard mobile light\/dark route matrices/);
   assert.match(browserQa, /Launch-Critical Route Inventory/);

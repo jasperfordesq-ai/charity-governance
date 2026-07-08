@@ -250,7 +250,7 @@ Evidence:
 - [ ] Desktop browser coverage is recorded with deployed responsive-smoke evidence for both the public/auth and dashboard desktop light/dark route matrices.
 - [ ] Mobile browser coverage is recorded with deployed responsive-smoke evidence for both the public/auth and dashboard mobile light/dark route matrices.
 - [ ] Auth, dashboard, billing, document upload, signed download, logout, and error states are covered in `docs/production-browser-qa.md` and the machine-readable launch evidence.
-- [ ] Every browser QA evidence slot records the exact promoted `release.commitSha`: `browserQa.checks.browser-qa-completed`, `browserQa.checks.desktop-coverage`, `browserQa.checks.mobile-coverage`, `browserQa.checks.accessibility-coverage`, `browserQa.checks.cross-browser-coverage`, `browserQa.checks.ios-safari-device-coverage`, and `browserQa.checks.critical-flows`.
+- [ ] Every browser QA evidence slot records the exact promoted `release.commitSha`: `browserQa.checks.browser-qa-completed`, `browserQa.checks.desktop-coverage`, `browserQa.checks.mobile-coverage`, `browserQa.checks.accessibility-coverage`, `browserQa.checks.cross-browser-coverage`, `browserQa.checks.ios-safari-device-coverage`, and `browserQa.checks.critical-flows-covered`.
 
 Evidence:
 

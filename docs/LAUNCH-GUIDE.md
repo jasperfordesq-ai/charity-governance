@@ -46,7 +46,7 @@ evidence slot must name the exact promoted `release.commitSha`:
 `browserQa.checks.mobile-coverage`, `browserQa.checks.accessibility-coverage`,
 `browserQa.checks.cross-browser-coverage`,
 `browserQa.checks.ios-safari-device-coverage`, and
-`browserQa.checks.critical-flows`.
+`browserQa.checks.critical-flows-covered`.
 A local `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
 `6da2573`: security scan, lint, build, workspace tests, dependency audit, and
 reliability ledger passed; only Playwright E2E was skipped. Treat this as local

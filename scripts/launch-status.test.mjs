@@ -29,7 +29,8 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /browserQa\.checks\.browser-qa-completed/);
   assert.match(gates, /browserQa\.checks\.desktop-coverage/);
   assert.match(gates, /browserQa\.checks\.mobile-coverage/);
-  assert.match(gates, /browserQa\.checks\.critical-flows/);
+  assert.match(gates, /browserQa\.checks\.critical-flows-covered/);
+  assert.doesNotMatch(gates, /browserQa\.checks\.critical-flows(?!-covered)/);
   assert.match(gates, /solicitor\/governance\/privacy review/);
   assert.match(gates, /external penetration test/);
 }
