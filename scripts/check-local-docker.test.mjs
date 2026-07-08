@@ -526,6 +526,9 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /percentages\.strictLaunchGates/);
   assert.match(auditGenerator, /Next incomplete checks/);
   assert.match(auditGenerator, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
+  assert.match(auditGenerator, /releaseImagePromotion/);
+  assert.match(auditGenerator, /Release Image Promotion/);
+  assert.match(auditGenerator, /release image promotion GitHub environment variables/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
   assert.match(auditLedger, /Launch status now separates missing production env values from external launch evidence gates/);
   assert.match(auditLedger, /85 machine-readable launch evidence checks/);
@@ -538,6 +541,13 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /group missing production values by provider\/source/);
   assert.match(auditLedger, /Local-state note/);
   assert.match(auditLedger, /Local Production Environment State/);
+  assert.match(auditLedger, /Release Image Promotion/);
+  assert.match(auditLedger, /GitHub environment: `production`/);
+  assert.match(auditLedger, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
+  assert.match(auditLedger, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/<project-ref>\.supabase\.co/);
+  assert.match(auditLedger, /gh workflow run release-images\.yml --ref master/);
+  assert.match(auditLedger, /release-image-digests\.env/);
+  assert.match(auditLedger, /CHARITYPILOT_\*_IMAGE/);
   assert.match(auditLedger, /non-committed/);
   assert.ok(
     /approvedForLaunch: false/.test(auditLedger) || /production-launch-evidence\.json has not been created yet/.test(auditLedger),

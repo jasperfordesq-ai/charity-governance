@@ -277,6 +277,7 @@ const fixedInThisAuditBranch = [
   'Launch status now keeps the full source-grouped production value checklist visible even after .env.production exists, while separately listing the currently missing values.',
   'Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
   'Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.',
+  'Platform audit now surfaces the release image promotion GitHub environment variables, workflow command, digest artifact, and evidence target from launch status so deploy operators do not miss the signed-image prerequisite.',
   'Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.',
   'Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.',
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
@@ -557,6 +558,7 @@ function readLaunchSummary() {
     evidenceLedger: state.evidenceLedger,
     deployedBrowserQa: state.deployedBrowserQa,
     productionLaunchCommands: state.productionLaunchCommands,
+    releaseImagePromotion: state.releaseImagePromotion,
     finalSignoffRequirements: state.finalSignoffRequirements,
   };
 }
@@ -718,6 +720,18 @@ function render() {
     md += `- Rollback rehearsal: \`${launch.productionLaunchCommands.rollbackRehearsal}\`\n`;
     md += `- Release-run evidence: \`${launch.productionLaunchCommands.releaseRunEvidence}\`\n`;
     md += `- Final evidence validation: \`${launch.productionLaunchCommands.finalEvidenceValidation}\`\n\n`;
+  }
+  if (launch.releaseImagePromotion) {
+    md += `### Release Image Promotion\n\n`;
+    md += `- GitHub environment: \`${launch.releaseImagePromotion.githubEnvironment}\`\n`;
+    md += `- Required GitHub environment variables:\n`;
+    for (const item of launch.releaseImagePromotion.requiredGitHubEnvironmentVariables) md += `  - \`${item}\`\n`;
+    md += `- Configure with:\n`;
+    for (const command of launch.releaseImagePromotion.configureCommands) md += `  - \`${command}\`\n`;
+    md += `- Workflow: \`${launch.releaseImagePromotion.workflowCommand}\`\n`;
+    md += `- Watch: \`${launch.releaseImagePromotion.watchCommand}\`\n`;
+    md += `- Digest artifact: \`${launch.releaseImagePromotion.evidenceArtifact}\`\n`;
+    md += `- Evidence target: ${launch.releaseImagePromotion.evidenceTarget}\n\n`;
   }
   if (launch.finalSignoffRequirements) {
     md += `### Final Signoff Requirements\n\n`;

@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `3aea92c`
+Working-tree base commit when generated: `c9448ba`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -241,6 +241,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Launch status now keeps the full source-grouped production value checklist visible even after .env.production exists, while separately listing the currently missing values.
 - Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
 - Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.
+- Platform audit now surfaces the release image promotion GitHub environment variables, workflow command, digest artifact, and evidence target from launch status so deploy operators do not miss the signed-image prerequisite.
 - Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.
 - Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.
 - Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.
@@ -409,6 +410,20 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Rollback rehearsal: `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env`
 - Release-run evidence: `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Final evidence validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
+
+### Release Image Promotion
+
+- GitHub environment: `production`
+- Required GitHub environment variables:
+  - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
+  - `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
+- Configure with:
+  - `gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie`
+  - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co`
+- Workflow: `gh workflow run release-images.yml --ref master`
+- Watch: `gh run watch <release-run-id> --exit-status`
+- Digest artifact: `release-image-digests.env`
+- Evidence target: Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.
 
 ### Final Signoff Requirements
 
