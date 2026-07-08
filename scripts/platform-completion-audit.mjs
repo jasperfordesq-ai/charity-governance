@@ -131,6 +131,7 @@ const fixedInThisAuditBranch = [
   'The compliance principle evidence-readiness panel is split out of the oversized compliance detail route behind a wiring regression test.',
   'Compliance principle in-app navigation now uses a HeroUI save/leave confirmation modal instead of a bare browser confirm prompt.',
   'Compliance principle pending-save navigation now uses the shared confirmation modal primitive while preserving keep-editing, leave, and save-now choices.',
+  'The session-timeout warning now uses the shared HeroUI modal form-action footer with explicit sign-out and stay-signed-in actions behind a wiring regression test.',
   'The primary add actions on documents, board, and deadlines now use lucide-react Plus icons instead of route-local inline SVG markup behind a wiring regression test.',
   'The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.',
   'The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.',

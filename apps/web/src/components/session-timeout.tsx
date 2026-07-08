@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button } from '@heroui/react';
+import { Modal, ModalContent, ModalHeader, ModalBody } from '@heroui/react';
+import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import { api } from '@/lib/api';
 import { Clock } from 'lucide-react';
 
@@ -11,6 +12,7 @@ const WARNING_BEFORE = 2 * 60 * 1000;   // Show warning 2 min before
 export function SessionTimeout() {
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(120);
+  const [isExtending, setIsExtending] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Mirrors showWarning for the activity listener so the main effect does not
@@ -33,7 +35,7 @@ export function SessionTimeout() {
         setCountdown((prev) => {
           if (prev <= 1) {
             if (countdownRef.current) clearInterval(countdownRef.current);
-            // Session expired — redirect to login
+            // Session expired - redirect to login.
             void api.post('/auth/logout', {}).catch(() => undefined);
             window.location.href = '/login';
             return 0;
@@ -61,14 +63,22 @@ export function SessionTimeout() {
   }, [resetTimer]);
 
   const handleExtend = async () => {
+    setIsExtending(true);
     try {
       await api.post('/auth/refresh', {});
     } catch {
       // If refresh fails, redirect
       window.location.href = '/login';
       return;
+    } finally {
+      setIsExtending(false);
     }
     resetTimer();
+  };
+
+  const handleSignOut = async () => {
+    await api.post('/auth/logout', {}).catch(() => undefined);
+    window.location.href = '/login';
   };
 
   if (!showWarning) return null;
@@ -93,15 +103,13 @@ export function SessionTimeout() {
             </p>
           </div>
         </ModalBody>
-        <ModalFooter className="justify-center">
-          <Button
-            className="bg-teal-primary hover:bg-teal-dark dark:hover:bg-teal-light text-white font-semibold"
-            onPress={handleExtend}
-            radius="lg"
-          >
-            Stay signed in
-          </Button>
-        </ModalFooter>
+        <ModalFormActions
+          cancelLabel="Sign out"
+          submitLabel="Stay signed in"
+          onCancel={handleSignOut}
+          onSubmit={handleExtend}
+          submitting={isExtending}
+        />
       </ModalContent>
     </Modal>
   );

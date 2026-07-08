@@ -2223,6 +2223,10 @@ test('shared workflow chrome avoids decorative round icon containers', () => {
   assert.match(sessionTimeout, /rounded-lg/);
   assert.match(sessionTimeout, /role="status"/);
   assert.match(sessionTimeout, /aria-live="polite"/);
+  assert.match(sessionTimeout, /ModalFormActions/);
+  assert.match(sessionTimeout, /cancelLabel="Sign out"/);
+  assert.match(sessionTimeout, /submitLabel="Stay signed in"/);
+  assert.doesNotMatch(sessionTimeout, /ModalFooter/);
   assert.doesNotMatch(dashboardLayout, /rounded-full bg-teal-primary\/10/);
 });
 
