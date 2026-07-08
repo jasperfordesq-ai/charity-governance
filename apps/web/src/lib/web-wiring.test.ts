@@ -2721,6 +2721,14 @@ test('billing plan feature lists use icon-library checks instead of decorative d
   assert.doesNotMatch(sectionsSrc, />v<\/span>/, 'billing FAQ disclosure should use a chevron icon, not text v');
 });
 
+test('billing current-plan panel uses shared status panel styling', () => {
+  const pageSrc = dash('billing/page.tsx');
+
+  assert.match(pageSrc, /statusPanelClassName/);
+  assert.match(pageSrc, /<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-teal-primary\/20 bg-white p-5 shadow-sm/);
+});
+
 test('dashboard navigation manages mobile sidebar focus and meaningful breadcrumbs', () => {
   const dashboardLayout = app('(dashboard)/layout.tsx');
   for (const term of [

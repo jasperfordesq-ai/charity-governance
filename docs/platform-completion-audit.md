@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `5c8980e`
+Working-tree base commit when generated: `3e55438`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -148,6 +148,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.
 - Billing checkout and portal handoffs now use a shared visible inline status instead of a route-local hidden live-region message.
+- Billing current-plan summary now uses shared status panel styling instead of route-local brand panel markup.
 - Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.
 - Deployed browser QA now has cross-browser responsive and accessibility script wiring for Chromium desktop, Chromium mobile emulation, Firefox, and WebKit evidence runs while keeping real iOS Safari as manual or cloud-device evidence.
 - Supabase launch evidence now requires backup policy or PITR evidence and restore-test ownership in addition to private bucket, signed URL, and readiness proof.
