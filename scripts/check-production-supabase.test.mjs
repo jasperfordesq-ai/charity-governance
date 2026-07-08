@@ -231,3 +231,29 @@ test('production Supabase checker rejects copied project-ref placeholder URLs be
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production Supabase checker rejects copied your-project placeholder URLs before probing', async () => {
+  const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    SUPABASE_URL: 'https://your-project.supabase.co',
+  }));
+  let probed = false;
+
+  try {
+    const result = await runProductionSupabaseCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async () => {
+          probed = true;
+          return response(500, {});
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(probed, false, 'checker must stop before probing placeholder Supabase projects');
+    assert.match(result.stderr, /SUPABASE_URL must be configured/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

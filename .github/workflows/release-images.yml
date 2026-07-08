@@ -68,7 +68,7 @@ jobs:
             value="${!var_name}"
             normalized="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
             case "${normalized}" in
-              *replace_me*|*placeholder*|*project_ref*)
+              *replace_me*|*change-me*|*your_*|*your-*|*placeholder*|*project_ref*)
                 echo "${var_name} production variable must not contain placeholder text." >&2
                 exit 1
                 ;;

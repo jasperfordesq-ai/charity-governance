@@ -3765,6 +3765,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL production variable is required/);
   assert.match(workflow, /production variable must not contain placeholder text/);
   assert.match(workflow, /project_ref/);
+  assert.match(workflow, /your-/);
   assert.match(workflow, /NEXT_PUBLIC_API_URL must be the canonical production API origin https:\/\/api\.charitypilot\.ie/);
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);

@@ -2068,7 +2068,7 @@ test('production launch evidence validator rejects placeholders, local URLs, and
   evidence.areas.billingAndEmail.checks['stripe-webhook-secret'].evidence[0].description = 'whsec_rawWebhookSecretMustNotAppear';
   evidence.areas.observability.checks['incident-owner'].evidence[0].reference = 'TBD';
   evidence.areas.supabaseStorage.checks['separate-production-project'].evidence[0].description =
-    'Supabase project remains https://REAL_SUPABASE_PROJECT_REF.supabase.co';
+    'Supabase project remains https://your-project.supabase.co';
   evidence.areas.securityReview.checks['report-reference'].evidence[0].reference = 'https://unapproved-audit-vault.invalid/report';
   evidence.areas.legalAndCompliance.checks['privacy-policy-approved'].evidence[0].reference =
     'https://evidence.charitypilot.ie/launch/legal/privacy?token=temporary-secret';
