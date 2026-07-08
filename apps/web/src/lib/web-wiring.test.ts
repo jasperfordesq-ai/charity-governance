@@ -1177,6 +1177,9 @@ test('export report preview UI is extracted from the oversized route file', () =
   assert.match(previewSrc, /Report Preview/);
   assert.match(previewSrc, /Board Approval Record/);
   assert.match(previewSrc, /statusPanelClassName/);
+  assert.match(previewSrc, /StatusChip/);
+  assert.doesNotMatch(previewSrc, /<Chip\b/);
+  assert.doesNotMatch(previewSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
   assert.doesNotMatch(previewSrc, /border border-gray-200 bg-white p-5 shadow-sm/);
 });
 
@@ -1210,6 +1213,9 @@ test('export board approval form is extracted from the oversized route file', ()
   assert.match(panelSrc, /Board meeting date/);
   assert.match(panelSrc, /Approval notes/);
   assert.match(panelSrc, /FormAlert/);
+  assert.match(panelSrc, /StatusChip/);
+  assert.doesNotMatch(panelSrc, /<Chip\b/);
+  assert.doesNotMatch(panelSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
 });
 
 test('export loading, warning, and sign-off error states use shared primitives', () => {
@@ -1238,7 +1244,9 @@ test('export loading, warning, and sign-off error states use shared primitives',
   assert.doesNotMatch(pageSrc, /bg-red-50/);
 
   assert.match(previewSrc, /from '@\/components\/ui\/states'/);
+  assert.match(previewSrc, /from '@\/components\/ui\/status'/);
   assert.match(previewSrc, /LoadingState/);
+  assert.match(previewSrc, /StatusChip/);
   assert.doesNotMatch(previewSrc, /animate-pulse/);
 });
 

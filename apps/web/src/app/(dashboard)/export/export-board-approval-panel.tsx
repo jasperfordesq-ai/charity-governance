@@ -1,10 +1,11 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
-import { Button, Card, Chip, Input, Select, SelectItem, Textarea } from '@heroui/react';
+import { Button, Card, Input, Select, SelectItem, Textarea } from '@heroui/react';
 import { ComplianceSignoffStatus, type ComplianceSignoffResponse } from '@charitypilot/shared';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
+import { StatusChip, type StatusTone } from '@/components/ui/status';
 
 export type ExportSignoffForm = {
   status: ComplianceSignoffStatus;
@@ -14,6 +15,12 @@ export type ExportSignoffForm = {
   approvedByRole: string;
   approvalNotes: string;
 };
+
+function signoffTone(color: 'success' | 'warning' | 'default'): StatusTone {
+  if (color === 'success') return 'success';
+  if (color === 'warning') return 'warning';
+  return 'neutral';
+}
 
 export function ExportBoardApprovalPanel({
   onSaveSignoff,
@@ -40,9 +47,9 @@ export function ExportBoardApprovalPanel({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Board approval</h2>
-            <Chip size="sm" color={signoffChipColor} variant="flat">
+            <StatusChip tone={signoffTone(signoffChipColor)}>
               {signoffStatusLabels[signoffForm.status]}
-            </Chip>
+            </StatusChip>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
             Record the board meeting where trustees approved the annual Compliance Record before reporting the position to the Charities Regulator.

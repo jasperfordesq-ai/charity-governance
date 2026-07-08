@@ -1,9 +1,9 @@
 'use client';
 
-import { Card, Chip } from '@heroui/react';
+import { Card } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
 import { LoadingState } from '@/components/ui/states';
-import { statusPanelClassName, type StatusTone } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 import { GOVERNANCE_PRINCIPLES, type ComplianceSummary } from '@charitypilot/shared';
 import type { ReactNode } from 'react';
 import { Building2, CircleCheck, FileText, ListChecks, ShieldCheck, UsersRound } from 'lucide-react';
@@ -181,9 +181,9 @@ export function ExportReportPreview({
                   Approval status, board meeting date, minute reference, approver, and any sign-off notes.
                 </p>
               </div>
-              <Chip size="sm" color={signoffChipColor} variant="flat">
+              <StatusChip tone={signoffTone(signoffChipColor)}>
                 {signoffLabel}
-              </Chip>
+              </StatusChip>
             </div>
           </Card>
 
