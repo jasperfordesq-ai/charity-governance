@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `29696db`
+Working-tree base commit when generated: `ee61c03`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -506,7 +506,7 @@ Grouped by source:
 - Supabase storage:
   - `SUPABASE_URL`: Same Supabase project URL (Step 2)
   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
-  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://<ref>.supabase.co (Step 2)
+  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://YOUR_SUPABASE_PROJECT_REF.supabase.co (Step 2)
   - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`: Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)
 - Observability:
   - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)

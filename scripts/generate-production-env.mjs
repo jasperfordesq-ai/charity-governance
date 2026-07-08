@@ -28,7 +28,7 @@ export const OPERATOR_SUPPLIED_KEYS = [
   ['FRONTEND_URL', 'Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)'],
   ['NEXT_PUBLIC_API_URL', 'Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)'],
   ['CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL', 'Docker Compose web runtime API origin; must match NEXT_PUBLIC_API_URL (Step 4/6)'],
-  ['NEXT_PUBLIC_SUPABASE_URL', 'Supabase project URL, https://<ref>.supabase.co (Step 2)'],
+  ['NEXT_PUBLIC_SUPABASE_URL', 'Supabase project URL, https://YOUR_SUPABASE_PROJECT_REF.supabase.co (Step 2)'],
   ['CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL', 'Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)'],
   ['SUPABASE_URL', 'Same Supabase project URL (Step 2)'],
   ['SUPABASE_SERVICE_ROLE_KEY', 'Supabase service role key - secret store only (Step 2)'],
