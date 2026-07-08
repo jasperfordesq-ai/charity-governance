@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `f8bb06a`
+Working-tree base commit when generated: `02ef299`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -156,7 +156,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Billing current-plan summary now uses shared status panel styling instead of route-local brand panel markup.
 - Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.
 - Deployed browser QA now has cross-browser responsive and accessibility script wiring for Chromium desktop, Chromium mobile emulation, Firefox, and WebKit evidence runs while keeping real iOS Safari as manual or cloud-device evidence.
-- Supabase launch evidence now requires backup policy or PITR evidence and restore-test ownership in addition to private bucket, signed URL, and readiness proof.
+- Supabase launch evidence now requires backup policy or PITR evidence plus restore-test owner/date/recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
 - The team member list, role edit controls, loading/error/empty states, and shared role display metadata are split out of the team route behind a wiring regression test.
 - The team invite form and pending-invite list are split out of the team route behind a wiring regression test while preserving invite role gates and revoke states.
 - The team role guidance panel is split out of the team route behind a wiring regression test and now uses shared status panel styling.

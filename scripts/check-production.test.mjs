@@ -2533,6 +2533,17 @@ test('backend product audit records current launch and dependency posture', () =
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
 
+test('platform audit describes safe isolated Supabase restore evidence', () => {
+  const auditScript = readRepoFile('scripts/platform-completion-audit.mjs');
+  const platformAudit = readRepoFile('docs/platform-completion-audit.md');
+  const combined = `${auditScript}\n${platformAudit}`;
+
+  assert.match(combined, /isolated restore target/);
+  assert.match(combined, /non-production restore target/);
+  assert.match(combined, /production project was not overwritten/);
+  assert.doesNotMatch(combined, /restore-test ownership in addition to private bucket/);
+});
+
 test('governance docs describe the broadened approval-readiness model', () => {
   const governanceArchitecture = readRepoFile('docs/architecture/08-governance-domain.md');
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
