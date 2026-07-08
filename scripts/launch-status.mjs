@@ -68,11 +68,11 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
   githubEnvironment: 'production',
   requiredGitHubEnvironmentVariables: Object.freeze([
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
+    'NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co',
   ]),
   configureCommands: Object.freeze([
     'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"',
   ]),
   workflowCommand: 'gh workflow run release-images.yml --ref master',
   watchCommand: 'gh run watch <release-run-id> --exit-status',
@@ -412,7 +412,7 @@ export function assessLaunchState(state) {
   if (remainingKeys.length > 0) {
     return {
       phase: 'ENV_INCOMPLETE',
-      headline: `.env.production exists but ${remainingKeys.length} value(s) still need real data.`,
+      headline: `.env.production exists but ${remainingKeys.length} production value issue(s) still need resolution.`,
       remainingKeys,
       remainingKeyDetails,
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
@@ -434,7 +434,7 @@ export function assessLaunchState(state) {
 
   return {
     phase: 'ENV_COMPLETE',
-    headline: '.env.production has no remaining placeholders. Validate it next.',
+    headline: '.env.production has no unresolved production value issues. Validate it next.',
     remainingKeys: [],
     remainingKeyDetails: [],
     remainingKeyGroups: [],

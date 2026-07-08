@@ -555,7 +555,7 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /Release Image Promotion/);
   assert.match(auditLedger, /GitHub environment: `production`/);
   assert.match(auditLedger, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
-  assert.match(auditLedger, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/<project-ref>\.supabase\.co/);
+  assert.match(auditLedger, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/YOUR_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(auditLedger, /gh workflow run release-images\.yml --ref master/);
   assert.match(auditLedger, /release-image-digests\.env/);
   assert.match(auditLedger, /CHARITYPILOT_\*_IMAGE/);

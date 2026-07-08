@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `dcd0c36`
+Working-tree base commit when generated: `cddd0f7`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -16,7 +16,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
 | API/backend | 12 route groups scanned with route-local guard heuristics and 45 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | .env.production exists but 19 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| Launch operations | .env.production exists but 19 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-08; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
 | Verification surface | 16 web unit test files, 45 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
@@ -416,10 +416,10 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - GitHub environment: `production`
 - Required GitHub environment variables:
   - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
-  - `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co`
 - Configure with:
   - `gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie`
-  - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co`
+  - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"`
 - Workflow: `gh workflow run release-images.yml --ref master`
 - Watch: `gh run watch <release-run-id> --exit-status`
 - Digest artifact: `release-image-digests.env`
@@ -441,7 +441,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Local Production Environment State
 
 - Phase: `ENV_INCOMPLETE`
-- .env.production exists but 19 value(s) still need real data.
+- .env.production exists but 19 production value issue(s) still need resolution.
 - This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Progress Summary

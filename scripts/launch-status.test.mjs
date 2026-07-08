@@ -89,11 +89,11 @@ function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.githubEnvironment, 'production');
   assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
+    'NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co',
   ]);
   assert.deepEqual(promotion.configureCommands, [
     'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body https://<project-ref>.supabase.co',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"',
   ]);
   assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');
   assert.equal(promotion.watchCommand, 'gh run watch <release-run-id> --exit-status');
@@ -189,6 +189,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   ].join('\n');
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.match(s.headline, /production value issue\(s\) still need resolution/);
   assert.deepEqual(s.remainingKeys.sort(), ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
   assert.deepEqual(s.remainingKeyDetails, [
     { key: 'DATABASE_URL', reason: 'placeholder', detail: 'Value still contains a REPLACE_ME placeholder.' },
@@ -450,6 +451,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   ].join('\n');
   const s = assessLaunchState({ envExists: true, envContent: env });
   assert.equal(s.phase, 'ENV_COMPLETE');
+  assert.match(s.headline, /no unresolved production value issues/);
   assert.equal(s.remainingKeys.length, 0);
   assert.deepEqual(s.expectedProductionValueGroups, []);
   assert.deepEqual(s.launchProgress.productionValues, { completed: 28, total: 28, remaining: 0 });
