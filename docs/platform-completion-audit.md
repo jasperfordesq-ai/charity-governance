@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `009e11f`
+Working-tree base commit when generated: `02bff45`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -143,6 +143,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.
 - Production launch evidence status now reports evidence-check and final-signoff completion percentages in both text and JSON output.
 - Strict production launch evidence validation now prints checklist and final-signoff progress before the detailed issue list.
+- Strict production launch evidence validation now supports --json output for CI and operator dashboards.
 - Launch status now includes the next launch-evidence hint details in text and JSON output so operator dashboards can show the next proof to collect.
 - Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.
 - Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.
@@ -257,13 +258,13 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 ## Local Verification Evidence
 
 - `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit 73e8484: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
-- `npm run test:production-check` passed locally on 2026-07-08 with 299/299 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
+- `npm run test:production-check` passed locally on 2026-07-08 with 300/300 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
 - Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, and team permission-hint cleanup; production-tooling checks passed 299/299.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, and team permission-hint cleanup; production-tooling checks passed 300/300.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.

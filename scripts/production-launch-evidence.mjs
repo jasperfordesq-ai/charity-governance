@@ -237,10 +237,15 @@ function usage() {
 function parseArgs(argv) {
   const options = {
     evidenceFile: defaultEvidenceFile,
+    json: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
     if (arg === '--evidence-file') {
       const value = argv[index + 1];
       if (!value) throw new Error('--evidence-file requires a value');
@@ -1502,17 +1507,49 @@ function countApprovedFinalSignoffRoles(evidence) {
   return FINAL_SIGNOFF_ROLES.filter((role) => approvals[role.id]?.status === 'approved').length;
 }
 
-function renderFailureProgress(evidence, evidenceFile) {
+function launchProgress(evidence) {
   const completedChecks = countCompletedChecks(evidence);
   const totalChecks = countChecks();
   const approvedFinalSignoffRoles = countApprovedFinalSignoffRoles(evidence);
   const totalFinalSignoffRoles = FINAL_SIGNOFF_ROLES.length;
 
+  return {
+    checklistChecks: {
+      completed: completedChecks,
+      total: totalChecks,
+      percentage: completionPercent(completedChecks, totalChecks),
+    },
+    finalSignoffRoles: {
+      approved: approvedFinalSignoffRoles,
+      total: totalFinalSignoffRoles,
+      percentage: completionPercent(approvedFinalSignoffRoles, totalFinalSignoffRoles),
+    },
+  };
+}
+
+function renderFailureProgress(evidence, evidenceFile) {
+  const progress = launchProgress(evidence);
+
   return [
-    `Checklist checks complete: ${completedChecks} / ${totalChecks} (${completionPercent(completedChecks, totalChecks)}% complete)`,
-    `Final approval roles approved: ${approvedFinalSignoffRoles} / ${totalFinalSignoffRoles} (${completionPercent(approvedFinalSignoffRoles, totalFinalSignoffRoles)}% complete)`,
+    `Checklist checks complete: ${progress.checklistChecks.completed} / ${progress.checklistChecks.total} (${progress.checklistChecks.percentage}% complete)`,
+    `Final approval roles approved: ${progress.finalSignoffRoles.approved} / ${progress.finalSignoffRoles.total} (${progress.finalSignoffRoles.percentage}% complete)`,
     `Track progress with: npm run check:production:evidence:status -- --evidence-file=${redactLaunchEvidenceTranscript(evidenceFile)}`,
   ];
+}
+
+function renderJsonStatus(evidence, issues) {
+  return `${JSON.stringify(
+    {
+      ok: issues.length === 0,
+      approvedForLaunch: evidence?.approvedForLaunch === true,
+      areaCount: REQUIRED_LAUNCH_AREAS.length,
+      issueCount: issues.length,
+      issues,
+      progress: launchProgress(evidence),
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export function redactLaunchEvidenceTranscript(value) {
@@ -1559,6 +1596,10 @@ export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)
 
   const issues = validateLaunchEvidence(evidence);
   if (issues.length > 0) {
+    if (options.json) {
+      return result(1, renderJsonStatus(evidence, issues));
+    }
+
     return result(
       1,
       '',
@@ -1570,6 +1611,10 @@ export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)
         '',
       ].join('\n'),
     );
+  }
+
+  if (options.json) {
+    return result(0, renderJsonStatus(evidence, []));
   }
 
   return result(

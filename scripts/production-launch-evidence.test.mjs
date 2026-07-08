@@ -783,6 +783,64 @@ test('production launch evidence validator accepts complete dated external evide
   }
 });
 
+test('production launch evidence validator renders machine-readable JSON status', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const completeFile = writeEvidenceFile(completeEvidence(REQUIRED_LAUNCH_AREAS));
+  const incomplete = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  incomplete.approvedForLaunch = false;
+  incomplete.areas.releaseGate.checks['check-production'].status = 'pending';
+  incomplete.areas.releaseGate.checks['check-production'].evidence = [];
+  incomplete.finalSignoff.approvals.engineering.status = 'pending';
+  const incompleteFile = writeEvidenceFile(incomplete);
+
+  try {
+    const failed = runProductionLaunchEvidenceFromArgs(['--json', '--evidence-file', incompleteFile.evidencePath]);
+    assert.equal(failed.status, 1);
+    assert.equal(failed.stderr, '');
+    const failurePayload = JSON.parse(failed.stdout);
+    assert.equal(failurePayload.ok, false);
+    assert.equal(failurePayload.approvedForLaunch, false);
+    assert.equal(failurePayload.issueCount, failurePayload.issues.length);
+    assert.ok(failurePayload.issueCount > 0);
+    assert.deepEqual(failurePayload.progress, {
+      checklistChecks: {
+        completed: 84,
+        total: 85,
+        percentage: 98.8,
+      },
+      finalSignoffRoles: {
+        approved: 4,
+        total: 5,
+        percentage: 80,
+      },
+    });
+
+    const passed = runProductionLaunchEvidenceFromArgs(['--json', '--evidence-file', completeFile.evidencePath]);
+    assert.equal(passed.status, 0);
+    assert.equal(passed.stderr, '');
+    const successPayload = JSON.parse(passed.stdout);
+    assert.equal(successPayload.ok, true);
+    assert.equal(successPayload.approvedForLaunch, true);
+    assert.equal(successPayload.issueCount, 0);
+    assert.deepEqual(successPayload.issues, []);
+    assert.deepEqual(successPayload.progress, {
+      checklistChecks: {
+        completed: 85,
+        total: 85,
+        percentage: 100,
+      },
+      finalSignoffRoles: {
+        approved: 5,
+        total: 5,
+        percentage: 100,
+      },
+    });
+  } finally {
+    rmSync(completeFile.tempDir, { recursive: true, force: true });
+    rmSync(incompleteFile.tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator accepts UTF-16 JSON emitted by Windows shells', async () => {
   const { runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
   const { renderProductionLaunchEvidenceTemplate } = await loadEvidenceTemplateGenerator();
