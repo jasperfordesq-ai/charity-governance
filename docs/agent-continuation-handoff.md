@@ -258,14 +258,14 @@ Recently successful checks in this workstream:
   - Security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed.
   - Playwright E2E intentionally skipped.
 - `npm run test:production-check`
-  - Passed on 2026-07-08 with 312/312 production-tooling checks passing.
+  - Passed on 2026-07-08 with 313/313 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
-  - Passed again with 312/312 production-tooling checks after the shared-state cleanup.
+  - Passed again with 313/313 production-tooling checks after the shared-state cleanup.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests
