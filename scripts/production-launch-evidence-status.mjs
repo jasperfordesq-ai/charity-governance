@@ -86,6 +86,11 @@ function statusOf(value) {
   return typeof value === 'string' && value.trim().length > 0 ? value : 'missing';
 }
 
+function completionPercent(completed, total) {
+  if (!Number.isFinite(completed) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.round((Math.max(0, completed) / total) * 1000) / 10;
+}
+
 export function releaseBindingStatus(evidence) {
   const release = evidence?.release;
   const manifest = release?.imageDigestManifest;
@@ -194,6 +199,10 @@ export function summarizeEvidence(evidence) {
     finalSignoffApprovals,
     incompleteCheckDetails,
     incompleteChecks,
+    percentages: {
+      evidenceChecks: completionPercent(completedChecks, countChecks()),
+      finalSignoffs: completionPercent(approvedFinalSignoffRoles, FINAL_SIGNOFF_ROLES.length),
+    },
     totalFinalSignoffRoles: FINAL_SIGNOFF_ROLES.length,
     totalChecks: countChecks(),
   };
@@ -210,8 +219,8 @@ function renderStatus(evidence) {
     `Evidence statuses complete: ${evidenceStatusesComplete ? 'yes' : 'no'}`,
     `approvedForLaunch: ${evidence?.approvedForLaunch === true ? 'true' : 'false'}`,
     `finalSignoff: ${statusOf(evidence?.finalSignoff?.status)}`,
-    `Final approval roles approved: ${summary.approvedFinalSignoffRoles} / ${summary.totalFinalSignoffRoles}`,
-    `Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}`,
+    `Final approval roles approved: ${summary.approvedFinalSignoffRoles} / ${summary.totalFinalSignoffRoles} (${summary.percentages.finalSignoffs}% complete)`,
+    `Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks} (${summary.percentages.evidenceChecks}% complete)`,
     `Release binding: ${releaseBinding.headline}`,
     '',
     'Areas:',
@@ -270,6 +279,7 @@ function renderJsonStatus(evidence) {
       approvedFinalSignoffRoles: summary.approvedFinalSignoffRoles,
       totalChecks: summary.totalChecks,
       totalFinalSignoffRoles: summary.totalFinalSignoffRoles,
+      percentages: summary.percentages,
       areas: summary.areaSummaries,
       pendingFinalSignoffRoles: summary.finalSignoffApprovals
         .filter((approval) => !approval.approved)
