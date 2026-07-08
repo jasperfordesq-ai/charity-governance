@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createContentSecurityPolicy } from './content-security-policy';
 
-test('production CSP uses only an approved origin-only API connect source', () => {
+test('production CSP uses only the canonical API connect source', () => {
   const csp = createContentSecurityPolicy({
     nonce: 'test-nonce',
     isDevelopment: false,
@@ -12,9 +12,10 @@ test('production CSP uses only an approved origin-only API connect source', () =
   assert.match(csp, /connect-src 'self' https:\/\/api\.charitypilot\.ie(?:;|$)/);
 });
 
-test('production CSP falls back instead of trusting unapproved API connect sources', () => {
+test('production CSP falls back instead of trusting non-canonical API connect sources', () => {
   for (const apiUrl of [
     'https://api.attacker.example',
+    'https://services.charitypilot.ie',
     'http://localhost:3002',
     'https://api.charitypilot.ie/api/v1',
   ]) {

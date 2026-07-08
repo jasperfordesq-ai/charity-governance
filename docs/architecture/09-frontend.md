@@ -102,7 +102,7 @@ flowchart TD
 `getApiBaseUrl` (`apps/web/src/lib/api-config.ts:10-28`) resolves the browser-facing API origin:
 
 - prefers `NEXT_PUBLIC_API_URL` (trimmed, trailing slashes stripped);
-- in production it validates the URL via `validateProductionApiUrl` — must be `https:`, origin-only, and on `charitypilot.ie` or a subdomain (`apps/web/src/lib/api-config.ts:42-63`);
+- in production it validates the URL via `validateProductionApiUrl` — must be the canonical origin `https://api.charitypilot.ie` (`apps/web/src/lib/api-config.ts:42-62`);
 - in production with no value set it throws; otherwise it falls back to `http://localhost:3002` (`apps/web/src/lib/api-config.ts:1`, `apps/web/src/lib/api-config.ts:23-27`).
 
 `getServerApiBaseUrl` (`apps/web/src/lib/api-config.ts:30-40`) is the server-side counterpart used by the proxy: it prefers `CHARITYPILOT_INTERNAL_API_URL` (validated by `validateServerApiUrl`, which in dev allows `http://`/`https://` origin-only URLs and in production applies the strict production rules — `apps/web/src/lib/api-config.ts:65-85`), falling back to `getApiBaseUrl`.
@@ -196,7 +196,7 @@ These are consumed where a feature may be plan-gated: the dashboard suppresses a
 
 ## Content Security Policy
 
-`createContentSecurityPolicy` builds the per-request CSP string used by the proxy (`apps/web/src/lib/content-security-policy.ts:36-63`). It pins `default-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, a nonce-based `script-src` with `'strict-dynamic'` (and `'unsafe-eval'` in development only), and a `connect-src` that in production is `'self'` plus the validated API origin (`productionApiConnectSource`, restricted to `charitypilot.ie` hosts) and in development whitelists the local API and dev-server websocket (`apps/web/src/lib/content-security-policy.ts:41-43`, `apps/web/src/lib/content-security-policy.ts:15-34`). Static security headers (`X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and HSTS in production) are added globally in `next.config.ts` (`apps/web/next.config.ts:24-48`).
+`createContentSecurityPolicy` builds the per-request CSP string used by the proxy (`apps/web/src/lib/content-security-policy.ts:31-58`). It pins `default-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, a nonce-based `script-src` with `'strict-dynamic'` (and `'unsafe-eval'` in development only), and a `connect-src` that in production is `'self'` plus the canonical API origin (`productionApiConnectSource`, restricted to `https://api.charitypilot.ie`) and in development whitelists the local API and dev-server websocket (`apps/web/src/lib/content-security-policy.ts:36-38`, `apps/web/src/lib/content-security-policy.ts:9-29`). Static security headers (`X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and HSTS in production) are added globally in `next.config.ts` (`apps/web/next.config.ts:24-48`).
 
 ## Cross-references
 

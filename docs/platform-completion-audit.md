@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `c9448ba`
+Working-tree base commit when generated: `c9f1745`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -44,7 +44,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Compliance detail autosave now flushes pending edits on blur/unmount, warns on browser unload, confirms in-app navigation while saves are pending, and exposes a retry action for failed saves.
 - Production deploy defaults now include the TLS compose overlay, with an explicit --no-tls-proxy escape hatch for managed platform TLS.
 - The plain-English launch guide now describes the Caddy TLS overlay as the default deploy path rather than optional proxy wiring.
-- Production hostname defaults and launch/runtime validators now consistently require app.charitypilot.ie for the web app and api.charitypilot.ie for the API.
+- Production hostname defaults, launch validators, web runtime API validation, and production CSP now consistently require app.charitypilot.ie for the web app and api.charitypilot.ie for the API.
 - The Irish compliance matrix now includes explicit not-yet-commenced Charities (Amendment) Act 2024 monitoring rows with solicitor review flags.
 - Organisation setup now captures conditional obligation profile facts for staff, volunteers, fundraising, safeguarding, GDPR, premises/events, public-sector context, and processors.
 - Approval readiness and exports now flag missing standard records, missing action/evidence fields, missing explanations, missing conditional-profile facts, and profile-triggered professional-review prompts.

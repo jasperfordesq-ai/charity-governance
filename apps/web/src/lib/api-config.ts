@@ -1,5 +1,5 @@
 const DEFAULT_DEVELOPMENT_API_URL = 'http://localhost:3002';
-const APPROVED_PRODUCTION_HOST = 'charitypilot.ie';
+const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
 
 type ApiEnv = {
   CHARITYPILOT_INTERNAL_API_URL?: string;
@@ -56,9 +56,8 @@ function validateProductionApiUrl(value: string): void {
     throw new Error('NEXT_PUBLIC_API_URL must be an origin-only URL in production');
   }
 
-  const host = url.hostname.toLowerCase();
-  if (host !== APPROVED_PRODUCTION_HOST && !host.endsWith(`.${APPROVED_PRODUCTION_HOST}`)) {
-    throw new Error('NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname');
+  if (url.origin !== CANONICAL_PRODUCTION_API_ORIGIN) {
+    throw new Error(`NEXT_PUBLIC_API_URL must use the canonical production API origin ${CANONICAL_PRODUCTION_API_ORIGIN}`);
   }
 }
 

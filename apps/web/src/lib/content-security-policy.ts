@@ -5,12 +5,6 @@ type CreateContentSecurityPolicyOptions = {
 };
 
 const DEFAULT_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
-const APPROVED_PRODUCTION_HOST = 'charitypilot.ie';
-
-function isApprovedProductionHost(hostname: string): boolean {
-  const normalizedHost = hostname.toLowerCase().replace(/\.$/, '');
-  return normalizedHost === APPROVED_PRODUCTION_HOST || normalizedHost.endsWith(`.${APPROVED_PRODUCTION_HOST}`);
-}
 
 function productionApiConnectSource(apiUrl?: string): string {
   const configuredUrl = apiUrl?.trim();
@@ -22,7 +16,7 @@ function productionApiConnectSource(apiUrl?: string): string {
     if (
       url.protocol === 'https:' &&
       url.origin === normalizedConfiguredUrl &&
-      isApprovedProductionHost(url.hostname)
+      url.origin === DEFAULT_PRODUCTION_API_ORIGIN
     ) {
       return url.origin;
     }

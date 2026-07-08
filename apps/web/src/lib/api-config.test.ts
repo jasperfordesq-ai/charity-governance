@@ -23,11 +23,19 @@ test('rejects non-production API URLs in production', () => {
   );
 });
 
-test('rejects unapproved API hosts in production', () => {
+test('rejects unapproved API hosts through the canonical production API origin check', () => {
   assert.throws(
     () =>
       getApiBaseUrl({ NODE_ENV: 'production', NEXT_PUBLIC_API_URL: 'https://api.attacker.example' }),
-    /NEXT_PUBLIC_API_URL must use an approved CharityPilot production hostname/,
+    /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+  );
+});
+
+test('rejects approved but non-canonical API hosts in production', () => {
+  assert.throws(
+    () =>
+      getApiBaseUrl({ NODE_ENV: 'production', NEXT_PUBLIC_API_URL: 'https://services.charitypilot.ie' }),
+    /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
   );
 });
 
