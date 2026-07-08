@@ -1479,6 +1479,42 @@ function countChecks() {
   return REQUIRED_LAUNCH_AREAS.reduce((total, area) => total + area.checks.length, 0);
 }
 
+function completionPercent(completed, total) {
+  if (!Number.isFinite(completed) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.round((Math.max(0, completed) / total) * 1000) / 10;
+}
+
+function countCompletedChecks(evidence) {
+  if (!isPlainObject(evidence?.areas)) return 0;
+
+  return REQUIRED_LAUNCH_AREAS.reduce((total, area) => {
+    const actualArea = evidence.areas[area.id];
+    if (!isPlainObject(actualArea?.checks)) return total;
+
+    return total + area.checks.filter((check) => actualArea.checks[check.id]?.status === 'complete').length;
+  }, 0);
+}
+
+function countApprovedFinalSignoffRoles(evidence) {
+  const approvals = evidence?.finalSignoff?.approvals;
+  if (!isPlainObject(approvals)) return 0;
+
+  return FINAL_SIGNOFF_ROLES.filter((role) => approvals[role.id]?.status === 'approved').length;
+}
+
+function renderFailureProgress(evidence, evidenceFile) {
+  const completedChecks = countCompletedChecks(evidence);
+  const totalChecks = countChecks();
+  const approvedFinalSignoffRoles = countApprovedFinalSignoffRoles(evidence);
+  const totalFinalSignoffRoles = FINAL_SIGNOFF_ROLES.length;
+
+  return [
+    `Checklist checks complete: ${completedChecks} / ${totalChecks} (${completionPercent(completedChecks, totalChecks)}% complete)`,
+    `Final approval roles approved: ${approvedFinalSignoffRoles} / ${totalFinalSignoffRoles} (${completionPercent(approvedFinalSignoffRoles, totalFinalSignoffRoles)}% complete)`,
+    `Track progress with: npm run check:production:evidence:status -- --evidence-file=${redactLaunchEvidenceTranscript(evidenceFile)}`,
+  ];
+}
+
 export function redactLaunchEvidenceTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
@@ -1528,6 +1564,8 @@ export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)
       '',
       [
         `Production launch evidence failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+        ...renderFailureProgress(evidence, options.evidenceFile),
+        '',
         ...issues.map((issue) => `- ${issue}`),
         '',
       ].join('\n'),

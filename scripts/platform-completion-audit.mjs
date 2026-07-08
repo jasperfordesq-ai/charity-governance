@@ -171,6 +171,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.',
   'Production launch evidence status now reports evidence-check and final-signoff completion percentages in both text and JSON output.',
+  'Strict production launch evidence validation now prints checklist and final-signoff progress before the detailed issue list.',
   'Launch status now includes the next launch-evidence hint details in text and JSON output so operator dashboards can show the next proof to collect.',
   'Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.',
   'Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.',

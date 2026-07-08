@@ -1925,6 +1925,12 @@ test('production launch evidence template covers every required area and final s
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
+    assert.match(result.stderr, /Checklist checks complete: 0 \/ 85 \(0% complete\)/);
+    assert.match(result.stderr, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
+    assert.match(
+      result.stderr,
+      /Track progress with: npm run check:production:evidence:status -- --evidence-file=/,
+    );
     assert.match(result.stderr, /approvedForLaunch must be true/);
     assert.match(result.stderr, /areas\.releaseGate\.status must be complete/);
     assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.status must be approved/);
