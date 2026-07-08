@@ -203,6 +203,17 @@ export const FINAL_SIGNOFF_ROLES = [
   ['legalCompliance', 'Legal/compliance owner'],
   ['business', 'Business owner'],
 ].map(([id, label]) => ({ id, label }));
+
+const BROWSER_QA_RELEASE_BOUND_CHECKS = new Set([
+  'browser-qa-completed',
+  'desktop-coverage',
+  'mobile-coverage',
+  'accessibility-coverage',
+  'cross-browser-coverage',
+  'ios-safari-device-coverage',
+  'critical-flows-covered',
+]);
+
 export const LAUNCH_CRITICAL_ROUTES = [
   '/',
   '/features',
@@ -826,6 +837,11 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
 function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, issues, release) {
   validateExecutableCheckerEvidence(areaId, checkId, actualCheck, checkPath, issues);
 
+  if (areaId === 'browserQa' && BROWSER_QA_RELEASE_BOUND_CHECKS.has(checkId) && typeof release?.commitSha === 'string') {
+    const text = evidenceText(actualCheck.evidence);
+    requireEvidenceText(text, release.commitSha, `${checkPath}.evidence must include release.commitSha`, issues);
+  }
+
   if (areaId === 'releaseGate') {
     validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues);
   }
@@ -1336,9 +1352,6 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       if (!hasRouteToken(text, route)) {
         issues.push(`${checkPath}.evidence must include launch route ${route}`);
       }
-    }
-    if (typeof release?.commitSha === 'string') {
-      requireEvidenceText(text, release.commitSha, `${checkPath}.evidence must include release.commitSha`, issues);
     }
   }
 }

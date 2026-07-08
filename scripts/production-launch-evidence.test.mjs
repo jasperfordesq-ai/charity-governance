@@ -556,6 +556,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'browserQa' && checkId === 'browser-qa-completed') {
     entry.type = 'command-output';
     entry.description = [
+      `Browser QA release commit: ${commitSha}.`,
       'E2E_DEPLOYED_QA=true',
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
@@ -568,6 +569,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'browserQa' && checkId === 'desktop-coverage') {
     entry.type = 'command-output';
     entry.description = [
+      `Browser QA release commit: ${commitSha}.`,
       'E2E_DEPLOYED_QA=true',
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
@@ -580,6 +582,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'browserQa' && checkId === 'mobile-coverage') {
     entry.type = 'command-output';
     entry.description = [
+      `Browser QA release commit: ${commitSha}.`,
       'E2E_DEPLOYED_QA=true',
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
@@ -592,6 +595,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'browserQa' && checkId === 'accessibility-coverage') {
     entry.type = 'command-output';
     entry.description = [
+      `Browser QA release commit: ${commitSha}.`,
       'E2E_DEPLOYED_QA=true',
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
@@ -604,6 +608,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'browserQa' && checkId === 'cross-browser-coverage') {
     entry.type = 'command-output';
     entry.description = [
+      `Browser QA release commit: ${commitSha}.`,
       'E2E_DEPLOYED_QA=true',
       'npm run test:e2e:deployed:responsive:cross-browser completed against deployed HTTPS production URL.',
       'npm run test:e2e:deployed:accessibility:cross-browser completed against deployed HTTPS production URL.',
@@ -613,6 +618,7 @@ function evidenceEntry(areaId, checkId) {
 
   if (areaId === 'browserQa' && checkId === 'ios-safari-device-coverage') {
     entry.description = [
+      `Browser QA release commit: ${commitSha}.`,
       'real iOS Safari manual or cloud-device evidence recorded for https://app.charitypilot.ie.',
       'The run covered mobile light and dark rendering, navigation, login, dashboard, documents, and sign-out.',
     ].join(' ');
@@ -1281,18 +1287,24 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_EMAIL/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_PASSWORD/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run test:e2e:responsive or all four focused responsive route chunks/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include desktop light and dark/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include mobile light and dark/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.mobile-coverage\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include npm run test:e2e -- tests\/accessibility\.spec\.ts/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include light and dark/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.accessibility-coverage\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include test:e2e:deployed:responsive:cross-browser/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include deployed-firefox-desktop/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include deployed-webkit-desktop/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.cross-browser-coverage\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.ios-safari-device-coverage\.evidence must include real iOS Safari/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.ios-safari-device-coverage\.evidence must include manual or cloud-device evidence/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.ios-safari-device-coverage\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include docs\/production-browser-qa\.md/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.critical-flows-covered\.evidence must include auth flow/);
@@ -1312,6 +1324,7 @@ test('production launch evidence validator accepts complete chunked responsive Q
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
 
   evidence.areas.browserQa.checks['browser-qa-completed'].evidence[0].description = [
+    `Browser QA release commit: ${commitSha}.`,
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
@@ -1323,6 +1336,7 @@ test('production launch evidence validator accepts complete chunked responsive Q
     'all four focused responsive route chunks passed against deployed HTTPS production URL',
   ].join(' ');
   evidence.areas.browserQa.checks['desktop-coverage'].evidence[0].description = [
+    `Browser QA release commit: ${commitSha}.`,
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
@@ -1331,6 +1345,7 @@ test('production launch evidence validator accepts complete chunked responsive Q
     'desktop light and dark route coverage completed',
   ].join(' ');
   evidence.areas.browserQa.checks['mobile-coverage'].evidence[0].description = [
+    `Browser QA release commit: ${commitSha}.`,
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
@@ -1966,6 +1981,20 @@ test('production launch evidence template covers every required area and final s
         'real iOS Safari',
       ),
     );
+    for (const checkId of [
+      'browser-qa-completed',
+      'desktop-coverage',
+      'mobile-coverage',
+      'accessibility-coverage',
+      'cross-browser-coverage',
+      'ios-safari-device-coverage',
+      'critical-flows-covered',
+    ]) {
+      assert.ok(
+        template.areas.browserQa.checks[checkId].requiredEvidenceHints.includes('release.commitSha'),
+        `${checkId} should tell operators to bind evidence to release.commitSha`,
+      );
+    }
     assert.ok(
       template.areas.browserQa.checks['critical-flows-covered'].requiredEvidenceHints.includes(
         'Launch-Critical Route Inventory',

@@ -169,6 +169,7 @@ const evidenceHintsByCheck = new Map([
     'not a substitute for legal advice',
   ]],
   ['browserQa.browser-qa-completed', [
+    'release.commitSha',
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
@@ -176,16 +177,19 @@ const evidenceHintsByCheck = new Map([
     'or all four focused responsive chunks: test:e2e:responsive:public:desktop, test:e2e:responsive:public:mobile, test:e2e:responsive:dashboard:desktop, test:e2e:responsive:dashboard:mobile',
   ]],
   ['browserQa.desktop-coverage', [
+    'release.commitSha',
     'desktop light and dark',
     'npm run test:e2e:responsive',
     'or both desktop chunks: test:e2e:responsive:public:desktop and test:e2e:responsive:dashboard:desktop',
   ]],
   ['browserQa.mobile-coverage', [
+    'release.commitSha',
     'mobile light and dark',
     'npm run test:e2e:responsive',
     'or both mobile chunks: test:e2e:responsive:public:mobile and test:e2e:responsive:dashboard:mobile',
   ]],
   ['browserQa.accessibility-coverage', [
+    'release.commitSha',
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
@@ -195,6 +199,7 @@ const evidenceHintsByCheck = new Map([
     'light and dark',
   ]],
   ['browserQa.cross-browser-coverage', [
+    'release.commitSha',
     'E2E_DEPLOYED_QA=true',
     'npm run test:e2e:deployed:responsive:cross-browser',
     'npm run test:e2e:deployed:accessibility:cross-browser',
@@ -204,6 +209,7 @@ const evidenceHintsByCheck = new Map([
     'deployed-webkit-desktop',
   ]],
   ['browserQa.ios-safari-device-coverage', [
+    'release.commitSha',
     'real iOS Safari',
     'manual or cloud-device evidence',
     'https://app.charitypilot.ie',
