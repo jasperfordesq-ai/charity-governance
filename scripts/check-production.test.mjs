@@ -2316,7 +2316,9 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /public mobile 13\/13/);
   assert.match(launchGuide, /dashboard desktop 12\/12/);
   assert.match(launchGuide, /dashboard mobile 12\/12/);
-  assert.match(launchGuide, /Local accessibility QA also passed 16\/16/);
+  assert.match(launchGuide, /current accessibility suite covers the launch-critical public\/auth routes/);
+  assert.match(launchGuide, /dynamic compliance principle-detail page/);
+  assert.match(launchGuide, /rerun it for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /85 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);

@@ -2166,6 +2166,11 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   }
 
   assert.match(src, /isDisabled=\{[^}]*saving/);
+  assert.match(src, /const actionsDisabled = saving \|\| Boolean\(closingRecordId\)/);
+  assert.match(src, /actionDisabled=\{actionsDisabled\}/);
+  assert.match(src, /actionDisabledReason=\{actionDisabledReason\}/);
+  assert.match(src, /aria-describedby=\{actionDisabled \? actionHintId : undefined\}/);
+  assert.match(src, /className="sr-only"/);
   assert.match(src, /const requestSeq = \+\+registersRequestSeq\.current/);
   assert.match(src, /governance-registers\/summary\?year=\$\{requestedYear\}/);
   assert.match(src, /governance-registers\/annual-report\?year=\$\{requestedYear\}/);
@@ -2840,6 +2845,44 @@ test('dashboard navigation manages mobile sidebar focus and meaningful breadcrum
     );
   }
   assert.doesNotMatch(breadcrumbs, /const label = LABELS\[seg\] \?\? seg\.replace/);
+});
+
+test('deployed accessibility coverage includes every launch-critical public route and principle detail', () => {
+  const accessibilitySpec = repo('e2e/tests/accessibility.spec.ts');
+  const responsiveSpec = repo('e2e/tests/responsive-smoke.spec.ts');
+
+  for (const term of [
+    'PUBLIC_AND_AUTH_PAGES',
+    '/features',
+    '/blog/understanding-the-charities-governance-code',
+    '/privacy',
+    '/terms',
+    '/accept-invite',
+    '/verify-email',
+    'getPrincipleIdByNumber',
+    "/compliance/${await getPrincipleIdByNumber(1)}",
+  ]) {
+    assert.match(
+      accessibilitySpec,
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `accessibility spec must include launch-critical coverage for ${term}`,
+    );
+  }
+
+  for (const route of [
+    '/features',
+    '/blog/understanding-the-charities-governance-code',
+    '/privacy',
+    '/terms',
+    '/accept-invite',
+    '/verify-email',
+  ]) {
+    assert.match(
+      responsiveSpec,
+      new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `responsive launch coverage must still include ${route}`,
+    );
+  }
 });
 
 test('theme prepaint and client layout handling support dark mode beyond protected app routes', () => {

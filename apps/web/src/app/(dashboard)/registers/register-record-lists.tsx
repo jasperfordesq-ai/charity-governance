@@ -56,6 +56,13 @@ export function RegisterRecordsPanel({
   closingRecordId: string | null;
   saving: boolean;
 }) {
+  const actionsDisabled = saving || Boolean(closingRecordId);
+  const actionDisabledReason = closingRecordId
+    ? 'Wait for the current close action to finish before adding another register record.'
+    : saving
+      ? 'Wait for the current save to finish before adding another register record.'
+      : '';
+
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <RegisterSection
@@ -64,6 +71,8 @@ export function RegisterRecordsPanel({
         count={conflicts.length}
         actionLabel="Add conflict"
         onAdd={() => onAdd('conflict')}
+        actionDisabled={actionsDisabled}
+        actionDisabledReason={actionDisabledReason}
         emptyTitle="No conflicts recorded"
         emptyDescription="Add declared trustee interests so decisions and minute references stay visible."
       >
@@ -104,6 +113,8 @@ export function RegisterRecordsPanel({
         count={risks.length}
         actionLabel="Add risk"
         onAdd={() => onAdd('risk')}
+        actionDisabled={actionsDisabled}
+        actionDisabledReason={actionDisabledReason}
         emptyTitle="No risks recorded"
         emptyDescription="Add key risks so mitigation, owner, and review dates are ready for trustee oversight."
       >
@@ -143,6 +154,8 @@ export function RegisterRecordsPanel({
         count={complaints.length}
         actionLabel="Add complaint"
         onAdd={() => onAdd('complaint')}
+        actionDisabled={actionsDisabled}
+        actionDisabledReason={actionDisabledReason}
         emptyTitle="No complaints recorded"
         emptyDescription="Record complaints and board review status so improvement actions do not disappear."
       >
@@ -183,6 +196,8 @@ export function RegisterRecordsPanel({
         count={fundraising.length}
         actionLabel="Add activity"
         onAdd={() => onAdd('fundraising')}
+        actionDisabled={actionsDisabled}
+        actionDisabledReason={actionDisabledReason}
         emptyTitle="No fundraising activities recorded"
         emptyDescription="Add public-facing campaigns, controls, and third-party fundraiser checks where relevant."
       >
@@ -225,6 +240,8 @@ function RegisterSection({
   description,
   actionLabel,
   onAdd,
+  actionDisabled,
+  actionDisabledReason,
   count,
   emptyTitle,
   emptyDescription,
@@ -234,11 +251,15 @@ function RegisterSection({
   description: string;
   actionLabel: string;
   onAdd: () => void;
+  actionDisabled: boolean;
+  actionDisabledReason: string;
   count: number;
   emptyTitle: string;
   emptyDescription: string;
   children: ReactNode;
 }) {
+  const actionHintId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-add-action-hint`;
+
   return (
     <DataList
       title={(
@@ -249,9 +270,18 @@ function RegisterSection({
       )}
       description={description}
       actions={(
-        <Button size="sm" className={primaryActionButtonClassName} onPress={onAdd}>
-          {actionLabel}
-        </Button>
+        <>
+          <Button
+            size="sm"
+            className={primaryActionButtonClassName}
+            onPress={onAdd}
+            isDisabled={actionDisabled}
+            aria-describedby={actionDisabled ? actionHintId : undefined}
+          >
+            {actionLabel}
+          </Button>
+          {actionDisabled ? <span id={actionHintId} className="sr-only">{actionDisabledReason}</span> : null}
+        </>
       )}
     >
       {count === 0 ? (

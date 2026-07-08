@@ -31,7 +31,7 @@ machine-readable launch evidence is `9 / 85` complete, final signoffs are
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.
-Local responsive browser QA completed cleanly on 2026-07-08 as four focused route chunks across desktop/mobile and light/dark: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12. Local accessibility QA also passed 16/16 on the local stack, but deployed production QA remains a launch gate
+Local responsive browser QA completed cleanly on 2026-07-08 as four focused route chunks across desktop/mobile and light/dark: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12. The current accessibility suite covers the launch-critical public/auth routes plus protected dashboard routes in both themes, including the dynamic compliance principle-detail page; rerun it for the final release transcript. Deployed production QA remains a launch gate
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all

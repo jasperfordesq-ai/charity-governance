@@ -1,9 +1,11 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import AxeBuilder from '@axe-core/playwright';
+import { getPrincipleIdByNumber } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 type Theme = 'light' | 'dark';
+type RouteSpec = string | { label: string; resolve: () => Promise<string> };
 
 const NAVIGATION_TIMEOUT_MS = 300_000;
 const ACCESSIBILITY_TEST_TIMEOUT_MS = 300_000;
@@ -52,9 +54,13 @@ async function seriousViolations(page: Page): Promise<string[]> {
     .map((v) => `${v.id} (${v.impact}) x${v.nodes.length}: ${v.help}`);
 }
 
-const DASHBOARD_PAGES = [
+const DASHBOARD_PAGES: readonly RouteSpec[] = [
   '/dashboard',
   '/compliance',
+  {
+    label: '/compliance/${principleId}',
+    resolve: async () => `/compliance/${await getPrincipleIdByNumber(1)}`,
+  },
   '/board',
   '/documents',
   '/deadlines',
@@ -64,28 +70,50 @@ const DASHBOARD_PAGES = [
   '/billing',
   '/export',
   '/regulator',
-];
+] as const;
+
+const PUBLIC_AND_AUTH_PAGES = [
+  '/',
+  '/features',
+  '/pricing',
+  '/blog',
+  '/blog/understanding-the-charities-governance-code',
+  '/privacy',
+  '/terms',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/accept-invite',
+  '/verify-email',
+] as const;
+
+async function resolveRoute(route: RouteSpec): Promise<{ label: string; path: string }> {
+  if (typeof route === 'string') return { label: route, path: route };
+  return { label: route.label, path: await route.resolve() };
+}
 
 test.describe('Accessibility - dashboard (light + dark)', () => {
-  for (const path of DASHBOARD_PAGES) {
-    test(`${path} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
+  for (const route of DASHBOARD_PAGES) {
+    test(`${typeof route === 'string' ? route : route.label} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
+      const { label, path } = await resolveRoute(route);
       // Light theme (default).
       await ownerPage.emulateMedia({ reducedMotion: 'reduce' });
       await gotoWithDevServerRetry(ownerPage, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
       await waitForDocumentShell(ownerPage);
       await applyTheme(ownerPage, 'light');
       await settle(ownerPage);
-      expect(await seriousViolations(ownerPage), `${path} (light)`).toEqual([]);
+      expect(await seriousViolations(ownerPage), `${label} (light)`).toEqual([]);
 
       await applyTheme(ownerPage, 'dark');
       await settle(ownerPage);
-      expect(await seriousViolations(ownerPage), `${path} (dark)`).toEqual([]);
+      expect(await seriousViolations(ownerPage), `${label} (dark)`).toEqual([]);
     });
   }
 });
 
 test.describe('Accessibility - public & auth pages', () => {
-  for (const path of ['/', '/pricing', '/login', '/register', '/forgot-password']) {
+  for (const path of PUBLIC_AND_AUTH_PAGES) {
     test(`${path} is axe-clean (0 serious/critical)`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await gotoWithDevServerRetry(page, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
