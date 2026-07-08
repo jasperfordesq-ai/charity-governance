@@ -166,6 +166,7 @@ const fixedInThisAuditBranch = [
   'Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.',
   'Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.',
   'Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.',
+  'Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.',
   'Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.',
@@ -534,6 +535,7 @@ function readLaunchSummary() {
     headline: state.headline,
     remainingKeys: state.remainingKeys ?? [],
     remainingKeyGroups: state.remainingKeyGroups ?? [],
+    launchProgress: state.launchProgress,
     evidenceLedger: state.evidenceLedger,
   };
 }
@@ -677,6 +679,9 @@ function render() {
     }
     if (launch.launchProgress.finalSignoffs) {
       md += `- Final signoffs approved: ${launch.launchProgress.finalSignoffs.approved} / ${launch.launchProgress.finalSignoffs.total} (${launch.launchProgress.finalSignoffs.remaining} remaining)\n`;
+    }
+    if (launch.launchProgress.strictLaunchGates) {
+      md += `- Strict launch gates complete: ${launch.launchProgress.strictLaunchGates.completed} / ${launch.launchProgress.strictLaunchGates.total} (${launch.launchProgress.strictLaunchGates.remaining} remaining, ${launch.launchProgress.percentages.strictLaunchGates}% complete)\n`;
     }
     md += `- approvedForLaunch: ${launch.launchProgress.approvedForLaunch ? 'true' : 'false'}\n\n`;
   }

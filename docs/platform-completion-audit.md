@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `69a8b32`
+Working-tree base commit when generated: `119a807`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -137,6 +137,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.
 - Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.
 - Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.
+- Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.
 - Launch status and production readiness TODO now name all 85 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
 - Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.
@@ -369,6 +370,14 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Phase: `ENV_INCOMPLETE`
 - .env.production exists but 23 value(s) still need real data.
 - This generated section reflects the local non-committed `.env.production`; the listed placeholders are not committed and may differ on another operator workstation or secret-store checkout.
+
+### Launch Progress Summary
+
+- Production values complete: 1 / 24 (23 remaining)
+- Launch evidence checks complete: 9 / 85 (76 remaining)
+- Final signoffs approved: 0 / 5 (5 remaining)
+- Strict launch gates complete: 10 / 114 (104 remaining, 8.8% complete)
+- approvedForLaunch: false
 
 ### Local Production Environment Placeholders
 

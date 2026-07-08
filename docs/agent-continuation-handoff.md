@@ -29,6 +29,7 @@ Known current state from `npm run launch:status -- --json` on 2026-07-08:
 - Production values complete: `1 / 24`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
 - Machine-readable launch evidence completion: `9 / 85`.
+- Strict counted launch gates: `10 / 114` complete (`8.8%`), counting only production values, launch evidence checks, and final signoff roles.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
@@ -405,6 +406,9 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 Strict launch evidence metric:
 
 - `76 / 85` machine-readable launch checks remain.
+- Strict counted launch gates are `10 / 114` complete, so `104 / 114`
+  counted gates remain. This is an operator progress metric only, not a legal,
+  security, operations, or business readiness certification.
 - Strict launch evidence is still mostly incomplete because the remaining checks
   include the real production environment, deploy, rollback, provider,
   backup/restore, deployed QA, legal, pentest, and final signoff gates.

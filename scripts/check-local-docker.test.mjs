@@ -517,6 +517,8 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /approvedForLaunch/);
   assert.match(auditGenerator, /finalSignoff/);
   assert.match(auditGenerator, /Final approval roles approved/);
+  assert.match(auditGenerator, /Strict launch gates/);
+  assert.match(auditGenerator, /percentages\.strictLaunchGates/);
   assert.match(auditGenerator, /Next incomplete checks/);
   assert.match(auditGenerator, /browserQa accessibility, cross-browser, and iOS Safari evidence slots/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
@@ -525,6 +527,8 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditLedger, /Release binding:/);
+  assert.match(auditLedger, /Launch Progress Summary/);
+  assert.match(auditLedger, /Strict launch gates complete: 10 \/ 114 \(104 remaining, 8\.8% complete\)/);
   assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /group missing production values by provider\/source/);
   assert.match(auditLedger, /Local-state note/);

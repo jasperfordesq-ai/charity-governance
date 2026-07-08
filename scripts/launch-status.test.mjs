@@ -66,6 +66,13 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 24, remaining: 24 });
   assert.equal(payload.launchProgress.evidenceChecks, null);
   assert.equal(payload.launchProgress.finalSignoffs, null);
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 114, remaining: 114 });
+  assert.deepEqual(payload.launchProgress.percentages, {
+    productionValues: 0,
+    evidenceChecks: 0,
+    finalSignoffs: 0,
+    strictLaunchGates: 0,
+  });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assertExternalLaunchEvidenceGates(s);
 });
@@ -223,6 +230,13 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.deepEqual(payload.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
   assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 85, remaining: 85 });
   assert.deepEqual(payload.launchProgress.finalSignoffs, { approved: 0, total: 5, remaining: 5 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 22, total: 114, remaining: 92 });
+  assert.deepEqual(payload.launchProgress.percentages, {
+    productionValues: 91.7,
+    evidenceChecks: 0,
+    finalSignoffs: 0,
+    strictLaunchGates: 19.3,
+  });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
   assert.equal(payload.evidenceLedger.totalChecks, 85);

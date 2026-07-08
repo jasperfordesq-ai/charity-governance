@@ -82,6 +82,8 @@ const MISSING_VALUE_GROUPS = Object.freeze([
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
 const EXPECTED_PRODUCTION_VALUE_KEYS = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
 const TOTAL_EXPECTED_PRODUCTION_VALUES = EXPECTED_PRODUCTION_VALUE_KEYS.length;
+const TOTAL_LAUNCH_EVIDENCE_CHECKS = 85;
+const TOTAL_FINAL_SIGNOFF_ROLES = 5;
 
 function parseArgs(argv) {
   return {
@@ -129,25 +131,40 @@ function expectedProductionValueGroups() {
   return groupRemainingKeys(EXPECTED_PRODUCTION_VALUE_KEYS);
 }
 
+function completionPercent(completed, total) {
+  if (!Number.isFinite(completed) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.round((Math.max(0, completed) / total) * 1000) / 10;
+}
+
 function buildLaunchProgress({ remainingKeys, evidenceLedger }) {
   const remainingProductionValues = Math.max(0, remainingKeys.length);
   const completedProductionValues = Math.max(0, TOTAL_EXPECTED_PRODUCTION_VALUES - remainingProductionValues);
+  const completedEvidenceChecks =
+    typeof evidenceLedger.completedChecks === 'number' ? Math.max(0, evidenceLedger.completedChecks) : 0;
+  const totalEvidenceChecks =
+    typeof evidenceLedger.totalChecks === 'number' ? Math.max(0, evidenceLedger.totalChecks) : TOTAL_LAUNCH_EVIDENCE_CHECKS;
+  const approvedFinalSignoffs =
+    typeof evidenceLedger.approvedFinalSignoffRoles === 'number' ? Math.max(0, evidenceLedger.approvedFinalSignoffRoles) : 0;
+  const totalFinalSignoffRoles =
+    typeof evidenceLedger.totalFinalSignoffRoles === 'number' ? Math.max(0, evidenceLedger.totalFinalSignoffRoles) : TOTAL_FINAL_SIGNOFF_ROLES;
   const evidenceCompleted =
     typeof evidenceLedger.completedChecks === 'number' && typeof evidenceLedger.totalChecks === 'number'
       ? {
-          completed: evidenceLedger.completedChecks,
-          total: evidenceLedger.totalChecks,
-          remaining: Math.max(0, evidenceLedger.totalChecks - evidenceLedger.completedChecks),
+          completed: completedEvidenceChecks,
+          total: totalEvidenceChecks,
+          remaining: Math.max(0, totalEvidenceChecks - completedEvidenceChecks),
         }
       : null;
   const finalSignoffs =
     typeof evidenceLedger.approvedFinalSignoffRoles === 'number' && typeof evidenceLedger.totalFinalSignoffRoles === 'number'
       ? {
-          approved: evidenceLedger.approvedFinalSignoffRoles,
-          total: evidenceLedger.totalFinalSignoffRoles,
-          remaining: Math.max(0, evidenceLedger.totalFinalSignoffRoles - evidenceLedger.approvedFinalSignoffRoles),
+          approved: approvedFinalSignoffs,
+          total: totalFinalSignoffRoles,
+          remaining: Math.max(0, totalFinalSignoffRoles - approvedFinalSignoffs),
         }
       : null;
+  const strictLaunchGateCompleted = completedProductionValues + completedEvidenceChecks + approvedFinalSignoffs;
+  const strictLaunchGateTotal = TOTAL_EXPECTED_PRODUCTION_VALUES + totalEvidenceChecks + totalFinalSignoffRoles;
 
   return {
     productionValues: {
@@ -157,6 +174,17 @@ function buildLaunchProgress({ remainingKeys, evidenceLedger }) {
     },
     evidenceChecks: evidenceCompleted,
     finalSignoffs,
+    strictLaunchGates: {
+      completed: strictLaunchGateCompleted,
+      total: strictLaunchGateTotal,
+      remaining: Math.max(0, strictLaunchGateTotal - strictLaunchGateCompleted),
+    },
+    percentages: {
+      productionValues: completionPercent(completedProductionValues, TOTAL_EXPECTED_PRODUCTION_VALUES),
+      evidenceChecks: completionPercent(completedEvidenceChecks, totalEvidenceChecks),
+      finalSignoffs: completionPercent(approvedFinalSignoffs, totalFinalSignoffRoles),
+      strictLaunchGates: completionPercent(strictLaunchGateCompleted, strictLaunchGateTotal),
+    },
     approvedForLaunch: evidenceLedger.approvedForLaunch === true,
   };
 }
@@ -318,18 +346,21 @@ function renderLaunchStatusText(state) {
   if (state.launchProgress) {
     lines.push('Progress summary:');
     lines.push(
-      `  Production values: ${state.launchProgress.productionValues.completed} / ${state.launchProgress.productionValues.total} complete (${state.launchProgress.productionValues.remaining} remaining)`,
+      `  Production values: ${state.launchProgress.productionValues.completed} / ${state.launchProgress.productionValues.total} complete (${state.launchProgress.productionValues.remaining} remaining, ${state.launchProgress.percentages.productionValues}% complete)`,
     );
     if (state.launchProgress.evidenceChecks) {
       lines.push(
-        `  Launch evidence checks: ${state.launchProgress.evidenceChecks.completed} / ${state.launchProgress.evidenceChecks.total} complete (${state.launchProgress.evidenceChecks.remaining} remaining)`,
+        `  Launch evidence checks: ${state.launchProgress.evidenceChecks.completed} / ${state.launchProgress.evidenceChecks.total} complete (${state.launchProgress.evidenceChecks.remaining} remaining, ${state.launchProgress.percentages.evidenceChecks}% complete)`,
       );
     }
     if (state.launchProgress.finalSignoffs) {
       lines.push(
-        `  Final signoffs: ${state.launchProgress.finalSignoffs.approved} / ${state.launchProgress.finalSignoffs.total} approved (${state.launchProgress.finalSignoffs.remaining} remaining)`,
+        `  Final signoffs: ${state.launchProgress.finalSignoffs.approved} / ${state.launchProgress.finalSignoffs.total} approved (${state.launchProgress.finalSignoffs.remaining} remaining, ${state.launchProgress.percentages.finalSignoffs}% complete)`,
       );
     }
+    lines.push(
+      `  Strict launch gates: ${state.launchProgress.strictLaunchGates.completed} / ${state.launchProgress.strictLaunchGates.total} complete (${state.launchProgress.strictLaunchGates.remaining} remaining, ${state.launchProgress.percentages.strictLaunchGates}% complete)`,
+    );
     lines.push(`  approvedForLaunch: ${state.launchProgress.approvedForLaunch ? 'true' : 'false'}`, '');
   }
   lines.push('Next:');
