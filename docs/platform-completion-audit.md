@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `7455f56`
+Working-tree base commit when generated: `c763375`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -183,6 +183,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.
 - Dashboard summary and progress cards now use shared status panel styling instead of route-local neutral card markup.
 - Dashboard deadline and board-alert action list cards now use shared status panel styling instead of route-local neutral card markup.
+- The platform audit next sequence now shifts from broad route-local state cleanup to deployed-QA-driven fixes once static route findings are clear.
 - Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
 - Global recovery, not-found, dashboard mobile-menu, and compliance disclosure actions now use HeroUI Button primitives instead of bespoke route-local action markup.
 - Responsive browser-smoke QA now waits for the parsed document shell before applying light/dark theme checks after commit-stage navigations.
@@ -451,6 +452,6 @@ The matrix must stay source-cited and review-ready. The following official sourc
 
 1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
 2. Complete deployed browser QA across every route in desktop/mobile and light/dark mode, then attach production-only evidence.
-3. Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
+3. Use deployed QA findings to fix route-specific state or visual regressions with shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
 4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.
 5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.

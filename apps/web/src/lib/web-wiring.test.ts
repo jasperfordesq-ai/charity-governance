@@ -548,8 +548,10 @@ test('the per-standard compliance editor announces its save state (Saving / Save
   const src = [
     dash('compliance/[principleId]/page.tsx'),
     optionalDash('compliance/[principleId]/standard-editor-card.tsx'),
+    component('ui/states.tsx'),
   ].join('\n');
-  assert.match(src, /aria-live/);
+  assert.match(src, /SaveStatusIndicator/);
+  assert.match(src, /aria-live=\{status === 'error' \? 'assertive' : 'polite'\}/);
   assert.match(src, /Save failed/i);
   assert.match(src, /from '@\/components\/ui\/status'/);
   assert.match(src, /StatusDot/);
@@ -809,7 +811,9 @@ test('principle detail standard editor card is extracted from the oversized rout
   const cardPath = dashPath('compliance/[principleId]/standard-editor-card.tsx');
   assert.ok(existsSync(cardPath), 'standard editor card should be split out of page.tsx');
   const cardSrc = readFileSync(cardPath, 'utf8');
+  const statesSrc = component('ui/states.tsx');
   const standardEditorSurface = [pageSrc, listSrc].join('\n');
+  const cardSurface = [cardSrc, statesSrc].join('\n');
 
   assert.match(standardEditorSurface, /StandardEditorCard/);
   assert.doesNotMatch(pageSrc, /Action Taken/);
@@ -817,7 +821,8 @@ test('principle detail standard editor card is extracted from the oversized rout
   assert.doesNotMatch(pageSrc, /Save failed/);
   assert.match(cardSrc, /Action Taken/);
   assert.match(cardSrc, /Internal Notes/);
-  assert.match(cardSrc, /Save failed/);
+  assert.match(cardSurface, /Save failed/);
+  assert.match(cardSrc, /SaveStatusIndicator/);
   assert.match(cardSrc, /onRetrySave/);
   assert.match(cardSrc, /StatusChip/);
   assert.doesNotMatch(cardSrc, /<Chip\b/);
@@ -989,7 +994,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'downloadDocId',
         'linkingStandard',
         'unlinkingStandard',
-        'aria-live="polite"',
+        'SaveStatusIndicator',
         'review-ready',
       ],
       patterns: [
@@ -1018,7 +1023,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'deletingDeadlineId',
         'dueState',
         'priorityLabel',
-        'aria-live="polite"',
+        'SaveStatusIndicator',
         'review-ready',
       ],
       patterns: [
@@ -1043,7 +1048,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'TrusteeEvidencePromptCards',
         'BoardEvidenceChips',
         'table and mobile card views',
-        'aria-live="polite"',
+        'SaveStatusIndicator',
         'review-ready',
       ],
       patterns: [
@@ -1072,7 +1077,7 @@ test('phase 6B operational workflows use shared primitives and review-ready safe
         'Registered Charity Number',
         'review-ready',
         'not legal advice',
-        'aria-live="polite"',
+        'SaveStatusIndicator',
       ],
       patterns: [
         /isDisabled=\{[^}]*!isDirty/,
@@ -1210,10 +1215,10 @@ test('board member list panel is extracted from the oversized route file', () =>
   const panelSrc = readFileSync(panelPath, 'utf8');
 
   assert.match(pageSrc, /BoardMemberListPanel/);
-  assert.doesNotMatch(pageSrc, /Board register ready/);
+  assert.doesNotMatch(pageSrc, /Trustees/);
   assert.doesNotMatch(pageSrc, /table and mobile card views/);
   assert.doesNotMatch(pageSrc, /function formatDate|const formatDate/);
-  assert.match(panelSrc, /Board register ready/);
+  assert.match(panelSrc, /Trustees/);
   assert.match(panelSrc, /table and mobile card views/);
   assert.match(panelSrc, /BoardEvidenceChips/);
   assert.match(panelSrc, /formatDate/);
@@ -1682,7 +1687,7 @@ test('workflow status controls use lucide icons instead of inline svg', () => {
   const expectations: Array<[string, string, string[]]> = [
     ['component', 'cookie-consent.tsx', ['CircleAlert']],
     ['component', 'session-timeout.tsx', ['Clock']],
-    ['dashboard', 'compliance/[principleId]/standard-editor-card.tsx', ['Check', 'CircleAlert', 'LoaderCircle']],
+    ['component', 'ui/states.tsx', ['CheckCircle2', 'LoaderCircle', 'TriangleAlert']],
     ['dashboard', 'documents/document-list-panel.tsx', ['X']],
     ['dashboard', 'export/export-report-preview.tsx', ['Building2', 'CircleCheck', 'FileText', 'ListChecks', 'ShieldCheck', 'UsersRound']],
   ];
@@ -1699,7 +1704,7 @@ test('workflow status controls use lucide icons instead of inline svg', () => {
 
 test('marketing blog client uses lucide icons instead of inline svg', () => {
   const src = app('(marketing)/blog/BlogClient.tsx');
-  const icons = ['ArrowRight', 'BookOpen', 'FileText', 'Search', 'ShieldCheck'];
+  const icons = ['ArrowRight', 'BookOpen', 'Search', 'ShieldCheck'];
 
   assert.match(src, /from 'lucide-react'/, 'BlogClient should use lucide-react for marketing blog icons');
   for (const icon of icons) {
@@ -2053,10 +2058,10 @@ test('deadlines list panel is extracted from the oversized route file', () => {
   const panelSrc = readFileSync(panelPath, 'utf8');
 
   assert.match(pageSrc, /DeadlineListPanel/);
-  assert.doesNotMatch(pageSrc, /Deadline list ready/);
+  assert.doesNotMatch(pageSrc, /Deadline list/);
   assert.doesNotMatch(pageSrc, /No deadlines yet/);
   assert.doesNotMatch(pageSrc, /classifyDeadline/);
-  assert.match(panelSrc, /Deadline list ready/);
+  assert.match(panelSrc, /Deadline list/);
   assert.match(panelSrc, /No deadlines yet/);
   assert.match(panelSrc, /classifyDeadline/);
   assert.match(panelSrc, /DeadlineBadge/);
@@ -2149,11 +2154,11 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
     'hasLoadedSelectedYear',
     'canSaveAnnual',
     'canSaveFinancial',
-    'registerSavingLabel',
+    'registerSaveStatus',
     'Annual Report source check',
     'Financial controls source check',
     'review-ready',
-    'aria-live="polite"',
+    'SaveStatusIndicator',
     'governance-registers/annual-report',
     'governance-registers/financial-controls',
   ]) {
@@ -2336,7 +2341,9 @@ test('platform audit summary follows the remaining route findings instead of sta
 
   assert.doesNotMatch(audit, /visual treatment on decorative or pill-heavy pages/i);
   assert.doesNotMatch(audit, /visual treatment on flagged P0 routes/i);
+  assert.doesNotMatch(audit, /Convert remaining route-local state UI/i);
   assert.match(audit, /deployed browser QA for every route/i);
+  assert.match(audit, /Use deployed QA findings to fix route-specific state or visual regressions/i);
 });
 
 test('platform audit scans route-local extracted components for static dark-mode evidence', () => {
@@ -2621,7 +2628,8 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
     'canInviteAdmin',
     'canInviteMembers',
     'canEditMemberRole',
-    'aria-live="polite"',
+    'SaveStatusIndicator',
+    'InlineStatus',
     'Invite sent',
     'Invite revoked',
     'role guidance',
@@ -2734,7 +2742,7 @@ test('phase 6C billing preserves Stripe redirect validation while clarifying pla
     'Complete-only register gates',
     'Current plan',
     'isDisabled={isCurrent',
-    'aria-live="polite"',
+    'InlineStatus',
   ]) {
     assert.match(src, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `billing must include ${term}`);
   }
