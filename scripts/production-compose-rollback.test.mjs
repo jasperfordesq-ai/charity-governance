@@ -303,3 +303,45 @@ test('production rollback requires an explicit rollback digest manifest', async 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /--rollback-digest-file is required/);
 });
+
+test('production rollback can opt out of the TLS overlay when deploy uses managed load-balancer TLS', async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-rollback-no-tls-proxy-'));
+  const envPath = join(tempDir, 'production.env');
+  const manifestPath = join(tempDir, 'release-image-digests.previous.env');
+  const deployCalls = [];
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(manifestPath, rollbackManifest());
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      [
+        '--production-env-file',
+        envPath,
+        '--rollback-digest-file',
+        manifestPath,
+        '--no-tls-proxy',
+      ],
+      {
+        processEnv: cleanEnv(),
+        runDeploy: (args, env) => {
+          deployCalls.push({ args, env });
+          return { status: 0, stdout: 'deploy ok\n', stderr: '' };
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(deployCalls.length, 1);
+    assert.deepEqual(deployCalls[0].args, [
+      '--production-env-file',
+      deployCalls[0].args[1],
+      '--no-tls-proxy',
+    ]);
+    assert.match(result.stdout, /Production compose rollback/);
+    assert.match(result.stdout, /deploy ok/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

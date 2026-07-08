@@ -1597,8 +1597,12 @@ test('reliability report emits ASCII-safe operator output', () => {
 test('production todo reflects current launch blockers without overclaiming local browser smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
 
-  assert.match(productionTodo, /Current local status checked 2026-07-06/);
-  assert.match(productionTodo, /23 production values still require real data/);
+  assert.match(productionTodo, /Current local status checked 2026-07-08/);
+  assert.match(productionTodo, /1 of 24 production values is complete/);
+  assert.match(productionTodo, /1 of 24 production values is complete[\s\S]*23[\s\S]*production values still require real data/);
+  assert.match(productionTodo, /launch evidence ledger remains 0 of 85 checks/);
+  assert.match(productionTodo, /final signoffs remain 0 of 5 approved/);
+  assert.match(productionTodo, /approvedForLaunch` is\s+>\s+false/s);
   assert.match(productionTodo, /local responsive browser QA completed as four focused route chunks/);
   assert.match(productionTodo, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(productionTodo, /local accessibility QA passed 16\/16/);
@@ -2263,8 +2267,12 @@ test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
-  assert.match(launchGuide, /Last updated: 2026-07-06/);
+  assert.match(launchGuide, /Last updated: 2026-07-08/);
   assert.match(launchGuide, /23 production values needing real data/);
+  assert.match(launchGuide, /production values are `1 \/ 24` complete/);
+  assert.match(launchGuide, /machine-readable launch evidence is `0 \/ 85` complete/);
+  assert.match(launchGuide, /final signoffs are\s+`0 \/ 5`/);
+  assert.match(launchGuide, /`approvedForLaunch` is `false`/);
   assert.match(launchGuide, /Local responsive browser QA completed as four focused route chunks/);
   assert.match(launchGuide, /47 first-pass checks and 3 retry-pass flaky checks/);
   assert.match(launchGuide, /local accessibility QA passed 16\/16/);
@@ -2408,6 +2416,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /runProductionDeployPreflightFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /runProductionComposeDeployFromArgs/);
+  assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /--no-tls-proxy/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /REQUIRED_LAUNCH_AREAS/);
   assert.match(readRepoFile('scripts/init-production-launch-evidence.mjs'), /\.charitypilot-launch-evidence/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /hosting-check/);
@@ -2439,6 +2448,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
+  assert.match(runbook, /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/);
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/);

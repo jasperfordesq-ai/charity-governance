@@ -32,7 +32,7 @@ const requiredWebBuildOrigins = [
 
 function usage() {
   return [
-    'Usage: node scripts/production-compose-rollback.mjs --production-env-file <path> --rollback-digest-file <path> [--dry-run] [--wait-timeout <seconds>]',
+    'Usage: node scripts/production-compose-rollback.mjs --production-env-file <path> --rollback-digest-file <path> [--dry-run] [--wait-timeout <seconds>] [--no-tls-proxy]',
     '',
   ].join('\n');
 }
@@ -48,6 +48,7 @@ function parsePositiveInteger(value, flagName) {
 function parseArgs(argv) {
   const options = {
     dryRun: false,
+    tlsProxy: true,
     productionEnvFile: '.env.production',
     rollbackDigestFile: null,
     waitTimeoutSeconds: null,
@@ -57,6 +58,10 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--dry-run') {
       options.dryRun = true;
+      continue;
+    }
+    if (arg === '--no-tls-proxy') {
+      options.tlsProxy = false;
       continue;
     }
     if (arg === '--production-env-file') {
@@ -222,6 +227,7 @@ export function runProductionComposeRollbackFromArgs(
     mergedEnvPath,
     ...(options.waitTimeoutSeconds ? ['--wait-timeout', String(options.waitTimeoutSeconds)] : []),
     ...(options.dryRun ? ['--dry-run'] : []),
+    ...(options.tlsProxy ? [] : ['--no-tls-proxy']),
   ];
 
   try {
