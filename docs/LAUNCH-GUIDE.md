@@ -175,8 +175,10 @@ You need four external services. Create the **production/live** versions
   npm run setup:production-env
   ```
   It prints exactly which values you still need and where each comes from.
-- **Then** open `.env.production` and replace each remaining `REPLACE_ME` with the
-  real value from Steps 1-4. **Never commit this file** (it's already gitignored).
+- **Then** open `.env.production` and resolve every value reported by
+  `npm run launch:status`: replace remaining `REPLACE_ME` placeholders, fill
+  the real provider values from Steps 1-4, and correct any drifted TLS/cookie
+  settings. **Never commit this file** (it's already gitignored).
 - **Then verify it** (these commands check your config without launching):
   ```bash
   npm run check:production -- --production-env-file=.env.production

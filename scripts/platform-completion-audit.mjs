@@ -569,7 +569,7 @@ function localLaunchStateNote(launch) {
   }
 
   if (launch.phase === 'ENV_INCOMPLETE') {
-    return 'This generated section reflects the local non-committed `.env.production`; the listed placeholders are not committed and may differ on another operator workstation or secret-store checkout.';
+    return 'This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.';
   }
 
   return 'This generated section reflects the local non-committed `.env.production`; launch still depends on external evidence and final signoffs, even when local placeholders are filled.';

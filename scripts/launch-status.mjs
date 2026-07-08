@@ -398,8 +398,8 @@ export function assessLaunchState(state) {
       launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
-        'Open .env.production and replace each REPLACE_ME value listed below.',
-        'docs/LAUNCH-GUIDE.md says where each value comes from (Stripe, Supabase, domain, hosting).',
+        'Open .env.production and resolve each listed value: replace placeholders, fill real provider values, or correct drifted TLS/cookie settings.',
+        'docs/LAUNCH-GUIDE.md says where each value comes from (Stripe, Supabase, domain, hosting, TLS, and cookies).',
         'Then run:  npm run check:production -- --production-env-file=.env.production',
       ],
     };

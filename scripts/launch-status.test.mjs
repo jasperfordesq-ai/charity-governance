@@ -206,6 +206,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
+  assert.ok(s.nextActions.some((a) => /replace placeholders, fill real provider values, or correct drifted TLS\/cookie settings/.test(a)));
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assertExternalLaunchEvidenceGates(s);
 });
@@ -251,6 +252,7 @@ test('reports TLS and shared-cookie production drift before deploy preflight', (
   ]);
   assert.match(s.remainingKeyGroups[0].items[0].hint, /Shared cookie domain/);
   assert.match(s.remainingKeyGroups[0].items[1].hint, /app\.charitypilot\.ie/);
+  assert.ok(s.nextActions.some((a) => /correct drifted TLS\/cookie settings/.test(a)));
 });
 
 test('reports launch evidence completion counts when the evidence ledger exists', () => {

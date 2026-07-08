@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `ac5a87b`
+Working-tree base commit when generated: `5c2aeb9`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -358,7 +358,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
 - Solicitor/governance/privacy review and external penetration test are required before real charity data.
 
-Local-state note: This generated section reflects the local non-committed `.env.production`; the listed placeholders are not committed and may differ on another operator workstation or secret-store checkout.
+Local-state note: This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Evidence Ledger
 
@@ -442,7 +442,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 - Phase: `ENV_INCOMPLETE`
 - .env.production exists but 19 value(s) still need real data.
-- This generated section reflects the local non-committed `.env.production`; the listed placeholders are not committed and may differ on another operator workstation or secret-store checkout.
+- This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Progress Summary
 
@@ -503,7 +503,6 @@ Grouped by source:
   - `CHARITYPILOT_API_IMAGE`: Digest-pinned API image ref from release-image-digests.env (Step 6)
   - `CHARITYPILOT_WEB_IMAGE`: Digest-pinned web image ref from release-image-digests.env (Step 6)
   - `CHARITYPILOT_MIGRATION_IMAGE`: Digest-pinned migration image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`: Web image build API origin copied from release-image-digests.env (Step 6)
   - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`: Web image build Supabase origin copied from release-image-digests.env (Step 6)
 
 ## Irish Compliance Source Posture
