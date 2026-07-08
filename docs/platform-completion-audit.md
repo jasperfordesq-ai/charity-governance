@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `4bac158`
+Working-tree base commit when generated: `1e927d3`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -432,7 +432,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
   - `gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie`
   - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"`
 - Workflow: `gh workflow run release-images.yml --ref master`
-- Watch: `gh run watch <release-run-id> --exit-status`
+- Watch: `gh run watch RELEASE_RUN_ID --exit-status`
 - Digest artifact: `release-image-digests.env`
 - Evidence target: Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.
 

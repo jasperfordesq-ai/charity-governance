@@ -199,7 +199,7 @@ You need four external services. Create the **production/live** versions
   gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie
   gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"
   gh workflow run release-images.yml --ref master
-  gh run watch <release-run-id> --exit-status
+  gh run watch RELEASE_RUN_ID --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
   npm run deploy:production -- --production-env-file=.env.production
   ```

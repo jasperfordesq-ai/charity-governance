@@ -2626,7 +2626,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /SECRET_STORE_E2E_OWNER_PASSWORD/);
   assert.doesNotMatch(runbook, /<secret-store-reference>/);
   assert.match(runbook, /gh workflow run release-images\.yml --ref master/);
-  assert.match(runbook, /gh run watch <release-run-id> --exit-status/);
+  assert.match(runbook, /gh run watch RELEASE_RUN_ID --exit-status/);
   assert.match(runbook, /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/);
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);

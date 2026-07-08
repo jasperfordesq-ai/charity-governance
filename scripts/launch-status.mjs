@@ -88,7 +88,7 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
     'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"',
   ]),
   workflowCommand: 'gh workflow run release-images.yml --ref master',
-  watchCommand: 'gh run watch <release-run-id> --exit-status',
+  watchCommand: 'gh run watch RELEASE_RUN_ID --exit-status',
   evidenceArtifact: 'release-image-digests.env',
   evidenceTarget:
     'Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.',

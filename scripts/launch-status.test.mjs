@@ -111,7 +111,7 @@ function assertReleaseImagePromotion(promotion) {
     'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"',
   ]);
   assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');
-  assert.equal(promotion.watchCommand, 'gh run watch <release-run-id> --exit-status');
+  assert.equal(promotion.watchCommand, 'gh run watch RELEASE_RUN_ID --exit-status');
   assert.equal(promotion.evidenceArtifact, 'release-image-digests.env');
   assert.match(promotion.evidenceTarget, /CHARITYPILOT_\*_IMAGE/);
   assert.match(promotion.evidenceTarget, /CHARITYPILOT_WEB_BUILD_\*/);
