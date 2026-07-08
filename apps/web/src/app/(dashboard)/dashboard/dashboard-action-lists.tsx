@@ -1,9 +1,10 @@
 'use client';
 
-import { Card, Chip } from '@heroui/react';
+import { Card } from '@heroui/react';
 import Link from 'next/link';
 import type { BoardAlert, DeadlineResponse } from '@charitypilot/shared';
 import { EmptyState, LoadingState, ReviewWarningState } from '@/components/ui/states';
+import { StatusChip, type StatusTone } from '@/components/ui/status';
 
 const stateActionClass = 'text-xs font-semibold text-teal-primary hover:underline dark:text-teal-bright';
 
@@ -38,9 +39,9 @@ export function DashboardActionLists({
                 const now = new Date();
                 const daysUntil = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-                let chipColor: 'danger' | 'warning' | 'success' = 'success';
-                if (daysUntil < 0) chipColor = 'danger';
-                else if (daysUntil <= 30) chipColor = 'warning';
+                let chipTone: StatusTone = 'success';
+                if (daysUntil < 0) chipTone = 'danger';
+                else if (daysUntil <= 30) chipTone = 'warning';
 
                 return (
                   <div key={d.id} className="flex items-center justify-between px-5 py-3.5">
@@ -54,13 +55,13 @@ export function DashboardActionLists({
                         })}
                       </p>
                     </div>
-                    <Chip size="sm" color={chipColor} variant="flat">
+                    <StatusChip tone={chipTone}>
                       {daysUntil < 0
                         ? `${Math.abs(daysUntil)}d overdue`
                         : daysUntil === 0
                           ? 'Due today'
                           : `${daysUntil}d left`}
-                    </Chip>
+                    </StatusChip>
                   </div>
                 );
               })}
@@ -94,9 +95,9 @@ export function DashboardActionLists({
           <Card className="divide-y divide-gray-100 border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
             {boardAlerts.slice(0, 8).map((alert, idx) => {
               const chipProps = {
-                conduct_unsigned: { color: 'warning' as const, label: 'Conduct' },
-                induction_pending: { color: 'warning' as const, label: 'Induction' },
-                term_expiring: { color: 'danger' as const, label: 'Term Limit' },
+                conduct_unsigned: { tone: 'warning' as const, label: 'Conduct' },
+                induction_pending: { tone: 'warning' as const, label: 'Induction' },
+                term_expiring: { tone: 'danger' as const, label: 'Term Limit' },
               };
               const meta = chipProps[alert.type];
 
@@ -106,9 +107,9 @@ export function DashboardActionLists({
                     <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{alert.memberName}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{alert.message}</p>
                   </div>
-                  <Chip size="sm" color={meta.color} variant="flat">
+                  <StatusChip tone={meta.tone}>
                     {meta.label}
-                  </Chip>
+                  </StatusChip>
                 </div>
               );
             })}

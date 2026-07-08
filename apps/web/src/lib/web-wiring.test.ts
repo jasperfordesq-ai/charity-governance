@@ -424,9 +424,14 @@ test('dashboard loading and empty states use shared primitives instead of route-
   assert.doesNotMatch(dashboardSurface, /rounded-full bg-gray-400/);
 
   assert.match(actionListsSrc, /from '@\/components\/ui\/states'/);
+  assert.match(actionListsSrc, /from '@\/components\/ui\/status'/);
   assert.match(actionListsSrc, /LoadingState/);
   assert.match(actionListsSrc, /EmptyState/);
   assert.match(actionListsSrc, /ReviewWarningState/);
+  assert.match(actionListsSrc, /StatusChip/);
+  assert.doesNotMatch(actionListsSrc, /<Chip\b/);
+  assert.doesNotMatch(actionListsSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
+  assert.doesNotMatch(actionListsSrc, /color=\{chip/);
   assert.doesNotMatch(actionListsSrc, /function SkeletonList/);
   assert.doesNotMatch(actionListsSrc, /animate-pulse/);
   assert.doesNotMatch(actionListsSrc, /Everything looks good!/);
