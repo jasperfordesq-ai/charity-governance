@@ -486,9 +486,11 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.match(auditLedger, /6\/6 selected release gates/);
-  assert.match(auditLedger, /Local responsive browser QA completed with the `npm run test:e2e:responsive:\*` focused chunk commands/);
-  assert.match(auditLedger, /public desktop 13 passed/);
-  assert.match(auditLedger, /dashboard desktop 10 passed with 2 retry-pass flaky checks/);
+  assert.match(auditLedger, /Local responsive browser QA completed cleanly on 2026-07-08/);
+  assert.match(auditLedger, /public desktop 13\/13/);
+  assert.match(auditLedger, /dashboard desktop 12\/12/);
+  assert.match(auditLedger, /dashboard mobile 12\/12/);
+  assert.match(auditLedger, /16\/16 axe checks/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
 

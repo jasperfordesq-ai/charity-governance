@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `4ad404b`
+Working-tree base commit when generated: `95c9d93`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -186,7 +186,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-08 launch counters: 1/24 production values, 0/85 evidence checks, 0/5 final signoffs, and a 65-70% overall remaining estimate.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
-- The production readiness TODO and launch guide now record the 2026-07-06 local responsive and accessibility QA evidence while keeping deployed QA open.
+- The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.
+- The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.
 - The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.
 - The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.
 - The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.
@@ -239,8 +240,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run release:ready -- --no-e2e` passed locally with 6/6 selected release gates and only the full Playwright suite skipped.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
-- `npm run test:e2e -- tests/accessibility.spec.ts` passed locally with 16/16 axe checks, including dashboard light/dark coverage.
-- Local responsive browser QA completed with the `npm run test:e2e:responsive:*` focused chunk commands after reinstalling the corrupted Playwright Chromium cache: public desktop 13 passed, public mobile 12 passed with 1 retry-pass flaky check, dashboard desktop 10 passed with 2 retry-pass flaky checks, and dashboard mobile 12 passed.
+- `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
+- Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
@@ -260,7 +261,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after production launch evidence status JSON hardening.
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after aligning status completion with area statuses.
 - `node --check scripts\launch-status.mjs scripts\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.
-- `npm run test:e2e -- tests/accessibility.spec.ts` passed locally after restarting the local web container with a larger Next dev heap: 16 accessibility titles covered, with 2 timeout retry-passes and no serious/critical axe violations.
+- `npm run test:local-docker:smoke` passed locally on 2026-07-08 after stabilizing the local Docker QA stack, covering API health/readiness, registration, local admin document storage, and the web root over loopback.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
