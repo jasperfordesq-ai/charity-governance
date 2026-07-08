@@ -1654,7 +1654,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /313\/313 production-tooling checks/);
+  assert.match(productionTodo, /315\/315 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /313\/313 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /312\/312 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /311\/311 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /304\/304 production-tooling checks/);
@@ -1683,9 +1684,15 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /releaseGate\.check-production/);
   assert.match(handoff, /releaseGate\.deploy-preflight/);
   assert.match(handoff, new RegExp(`commit \`${escapeRegExp(selectedGateCommit)}\``));
+  assert.match(handoff, /isolated restore target/);
+  assert.match(handoff, /non-production restore target/);
+  assert.match(handoff, /production project was not overwritten/);
+  assert.match(handoff, /315\/315 production-tooling checks/);
   assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 85`/);
   assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 85`/);
   assert.doesNotMatch(handoff, /85 \/ 85` machine-readable launch checks remain/);
+  assert.doesNotMatch(handoff, /313\/313 production-tooling checks/);
+  assert.doesNotMatch(handoff, /restore-test ownership/);
 });
 
 test('production secret env files are ignored by git without hiding the template', () => {
@@ -2350,7 +2357,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 313\/313/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 315\/315/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 313\/313/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 312\/312/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 311\/311/);
   assert.doesNotMatch(launchGuide, /304\/304 production-tooling checks|passed 304\/304/);

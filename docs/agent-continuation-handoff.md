@@ -232,7 +232,7 @@ The launch evidence model has been tightened substantially:
   - cross-browser coverage;
   - real iOS Safari or cloud-device proof;
   - full route inventory across desktop/mobile and light/dark.
-- Supabase evidence requires private bucket, signed URL behavior, backup/PITR evidence, and restore-test ownership.
+- Supabase evidence requires private bucket, signed URL behavior, backup/PITR evidence, restore-test owner/date/recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
 - Billing/email evidence requires Stripe webhook event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Evidence chronology now allows the package to be prepared before evidence is collected, while requiring every checklist evidence entry to be captured no later than `finalSignoff.approvedAt`.
 - Deploy-smoke evidence hints now match the strict validator:
@@ -258,14 +258,14 @@ Recently successful checks in this workstream:
   - Security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed.
   - Playwright E2E intentionally skipped.
 - `npm run test:production-check`
-  - Passed on 2026-07-08 with 313/313 production-tooling checks passing.
+  - Passed on 2026-07-08 with 315/315 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
-  - Passed again with 313/313 production-tooling checks after the shared-state cleanup.
+  - Passed again with 315/315 production-tooling checks after launch-evidence and continuation-doc hardening.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests
