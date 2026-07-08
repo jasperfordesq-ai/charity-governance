@@ -175,6 +175,31 @@ test('deploy preflight dry-run validates production environment values', () => {
   }
 });
 
+test('deploy preflight reports TLS proxy drift even when production env validation fails', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-env-and-tls-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeDeployEnv({
+    DATABASE_URL: 'REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+    CHARITYPILOT_WEB_DOMAIN: 'charitypilot.ie',
+    CHARITYPILOT_API_DOMAIN: 'services.charitypilot.ie',
+  }));
+
+  try {
+    const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /production environment validation failed/);
+    assert.match(result.stderr, /DATABASE_URL is missing or still contains a placeholder value/);
+    assert.match(result.stderr, /TLS proxy validation also failed \(2 issues\):/);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_DOMAIN must match the canonical production web hostname app\.charitypilot\.ie/);
+    assert.match(result.stderr, /CHARITYPILOT_API_DOMAIN must match the canonical production API hostname api\.charitypilot\.ie/);
+    assert.doesNotMatch(result.stdout, /cosign verify/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('deploy preflight dry-run emits production validation and signature verification commands', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-valid-'));
   const envPath = join(tempDir, 'production.env');

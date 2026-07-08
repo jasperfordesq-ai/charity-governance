@@ -249,15 +249,24 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
   }
 
   const deploymentEnv = { ...processEnv, ...fileEnv };
+  const tlsIssues = options.tlsProxy ? tlsProxyIssues(deploymentEnv) : [];
   const productionEnvResult = runProductionPreflight({
     envFile: envPath,
     processEnv: deploymentEnv,
   });
   if (productionEnvResult.status !== 0) {
+    const tlsFailureSection =
+      tlsIssues.length > 0
+        ? [
+            `TLS proxy validation also failed (${tlsIssues.length} issue${tlsIssues.length === 1 ? '' : 's'}):`,
+            ...tlsIssues.map((issue) => `- ${issue}`),
+            '',
+          ].join('\n')
+        : '';
     return result(
       1,
       '',
-      `Production deploy preflight failed: production environment validation failed.\n${productionEnvResult.stderr}`,
+      `Production deploy preflight failed: production environment validation failed.\n${productionEnvResult.stderr}${tlsFailureSection}`,
     );
   }
 
@@ -270,9 +279,7 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
     const issue = webBuildOriginIssue(buildOrigin, deploymentEnv);
     if (issue) issues.push(issue);
   }
-  if (options.tlsProxy) {
-    issues.push(...tlsProxyIssues(deploymentEnv));
-  }
+  issues.push(...tlsIssues);
 
   if (issues.length > 0) {
     return result(
