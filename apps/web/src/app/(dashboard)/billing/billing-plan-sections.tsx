@@ -100,7 +100,7 @@ export function BillingPlanSections({
                   <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{plan.summary}</p>
                 </div>
 
-                <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+                <div className="mt-5 border-y border-gray-200 py-4 dark:border-gray-800">
                   <div className="flex items-baseline gap-1">
                     <span className="text-3xl font-extrabold text-gray-950 dark:text-gray-50">&euro;{plan.monthlyPrice}</span>
                     <span className="text-sm text-gray-600 dark:text-gray-300">/month</span>

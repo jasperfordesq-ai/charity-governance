@@ -2404,6 +2404,13 @@ test('billing page uses shared visible status for Stripe actions', () => {
   assert.doesNotMatch(billingPage, /Billing ready/);
 });
 
+test('billing plan pricing avoids nested card panel styling', () => {
+  const billingPlans = readRepoFile('apps/web/src/app/(dashboard)/billing/billing-plan-sections.tsx');
+
+  assert.doesNotMatch(billingPlans, /rounded-lg border border-gray-200 bg-gray-50/);
+  assert.match(billingPlans, /border-y border-gray-200 py-4/);
+});
+
 test('team permission-denied states use the shared permission hint primitive', () => {
   const statePrimitives = readRepoFile('apps/web/src/components/ui/states.tsx');
   const membersPanel = readRepoFile('apps/web/src/app/(dashboard)/team/team-members-panel.tsx');

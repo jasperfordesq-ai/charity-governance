@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `a0ade56`
+Working-tree base commit when generated: `5142127`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -156,6 +156,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The team role guidance panel is split out of the team route behind a wiring regression test and now uses shared status panel styling.
 - Team feedback now uses the shared inline status primitive instead of route-local alert styling.
 - Team role-change and invite-revoke permission-denied messages now use a shared permission hint primitive instead of route-local grey boxes or text.
+- Billing plan price blocks now use flat border bands instead of nested grey card panels behind a production tooling regression test.
 - Dashboard shell loading and dashboard/compliance status dots now use shared UI primitives with dark-mode-aware semantic tones.
 - Board and compliance binary filters now use HeroUI Switch controls instead of route-local switch markup.
 - Deadline completion now uses a HeroUI Checkbox instead of a route-local button with checkbox ARIA.
@@ -180,7 +181,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Document uploads now use a shared HeroUI-backed file upload field instead of route-local file input styling.
 - Marketing blog search and trial CTA now use HeroUI Input and Button primitives instead of route-local form/link styling.
 - Billing plan-gate explanation tiles now use a shared status tile primitive instead of route-local tile markup.
-- Billing plan feature lists and FAQ disclosure controls now use lucide-react Check and ChevronDown icons instead of decorative dot/text affordances.
+- Billing plan price bands, feature lists, and FAQ disclosure controls avoid nested card treatment and use lucide-react Check and ChevronDown icons instead of decorative dot/text affordances.
 - Dashboard primary actions now share dark-mode-aware action button styling instead of repeating route-local teal button classes.
 - Public marketing and auth primary CTAs now share the same dark-mode-aware action styling as dashboard workflows.
 - Remaining public action controls now share the dark-mode-aware action button helper while banner and selected-filter styling stay scoped.
@@ -250,7 +251,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
 - Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action-status, and team permission-hint cleanup; production-tooling checks passed 296/296.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, and team permission-hint cleanup; production-tooling checks passed 297/297.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.
