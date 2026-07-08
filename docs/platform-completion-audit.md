@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `58bf80e`
+Working-tree base commit when generated: `46b5944`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
