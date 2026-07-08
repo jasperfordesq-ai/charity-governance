@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Button, Card, Chip, Progress } from '@heroui/react';
+import { Button, Card, Progress } from '@heroui/react';
 import { ChevronDown } from 'lucide-react';
 import { AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState } from '@/components/ui/states';
+import { StatusChip } from '@/components/ui/status';
 import type { ComplianceSummary, GovernancePrincipleResponse } from '@charitypilot/shared';
 
 function scoreColour(pct: number): 'success' | 'warning' | 'danger' {
@@ -146,9 +147,9 @@ export function CompliancePrincipleList({
                                 key={s.id}
                                 className="flex items-start gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800"
                               >
-                                <Chip size="sm" variant="flat" className="flex-shrink-0 mt-0.5 font-mono">
+                                <StatusChip tone="neutral" className="mt-0.5 flex-shrink-0 font-mono">
                                   {s.code}
-                                </Chip>
+                                </StatusChip>
                                 <p className="text-sm text-gray-700 dark:text-gray-300 flex-1">{s.title}</p>
                               </div>
                             ))}
@@ -166,9 +167,9 @@ export function CompliancePrincipleList({
                                   key={s.id}
                                   className="flex items-start gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800"
                                 >
-                                  <Chip size="sm" variant="flat" color="secondary" className="flex-shrink-0 mt-0.5 font-mono">
+                                  <StatusChip tone="brand" className="mt-0.5 flex-shrink-0 font-mono">
                                     {s.code}
-                                  </Chip>
+                                  </StatusChip>
                                   <p className="text-sm text-gray-700 dark:text-gray-300 flex-1">{s.title}</p>
                                 </div>
                               ))}

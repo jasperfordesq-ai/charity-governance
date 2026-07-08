@@ -611,6 +611,10 @@ test('compliance overview principle list is extracted from the oversized route f
   assert.match(listSrc, /Edit Compliance Records/);
   assert.match(listSrc, /primaryActionButtonClassName/);
   assert.match(listSrc, /ChevronDown/);
+  assert.match(listSrc, /from '@\/components\/ui\/status'/);
+  assert.match(listSrc, /StatusChip/);
+  assert.doesNotMatch(listSrc, /<Chip\b/);
+  assert.doesNotMatch(listSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
 });
 
 test('compliance overview workflow state is extracted from the oversized route file', () => {
@@ -774,6 +778,9 @@ test('principle detail standard editor card is extracted from the oversized rout
   assert.match(cardSrc, /Internal Notes/);
   assert.match(cardSrc, /Save failed/);
   assert.match(cardSrc, /onRetrySave/);
+  assert.match(cardSrc, /StatusChip/);
+  assert.doesNotMatch(cardSrc, /<Chip\b/);
+  assert.doesNotMatch(cardSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
 });
 
 test('principle detail standard list is extracted from the oversized route file', () => {

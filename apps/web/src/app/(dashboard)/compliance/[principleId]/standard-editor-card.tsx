@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Card, Chip, Select, SelectItem, Textarea } from '@heroui/react';
+import { Button, Card, Select, SelectItem, Textarea } from '@heroui/react';
 import {
   ComplianceStatus,
   type GovernancePrincipleResponse,
@@ -90,14 +90,14 @@ export function StandardEditorCard({
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{standard.title}</p>
               <div className="flex items-center gap-2 mt-1">
                 {standard.isAdditional && (
-                  <Chip size="sm" variant="flat" color="secondary" className="text-xs">
+                  <StatusChip tone="brand">
                     Additional
-                  </Chip>
+                  </StatusChip>
                 )}
                 {standard.isCore && (
-                  <Chip size="sm" variant="flat" color="primary" className="text-xs">
+                  <StatusChip tone="info">
                     Core
-                  </Chip>
+                  </StatusChip>
                 )}
               </div>
             </div>
