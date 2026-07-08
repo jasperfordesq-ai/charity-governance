@@ -636,6 +636,18 @@ function render() {
   md += `- ${launch.headline}\n`;
   md += `- ${localLaunchStateNote(launch)}\n\n`;
 
+  if (launch.launchProgress) {
+    md += `### Launch Progress Summary\n\n`;
+    md += `- Production values complete: ${launch.launchProgress.productionValues.completed} / ${launch.launchProgress.productionValues.total} (${launch.launchProgress.productionValues.remaining} remaining)\n`;
+    if (launch.launchProgress.evidenceChecks) {
+      md += `- Launch evidence checks complete: ${launch.launchProgress.evidenceChecks.completed} / ${launch.launchProgress.evidenceChecks.total} (${launch.launchProgress.evidenceChecks.remaining} remaining)\n`;
+    }
+    if (launch.launchProgress.finalSignoffs) {
+      md += `- Final signoffs approved: ${launch.launchProgress.finalSignoffs.approved} / ${launch.launchProgress.finalSignoffs.total} (${launch.launchProgress.finalSignoffs.remaining} remaining)\n`;
+    }
+    md += `- approvedForLaunch: ${launch.launchProgress.approvedForLaunch ? 'true' : 'false'}\n\n`;
+  }
+
   if (launch.remainingKeys.length > 0) {
     md += `### Local Production Environment Placeholders\n\n`;
     md += `The local non-committed production env still needs ${launch.remainingKeys.length} real value(s):\n\n`;

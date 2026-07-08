@@ -80,6 +80,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
 ]);
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
 const EXPECTED_PRODUCTION_VALUE_KEYS = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
+const TOTAL_EXPECTED_PRODUCTION_VALUES = EXPECTED_PRODUCTION_VALUE_KEYS.length;
 
 function parseArgs(argv) {
   return {
@@ -125,6 +126,38 @@ export function groupRemainingKeys(keys) {
 
 function expectedProductionValueGroups() {
   return groupRemainingKeys(EXPECTED_PRODUCTION_VALUE_KEYS);
+}
+
+function buildLaunchProgress({ remainingKeys, evidenceLedger }) {
+  const remainingProductionValues = Math.max(0, remainingKeys.length);
+  const completedProductionValues = Math.max(0, TOTAL_EXPECTED_PRODUCTION_VALUES - remainingProductionValues);
+  const evidenceCompleted =
+    typeof evidenceLedger.completedChecks === 'number' && typeof evidenceLedger.totalChecks === 'number'
+      ? {
+          completed: evidenceLedger.completedChecks,
+          total: evidenceLedger.totalChecks,
+          remaining: Math.max(0, evidenceLedger.totalChecks - evidenceLedger.completedChecks),
+        }
+      : null;
+  const finalSignoffs =
+    typeof evidenceLedger.approvedFinalSignoffRoles === 'number' && typeof evidenceLedger.totalFinalSignoffRoles === 'number'
+      ? {
+          approved: evidenceLedger.approvedFinalSignoffRoles,
+          total: evidenceLedger.totalFinalSignoffRoles,
+          remaining: Math.max(0, evidenceLedger.totalFinalSignoffRoles - evidenceLedger.approvedFinalSignoffRoles),
+        }
+      : null;
+
+  return {
+    productionValues: {
+      completed: completedProductionValues,
+      total: TOTAL_EXPECTED_PRODUCTION_VALUES,
+      remaining: remainingProductionValues,
+    },
+    evidenceChecks: evidenceCompleted,
+    finalSignoffs,
+    approvedForLaunch: evidenceLedger.approvedForLaunch === true,
+  };
 }
 
 function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
@@ -186,6 +219,7 @@ export function assessLaunchState(state) {
       remainingKeyGroups: [],
       expectedProductionValueGroups: expectedProductionValueGroups(),
       evidenceLedger,
+      launchProgress: buildLaunchProgress({ remainingKeys: EXPECTED_PRODUCTION_VALUE_KEYS, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
         'Run:  npm run setup:production-env',
@@ -204,6 +238,7 @@ export function assessLaunchState(state) {
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
       expectedProductionValueGroups: [],
       evidenceLedger,
+      launchProgress: buildLaunchProgress({ remainingKeys, evidenceLedger }),
       externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
       nextActions: [
         'Open .env.production and replace each REPLACE_ME value listed below.',
@@ -220,6 +255,7 @@ export function assessLaunchState(state) {
     remainingKeyGroups: [],
     expectedProductionValueGroups: [],
     evidenceLedger,
+    launchProgress: buildLaunchProgress({ remainingKeys: [], evidenceLedger }),
     externalEvidenceGates: EXTERNAL_LAUNCH_EVIDENCE_GATES,
     nextActions: [
       'Run:  npm run check:production -- --production-env-file=.env.production',
@@ -241,6 +277,7 @@ export function renderLaunchStatusJson(state) {
       remainingKeys: state.remainingKeys,
       remainingKeyGroups: state.remainingKeyGroups,
       expectedProductionValueGroups: state.expectedProductionValueGroups ?? [],
+      launchProgress: state.launchProgress,
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
       externalEvidenceGates: state.externalEvidenceGates,
@@ -275,6 +312,23 @@ function renderLaunchStatusText(state) {
       }
     }
     lines.push('');
+  }
+  if (state.launchProgress) {
+    lines.push('Progress summary:');
+    lines.push(
+      `  Production values: ${state.launchProgress.productionValues.completed} / ${state.launchProgress.productionValues.total} complete (${state.launchProgress.productionValues.remaining} remaining)`,
+    );
+    if (state.launchProgress.evidenceChecks) {
+      lines.push(
+        `  Launch evidence checks: ${state.launchProgress.evidenceChecks.completed} / ${state.launchProgress.evidenceChecks.total} complete (${state.launchProgress.evidenceChecks.remaining} remaining)`,
+      );
+    }
+    if (state.launchProgress.finalSignoffs) {
+      lines.push(
+        `  Final signoffs: ${state.launchProgress.finalSignoffs.approved} / ${state.launchProgress.finalSignoffs.total} approved (${state.launchProgress.finalSignoffs.remaining} remaining)`,
+      );
+    }
+    lines.push(`  approvedForLaunch: ${state.launchProgress.approvedForLaunch ? 'true' : 'false'}`, '');
   }
   lines.push('Next:');
   for (const action of state.nextActions) lines.push(`  ${action}`);

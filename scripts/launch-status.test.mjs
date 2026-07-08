@@ -63,6 +63,10 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   const payload = JSON.parse(renderLaunchStatusJson(s));
   assert.equal(payload.phase, 'NO_ENV');
   assert.deepEqual(payload.expectedProductionValueGroups, s.expectedProductionValueGroups);
+  assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 24, remaining: 24 });
+  assert.equal(payload.launchProgress.evidenceChecks, null);
+  assert.equal(payload.launchProgress.finalSignoffs, null);
+  assert.equal(payload.launchProgress.approvedForLaunch, false);
   assertExternalLaunchEvidenceGates(s);
 });
 
@@ -86,6 +90,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.doesNotMatch(JSON.stringify(s.remainingKeyGroups), /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
   assert.deepEqual(s.expectedProductionValueGroups, []);
   assert.equal(s.evidenceLedger.exists, true);
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assertExternalLaunchEvidenceGates(s);
@@ -171,6 +176,10 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.equal(payload.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(payload.remainingKeys, ['DATABASE_URL', 'STRIPE_SECRET_KEY']);
   assert.deepEqual(payload.expectedProductionValueGroups, []);
+  assert.deepEqual(payload.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
+  assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 85, remaining: 85 });
+  assert.deepEqual(payload.launchProgress.finalSignoffs, { approved: 0, total: 5, remaining: 5 });
+  assert.equal(payload.launchProgress.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
   assert.equal(payload.evidenceLedger.totalChecks, 85);
   assert.equal(payload.evidenceLedger.approvedForLaunch, false);
@@ -210,6 +219,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   assert.equal(s.phase, 'ENV_COMPLETE');
   assert.equal(s.remainingKeys.length, 0);
   assert.deepEqual(s.expectedProductionValueGroups, []);
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 24, total: 24, remaining: 0 });
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assert.ok(s.nextActions.some((a) => a.includes('check:production:evidence:status')));
   assert.ok(s.nextActions.some((a) => a.includes('--json')));
