@@ -824,6 +824,14 @@ test('principle detail standard editor card is extracted from the oversized rout
   assert.doesNotMatch(cardSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
 });
 
+test('principle detail standard editor cards use shared status panel styling', () => {
+  const cardSrc = dash('compliance/[principleId]/standard-editor-card.tsx');
+
+  assert.match(cardSrc, /statusPanelClassName/);
+  assert.match(cardSrc, /className=\{statusPanelClassName\('neutral', 'shadow-sm overflow-hidden'\)\}/);
+  assert.doesNotMatch(cardSrc, /border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden/);
+});
+
 test('principle detail standard list is extracted from the oversized route file', () => {
   const pageSrc = dash('compliance/[principleId]/page.tsx');
   const listPath = dashPath('compliance/[principleId]/principle-standard-list.tsx');

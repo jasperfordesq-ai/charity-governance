@@ -5,7 +5,7 @@ import {
   ComplianceStatus,
   type GovernancePrincipleResponse,
 } from '@charitypilot/shared';
-import { StatusChip, StatusDot, type StatusTone } from '@/components/ui/status';
+import { StatusChip, StatusDot, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 import { SaveStatusIndicator } from '@/components/ui/states';
 
 export interface StandardFormState {
@@ -77,7 +77,7 @@ export function StandardEditorCard({
   return (
     <Card
       key={standard.id}
-      className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
+      className={statusPanelClassName('neutral', 'shadow-sm overflow-hidden')}
     >
       <div className={classes('h-1', statusAccentClasses[form.status] ?? statusAccentClasses.NOT_STARTED)} />
       <div className="p-5 sm:p-6 space-y-5">

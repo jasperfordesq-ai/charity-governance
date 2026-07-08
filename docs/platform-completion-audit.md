@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `19d38cc`
+Working-tree base commit when generated: `7455f56`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -177,6 +177,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Marketing landing workflow signal tiles now use shared status panel styling instead of route-local grey card markup.
 - Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.
 - Compliance overview summary and principle cards now use shared status panel styling instead of route-local neutral card markup.
+- Compliance detail standard editor cards now use shared status panel styling instead of route-local neutral card markup.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 - Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.
