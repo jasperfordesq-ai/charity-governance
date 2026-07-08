@@ -449,6 +449,14 @@ test('dashboard loading and empty states use shared primitives instead of route-
   assert.doesNotMatch(summaryCardsSrc, /if \(loading\) return null/);
 });
 
+test('dashboard annual regulator summary uses shared status panel styling', () => {
+  const pageSrc = dash('dashboard/page.tsx');
+
+  assert.match(pageSrc, /statusPanelClassName/);
+  assert.match(pageSrc, /<section className=\{statusPanelClassName\('brand', 'p-5 shadow-sm'\)\}>/);
+  assert.doesNotMatch(pageSrc, /rounded-lg border border-teal-primary\/20 dark:border-teal-light\/20 bg-white dark:bg-gray-900 p-5 shadow-sm/);
+});
+
 test('dashboard workflow state is extracted from the oversized route file', () => {
   const pageSrc = dash('dashboard/page.tsx');
   const workflowPath = dashPath('dashboard/use-dashboard-workflow.ts');

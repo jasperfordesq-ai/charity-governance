@@ -207,6 +207,7 @@ const fixedInThisAuditBranch = [
   'Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.',
   'Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.',
   'Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.',
+  'Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.',
   'Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.',
   'Global recovery, not-found, dashboard mobile-menu, and compliance disclosure actions now use HeroUI Button primitives instead of bespoke route-local action markup.',
   'Responsive browser-smoke QA now waits for the parsed document shell before applying light/dark theme checks after commit-stage navigations.',

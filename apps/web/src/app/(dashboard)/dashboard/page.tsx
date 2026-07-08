@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { AppPage } from '@/components/ui/app-page';
 import { ErrorState, ReviewWarningState } from '@/components/ui/states';
-import { StatusChip } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { DashboardActionLists } from './dashboard-action-lists';
 import { DashboardProgressPanels } from './dashboard-progress-panels';
 import { DashboardSummaryCards } from './dashboard-summary-cards';
@@ -46,7 +46,7 @@ export default function DashboardPage() {
         </>
       )}
     >
-      <section className="rounded-lg border border-teal-primary/20 dark:border-teal-light/20 bg-white dark:bg-gray-900 p-5 shadow-sm">
+      <section className={statusPanelClassName('brand', 'p-5 shadow-sm')}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <StatusChip tone="brand" className="mb-3">
