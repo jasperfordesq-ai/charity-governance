@@ -22,6 +22,8 @@ const repoRoot = resolve(scriptsDir, '..');
 const DEFAULT_EVIDENCE_FILE = '.charitypilot-launch-evidence/production-launch-evidence.json';
 const EVIDENCE_STATUS_COMMAND = `npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 const EVIDENCE_STATUS_JSON_COMMAND = `npm run check:production:evidence:status -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
+const EVIDENCE_VALIDATION_COMMAND = `npm run check:production:evidence -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
+const EVIDENCE_VALIDATION_JSON_COMMAND = `npm run check:production:evidence -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
@@ -136,6 +138,15 @@ function completionPercent(completed, total) {
   return Math.round((Math.max(0, completed) / total) * 1000) / 10;
 }
 
+function evidenceLedgerCommands() {
+  return {
+    statusCommand: EVIDENCE_STATUS_COMMAND,
+    jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
+    validationCommand: EVIDENCE_VALIDATION_COMMAND,
+    jsonValidationCommand: EVIDENCE_VALIDATION_JSON_COMMAND,
+  };
+}
+
 function buildLaunchProgress({ remainingKeys, evidenceLedger }) {
   const remainingProductionValues = Math.max(0, remainingKeys.length);
   const completedProductionValues = Math.max(0, TOTAL_EXPECTED_PRODUCTION_VALUES - remainingProductionValues);
@@ -195,8 +206,7 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
       exists: false,
       headline: `${DEFAULT_EVIDENCE_FILE} has not been created yet.`,
       nextAction: 'Create it with:  npm run check:production:evidence:init',
-      statusCommand: EVIDENCE_STATUS_COMMAND,
-      jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
+      ...evidenceLedgerCommands(),
     };
   }
 
@@ -220,16 +230,14 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
       releaseBinding: releaseBindingStatus(evidence),
       headline: `${DEFAULT_EVIDENCE_FILE} exists. Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}.`,
       nextAction: `Track progress with:  ${EVIDENCE_STATUS_COMMAND}`,
-      statusCommand: EVIDENCE_STATUS_COMMAND,
-      jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
+      ...evidenceLedgerCommands(),
     };
   } catch {
     return {
       exists: true,
       headline: `${DEFAULT_EVIDENCE_FILE} exists but is not valid launch evidence JSON yet.`,
       nextAction: `Fix the file or recreate it with:  npm run check:production:evidence:init -- --force`,
-      statusCommand: EVIDENCE_STATUS_COMMAND,
-      jsonStatusCommand: EVIDENCE_STATUS_JSON_COMMAND,
+      ...evidenceLedgerCommands(),
     };
   }
 }
@@ -387,7 +395,10 @@ function renderLaunchStatusText(state) {
       }
     }
   }
-  lines.push(`  ${state.evidenceLedger.nextAction}`, '', 'External launch evidence still required:');
+  lines.push(`  ${state.evidenceLedger.nextAction}`);
+  lines.push(`  Strict validation:  ${state.evidenceLedger.validationCommand}`);
+  lines.push(`  Strict validation JSON:  ${state.evidenceLedger.jsonValidationCommand}`);
+  lines.push('', 'External launch evidence still required:');
   for (const gate of state.externalEvidenceGates) lines.push(`  - ${gate}`);
   lines.push('', 'Full map: docs/LAUNCH-GUIDE.md', '');
 

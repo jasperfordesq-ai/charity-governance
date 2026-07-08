@@ -265,6 +265,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence status now has a non-secret JSON output mode for CI dashboards and operator handoff automation while preserving the strict final validator.',
   'Production launch evidence status completion now requires area statuses as well as all checks and final approval roles, reducing operator/validator drift.',
   'Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.',
+  'Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.',
   'Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.',
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
   'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
@@ -668,7 +669,12 @@ function render() {
     md += `- Next incomplete checks:\n`;
     for (const check of launch.evidenceLedger.nextIncompleteChecks) md += `  - ${check}\n`;
   }
-  md += `- ${launch.evidenceLedger.nextAction}\n\n`;
+  md += `- ${launch.evidenceLedger.nextAction}\n`;
+  if (launch.evidenceLedger.validationCommand || launch.evidenceLedger.jsonValidationCommand) {
+    md += `- Strict validation: \`${launch.evidenceLedger.validationCommand}\`\n`;
+    md += `- Strict validation JSON: \`${launch.evidenceLedger.jsonValidationCommand}\`\n`;
+  }
+  md += `\n`;
   md += `### Local Production Environment State\n\n`;
   md += `- Phase: \`${launch.phase}\`\n`;
   md += `- ${launch.headline}\n`;

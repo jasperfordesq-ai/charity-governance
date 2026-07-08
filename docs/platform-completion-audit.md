@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `02bff45`
+Working-tree base commit when generated: `e2fa8cf`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -236,6 +236,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence status now has a non-secret JSON output mode for CI dashboards and operator handoff automation while preserving the strict final validator.
 - Production launch evidence status completion now requires area statuses as well as all checks and final approval roles, reducing operator/validator drift.
 - Launch status now exposes text and JSON launch-evidence status commands plus a stricter evidence-status-complete flag for operator dashboards.
+- Launch status now exposes strict launch-evidence validation commands, including JSON output, alongside the read-only progress commands so operators can move from tracking to final gate validation without command drift.
 - Production launch evidence now binds pentest, deployed browser QA, and final signoff proof to the exact promoted release commit SHA.
 - Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.
 - Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.
@@ -367,6 +368,8 @@ Local-state note: This generated section reflects the local non-committed `.env.
   - releaseGate.deploy-smoke (pending)
   - releaseGate.deploy-rollback (pending)
 - Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
+- Strict validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
+- Strict validation JSON: `npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 
 ### Local Production Environment State
 

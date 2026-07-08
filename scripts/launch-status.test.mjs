@@ -45,6 +45,8 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:init/);
   assert.match(s.evidenceLedger.statusCommand, /check:production:evidence:status/);
   assert.match(s.evidenceLedger.jsonStatusCommand, /--json/);
+  assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
+  assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assert.equal(s.expectedProductionValueGroups.length, 8);
   assert.deepEqual(s.expectedProductionValueGroups.map((group) => group.label), [
     'Hosting, DNS, TLS, and proxy',
@@ -99,6 +101,8 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.equal(s.evidenceLedger.exists, true);
   assert.deepEqual(s.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
+  assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
+  assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assertExternalLaunchEvidenceGates(s);
 });
@@ -163,6 +167,8 @@ test('reports launch evidence completion counts when the evidence ledger exists'
     ],
   );
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
+  assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
+  assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
 });
 
 test('reports whether launch evidence is bound to a concrete release identity', () => {
@@ -249,6 +255,8 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.deepEqual(payload.evidenceLedger.nextIncompleteCheckDetails[0].requiredEvidenceHints, ['npm ci', 'exit 0']);
   assert.match(payload.evidenceLedger.statusCommand, /check:production:evidence:status/);
   assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
+  assert.match(payload.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
+  assert.match(payload.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
   assert.equal(payload.remainingKeyGroups[0].label, 'PostgreSQL');
