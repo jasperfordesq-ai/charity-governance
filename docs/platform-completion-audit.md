@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `886dbe7`
+Working-tree base commit when generated: `f990527`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -306,7 +306,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 365 | no | no obvious static risk; verify in browser |
 | P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 79 | no | no obvious static risk; verify in browser |
-| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 160 | yes | no obvious static risk; verify in browser |
+| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 163 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
@@ -326,7 +326,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 183 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
-| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 183 | yes | no obvious static risk; verify in browser |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 185 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 196 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 264 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
