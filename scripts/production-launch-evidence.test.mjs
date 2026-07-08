@@ -2067,6 +2067,8 @@ test('production launch evidence validator rejects placeholders, local URLs, and
   evidence.areas.hostingDnsTls.checks['web-origin'].evidence[0].reference = 'http://localhost:3000/todo';
   evidence.areas.billingAndEmail.checks['stripe-webhook-secret'].evidence[0].description = 'whsec_rawWebhookSecretMustNotAppear';
   evidence.areas.observability.checks['incident-owner'].evidence[0].reference = 'TBD';
+  evidence.areas.supabaseStorage.checks['separate-production-project'].evidence[0].description =
+    'Supabase project remains https://REAL_SUPABASE_PROJECT_REF.supabase.co';
   evidence.areas.securityReview.checks['report-reference'].evidence[0].reference = 'https://unapproved-audit-vault.invalid/report';
   evidence.areas.legalAndCompliance.checks['privacy-policy-approved'].evidence[0].reference =
     'https://evidence.charitypilot.ie/launch/legal/privacy?token=temporary-secret';
@@ -2082,6 +2084,7 @@ test('production launch evidence validator rejects placeholders, local URLs, and
     assert.match(result.stderr, /legalAndCompliance\.checks\.privacy-policy-approved\.evidence\[0\]\.reference must not contain token-bearing query parameters/);
     assert.match(result.stderr, /finalSignoff\.approvals\.engineering\.evidence\[0\]\.reference must use the canonical charity-governance GitHub repository when github\.com is used/);
     assert.match(result.stderr, /observability\.checks\.incident-owner\.evidence\[0\]\.reference must not be a placeholder or local reference/);
+    assert.match(result.stderr, /supabaseStorage\.checks\.separate-production-project\.evidence\[0\]\.description must not be a placeholder or local reference/);
     assert.match(result.stderr, /billingAndEmail\.checks\.stripe-webhook-secret\.evidence\[0\]\.description must not contain raw secret-looking values/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
