@@ -309,7 +309,7 @@ function localVerificationEvidence() {
     '`npm run test:production-check` passed locally on 2026-07-08 with 300/300 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.',
     '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
     '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
-    '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.',
+    '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.',
     'Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.',
     '`npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.',
     '`npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, and team permission-hint cleanup; production-tooling checks passed 300/300.',

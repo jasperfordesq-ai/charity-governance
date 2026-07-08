@@ -1,8 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import AxeBuilder from '@axe-core/playwright';
-import { getPrincipleIdByNumber } from '../helpers/db';
-import { gotoWithDevServerRetry } from '../helpers/navigation';
+import { gotoWithDevServerRetry, resolveFirstComplianceDetailPath } from '../helpers/navigation';
 
 type Theme = 'light' | 'dark';
 
@@ -18,7 +17,7 @@ test.describe.configure({ retries: 2, timeout: ACCESSIBILITY_TEST_TIMEOUT_MS });
 /**
  * Concern: accessibility & resilience. A charity-sector product must clear a WCAG 2.1 AA
  * baseline. We assert ZERO serious/critical axe violations on every key page, in BOTH the
- * light and dark themes (dark mode is scoped to the dashboard app routes).
+ * light and dark themes.
  */
 
 // Settle the page before scanning so axe never measures a transient state. HeroUI /
@@ -84,9 +83,9 @@ const PUBLIC_AND_AUTH_PAGES = [
   '/verify-email',
 ] as const;
 
-async function resolveDashboardPath(path: string): Promise<string> {
+async function resolveDashboardPath(page: Page, path: string): Promise<string> {
   if (path === '/compliance/${principleId}') {
-    return `/compliance/${await getPrincipleIdByNumber(1)}`;
+    return resolveFirstComplianceDetailPath(page, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
   }
   return path;
 }
@@ -94,7 +93,7 @@ async function resolveDashboardPath(path: string): Promise<string> {
 test.describe('Accessibility - dashboard (light + dark)', () => {
   for (const path of DASHBOARD_PAGES) {
     test(`${path} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
-      const resolvedPath = await resolveDashboardPath(path);
+      const resolvedPath = await resolveDashboardPath(ownerPage, path);
       // Light theme (default).
       await ownerPage.emulateMedia({ reducedMotion: 'reduce' });
       await gotoWithDevServerRetry(ownerPage, resolvedPath, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
@@ -116,8 +115,12 @@ test.describe('Accessibility - public & auth pages', () => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await gotoWithDevServerRetry(page, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
       await waitForDocumentShell(page);
-      await settle(page);
-      expect(await seriousViolations(page), path).toEqual([]);
+
+      for (const theme of ['light', 'dark'] as const) {
+        await applyTheme(page, theme);
+        await settle(page);
+        expect(await seriousViolations(page), `${path} (${theme})`).toEqual([]);
+      }
     });
   }
 });

@@ -2859,8 +2859,10 @@ test('deployed accessibility coverage includes every launch-critical public rout
     '/terms',
     '/accept-invite',
     '/verify-email',
-    'getPrincipleIdByNumber',
-    "/compliance/${await getPrincipleIdByNumber(1)}",
+    'resolveFirstComplianceDetailPath',
+    "path === '/compliance/${principleId}'",
+    "for (const theme of ['light', 'dark'] as const)",
+    'await applyTheme(page, theme)',
   ]) {
     assert.match(
       accessibilitySpec,

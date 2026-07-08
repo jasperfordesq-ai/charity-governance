@@ -1616,7 +1616,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /public mobile 13\/13/);
   assert.match(productionTodo, /dashboard desktop 12\/12/);
   assert.match(productionTodo, /dashboard mobile 12\/12/);
-  assert.match(productionTodo, /Local accessibility QA also passed 16\/16/);
+  assert.match(productionTodo, /local accessibility suite covers launch-critical public\/auth and dashboard routes across light and dark themes/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /85 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);

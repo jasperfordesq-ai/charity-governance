@@ -292,6 +292,9 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
 
   assert.match(accessibilitySpec, /const NAVIGATION_TIMEOUT_MS = 300_000/);
+  assert.match(accessibilitySpec, /resolveFirstComplianceDetailPath/);
+  assert.doesNotMatch(accessibilitySpec, /helpers\/db/);
+  assert.doesNotMatch(accessibilitySpec, /getPrincipleIdByNumber/);
   assert.match(accessibilitySpec, /async function waitForDocumentShell\(page: Page\): Promise<void>/);
   assert.match(accessibilitySpec, /async function applyTheme\(page: Page,\s*theme: Theme\): Promise<void>/);
   assert.match(accessibilitySpec, /Boolean\(document\.documentElement && document\.body\)/);
@@ -300,6 +303,9 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   assert.match(accessibilitySpec, /gotoWithDevServerRetry\(page,\s*path,\s*\{\s*waitUntil:\s*'commit',\s*timeout:\s*NAVIGATION_TIMEOUT_MS\s*\}\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'light'\)/);
   assert.match(accessibilitySpec, /await applyTheme\(ownerPage,\s*'dark'\)/);
+  assert.match(accessibilitySpec, /for \(const theme of \['light', 'dark'\] as const\)/);
+  assert.match(accessibilitySpec, /await applyTheme\(page,\s*theme\)/);
+  assert.match(accessibilitySpec, /\$\{path\} \(\$\{theme\}\)/);
   assert.doesNotMatch(accessibilitySpec, /waitForLoadState\('networkidle'\)/);
   assert.doesNotMatch(accessibilitySpec, /waitUntil:\s*'domcontentloaded'/);
 });
@@ -309,6 +315,9 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
+  assert.match(responsiveSpec, /resolveFirstComplianceDetailPath/);
+  assert.doesNotMatch(responsiveSpec, /helpers\/db/);
+  assert.doesNotMatch(responsiveSpec, /getPrincipleIdByNumber/);
   assert.match(responsiveSpec, /const FONT_SETTLE_TIMEOUT_MS = 5_000/);
   assert.match(responsiveSpec, /Promise\.race\(\[/);
   assert.match(responsiveSpec, /setTimeout\(resolve,\s*timeoutMs\)/);
@@ -325,7 +334,9 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   assert.match(navigationHelper, /if \(IS_DEPLOYED_QA \|\| !isDevServerRestartNavigationError\(err\) \|\| attempt === 2\)/);
   assert.match(navigationHelper, /await waitForLocalWebServer\(\)/);
   assert.match(navigationHelper, /return await page\.goto\(url,\s*gotoOptions\)/);
-  assert.match(responsiveSpec, /import \{ gotoWithDevServerRetry \} from '\.\.\/helpers\/navigation'/);
+  assert.match(navigationHelper, /export async function resolveFirstComplianceDetailPath\(page: Page,\s*options\?: GotoOptions\): Promise<string>/);
+  assert.match(navigationHelper, /locator\('a\[href\^="\/compliance\/"\]'\)/);
+  assert.match(responsiveSpec, /import \{ gotoWithDevServerRetry, resolveFirstComplianceDetailPath \} from '\.\.\/helpers\/navigation'/);
   assert.match(fixtures, /import \{ gotoWithDevServerRetry \} from '\.\/helpers\/navigation'/);
   assert.doesNotMatch(responsiveSpec, /document\.fonts\.ready\.then\(\(\) => undefined\)\)/);
   assert.doesNotMatch(responsiveSpec, /(?:page|ownerPage)\.goto\(.*waitUntil:\s*'commit'/);
@@ -503,7 +514,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditLedger, /public desktop 13\/13/);
   assert.match(auditLedger, /dashboard desktop 12\/12/);
   assert.match(auditLedger, /dashboard mobile 12\/12/);
-  assert.match(auditLedger, /16\/16 axe checks/);
+  assert.match(auditLedger, /public\/auth and dashboard routes[\s\S]*light and dark themes/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
 

@@ -72,3 +72,19 @@ export async function gotoWithDevServerRetry(
 
   throw new Error(`Unable to navigate to ${url}`);
 }
+
+export async function resolveFirstComplianceDetailPath(page: Page, options?: GotoOptions): Promise<string> {
+  await gotoWithDevServerRetry(page, '/compliance', options);
+  const href = await page.locator('a[href^="/compliance/"]').first().getAttribute('href', { timeout: 120_000 });
+
+  if (!href) {
+    throw new Error('Unable to resolve a compliance principle detail route from the compliance overview');
+  }
+
+  const resolved = new URL(href, WEB_BASE_URL);
+  if (!resolved.pathname.startsWith('/compliance/') || resolved.pathname === '/compliance/') {
+    throw new Error(`Resolved compliance detail href is not a principle detail route: ${resolved.pathname}`);
+  }
+
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+}

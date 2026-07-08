@@ -1,10 +1,9 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
-import { getPrincipleIdByNumber } from '../helpers/db';
-import { gotoWithDevServerRetry } from '../helpers/navigation';
+import { gotoWithDevServerRetry, resolveFirstComplianceDetailPath } from '../helpers/navigation';
 
 type Theme = 'light' | 'dark';
-type RouteSpec = string | { label: string; resolve: () => Promise<string> };
+type RouteSpec = string | { label: string; resolve: (page: Page) => Promise<string> };
 
 const VIEWPORT_CASES = [
   { label: 'desktop light and dark', width: 1440, height: 1000 },
@@ -38,7 +37,7 @@ const DASHBOARD_ROUTES: readonly RouteSpec[] = [
   '/compliance',
   {
     label: '/compliance/${principleId}',
-    resolve: async () => `/compliance/${await getPrincipleIdByNumber(1)}`,
+    resolve: async (page) => resolveFirstComplianceDetailPath(page, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS }),
   },
   '/board',
   '/documents',
@@ -94,9 +93,9 @@ async function assertRenderable(page: Page, route: string): Promise<void> {
   expect(overflow, `${route} should not create horizontal page overflow`).toBeLessThanOrEqual(2);
 }
 
-async function resolveRoute(route: RouteSpec): Promise<{ label: string; path: string }> {
+async function resolveRoute(route: RouteSpec, page: Page): Promise<{ label: string; path: string }> {
   if (typeof route === 'string') return { label: route, path: route };
-  return { label: route.label, path: await route.resolve() };
+  return { label: route.label, path: await route.resolve(page) };
 }
 
 for (const viewportCase of VIEWPORT_CASES) {
@@ -120,7 +119,7 @@ for (const viewportCase of VIEWPORT_CASES) {
     test(`launch-critical dashboard route ${typeof route === 'string' ? route : route.label} renders in ${viewportCase.label}`, async ({ ownerPage }) => {
       test.setTimeout(DASHBOARD_ROUTE_TIMEOUT_MS);
       await ownerPage.setViewportSize({ width: viewportCase.width, height: viewportCase.height });
-      const { label, path } = await resolveRoute(route);
+      const { label, path } = await resolveRoute(route, ownerPage);
       await gotoWithDevServerRetry(ownerPage, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
 
       for (const theme of THEME_CASES) {
