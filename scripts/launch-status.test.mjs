@@ -158,6 +158,50 @@ test('reports launch evidence completion counts when the evidence ledger exists'
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
 });
 
+test('reports whether launch evidence is bound to a concrete release identity', () => {
+  const templateEvidence = renderProductionLaunchEvidenceTemplate();
+  const placeholderState = assessLaunchState({
+    envExists: true,
+    envContent: 'NODE_ENV=production',
+    evidenceFileExists: true,
+    evidenceContent: templateEvidence,
+  });
+
+  assert.equal(placeholderState.evidenceLedger.releaseBinding.complete, false);
+  assert.match(placeholderState.evidenceLedger.releaseBinding.headline, /not bound to a concrete release/);
+  assert.ok(placeholderState.evidenceLedger.releaseBinding.missingFields.includes('release.commitSha'));
+  assert.ok(placeholderState.evidenceLedger.releaseBinding.missingFields.includes('release.workflowRunUrl'));
+  assert.ok(placeholderState.evidenceLedger.releaseBinding.missingFields.includes('release.imageDigestManifest.apiImage'));
+
+  const concreteEvidence = JSON.parse(templateEvidence);
+  concreteEvidence.release = {
+    commitSha: 'a'.repeat(40),
+    workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+    workflowFile: '.github/workflows/release-images.yml',
+    gitRef: 'refs/heads/master',
+    imageDigestManifest: {
+      apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'b'.repeat(64)}`,
+      webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'c'.repeat(64)}`,
+      migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migration@sha256:${'d'.repeat(64)}`,
+      webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
+      webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+    },
+  };
+
+  const concreteState = assessLaunchState({
+    envExists: true,
+    envContent: 'NODE_ENV=production',
+    evidenceFileExists: true,
+    evidenceContent: JSON.stringify(concreteEvidence),
+  });
+  const payload = JSON.parse(renderLaunchStatusJson(concreteState));
+
+  assert.equal(concreteState.evidenceLedger.releaseBinding.complete, true);
+  assert.equal(concreteState.evidenceLedger.releaseBinding.commitSha, 'a'.repeat(40));
+  assert.deepEqual(concreteState.evidenceLedger.releaseBinding.missingFields, []);
+  assert.equal(payload.evidenceLedger.releaseBinding.complete, true);
+});
+
 test('renders machine-readable launch status for operator dashboards', () => {
   const state = assessLaunchState({
     envExists: true,

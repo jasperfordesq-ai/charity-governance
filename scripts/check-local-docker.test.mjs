@@ -488,7 +488,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditLedger, /passed locally on 2026-07-08 at commit e2a98ee/);
   assert.match(auditLedger, /9\/85 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/85 evidence checks/);
-  assert.match(auditLedger, /298\/298 production-tooling checks/);
+  assert.match(auditLedger, /299\/299 production-tooling checks/);
+  assert.doesNotMatch(auditLedger, /298\/298 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /297\/297 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /286\/286 production-tooling checks/);
   assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed/);
@@ -509,6 +510,8 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /85 machine-readable launch evidence checks/);
   assert.match(auditGenerator, /launch evidence ledger status/);
   assert.match(auditGenerator, /launch evidence approval state, final signoff state, and the next incomplete checks/);
+  assert.match(auditGenerator, /Release binding/);
+  assert.match(auditGenerator, /releaseBinding\.headline/);
   assert.match(auditGenerator, /final approval role progress separately from checklist completion/);
   assert.match(auditGenerator, /group missing production values by provider\/source/);
   assert.match(auditGenerator, /approvedForLaunch/);
@@ -521,6 +524,7 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /85 machine-readable launch evidence checks/);
   assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
+  assert.match(auditLedger, /Release binding:/);
   assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /group missing production values by provider\/source/);
   assert.match(auditLedger, /Local-state note/);
