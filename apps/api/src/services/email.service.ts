@@ -101,18 +101,22 @@ function defaultEmailLogger(): EmailLogger {
 }
 
 export class EmailService {
-  private resend: Resend;
+  private resend?: Resend;
   private from: string;
   private frontendUrl: string;
 
   constructor(private logger: EmailLogger = defaultEmailLogger()) {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
+    this.resend = this.hasConfiguredResendKey() ? new Resend(process.env.RESEND_API_KEY) : undefined;
     this.from = process.env.EMAIL_FROM ?? 'noreply@charitypilot.ie';
     this.frontendUrl = getPrimaryFrontendOrigin();
   }
 
+  private hasConfiguredResendKey(): boolean {
+    return isConfiguredSecret(process.env.RESEND_API_KEY);
+  }
+
   isConfigured(): boolean {
-    return isConfiguredSecret(process.env.RESEND_API_KEY) && this.from.includes('@');
+    return this.hasConfiguredResendKey() && this.from.includes('@') && this.resend !== undefined;
   }
 
   async sendWelcomeEmail(to: string, name: string, orgName: string): Promise<boolean> {
@@ -253,7 +257,7 @@ export class EmailService {
   }
 
   private async _send(to: string, subject: string, html: string): Promise<boolean> {
-    if (!this.isConfigured()) {
+    if (!this.isConfigured() || this.resend === undefined) {
       this.logger.warn('[EmailService] Email not sent because delivery is not configured');
       return false;
     }

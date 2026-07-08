@@ -219,10 +219,9 @@ test('_send returns false without throwing when Resend is unconfigured or the SD
   const snapshot = snapshotEnv(['RESEND_API_KEY', 'EMAIL_FROM', 'FRONTEND_URL']);
 
   try {
-    // Case A: unconfigured (placeholder) key -> isConfigured() is false, so the send
-    // method returns false and never touches the SDK. A placeholder still satisfies the
-    // Resend constructor (non-empty) while isConfiguredSecret() rejects it.
-    process.env.RESEND_API_KEY = 're_...';
+    // Case A: missing key -> construction and send both degrade without touching
+    // the SDK. CI does not always provide optional provider config for route tests.
+    delete process.env.RESEND_API_KEY;
     process.env.EMAIL_FROM = 'noreply@example.org';
     process.env.FRONTEND_URL = 'https://app.example.org';
 
