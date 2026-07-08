@@ -205,6 +205,7 @@ const fixedInThisAuditBranch = [
   'Marketing blog search now uses the shared empty-state primitive for no-result filters instead of route-local dashed-panel markup.',
   'Marketing landing workflow signal tiles now use shared status panel styling instead of route-local grey card markup.',
   'Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.',
+  'Compliance overview summary and principle cards now use shared status panel styling instead of route-local neutral card markup.',
   'Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.',
   'Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.',
   'Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.',

@@ -511,6 +511,18 @@ test('dashboard binary filters use HeroUI Switch instead of route-local switch m
   }
 });
 
+test('compliance overview summary and principle cards use shared status panel styling', () => {
+  const pageSrc = dash('compliance/page.tsx');
+  const principleListSrc = dash('compliance/compliance-principle-list.tsx');
+
+  for (const src of [pageSrc, principleListSrc]) {
+    assert.match(src, /statusPanelClassName/);
+    assert.doesNotMatch(src, /border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm/);
+  }
+  assert.match(pageSrc, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
+  assert.match(principleListSrc, /className=\{statusPanelClassName\('neutral', 'shadow-sm overflow-hidden'\)\}/);
+});
+
 test('deadline completion uses HeroUI Checkbox instead of a button with checkbox ARIA', () => {
   const src = dash('deadlines/deadline-list-panel.tsx');
 

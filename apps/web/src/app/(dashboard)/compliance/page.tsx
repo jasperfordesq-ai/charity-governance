@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card, Progress, Select, SelectItem, Button, Switch } from '@heroui/react';
 import { AppPage } from '@/components/ui/app-page';
 import { ReviewWarningState } from '@/components/ui/states';
+import { statusPanelClassName } from '@/components/ui/status';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import { CompliancePrincipleList } from './compliance-principle-list';
 import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
@@ -78,7 +79,7 @@ export default function CompliancePage() {
 
       {/* Overall summary bar */}
       {summary && (
-        <Card className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+        <Card className={statusPanelClassName('neutral', 'p-5 shadow-sm')}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-shrink-0">
               <p className="text-sm text-gray-500 dark:text-gray-400">Overall Score</p>

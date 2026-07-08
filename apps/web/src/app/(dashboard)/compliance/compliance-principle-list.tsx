@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react';
 import { AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState } from '@/components/ui/states';
-import { StatusChip } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { ComplianceSummary, GovernancePrincipleResponse } from '@charitypilot/shared';
 
 function scoreColour(pct: number): 'success' | 'warning' | 'danger' {
@@ -69,7 +69,7 @@ export function CompliancePrincipleList({
                 return (
                   <Card
                     key={principle.id}
-                    className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
+                    className={statusPanelClassName('neutral', 'shadow-sm overflow-hidden')}
                   >
                     <div className="p-5">
                       <div className="flex items-start justify-between gap-4">

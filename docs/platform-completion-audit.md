@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `05b755e`
+Working-tree base commit when generated: `19d38cc`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -176,6 +176,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Marketing blog search now uses the shared empty-state primitive for no-result filters instead of route-local dashed-panel markup.
 - Marketing landing workflow signal tiles now use shared status panel styling instead of route-local grey card markup.
 - Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.
+- Compliance overview summary and principle cards now use shared status panel styling instead of route-local neutral card markup.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 - Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.
@@ -297,7 +298,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 143 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 144 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 100 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 132 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 127 | yes | no obvious static risk; verify in browser |
