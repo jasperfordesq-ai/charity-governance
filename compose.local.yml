@@ -48,7 +48,7 @@ services:
       sh -lc "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma &&
       npm run db:seed -w @charitypilot/api &&
       cd apps/api &&
-      node --import tsx --watch src/server.ts"
+      npx --no-install tsx watch --clear-screen=false src/server.ts"
     environment:
       NODE_ENV: development
       PORT: 3002
@@ -112,6 +112,7 @@ services:
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_...
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
+      NEXT_WEBPACK_USEPOLLING: "1"
     ports:
       - "127.0.0.1:3003:3003"
     volumes:

@@ -59,8 +59,10 @@ test('local Docker overlay installs and runs API and web in development mode', (
   assert.match(compose, /127\.0\.0\.1:3003:3003/);
   assert.match(compose, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(compose, /npm run db:seed -w @charitypilot\/api/);
-  assert.match(compose, /node --import tsx --watch src\/server\.ts/);
+  assert.match(compose, /npx --no-install tsx watch --clear-screen=false src\/server\.ts/);
   assert.match(compose, /web:[\s\S]*rm -rf apps\/web\/\.next\/\* && npm run dev -w @charitypilot\/web/);
+  assert.match(compose, /NEXT_WEBPACK_USEPOLLING:\s+"1"/);
+  assert.doesNotMatch(compose, /api:[\s\S]*node --import tsx --watch src\/server\.ts/);
   assert.doesNotMatch(compose, /tsx\/esm/);
   assert.equal(apiPackage.scripts.dev, 'node --env-file=.env --import tsx --watch src/server.ts');
   assert.match(compose, /\/api\/v1\/health/);
@@ -340,6 +342,12 @@ test('web dev server ignores Playwright artifacts during local browser QA', () =
   assert.match(nextConfig, /if \(dev\)/);
   assert.match(nextConfig, /\*\*\/e2e\/test-results\/\*\*/);
   assert.match(nextConfig, /\*\*\/e2e\/playwright-report\/\*\*/);
+  assert.match(nextConfig, /\*\*\/apps\/web\/\.next\/\*\*/);
+  assert.match(nextConfig, /\*\*\/apps\/web\/\.next-dev\/\*\*/);
+  assert.match(nextConfig, /\*\*\/apps\/web\/\.next-build-\*\/\*\*/);
+  assert.match(nextConfig, /\*\*\/apps\/web\/\.test-dist\/\*\*/);
+  assert.match(nextConfig, /\*\*\/apps\/web\/\.turbo\/\*\*/);
+  assert.match(nextConfig, /\*\*\/apps\/web\/next-codex-build\/\*\*/);
   assert.match(playwrightConfig, /process\.env\.E2E_ARTIFACT_DIR \?\? join\(tmpdir\(\), 'charitypilot-e2e-artifacts'\)/);
   assert.match(playwrightConfig, /outputDir:\s*join\(ARTIFACT_ROOT, 'test-results'\)/);
   assert.match(playwrightConfig, /outputFolder:\s*join\(ARTIFACT_ROOT, 'html-report'\)/);

@@ -29,6 +29,12 @@ const nextConfig: NextConfig = {
           ...(Array.isArray(config.watchOptions?.ignored) ? config.watchOptions.ignored : []),
           '**/e2e/test-results/**',
           '**/e2e/playwright-report/**',
+          '**/apps/web/.next/**',
+          '**/apps/web/.next-dev/**',
+          '**/apps/web/.next-build-*/**',
+          '**/apps/web/.test-dist/**',
+          '**/apps/web/.turbo/**',
+          '**/apps/web/next-codex-build/**',
         ],
       };
     }
