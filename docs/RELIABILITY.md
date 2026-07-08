@@ -11,7 +11,7 @@ documented n/a), the job is finished and stays finished.
 
 ## At a glance
 
-Generated: 2026-07-05 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-07-08 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Generated: 2026-07-05 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 95 | 0 | 0 | 7 | 102 |
 | **Total** | **354** | **0** | **0** | **22** | **376** |
 
-**API suite:** 419 passing, 0 failing. **Web suite:** 207 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 428 passing, 0 failing. **Web suite:** 229 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
 
 **Linkage:** 354/354 covered guarantees verified against a passing/linked test.
 
@@ -461,13 +461,13 @@ _49 guarantees - covered 49_
 | Auth & session integrity | The 401 interceptor refreshes once then retries the original request, succeeding transparently when the refresh succeeds. | covered | `refreshes the session once then retries the original request on a 401`<br/><sub>lib/api.test.ts</sub> |
 | Auth & session integrity | A request marked skipAuthRefresh is never auto-refreshed/retried on 401 (auth pages surface an inline error instead of a redirect). | covered | `does not refresh or retry when skipAuthRefresh is set`<br/><sub>lib/api.test.ts</sub> |
 | Auth & session integrity | An unauthenticated request to a protected app route is redirected to /login?next=<path> at the edge (proxy), before any protected page renders. | covered | `an unauthenticated visit to a protected route redirects to login with a next param` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
-| Auth & session integrity | Production CSP connect-src trusts only an approved, origin-only API source. | covered | `production CSP uses only an approved origin-only API connect source`<br/><sub>lib/content-security-policy.test.ts</sub> |
-| Auth & session integrity | Production CSP falls back to the default API origin instead of trusting an unapproved connect source. | covered | `production CSP falls back instead of trusting unapproved API connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
+| Auth & session integrity | Production CSP connect-src trusts only the canonical production API origin. | covered | `production CSP uses only the canonical API connect source`<br/><sub>lib/content-security-policy.test.ts</sub> |
+| Auth & session integrity | Production CSP falls back to the default API origin instead of trusting a non-canonical connect source. | covered | `production CSP falls back instead of trusting non-canonical API connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | Development CSP keeps the local API and websocket connect sources so local dev still works. | covered | `development CSP keeps local API and websocket connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | In production the API base URL must be explicitly set, https, origin-only and an approved charitypilot.ie host — otherwise it is rejected. | covered | `requires an explicit API URL in production`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | A non-production (http) API URL is rejected in production. | covered | `rejects non-production API URLs in production`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | A request that still 401s after a refresh is rejected and not retried again — no infinite refresh/retry loop. | covered | `a request that still 401s after a refresh is rejected (no infinite retry loop)`<br/><sub>lib/api.test.ts</sub> |
-| Auth & session integrity | An unapproved API host is rejected in production (no talking to an attacker-controlled origin). | covered | `rejects unapproved API hosts in production`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | Any non-canonical API origin is rejected in production, including approved but wrong CharityPilot subdomains and attacker-controlled hosts. | covered | `rejects unapproved API hosts through the canonical production API origin check`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | An API URL carrying a path is rejected in production (origin-only). | covered | `rejects API URLs with paths in production`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | A trailing slash on the configured API URL is trimmed consistently. | covered | `uses explicit API URL after trimming a trailing slash`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | The localhost API fallback is available only outside production. | covered | `keeps the local Docker API fallback for local development only`<br/><sub>lib/api-config.test.ts</sub> |
