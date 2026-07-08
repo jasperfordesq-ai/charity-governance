@@ -26,7 +26,7 @@ on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
 configured handoff still had 23 production values needing real data.
 On the latest checked workstation, production values are `1 / 24` complete,
-machine-readable launch evidence is `0 / 85` complete, final signoffs are
+machine-readable launch evidence is `9 / 85` complete, final signoffs are
 `0 / 5`, and `approvedForLaunch` is `false`.
 Local responsive browser QA completed cleanly on 2026-07-08 as four focused route chunks across desktop/mobile and light/dark: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12. Local accessibility QA also passed 16/16 on the local stack, but deployed production QA remains a launch gate
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or

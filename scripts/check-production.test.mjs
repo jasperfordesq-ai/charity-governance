@@ -1628,6 +1628,20 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.doesNotMatch(productionTodo, /Everything verifiable without external accounts now passes/i);
 });
 
+test('agent continuation handoff reflects current launch evidence progress without stale zero counters', () => {
+  const handoff = readRepoFile('docs/agent-continuation-handoff.md');
+
+  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-08/);
+  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 85`/);
+  assert.match(handoff, /The evidence ledger is currently `9 \/ 85`/);
+  assert.match(handoff, /76 \/ 85` machine-readable launch checks remain/);
+  assert.match(handoff, /releaseGate\.check-production/);
+  assert.match(handoff, /releaseGate\.deploy-preflight/);
+  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 85`/);
+  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 85`/);
+  assert.doesNotMatch(handoff, /85 \/ 85` machine-readable launch checks remain/);
+});
+
 test('production secret env files are ignored by git without hiding the template', () => {
   const gitignoreLines = readRepoFile('.gitignore')
     .split(/\r?\n/)
@@ -2275,7 +2289,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /Last updated: 2026-07-08/);
   assert.match(launchGuide, /23 production values needing real data/);
   assert.match(launchGuide, /production values are `1 \/ 24` complete/);
-  assert.match(launchGuide, /machine-readable launch evidence is `0 \/ 85` complete/);
+  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
   assert.match(launchGuide, /final signoffs are\s+`0 \/ 5`/);
   assert.match(launchGuide, /`approvedForLaunch` is `false`/);
   assert.match(launchGuide, /Local responsive browser QA completed cleanly on 2026-07-08/);
@@ -2291,6 +2305,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(launchGuide, /Launch-Critical Route Inventory/);
   assert.match(launchGuide, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
+  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 85` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
   assert.doesNotMatch(launchGuide, /optional reverse proxy/);

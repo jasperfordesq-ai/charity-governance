@@ -28,7 +28,7 @@ Known current state from `npm run launch:status -- --json` on 2026-07-08:
 - `.env.production` exists but still has 23 values needing real production data.
 - Production values complete: `1 / 24`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
-- Machine-readable launch evidence completion: `0 / 85`.
+- Machine-readable launch evidence completion: `9 / 85`.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
@@ -294,17 +294,22 @@ These require human/operator/provider access and must not be faked:
 
 ### Launch Evidence Still Open
 
-The evidence ledger is still `0 / 85`.
+The evidence ledger is currently `9 / 85`. Those completed checks are local/CI
+release-gate basics only; they do not replace real production env validation,
+digest-pinned deployment, public HTTPS smoke, rollback, provider, backup/restore,
+deployed browser QA, legal, pentest, or final signoff evidence.
 
 The first incomplete evidence checks currently reported are:
 
-- `releaseGate.npm-ci`
-- `releaseGate.db-generate`
-- `releaseGate.prisma-validate`
-- `releaseGate.lint`
-- `releaseGate.test`
+- `releaseGate.check-production`
+- `releaseGate.deploy-preflight`
+- `releaseGate.deploy-production`
+- `releaseGate.deploy-smoke`
+- `releaseGate.deploy-rollback`
 
-Do not fill these with local or fake evidence. They need final release/build-machine evidence tied to the promoted release.
+Do not fill these with local or fake evidence. They need final real production
+configuration, deployment, rollback, and public HTTPS smoke evidence tied to the
+promoted release.
 
 ### Deployed Browser QA Still Open
 
@@ -399,8 +404,10 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 
 Strict launch evidence metric:
 
-- `85 / 85` machine-readable launch checks remain.
-- This means strict launch evidence is still 100% incomplete.
+- `76 / 85` machine-readable launch checks remain.
+- Strict launch evidence is still mostly incomplete because the remaining checks
+  include the real production environment, deploy, rollback, provider,
+  backup/restore, deployed QA, legal, pentest, and final signoff gates.
 - Final signoffs remain `0 / 5`.
 - Production values remain `1 / 24` complete, with 23 real provider/hosting/image-promotion values still missing.
 
