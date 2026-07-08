@@ -13,6 +13,7 @@ import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import {
   decodeJsonFile,
   isEvidenceStatusComplete,
+  releaseBindingStatus,
   summarizeEvidence,
 } from './production-launch-evidence-status.mjs';
 
@@ -21,14 +22,6 @@ const repoRoot = resolve(scriptsDir, '..');
 const DEFAULT_EVIDENCE_FILE = '.charitypilot-launch-evidence/production-launch-evidence.json';
 const EVIDENCE_STATUS_COMMAND = `npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 const EVIDENCE_STATUS_JSON_COMMAND = `npm run check:production:evidence:status -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
-const RELEASE_WORKFLOW_FILE = '.github/workflows/release-images.yml';
-const RELEASE_WORKFLOW_RUN_PATTERN =
-  /^https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\/actions\/runs\/[0-9]+$/;
-const RELEASE_IMAGE_PATTERNS = Object.freeze({
-  apiImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:[a-f0-9]{64}$/,
-  webImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}$/,
-  migrationImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-migration@sha256:[a-f0-9]{64}$/,
-});
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
@@ -165,51 +158,6 @@ function buildLaunchProgress({ remainingKeys, evidenceLedger }) {
     evidenceChecks: evidenceCompleted,
     finalSignoffs,
     approvedForLaunch: evidenceLedger.approvedForLaunch === true,
-  };
-}
-
-function releaseBindingStatus(evidence) {
-  const release = evidence?.release;
-  const manifest = release?.imageDigestManifest;
-  const missingFields = [];
-  const commitSha = typeof release?.commitSha === 'string' && /^[a-f0-9]{40}$/.test(release.commitSha)
-    ? release.commitSha
-    : null;
-
-  if (!commitSha) missingFields.push('release.commitSha');
-  if (typeof release?.workflowRunUrl !== 'string' || !RELEASE_WORKFLOW_RUN_PATTERN.test(release.workflowRunUrl)) {
-    missingFields.push('release.workflowRunUrl');
-  }
-  if (release?.workflowFile !== RELEASE_WORKFLOW_FILE) missingFields.push('release.workflowFile');
-  if (typeof release?.gitRef !== 'string' || !/^refs\/(?:heads\/master|tags\/v.+)$/.test(release.gitRef)) {
-    missingFields.push('release.gitRef');
-  }
-  if (!manifest || typeof manifest !== 'object') {
-    missingFields.push('release.imageDigestManifest');
-  } else {
-    for (const [key, pattern] of Object.entries(RELEASE_IMAGE_PATTERNS)) {
-      if (typeof manifest[key] !== 'string' || !pattern.test(manifest[key])) {
-        missingFields.push(`release.imageDigestManifest.${key}`);
-      }
-    }
-    if (typeof manifest.webBuildNextPublicApiUrl !== 'string' || manifest.webBuildNextPublicApiUrl !== 'https://api.charitypilot.ie') {
-      missingFields.push('release.imageDigestManifest.webBuildNextPublicApiUrl');
-    }
-    if (typeof manifest.webBuildNextPublicSupabaseUrl !== 'string' || !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(manifest.webBuildNextPublicSupabaseUrl)) {
-      missingFields.push('release.imageDigestManifest.webBuildNextPublicSupabaseUrl');
-    }
-  }
-
-  return {
-    complete: missingFields.length === 0,
-    commitSha,
-    workflowRunUrl: typeof release?.workflowRunUrl === 'string' && RELEASE_WORKFLOW_RUN_PATTERN.test(release.workflowRunUrl)
-      ? release.workflowRunUrl
-      : null,
-    missingFields,
-    headline: missingFields.length === 0
-      ? `Launch evidence is bound to release ${commitSha}.`
-      : `Launch evidence is not bound to a concrete release artifact identity (${missingFields.length} field(s) missing or placeholder).`,
   };
 }
 

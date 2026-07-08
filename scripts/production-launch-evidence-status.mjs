@@ -11,6 +11,14 @@ import {
 import { evidenceHints as defaultEvidenceHints } from './generate-production-launch-evidence-template.mjs';
 
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
+const releaseWorkflowFile = '.github/workflows/release-images.yml';
+const releaseWorkflowRunPattern =
+  /^https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\/actions\/runs\/[0-9]+$/;
+const releaseImagePatterns = Object.freeze({
+  apiImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:[a-f0-9]{64}$/,
+  webImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}$/,
+  migrationImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-migration@sha256:[a-f0-9]{64}$/,
+});
 
 function usage() {
   return 'Usage: node scripts/production-launch-evidence-status.mjs [--json] [--evidence-file <path>]\n';
@@ -76,6 +84,51 @@ function countChecks() {
 
 function statusOf(value) {
   return typeof value === 'string' && value.trim().length > 0 ? value : 'missing';
+}
+
+export function releaseBindingStatus(evidence) {
+  const release = evidence?.release;
+  const manifest = release?.imageDigestManifest;
+  const missingFields = [];
+  const commitSha = typeof release?.commitSha === 'string' && /^[a-f0-9]{40}$/.test(release.commitSha)
+    ? release.commitSha
+    : null;
+
+  if (!commitSha) missingFields.push('release.commitSha');
+  if (typeof release?.workflowRunUrl !== 'string' || !releaseWorkflowRunPattern.test(release.workflowRunUrl)) {
+    missingFields.push('release.workflowRunUrl');
+  }
+  if (release?.workflowFile !== releaseWorkflowFile) missingFields.push('release.workflowFile');
+  if (typeof release?.gitRef !== 'string' || !/^refs\/(?:heads\/master|tags\/v.+)$/.test(release.gitRef)) {
+    missingFields.push('release.gitRef');
+  }
+  if (!manifest || typeof manifest !== 'object') {
+    missingFields.push('release.imageDigestManifest');
+  } else {
+    for (const [key, pattern] of Object.entries(releaseImagePatterns)) {
+      if (typeof manifest[key] !== 'string' || !pattern.test(manifest[key])) {
+        missingFields.push(`release.imageDigestManifest.${key}`);
+      }
+    }
+    if (typeof manifest.webBuildNextPublicApiUrl !== 'string' || manifest.webBuildNextPublicApiUrl !== 'https://api.charitypilot.ie') {
+      missingFields.push('release.imageDigestManifest.webBuildNextPublicApiUrl');
+    }
+    if (typeof manifest.webBuildNextPublicSupabaseUrl !== 'string' || !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(manifest.webBuildNextPublicSupabaseUrl)) {
+      missingFields.push('release.imageDigestManifest.webBuildNextPublicSupabaseUrl');
+    }
+  }
+
+  return {
+    complete: missingFields.length === 0,
+    commitSha,
+    workflowRunUrl: typeof release?.workflowRunUrl === 'string' && releaseWorkflowRunPattern.test(release.workflowRunUrl)
+      ? release.workflowRunUrl
+      : null,
+    missingFields,
+    headline: missingFields.length === 0
+      ? `Launch evidence is bound to release ${commitSha}.`
+      : `Launch evidence is not bound to a concrete release artifact identity (${missingFields.length} field(s) missing or placeholder).`,
+  };
 }
 
 export function summarizeEvidence(evidence) {
@@ -149,6 +202,7 @@ export function summarizeEvidence(evidence) {
 function renderStatus(evidence) {
   const summary = summarizeEvidence(evidence);
   const evidenceStatusesComplete = isEvidenceStatusComplete(evidence, summary);
+  const releaseBinding = releaseBindingStatus(evidence);
   const lines = [
     'CharityPilot production launch evidence status',
     '==============================================',
@@ -158,6 +212,7 @@ function renderStatus(evidence) {
     `finalSignoff: ${statusOf(evidence?.finalSignoff?.status)}`,
     `Final approval roles approved: ${summary.approvedFinalSignoffRoles} / ${summary.totalFinalSignoffRoles}`,
     `Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks}`,
+    `Release binding: ${releaseBinding.headline}`,
     '',
     'Areas:',
   ];
@@ -209,6 +264,7 @@ function renderJsonStatus(evidence) {
     {
       approvedForLaunch: evidence?.approvedForLaunch === true,
       completedChecks: summary.completedChecks,
+      releaseBinding: releaseBindingStatus(evidence),
       evidenceStatusesComplete: isEvidenceStatusComplete(evidence, summary),
       finalSignoffStatus: statusOf(evidence?.finalSignoff?.status),
       approvedFinalSignoffRoles: summary.approvedFinalSignoffRoles,

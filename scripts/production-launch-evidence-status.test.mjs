@@ -44,6 +44,7 @@ test('production launch evidence status reports pending template progress withou
     assert.match(result.stdout, /releaseGate: 0 \/ 18 complete/);
     assert.match(result.stdout, /approvedForLaunch: false/);
     assert.match(result.stdout, /finalSignoff: pending/);
+    assert.match(result.stdout, /Release binding: Launch evidence is not bound to a concrete release artifact identity/);
     assert.match(result.stdout, /Final approval roles still pending:/);
     assert.match(result.stdout, /engineering: pending/);
     assert.match(result.stdout, /legalCompliance: pending/);
@@ -100,6 +101,10 @@ test('production launch evidence status renders non-secret JSON for automation',
     assert.equal(payload.evidenceStatusesComplete, false);
     assert.equal(payload.approvedForLaunch, false);
     assert.equal(payload.completedChecks, 1);
+    assert.equal(payload.releaseBinding.complete, false);
+    assert.ok(payload.releaseBinding.missingFields.includes('release.commitSha'));
+    assert.ok(payload.releaseBinding.missingFields.includes('release.workflowRunUrl'));
+    assert.ok(payload.releaseBinding.missingFields.includes('release.imageDigestManifest.apiImage'));
     assert.equal(payload.totalChecks, 85);
     assert.equal(payload.approvedFinalSignoffRoles, 1);
     assert.equal(payload.totalFinalSignoffRoles, 5);
