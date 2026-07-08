@@ -389,6 +389,10 @@ test('dashboard sign-off and register summary cards are extracted from the overs
   assert.match(summaryCardsSrc, /Annual board sign-off/);
   assert.match(summaryCardsSrc, /Governance registers/);
   assert.match(summaryCardsSrc, /ComplianceSignoffStatus/);
+  assert.match(summaryCardsSrc, /from '@\/components\/ui\/status'/);
+  assert.match(summaryCardsSrc, /StatusChip/);
+  assert.doesNotMatch(summaryCardsSrc, /<Chip\b/);
+  assert.doesNotMatch(summaryCardsSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
 });
 
 test('dashboard progress panels are extracted from the oversized route file', () => {
@@ -413,10 +417,14 @@ test('dashboard loading and empty states use shared primitives instead of route-
   const dashboardSurface = [pageSrc, progressSrc].join('\n');
 
   assert.match(pageSrc, /from '@\/components\/ui\/states'/);
+  assert.match(pageSrc, /from '@\/components\/ui\/status'/);
   assert.match(progressSrc, /from '@\/components\/ui\/status'/);
   assert.match(dashboardSurface, /LoadingState/);
   assert.match(dashboardSurface, /EmptyState/);
   assert.match(dashboardSurface, /StatusDot/);
+  assert.match(pageSrc, /StatusChip/);
+  assert.doesNotMatch(pageSrc, /<Chip\b/);
+  assert.doesNotMatch(pageSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
   assert.doesNotMatch(dashboardSurface, /function SkeletonCard/);
   assert.doesNotMatch(dashboardSurface, /animate-pulse/);
   assert.doesNotMatch(dashboardSurface, /rounded-full bg-green-500/);

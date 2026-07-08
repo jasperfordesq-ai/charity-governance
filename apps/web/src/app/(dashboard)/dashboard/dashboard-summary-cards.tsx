@@ -1,10 +1,11 @@
 'use client';
 
-import { Button, Card, Chip } from '@heroui/react';
+import { Button, Card } from '@heroui/react';
 import Link from 'next/link';
 import type { ComplianceSignoffResponse, GovernanceRegistersSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
 import { LoadingState } from '@/components/ui/states';
+import { StatusChip, type StatusTone } from '@/components/ui/status';
 
 type DashboardSummaryCardsProps = {
   loading: boolean;
@@ -25,23 +26,27 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
   const signoffStatus = signoff?.status ?? ComplianceSignoffStatus.DRAFT;
   const signoffMeta = {
     [ComplianceSignoffStatus.APPROVED]: {
-      color: 'success' as const,
+      tone: 'success' as const,
       label: 'Approved',
       text: signoff?.boardMeetingDate
         ? `Approved at board meeting on ${new Date(signoff.boardMeetingDate).toLocaleDateString('en-IE')}.`
         : 'The annual Compliance Record has been marked approved.',
     },
     [ComplianceSignoffStatus.BOARD_REVIEW]: {
-      color: 'warning' as const,
+      tone: 'warning' as const,
       label: 'Board review',
       text: 'The Compliance Record is ready for trustee review and board minute approval.',
     },
     [ComplianceSignoffStatus.DRAFT]: {
-      color: 'default' as const,
+      tone: 'neutral' as const,
       label: 'Draft',
       text: 'Record board approval before reporting the annual compliance position.',
     },
   }[signoffStatus];
+  const openRegisterItems = registerSummary
+    ? registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints
+    : 0;
+  const registerTone: StatusTone = openRegisterItems > 0 ? 'warning' : 'success';
 
   return (
     <>
@@ -50,9 +55,9 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Annual board sign-off</h2>
-              <Chip size="sm" color={signoffMeta.color} variant="flat">
+              <StatusChip tone={signoffMeta.tone}>
                 {signoffMeta.label}
-              </Chip>
+              </StatusChip>
             </div>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{signoffMeta.text}</p>
             {signoff?.minuteReference && (
@@ -73,17 +78,9 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Governance registers</h2>
-                <Chip
-                  size="sm"
-                  color={
-                    registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints > 0
-                      ? 'warning'
-                      : 'success'
-                  }
-                  variant="flat"
-                >
-                  {registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints} open items
-                </Chip>
+                <StatusChip tone={registerTone}>
+                  {openRegisterItems} open items
+                </StatusChip>
               </div>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Annual Report readiness {registerSummary.annualReportReadinessPercent}% | Financial controls{' '}
