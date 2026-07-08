@@ -25,7 +25,11 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /npm run test:e2e:responsive/);
   assert.match(gates, /Launch-Critical Route Inventory/);
   assert.match(gates, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
-  assert.match(gates, /release\.commitSha/);
+  assert.match(gates, /every browser QA evidence slot must bind to the exact promoted release\.commitSha/);
+  assert.match(gates, /browserQa\.checks\.browser-qa-completed/);
+  assert.match(gates, /browserQa\.checks\.desktop-coverage/);
+  assert.match(gates, /browserQa\.checks\.mobile-coverage/);
+  assert.match(gates, /browserQa\.checks\.critical-flows/);
   assert.match(gates, /solicitor\/governance\/privacy review/);
   assert.match(gates, /external penetration test/);
 }
@@ -150,15 +154,17 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   ]);
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('CHARITYPILOT_API_IMAGE')));
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('AUTH_COOKIE_DOMAIN')));
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('CHARITYPILOT_WEB_DOMAIN')));
   assert.match(JSON.stringify(s.expectedProductionValueGroups), /Stripe live secret key/);
   assert.doesNotMatch(JSON.stringify(s.expectedProductionValueGroups), /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
   const payload = JSON.parse(renderLaunchStatusJson(s));
   assert.equal(payload.phase, 'NO_ENV');
   assert.deepEqual(payload.expectedProductionValueGroups, s.expectedProductionValueGroups);
-  assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 24, remaining: 24 });
+  assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 28, remaining: 28 });
   assert.equal(payload.launchProgress.evidenceChecks, null);
   assert.equal(payload.launchProgress.finalSignoffs, null);
-  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 114, remaining: 114 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 118, remaining: 118 });
   assert.deepEqual(payload.launchProgress.percentages, {
     productionValues: 0,
     evidenceChecks: 0,
@@ -194,8 +200,9 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.equal(s.expectedProductionValueGroups.length, 8);
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
+  assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('CADDY_ACME_EMAIL')));
   assert.equal(s.evidenceLedger.exists, true);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 26, total: 28, remaining: 2 });
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
@@ -224,6 +231,26 @@ test('groups missing production values by operator source', () => {
   assert.match(groups[2].items[0].hint, /service role key/);
   assert.match(groups[3].items[0].hint, /Digest-pinned web image ref/);
   assert.match(groups[4].items[0].hint, /Operator-supplied production value/);
+});
+
+test('reports TLS and shared-cookie production drift before deploy preflight', () => {
+  const env = [
+    'NODE_ENV=production',
+    'AUTH_COOKIE_DOMAIN=',
+    'CADDY_ACME_EMAIL=ops@charitypilot.ie',
+    'CHARITYPILOT_WEB_DOMAIN=charitypilot.ie',
+    'CHARITYPILOT_API_DOMAIN=api.charitypilot.ie',
+  ].join('\n');
+
+  const s = assessLaunchState({ envExists: true, envContent: env });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, ['AUTH_COOKIE_DOMAIN', 'CHARITYPILOT_WEB_DOMAIN']);
+  assert.deepEqual(s.remainingKeyGroups.map((group) => ({ label: group.label, keys: group.keys })), [
+    { label: 'Hosting, DNS, TLS, and proxy', keys: ['AUTH_COOKIE_DOMAIN', 'CHARITYPILOT_WEB_DOMAIN'] },
+  ]);
+  assert.match(s.remainingKeyGroups[0].items[0].hint, /Shared cookie domain/);
+  assert.match(s.remainingKeyGroups[0].items[1].hint, /app\.charitypilot\.ie/);
 });
 
 test('reports launch evidence completion counts when the evidence ledger exists', () => {
@@ -331,15 +358,16 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.equal(payload.expectedProductionValueGroups.length, 8);
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
-  assert.deepEqual(payload.launchProgress.productionValues, { completed: 22, total: 24, remaining: 2 });
+  assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('AUTH_COOKIE_DOMAIN')));
+  assert.deepEqual(payload.launchProgress.productionValues, { completed: 26, total: 28, remaining: 2 });
   assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 85, remaining: 85 });
   assert.deepEqual(payload.launchProgress.finalSignoffs, { approved: 0, total: 5, remaining: 5 });
-  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 22, total: 114, remaining: 92 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 26, total: 118, remaining: 92 });
   assert.deepEqual(payload.launchProgress.percentages, {
-    productionValues: 91.7,
+    productionValues: 92.9,
     evidenceChecks: 0,
     finalSignoffs: 0,
-    strictLaunchGates: 19.3,
+    strictLaunchGates: 22,
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
@@ -387,7 +415,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   assert.equal(s.phase, 'ENV_COMPLETE');
   assert.equal(s.remainingKeys.length, 0);
   assert.deepEqual(s.expectedProductionValueGroups, []);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 24, total: 24, remaining: 0 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 28, total: 28, remaining: 0 });
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assert.ok(s.nextActions.some((a) => a.includes('check:production:evidence:status')));
   assert.ok(s.nextActions.some((a) => a.includes('--json')));

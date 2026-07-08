@@ -2,7 +2,7 @@
 
 Date checked: 2026-07-05
 
-Scope: current backend/dependency hardening refresh. Runtime API, shared, dependency, and operational-readiness surfaces were inspected; no runtime code or package files were edited in this pass. Launch status still reports that 23 production values still require real data, and the external launch ledger still needs all 85 machine-readable launch evidence checks before real charity data.
+Scope: current backend/dependency hardening refresh. Runtime API, shared, dependency, and operational-readiness surfaces were inspected; no runtime code or package files were edited in this pass. Launch status still reports that 19 production values still require real data, and the external launch ledger still needs all 85 machine-readable launch evidence checks before real charity data.
 
 ## Findings
 

@@ -24,10 +24,10 @@ be rerun against the final production configuration:
 a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`;
 on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
-configured handoff still had 23 production values needing real data.
-On the latest checked workstation, production values are `1 / 24` complete,
+configured handoff still had 19 production values needing real data.
+On the latest checked workstation, production values are `9 / 28` complete,
 machine-readable launch evidence is `9 / 85` complete, final signoffs are
-`0 / 5`, the strict counted launch gates are `10 / 114` complete (`8.8%`),
+`0 / 5`, the strict counted launch gates are `18 / 118` complete (`15.3%`),
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.
@@ -39,7 +39,14 @@ The machine-readable launch evidence file must also pass all
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
-The deployed browser evidence must also complete the Launch-Critical Route Inventory in `docs/production-browser-qa.md`, proving every route in desktop, mobile, light-mode, and dark-mode evidence before launch signoff, and the critical-flow evidence must name the exact promoted `release.commitSha`.
+The deployed browser evidence must also complete the Launch-Critical Route Inventory
+in `docs/production-browser-qa.md`, proving every route in desktop, mobile, light-mode, and dark-mode evidence before launch signoff. Every browser QA
+evidence slot must name the exact promoted `release.commitSha`:
+`browserQa.checks.browser-qa-completed`, `browserQa.checks.desktop-coverage`,
+`browserQa.checks.mobile-coverage`, `browserQa.checks.accessibility-coverage`,
+`browserQa.checks.cross-browser-coverage`,
+`browserQa.checks.ios-safari-device-coverage`, and
+`browserQa.checks.critical-flows`.
 A local `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
 `6da2573`: security scan, lint, build, workspace tests, dependency audit, and
 reliability ledger passed; only Playwright E2E was skipped. Treat this as local

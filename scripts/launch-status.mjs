@@ -97,7 +97,7 @@ const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 85 machine-readable checks, including release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
-  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence and bind that critical-flow evidence to release.commitSha, accessibility output must be recorded in browserQa.checks.accessibility-coverage, cross-browser output in browserQa.checks.cross-browser-coverage, and real iOS Safari evidence in browserQa.checks.ios-safari-device-coverage.',
+  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, and every browser QA evidence slot must bind to the exact promoted release.commitSha: browserQa.checks.browser-qa-completed, browserQa.checks.desktop-coverage, browserQa.checks.mobile-coverage, browserQa.checks.accessibility-coverage, browserQa.checks.cross-browser-coverage, browserQa.checks.ios-safari-device-coverage, and browserQa.checks.critical-flows.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
 ]);
@@ -105,7 +105,16 @@ const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
 const MISSING_VALUE_GROUPS = Object.freeze([
   {
     label: 'Hosting, DNS, TLS, and proxy',
-    keys: ['TRUSTED_PROXY_ADDRESSES', 'FRONTEND_URL', 'NEXT_PUBLIC_API_URL', 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL'],
+    keys: [
+      'TRUSTED_PROXY_ADDRESSES',
+      'FRONTEND_URL',
+      'NEXT_PUBLIC_API_URL',
+      'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL',
+      'AUTH_COOKIE_DOMAIN',
+      'CADDY_ACME_EMAIL',
+      'CHARITYPILOT_WEB_DOMAIN',
+      'CHARITYPILOT_API_DOMAIN',
+    ],
   },
   {
     label: 'PostgreSQL',
@@ -170,6 +179,38 @@ function placeholderKeys(envContent) {
     if (m && /REPLACE_ME/.test(m[2])) keys.push(m[1]);
   }
   return keys;
+}
+
+function productionEnvAssignments(envContent) {
+  const assignments = new Map();
+  for (const line of envContent.split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*?)(\r?)$/);
+    if (!m) continue;
+    assignments.set(m[1], m[2].trim());
+  }
+  return assignments;
+}
+
+function productionValueIssueKeys(envContent) {
+  const keys = new Set(placeholderKeys(envContent));
+  const assignments = productionEnvAssignments(envContent);
+  const expectedExactValues = [
+    ['AUTH_COOKIE_DOMAIN', '.charitypilot.ie'],
+    ['CHARITYPILOT_WEB_DOMAIN', 'app.charitypilot.ie'],
+    ['CHARITYPILOT_API_DOMAIN', 'api.charitypilot.ie'],
+  ];
+
+  for (const [key, expectedValue] of expectedExactValues) {
+    if (!assignments.has(key)) continue;
+    if (assignments.get(key) !== expectedValue) keys.add(key);
+  }
+
+  if (assignments.has('CADDY_ACME_EMAIL')) {
+    const caddyEmail = assignments.get('CADDY_ACME_EMAIL') ?? '';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(caddyEmail)) keys.add('CADDY_ACME_EMAIL');
+  }
+
+  return [...keys];
 }
 
 export function groupRemainingKeys(keys) {
@@ -341,7 +382,7 @@ export function assessLaunchState(state) {
     };
   }
 
-  const remainingKeys = placeholderKeys(state.envContent ?? '');
+  const remainingKeys = productionValueIssueKeys(state.envContent ?? '');
   if (remainingKeys.length > 0) {
     return {
       phase: 'ENV_INCOMPLETE',

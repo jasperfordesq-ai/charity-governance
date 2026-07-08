@@ -446,10 +446,10 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Launch Progress Summary
 
-- Production values complete: 1 / 24 (23 remaining)
+- Production values complete: 9 / 28 (19 remaining)
 - Launch evidence checks complete: 9 / 85 (76 remaining)
 - Final signoffs approved: 0 / 5 (5 remaining)
-- Strict launch gates complete: 10 / 114 (104 remaining, 8.8% complete)
+- Strict launch gates complete: 18 / 118 (100 remaining, 15.3% complete)
 - approvedForLaunch: false
 
 ### Local Production Environment Placeholders

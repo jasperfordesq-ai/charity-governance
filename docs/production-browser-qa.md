@@ -104,6 +104,13 @@ Record the cross-browser command output in `browserQa.checks.cross-browser-cover
 ## Launch-Critical Route Inventory
 
 Every route below must have desktop, mobile, light-mode, and dark-mode evidence before browser QA can close. Automated responsive smoke can supply this evidence for rendered routes; manual notes should cover route-specific workflow checks, permission states, empty states, and any production-only provider behavior.
+Every browser QA evidence slot recorded in the launch ledger must name the exact
+promoted `release.commitSha`, including `browserQa.checks.browser-qa-completed`,
+`browserQa.checks.desktop-coverage`, `browserQa.checks.mobile-coverage`,
+`browserQa.checks.accessibility-coverage`,
+`browserQa.checks.cross-browser-coverage`,
+`browserQa.checks.ios-safari-device-coverage`, and
+`browserQa.checks.critical-flows`.
 
 | Route | Area | Required evidence |
 | --- | --- | --- |

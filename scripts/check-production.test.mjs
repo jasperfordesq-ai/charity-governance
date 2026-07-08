@@ -1606,8 +1606,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.match(productionTodo, /Current local status checked 2026-07-08/);
-  assert.match(productionTodo, /1 of 24 production values is complete/);
-  assert.match(productionTodo, /1 of 24 production values is complete[\s\S]*23[\s\S]*production values still require real data/);
+  assert.match(productionTodo, /9 of 28 production values are complete/);
+  assert.match(productionTodo, /9 of 28 production values are complete[\s\S]*19[\s\S]*production values still require real data/);
   assert.match(productionTodo, /launch evidence ledger is now 9 of 85 checks\s+>\s+complete from local\/CI release-gate evidence/s);
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
@@ -2302,8 +2302,8 @@ test('plain English launch guide names every final approval role', () => {
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-08/);
-  assert.match(launchGuide, /23 production values needing real data/);
-  assert.match(launchGuide, /production values are `1 \/ 24` complete/);
+  assert.match(launchGuide, /19 production values needing real data/);
+  assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
   assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 300\/300/);
   assert.doesNotMatch(launchGuide, /299\/299 production-tooling checks|passed 299\/299/);
@@ -2476,7 +2476,7 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /Fresh production dependency audit on 2026-07-05/);
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
-  assert.match(backendAudit, /23 production values still require real data/);
+  assert.match(backendAudit, /19 production values still require real data/);
   assert.match(backendAudit, /85 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
