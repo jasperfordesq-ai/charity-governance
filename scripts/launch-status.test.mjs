@@ -25,6 +25,9 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /npm run test:e2e:responsive/);
   assert.match(gates, /Launch-Critical Route Inventory/);
   assert.match(gates, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
+  assert.match(gates, /pending-navigation confirmation/);
+  assert.match(gates, /conditional obligations/);
+  assert.match(gates, /readiness blockers/);
   assert.match(gates, /every browser QA evidence slot must bind to the exact promoted release\.commitSha/);
   assert.match(gates, /browserQa\.checks\.browser-qa-completed/);
   assert.match(gates, /browserQa\.checks\.desktop-coverage/);
