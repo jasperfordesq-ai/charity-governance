@@ -47,7 +47,7 @@ release-gate evidence, not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Must pass for the release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 286/286 on 2026-07-08; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
