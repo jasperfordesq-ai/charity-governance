@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `bbb9970`
+Working-tree base commit when generated: `1db62df`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -15,10 +15,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 44 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 45 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 23 value(s) still need real data. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-08; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 16 web unit test files, 44 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 16 web unit test files, 45 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -263,7 +263,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit bbb9970: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
+- `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit 1db62df: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
 - `npm run test:production-check` passed locally on 2026-07-08 with 300/300 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
