@@ -68,6 +68,13 @@ function readRepoFile(path) {
   return readFileSync(join(repoRoot, path), 'utf8').replace(/\r\n/g, '\n');
 }
 
+function currentAuditSelectedGateCommit() {
+  const auditLedger = readRepoFile('docs/platform-completion-audit.md');
+  const match = auditLedger.match(/`npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit ([a-f0-9]{7,40})/);
+  assert.ok(match, 'platform completion audit must record the latest local selected-gate commit');
+  return match[1];
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -1596,6 +1603,7 @@ test('reliability report emits ASCII-safe operator output', () => {
 
 test('production todo reflects current launch blockers without overclaiming local browser smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
+  const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.match(productionTodo, /Current local status checked 2026-07-08/);
   assert.match(productionTodo, /1 of 24 production values is complete/);
@@ -1617,6 +1625,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
+  assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
   assert.match(productionTodo, /300\/300 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /299\/299 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /298\/298 production-tooling checks/);
@@ -1633,6 +1642,7 @@ test('production todo reflects current launch blockers without overclaiming loca
 
 test('agent continuation handoff reflects current launch evidence progress without stale zero counters', () => {
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');
+  const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-08/);
   assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 85`/);
@@ -1640,6 +1650,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /76 \/ 85` machine-readable launch checks remain/);
   assert.match(handoff, /releaseGate\.check-production/);
   assert.match(handoff, /releaseGate\.deploy-preflight/);
+  assert.match(handoff, new RegExp(`commit \`${escapeRegExp(selectedGateCommit)}\``));
   assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 85`/);
   assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 85`/);
   assert.doesNotMatch(handoff, /85 \/ 85` machine-readable launch checks remain/);
@@ -2287,6 +2298,7 @@ test('production browser QA checklist points browser evidence at the dedicated l
 
 test('plain English launch guide names every final approval role', () => {
   const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
+  const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-08/);
@@ -2295,7 +2307,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
   assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 300\/300/);
   assert.doesNotMatch(launchGuide, /299\/299 production-tooling checks|passed 299\/299/);
-  assert.match(launchGuide, /commit\s+`1db62df`/);
+  assert.match(launchGuide, new RegExp(`commit\\s+\`${escapeRegExp(selectedGateCommit)}\``));
   assert.doesNotMatch(launchGuide, /`91baf75`|`db025c7`|`73e8484`/);
   assert.match(launchGuide, /final signoffs are\s+`0 \/ 5`/);
   assert.match(launchGuide, /`approvedForLaunch` is `false`/);
