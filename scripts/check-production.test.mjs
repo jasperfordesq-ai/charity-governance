@@ -1600,9 +1600,9 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /Current local status checked 2026-07-08/);
   assert.match(productionTodo, /1 of 24 production values is complete/);
   assert.match(productionTodo, /1 of 24 production values is complete[\s\S]*23[\s\S]*production values still require real data/);
-  assert.match(productionTodo, /launch evidence ledger remains 0 of 85 checks/);
-  assert.match(productionTodo, /final signoffs remain 0 of 5 approved/);
-  assert.match(productionTodo, /approvedForLaunch` is\s+>\s+false/s);
+  assert.match(productionTodo, /launch evidence ledger is now 9 of 85 checks\s+>\s+complete from local\/CI release-gate evidence/s);
+  assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
+  assert.match(productionTodo, /`approvedForLaunch` is false/);
   assert.match(productionTodo, /Local responsive browser QA completed cleanly on 2026-07-08/);
   assert.match(productionTodo, /public desktop 13\/13/);
   assert.match(productionTodo, /public mobile 13\/13/);

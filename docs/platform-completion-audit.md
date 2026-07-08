@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `b00a066`
+Working-tree base commit when generated: `e2a98ee`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -253,7 +253,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit b00a066: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
+- `npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit e2a98ee: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.
 - `npm run test:production-check` passed locally on 2026-07-08 with 297/297 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -351,16 +351,16 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 0 / 85.
+- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 85.
 - approvedForLaunch: false
 - finalSignoff: pending
 - Final approval roles approved: 0 / 5
 - Next incomplete checks:
-  - releaseGate.npm-ci (pending)
-  - releaseGate.db-generate (pending)
-  - releaseGate.prisma-validate (pending)
-  - releaseGate.lint (pending)
-  - releaseGate.test (pending)
+  - releaseGate.check-production (pending)
+  - releaseGate.deploy-preflight (pending)
+  - releaseGate.deploy-production (pending)
+  - releaseGate.deploy-smoke (pending)
+  - releaseGate.deploy-rollback (pending)
 - Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 
 ### Local Production Environment State

@@ -9,9 +9,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > **Current local status checked 2026-07-08:** `npm run launch:status -- --json`
 > still reports `ENV_INCOMPLETE`: 1 of 24 production values is complete and 23
 > production values still require real data in `.env.production` or the approved
-> production secret store. The launch evidence ledger remains 0 of 85 checks
-> complete, final signoffs remain 0 of 5 approved, and `approvedForLaunch` is
-> false. Do not put real charity data into CharityPilot until those values,
+> production secret store. The launch evidence ledger is now 9 of 85 checks
+> complete from local/CI release-gate evidence, final signoffs remain 0 of 5
+> approved, and `approvedForLaunch` is false. Do not put real charity data into CharityPilot until those values,
 > provider checks, deployed QA, legal/privacy review, external security review,
 > backup/restore evidence, all 85 machine-readable launch evidence checks, and
 > final signoffs are complete.
@@ -47,7 +47,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > every checklist item to predate final signoff, and aligns the deploy-smoke evidence
 > hint with the actual `node scripts/smoke-production-deploy.mjs` command. A local
 > `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
-> `b00a066`: security scan, lint, build, workspace tests, dependency audit, and
+> `e2a98ee`: security scan, lint, build, workspace tests, dependency audit, and
 > reliability ledger passed; only Playwright E2E was skipped. This still does not
 > replace deployed QA, real provider checks, legal/privacy review, pentest, or
 > final production signoffs.

@@ -286,7 +286,7 @@ const independentAuditFindings = [
 ];
 
 const localVerificationEvidence = [
-  '`npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit b00a066: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.',
+  '`npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit e2a98ee: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped.',
   '`npm run test:production-check` passed locally on 2026-07-08 with 297/297 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.',
   '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
   '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
