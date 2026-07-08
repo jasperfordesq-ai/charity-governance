@@ -2295,8 +2295,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
   assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 300\/300/);
   assert.doesNotMatch(launchGuide, /299\/299 production-tooling checks|passed 299\/299/);
-  assert.match(launchGuide, /commit\s+`91baf75`/);
-  assert.doesNotMatch(launchGuide, /`db025c7`|`73e8484`/);
+  assert.match(launchGuide, /commit\s+`1db62df`/);
+  assert.doesNotMatch(launchGuide, /`91baf75`|`db025c7`|`73e8484`/);
   assert.match(launchGuide, /final signoffs are\s+`0 \/ 5`/);
   assert.match(launchGuide, /`approvedForLaunch` is `false`/);
   assert.match(launchGuide, /Local responsive browser QA completed cleanly on 2026-07-08/);
