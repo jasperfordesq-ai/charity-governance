@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { useDocumentTitle } from '@/lib/use-title';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { AppPage } from '@/components/ui/app-page';
+import { SaveStatusIndicator } from '@/components/ui/states';
 import { DocumentDeleteModal } from './document-delete-modal';
 import { DocumentEvidencePackPanel } from './document-evidence-pack-panel';
 import { DocumentListPanel } from './document-list-panel';
@@ -77,6 +78,8 @@ export default function DocumentsPage() {
     uploadOwner,
   } = useDocumentsWorkflow();
   const documentDataReady = !loading && !loadError;
+  const documentMutationStatus: 'idle' | 'saving' | 'saved' | 'error' =
+    uploading || deleting || linkingStandard || Boolean(unlinkingStandard) ? 'saving' : 'idle';
 
   return (
     <AppPage
@@ -84,13 +87,16 @@ export default function DocumentsPage() {
       title="Document Vault"
       description="Store governance files in private evidence storage, then link them to standards so trustee review packs are review-ready."
       actions={(
-        <Button
-          className={primaryActionButtonClassName}
-          onPress={uploadModal.onOpen}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Upload document
-        </Button>
+        <>
+          <SaveStatusIndicator status={documentMutationStatus} />
+          <Button
+            className={primaryActionButtonClassName}
+            onPress={uploadModal.onOpen}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Upload document
+          </Button>
+        </>
       )}
     >
       {documentDataReady && (

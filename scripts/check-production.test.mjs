@@ -2379,6 +2379,14 @@ test('team page mutations use the shared save-status primitive', () => {
   assert.doesNotMatch(teamPage, /Team permissions ready/);
 });
 
+test('documents page mutations use the shared save-status primitive', () => {
+  const documentsPage = readRepoFile('apps/web/src/app/(dashboard)/documents/page.tsx');
+
+  assert.match(documentsPage, /SaveStatusIndicator/);
+  assert.match(documentsPage, /const documentMutationStatus: 'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(documentsPage, /<SaveStatusIndicator\s+status=\{documentMutationStatus\}/);
+});
+
 test('billing page uses shared visible status for Stripe actions', () => {
   const billingPage = readRepoFile('apps/web/src/app/(dashboard)/billing/page.tsx');
 
