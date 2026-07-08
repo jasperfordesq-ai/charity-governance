@@ -17,7 +17,7 @@ const releaseWorkflowRunPattern =
 const releaseImagePatterns = Object.freeze({
   apiImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:[a-f0-9]{64}$/,
   webImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}$/,
-  migrationImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-migration@sha256:[a-f0-9]{64}$/,
+  migrationImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:[a-f0-9]{64}$/,
 });
 
 function usage() {

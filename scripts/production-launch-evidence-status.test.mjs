@@ -129,6 +129,36 @@ test('production launch evidence status renders non-secret JSON for automation',
   }
 });
 
+test('production launch evidence status recognises the published migration image repository', async () => {
+  const { releaseBindingStatus } = await loadStatusRunner();
+  const digest = 'a'.repeat(64);
+  const evidence = {
+    release: {
+      commitSha: 'b'.repeat(40),
+      workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+      workflowFile: '.github/workflows/release-images.yml',
+      gitRef: 'refs/heads/master',
+      imageDigestManifest: {
+        apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
+        webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
+        migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+        webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
+        webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+      },
+    },
+  };
+
+  const pluralStatus = releaseBindingStatus(evidence);
+  assert.equal(pluralStatus.complete, true);
+  assert.deepEqual(pluralStatus.missingFields, []);
+
+  evidence.release.imageDigestManifest.migrationImage =
+    `ghcr.io/jasperfordesq-ai/charity-governance-migration@sha256:${digest}`;
+  const singularStatus = releaseBindingStatus(evidence);
+  assert.equal(singularStatus.complete, false);
+  assert.ok(singularStatus.missingFields.includes('release.imageDigestManifest.migrationImage'));
+});
+
 test('production launch evidence status falls back to current hints for older ledgers', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
   const evidence = {

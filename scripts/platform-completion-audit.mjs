@@ -283,7 +283,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence references now must use approved HTTPS evidence hosts and reject signed or token-bearing URL query strings.',
   'Production launch evidence now restricts GitHub evidence references to the canonical charity-governance repository.',
   'Production launch evidence chronology now lets operators prepare the package before collecting evidence while requiring all checklist evidence before final signoff approval.',
-  'Production launch evidence deploy-smoke hints now name the real smoke-production-deploy command that the validator accepts.',
+  'Production launch evidence deploy-smoke hints now match the strict validator by naming the deploy command, standalone smoke command, success marker, and canonical production origins.',
   'Platform audit generation now falls back to reading .git metadata directly when shelling out to git is unavailable.',
   'The plain-English launch guide and platform audit now describe launch status as local non-committed state, so fresh clones and partially configured production workstations do not contradict each other.',
   'Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.',

@@ -235,10 +235,14 @@ The launch evidence model has been tightened substantially:
 - Supabase evidence requires private bucket, signed URL behavior, backup/PITR evidence, and restore-test ownership.
 - Billing/email evidence requires Stripe webhook event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Evidence chronology now allows the package to be prepared before evidence is collected, while requiring every checklist evidence entry to be captured no later than `finalSignoff.approvedAt`.
-- Deploy-smoke evidence hints now name the actual accepted command:
+- Deploy-smoke evidence hints now match the strict validator:
 
 ```powershell
+npm run deploy:production -- --production-env-file=.env.production
 node scripts/smoke-production-deploy.mjs --production-env-file .env.production
+Production deploy smoke passed
+https://app.charitypilot.ie
+https://api.charitypilot.ie
 ```
 
 ## Recent Verification Evidence

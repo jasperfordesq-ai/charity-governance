@@ -1914,7 +1914,9 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.releaseGate.checks['deploy-smoke'].requiredEvidenceHints,
       [
+        'npm run deploy:production -- --production-env-file=.env.production',
         'node scripts/smoke-production-deploy.mjs --production-env-file .env.production',
+        'Production deploy smoke passed',
         'https://app.charitypilot.ie',
         'https://api.charitypilot.ie',
       ],
