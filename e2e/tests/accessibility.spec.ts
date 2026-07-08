@@ -5,7 +5,6 @@ import { getPrincipleIdByNumber } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 type Theme = 'light' | 'dark';
-type RouteSpec = string | { label: string; resolve: () => Promise<string> };
 
 const NAVIGATION_TIMEOUT_MS = 300_000;
 const ACCESSIBILITY_TEST_TIMEOUT_MS = 300_000;
@@ -54,13 +53,10 @@ async function seriousViolations(page: Page): Promise<string[]> {
     .map((v) => `${v.id} (${v.impact}) x${v.nodes.length}: ${v.help}`);
 }
 
-const DASHBOARD_PAGES: readonly RouteSpec[] = [
+const DASHBOARD_PAGES = [
   '/dashboard',
   '/compliance',
-  {
-    label: '/compliance/${principleId}',
-    resolve: async () => `/compliance/${await getPrincipleIdByNumber(1)}`,
-  },
+  '/compliance/${principleId}',
   '/board',
   '/documents',
   '/deadlines',
@@ -88,26 +84,28 @@ const PUBLIC_AND_AUTH_PAGES = [
   '/verify-email',
 ] as const;
 
-async function resolveRoute(route: RouteSpec): Promise<{ label: string; path: string }> {
-  if (typeof route === 'string') return { label: route, path: route };
-  return { label: route.label, path: await route.resolve() };
+async function resolveDashboardPath(path: string): Promise<string> {
+  if (path === '/compliance/${principleId}') {
+    return `/compliance/${await getPrincipleIdByNumber(1)}`;
+  }
+  return path;
 }
 
 test.describe('Accessibility - dashboard (light + dark)', () => {
-  for (const route of DASHBOARD_PAGES) {
-    test(`${typeof route === 'string' ? route : route.label} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
-      const { label, path } = await resolveRoute(route);
+  for (const path of DASHBOARD_PAGES) {
+    test(`${path} is axe-clean in light and dark themes`, async ({ ownerPage }) => {
+      const resolvedPath = await resolveDashboardPath(path);
       // Light theme (default).
       await ownerPage.emulateMedia({ reducedMotion: 'reduce' });
-      await gotoWithDevServerRetry(ownerPage, path, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
+      await gotoWithDevServerRetry(ownerPage, resolvedPath, { waitUntil: 'commit', timeout: NAVIGATION_TIMEOUT_MS });
       await waitForDocumentShell(ownerPage);
       await applyTheme(ownerPage, 'light');
       await settle(ownerPage);
-      expect(await seriousViolations(ownerPage), `${label} (light)`).toEqual([]);
+      expect(await seriousViolations(ownerPage), `${path} (light)`).toEqual([]);
 
       await applyTheme(ownerPage, 'dark');
       await settle(ownerPage);
-      expect(await seriousViolations(ownerPage), `${label} (dark)`).toEqual([]);
+      expect(await seriousViolations(ownerPage), `${path} (dark)`).toEqual([]);
     });
   }
 });
