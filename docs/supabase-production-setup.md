@@ -122,17 +122,20 @@ Evidence:
 
 - [ ] Enable managed database backups or point-in-time recovery for production PostgreSQL.
 - [ ] Record the backup window and retention period outside git.
-- [ ] Run a restore test before launch.
+- [ ] Run a restore test before launch into an isolated, non-production restore target.
+- [ ] Confirm the live production Supabase project was not overwritten or mutated by the restore rehearsal.
 - [ ] Repeat restore testing quarterly.
 - [ ] Confirm document storage retention aligns with the approved data retention policy.
 - [ ] Record the retention policy reference in `docs/production-launch-checklist.md`.
 - [ ] Record backup/PITR evidence in `supabaseStorage.checks.supabase-backups-enabled`.
-- [ ] Record restore-test owner and recovery notes in `supabaseStorage.checks.supabase-restore-tested`.
+- [ ] Record restore-test owner, restore date, recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten in `supabaseStorage.checks.supabase-restore-tested`.
 
 Evidence:
 
 | Field | Value |
 | --- | --- |
 | Backup policy location | |
-| Restore test location | |
+| Isolated restore test location | |
+| Non-production restore target reference | |
+| Production-not-overwritten confirmation | |
 | Retention policy location | |

@@ -6,6 +6,7 @@ import { redactProductionDeployTranscript } from './production-deploy-preflight.
 
 const ENV_FILE_FLAG = '--production-env-file=';
 const READINESS_PATH = '/api/v1/health/readiness';
+const MIN_READINESS_KEY_LENGTH = 32;
 const DISALLOWED_CORS_PROBE_ORIGIN = 'https://not-charitypilot.example';
 const placeholderSecretPattern = /(?:replace_me|change-me|your_|your-|todo|tbd|pending|placeholder)/i;
 
@@ -116,6 +117,8 @@ function smokeConfig(env) {
 
   if (!readinessKey || placeholderSecretPattern.test(readinessKey)) {
     issues.push('READINESS_API_KEY is required for production deploy smoke');
+  } else if (readinessKey.length < MIN_READINESS_KEY_LENGTH) {
+    issues.push(`READINESS_API_KEY must be at least ${MIN_READINESS_KEY_LENGTH} characters for production deploy smoke`);
   }
 
   return { issues, webOrigin, apiOrigin, readinessKey };

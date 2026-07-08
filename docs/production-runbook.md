@@ -104,6 +104,8 @@ Use managed PostgreSQL backups with point-in-time recovery enabled. Confirm back
 
 Run `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel` before launch from a trusted shell with Docker available, after seeding the restore sentinel through the approved operational process. The checker takes a temporary custom-format dump from the production `DATABASE_URL`, restores it into a disposable local PostgreSQL container, verifies the critical application tables, governance reference data, and representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows, then removes the temporary dump by default. Do not store retained dumps in evidence systems.
 
+For Supabase storage and project recovery, record restore evidence only from an isolated non-production restore target. The launch evidence for `supabaseStorage.checks.supabase-restore-tested` must name the owner, restore date, recovery notes, isolated restore target, non-production restore target, and confirmation that the live production Supabase project was not overwritten or mutated by the rehearsal.
+
 ## Jobs
 
 In production, the API container does not run scheduled jobs in-process. The default Docker Compose stack runs a separate `production-scheduler` service, and the `jobs` profile exposes one-shot reminder and cleanup commands for rehearsal or platform scheduler integrations:

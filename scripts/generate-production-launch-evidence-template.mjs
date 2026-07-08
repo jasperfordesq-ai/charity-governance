@@ -82,7 +82,15 @@ const evidenceHintsByCheck = new Map([
     'retention period',
     'backup owner',
   ]],
-  ['supabaseStorage.supabase-restore-tested', ['Supabase restore test', 'owner', 'restore date', 'recovery notes']],
+  ['supabaseStorage.supabase-restore-tested', [
+    'Supabase restore test',
+    'owner',
+    'restore date',
+    'recovery notes',
+    'isolated restore target',
+    'non-production restore target',
+    'production project was not overwritten',
+  ]],
   ['jobs.scheduler-owned', ['production-scheduler service', 'platform scheduler replacement approval', 'scheduler owner']],
   ['jobs.scheduler-command', [
     'dist/jobs/production-scheduler.js',

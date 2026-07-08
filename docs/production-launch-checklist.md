@@ -148,8 +148,8 @@ Evidence:
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and signed download are verified through the deployed app.
 - [ ] Supabase backup policy or PITR evidence is recorded outside git with backup window, retention period, and backup owner.
-- [ ] Supabase restore test evidence exists with owner, restore date, and recovery notes.
-- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested` with owner/date/recovery details.
+- [ ] Supabase restore test evidence exists with owner, restore date, recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
+- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested` with owner/date/recovery details, isolated restore target, non-production restore target, and production-not-overwritten confirmation.
 
 Evidence:
 
@@ -159,7 +159,9 @@ Evidence:
 | Readiness output location | |
 | Document QA evidence location | |
 | Backup policy location | |
-| Restore test location | |
+| Isolated restore test location | |
+| Non-production restore target reference | |
+| Production-not-overwritten confirmation | |
 
 ## 6. Jobs
 

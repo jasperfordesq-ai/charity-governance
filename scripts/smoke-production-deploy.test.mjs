@@ -329,6 +329,36 @@ test('production deploy smoke rejects placeholder readiness keys before fetching
   }
 });
 
+test('production deploy smoke rejects short readiness keys before fetching', async () => {
+  const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-short-readiness-'));
+  const envPath = join(tempDir, 'production.env');
+  let fetchCalled = false;
+
+  writeFileSync(envPath, completeSmokeEnv({
+    READINESS_API_KEY: 'short-key',
+  }));
+
+  try {
+    const result = await runProductionDeploySmokeFromArgs(
+      ['--production-env-file', envPath, '--dry-run'],
+      {
+        processEnv: cleanEnv(),
+        fetchImpl: async () => {
+          fetchCalled = true;
+          return response(200, {}, baselineHeaders());
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(fetchCalled, false);
+    assert.match(result.stderr, /READINESS_API_KEY must be at least 32 characters for production deploy smoke/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production deploy smoke fails when keyed readiness is not ready', async () => {
   const runProductionDeploySmokeFromArgs = await loadSmokeRunner();
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-smoke-not-ready-'));

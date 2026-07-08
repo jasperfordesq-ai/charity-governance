@@ -279,7 +279,10 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'supabaseStorage' && checkId === 'supabase-restore-tested') {
-    entry.description = 'Supabase restore test evidence exists with an accountable owner, restore date, and recovery notes for the production Supabase project.';
+    entry.description = [
+      'Supabase restore test evidence exists with an accountable owner, restore date, and recovery notes for the production Supabase project.',
+      'The test used an isolated restore target and non-production restore target, and the production project was not overwritten.',
+    ].join(' ');
   }
 
   if (areaId === 'billingAndEmail' && checkId === 'providers-check') {
@@ -1192,6 +1195,9 @@ test('production launch evidence validator requires concrete hosting database an
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include Supabase restore test/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include restore date/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include recovery notes/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include isolated restore target/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include non-production restore target/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-restore-tested\.evidence must include production project was not overwritten/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1936,6 +1942,16 @@ test('production launch evidence template covers every required area and final s
     assert.ok(
       template.areas.supabaseStorage.checks['supabase-restore-tested'].requiredEvidenceHints.includes(
         'Supabase restore test',
+      ),
+    );
+    assert.ok(
+      template.areas.supabaseStorage.checks['supabase-restore-tested'].requiredEvidenceHints.includes(
+        'isolated restore target',
+      ),
+    );
+    assert.ok(
+      template.areas.supabaseStorage.checks['supabase-restore-tested'].requiredEvidenceHints.includes(
+        'production project was not overwritten',
       ),
     );
     assert.ok(

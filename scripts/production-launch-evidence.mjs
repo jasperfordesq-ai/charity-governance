@@ -944,7 +944,15 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         'retention period',
         'backup owner',
       ],
-      'supabase-restore-tested': ['Supabase restore test', 'owner', 'restore date', 'recovery notes'],
+      'supabase-restore-tested': [
+        'Supabase restore test',
+        'owner',
+        'restore date',
+        'recovery notes',
+        'isolated restore target',
+        'non-production restore target',
+        'production project was not overwritten',
+      ],
     };
 
     for (const marker of supabaseMarkersByCheck[checkId] ?? []) {
