@@ -1,11 +1,13 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { Button, Card, CardBody, Link, Spinner } from '@heroui/react';
+import { Button, Card, CardBody, Link } from '@heroui/react';
 import { Check, CircleAlert, Mail } from 'lucide-react';
 import { FormAlert } from '@/components/ui/form-alert';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { AuthCardLoading } from '@/components/ui/auth-card-loading';
 import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
+import { LoadingState } from '@/components/ui/states';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -91,11 +93,7 @@ function VerifyEmailContent() {
         <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
           <CardBody className="p-8 sm:p-10">
             {status === 'loading' && (
-              <div className="text-center py-8" role="status" aria-live="polite">
-                <Spinner size="lg" color="primary" classNames={{ circle1: 'border-b-teal-primary', circle2: 'border-b-teal-primary' }} />
-                <p className="mt-4 text-gray-700 dark:text-gray-200 font-medium">Verifying your email...</p>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">This should only take a moment.</p>
-              </div>
+              <LoadingState title="Verifying your email" description="This should only take a moment." />
             )}
 
             {status === 'pending' && (
@@ -178,16 +176,7 @@ function VerifyEmailContent() {
 
 function VerifyEmailFallback() {
   return (
-    <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
-        <CardBody className="p-8 sm:p-10">
-          <div className="text-center py-8" role="status" aria-live="polite">
-            <Spinner size="lg" color="primary" classNames={{ circle1: 'border-b-teal-primary', circle2: 'border-b-teal-primary' }} />
-            <p className="mt-4 text-gray-700 dark:text-gray-200 font-medium">Verifying your email...</p>
-          </div>
-        </CardBody>
-      </Card>
-    </div>
+    <AuthCardLoading title="Preparing email verification" description="Checking your secure verification link." />
   );
 }
 

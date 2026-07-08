@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `838805d`
+Working-tree base commit when generated: `beca819`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -165,6 +165,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Compliance overview principle disclosure buttons now expose expanded state and controlled panel relationships for assistive technology.
 - Auth password visibility controls now use a shared HeroUI icon-button primitive instead of repeated route-local raw buttons.
 - Auth email and password-recovery status illustrations now use a shared dark-mode-aware status icon primitive instead of repeated route-local icon containers.
+- Auth invite, reset-password, and verify-email async fallbacks now use shared loading primitives instead of route-local skeleton or spinner markup.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 - Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
@@ -180,7 +181,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Pricing metadata is ASCII-safe and pricing feature/comparison icons now use lucide-react directly without route-local wrappers.
 - The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.
 - The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.
-- Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare GPL-3.0-or-later licensing, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.
+- Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare GPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.
 - The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.
 - The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
@@ -274,7 +275,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
 | P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 79 | no | no obvious static risk; verify in browser |
-| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 166 | yes | no obvious static risk; verify in browser |
+| P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 160 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 198 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
@@ -294,10 +295,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 266 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 184 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
-| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 183 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
-| P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 201 | yes | no obvious static risk; verify in browser |
+| P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 
 ## API And Backend Audit
 

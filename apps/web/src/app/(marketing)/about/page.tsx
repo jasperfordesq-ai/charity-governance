@@ -54,7 +54,7 @@ export default function AboutPage() {
               >
                 https://github.com/jasperfordesq-ai/charity-governance
               </a>
-              .
+              . The software is provided with no warranty under the GPL.
             </p>
           </div>
         </div>

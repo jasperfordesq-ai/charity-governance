@@ -15,7 +15,7 @@ export function LegalAttribution({ className = '' }: { className?: string }) {
       >
         GitHub repository
       </a>
-      .
+      . No warranty.
     </p>
   );
 }

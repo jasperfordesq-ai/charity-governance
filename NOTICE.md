@@ -7,6 +7,8 @@ Jasper Ford is the IP holder for CharityPilot. The project is licensed under
 the GNU General Public License v3.0 or later (GPL-3.0-or-later). See
 [LICENSE](LICENSE) for the full license text.
 
+The software is provided with no warranty under the GPL.
+
 Canonical source repository:
 
 https://github.com/jasperfordesq-ai/charity-governance

@@ -857,6 +857,8 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
     ['ui/status.tsx', ['StatusChip', 'StatusDot', 'EvidenceChip', 'ReviewFlag', 'DeadlineBadge']],
     ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
     ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
+    ['ui/auth-card-loading.tsx', ['AuthCardLoading']],
+    ['ui/auth-status-icon.tsx', ['AuthStatusIcon']],
     ['ui/modal-form-actions.tsx', ['ModalFormActions']],
     ['ui/modal-dismiss-actions.tsx', ['ModalDismissActions']],
     ['ui/confirm-action-modal.tsx', ['ConfirmActionModal']],
@@ -1691,6 +1693,29 @@ test('auth status illustrations use the shared status icon primitive', () => {
     assert.doesNotMatch(src, /bg-red-50 dark:bg-red-950\/40/, `${route} should not duplicate error icon tones`);
     assert.doesNotMatch(src, /bg-teal-primary\/10 dark:bg-teal-bright\/10/, `${route} should not duplicate brand icon tones`);
   }
+});
+
+test('auth async fallbacks use shared loading primitives instead of route-local skeletons', () => {
+  const primitive = component('ui/auth-card-loading.tsx');
+  assert.match(primitive, /export function AuthCardLoading/);
+  assert.match(primitive, /LoadingState/);
+  assert.match(primitive, /CardBody/);
+
+  const routes = [
+    '(auth)/accept-invite/page.tsx',
+    '(auth)/reset-password/page.tsx',
+    '(auth)/verify-email/page.tsx',
+  ];
+
+  for (const route of routes) {
+    const src = app(route);
+    assert.match(src, /AuthCardLoading/, `${route} should use the shared auth loading card`);
+    assert.doesNotMatch(src, /animate-pulse/, `${route} should not keep route-local skeleton markup`);
+    assert.doesNotMatch(src, /bg-gray-200 dark:bg-gray-800/, `${route} should not keep route-local skeleton bars`);
+    assert.doesNotMatch(src, /<Spinner\b/, `${route} should not keep a route-local spinner state`);
+  }
+
+  assert.match(app('(auth)/verify-email/page.tsx'), /LoadingState/, 'verify-email should use shared LoadingState for in-card verification progress');
 });
 
 test('auth password visibility controls use the shared HeroUI icon button primitive', () => {
@@ -2806,6 +2831,7 @@ test('public attribution surfaces name Jasper Ford as IP holder and link to the 
   const notice = repo('NOTICE.md');
   assert.match(notice, /Copyright \(C\) 2026 Jasper Ford/);
   assert.match(notice, /GNU General Public License v3\.0 or later/);
+  assert.match(notice, /no warranty under the GPL/i);
   assert.match(notice, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
 
   const attribution = component('legal-attribution.tsx');

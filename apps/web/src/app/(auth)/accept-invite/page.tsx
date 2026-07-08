@@ -9,6 +9,7 @@ import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { useAuth } from '@/lib/auth-context';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { AuthCardLoading } from '@/components/ui/auth-card-loading';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
@@ -145,14 +146,7 @@ function AcceptInviteForm() {
 
 function AcceptInviteFallback() {
   return (
-    <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
-        <CardBody className="p-8 sm:p-10">
-          <div className="h-7 w-44 rounded bg-gray-200 dark:bg-gray-800 mx-auto mb-3" />
-          <div className="h-4 w-64 rounded bg-gray-200 dark:bg-gray-800 mx-auto" />
-        </CardBody>
-      </Card>
-    </div>
+    <AuthCardLoading title="Preparing invite" description="Checking your secure invite link." />
   );
 }
 
