@@ -485,7 +485,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /npm run test:e2e:responsive/);
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
-  assert.match(auditLedger, /passed locally on 2026-07-08 at commit db025c7/);
+  assert.match(auditLedger, /passed locally on 2026-07-08 at commit 73e8484/);
   assert.match(auditLedger, /9\/85 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/85 evidence checks/);
   assert.match(auditLedger, /299\/299 production-tooling checks/);
