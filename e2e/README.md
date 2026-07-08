@@ -163,11 +163,54 @@ If the deployed responsive matrix needs chunking, run the same four
 `test:e2e:responsive:*` commands with the deployed environment variables above
 and keep the four transcripts together as one browser-QA evidence set.
 
+Example focused deployed chunks:
+
+```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
+npm run test:e2e:responsive:public:desktop
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
+npm run test:e2e:responsive:public:mobile
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
+npm run test:e2e:responsive:dashboard:desktop
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
+npm run test:e2e:responsive:dashboard:mobile
+```
+
 For cross-browser launch evidence on a runner with the required browsers
 installed, use:
 
 ```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:responsive:cross-browser
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:accessibility:cross-browser
 ```
 

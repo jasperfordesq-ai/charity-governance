@@ -643,6 +643,10 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
   assert.match(e2eReadme, /full 50-test matrix/);
+  assert.match(e2eReadme, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive:public:desktop/);
+  assert.match(e2eReadme, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:deployed:responsive:cross-browser/);
+  assert.match(e2eReadme, /SECRET_STORE_E2E_OWNER_EMAIL/);
+  assert.match(e2eReadme, /SECRET_STORE_E2E_OWNER_PASSWORD/);
   assert.match(e2eReadme, /test:e2e:responsive:public:desktop/);
   assert.match(e2eReadme, /test:e2e:responsive:dashboard:mobile/);
   assert.match(e2eReadme, /Invalid file descriptor to ICU data/);

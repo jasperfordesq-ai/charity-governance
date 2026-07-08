@@ -136,29 +136,29 @@ For automated deployed browser evidence, use an approved non-sensitive owner/adm
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive
 
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e -- tests/accessibility.spec.ts
 
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:responsive:cross-browser
 
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:accessibility:cross-browser
 ```
 

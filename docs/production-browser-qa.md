@@ -33,15 +33,15 @@ Example deployed cross-browser responsive and accessibility commands:
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:responsive:cross-browser
 
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:accessibility:cross-browser
 ```
 
@@ -50,9 +50,32 @@ runner, run the four focused chunks instead and keep all four command transcript
 together under the same browser QA evidence reference:
 
 ```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive:public:desktop
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive:public:mobile
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive:dashboard:desktop
+
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive:dashboard:mobile
 ```
 
@@ -72,8 +95,8 @@ Example deployed accessibility smoke command:
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
 E2E_API_URL=https://api.charitypilot.ie \
-E2E_OWNER_EMAIL=<secret-store-reference> \
-E2E_OWNER_PASSWORD=<secret-store-reference> \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e -- tests/accessibility.spec.ts
 ```
 

@@ -2281,6 +2281,11 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.match(browserQa, /test:e2e:responsive:public:mobile/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
+  assert.match(browserQa, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive:public:desktop/);
+  assert.match(browserQa, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive:dashboard:mobile/);
+  assert.match(browserQa, /SECRET_STORE_E2E_OWNER_EMAIL/);
+  assert.match(browserQa, /SECRET_STORE_E2E_OWNER_PASSWORD/);
+  assert.doesNotMatch(browserQa, /<secret-store-reference>/);
   assert.match(browserQa, /E2E_SKIP_ROUTE_WARMING=true/);
   assert.match(browserQa, /E2E_ROUTE_WARM_TIMEOUT_MS/);
   assert.match(readRepoFile('e2e/global-setup.ts'), /Route warming skipped because E2E_SKIP_ROUTE_WARMING=true/);
@@ -2615,6 +2620,11 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/YOUR_SUPABASE_PROJECT_REF\.supabase\.co"/);
+  assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive/);
+  assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:deployed:responsive:cross-browser/);
+  assert.match(runbook, /SECRET_STORE_E2E_OWNER_EMAIL/);
+  assert.match(runbook, /SECRET_STORE_E2E_OWNER_PASSWORD/);
+  assert.doesNotMatch(runbook, /<secret-store-reference>/);
   assert.match(runbook, /gh workflow run release-images\.yml --ref master/);
   assert.match(runbook, /gh run watch <release-run-id> --exit-status/);
   assert.match(runbook, /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/);
