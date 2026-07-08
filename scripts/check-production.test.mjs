@@ -1617,6 +1617,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
+  assert.match(productionTodo, /297\/297 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /286\/286 production-tooling checks/);
   assert.match(productionTodo, /Rerun every release gate on the final release ref/);
   assert.match(productionTodo, /commit SHA, workflow run, and digest manifest/);
   assert.doesNotMatch(productionTodo, /Latest local selected-gate check/);
