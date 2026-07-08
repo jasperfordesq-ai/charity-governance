@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `6c1ae4a`
+Working-tree base commit when generated: `9d4941f`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -106,6 +106,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The organisation conditional-obligation profile fields are split out of the oversized organisation route behind a wiring regression test.
 - The organisation profile form section is split out of the oversized organisation route behind a wiring regression test.
 - The organisation complexity guidance modal is split out of the oversized organisation route behind a wiring regression test.
+- The organisation complexity guidance modal now uses a shared HeroUI dismiss-action footer primitive behind a wiring regression test.
 - The organisation setup summary panel is split out of the oversized organisation route behind a wiring regression test.
 - The organisation workflow session hydration, dirty-state guard, validation, save mutation, and setup form state are split into a route-local hook behind a wiring regression test.
 - The dashboard deadline and board-alert action lists are split out of the oversized dashboard route behind a wiring regression test.

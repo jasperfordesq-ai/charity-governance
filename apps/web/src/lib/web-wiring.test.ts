@@ -292,6 +292,8 @@ test('organisation complexity guidance modal is extracted from the oversized rou
   assert.match(modalSrc, /Simple organisations/);
   assert.match(modalSrc, /Complex organisations/);
   assert.match(modalSrc, /Changing this setting affects which standards appear/);
+  assert.match(modalSrc, /ModalDismissActions/);
+  assert.doesNotMatch(modalSrc, /ModalFooter/);
 });
 
 test('organisation workflow state is extracted from the oversized route file', () => {
@@ -856,6 +858,7 @@ test('the shared UI foundation exposes reusable page, state, form, list, status,
     ['ui/states.tsx', ['LoadingState', 'EmptyState', 'ErrorState', 'LockedFeatureState', 'ReviewWarningState']],
     ['ui/forms.tsx', ['FieldGroup', 'FormHint', 'ValidationSummary', 'StickyFormActions']],
     ['ui/modal-form-actions.tsx', ['ModalFormActions']],
+    ['ui/modal-dismiss-actions.tsx', ['ModalDismissActions']],
     ['ui/confirm-action-modal.tsx', ['ConfirmActionModal']],
     ['ui/data-list.tsx', ['DataList', 'DataListTable', 'DataListItems']],
     ['ui/source-reference.tsx', ['SourceReferenceLink', 'SourceReferenceList', 'SourceReferenceNote']],

@@ -1,7 +1,7 @@
 'use client';
 
-import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '@heroui/react';
-import { primaryActionButtonClassName } from '@/components/ui/action-button';
+import { Modal, ModalBody, ModalContent, ModalHeader } from '@heroui/react';
+import { ModalDismissActions } from '@/components/ui/modal-dismiss-actions';
 import { InlineStatus } from '@/components/ui/states';
 
 export function OrganisationComplexityModal({
@@ -34,11 +34,7 @@ export function OrganisationComplexityModal({
                 Changing this setting affects which standards appear. Existing records are retained. Treat this as a governance setup choice, not legal advice.
               </InlineStatus>
             </ModalBody>
-            <ModalFooter>
-              <Button className={primaryActionButtonClassName} onPress={onClose}>
-                Got it
-              </Button>
-            </ModalFooter>
+            <ModalDismissActions onDismiss={onClose} />
           </>
         )}
       </ModalContent>
