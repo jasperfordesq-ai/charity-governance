@@ -113,6 +113,7 @@ function ResetPasswordForm() {
                     variant="bordered"
                     classNames={{
                       inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright',
+                      description: '!text-gray-700 dark:!text-gray-300',
                     }}
                     endContent={eyeButton(showPassword, () => setShowPassword(!showPassword))}
                   />
@@ -131,6 +132,7 @@ function ResetPasswordForm() {
                     variant="bordered"
                     classNames={{
                       inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright',
+                      description: '!text-gray-700 dark:!text-gray-300',
                     }}
                     endContent={
                       <div className="flex items-center gap-1">

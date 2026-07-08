@@ -93,7 +93,10 @@ function AcceptInviteForm() {
                 isRequired
                 autoComplete="new-password"
                 variant="bordered"
-                classNames={{ inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright' }}
+                classNames={{
+                  inputWrapper: 'border-gray-300 hover:border-teal-primary focus-within:!border-teal-primary dark:border-gray-700 dark:hover:border-teal-bright dark:focus-within:!border-teal-bright',
+                  description: '!text-gray-700 dark:!text-gray-300',
+                }}
                 description="Use at least 8 characters with uppercase, lowercase, and a number."
                 endContent={
                   <PasswordVisibilityButton

@@ -64,7 +64,7 @@ export default async function BlogPostPage({
           </Link>
 
           <div className="mb-5 flex flex-wrap items-center gap-3">
-            <span className="rounded-md bg-white/15 px-3 py-1 text-xs font-semibold text-teal-50">
+            <span className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-teal-900 shadow-sm">
               {meta.category}
             </span>
             <span className="text-sm text-teal-100">{meta.readTime}</span>
@@ -79,7 +79,7 @@ export default async function BlogPostPage({
           </p>
 
           <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-sm font-bold text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-sm font-bold text-teal-900 shadow-sm">
               CP
             </div>
             <div>

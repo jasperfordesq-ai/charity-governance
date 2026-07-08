@@ -3101,6 +3101,39 @@ test('dashboard and auth navigation links preserve dark-mode active polish', () 
   );
 });
 
+test('public and auth helper text keeps accessible contrast in light mode', () => {
+  const resetPasswordPage = app('(auth)/reset-password/page.tsx');
+  const acceptInvitePage = app('(auth)/accept-invite/page.tsx');
+  const blogPostPage = app('(marketing)/blog/[slug]/page.tsx');
+
+  for (const [file, src] of [
+    ['(auth)/reset-password/page.tsx', resetPasswordPage],
+    ['(auth)/accept-invite/page.tsx', acceptInvitePage],
+  ] as const) {
+    assert.match(
+      src,
+      /description: '!text-gray-700 dark:!text-gray-300'/,
+      `${file} should override faint HeroUI password description text`,
+    );
+    assert.doesNotMatch(
+      src,
+      /description="(?:At least 8 characters|Use at least 8 characters)[\s\S]*?text-foreground-400/,
+      `${file} should not rely on the low-contrast default description token`,
+    );
+  }
+
+  assert.match(
+    blogPostPage,
+    /rounded-md bg-white px-3 py-1 text-xs font-semibold text-teal-900 shadow-sm/,
+    'blog post category chip should be opaque enough over the teal hero',
+  );
+  assert.match(
+    blogPostPage,
+    /rounded-lg bg-white text-sm font-bold text-teal-900 shadow-sm/,
+    'blog post author avatar should be opaque enough over the teal hero',
+  );
+});
+
 test('public and auth primary CTAs use the shared action button styling', () => {
   const ctaFiles = [
     '(auth)/accept-invite/page.tsx',
