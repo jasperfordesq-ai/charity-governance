@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { getTrustedStripeRedirectUrl } from '@/lib/url-security';
 import { AppPage } from '@/components/ui/app-page';
-import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
+import { ErrorState, InlineStatus, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
 import { BillingPlanSections } from './billing-plan-sections';
 import type { BillingStatusResponse } from '@charitypilot/shared';
@@ -102,6 +102,11 @@ export default function BillingPage() {
   const isActive = billing?.status === SubscriptionStatus.ACTIVE;
   const billingConfigured = billing?.billingConfigured ?? false;
   const currentPlanName = billing?.plan === SubscriptionPlan.COMPLETE ? 'Complete' : billing?.plan === SubscriptionPlan.ESSENTIALS ? 'Essentials' : 'No active plan';
+  const billingActionStatus = checkoutLoading
+    ? 'Preparing secure Stripe checkout...'
+    : portalLoading
+      ? 'Opening secure Stripe customer portal...'
+      : '';
 
   return (
     <AppPage
@@ -109,10 +114,6 @@ export default function BillingPage() {
       title="Billing & Subscription"
       description="Manage the plan that controls governance coverage, evidence storage, reminders, team access, and Complete register access."
     >
-      <div aria-live="polite" className="sr-only">
-        {billingError ?? (checkoutLoading ? 'Preparing Stripe checkout' : portalLoading ? 'Opening Stripe portal' : 'Billing ready')}
-      </div>
-
       {billingError ? (
         <ErrorState
           title="Billing needs attention"
@@ -132,6 +133,12 @@ export default function BillingPage() {
             description="Checkout and portal actions are disabled while the payment provider is not configured. Existing access is shown from the current billing status. Please contact support to change your plan."
           />
         </div>
+      ) : null}
+
+      {billingActionStatus ? (
+        <InlineStatus tone="neutral">
+          {billingActionStatus}
+        </InlineStatus>
       ) : null}
 
       {loading ? (

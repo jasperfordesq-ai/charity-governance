@@ -2379,6 +2379,15 @@ test('team page mutations use the shared save-status primitive', () => {
   assert.doesNotMatch(teamPage, /Team permissions ready/);
 });
 
+test('billing page uses shared visible status for Stripe actions', () => {
+  const billingPage = readRepoFile('apps/web/src/app/(dashboard)/billing/page.tsx');
+
+  assert.match(billingPage, /InlineStatus/);
+  assert.match(billingPage, /const billingActionStatus = checkoutLoading[\s\S]*portalLoading/);
+  assert.match(billingPage, /<InlineStatus tone="neutral">\s*\{billingActionStatus\}/);
+  assert.doesNotMatch(billingPage, /Billing ready/);
+});
+
 test('backend product audit records current launch and dependency posture', () => {
   const backendAudit = readRepoFile('docs/product-revamp/backend-audit.md');
 

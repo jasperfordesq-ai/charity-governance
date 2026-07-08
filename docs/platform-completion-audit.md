@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `4a91dcb`
+Working-tree base commit when generated: `dd6458b`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -145,6 +145,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.
+- Billing checkout and portal handoffs now use a shared visible inline status instead of a route-local hidden live-region message.
 - Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.
 - Deployed browser QA now has cross-browser responsive and accessibility script wiring for Chromium desktop, Chromium mobile emulation, Firefox, and WebKit evidence runs while keeping real iOS Safari as manual or cloud-device evidence.
 - Supabase launch evidence now requires backup policy or PITR evidence and restore-test ownership in addition to private bucket, signed URL, and readiness proof.
@@ -246,7 +247,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
 - Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team mutation-status cleanup; production-tooling checks passed 292/292.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team mutation-status and billing action-status cleanup; production-tooling checks passed 293/293.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.
@@ -282,7 +283,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 364 | no | no obvious static risk; verify in browser |
 | P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 79 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 160 | yes | no obvious static risk; verify in browser |
-| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 198 | yes | no obvious static risk; verify in browser |
+| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
