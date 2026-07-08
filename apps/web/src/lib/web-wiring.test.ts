@@ -1432,12 +1432,15 @@ test('documents delete modal is extracted from the oversized route file', () => 
   const modalPath = dashPath('documents/document-delete-modal.tsx');
   assert.ok(existsSync(modalPath), 'document delete modal should be split out of page.tsx');
   const modalSrc = readFileSync(modalPath, 'utf8');
+  const confirmModal = component('ui/confirm-action-modal.tsx');
 
   assert.match(pageSrc, /DocumentDeleteModal/);
   assert.doesNotMatch(pageSrc, /<ModalHeader>Delete document<\/ModalHeader>/);
   assert.doesNotMatch(pageSrc, /This removes the file and its standard links/);
-  assert.match(modalSrc, /<ModalHeader>Delete document<\/ModalHeader>/);
+  assert.match(modalSrc, /ConfirmActionModal/);
+  assert.doesNotMatch(modalSrc, /ModalHeader/);
   assert.match(modalSrc, /This removes the file and its standard links/);
+  assert.match(confirmModal, /destructive action/i);
 });
 
 test('documents uploaded-list panel is extracted from the oversized route file', () => {
@@ -1901,14 +1904,19 @@ test('deadlines delete confirmation modal is extracted from the oversized route 
   const modalPath = dashPath('deadlines/deadline-delete-modal.tsx');
   assert.ok(existsSync(modalPath), 'deadline delete modal should be split out of page.tsx');
   const modalSrc = readFileSync(modalPath, 'utf8');
+  const confirmModal = component('ui/confirm-action-modal.tsx');
 
   assert.match(pageSrc, /DeadlineDeleteModal/);
   assert.doesNotMatch(pageSrc, /<Modal isOpen=\{deleteModal\.isOpen\}/);
   assert.doesNotMatch(pageSrc, /<ModalHeader>Delete deadline<\/ModalHeader>/);
   assert.doesNotMatch(pageSrc, /This cannot be undone/);
+  assert.match(modalSrc, /ConfirmActionModal/);
+  assert.doesNotMatch(modalSrc, /ModalHeader/);
   assert.match(modalSrc, /Delete deadline/);
   assert.match(modalSrc, /Remove \{selectedDeadline \?/);
   assert.match(modalSrc, /This cannot be undone/);
+  assert.match(confirmModal, /ModalHeader/);
+  assert.match(confirmModal, /confirmDisabled/);
 });
 
 test('deadlines workflow state is extracted from the oversized route file', () => {
