@@ -208,6 +208,7 @@ const fixedInThisAuditBranch = [
   'Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.',
   'Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.',
   'Dashboard annual regulator summary now uses shared status panel styling instead of route-local brand panel markup.',
+  'Dashboard summary and progress cards now use shared status panel styling instead of route-local neutral card markup.',
   'Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.',
   'Global recovery, not-found, dashboard mobile-menu, and compliance disclosure actions now use HeroUI Button primitives instead of bespoke route-local action markup.',
   'Responsive browser-smoke QA now waits for the parsed document shell before applying light/dark theme checks after commit-stage navigations.',

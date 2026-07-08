@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { ComplianceSignoffResponse, GovernanceRegistersSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
 import { LoadingState } from '@/components/ui/states';
-import { StatusChip, type StatusTone } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 
 type DashboardSummaryCardsProps = {
   loading: boolean;
@@ -50,7 +50,7 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
 
   return (
     <>
-      <Card className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+      <Card className={statusPanelClassName('neutral', 'p-5 shadow-sm')}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -73,7 +73,7 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
       </Card>
 
       {registerSummary && (
-        <Card className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+        <Card className={statusPanelClassName('neutral', 'p-5 shadow-sm')}>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">

@@ -457,6 +457,19 @@ test('dashboard annual regulator summary uses shared status panel styling', () =
   assert.doesNotMatch(pageSrc, /rounded-lg border border-teal-primary\/20 dark:border-teal-light\/20 bg-white dark:bg-gray-900 p-5 shadow-sm/);
 });
 
+test('dashboard summary and progress cards use shared status panel styling', () => {
+  const summaryCardsSrc = dash('dashboard/dashboard-summary-cards.tsx');
+  const progressSrc = dash('dashboard/dashboard-progress-panels.tsx');
+
+  for (const src of [summaryCardsSrc, progressSrc]) {
+    assert.match(src, /statusPanelClassName/);
+    assert.doesNotMatch(src, /border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm/);
+  }
+  assert.match(summaryCardsSrc, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
+  assert.match(progressSrc, /className=\{statusPanelClassName\('neutral', 'p-6 shadow-sm'\)\}/);
+  assert.match(progressSrc, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm hover:border-teal-primary\/40 dark:hover:border-teal-light\/40 hover:shadow-md transition-all cursor-pointer h-full'\)\}/);
+});
+
 test('dashboard workflow state is extracted from the oversized route file', () => {
   const pageSrc = dash('dashboard/page.tsx');
   const workflowPath = dashPath('dashboard/use-dashboard-workflow.ts');

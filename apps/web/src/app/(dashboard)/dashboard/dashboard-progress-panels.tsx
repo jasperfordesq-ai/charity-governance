@@ -5,7 +5,7 @@ import type { ComplianceSummary } from '@charitypilot/shared';
 import Link from 'next/link';
 import { AppSection } from '@/components/ui/app-page';
 import { EmptyState, LoadingState } from '@/components/ui/states';
-import { StatusDot } from '@/components/ui/status';
+import { StatusDot, statusPanelClassName } from '@/components/ui/status';
 
 const scoreColour = (pct: number) => {
   if (pct >= 80) return 'success';
@@ -28,7 +28,7 @@ export function DashboardProgressPanels({
           description="Checking this year's standards, deadlines, trustees, and register signals."
         />
       ) : compliance ? (
-        <Card className="p-6 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+        <Card className={statusPanelClassName('neutral', 'p-6 shadow-sm')}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="flex-shrink-0 text-center sm:text-left">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Overall recorded progress</p>
@@ -95,7 +95,7 @@ export function DashboardProgressPanels({
             {compliance.byPrinciple.map((principle) => (
               <Link key={principle.principleId} href={`/compliance/${principle.principleId}`}>
                 <Card
-                  className="p-5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-teal-primary/40 dark:hover:border-teal-light/40 hover:shadow-md transition-all cursor-pointer h-full"
+                  className={statusPanelClassName('neutral', 'p-5 shadow-sm hover:border-teal-primary/40 dark:hover:border-teal-light/40 hover:shadow-md transition-all cursor-pointer h-full')}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="w-8 h-8 rounded-lg bg-teal-primary/10 dark:bg-teal-light/10 text-teal-primary dark:text-teal-bright flex items-center justify-center text-sm font-bold">
