@@ -2471,20 +2471,21 @@ test('irish source log records current official-source recheck without legal cer
   const auditScript = readRepoFile('scripts/platform-completion-audit.mjs');
   const platformAudit = readRepoFile('docs/platform-completion-audit.md');
 
-  assert.match(sourceLog, /Date checked: 2026-07-06/);
-  assert.match(sourceLog, /Official sources were rechecked by web search\/browsing on 2026-07-06/);
+  assert.match(sourceLog, /Date checked: 2026-07-08/);
+  assert.match(sourceLog, /Official sources were rechecked by web search\/browsing on 2026-07-08/);
   assert.match(sourceLog, /Charities Regulator direct automated fetches returned 403/);
-  assert.match(sourceLog, /Irish Statute Book commencement table was updated to 24 June 2026/);
+  assert.match(sourceLog, /Irish Statute Book commencement table was updated to 18 June 2026/);
   assert.match(sourceLog, /Law Reform Commission revised Charities Act 2009 page was updated to 22 April 2026/);
   assert.match(sourceLog, /not legal advice/);
   assert.match(sourceLog, /professional-review flags/);
   assert.doesNotMatch(sourceLog, /legally guaranteed/i);
   assert.doesNotMatch(sourceLog, /legally bombproof/i);
+  assert.doesNotMatch(sourceLog, /Date checked: 2026-07-06/);
   assert.doesNotMatch(sourceLog, /Date checked: 2026-07-05/);
   assert.doesNotMatch(sourceLog, /Date checked: 2026-07-03/);
-  assert.match(auditScript, /source metadata was refreshed.*2026-07-06/);
+  assert.match(auditScript, /source metadata was refreshed.*2026-07-08/);
   assert.doesNotMatch(auditScript, /source metadata was refreshed.*2026-07-04/);
-  assert.match(platformAudit, /source metadata was refreshed.*2026-07-06/);
+  assert.match(platformAudit, /source metadata was refreshed.*2026-07-08/);
   assert.doesNotMatch(platformAudit, /source metadata was refreshed.*2026-07-04/);
 });
 
