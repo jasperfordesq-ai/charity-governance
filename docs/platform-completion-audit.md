@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `649be67`
+Working-tree base commit when generated: `a0ade56`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -99,6 +99,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The export report preview cards and score helpers are split out of the oversized export route behind a wiring regression test.
 - The export controls and readiness-warning panel are split out of the oversized export route behind a wiring regression test.
 - The export board-approval form panel is split out of the oversized export route behind a wiring regression test.
+- The export board sign-off save action now exposes the shared save-status primitive behind a production tooling regression test.
 - The export workflow loading, approval-readiness refresh, board sign-off mutation, report-opening state, and blocker derivation are split into a route-local hook behind a wiring regression test.
 - The compliance principle evidence-readiness panel is split out of the oversized compliance detail route behind a wiring regression test.
 - Compliance principle in-app navigation now uses a HeroUI save/leave confirmation modal instead of a bare browser confirm prompt.
@@ -170,7 +171,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Auth email and password-recovery status illustrations now use a shared dark-mode-aware status icon primitive instead of repeated route-local icon containers.
 - Auth invite, reset-password, and verify-email async fallbacks now use shared loading primitives instead of route-local skeleton or spinner markup.
 - Marketing blog search now uses the shared empty-state primitive for no-result filters instead of route-local dashed-panel markup.
-- Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.
+- Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.
 - Shared utility icon controls for theme switching, copying links, and back-to-top now use HeroUI Button semantics.
 - Compliance principle back navigation and autosave retry controls now use HeroUI Button primitives.
 - Public marketing navigation, blog filters, and cookie-consent actions now use HeroUI Button primitives with dark-mode mobile navigation styling.
@@ -249,7 +250,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 with 16/16 axe checks, including dashboard light/dark coverage and no serious/critical violations.
 - Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document mutation-status, billing action-status, and team permission-hint cleanup; production-tooling checks passed 295/295.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action-status, and team permission-hint cleanup; production-tooling checks passed 296/296.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.

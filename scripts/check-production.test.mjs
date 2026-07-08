@@ -2387,6 +2387,14 @@ test('documents page mutations use the shared save-status primitive', () => {
   assert.match(documentsPage, /<SaveStatusIndicator\s+status=\{documentMutationStatus\}/);
 });
 
+test('export board sign-off uses the shared save-status primitive', () => {
+  const approvalPanel = readRepoFile('apps/web/src/app/(dashboard)/export/export-board-approval-panel.tsx');
+
+  assert.match(approvalPanel, /SaveStatusIndicator/);
+  assert.match(approvalPanel, /const signoffSaveStatus: 'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(approvalPanel, /<SaveStatusIndicator\s+status=\{signoffSaveStatus\}/);
+});
+
 test('billing page uses shared visible status for Stripe actions', () => {
   const billingPage = readRepoFile('apps/web/src/app/(dashboard)/billing/page.tsx');
 

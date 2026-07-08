@@ -5,6 +5,7 @@ import { Button, Card, Input, Select, SelectItem, Textarea } from '@heroui/react
 import { ComplianceSignoffStatus, type ComplianceSignoffResponse } from '@charitypilot/shared';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
+import { SaveStatusIndicator } from '@/components/ui/states';
 import { StatusChip, type StatusTone } from '@/components/ui/status';
 
 export type ExportSignoffForm = {
@@ -41,6 +42,9 @@ export function ExportBoardApprovalPanel({
   signoffForm: ExportSignoffForm;
   signoffStatusLabels: Record<ComplianceSignoffStatus, string>;
 }) {
+  const signoffSaveStatus: 'idle' | 'saving' | 'saved' | 'error' =
+    savingSignoff ? 'saving' : signoffError ? 'error' : 'idle';
+
   return (
     <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -66,13 +70,16 @@ export function ExportBoardApprovalPanel({
             </p>
           )}
         </div>
-        <Button
-          className={primaryActionButtonClassName}
-          onPress={onSaveSignoff}
-          isLoading={savingSignoff}
-        >
-          Save sign-off
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SaveStatusIndicator status={signoffSaveStatus} />
+          <Button
+            className={primaryActionButtonClassName}
+            onPress={onSaveSignoff}
+            isLoading={savingSignoff}
+          >
+            Save sign-off
+          </Button>
+        </div>
       </div>
 
       {signoffError && (
