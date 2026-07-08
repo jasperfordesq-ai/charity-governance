@@ -239,7 +239,7 @@ Recently successful checks in this workstream:
 - `npm run lint -w @charitypilot/web`
   - Passed after the same auth/public trust-surface work.
 - `npm run release:ready -- --no-e2e`
-  - Passed on 2026-07-08 at commit `dc26da0`.
+  - Passed on 2026-07-08 at commit `b00a066`.
   - Security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed.
   - Playwright E2E intentionally skipped.
 - `npm run test:production-check`
