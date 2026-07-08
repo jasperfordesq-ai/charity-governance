@@ -20,6 +20,7 @@ export function DocumentDeleteModal({
     <ConfirmActionModal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
+      ariaLabel="Confirm destructive action"
       title="Delete document"
       confirmLabel="Delete"
       confirming={deleting}

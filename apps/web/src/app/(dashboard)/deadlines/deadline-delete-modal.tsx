@@ -24,6 +24,7 @@ export function DeadlineDeleteModal({
     <ConfirmActionModal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
+      ariaLabel="Confirm destructive action"
       title="Delete deadline"
       confirmLabel="Delete deadline"
       confirming={deleting}

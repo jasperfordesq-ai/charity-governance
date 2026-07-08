@@ -670,6 +670,7 @@ test('principle detail uses an in-app confirmation dialog while saves are pendin
     'leaveWithoutSaving',
     'stayOnCompliancePage',
     'Could not save every pending edit',
+    'ConfirmActionModal',
     'Save now and leave',
     'Leave without waiting',
     'Keep editing',
@@ -1439,8 +1440,10 @@ test('documents delete modal is extracted from the oversized route file', () => 
   assert.doesNotMatch(pageSrc, /This removes the file and its standard links/);
   assert.match(modalSrc, /ConfirmActionModal/);
   assert.doesNotMatch(modalSrc, /ModalHeader/);
+  assert.match(modalSrc, /ariaLabel="Confirm destructive action"/);
   assert.match(modalSrc, /This removes the file and its standard links/);
-  assert.match(confirmModal, /destructive action/i);
+  assert.match(confirmModal, /ariaLabel = 'Confirm action'/);
+  assert.match(confirmModal, /secondaryLabel/);
 });
 
 test('documents uploaded-list panel is extracted from the oversized route file', () => {
@@ -1912,6 +1915,7 @@ test('deadlines delete confirmation modal is extracted from the oversized route 
   assert.doesNotMatch(pageSrc, /This cannot be undone/);
   assert.match(modalSrc, /ConfirmActionModal/);
   assert.doesNotMatch(modalSrc, /ModalHeader/);
+  assert.match(modalSrc, /ariaLabel="Confirm destructive action"/);
   assert.match(modalSrc, /Delete deadline/);
   assert.match(modalSrc, /Remove \{selectedDeadline \?/);
   assert.match(modalSrc, /This cannot be undone/);
