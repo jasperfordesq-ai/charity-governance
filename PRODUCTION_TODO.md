@@ -41,7 +41,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > transcripts, commit SHA, workflow run, and digest manifest in the non-committed
 > launch evidence ledger before treating the platform as ready for real charity data.
 > The latest repository hardening on `master` constrains launch evidence references
-> to approved hosts and the canonical GitHub repository, adds visible GPL/source
+> to approved hosts and the canonical GitHub repository, adds visible AGPL/source
 > attribution and no-warranty surfaces, shares auth status/loading primitives, lets
 > the evidence package be prepared before evidence is collected while requiring
 > every checklist item to predate final signoff, and aligns the deploy-smoke evidence

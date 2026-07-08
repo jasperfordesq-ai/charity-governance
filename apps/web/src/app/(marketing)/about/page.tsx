@@ -4,7 +4,7 @@ import { SOURCE_REPOSITORY_URL } from '@/components/legal-attribution';
 export const metadata: Metadata = {
   title: 'About CharityPilot',
   description:
-    'About CharityPilot, its copyright attribution to Jasper Ford, GPL license, and public source repository.',
+    'About CharityPilot, its copyright attribution to Jasper Ford, AGPL license, and public source repository.',
 };
 
 export default function AboutPage() {
@@ -33,8 +33,8 @@ export default function AboutPage() {
               Copyright and IP holder
             </h2>
             <p className="mt-4 leading-7 text-gray-700 dark:text-gray-300">
-              CharityPilot is copyright (C) 2026 Jasper Ford. Jasper Ford is the
-              IP holder for the CharityPilot software and source code.
+              CharityPilot was created by Jasper Ford. Jasper Ford is the IP
+              holder for the CharityPilot software and source code.
             </p>
           </div>
 
@@ -43,7 +43,7 @@ export default function AboutPage() {
               License and source
             </h2>
             <p className="mt-4 leading-7 text-gray-700 dark:text-gray-300">
-              CharityPilot is licensed under GPL-3.0-or-later. The canonical public
+              CharityPilot is licensed under AGPL-3.0-or-later. The canonical public
               source repository is
               {' '}
               <a
@@ -54,7 +54,7 @@ export default function AboutPage() {
               >
                 https://github.com/jasperfordesq-ai/charity-governance
               </a>
-              . The software is provided with no warranty under the GPL.
+              . The software is provided with no warranty under the AGPL.
             </p>
           </div>
         </div>
@@ -67,9 +67,9 @@ export default function AboutPage() {
           </h2>
           <p className="mt-4 leading-7 text-gray-700 dark:text-gray-300">
             Anyone using, modifying, deploying, or conveying CharityPilot should preserve
-            the copyright notice, GPL license notice, and source repository link. The
-            application footer includes this visible attribution so users can trace the
-            project back to its public source.
+            the copyright notice, AGPL license notice, AGPL Section 7(b) attribution,
+            and source repository link. The application footer includes this visible
+            attribution so users can trace the project back to its public source.
           </p>
         </div>
       </section>

@@ -161,10 +161,17 @@ export default function TermsPage() {
 
           <h2>6. Intellectual Property</h2>
           <p>
-            The Service, including its software, design, text, graphics, and branding, is owned
-            by or licensed to Project Nexus Ltd and is protected by Irish and international
-            intellectual property laws. Nothing in these Terms grants you any rights in the
-            Service other than the right to use it in accordance with these Terms.
+            The CharityPilot software and source code were created by Jasper Ford, who is the
+            copyright and IP holder for the software. CharityPilot is licensed under
+            AGPL-3.0-or-later, with source available at{' '}
+            <a href="https://github.com/jasperfordesq-ai/charity-governance">
+              https://github.com/jasperfordesq-ai/charity-governance
+            </a>
+            . The Service design, text, graphics, branding, hosted operations, and commercial
+            service rights may be owned by or licensed to Project Nexus Ltd and are protected by
+            Irish and international intellectual property laws. Nothing in these Terms grants you
+            rights other than those provided by the AGPL and the right to use the hosted Service
+            in accordance with these Terms.
           </p>
 
           <h2>7. Service Availability and Changes</h2>

@@ -210,7 +210,7 @@ const fixedInThisAuditBranch = [
   'Pricing metadata is ASCII-safe and pricing feature/comparison icons now use lucide-react directly without route-local wrappers.',
   'The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.',
   'The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.',
-  'Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare GPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.',
+  'Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare AGPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.',
   'The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.',
   'The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.',
   'The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-08 launch counters: 1/24 production values, 0/85 evidence checks, 0/5 final signoffs, and a 65-70% overall remaining estimate.',

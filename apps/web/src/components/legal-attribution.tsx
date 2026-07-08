@@ -3,9 +3,9 @@ export const SOURCE_REPOSITORY_URL = 'https://github.com/jasperfordesq-ai/charit
 export function LegalAttribution({ className = '' }: { className?: string }) {
   return (
     <p className={className}>
-      CharityPilot copyright (C) 2026 Jasper Ford, IP holder. Licensed under
+      Powered by CharityPilot. Created by Jasper Ford. Licensed under
       {' '}
-      GPL-3.0-or-later. Source:
+      AGPL-3.0-or-later. Source:
       {' '}
       <a
         href={SOURCE_REPOSITORY_URL}

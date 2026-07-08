@@ -5,8 +5,11 @@ digitises the Charities Regulator (CRA) **Governance Code Compliance Record
 Form** and the supporting governance registers, so a charity can track
 compliance, board members, documents, deadlines, and sign-off in one place.
 
-Commercial SaaS by Project Nexus Ltd. Two tiers: **Essentials** and **Complete**,
-with a free trial.
+Created by **Jasper Ford**, the CharityPilot copyright and IP holder.
+Commercial SaaS operations may be provided by Project Nexus Ltd. Two tiers:
+**Essentials** and **Complete**, with a free trial.
+
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 ---
 
@@ -155,3 +158,40 @@ npm audit --omit=dev --audit-level=moderate
 
 Canonical repository:
 <https://github.com/jasperfordesq-ai/charity-governance>
+
+## Credits and Origins
+
+CharityPilot was created by **Jasper Ford**, who is the copyright and IP holder
+for the CharityPilot software and source code.
+
+## License
+
+License: AGPL v3 or later (`AGPL-3.0-or-later`).
+
+This software is licensed under the **GNU Affero General Public License version
+3 or later** (AGPL-3.0-or-later).
+
+The AGPL requires that if you modify this software and let users interact with
+it remotely through a computer network, you must offer those users access to the
+complete corresponding source code of your modified version.
+
+See [LICENSE](LICENSE) for the full AGPL text and [NOTICE](NOTICE) for the
+CharityPilot attribution, additional terms, warranty disclaimers, source-code
+notice, and AGPL Section 7 terms.
+
+## UI Attribution Requirement
+
+Under AGPL Section 7(b), all public deployments, modified versions, and
+downstream interfaces based on CharityPilot must preserve clear attribution to
+CharityPilot and Jasper Ford, together with a link to the public source
+repository.
+
+Interactive interfaces should keep attribution visible in an ordinary legal
+notice path, such as the global footer and About page. The canonical wording is:
+
+```text
+Powered by CharityPilot
+Created by Jasper Ford
+Licensed under AGPL v3-or-later
+Source: https://github.com/jasperfordesq-ai/charity-governance
+```

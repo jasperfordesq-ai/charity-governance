@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `2f9f21e`
+Working-tree base commit when generated: `abea9ba`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -181,7 +181,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Pricing metadata is ASCII-safe and pricing feature/comparison icons now use lucide-react directly without route-local wrappers.
 - The plain-English launch guide now matches the evidence validator by requiring five final approval roles, including legal/compliance.
 - The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.
-- Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare GPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.
+- Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare AGPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.
 - The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.
 - The production readiness TODO now reflects the current 23-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-08 launch counters: 1/24 production values, 0/85 evidence checks, 0/5 final signoffs, and a 65-70% overall remaining estimate.
@@ -298,7 +298,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 183 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
-| P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 257 | no | no obvious static risk; verify in browser |
+| P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 264 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 
 ## API And Backend Audit

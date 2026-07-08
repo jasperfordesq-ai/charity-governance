@@ -2823,20 +2823,28 @@ test('public SEO and sharing URLs use the canonical production app origin', () =
   assert.match(app('(marketing)/blog/[slug]/page.tsx'), /const canonicalUrl = absoluteSiteUrl\(`\/blog\/\$\{meta\.slug\}`\)/);
 });
 
-test('public attribution surfaces name Jasper Ford as IP holder and link to the GPL source repository', () => {
+test('public attribution follows the Project NEXUS AGPL licensing model', () => {
   const rootPackage = repo('package.json');
-  assert.match(rootPackage, /"license": "GPL-3\.0-or-later"/);
+  assert.match(rootPackage, /"license": "AGPL-3\.0-or-later"/);
   assert.match(rootPackage, /"repository": \{[\s\S]*?"url": "https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\.git"/);
 
-  const notice = repo('NOTICE.md');
-  assert.match(notice, /Copyright \(C\) 2026 Jasper Ford/);
-  assert.match(notice, /GNU General Public License v3\.0 or later/);
-  assert.match(notice, /no warranty under the GPL/i);
+  assert.ok(!existsSync(join(WEB, '..', '..', 'NOTICE.md')), 'CharityPilot should use the Nexus-style root NOTICE file');
+  const license = repo('LICENSE');
+  assert.match(license, /GNU AFFERO GENERAL PUBLIC LICENSE/);
+  assert.match(license, /Remote Network Interaction/);
+
+  const notice = repo('NOTICE');
+  assert.match(notice, /CharityPilot Attribution, Additional Terms, and Notices/);
+  assert.match(notice, /Copyright \(c\) 2024-2026 Jasper Ford/);
+  assert.match(notice, /AGPL-3\.0-or-later Section 7/);
+  assert.match(notice, /Under AGPL Section 7\(b\)/);
+  assert.doesNotMatch(notice, /Mary Casey|Steven J\. Kelly|Sarah Bird|Fergal Conlon/);
+  assert.match(notice, /no representation that the software, as provided, is suitable for any\s+particular legal/i);
   assert.match(notice, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
 
   const attribution = component('legal-attribution.tsx');
   assert.match(attribution, /Jasper Ford/);
-  assert.match(attribution, /GPL-3\.0-or-later/);
+  assert.match(attribution, /AGPL-3\.0-or-later/);
   assert.match(attribution, /no warranty/i);
   assert.match(attribution, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
 
@@ -2850,9 +2858,17 @@ test('public attribution surfaces name Jasper Ford as IP holder and link to the 
   const aboutPage = readFileSync(aboutPagePath, 'utf8');
   assert.match(aboutPage, /Jasper Ford/);
   assert.match(aboutPage, /IP holder/);
-  assert.match(aboutPage, /GPL-3\.0-or-later/);
+  assert.match(aboutPage, /AGPL-3\.0-or-later/);
+  assert.match(aboutPage, /Section 7\(b\)/);
   assert.match(aboutPage, /no warranty/i);
   assert.match(aboutPage, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
+
+  const readme = repo('README.md');
+  assert.match(readme, /License: AGPL v3/);
+  assert.match(readme, /## UI Attribution Requirement/);
+  assert.match(readme, /Under AGPL Section 7\(b\)/);
+  assert.match(readme, /\[NOTICE\]\(NOTICE\)/);
+  assert.doesNotMatch(readme, /Mary Casey|Steven J\. Kelly|Sarah Bird|Fergal Conlon/);
 
   assert.match(app('(marketing)/layout.tsx'), /href="\/about"/);
   assert.match(app('(marketing)/MobileNav.tsx'), /href: '\/about'/);
