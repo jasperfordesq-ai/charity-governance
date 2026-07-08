@@ -1225,6 +1225,17 @@ test('export board approval form is extracted from the oversized route file', ()
   assert.doesNotMatch(panelSrc, /import \{[^}]*\bChip\b[^}]*\} from '@heroui\/react'/);
 });
 
+test('export controls and board approval panels use shared status panel styling', () => {
+  const controlsSrc = dash('export/export-controls-panel.tsx');
+  const panelSrc = dash('export/export-board-approval-panel.tsx');
+
+  for (const src of [controlsSrc, panelSrc]) {
+    assert.match(src, /statusPanelClassName/);
+    assert.match(src, /className=\{statusPanelClassName\('neutral', 'p-6 shadow-sm'\)\}/);
+    assert.doesNotMatch(src, /border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6/);
+  }
+});
+
 test('export loading, warning, and sign-off error states use shared primitives', () => {
   const pageSrc = [
     dash('export/page.tsx'),

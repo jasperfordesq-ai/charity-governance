@@ -4,6 +4,7 @@ import { Button, Card, Select, SelectItem } from '@heroui/react';
 import { Download } from 'lucide-react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ReviewWarningState } from '@/components/ui/states';
+import { statusPanelClassName } from '@/components/ui/status';
 
 export function ExportControlsPanel({
   exporting,
@@ -24,7 +25,7 @@ export function ExportControlsPanel({
 }) {
   return (
     <>
-      <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
+      <Card className={statusPanelClassName('neutral', 'p-6 shadow-sm')}>
         <div className="flex flex-col sm:flex-row sm:items-end gap-4">
           <Select
             label="Reporting Year"

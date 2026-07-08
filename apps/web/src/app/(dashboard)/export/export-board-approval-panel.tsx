@@ -6,7 +6,7 @@ import { ComplianceSignoffStatus, type ComplianceSignoffResponse } from '@charit
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { SaveStatusIndicator } from '@/components/ui/states';
-import { StatusChip, type StatusTone } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 
 export type ExportSignoffForm = {
   status: ComplianceSignoffStatus;
@@ -46,7 +46,7 @@ export function ExportBoardApprovalPanel({
     savingSignoff ? 'saving' : signoffError ? 'error' : 'idle';
 
   return (
-    <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6">
+    <Card className={statusPanelClassName('neutral', 'p-6 shadow-sm')}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
