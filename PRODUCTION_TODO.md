@@ -26,7 +26,12 @@ Status marks reflect completed repository hardening work. Open items require rea
 > CI summaries, release handoffs, or operations dashboards.
 > Missing production values are grouped by provider/source in that output:
 > hosting/proxy, PostgreSQL, Stripe, Resend, Supabase, observability, and release image promotion.
-> This is the handoff order for filling the real secret store.
+> The JSON output also keeps the full source-grouped production value checklist
+> visible after `.env.production` exists, while separately listing only the
+> currently missing values. This is the handoff order for filling the real secret store.
+> Strict launch-evidence JSON validation reports the next incomplete checklist
+> items and evidence hints, so failing launch-gate output can drive an operator
+> work queue without weakening the final validator.
 > Local responsive browser QA completed cleanly on 2026-07-08 as four focused route chunks across desktop/mobile and light/dark: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12. Local accessibility QA also passed 16/16 on the local stack, but deployed production QA still remains open and must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in `browserQa.checks.accessibility-coverage`,
 > cross-browser QA in `browserQa.checks.cross-browser-coverage`, and real iOS Safari device QA in
