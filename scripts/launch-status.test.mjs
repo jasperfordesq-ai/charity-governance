@@ -105,12 +105,14 @@ function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.githubEnvironment, 'production');
   assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co',
+    'NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co (replace REAL_SUPABASE_PROJECT_REF before running release-images.yml)',
   ]);
   assert.deepEqual(promotion.configureCommands, [
     'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first',
   ]);
+  assert.doesNotMatch(promotion.requiredGitHubEnvironmentVariables.join('\n'), /YOUR_SUPABASE_PROJECT_REF/);
+  assert.doesNotMatch(promotion.configureCommands.join('\n'), /YOUR_SUPABASE_PROJECT_REF/);
   assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');
   assert.equal(promotion.watchCommand, 'gh run watch RELEASE_RUN_ID --exit-status');
   assert.equal(promotion.evidenceArtifact, 'release-image-digests.env');

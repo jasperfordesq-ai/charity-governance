@@ -341,6 +341,32 @@ test('passes when the selected env file contains complete production values', ()
   }
 });
 
+test('fails when production Supabase URLs still contain project-ref placeholder text', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-project-ref-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /SUPABASE_URL is missing or still contains a placeholder value/);
+    assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when production document storage is configured to use the local driver', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-storage-driver-'));
   const envPath = join(tempDir, 'production.env');
@@ -2346,7 +2372,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
   assert.match(launchGuide, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
-  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/YOUR_SUPABASE_PROJECT_REF\.supabase\.co"/);
+  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co"\s+# replace REAL_SUPABASE_PROJECT_REF first/);
   assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
   assert.match(launchGuide, /release-image-digests\.env/);
   assert.match(launchGuide, /CHARITYPILOT_WEB_BUILD_\*/);
@@ -2630,7 +2656,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
-  assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/YOUR_SUPABASE_PROJECT_REF\.supabase\.co"/);
+  assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co"\s+# replace REAL_SUPABASE_PROJECT_REF first/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:deployed:responsive:cross-browser/);
   assert.match(runbook, /SECRET_STORE_E2E_OWNER_EMAIL/);
@@ -3738,7 +3764,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /NEXT_PUBLIC_API_URL production variable is required/);
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL production variable is required/);
   assert.match(workflow, /production variable must not contain placeholder text/);
-  assert.match(workflow, /your_supabase_project_ref/);
+  assert.match(workflow, /project_ref/);
   assert.match(workflow, /NEXT_PUBLIC_API_URL must be the canonical production API origin https:\/\/api\.charitypilot\.ie/);
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);

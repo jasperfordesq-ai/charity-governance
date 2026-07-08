@@ -15,6 +15,7 @@ const PLACEHOLDERS = [
   'change-me',
   'your_',
   'your-',
+  'project_ref',
   'sk_test_...',
   'pk_test_...',
   'whsec_...',
@@ -76,7 +77,8 @@ function envValue(env, key) {
 }
 
 function isConfigured(value) {
-  return Boolean(value.trim()) && !PLACEHOLDERS.some((placeholder) => value.includes(placeholder));
+  const normalizedValue = value.toLowerCase();
+  return Boolean(value.trim()) && !PLACEHOLDERS.some((placeholder) => normalizedValue.includes(placeholder.toLowerCase()));
 }
 
 function isLocalHost(hostname) {

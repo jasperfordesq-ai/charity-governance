@@ -81,11 +81,11 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
   githubEnvironment: 'production',
   requiredGitHubEnvironmentVariables: Object.freeze([
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co',
+    'NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co (replace REAL_SUPABASE_PROJECT_REF before running release-images.yml)',
   ]),
   configureCommands: Object.freeze([
     'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first',
   ]),
   workflowCommand: 'gh workflow run release-images.yml --ref master',
   watchCommand: 'gh run watch RELEASE_RUN_ID --exit-status',

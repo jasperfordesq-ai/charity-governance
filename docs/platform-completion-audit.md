@@ -4,7 +4,7 @@ Generated: 2026-07-08
 
 Branch: `master`
 
-Working-tree base commit when generated: `b4168ae`
+Working-tree base commit when generated: `55d84ec`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -427,10 +427,10 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - GitHub environment: `production`
 - Required GitHub environment variables:
   - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
-  - `NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co (replace REAL_SUPABASE_PROJECT_REF before running release-images.yml)`
 - Configure with:
   - `gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie`
-  - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"`
+  - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first`
 - Workflow: `gh workflow run release-images.yml --ref master`
 - Watch: `gh run watch RELEASE_RUN_ID --exit-status`
 - Digest artifact: `release-image-digests.env`
@@ -506,7 +506,7 @@ Grouped by source:
 - Supabase storage:
   - `SUPABASE_URL`: Same Supabase project URL (Step 2)
   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
-  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://YOUR_SUPABASE_PROJECT_REF.supabase.co (Step 2)
+  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://REPLACE_ME_SUPABASE_PROJECT_REF.supabase.co (Step 2)
   - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`: Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)
 - Observability:
   - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)

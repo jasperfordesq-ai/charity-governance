@@ -105,6 +105,20 @@ test('validateProductionEnv accepts complete production configuration', () => {
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
+test('validateProductionEnv rejects copied Supabase project-ref placeholders', () => {
+  setCompleteProductionEnv({
+    SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+  });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('SUPABASE_URL is missing or still contains a placeholder value'),
+  );
+});
+
 test('validateProductionEnv rejects local document storage in production', () => {
   setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local' });
 

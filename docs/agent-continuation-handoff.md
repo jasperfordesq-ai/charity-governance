@@ -62,7 +62,7 @@ release-images.yml --ref master` can produce the `release-image-digests.env`
 artifact:
 
 - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
-- `NEXT_PUBLIC_SUPABASE_URL=https://YOUR_SUPABASE_PROJECT_REF.supabase.co`
+- `NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co` (replace `REAL_SUPABASE_PROJECT_REF` before running `release-images.yml`)
 
 ## Non-Negotiable Product Posture
 

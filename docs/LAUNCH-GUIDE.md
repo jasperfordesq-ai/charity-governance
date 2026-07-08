@@ -197,7 +197,7 @@ You need four external services. Create the **production/live** versions
   ```bash
   npm run db:migrate:deploy -w @charitypilot/api
   gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie
-  gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://YOUR_SUPABASE_PROJECT_REF.supabase.co"
+  gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
