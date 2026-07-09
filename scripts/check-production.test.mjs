@@ -1634,10 +1634,23 @@ test('release readiness child gates have finite process timeouts', () => {
   assert.match(releaseReady, /RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_E2E_TIMEOUT_MS', 1500000\)/);
   assert.match(releaseReady, /timeout: opts\.timeoutMs \?\? RELEASE_READY_GATE_TIMEOUT_MS/);
   assert.match(releaseReady, /res\.error\?\.code === 'ETIMEDOUT'/);
-  assert.match(releaseReady, /cleanupTimedOutProcessTree\(res\.pid\)/);
+  assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);
   assert.match(releaseReady, /taskkill', \['\/PID', String\(pid\), '\/T', '\/F'\]/);
   assert.match(releaseReady, /Gate timed out after \$\{\(timeoutMs \/ 1000\)\.toFixed\(0\)\}s/);
-  assert.match(releaseReady, /run\('End-to-end \(Playwright\)', 'npm', \['run', 'test:e2e'\], \{ timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS \}\)/);
+  assert.match(releaseReady, /timeoutMs:\s*RELEASE_READY_E2E_TIMEOUT_MS/);
+});
+
+test('release readiness child gates clean up process trees after failed child exits', () => {
+  const releaseReady = readRepoFile('scripts/release-ready.mjs');
+
+  assert.match(releaseReady, /cleanupProcessTreeOnFailure:\s*true/);
+  assert.match(releaseReady, /cleanupRepoPlaywrightProcessesOnFailure:\s*true/);
+  assert.match(releaseReady, /if \(!ok && opts\.cleanupProcessTreeOnFailure && !timedOut\)/);
+  assert.match(releaseReady, /if \(!ok && opts\.cleanupRepoPlaywrightProcessesOnFailure\)/);
+  assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);
+  assert.match(releaseReady, /cleanupRepoPlaywrightProcesses\(\)/);
+  assert.match(releaseReady, /npm-cli\.js\*run\*test:e2e/);
+  assert.match(releaseReady, /'test:e2e', '@playwright\\\\test', 'playwright\\\\lib\\\\worker\\\\workerProcessEntry'/);
 });
 
 test('reliability report emits ASCII-safe operator output', () => {
@@ -1683,7 +1696,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /GREEN - repository release gates passed/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /332\/332 production-tooling checks/);
+  assert.match(productionTodo, /333\/333 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /332\/332 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /331\/331 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /330\/330 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /322\/322 production-tooling checks/);
@@ -1726,7 +1740,8 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /isolated restore target/);
   assert.match(handoff, /non-production restore target/);
   assert.match(handoff, /production project was not overwritten/);
-  assert.match(handoff, /332\/332 production-tooling checks/);
+  assert.match(handoff, /333\/333 production-tooling checks/);
+  assert.doesNotMatch(handoff, /332\/332 production-tooling checks/);
   assert.doesNotMatch(handoff, /331\/331 production-tooling checks/);
   assert.match(handoff, /`npm run release:ready`/);
   assert.match(handoff, /95 Playwright E2E tests passed/);
@@ -2416,7 +2431,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 332\/332/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 332\/332/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 331\/331/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 330\/330/);
   assert.match(launchGuide, /local `npm run release:ready` run passed on 2026-07-09/);

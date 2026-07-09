@@ -35,14 +35,45 @@ function positiveIntEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanupTimedOutProcessTree(pid) {
+function cleanupProcessTree(pid) {
   if (process.platform !== 'win32' || !pid) {
     return;
   }
   try {
     spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
   } catch {
-    // Best-effort cleanup only; the timed-out gate remains failed either way.
+    // Best-effort cleanup only; the gate remains failed either way.
+  }
+}
+
+function cleanupRepoPlaywrightProcesses() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  const escapedRoot = ROOT.replaceAll("'", "''");
+  const command = [
+    `$repoRoot = '${escapedRoot}'`,
+    "$patterns = @('test:e2e', '@playwright\\test', 'playwright\\lib\\worker\\workerProcessEntry')",
+    "$matches = Get-CimInstance Win32_Process -Filter \"name = 'node.exe'\" | Where-Object {",
+    '  $commandLine = $_.CommandLine',
+    '  if (-not $commandLine) { return $false }',
+    '  if ($commandLine -like "*npm-cli.js*run*test:e2e*") { return $true }',
+    '  if ($commandLine -notlike "*$repoRoot*") { return $false }',
+    '  foreach ($pattern in $patterns) {',
+    '    if ($commandLine -like "*$pattern*") { return $true }',
+    '  }',
+    '  return $false',
+    '}',
+    '$matches | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }',
+  ].join('; ');
+
+  try {
+    spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
+      stdio: 'ignore',
+    });
+  } catch {
+    // Best-effort cleanup only; the gate remains failed either way.
   }
 }
 
@@ -57,11 +88,18 @@ function run(name, cmd, cmdArgs, opts = {}) {
     timeout: opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS,
   });
   const ms = Date.now() - started;
-  if (res.error?.code === 'ETIMEDOUT') {
-    cleanupTimedOutProcessTree(res.pid);
+  const timedOut = res.error?.code === 'ETIMEDOUT';
+  if (timedOut) {
+    cleanupProcessTree(res.pid);
     process.stdout.write(`Gate timed out after ${(timeoutMs / 1000).toFixed(0)}s.\n`);
   }
   const ok = res.status === 0;
+  if (!ok && opts.cleanupProcessTreeOnFailure && !timedOut) {
+    cleanupProcessTree(res.pid);
+  }
+  if (!ok && opts.cleanupRepoPlaywrightProcessesOnFailure) {
+    cleanupRepoPlaywrightProcesses();
+  }
   return { name, ok, ms, skipped: false };
 }
 
@@ -125,7 +163,11 @@ if (noE2e) {
     );
     results.push({ name: 'End-to-end (Playwright)', ok: false, ms: 0, skipped: false });
   } else {
-    results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], { timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS }));
+    results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], {
+      timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS,
+      cleanupProcessTreeOnFailure: true,
+      cleanupRepoPlaywrightProcessesOnFailure: true,
+    }));
   }
 }
 
