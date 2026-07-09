@@ -14,6 +14,22 @@ test('CI PostgreSQL starter dry-run renders retried pull and health commands', a
   assert.match(result.stdout, /Retries: 6/);
 });
 
+test('CI PostgreSQL starter rejects unknown options before Docker commands run', async () => {
+  let commandCalls = 0;
+
+  const result = await runCiPostgresFromArgs(['--dry-run', '--surprise'], {
+    commandRunner() {
+      commandCalls += 1;
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(result.status, 2);
+  assert.equal(commandCalls, 0);
+  assert.match(result.stderr, /Unknown option: --surprise/);
+  assert.match(result.stderr, /Usage: node scripts\/start-ci-postgres\.mjs \[--dry-run\]/);
+});
+
 test('CI PostgreSQL starter retries image pulls before starting the container', async () => {
   const commands = [];
   let pulls = 0;

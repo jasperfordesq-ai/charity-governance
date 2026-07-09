@@ -2,6 +2,8 @@
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+const USAGE_TEXT = 'Usage: node scripts/start-ci-postgres.mjs [--dry-run]';
+
 function configFrom({ args = process.argv.slice(2), env = process.env } = {}) {
   return {
     image: env.CHARITYPILOT_CI_POSTGRES_IMAGE ?? 'postgres:16.4-alpine',
@@ -137,6 +139,12 @@ export async function runCiPostgresFromArgs(args = process.argv.slice(2), {
   commandRunner = defaultCommandRunner,
   sleep: sleepFn = sleep,
 } = {}) {
+  for (const arg of args) {
+    if (arg !== '--dry-run') {
+      return result(2, '', `Unknown option: ${arg}\n${USAGE_TEXT}\n`);
+    }
+  }
+
   let stdout = '';
   let stderr = '';
   const context = {
