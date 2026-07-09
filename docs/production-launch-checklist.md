@@ -284,7 +284,7 @@ Evidence:
 
 ## Final Signoff
 
-The machine-readable `.charitypilot-launch-evidence/production-launch-evidence.json` file must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. The top-level final signoff evidence must include launch approval and the exact promoted `release.commitSha`. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and role-specific non-secret external evidence references that include that approval role and launch approval.
+The machine-readable `.charitypilot-launch-evidence/production-launch-evidence.json` file must include a `finalSignoff.approvals` object with separate `engineering`, `operations`, `security`, `legalCompliance`, and `business` approvals. The top-level final signoff evidence must include launch approval and the exact promoted `release.commitSha`. Each role approval must have `status: "approved"`, an owner, an ISO `approvedAt` timestamp, and role-specific non-secret external evidence references that include that approval role, launch approval, and the exact promoted `release.commitSha`.
 
 | Role | Name | Date | Evidence reference |
 | --- | --- | --- | --- |

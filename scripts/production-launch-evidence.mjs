@@ -1387,7 +1387,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
   }
 }
 
-function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {
+function validateFinalSignoffApprovals(finalSignoff, release, preparedAt, issues) {
   if (!isPlainObject(finalSignoff.approvals)) {
     issues.push('finalSignoff.approvals is required');
     return;
@@ -1425,6 +1425,9 @@ function validateFinalSignoffApprovals(finalSignoff, preparedAt, issues) {
     }
     if (!approvalEvidenceText.includes('launch approval')) {
       issues.push(`${approvalPath}.evidence must include launch approval`);
+    }
+    if (typeof release?.commitSha === 'string' && !evidenceText(approval.evidence).includes(release.commitSha)) {
+      issues.push(`${approvalPath}.evidence must include release.commitSha`);
     }
   }
 }
@@ -1519,7 +1522,7 @@ function validateLaunchEvidence(evidence) {
       notAfterLabel: 'finalSignoff.approvedAt',
     });
     validateFinalSignoffEvidence(evidence.finalSignoff, evidence.release, issues);
-    validateFinalSignoffApprovals(evidence.finalSignoff, preparedAt, issues);
+    validateFinalSignoffApprovals(evidence.finalSignoff, evidence.release, preparedAt, issues);
   }
 
   return issues;

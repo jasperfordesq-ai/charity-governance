@@ -332,7 +332,7 @@ function evidenceTemplate() {
           status: 'pending',
           owner: `REPLACE_WITH_${role.id.toUpperCase()}_OWNER`,
           approvedAt: placeholderTimestamp,
-          requiredEvidenceHints: [role.label, 'launch approval'],
+          requiredEvidenceHints: [role.label, 'launch approval', 'release.commitSha'],
           evidence: [],
         },
       ])),

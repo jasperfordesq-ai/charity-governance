@@ -691,7 +691,7 @@ function completeEvidence(requiredAreas) {
             {
               type: 'approval',
               reference: 'https://evidence.charitypilot.ie/launch/final-signoff/engineering',
-              description: 'Engineering owner launch approval',
+              description: `Engineering owner launch approval for release ${commitSha}`,
               capturedAt,
             },
           ],
@@ -704,7 +704,7 @@ function completeEvidence(requiredAreas) {
             {
               type: 'approval',
               reference: 'https://evidence.charitypilot.ie/launch/final-signoff/operations',
-              description: 'Operations owner launch approval',
+              description: `Operations owner launch approval for release ${commitSha}`,
               capturedAt,
             },
           ],
@@ -717,7 +717,7 @@ function completeEvidence(requiredAreas) {
             {
               type: 'approval',
               reference: 'https://evidence.charitypilot.ie/launch/final-signoff/security',
-              description: 'Security owner launch approval',
+              description: `Security owner launch approval for release ${commitSha}`,
               capturedAt,
             },
           ],
@@ -730,7 +730,7 @@ function completeEvidence(requiredAreas) {
             {
               type: 'approval',
               reference: 'https://evidence.charitypilot.ie/launch/final-signoff/legal-compliance',
-              description: 'Legal/compliance owner launch approval',
+              description: `Legal/compliance owner launch approval for release ${commitSha}`,
               capturedAt,
             },
           ],
@@ -743,7 +743,7 @@ function completeEvidence(requiredAreas) {
             {
               type: 'approval',
               reference: 'https://evidence.charitypilot.ie/launch/final-signoff/business',
-              description: 'Business owner launch approval',
+              description: `Business owner launch approval for release ${commitSha}`,
               capturedAt,
             },
           ],
@@ -1720,6 +1720,22 @@ test('production launch evidence validator binds final signoff evidence to the p
   }
 });
 
+test('production launch evidence validator binds every final approval role to the promoted commit', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.finalSignoff.approvals.operations.evidence[0].description = 'Operations owner launch approval';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /finalSignoff\.approvals\.operations\.evidence must include release\.commitSha/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires role-specific final approval evidence', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
@@ -2074,7 +2090,7 @@ test('production launch evidence template covers every required area and final s
     );
     assert.deepEqual(
       template.finalSignoff.approvals.legalCompliance.requiredEvidenceHints,
-      ['Legal/compliance owner', 'launch approval'],
+      ['Legal/compliance owner', 'launch approval', 'release.commitSha'],
     );
     assert.deepEqual(template.finalSignoff.requiredEvidenceHints, ['launch approval', 'release.commitSha']);
     assert.doesNotMatch(JSON.stringify(template), /sk_live_|whsec_|re_[A-Za-z0-9]|postgres(?:ql)?:\/\/|SUPABASE_SERVICE_ROLE_KEY=/);
