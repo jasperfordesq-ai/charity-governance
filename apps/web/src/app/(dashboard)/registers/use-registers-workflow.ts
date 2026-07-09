@@ -151,7 +151,7 @@ export function useRegistersWorkflow() {
   const fetchOrganisationProfile = useCallback(async () => {
     setOrganisationProfileError('');
     try {
-      const res = await api.get('/organisations');
+      const res = await api.get('/organisation');
       setOrganisation(res.data?.data ?? res.data ?? null);
     } catch (err) {
       if (isApiNotFoundError(err)) {
