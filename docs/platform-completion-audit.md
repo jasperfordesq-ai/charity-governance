@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `034032c`
+Working-tree base commit when generated: `cf683f1`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -273,7 +273,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 034032c; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Current local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed.
 - `npm run test:production-check` passed locally on 2026-07-09 with 330/330 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -464,9 +464,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Repository State For Launch Evidence
 
 - Branch: `master`
-- Head: `034032c8ac67a4a3431a23cd75373e3c61a8ee57`
+- Head: `cf683f188266faff67aac6f42cb94d8676b5c96d`
 - Upstream: `origin/master`
-- Upstream head: `034032c8ac67a4a3431a23cd75373e3c61a8ee57`
+- Upstream head: `cf683f188266faff67aac6f42cb94d8676b5c96d`
 - Dirty worktree: `true`
 - Synced with upstream: `true`
 - Launch evidence risk: `dirty_worktree`

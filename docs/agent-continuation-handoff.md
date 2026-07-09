@@ -298,10 +298,10 @@ Recently successful checks in this workstream:
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
 - `npm run lint -w @charitypilot/web`
   - Passed after the same auth/public trust-surface work.
-- `npm run release:ready -- --no-e2e`
-  - Passed on 2026-07-09 at commit `8a5e030` in the latest local selected-gate run recorded by this handoff.
-  - Security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed.
-  - Playwright E2E intentionally skipped.
+- `npm run release:ready`
+  - Passed on 2026-07-09 at commit `cf683f1` in the latest full local release-gate run recorded by this handoff.
+  - Security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed.
+  - Final summary included `OVERALL: GREEN - repository release gates passed`.
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 330/330 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.

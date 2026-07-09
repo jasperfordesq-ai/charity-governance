@@ -47,10 +47,10 @@ evidence slot must name the exact promoted `release.commitSha`:
 `browserQa.checks.cross-browser-coverage`,
 `browserQa.checks.ios-safari-device-coverage`, and
 `browserQa.checks.critical-flows-covered`.
-A local `npm run release:ready -- --no-e2e` run passed on 2026-07-09 at commit
-`8a5e030`: security scan, lint, build, workspace tests, dependency audit, and
-reliability ledger passed; only Playwright E2E was skipped. Treat this as local
-release-gate evidence, not as production launch approval.
+A local `npm run release:ready` run passed on 2026-07-09 at commit
+`cf683f1`: security scan, lint, build, workspace tests, dependency audit,
+reliability ledger, and 95 Playwright E2E tests passed; `OVERALL: GREEN - repository release gates passed`. Treat this as local release-gate evidence,
+not as production launch approval.
 
 | Check | Result |
 | --- | --- |

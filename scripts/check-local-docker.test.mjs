@@ -504,7 +504,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   const auditBaseCommit = auditLedger.match(/Working-tree base commit when generated: `([a-f0-9]+)`/)?.[1];
 
   assert.match(auditGenerator, /Local Verification Evidence/);
-  assert.match(auditGenerator, /npm run release:ready -- --no-e2e/);
+  assert.match(auditGenerator, /npm run release:ready/);
   assert.match(auditGenerator, /RECORDED_SELECTED_GATE_EVIDENCE/);
   assert.doesNotMatch(auditGenerator, /passed locally on 2026-07-08 at commit \$\{commit\}/);
   assert.match(auditGenerator, /npm run test:e2e:responsive/);
@@ -512,9 +512,16 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditGenerator, /remains an open local QA blocker/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.ok(auditBaseCommit, 'audit ledger must record the generated base commit');
-  assert.match(auditLedger, /historical local selected-gate evidence/i);
-  assert.match(auditLedger, /not current for generated base commit/);
-  assert.match(auditLedger, /passed locally on 2026-07-09 at commit [a-f0-9]{7,40}/);
+  const recordedReleaseGateCommit = auditLedger.match(/`npm run release:ready` passed locally on 2026-07-09 at commit ([a-f0-9]{7,40})/)?.[1];
+  assert.ok(recordedReleaseGateCommit, 'audit ledger must record the latest local release-gate commit');
+  assert.match(auditLedger, /(Current|Historical) local release-gate evidence/i);
+  if (recordedReleaseGateCommit === auditBaseCommit) {
+    assert.match(auditLedger, /Current local release-gate evidence/);
+    assert.doesNotMatch(auditLedger, /not current for generated base commit/);
+  } else {
+    assert.match(auditLedger, /Historical local release-gate evidence/);
+    assert.match(auditLedger, /not current for generated base commit/);
+  }
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/86 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/86 evidence checks/);
@@ -535,8 +542,10 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /298\/298 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /297\/297 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /286\/286 production-tooling checks/);
-  assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed/);
-  assert.match(auditLedger, /only Playwright E2E was skipped/);
+  assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed/);
+  assert.match(auditLedger, /95 Playwright E2E tests passed/);
+  assert.match(auditLedger, /GREEN - repository release gates passed/);
+  assert.doesNotMatch(auditLedger, /only Playwright E2E was skipped/);
   assert.match(auditLedger, /Local responsive browser QA revalidated cleanly on 2026-07-09/);
   assert.match(auditLedger, /public desktop 14\/14/);
   assert.match(auditLedger, /public mobile 14\/14/);

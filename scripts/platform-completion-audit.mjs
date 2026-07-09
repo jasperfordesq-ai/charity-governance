@@ -14,11 +14,11 @@ const launchEvidencePath = join(repoRoot, '.charitypilot-launch-evidence', 'prod
 
 const auditDate = new Date().toISOString().slice(0, 10);
 const RECORDED_SELECTED_GATE_EVIDENCE = Object.freeze({
-  command: 'npm run release:ready -- --no-e2e',
+  command: 'npm run release:ready',
   date: '2026-07-09',
-  commit: '8a5e030',
+  commit: 'cf683f1',
   summary:
-    'security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped',
+    'security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed',
 });
 
 const routePriorities = new Map([
@@ -316,8 +316,8 @@ function localVerificationEvidence() {
   const { commit: currentCommit } = currentGitBranchAndCommit();
   const selectedGateEvidence =
     RECORDED_SELECTED_GATE_EVIDENCE.commit === currentCommit
-      ? `\`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}.`
-      : `Historical local selected-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}. This is not current for generated base commit ${currentCommit}; rerun the selected gate on the final release ref before treating it as current release evidence.`;
+      ? `Current local release-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}.`
+      : `Historical local release-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}. This is not current for generated base commit ${currentCommit}; rerun the selected gate on the final release ref before treating it as current release evidence.`;
 
   return [
     selectedGateEvidence,

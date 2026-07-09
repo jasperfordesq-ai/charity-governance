@@ -45,10 +45,10 @@ Status marks reflect completed repository hardening work. Open items require rea
 > production-tooling tests, production validators, release workflows, Docker
 > image promotion scripts, rollback tooling, secret scanning, SAST scanning, and
 > launch evidence validation are wired in the repo. They must be rerun against
-> the final release ref and real production configuration before launch. A
-> selected-gate `npm run release:ready -- --no-e2e` run is useful for local
-> operator checks, but it is not a full release-ready result because deployed
-> E2E, provider evidence, legal review, pentest, and final signoffs remain open.
+> the final release ref and real production configuration before launch. A full
+> local `npm run release:ready` run is useful repository release-gate evidence,
+> but it is not production launch approval because deployed QA, provider
+> evidence, legal review, pentest, and final signoffs remain open.
 > Rerun every release gate on the final release ref and record the exact command
 > transcripts, commit SHA, workflow run, and digest manifest in the non-committed
 > launch evidence ledger before treating the platform as ready for real charity data.
@@ -60,11 +60,11 @@ Status marks reflect completed repository hardening work. Open items require rea
 > hints with the strict validator: `npm run deploy:production -- --production-env-file=.env.production`,
 > `node scripts/smoke-production-deploy.mjs --production-env-file .env.production`,
 > `Production deploy smoke passed`, and both canonical production origins. A later
-> local `npm run release:ready -- --no-e2e` run passed on 2026-07-09 at commit
-> `8a5e030`: security scan, lint, build, workspace tests, dependency audit, and
-> reliability ledger passed; only Playwright E2E was skipped. This still does not
-> replace deployed QA, real provider checks, legal/privacy review, pentest, or
-> final production signoffs.
+> local `npm run release:ready` run passed on 2026-07-09 at commit
+> `cf683f1`: security scan, lint, build, workspace tests, dependency audit,
+> reliability ledger, and 95 Playwright E2E tests passed; `OVERALL: GREEN - repository release gates passed`. This still does not replace deployed QA,
+> real provider checks, legal/privacy review, pentest, or final production
+> signoffs.
 
 ## Security and Auth
 
