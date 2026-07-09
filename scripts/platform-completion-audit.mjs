@@ -749,7 +749,9 @@ function render() {
     md += `### Production Launch Command Sequence\n\n`;
     md += `- Core preflight: \`${launch.productionLaunchCommands.corePreflight}\`\n`;
     md += `- GitHub production environment: \`${launch.productionLaunchCommands.githubEnvironment}\`\n`;
+    md += `- GitHub production environment JSON: \`${launch.productionLaunchCommands.githubEnvironmentJson}\`\n`;
     md += `- GitHub production secret store: \`${launch.productionLaunchCommands.githubSecretStore}\`\n`;
+    md += `- GitHub production secret-store JSON: \`${launch.productionLaunchCommands.githubSecretStoreJson}\`\n`;
     md += `- Hosting/DNS/TLS: \`${launch.productionLaunchCommands.hosting}\`\n`;
     md += `- Database backup/restore: \`${launch.productionLaunchCommands.database}\`\n`;
     md += `- Supabase storage: \`${launch.productionLaunchCommands.supabase}\`\n`;

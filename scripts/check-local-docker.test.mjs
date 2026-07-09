@@ -670,7 +670,12 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /Release Image Promotion/);
   assert.match(auditLedger, /Protected Final Launch Evidence Workflow/);
   assert.match(auditLedger, /GitHub production environment: `npm run check:production:github-env -- --environment=production`/);
+  assert.match(auditLedger, /GitHub production environment JSON: `npm run check:production:github-env -- --environment=production --json`/);
   assert.match(auditLedger, /GitHub production secret store: `npm run check:production:github-secrets -- --environment=production`/);
+  assert.match(
+    auditLedger,
+    /GitHub production secret-store JSON: `npm run check:production:github-secrets -- --environment=production --json`/,
+  );
   assert.match(auditLedger, /\.github\/workflows\/production-launch-evidence\.yml/);
   assert.match(auditLedger, /gh workflow run production-launch-evidence\.yml --ref master/);
   assert.match(auditLedger, /GitHub environment: `production`/);

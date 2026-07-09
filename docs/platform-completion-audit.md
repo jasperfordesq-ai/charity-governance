@@ -431,7 +431,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 - Core preflight: `npm run check:production -- --production-env-file=.env.production`
 - GitHub production environment: `npm run check:production:github-env -- --environment=production`
+- GitHub production environment JSON: `npm run check:production:github-env -- --environment=production --json`
 - GitHub production secret store: `npm run check:production:github-secrets -- --environment=production`
+- GitHub production secret-store JSON: `npm run check:production:github-secrets -- --environment=production --json`
 - Hosting/DNS/TLS: `npm run check:production:hosting -- --production-env-file=.env.production`
 - Database backup/restore: `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel`
 - Supabase storage: `npm run check:production:supabase -- --production-env-file=.env.production`
