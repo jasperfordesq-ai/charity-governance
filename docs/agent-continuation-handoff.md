@@ -34,9 +34,12 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 - Latest verified pushed commit at the time of this handoff refresh:
-  `73eda7ddaeaa8d6fdbe273cd541296b90dbe8049`.
+  `7c182f3379568765387772b382c4d596105a839a`.
 - GitHub CI for that commit passed:
-  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29007934895`.
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29010531551`.
+- The generated platform audit intentionally keeps repository clean/synced state
+  live-only; run `npm run launch:status -- --json` and inspect
+  `repositoryState` from the release checkout before collecting launch evidence.
 - Fresh public DNS/HTTPS spot check on 2026-07-09 found both canonical
   production hosts unresolved from this workstation:
   `app.charitypilot.ie` and `api.charitypilot.ie`.
@@ -273,6 +276,13 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- `gh run watch 29010531551 --exit-status`
+  - Passed on 2026-07-09 for commit `7c182f3`.
+  - Covered CI security scan, Prisma validation/migration, PostgreSQL
+    backup/restore, lint, tests, reliability ledger, local Docker smoke,
+    workspace builds, Docker image builds/smokes, scheduled-job smoke, and
+    dependency audit after the live-only platform-audit repository-state
+    hardening.
 - `gh run watch 29001831333 --exit-status`
   - Passed on 2026-07-09 for commit `786d7ff`.
   - Covered CI security scan, Prisma validation/migration, PostgreSQL

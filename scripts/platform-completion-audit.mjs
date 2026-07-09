@@ -586,10 +586,6 @@ function readLaunchSummary() {
   };
 }
 
-function formatOptionalLaunchValue(value) {
-  return value === null || value === undefined || value === '' ? 'unknown' : String(value);
-}
-
 function localLaunchStateNote(launch) {
   if (launch.phase === 'NO_ENV') {
     return 'This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.';
