@@ -1705,7 +1705,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /338\/338 production-tooling checks/);
+  assert.match(productionTodo, /340\/340 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /338\/338 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /333\/333 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /332\/332 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /331\/331 production-tooling checks/);
@@ -2455,7 +2456,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 338\/338/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 340\/340/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 338\/338/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 332\/332/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 331\/331/);

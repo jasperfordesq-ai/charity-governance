@@ -590,7 +590,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/87 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/87 evidence checks/);
-  assert.match(auditLedger, /338\/338 production-tooling checks/);
+  assert.match(auditLedger, /340\/340 production-tooling checks/);
+  assert.doesNotMatch(auditLedger, /338\/338 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /333\/333 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /332\/332 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /331\/331 production-tooling checks/);
@@ -667,6 +668,8 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /Local Production Environment State/);
   assert.match(auditLedger, /Release Image Promotion/);
   assert.match(auditLedger, /Protected Final Launch Evidence Workflow/);
+  assert.match(auditLedger, /GitHub production environment: `npm run check:production:github-env -- --environment=production`/);
+  assert.match(auditLedger, /GitHub production secret store: `npm run check:production:github-secrets -- --environment=production`/);
   assert.match(auditLedger, /\.github\/workflows\/production-launch-evidence\.yml/);
   assert.match(auditLedger, /gh workflow run production-launch-evidence\.yml --ref master/);
   assert.match(auditLedger, /GitHub environment: `production`/);
