@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `b1b42b1`
+Working-tree base commit when generated: `1b4bcdc`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -273,7 +273,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit b1b42b1; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 1b4bcdc; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 322/322 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -463,9 +463,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Repository State For Launch Evidence
 
 - Branch: `master`
-- Head: `b1b42b17a201cfa499f10b982c24b2168dfb9352`
+- Head: `1b4bcdc0cba5060f1d109b33f286cef8cd4e3168`
 - Upstream: `origin/master`
-- Upstream head: `b1b42b17a201cfa499f10b982c24b2168dfb9352`
+- Upstream head: `1b4bcdc0cba5060f1d109b33f286cef8cd4e3168`
 - Dirty worktree: `true`
 - Synced with upstream: `true`
 - Launch evidence risk: `dirty_worktree`

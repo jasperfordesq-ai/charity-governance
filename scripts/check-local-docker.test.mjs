@@ -606,6 +606,30 @@ test('platform audit records repository state for launch evidence handoff', () =
   assert.match(auditLedger, /Synced with upstream: `/);
 });
 
+test('platform audit check ignores volatile repository state snapshot drift', async () => {
+  const { normaliseAuditForCheck } = await import('../scripts/platform-completion-audit.mjs');
+  const committedSnapshot = [
+    'Working-tree base commit when generated: `abc1234`',
+    '- Head: `abc1234`',
+    '- Upstream head: `abc1234`',
+    '- Dirty worktree: `true`',
+    '- Synced with upstream: `true`',
+    '- Launch evidence risk: `dirty_worktree`',
+    '- Repository has uncommitted changes; do not collect launch evidence from this worktree.',
+  ].join('\n');
+  const currentSnapshot = [
+    'Working-tree base commit when generated: `def5678`',
+    '- Head: `def5678`',
+    '- Upstream head: `def5678`',
+    '- Dirty worktree: `false`',
+    '- Synced with upstream: `true`',
+    '- Launch evidence risk: `clean_synced`',
+    '- Repository is clean and synced with its upstream ref.',
+  ].join('\n');
+
+  assert.equal(normaliseAuditForCheck(committedSnapshot), normaliseAuditForCheck(currentSnapshot));
+});
+
 test('platform audit check command is read-only for fresh-session baselines', () => {
   const pkg = packageJson();
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');

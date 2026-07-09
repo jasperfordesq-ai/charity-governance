@@ -3,7 +3,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assessLaunchState, collectRepositoryState } from './launch-status.mjs';
 import { decodeJsonFile } from './production-launch-evidence-status.mjs';
 
@@ -849,10 +849,19 @@ function render() {
   return md;
 }
 
-function normaliseAuditForCheck(value) {
+export function normaliseAuditForCheck(value) {
   return value
     .replace(/Working-tree base commit when generated: `[^`]+`/g, 'Working-tree base commit when generated: `CURRENT`')
-    .replace(/not current for generated base commit [a-f0-9]+/g, 'not current for generated base commit CURRENT');
+    .replace(/not current for generated base commit [a-f0-9]+/g, 'not current for generated base commit CURRENT')
+    .replace(/- Head: `[^`]+`/g, '- Head: `CURRENT`')
+    .replace(/- Upstream head: `[^`]+`/g, '- Upstream head: `CURRENT`')
+    .replace(/- Dirty worktree: `(?:true|false|unknown)`/g, '- Dirty worktree: `CURRENT`')
+    .replace(/- Synced with upstream: `(?:true|false|unknown)`/g, '- Synced with upstream: `CURRENT`')
+    .replace(/- Launch evidence risk: `[^`]+`/g, '- Launch evidence risk: `CURRENT`')
+    .replace(/- Repository has uncommitted changes; do not collect launch evidence from this worktree\./g, '- Repository state headline: CURRENT')
+    .replace(/- Repository is clean and synced with its upstream ref\./g, '- Repository state headline: CURRENT')
+    .replace(/- Repository HEAD is not synced with its upstream; push or pull before collecting launch evidence\./g, '- Repository state headline: CURRENT')
+    .replace(/- Repository upstream state could not be verified; collect launch evidence only from a known release ref\./g, '- Repository state headline: CURRENT');
 }
 
 function main() {
@@ -889,4 +898,6 @@ function main() {
   console.log(`Wrote ${normalizePath(relative(repoRoot, outputPath))}`);
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
