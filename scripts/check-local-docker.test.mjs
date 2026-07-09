@@ -286,6 +286,24 @@ test('local Docker migrations are a first-class command and are dry-runnable', (
   assert.match(result.stdout, /docker compose -f compose\.yml -f compose\.local\.yml run --rm --no-deps -T api npx prisma --config apps\/api\/prisma\.config\.ts migrate status --schema apps\/api\/prisma\/schema\.prisma/);
 });
 
+test('local Docker migrations reject unknown options before touching Docker', async () => {
+  const module = await import(`${pathToFileURL(join(repoRoot, 'scripts', 'migrate-local-docker.mjs')).href}?unknown-option-test`);
+  let commandCalls = 0;
+
+  assert.throws(
+    () => module.runLocalDockerMigrations({
+      args: ['--dry-run', '--surprise'],
+      spawnSyncImpl() {
+        commandCalls += 1;
+        return { status: 0, stdout: '' };
+      },
+      writeOutput() {},
+    }),
+    /Unknown option: --surprise[\s\S]*Usage: node scripts\/migrate-local-docker\.mjs \[--dry-run\]/,
+  );
+  assert.equal(commandCalls, 0);
+});
+
 test('dashboard accessibility scans allow protected route cold compiles to finish', () => {
   const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
   const playwrightConfig = readRepoFile('e2e/playwright.config.ts');

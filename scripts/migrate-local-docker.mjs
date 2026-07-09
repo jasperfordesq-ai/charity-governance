@@ -154,6 +154,12 @@ export function runLocalDockerMigrations({
   spawnSyncImpl = spawnSync,
   writeOutput = (value) => process.stdout.write(value),
 } = {}) {
+  for (const arg of args) {
+    if (arg !== '--dry-run') {
+      throw new Error(`Unknown option: ${arg}\nUsage: node scripts/migrate-local-docker.mjs [--dry-run]`);
+    }
+  }
+
   const context = {
     dryRun: args.includes('--dry-run'),
     processEnv,
@@ -193,6 +199,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     runLocalDockerMigrations();
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
-    process.exit(1);
+    process.exit(error.message.startsWith('Unknown option:') ? 2 : 1);
   }
 }
