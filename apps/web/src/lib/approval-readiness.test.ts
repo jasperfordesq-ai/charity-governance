@@ -11,7 +11,7 @@ const readiness = (overrides: Partial<ApprovalReadiness> = {}): ApprovalReadines
   profileIssues: [],
   conditionalReviewItems: [],
   matrixReviewItems: [],
-  matrixLastChecked: '2026-07-08',
+  matrixLastChecked: '2026-07-09',
   ...overrides,
 });
 

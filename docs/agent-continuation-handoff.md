@@ -166,7 +166,7 @@ Correct posture:
 
 ### Compliance and Legal-Readiness Model
 
-- Irish compliance source metadata was refreshed against official sources on 2026-07-08.
+- Irish compliance source metadata was refreshed against official sources on 2026-07-09.
 - The matrix includes source metadata, last-checked dates, professional-review flags, and commencement status.
 - The product includes explicit not-yet-commenced monitoring rows for relevant Charities (Amendment) Act 2024 provisions.
 - Conditional obligation profile facts were added for:

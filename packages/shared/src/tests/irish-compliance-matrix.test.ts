@@ -52,7 +52,7 @@ test('Irish compliance matrix last-checked date matches the refreshed source log
   const sourceLog = readIrishSourceLog();
   const sourceLogDate = sourceLog.match(/Date checked: (\d{4}-\d{2}-\d{2})/)?.[1];
 
-  assert.equal(IRISH_COMPLIANCE_MATRIX_LAST_CHECKED, '2026-07-08');
+  assert.equal(IRISH_COMPLIANCE_MATRIX_LAST_CHECKED, '2026-07-09');
   assert.equal(sourceLogDate, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED);
   assert.match(sourceLog, /Official sources were rechecked by web search\/browsing/);
   assert.match(sourceLog, /professional-review flags/);
