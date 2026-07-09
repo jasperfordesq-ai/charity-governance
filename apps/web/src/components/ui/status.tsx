@@ -62,7 +62,7 @@ export function StatusChip({
     <span
       aria-label={ariaLabel}
       className={classes(
-        'inline-flex max-w-full items-center gap-1.5 rounded-full border font-medium leading-5',
+        'inline-flex max-w-full items-center gap-1.5 rounded-md border font-medium leading-5',
         sizeClasses[size],
         toneClasses[tone],
         className,

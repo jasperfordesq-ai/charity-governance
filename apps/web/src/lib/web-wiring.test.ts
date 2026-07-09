@@ -2944,6 +2944,8 @@ test('shared form/list/status primitives avoid accessibility regressions called 
   const status = component('ui/status.tsx');
   assert.doesNotMatch(status, /String\(children\)/);
   assert.match(status, /ariaLabel\?/);
+  assert.match(status, /rounded-md border/);
+  assert.doesNotMatch(status, /rounded-full border/);
 });
 
 test('marketing and auth layout chrome includes dark variants for muted text and surfaces', () => {
