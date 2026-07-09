@@ -32,6 +32,13 @@ const GUARANTEES = join(ROOT, 'docs', 'reliability', 'guarantees.json');
 const LEDGER_MD = join(ROOT, 'docs', 'RELIABILITY.md');
 
 const args = process.argv.slice(2);
+const USAGE_TEXT = 'Usage: node scripts/reliability-report.mjs [--write] [--no-run] [--surface=web|api]';
+const unknownArg = args.find((arg) => arg !== '--write' && arg !== '--no-run' && !/^--surface=(web|api)$/.test(arg));
+if (unknownArg) {
+  console.error(`Unknown option: ${unknownArg}`);
+  console.error(USAGE_TEXT);
+  process.exit(2);
+}
 const WRITE = args.includes('--write');
 const NO_RUN = args.includes('--no-run');
 const SURFACE_ARG = (args.find((a) => a.startsWith('--surface=')) || '').split('=')[1] || '';

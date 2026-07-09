@@ -1678,6 +1678,18 @@ test('reliability report emits ASCII-safe operator output', () => {
   assert.match(result.stdout, /OVERALL|--no-run/);
 });
 
+test('reliability report rejects unknown options before reporting', () => {
+  const result = spawnSync(process.execPath, ['scripts/reliability-report.mjs', '--no-run', '--surprise'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Unknown option: --surprise/);
+  assert.match(result.stderr, /Usage: node scripts\/reliability-report\.mjs/);
+  assert.equal(result.stdout, '');
+});
+
 test('production todo reflects current launch blockers without overclaiming local browser smoke', () => {
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
