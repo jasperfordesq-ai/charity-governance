@@ -91,6 +91,23 @@ function completionPercent(completed, total) {
   return Math.round((Math.max(0, completed) / total) * 1000) / 10;
 }
 
+function evidenceText(entries) {
+  return Array.isArray(entries)
+    ? entries.map((entry) => `${entry?.type ?? ''} ${entry?.reference ?? ''} ${entry?.description ?? ''}`).join('\n')
+    : '';
+}
+
+function finalApprovalProgressStatus(approval, releaseCommitSha) {
+  const status = statusOf(approval?.status);
+  if (status !== 'approved') return status;
+
+  if (typeof releaseCommitSha !== 'string' || !evidenceText(approval?.evidence).includes(releaseCommitSha)) {
+    return 'approved_missing_release_commit';
+  }
+
+  return status;
+}
+
 export function releaseBindingStatus(evidence) {
   const release = evidence?.release;
   const manifest = release?.imageDigestManifest;
@@ -179,9 +196,10 @@ export function summarizeEvidence(evidence) {
     });
   }
 
+  const releaseCommitSha = releaseBindingStatus(evidence).commitSha;
   const finalSignoffApprovals = FINAL_SIGNOFF_ROLES.map((role) => {
     const approval = evidence?.finalSignoff?.approvals?.[role.id];
-    const status = statusOf(approval?.status);
+    const status = finalApprovalProgressStatus(approval, releaseCommitSha);
     const approved = status === 'approved';
     if (approved) approvedFinalSignoffRoles += 1;
     return {

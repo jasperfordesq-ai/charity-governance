@@ -106,17 +106,18 @@ test('production launch evidence status renders non-secret JSON for automation',
     assert.ok(payload.releaseBinding.missingFields.includes('release.workflowRunUrl'));
     assert.ok(payload.releaseBinding.missingFields.includes('release.imageDigestManifest.apiImage'));
     assert.equal(payload.totalChecks, 85);
-    assert.equal(payload.approvedFinalSignoffRoles, 1);
+    assert.equal(payload.approvedFinalSignoffRoles, 0);
     assert.equal(payload.totalFinalSignoffRoles, 5);
     assert.deepEqual(payload.percentages, {
       evidenceChecks: 1.2,
-      finalSignoffs: 20,
+      finalSignoffs: 0,
     });
     assert.equal(payload.incompleteCheckCount, 84);
     assert.deepEqual(
       payload.pendingFinalSignoffRoles.map((role) => role.id),
-      ['operations', 'security', 'legalCompliance', 'business'],
+      ['engineering', 'operations', 'security', 'legalCompliance', 'business'],
     );
+    assert.equal(payload.pendingFinalSignoffRoles[0].status, 'approved_missing_release_commit');
     assert.match(payload.nextIncompleteChecks[0], /^releaseGate\.db-generate/);
     assert.equal(payload.nextIncompleteCheckDetails[0].path, 'releaseGate.db-generate');
     assert.deepEqual(payload.nextIncompleteCheckDetails[0].requiredEvidenceHints, [
@@ -124,6 +125,38 @@ test('production launch evidence status renders non-secret JSON for automation',
       'exit 0',
     ]);
     assert.equal(payload.areas.find((area) => area.id === 'releaseGate').completed, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence status does not count unbound final approval roles', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = await launchEvidenceTemplate();
+  evidence.release.commitSha = 'b'.repeat(40);
+  evidence.finalSignoff.approvals.engineering.status = 'approved';
+  evidence.finalSignoff.approvals.engineering.evidence = [
+    {
+      type: 'approval',
+      reference: 'https://evidence.charitypilot.ie/launch/final-signoff/engineering',
+      description: 'Engineering owner launch approval',
+      capturedAt: '2026-07-06T12:00:00.000Z',
+    },
+  ];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.approvedFinalSignoffRoles, 0);
+    assert.equal(payload.percentages.finalSignoffs, 0);
+    assert.ok(
+      payload.pendingFinalSignoffRoles.some(
+        (role) => role.id === 'engineering' && role.status === 'approved_missing_release_commit',
+      ),
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -193,6 +226,7 @@ test('production launch evidence status falls back to current hints for older le
 test('production launch evidence status complete flag requires area statuses', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
   const evidence = await launchEvidenceTemplate();
+  evidence.release.commitSha = 'b'.repeat(40);
   evidence.approvedForLaunch = true;
   evidence.finalSignoff.status = 'approved';
 
@@ -202,8 +236,16 @@ test('production launch evidence status complete flag requires area statuses', a
       check.status = 'complete';
     }
   }
-  for (const approval of Object.values(evidence.finalSignoff.approvals)) {
+  for (const [roleId, approval] of Object.entries(evidence.finalSignoff.approvals)) {
     approval.status = 'approved';
+    approval.evidence = [
+      {
+        type: 'approval',
+        reference: `https://evidence.charitypilot.ie/launch/final-signoff/${roleId}`,
+        description: `${approval.owner.replace('REPLACE_WITH_', '').replaceAll('_', ' ')} launch approval for release ${evidence.release.commitSha}`,
+        capturedAt: '2026-07-06T12:00:00.000Z',
+      },
+    ];
   }
   evidence.areas.releaseGate.status = 'pending';
 
