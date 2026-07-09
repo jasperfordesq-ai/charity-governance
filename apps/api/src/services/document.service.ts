@@ -295,6 +295,17 @@ export class DocumentService {
     return doc.fileUrl;
   }
 
+  async assertStoragePathBelongsToDocument(organisationId: string, storagePath: string): Promise<void> {
+    const doc = await this.prisma.document.findFirst({
+      where: { organisationId, fileUrl: storagePath },
+      select: { id: true },
+    });
+
+    if (!doc) {
+      throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+    }
+  }
+
   async create(
     organisationId: string,
     userId: string,

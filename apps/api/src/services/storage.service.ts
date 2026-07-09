@@ -104,6 +104,12 @@ function isMissingFileError(error: unknown): boolean {
 }
 
 export class StorageService {
+  assertLocalStorageEnabled(): void {
+    if (!isLocalStorageDriver()) {
+      throw new AppError(503, 'STORAGE_NOT_CONFIGURED', STORAGE_UNAVAILABLE_MESSAGE);
+    }
+  }
+
   isConfigured(): boolean {
     if (isLocalStorageDriver()) return true;
 
@@ -187,10 +193,7 @@ export class StorageService {
   }
 
   async readLocalFile(organisationId: string, storagePath: string): Promise<Buffer> {
-    if (!isLocalStorageDriver()) {
-      throw new AppError(503, 'STORAGE_NOT_CONFIGURED', STORAGE_UNAVAILABLE_MESSAGE);
-    }
-
+    this.assertLocalStorageEnabled();
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
     try {
       return await readFile(localFilePath(guardedPath));

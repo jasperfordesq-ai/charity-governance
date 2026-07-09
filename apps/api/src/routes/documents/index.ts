@@ -48,6 +48,8 @@ export async function documentRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Missing local storage path', code: 'LOCAL_STORAGE_PATH_REQUIRED' });
       }
 
+      storageService.assertLocalStorageEnabled();
+      await service.assertStoragePathBelongsToDocument(request.user.organisationId, path);
       const file = await storageService.readLocalFile(request.user.organisationId, path);
       const filename = path.split('/').pop()?.replace(/["\r\n]/g, '') || 'document';
 

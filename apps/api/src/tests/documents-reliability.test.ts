@@ -653,6 +653,42 @@ test('GET /_local-download requires a path query parameter', async () => {
   }
 });
 
+test('GET /_local-download requires the local storage path to belong to a live document row', { concurrency: false }, async () => {
+  const originalDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const originalReadLocalFile = StorageService.prototype.readLocalFile;
+  process.env.DOCUMENT_STORAGE_DRIVER = 'local';
+  let readCalled = false;
+
+  StorageService.prototype.readLocalFile = async () => {
+    readCalled = true;
+    return Buffer.from('orphaned file');
+  };
+
+  const app = await buildDocumentsApp({
+    subscription: activeSubscription(),
+    document: {
+      findFirst: async () => null,
+    },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/_local-download?path=org-1/orphaned-policy.pdf',
+      headers: { authorization: authHeader },
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().code, 'DOCUMENT_NOT_FOUND');
+    assert.equal(readCalled, false);
+  } finally {
+    StorageService.prototype.readLocalFile = originalReadLocalFile;
+    if (originalDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = originalDriver;
+    await app.close();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Graceful degradation
 // ---------------------------------------------------------------------------
