@@ -520,8 +520,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /generated base commit/);
   assert.doesNotMatch(auditGenerator, /not current for generated base commit/);
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
-  assert.match(auditLedger, /9\/86 evidence checks/);
-  assert.doesNotMatch(auditLedger, /0\/86 evidence checks/);
+  assert.match(auditLedger, /9\/87 evidence checks/);
+  assert.doesNotMatch(auditLedger, /0\/87 evidence checks/);
   assert.match(auditLedger, /338\/338 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /333\/333 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /332\/332 production-tooling checks/);
@@ -563,7 +563,7 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
 
   assert.match(auditGenerator, /Launch status now separates missing production env values from external launch evidence gates/);
-  assert.match(auditGenerator, /86 machine-readable launch evidence checks/);
+  assert.match(auditGenerator, /87 machine-readable launch evidence checks/);
   assert.match(auditGenerator, /launch evidence ledger status/);
   assert.match(auditGenerator, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditGenerator, /Release binding/);
@@ -582,12 +582,12 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /release image promotion GitHub environment variables/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
   assert.match(auditLedger, /Launch status now separates missing production env values from external launch evidence gates/);
-  assert.match(auditLedger, /86 machine-readable launch evidence checks/);
+  assert.match(auditLedger, /87 machine-readable launch evidence checks/);
   assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditLedger, /Release binding:/);
   assert.match(auditLedger, /Launch Progress Summary/);
-  assert.match(auditLedger, /Strict launch gates complete: 18 \/ 119 \(101 remaining, 15\.1% complete\)/);
+  assert.match(auditLedger, /Strict launch gates complete: 18 \/ 120 \(102 remaining, 15% complete\)/);
   assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /group missing production values by provider\/source/);
   assert.match(auditLedger, /Local-state note/);

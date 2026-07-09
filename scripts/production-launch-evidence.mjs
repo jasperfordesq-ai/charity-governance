@@ -21,6 +21,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['audit', 'production dependency audit completed'],
       ['check-production', 'production env validation completed against real secrets'],
       ['github-environment', 'GitHub production environment variables verified before release image promotion'],
+      ['github-secret-store', 'GitHub production secret names verified without reading values'],
       ['deploy-preflight', 'digest-pinned deploy preflight completed'],
       ['deploy-production', 'production Docker deployment completed'],
       ['deploy-smoke', 'post-deploy public HTTPS smoke completed'],
@@ -559,6 +560,11 @@ const executableCheckerEvidenceRequirements = new Map([
     commandLabel: 'check:production:github-env',
     command: 'npm run check:production:github-env -- --environment=production',
     successText: 'Production GitHub environment check passed',
+  }],
+  ['releaseGate.github-secret-store', {
+    commandLabel: 'check:production:github-secrets',
+    command: 'npm run check:production:github-secrets -- --environment=production',
+    successText: 'Production GitHub secret-store check passed',
   }],
   ['hostingDnsTls.hosting-check', {
     commandLabel: 'check:production:hosting',

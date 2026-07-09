@@ -28,8 +28,8 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - `.env.production` exists but still has 19 values needing real production data.
 - Production values complete: `9 / 28`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
-- Machine-readable launch evidence completion: `9 / 86`.
-- Strict counted launch gates: `18 / 119` complete (`15.1%`), counting only production values, launch evidence checks, and final signoff roles.
+- Machine-readable launch evidence completion: `9 / 87`.
+- Strict counted launch gates: `18 / 120` complete (`15%`), counting only production values, launch evidence checks, and final signoff roles.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
@@ -389,12 +389,12 @@ These require human/operator/provider access and must not be faked:
 9. Complete external penetration test.
 10. Remediate or formally accept pentest findings.
 11. Complete deployed browser QA and accessibility checks.
-12. Complete all 86 machine-readable launch evidence checks.
+12. Complete all 87 machine-readable launch evidence checks.
 13. Complete final engineering, operations, security, legal/compliance, and business signoffs.
 
 ### Launch Evidence Still Open
 
-The evidence ledger is currently `9 / 86`. Those completed checks are local/CI
+The evidence ledger is currently `9 / 87`. Those completed checks are local/CI
 release-gate basics only; they do not replace real production env validation,
 digest-pinned deployment, public HTTPS smoke, rollback, provider, backup/restore,
 deployed browser QA, legal, pentest, or final signoff evidence.
@@ -507,8 +507,8 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 
 Strict launch evidence metric:
 
-- `77 / 86` machine-readable launch checks remain.
-- Strict counted launch gates are `18 / 119` complete, so `101 / 119`
+- `78 / 87` machine-readable launch checks remain.
+- Strict counted launch gates are `18 / 120` complete, so `102 / 120`
   counted gates remain. This is an operator progress metric only, not a legal,
   security, operations, or business readiness certification.
 - Strict launch evidence is still mostly incomplete because the remaining checks
@@ -529,4 +529,4 @@ Repo-side-only estimate:
 
 ## Final Rule For Future Agents
 
-Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 86 launch evidence checks, and all five final signoffs are complete and recorded.
+Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 87 launch evidence checks, and all five final signoffs are complete and recorded.

@@ -133,12 +133,12 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
-- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 86 checks.
+- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 87 checks.
 - Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.
 - Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.
 - Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.
 - Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.
-- Launch status and production readiness TODO now name all 86 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
+- Launch status and production readiness TODO now name all 87 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
 - Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.
 - Production launch evidence status now reports evidence-check and final-signoff completion percentages in both text and JSON output.
@@ -209,7 +209,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The release readiness command now scopes failed Playwright E2E cleanup to this repository before stopping related Node processes, avoiding unrelated npm test processes on shared Windows hosts.
 - The release readiness command now resolves npm and npx gates through explicit Node CLI entrypoints on Windows instead of shell execution, keeping launch evidence transcripts free of shell-argument deprecation warnings.
 - The production readiness TODO now reflects the current 19-value launch blocker state without overclaiming unrun local smoke or external evidence.
-- The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/86 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
+- The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/87 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.
 - The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.
@@ -375,7 +375,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 86.
+- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 87.
 - approvedForLaunch: false
 - finalSignoff: pending
 - Final approval roles approved: 0 / 5
@@ -383,9 +383,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Next incomplete checks:
   - releaseGate.check-production (pending)
   - releaseGate.github-environment (missing)
+  - releaseGate.github-secret-store (missing)
   - releaseGate.deploy-preflight (pending)
   - releaseGate.deploy-production (pending)
-  - releaseGate.deploy-smoke (pending)
 - Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 - Strict validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Strict validation JSON: `npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
@@ -478,9 +478,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Launch Progress Summary
 
 - Production values complete: 9 / 28 (19 remaining)
-- Launch evidence checks complete: 9 / 86 (77 remaining)
+- Launch evidence checks complete: 9 / 87 (78 remaining)
 - Final signoffs approved: 0 / 5 (5 remaining)
-- Strict launch gates complete: 18 / 119 (101 remaining, 15.1% complete)
+- Strict launch gates complete: 18 / 120 (102 remaining, 15% complete)
 - approvedForLaunch: false
 
 ### Local Production Environment Issues

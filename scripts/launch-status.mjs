@@ -113,7 +113,7 @@ const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
 });
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
-  'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 86 machine-readable checks, including GitHub production environment, release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
+  'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 87 machine-readable checks, including GitHub production environment, GitHub production secret-store verification, release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, critical-flow evidence must include pending-navigation confirmation, conditional obligations, and readiness blockers, and every browser QA evidence slot must bind to the exact promoted release.commitSha: browserQa.checks.browser-qa-completed, browserQa.checks.desktop-coverage, browserQa.checks.mobile-coverage, browserQa.checks.accessibility-coverage, browserQa.checks.cross-browser-coverage, browserQa.checks.ios-safari-device-coverage, and browserQa.checks.critical-flows-covered.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
@@ -180,7 +180,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
 const EXPECTED_PRODUCTION_VALUE_KEYS = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
 const TOTAL_EXPECTED_PRODUCTION_VALUES = EXPECTED_PRODUCTION_VALUE_KEYS.length;
-const TOTAL_LAUNCH_EVIDENCE_CHECKS = 86;
+const TOTAL_LAUNCH_EVIDENCE_CHECKS = 87;
 const TOTAL_FINAL_SIGNOFF_ROLES = 5;
 const PLACEHOLDER_TOKENS = Object.freeze([
   'REPLACE_ME',

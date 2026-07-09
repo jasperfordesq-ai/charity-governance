@@ -23,6 +23,12 @@ const evidenceHintsByCheck = new Map([
     'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
     'secret values were not read',
   ]],
+  ['releaseGate.github-secret-store', [
+    'npm run check:production:github-secrets -- --environment=production',
+    'Production GitHub secret-store check passed',
+    'required secret name(s)',
+    'secret values were not read',
+  ]],
   ['releaseGate.deploy-preflight', ['npm run deploy:preflight -- --production-env-file=.env.production', 'digest-pinned API, web, and migration images']],
   ['releaseGate.deploy-production', [
     'npm run deploy:production -- --production-env-file=.env.production',

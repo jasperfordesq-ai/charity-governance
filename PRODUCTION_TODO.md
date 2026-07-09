@@ -9,14 +9,14 @@ Status marks reflect completed repository hardening work. Open items require rea
 > **Current local status checked 2026-07-09:** `npm run launch:status -- --json`
 > still reports `ENV_INCOMPLETE`: 9 of 28 production values are complete and 19
 > production values still require real data in `.env.production` or the approved
-> production secret store. The launch evidence ledger is now 9 of 86 checks
+> production secret store. The launch evidence ledger is now 9 of 87 checks
 > complete from local/CI release-gate evidence, final signoffs remain 0 of 5
-> approved, and the strict counted launch gates are 18 of 119 complete
-> (15.1%). This strict percentage counts only production values, evidence checks,
+> approved, and the strict counted launch gates are 18 of 120 complete
+> (15%). This strict percentage counts only production values, evidence checks,
 > and final signoff roles; it is not a legal or business readiness claim.
 > `approvedForLaunch` is false. Do not put real charity data into CharityPilot until those values,
 > provider checks, deployed QA, legal/privacy review, external security review,
-> backup/restore evidence, all 86 machine-readable launch evidence checks, and
+> backup/restore evidence, all 87 machine-readable launch evidence checks, and
 > final signoffs are complete.
 > `npm run launch:status` also surfaces the current launch evidence ledger count,
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so

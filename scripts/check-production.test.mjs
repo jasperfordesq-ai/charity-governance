@@ -1679,7 +1679,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /Current local status checked 2026-07-09/);
   assert.match(productionTodo, /9 of 28 production values are complete/);
   assert.match(productionTodo, /9 of 28 production values are complete[\s\S]*19[\s\S]*production values still require real data/);
-  assert.match(productionTodo, /launch evidence ledger is now 9 of 86 checks\s+>\s+complete from local\/CI release-gate evidence/s);
+  assert.match(productionTodo, /launch evidence ledger is now 9 of 87 checks\s+>\s+complete from local\/CI release-gate evidence/s);
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
   assert.match(productionTodo, /Local browser QA has current 2026-07-09 evidence/);
@@ -1692,7 +1692,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.doesNotMatch(productionTodo, /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i);
   assert.doesNotMatch(productionTodo, /full accessibility suite must be rerun for the final release transcript/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
-  assert.match(productionTodo, /86 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /87 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
   assert.match(productionTodo, /release\s+image promotion/i);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
@@ -1741,9 +1741,9 @@ test('agent continuation handoff reflects current launch evidence progress witho
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-09/);
-  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 86`/);
-  assert.match(handoff, /The evidence ledger is currently `9 \/ 86`/);
-  assert.match(handoff, /77 \/ 86` machine-readable launch checks remain/);
+  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 87`/);
+  assert.match(handoff, /The evidence ledger is currently `9 \/ 87`/);
+  assert.match(handoff, /78 \/ 87` machine-readable launch checks remain/);
   assert.match(handoff, /releaseGate\.check-production/);
   assert.match(handoff, /releaseGate\.github-environment/);
   assert.match(handoff, /releaseGate\.deploy-preflight/);
@@ -1783,9 +1783,9 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.doesNotMatch(handoff, /317\/317 production-tooling checks/);
   assert.doesNotMatch(handoff, /316\/316 production-tooling checks/);
   assert.doesNotMatch(handoff, /315\/315 production-tooling checks/);
-  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 86`/);
-  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 86`/);
-  assert.doesNotMatch(handoff, /86 \/ 86` machine-readable launch checks remain/);
+  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 87`/);
+  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 87`/);
+  assert.doesNotMatch(handoff, /87 \/ 87` machine-readable launch checks remain/);
   assert.doesNotMatch(handoff, /313\/313 production-tooling checks/);
   assert.doesNotMatch(handoff, /restore-test ownership/);
 });
@@ -2454,7 +2454,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /Last updated: 2026-07-09/);
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
-  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
+  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
   assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 338\/338/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 332\/332/);
@@ -2491,13 +2491,13 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
   assert.doesNotMatch(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
-  assert.match(launchGuide, /86 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /87 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(launchGuide, /Launch-Critical Route Inventory/);
   assert.match(launchGuide, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
-  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 86` complete/);
+  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 87` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
   assert.match(launchGuide, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
@@ -2655,7 +2655,7 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
   assert.match(backendAudit, /19 production values still require real data/);
-  assert.match(backendAudit, /86 machine-readable launch evidence checks/);
+  assert.match(backendAudit, /87 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
