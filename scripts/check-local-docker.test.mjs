@@ -230,6 +230,9 @@ test('personal local readiness gate is non-production and non-destructive by def
   assert.match(readinessScript, /console\.log\(`Database backup: \$\{backupPath\}`\);/);
   assert.match(readinessScript, /console\.log\(`Document backup: \$\{documentBackupDir\}`\);/);
   assert.match(readinessScript, /--keep-web-cache/);
+  assert.match(readinessScript, /allowedArgs = new Set\(\[[\s\S]*'--no-browser'[\s\S]*'--no-backup'[\s\S]*'--keep-web-cache'[\s\S]*\]\)/);
+  assert.match(readinessScript, /Unknown option: \$\{arg\}/);
+  assert.match(readinessScript, /process\.exit\(2\)/);
   assert.match(readinessScript, /Generated web cache cleanup/);
   assert.match(readinessScript, /localWebContainerIsRunning/);
   assert.match(readinessScript, /charitypilot-web-local is already running/);

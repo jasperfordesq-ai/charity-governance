@@ -18,6 +18,18 @@ const backupPath = join(postgresBackupDir, backupFile);
 const documentBackupDir = join(documentBackupRoot, `personal-local-${timestamp}`);
 
 const args = new Set(process.argv.slice(2));
+const allowedArgs = new Set([
+  '--no-browser',
+  '--no-backup',
+  '--keep-web-cache',
+]);
+for (const arg of args) {
+  if (!allowedArgs.has(arg)) {
+    console.error(`Unknown option: ${arg}`);
+    console.error('Usage: npm run personal:ready -- [--no-browser] [--no-backup] [--keep-web-cache]');
+    process.exit(2);
+  }
+}
 const skipBrowser = args.has('--no-browser');
 const skipBackup = args.has('--no-backup');
 const keepWebCache = args.has('--keep-web-cache');
