@@ -498,6 +498,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditGenerator, /passed locally on 2026-07-08 at commit \$\{commit\}/);
   assert.match(auditGenerator, /npm run test:e2e:responsive/);
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
+  assert.doesNotMatch(auditGenerator, /remains an open local QA blocker/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.ok(auditBaseCommit, 'audit ledger must record the generated base commit');
   assert.match(auditLedger, /passed locally on 2026-07-09 at commit [a-f0-9]{7,40}/);
@@ -520,6 +521,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditLedger, /dashboard desktop 12\/12/);
   assert.match(auditLedger, /dashboard mobile 12\/12/);
   assert.match(auditLedger, /public\/auth and dashboard routes[\s\S]*light and dark themes/);
+  assert.match(auditLedger, /CI local Docker smoke passed on 2026-07-09/);
+  assert.doesNotMatch(auditLedger, /remains an open local QA blocker/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });
 
