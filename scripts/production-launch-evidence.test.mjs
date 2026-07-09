@@ -158,6 +158,16 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'releaseGate' && checkId === 'github-environment') {
+    entry.type = 'command-output';
+    entry.description = [
+      'npm run check:production:github-env -- --environment=production',
+      'Production GitHub environment check passed: production has the required release-image public variables; secret values were not read.',
+      'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+    ].join(' ');
+  }
+
   if (areaId === 'releaseGate' && checkId === 'npm-ci') {
     entry.type = 'command-output';
     entry.description = 'npm ci completed on the release build machine with exit 0.';
@@ -787,7 +797,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /85 check\(s\)/);
+    assert.match(result.stdout, /86 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -827,8 +837,8 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.equal(failurePayload.incompleteCheckCount, 1);
     assert.deepEqual(failurePayload.progress, {
       checklistChecks: {
-        completed: 84,
-        total: 85,
+        completed: 85,
+        total: 86,
         percentage: 98.8,
       },
       finalSignoffRoles: {
@@ -848,8 +858,8 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.deepEqual(successPayload.issues, []);
     assert.deepEqual(successPayload.progress, {
       checklistChecks: {
-        completed: 85,
-        total: 85,
+        completed: 86,
+        total: 86,
         percentage: 100,
       },
       finalSignoffRoles: {
@@ -1052,6 +1062,7 @@ test('production launch evidence validator requires executable checker command t
     capturedAt,
   };
   evidence.areas.releaseGate.checks['check-production'].evidence = [genericEvidence];
+  evidence.areas.releaseGate.checks['github-environment'].evidence = [genericEvidence];
   evidence.areas.hostingDnsTls.checks['hosting-check'].evidence = [genericEvidence];
   evidence.areas.supabaseStorage.checks['supabase-check'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['providers-check'].evidence = [genericEvidence];
@@ -1064,10 +1075,32 @@ test('production launch evidence validator requires executable checker command t
     assert.equal(result.status, 1);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.check-production\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.check-production\.evidence must include the check:production command/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.github-environment\.evidence must include the check:production:github-env command/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.github-environment\.evidence must include Production GitHub environment check passed/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.hosting-check\.evidence must include Production hosting check passed/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-check\.evidence must include the check:production:supabase command/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include Production provider check passed/);
     assert.match(result.stderr, /areas\.observability\.checks\.observability-check\.evidence must include the check:production:observability command/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires GitHub production environment preflight evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  assert.ok(
+    REQUIRED_LAUNCH_AREAS.find((area) => area.id === 'releaseGate')?.checks.some((check) => check.id === 'github-environment'),
+    'releaseGate.github-environment must be part of REQUIRED_LAUNCH_AREAS',
+  );
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  delete evidence.areas.releaseGate.checks['github-environment'];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /releaseGate\.checks\.github-environment is required/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1959,6 +1992,16 @@ test('production launch evidence template covers every required area and final s
       ['npm ci', 'exit 0'],
     );
     assert.deepEqual(
+      template.areas.releaseGate.checks['github-environment'].requiredEvidenceHints,
+      [
+        'npm run check:production:github-env -- --environment=production',
+        'Production GitHub environment check passed',
+        'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+        'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+        'secret values were not read',
+      ],
+    );
+    assert.deepEqual(
       template.areas.releaseGate.checks.audit.requiredEvidenceHints,
       ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities'],
     );
@@ -2099,7 +2142,7 @@ test('production launch evidence template covers every required area and final s
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Checklist checks complete: 0 \/ 85 \(0% complete\)/);
+    assert.match(result.stderr, /Checklist checks complete: 0 \/ 86 \(0% complete\)/);
     assert.match(result.stderr, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(
       result.stderr,

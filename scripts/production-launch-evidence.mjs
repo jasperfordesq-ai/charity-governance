@@ -20,6 +20,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['build-web', 'web build completed'],
       ['audit', 'production dependency audit completed'],
       ['check-production', 'production env validation completed against real secrets'],
+      ['github-environment', 'GitHub production environment variables verified before release image promotion'],
       ['deploy-preflight', 'digest-pinned deploy preflight completed'],
       ['deploy-production', 'production Docker deployment completed'],
       ['deploy-smoke', 'post-deploy public HTTPS smoke completed'],
@@ -553,6 +554,11 @@ const executableCheckerEvidenceRequirements = new Map([
     commandLabel: 'check:production',
     command: 'npm run check:production -- --production-env-file=.env.production',
     successText: 'Production preflight passed',
+  }],
+  ['releaseGate.github-environment', {
+    commandLabel: 'check:production:github-env',
+    command: 'npm run check:production:github-env -- --environment=production',
+    successText: 'Production GitHub environment check passed',
   }],
   ['hostingDnsTls.hosting-check', {
     commandLabel: 'check:production:hosting',

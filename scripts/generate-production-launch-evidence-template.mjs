@@ -16,6 +16,13 @@ const evidenceHintsByCheck = new Map([
   ['releaseGate.build-web', ['npm run build -w @charitypilot/web', 'exit 0']],
   ['releaseGate.audit', ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities']],
   ['releaseGate.check-production', ['npm run check:production -- --production-env-file=.env.production', 'Production configuration check passed']],
+  ['releaseGate.github-environment', [
+    'npm run check:production:github-env -- --environment=production',
+    'Production GitHub environment check passed',
+    'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+    'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+    'secret values were not read',
+  ]],
   ['releaseGate.deploy-preflight', ['npm run deploy:preflight -- --production-env-file=.env.production', 'digest-pinned API, web, and migration images']],
   ['releaseGate.deploy-production', [
     'npm run deploy:production -- --production-env-file=.env.production',

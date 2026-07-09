@@ -64,7 +64,8 @@ function assertExternalLaunchEvidenceGates(state) {
   );
   const gates = state.externalEvidenceGates.join('\n');
   assert.match(gates, /production-launch-evidence\.json/);
-  assert.match(gates, /85 machine-readable checks/);
+  assert.match(gates, /86 machine-readable checks/);
+  assert.match(gates, /GitHub production environment/);
   assert.match(gates, /browserQa\.checks\.accessibility-coverage/);
   assert.match(gates, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(gates, /browserQa\.checks\.ios-safari-device-coverage/);
@@ -247,7 +248,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 28, remaining: 28 });
   assert.equal(payload.launchProgress.evidenceChecks, null);
   assert.equal(payload.launchProgress.finalSignoffs, null);
-  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 118, remaining: 118 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 119, remaining: 119 });
   assert.deepEqual(payload.launchProgress.percentages, {
     productionValues: 0,
     evidenceChecks: 0,
@@ -400,7 +401,7 @@ test('reports launch evidence completion counts when the evidence ledger exists'
 
   assert.equal(s.evidenceLedger.exists, true);
   assert.equal(s.evidenceLedger.completedChecks, 0);
-  assert.equal(s.evidenceLedger.totalChecks, 85);
+  assert.equal(s.evidenceLedger.totalChecks, 86);
   assert.equal(s.evidenceLedger.approvedForLaunch, false);
   assert.equal(s.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(s.evidenceLedger.approvedFinalSignoffRoles, 0);
@@ -422,7 +423,7 @@ test('reports launch evidence completion counts when the evidence ledger exists'
       { path: 'releaseGate.db-generate', status: 'missing', hints: ['npm run db:generate -w @charitypilot/api', 'exit 0'] },
     ],
   );
-  assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 85/);
+  assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 86/);
   assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
 });
@@ -519,18 +520,18 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('AUTH_COOKIE_DOMAIN')));
   assert.deepEqual(payload.launchProgress.productionValues, { completed: 26, total: 28, remaining: 2 });
-  assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 85, remaining: 85 });
+  assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 86, remaining: 86 });
   assert.deepEqual(payload.launchProgress.finalSignoffs, { approved: 0, total: 5, remaining: 5 });
-  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 26, total: 118, remaining: 92 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 26, total: 119, remaining: 93 });
   assert.deepEqual(payload.launchProgress.percentages, {
     productionValues: 92.9,
     evidenceChecks: 0,
     finalSignoffs: 0,
-    strictLaunchGates: 22,
+    strictLaunchGates: 21.8,
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
-  assert.equal(payload.evidenceLedger.totalChecks, 85);
+  assert.equal(payload.evidenceLedger.totalChecks, 86);
   assert.equal(payload.evidenceLedger.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(payload.evidenceLedger.approvedFinalSignoffRoles, 0);

@@ -26,8 +26,8 @@ on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
 configured handoff still had 19 production values needing real data.
 On the latest checked workstation, production values are `9 / 28` complete,
-machine-readable launch evidence is `9 / 85` complete, final signoffs are
-`0 / 5`, the strict counted launch gates are `18 / 118` complete (`15.3%`),
+machine-readable launch evidence is `9 / 86` complete, final signoffs are
+`0 / 5`, the strict counted launch gates are `18 / 119` complete (`15.1%`),
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.
@@ -35,7 +35,7 @@ Local browser QA has current 2026-07-09 evidence from focused responsive route c
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all
-85 machine-readable launch evidence checks, including the deployed accessibility
+86 machine-readable launch evidence checks, including the GitHub production environment preflight and deployed accessibility
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
