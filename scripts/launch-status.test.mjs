@@ -193,6 +193,10 @@ function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');
   assert.equal(promotion.watchCommand, 'gh run watch RELEASE_RUN_ID --exit-status');
   assert.equal(promotion.githubEnvironmentCheckCommand, 'npm run check:production:github-env -- --environment=production');
+  assert.equal(
+    promotion.githubEnvironmentCheckJsonCommand,
+    'npm run check:production:github-env -- --environment=production --json',
+  );
   assert.equal(promotion.evidenceArtifact, 'release-image-digests.env');
   assert.match(promotion.evidenceTarget, /CHARITYPILOT_\*_IMAGE/);
   assert.match(promotion.evidenceTarget, /CHARITYPILOT_WEB_BUILD_\*/);
@@ -614,6 +618,7 @@ test('launch status exposes repository state so release evidence is tied to a cl
     text,
     /GitHub production secret-store JSON:  npm run check:production:github-secrets -- --environment=production --json/,
   );
+  assert.match(text, /Preflight GitHub environment JSON:  npm run check:production:github-env -- --environment=production --json/);
   assert.match(text, /branch: master/);
   assert.match(text, /head: dddddddddddddddddddddddddddddddddddddddd/);
   assert.match(text, /upstream: origin\/master/);

@@ -783,6 +783,8 @@ function render() {
     for (const command of launch.releaseImagePromotion.configureCommands) md += `  - \`${command}\`\n`;
     md += `- Workflow: \`${launch.releaseImagePromotion.workflowCommand}\`\n`;
     md += `- Watch: \`${launch.releaseImagePromotion.watchCommand}\`\n`;
+    md += `- Preflight GitHub environment: \`${launch.releaseImagePromotion.githubEnvironmentCheckCommand}\`\n`;
+    md += `- Preflight GitHub environment JSON: \`${launch.releaseImagePromotion.githubEnvironmentCheckJsonCommand}\`\n`;
     md += `- Digest artifact: \`${launch.releaseImagePromotion.evidenceArtifact}\`\n`;
     md += `- Evidence target: ${launch.releaseImagePromotion.evidenceTarget}\n\n`;
   }

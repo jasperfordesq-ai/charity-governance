@@ -114,6 +114,7 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
   workflowCommand: 'gh workflow run release-images.yml --ref master',
   watchCommand: 'gh run watch RELEASE_RUN_ID --exit-status',
   githubEnvironmentCheckCommand: 'npm run check:production:github-env -- --environment=production',
+  githubEnvironmentCheckJsonCommand: 'npm run check:production:github-env -- --environment=production --json',
   evidenceArtifact: 'release-image-digests.env',
   evidenceTarget:
     'Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.',
@@ -779,6 +780,7 @@ export function renderLaunchStatusText(state) {
     lines.push(`  Workflow:  ${state.releaseImagePromotion.workflowCommand}`);
     lines.push(`  Watch:  ${state.releaseImagePromotion.watchCommand}`);
     lines.push(`  Preflight GitHub environment:  ${state.releaseImagePromotion.githubEnvironmentCheckCommand}`);
+    lines.push(`  Preflight GitHub environment JSON:  ${state.releaseImagePromotion.githubEnvironmentCheckJsonCommand}`);
     lines.push(`  Digest artifact:  ${state.releaseImagePromotion.evidenceArtifact}`);
     lines.push(`  Evidence target:  ${state.releaseImagePromotion.evidenceTarget}`);
   }

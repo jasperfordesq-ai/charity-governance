@@ -684,6 +684,11 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"/);
   assert.doesNotMatch(auditLedger, /REAL_SUPABASE_PROJECT_REF before running release-images\.yml/);
   assert.match(auditLedger, /gh workflow run release-images\.yml --ref master/);
+  assert.match(auditLedger, /Preflight GitHub environment: `npm run check:production:github-env -- --environment=production`/);
+  assert.match(
+    auditLedger,
+    /Preflight GitHub environment JSON: `npm run check:production:github-env -- --environment=production --json`/,
+  );
   assert.match(auditLedger, /release-image-digests\.env/);
   assert.match(auditLedger, /CHARITYPILOT_\*_IMAGE/);
   assert.match(auditLedger, /non-committed/);

@@ -467,6 +467,8 @@ Local-state note: This generated section reflects the local non-committed `.env.
   - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first`
 - Workflow: `gh workflow run release-images.yml --ref master`
 - Watch: `gh run watch RELEASE_RUN_ID --exit-status`
+- Preflight GitHub environment: `npm run check:production:github-env -- --environment=production`
+- Preflight GitHub environment JSON: `npm run check:production:github-env -- --environment=production --json`
 - Digest artifact: `release-image-digests.env`
 - Evidence target: Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.
 
