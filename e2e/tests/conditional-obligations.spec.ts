@@ -4,7 +4,7 @@ import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 test.describe.configure({ timeout: 240_000 });
 
-test('organisation conditional triggers surface document evidence prompts', async ({ ownerPage }) => {
+test('organisation conditional triggers surface workflow prompts', async ({ ownerPage }) => {
   await gotoWithDevServerRetry(ownerPage, '/organisation', { waitUntil: 'commit', timeout: 150_000 });
 
   await expect(ownerPage.getByRole('heading', { name: 'Organisation' })).toBeVisible({ timeout: 60_000 });
@@ -29,4 +29,16 @@ test('organisation conditional triggers surface document evidence prompts', asyn
   await expect(evidencePrompts.getByRole('heading', { name: 'Public fundraising controls' })).toBeVisible();
   await expect(evidencePrompts.getByText('Link evidence')).toBeVisible();
   await expect(evidencePrompts.getByText(/Standards 4\.3, 6\.4/)).toBeVisible();
+
+  await gotoWithDevServerRetry(ownerPage, '/deadlines', { waitUntil: 'commit', timeout: 150_000 });
+  await expect(ownerPage.getByRole('heading', { name: 'Deadlines' })).toBeVisible({ timeout: 60_000 });
+  const deadlinePrompts = ownerPage.locator('section').filter({ hasText: 'Profile-triggered review dates' });
+  await expect(deadlinePrompts.getByRole('heading', { name: 'Public fundraising controls' })).toBeVisible();
+  await expect(deadlinePrompts.getByText('Needs date')).toBeVisible();
+
+  await gotoWithDevServerRetry(ownerPage, '/regulator', { waitUntil: 'commit', timeout: 150_000 });
+  await expect(ownerPage.getByRole('heading', { name: 'Regulator Readiness' })).toBeVisible({ timeout: 60_000 });
+  const regulatorPriorities = ownerPage.locator('section').filter({ hasText: 'Profile-triggered regulator priorities' });
+  await expect(regulatorPriorities.getByRole('heading', { name: 'Public fundraising controls' })).toBeVisible();
+  await expect(regulatorPriorities.getByText(/1 triggered/)).toBeVisible();
 });
