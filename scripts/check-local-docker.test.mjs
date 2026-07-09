@@ -515,7 +515,10 @@ test('platform audit ledger records local browser evidence without closing deplo
   const recordedReleaseGateCommit = auditLedger.match(/`npm run release:ready` passed locally on 2026-07-09 at commit ([a-f0-9]{7,40})/)?.[1];
   assert.ok(recordedReleaseGateCommit, 'audit ledger must record the latest local release-gate commit');
   assert.match(auditLedger, /(Current|Historical) local release-gate evidence/i);
-  assert.match(auditLedger, /not current for generated base commit|Current local release-gate evidence/);
+  assert.match(auditLedger, /may be stale for the current checkout|Current local release-gate evidence/);
+  assert.match(auditLedger, /repositoryState\.headSha/);
+  assert.doesNotMatch(auditLedger, /generated base commit/);
+  assert.doesNotMatch(auditGenerator, /not current for generated base commit/);
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/86 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/86 evidence checks/);

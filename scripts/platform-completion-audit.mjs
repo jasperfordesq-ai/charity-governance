@@ -320,7 +320,7 @@ function localVerificationEvidence() {
   const selectedGateEvidence =
     RECORDED_SELECTED_GATE_EVIDENCE.commit === currentCommit
       ? `Current local release-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}.`
-      : `Historical local release-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}. This is not current for generated base commit ${currentCommit}; rerun the selected gate on the final release ref before treating it as current release evidence.`;
+      : `Historical local release-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}. This may be stale for the current checkout; rerun the selected gate on the final release ref and verify \`npm run launch:status -- --json\` reports the intended \`repositoryState.headSha\` before treating it as current release evidence.`;
 
   return [
     selectedGateEvidence,
@@ -845,7 +845,6 @@ function render() {
 
 export function normaliseAuditForCheck(value) {
   return value
-    .replace(/not current for generated base commit [a-f0-9]+/g, 'not current for generated base commit CURRENT')
     .replace(/- Branch: `[^`]+`/g, '- Branch: `CURRENT`');
 }
 
