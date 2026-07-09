@@ -308,8 +308,14 @@ const independentAuditFindings = [
 ];
 
 function localVerificationEvidence() {
+  const { commit: currentCommit } = currentGitBranchAndCommit();
+  const selectedGateEvidence =
+    RECORDED_SELECTED_GATE_EVIDENCE.commit === currentCommit
+      ? `\`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}.`
+      : `Historical local selected-gate evidence: \`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}. This is not current for generated base commit ${currentCommit}; rerun the selected gate on the final release ref before treating it as current release evidence.`;
+
   return [
-    `\`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}.`,
+    selectedGateEvidence,
     '`npm run test:production-check` passed locally on 2026-07-09 with 316/316 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.',
     '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
     '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
@@ -819,6 +825,12 @@ function render() {
   return md;
 }
 
+function normaliseAuditForCheck(value) {
+  return value
+    .replace(/Working-tree base commit when generated: `[^`]+`/g, 'Working-tree base commit when generated: `CURRENT`')
+    .replace(/not current for generated base commit [a-f0-9]+/g, 'not current for generated base commit CURRENT');
+}
+
 function main() {
   const args = new Set(process.argv.slice(2));
   const rendered = render();
@@ -837,7 +849,9 @@ function main() {
       return;
     }
 
-    if (readFileSync(outputPath, 'utf8') !== rendered) {
+    const current = normaliseAuditForCheck(readFileSync(outputPath, 'utf8'));
+    const expected = normaliseAuditForCheck(rendered);
+    if (current !== expected) {
       console.error(`Platform completion audit is stale. Run npm run audit:platform to refresh ${relativeOutputPath}.`);
       process.exitCode = 1;
       return;

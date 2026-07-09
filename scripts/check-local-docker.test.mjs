@@ -501,6 +501,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditGenerator, /remains an open local QA blocker/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.ok(auditBaseCommit, 'audit ledger must record the generated base commit');
+  assert.match(auditLedger, /historical local selected-gate evidence/i);
+  assert.match(auditLedger, /not current for generated base commit/);
   assert.match(auditLedger, /passed locally on 2026-07-09 at commit [a-f0-9]{7,40}/);
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/85 evidence checks/);
