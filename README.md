@@ -74,6 +74,19 @@ To run the same flow as an automated end-to-end smoke test:
 npm run test:local-docker:smoke
 ```
 
+For one-person local use without Stripe, Supabase, Resend, public hosting, or
+payments, run the personal local readiness gate before entering records you care
+about:
+
+```bash
+npm run personal:ready
+```
+
+That command checks local boot/login/document storage, verifies a PostgreSQL
+backup can be restored, copies local document storage into backups, and runs a
+non-destructive browser pass over the core pages. See
+[`docs/personal-local-use.md`](docs/personal-local-use.md).
+
 ### Option B — Run directly on your machine
 
 1. Start a PostgreSQL 16 instance on port `5434` (or update `DATABASE_URL`).
@@ -108,6 +121,7 @@ The API runs on <http://localhost:3002> and the web app on
 | `npm run db:migrate -w @charitypilot/api` | Apply database migrations |
 | `npm run db:seed -w @charitypilot/api` | Seed reference/demo data |
 | `npm run security:scan` | Secret + static analysis scan |
+| `npm run personal:ready` | Local personal-use readiness gate; no live payments or production providers |
 | `npm run launch:status` | Show where you are in the launch process and the next step |
 
 ---

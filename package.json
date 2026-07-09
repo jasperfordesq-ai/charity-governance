@@ -18,6 +18,7 @@
     "test:production-check": "node --test scripts/check-production.test.mjs scripts/postgres-backup.test.mjs scripts/security-scan.test.mjs scripts/production-deploy-preflight.test.mjs scripts/production-compose-deploy.test.mjs scripts/production-compose-rollback.test.mjs scripts/init-production-launch-evidence.test.mjs scripts/production-launch-evidence.test.mjs scripts/production-launch-evidence-status.test.mjs scripts/production-release-run-evidence.test.mjs scripts/check-production-github-env.test.mjs scripts/check-production-github-secrets.test.mjs scripts/check-production-supabase.test.mjs scripts/check-production-providers.test.mjs scripts/check-production-hosting.test.mjs scripts/check-production-observability.test.mjs scripts/check-production-database.test.mjs scripts/smoke-production-deploy.test.mjs scripts/start-ci-postgres.test.mjs scripts/generate-production-env.test.mjs scripts/launch-status.test.mjs",
     "test:local-docker": "node --test scripts/check-local-docker.test.mjs",
     "test:local-docker:smoke": "node scripts/smoke-local-docker.mjs",
+    "personal:ready": "node scripts/personal-local-ready.mjs",
     "lint": "turbo lint",
     "security:secrets": "node scripts/security-scan.mjs secrets",
     "security:sast": "node scripts/security-scan.mjs sast",

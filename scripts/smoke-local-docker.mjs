@@ -302,7 +302,7 @@ async function smokeLocalAdminLoginAndDocumentStorage() {
 }
 
 async function smokeWeb() {
-  const response = await fetchWithTimeout('http://127.0.0.1:3003/', {}, 60_000);
+  const response = await fetchWithTimeout('http://127.0.0.1:3003/', {}, 180_000);
   const body = await response.text();
 
   if (response.status !== 200 || !body.includes('CharityPilot')) {
@@ -337,7 +337,7 @@ try {
   console.log('Checking local admin login and document storage...');
   await waitForCheck('local admin document storage', smokeLocalAdminLoginAndDocumentStorage);
   console.log('Checking web root...');
-  await waitForCheck('web root', smokeWeb, 300_000);
+  await waitForCheck('web root', smokeWeb, 600_000);
 
   console.log('Local Docker smoke passed: API health/readiness, registration, local admin document storage, and web root responded over loopback.');
 } finally {

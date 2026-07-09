@@ -90,6 +90,27 @@ test('postgres backup CLI does not leave a final dump file when local Docker bac
   }
 });
 
+test('postgres backup CLI preserves PATH when invoked with the live process environment', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-live-env-backup-'));
+
+  try {
+    const originalPath = process.env.PATH;
+    const result = await runPostgresBackupFromArgs([
+      'backup',
+      '--database-container=charitypilot-missing-db',
+      `--output-dir=${tempDir}`,
+      '--output-file=missing.dump',
+    ], process.env);
+
+    assert.equal(result.status, 1);
+    assert.equal(process.env.PATH, originalPath);
+    assert.doesNotMatch(result.stderr, /Docker is not available/);
+    assert.equal(existsSync(join(tempDir, 'missing.dump')), false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('postgres backup CLI preserves an existing dump when overwrite backup fails', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-overwrite-backup-'));
   const dumpPath = join(tempDir, 'existing.dump');

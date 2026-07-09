@@ -1,0 +1,66 @@
+# Personal Local Use Readiness
+
+This checklist is for one-person, local-computer use of CharityPilot for a
+single charity workspace. It is not production launch approval, does not require
+Stripe, Supabase, Resend, DNS, TLS, public hosting, or final legal signoff, and
+does not prove the platform is legal advice.
+
+Use this gate before entering records you care about:
+
+```bash
+npm run personal:ready
+```
+
+The command proves:
+
+- the local Docker stack boots API, web, and PostgreSQL on loopback ports only;
+- the seeded local owner can sign in;
+- seeded starter documents can be downloaded from local filesystem storage;
+- a temporary document can be uploaded, downloaded, and deleted;
+- the local PostgreSQL database can be backed up and restored into a disposable
+  verification database;
+- local document storage can be copied into `.charitypilot-backups/documents`;
+- core personal-use pages render in light and dark mode for the seeded owner;
+- billing remains safe when Stripe is not configured.
+
+It may remove ignored Next.js build/cache directories under `apps/web` before
+booting the local stack. Those are generated artifacts, not charity records.
+
+The browser pass is intentionally a local personal-use smoke, not a full route
+inventory. Use the responsive and accessibility suites when you need exhaustive
+page/theme coverage.
+
+The command intentionally does not run the default full Playwright suite. The
+default E2E suite resets tenant/app tables and is only safe before you enter
+real personal records. For destructive pre-use QA, start the local stack and run:
+
+```bash
+npm run test:e2e
+```
+
+## Daily Personal-Use Routine
+
+1. Start CharityPilot:
+   ```bash
+   docker compose -f compose.yml -f compose.local.yml up
+   ```
+2. Open <http://localhost:3003>.
+3. Sign in with `admin@charitypilot.local`.
+4. Before and after important governance work, run:
+   ```bash
+   npm run personal:ready -- --no-browser
+   ```
+   This refreshes smoke, database restore proof, and document-storage backup
+   without running the browser page sweep.
+5. Keep `.charitypilot-backups/` backed up outside this repo, for example to an
+   encrypted external disk or private cloud backup.
+
+## Remaining Human Responsibilities
+
+- Keep the computer itself protected with disk encryption, OS login protection,
+  and normal malware/update hygiene.
+- Do not expose ports `3002`, `3003`, or `5434` to the public internet.
+- Review any governance/legal wording against your charity's circumstances.
+- Keep independent copies of key final exports and board-approved documents.
+- Do not treat the local app as a substitute for professional legal,
+  governance, tax, employment, safeguarding, or data-protection advice.

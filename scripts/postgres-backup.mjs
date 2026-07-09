@@ -904,10 +904,11 @@ function verifyRestore(options) {
 
 async function withProcessEnv(env, callback) {
   const originalEnv = { ...process.env };
+  const nextEnv = { ...env };
   for (const key of Object.keys(process.env)) {
     delete process.env[key];
   }
-  Object.assign(process.env, env);
+  Object.assign(process.env, nextEnv);
 
   try {
     return await callback();

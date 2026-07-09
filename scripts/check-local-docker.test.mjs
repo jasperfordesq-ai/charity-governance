@@ -191,11 +191,66 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   assert.match(smokeScript, /Seeded starter documents downloaded through local filesystem storage/);
   assert.match(smokeScript, /Document uploaded and downloaded through local filesystem storage/);
   assert.match(smokeScript, /set-cookie/i);
-  assert.match(smokeScript, /await waitForCheck\('web root', smokeWeb, 300_000\)/);
-  assert.match(smokeScript, /fetchWithTimeout\('http:\/\/127\.0\.0\.1:3003\/', \{\}, 60_000\)/);
+  assert.match(smokeScript, /await waitForCheck\('web root', smokeWeb, 600_000\)/);
+  assert.match(smokeScript, /fetchWithTimeout\('http:\/\/127\.0\.0\.1:3003\/', \{\}, 180_000\)/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3003\//);
   assert.match(smokeScript, /CharityPilot/);
   assert.doesNotMatch(smokeScript, /down', '-v'/);
+});
+
+test('personal local readiness gate is non-production and non-destructive by default', () => {
+  const rootPackage = packageJson();
+  const readinessScriptPath = join(repoRoot, 'scripts', 'personal-local-ready.mjs');
+  const readinessSpecPath = join(repoRoot, 'e2e', 'tests', 'personal-local-readiness.spec.ts');
+
+  assert.equal(rootPackage.scripts['personal:ready'], 'node scripts/personal-local-ready.mjs');
+  assert.equal(existsSync(readinessScriptPath), true, 'scripts/personal-local-ready.mjs must exist');
+  assert.equal(existsSync(readinessSpecPath), true, 'personal local Playwright check must exist');
+
+  const readinessScript = readRepoFile('scripts/personal-local-ready.mjs');
+  const readinessSpec = readRepoFile('e2e/tests/personal-local-readiness.spec.ts');
+  const personalConfig = readRepoFile('e2e/personal-local.config.ts');
+  const personalDocs = readRepoFile('docs/personal-local-use.md');
+  const readme = readRepoFile('README.md');
+
+  assert.match(readinessScript, /Scope: local personal use/);
+  assert.match(readinessScript, /no Stripe, no production launch evidence/);
+  assert.match(readinessScript, /const usesWindowsNpmShim = process\.platform === 'win32' && command === 'npm'/);
+  assert.match(readinessScript, /const executable = usesWindowsNpmShim \? 'cmd\.exe' : command/);
+  assert.match(readinessScript, /\['\/d', '\/s', '\/c', 'npm', \.\.\.commandArgs\]/);
+  assert.doesNotMatch(readinessScript, /shell: usesWindowsShellShim/);
+  assert.match(readinessScript, /npmScript\('test:local-docker:smoke'\)/);
+  assert.match(readinessScript, /scripts\/postgres-backup\.mjs/);
+  assert.match(readinessScript, /verify-restore/);
+  assert.match(readinessScript, /\.charitypilot-local-storage/);
+  assert.match(readinessScript, /personal-local-readiness\.spec\.ts/);
+  assert.match(readinessScript, /--no-browser/);
+  assert.match(readinessScript, /--no-backup/);
+  assert.match(readinessScript, /--keep-web-cache/);
+  assert.match(readinessScript, /Generated web cache cleanup/);
+  assert.match(readinessScript, /localWebContainerIsRunning/);
+  assert.match(readinessScript, /charitypilot-web-local is already running/);
+  assert.match(readinessScript, /apps', 'web'/);
+  assert.match(readinessScript, /rmSync\(path, \{ recursive: true, force: true \}\)/);
+  assert.doesNotMatch(readinessScript, /npm run test:e2e/);
+  assert.doesNotMatch(readinessScript, /E2E_DEPLOYED_QA=true/);
+
+  assert.match(personalConfig, /personal-local-readiness\\\.spec\\\.ts/);
+  assert.match(personalConfig, /timeout:\s*1_200_000/);
+  assert.doesNotMatch(personalConfig, /globalSetup/);
+  assert.match(readinessSpec, /admin@charitypilot\.local/);
+  assert.match(readinessSpec, /Billing setup is temporarily unavailable/);
+  assert.match(readinessSpec, /Get Essentials yearly/);
+  assert.match(readinessSpec, /planActionButtons/);
+  assert.match(readinessSpec, /Manage subscription/);
+  assert.doesNotMatch(readinessSpec, /resetDb|truncate|createVerifiedOwner|createAuthenticatedStorageState/);
+
+  assert.match(personalDocs, /not production launch approval/);
+  assert.match(personalDocs, /does not require[\s\S]*Stripe/);
+  assert.match(personalDocs, /default E2E suite resets tenant\/app tables/);
+  assert.match(personalDocs, /npm run personal:ready -- --no-browser/);
+  assert.match(readme, /npm run personal:ready/);
+  assert.match(readme, /docs\/personal-local-use\.md/);
 });
 
 test('local Docker migrations are a first-class command and are dry-runnable', () => {
@@ -363,6 +418,9 @@ test('web dev server ignores Playwright artifacts during local browser QA', () =
   assert.match(nextConfig, /if \(dev\)/);
   assert.match(nextConfig, /\*\*\/e2e\/test-results\/\*\*/);
   assert.match(nextConfig, /\*\*\/e2e\/playwright-report\/\*\*/);
+  assert.match(nextConfig, /\*\*\/\.charitypilot-backups\/\*\*/);
+  assert.match(nextConfig, /\*\*\/\.charitypilot-launch-evidence\/\*\*/);
+  assert.match(nextConfig, /\*\*\/\.charitypilot-local-storage\/\*\*/);
   assert.match(nextConfig, /\*\*\/apps\/web\/\.next\/\*\*/);
   assert.match(nextConfig, /\*\*\/apps\/web\/\.next-dev\/\*\*/);
   assert.match(nextConfig, /\*\*\/apps\/web\/\.next-build-\*\/\*\*/);
