@@ -51,6 +51,17 @@ test('postgres backup CLI fails safely without a database URL or local database 
   assert.match(result.stderr, /DATABASE_URL or --database-container is required/);
 });
 
+test('postgres backup CLI rejects usage errors distinctly from backup failures', async () => {
+  const unknownCommand = await runBackupCli(['--surprise']);
+  assert.equal(unknownCommand.status, 2);
+  assert.match(unknownCommand.stderr, /Unknown command: --surprise/);
+  assert.match(unknownCommand.stderr, /Usage:/);
+
+  const missingValue = await runBackupCli(['backup', '--output-dir']);
+  assert.equal(missingValue.status, 2);
+  assert.match(missingValue.stderr, /Missing value for --output-dir/);
+});
+
 test('postgres backup CLI renders a local Docker database dump command without writing a dump in dry-run mode', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-backup-dry-run-'));
 

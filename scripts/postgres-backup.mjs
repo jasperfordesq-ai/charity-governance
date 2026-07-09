@@ -951,6 +951,11 @@ function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
 }
 
+function isUsageError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^(Unknown command|Unexpected argument|Missing value for --)/.test(message);
+}
+
 export async function runPostgresBackupFromArgs(args = process.argv.slice(2), env = process.env) {
   const output = captureConsole();
 
@@ -984,7 +989,7 @@ export async function runPostgresBackupFromArgs(args = process.argv.slice(2), en
   } catch (error) {
     console.error(redactPostgresTranscript(error instanceof Error ? error.message : String(error)));
     console.error(usage().trim());
-    return result(1, output.stdout, output.stderr);
+    return result(isUsageError(error) ? 2 : 1, output.stdout, output.stderr);
   } finally {
     output.restore();
   }
