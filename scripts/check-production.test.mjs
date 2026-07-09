@@ -1610,6 +1610,10 @@ test('release readiness command uses ASCII-safe operator output', () => {
 test('release readiness command distinguishes skipped gates from full readiness', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
 
+  assert.match(releaseReady, /allowedArgs = new Set\(\[['"]--no-e2e['"], ['"]--no-build['"]\]\)/);
+  assert.match(releaseReady, /Unknown option: \$\{arg\}/);
+  assert.match(releaseReady, /Usage: npm run release:ready -- \[--no-e2e\] \[--no-build\]/);
+  assert.match(releaseReady, /process\.exit\(2\)/);
   assert.match(releaseReady, /skipped > 0/);
   assert.match(releaseReady, /GREEN - selected gates passed; skipped gates remain/);
   assert.match(releaseReady, /GREEN - repository release gates passed/);

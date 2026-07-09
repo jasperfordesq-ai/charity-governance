@@ -17,6 +17,14 @@ import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
+const allowedArgs = new Set(['--no-e2e', '--no-build']);
+for (const arg of args) {
+  if (!allowedArgs.has(arg)) {
+    console.error(`Unknown option: ${arg}`);
+    console.error('Usage: npm run release:ready -- [--no-e2e] [--no-build]');
+    process.exit(2);
+  }
+}
 const noE2e = args.includes('--no-e2e');
 const noBuild = args.includes('--no-build');
 
