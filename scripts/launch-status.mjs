@@ -53,6 +53,8 @@ const DEPLOYED_BROWSER_QA = Object.freeze({
     'E2E_OWNER_EMAIL from the approved non-sensitive test workspace',
     'E2E_OWNER_PASSWORD from the approved non-sensitive test workspace',
   ]),
+  preflightCommand: 'npm run check:production:browser-qa-env',
+  preflightJsonCommand: 'npm run check:production:browser-qa-env -- --json',
   responsiveCommand: 'npm run test:e2e:responsive',
   focusedResponsiveCommands: Object.freeze([
     'npm run test:e2e:responsive:public:desktop',
@@ -78,6 +80,8 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
   supabase: 'npm run check:production:supabase -- --production-env-file=.env.production',
   providers: 'npm run check:production:providers -- --production-env-file=.env.production',
   observability: 'npm run check:production:observability -- --production-env-file=.env.production',
+  deployedBrowserQaPreflight: 'npm run check:production:browser-qa-env',
+  deployedBrowserQaPreflightJson: 'npm run check:production:browser-qa-env -- --json',
   deployPreflight: 'npm run deploy:preflight -- --production-env-file=.env.production',
   deployProduction: 'npm run deploy:production -- --production-env-file=.env.production',
   rollbackRehearsal:
@@ -746,6 +750,8 @@ export function renderLaunchStatusText(state) {
     lines.push('', 'Deployed browser QA:');
     lines.push('  Required environment:');
     for (const item of state.deployedBrowserQa.requiredEnvironment) lines.push(`    - ${item}`);
+    lines.push(`  Preflight:  ${state.deployedBrowserQa.preflightCommand}`);
+    lines.push(`  Preflight JSON:  ${state.deployedBrowserQa.preflightJsonCommand}`);
     lines.push(`  Responsive:  ${state.deployedBrowserQa.responsiveCommand}`);
     lines.push('  Focused responsive chunks:');
     for (const command of state.deployedBrowserQa.focusedResponsiveCommands) lines.push(`    - ${command}`);
@@ -767,6 +773,8 @@ export function renderLaunchStatusText(state) {
     lines.push(`  Supabase storage:  ${state.productionLaunchCommands.supabase}`);
     lines.push(`  Stripe/Resend providers:  ${state.productionLaunchCommands.providers}`);
     lines.push(`  Observability alerting:  ${state.productionLaunchCommands.observability}`);
+    lines.push(`  Deployed browser QA env preflight:  ${state.productionLaunchCommands.deployedBrowserQaPreflight}`);
+    lines.push(`  Deployed browser QA env preflight JSON:  ${state.productionLaunchCommands.deployedBrowserQaPreflightJson}`);
     lines.push(`  Deploy preflight:  ${state.productionLaunchCommands.deployPreflight}`);
     lines.push(`  Deploy production:  ${state.productionLaunchCommands.deployProduction}`);
     lines.push(`  Rollback rehearsal:  ${state.productionLaunchCommands.rollbackRehearsal}`);

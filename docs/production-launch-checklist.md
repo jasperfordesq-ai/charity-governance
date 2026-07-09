@@ -252,6 +252,7 @@ Evidence:
 ## 10. Browser QA
 
 - [ ] `docs/production-browser-qa.md` has been completed against the deployed production URL.
+- [ ] `npm run check:production:browser-qa-env` passed in the deployed QA shell without printing owner credential values; keep the redacted text or JSON transcript with the browser QA evidence.
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e:responsive` command output with `E2E_DEPLOYED_QA=true`, canonical web/API URLs, and secret-store owner credential references, or all four focused responsive route chunk transcripts from the same deployed QA environment.
 - [ ] Machine-readable launch evidence includes deployed `npm run test:e2e -- tests/accessibility.spec.ts` command output with the same deployed QA environment.
 - [ ] Machine-readable launch evidence records that command output in the dedicated `browserQa.checks.accessibility-coverage` check.

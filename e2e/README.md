@@ -154,6 +154,19 @@ In deployed browser QA mode the harness:
 - logs in with `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD`;
 - fails closed if any test tries to use the local direct-Postgres helpers.
 
+Run the redacted environment preflight from the repo root before starting
+deployed Playwright checks. It validates `E2E_DEPLOYED_QA=true`, canonical HTTPS
+web/API origins, and credential presence without printing the credential values:
+
+```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
+npm run check:production:browser-qa-env
+```
+
 Example:
 
 ```bash

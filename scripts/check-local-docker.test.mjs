@@ -590,7 +590,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/87 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/87 evidence checks/);
-  assert.match(auditLedger, /346\/346 production-tooling checks/);
+  assert.match(auditLedger, /349\/349 production-tooling checks/);
+  assert.doesNotMatch(auditLedger, /346\/346 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /345\/345 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /340\/340 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /338\/338 production-tooling checks/);
@@ -961,6 +962,10 @@ test('deployed browser QA matrix is runnable as focused launch evidence commands
     'cd e2e && npm run test:deployed:accessibility:cross-browser',
   );
   assert.equal(
+    rootPackage.scripts['check:production:browser-qa-env'],
+    'node scripts/check-deployed-browser-qa-env.mjs',
+  );
+  assert.equal(
     e2ePackageJson.scripts['test:deployed:responsive:cross-browser'],
     'playwright test tests/responsive-smoke.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop',
   );
@@ -974,9 +979,13 @@ test('deployed browser QA matrix is runnable as focused launch evidence commands
   assert.match(playwrightConfig, /deployed-firefox-desktop/);
   assert.match(playwrightConfig, /deployed-webkit-desktop/);
   assert.match(playwrightConfig, /E2E_DEPLOYED_QA/);
+  assert.match(readRepoFile('scripts/check-deployed-browser-qa-env.mjs'), /CANONICAL_PRODUCTION_WEB_ORIGIN/);
+  assert.match(readRepoFile('scripts/check-deployed-browser-qa-env.mjs'), /secretValuesPrinted:\s*false/);
   assert.match(browserQa, /test:e2e:deployed:responsive:cross-browser/);
   assert.match(browserQa, /test:e2e:deployed:accessibility:cross-browser/);
+  assert.match(browserQa, /check:production:browser-qa-env/);
   assert.match(e2eReadme, /test:e2e:deployed:responsive:cross-browser/);
+  assert.match(e2eReadme, /check:production:browser-qa-env/);
   assert.match(e2eReadme, /Desktop Firefox/);
   assert.match(e2eReadme, /Desktop WebKit/);
 });

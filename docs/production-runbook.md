@@ -152,6 +152,17 @@ Run `docs/production-browser-qa.md` against the deployed HTTPS production URL an
 
 For automated deployed browser evidence, use an approved non-sensitive owner/admin test workspace and supply credentials from the secret store. Record redacted command output in `.charitypilot-launch-evidence/production-launch-evidence.json`; do not record the credential values themselves.
 
+Before running Playwright, verify the deployed QA shell without printing credential values:
+
+```bash
+E2E_DEPLOYED_QA=true \
+E2E_WEB_URL=https://app.charitypilot.ie \
+E2E_API_URL=https://api.charitypilot.ie \
+E2E_OWNER_EMAIL=SECRET_STORE_E2E_OWNER_EMAIL \
+E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
+npm run check:production:browser-qa-env
+```
+
 ```bash
 E2E_DEPLOYED_QA=true \
 E2E_WEB_URL=https://app.charitypilot.ie \
