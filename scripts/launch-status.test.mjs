@@ -128,7 +128,12 @@ function assertLocalPersonalReadiness(readiness) {
 function assertProductionLaunchCommands(commands) {
   assert.equal(commands.corePreflight, 'npm run check:production -- --production-env-file=.env.production');
   assert.equal(commands.githubEnvironment, 'npm run check:production:github-env -- --environment=production');
+  assert.equal(commands.githubEnvironmentJson, 'npm run check:production:github-env -- --environment=production --json');
   assert.equal(commands.githubSecretStore, 'npm run check:production:github-secrets -- --environment=production');
+  assert.equal(
+    commands.githubSecretStoreJson,
+    'npm run check:production:github-secrets -- --environment=production --json',
+  );
   assert.equal(commands.hosting, 'npm run check:production:hosting -- --production-env-file=.env.production');
   assert.equal(
     commands.database,
@@ -604,6 +609,11 @@ test('launch status exposes repository state so release evidence is tied to a cl
   assert.match(text, /Local personal data safety:/);
   assert.match(text, /npm run personal:ready/);
   assert.match(text, /Do not run the default full E2E suite/);
+  assert.match(text, /GitHub production environment JSON:  npm run check:production:github-env -- --environment=production --json/);
+  assert.match(
+    text,
+    /GitHub production secret-store JSON:  npm run check:production:github-secrets -- --environment=production --json/,
+  );
   assert.match(text, /branch: master/);
   assert.match(text, /head: dddddddddddddddddddddddddddddddddddddddd/);
   assert.match(text, /upstream: origin\/master/);
