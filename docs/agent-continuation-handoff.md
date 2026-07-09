@@ -33,6 +33,20 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
+- Latest verified pushed commit at the time of this handoff refresh:
+  `786d7ff6cdb3bedfe7af5a630dd3047bd44212ff`.
+- GitHub CI for that commit passed:
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29001831333`.
+- Fresh public DNS/HTTPS spot check on 2026-07-09 found both canonical
+  production hosts unresolved from this workstation:
+  `app.charitypilot.ie` and `api.charitypilot.ie`.
+- GitHub `production` environment variables currently include
+  `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`, but
+  `NEXT_PUBLIC_SUPABASE_URL` is still missing because the real Supabase project
+  ref has not been provided.
+- GitHub `production` environment secrets list is currently empty, so provider
+  secrets still need to be configured outside git before release images or live
+  deploy evidence can be completed.
 
 The 19 missing production values are:
 
@@ -248,6 +262,27 @@ https://api.charitypilot.ie
 ## Recent Verification Evidence
 
 Recently successful checks in this workstream:
+
+- `gh run watch 29001831333 --exit-status`
+  - Passed on 2026-07-09 for commit `786d7ff`.
+  - Covered CI security scan, Prisma validation/migration, PostgreSQL
+    backup/restore, lint, tests, reliability ledger, local Docker smoke,
+    workspace builds, Docker image builds/smokes, and dependency audit.
+- `npm run test -w @charitypilot/web`
+  - Passed on 2026-07-09 with 232 web tests after compliance navigation
+    confirmation copy/timer-guard hardening.
+- `cd e2e; npm test -- tests/compliance.spec.ts`
+  - Passed on 2026-07-09 with both compliance browser journeys passing after
+    the same navigation-confirmation hardening.
+- `npm run lint -w @charitypilot/web`
+  - Passed on 2026-07-09 after the same changes.
+- `npm run build -w @charitypilot/web`
+  - Passed on 2026-07-09 after the same changes.
+- `npm run audit:platform:check`
+  - Passed on 2026-07-09 after the same changes.
+- `npm run test:production-check`
+  - Passed on 2026-07-09 with 323/323 production-tooling checks passing after
+    the same changes.
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
