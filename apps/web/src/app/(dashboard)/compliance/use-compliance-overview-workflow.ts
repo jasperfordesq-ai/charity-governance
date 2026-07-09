@@ -3,18 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
 import type { ComplianceSummary, GovernancePrincipleResponse } from '@charitypilot/shared';
+import type { ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
 import { api } from '@/lib/api';
+import { approvalReadinessSummary, countApprovalReadinessBlockers } from '@/lib/approval-readiness';
 import { logClientError } from '@/lib/client-logger';
 import { apiErrorMessage } from '@/lib/errors';
 
-type ApprovalReadiness = {
-  ready: boolean;
-  missingExplanations: Array<{
-    standardId: string;
-    standardCode: string;
-    status: 'NOT_APPLICABLE' | 'EXPLAIN';
-  }>;
-};
+type ApprovalReadiness = ComplianceApprovalReadinessResponse;
 
 export function scoreColour(pct: number): 'success' | 'warning' | 'danger' {
   if (pct >= 80) return 'success';
@@ -69,7 +64,8 @@ export function useComplianceOverviewWorkflow() {
     fetchData();
   }, [fetchData]);
 
-  const missingExplanations = approvalReadiness?.missingExplanations ?? [];
+  const approvalReadinessBlockerCount = countApprovalReadinessBlockers(approvalReadiness);
+  const approvalReadinessSummaryText = approvalReadinessSummary(approvalReadiness);
   const evidencePrompts = IRISH_COMPLIANCE_MATRIX
     .filter((entry) => entry.featureArea === 'compliance' || entry.featureArea === 'export' || entry.featureArea === 'deadlines')
     .slice(0, 4)
@@ -80,12 +76,13 @@ export function useComplianceOverviewWorkflow() {
     }));
 
   return {
+    approvalReadinessBlockerCount,
+    approvalReadinessSummaryText,
     expandedId,
     evidencePrompts,
     fetchData,
     loading,
     loadError,
-    missingExplanations,
     principles,
     setExpandedId,
     setShowAdditional,

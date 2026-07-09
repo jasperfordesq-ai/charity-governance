@@ -14,12 +14,13 @@ import { scoreColour, useComplianceOverviewWorkflow } from './use-compliance-ove
 export default function CompliancePage() {
   useDocumentTitle('Compliance');
   const {
+    approvalReadinessBlockerCount,
+    approvalReadinessSummaryText,
     expandedId,
     evidencePrompts,
     fetchData,
     loading,
     loadError,
-    missingExplanations,
     principles,
     setExpandedId,
     setShowAdditional,
@@ -55,13 +56,13 @@ export default function CompliancePage() {
       )}
     >
 
-      {missingExplanations.length > 0 && (
+      {approvalReadinessBlockerCount > 0 && (
         <ReviewWarningState
-          title="Approval explanations are incomplete"
-          description={`${missingExplanations.length} standard${missingExplanations.length === 1 ? '' : 's'} marked not applicable or explain need an explanation before annual board approval can be saved.`}
+          title="Approval readiness is incomplete"
+          description={`${approvalReadinessSummaryText} Resolve these before annual board approval can be saved.`}
           action={(
             <Button as={Link} href="#principles" size="sm" variant="flat">
-              Edit explanations below
+              Review standards below
             </Button>
           )}
         />

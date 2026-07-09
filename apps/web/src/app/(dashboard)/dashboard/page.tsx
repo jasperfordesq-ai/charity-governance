@@ -15,6 +15,8 @@ import { useDashboardWorkflow } from './use-dashboard-workflow';
 export default function DashboardPage() {
   useDocumentTitle('Dashboard');
   const {
+    approvalReadinessBlockerCount,
+    approvalReadinessSummaryText,
     boardAlerts,
     boardMemberCount,
     compliance,
@@ -23,7 +25,6 @@ export default function DashboardPage() {
     error,
     fetchDashboard,
     loading,
-    missingExplanations,
     registerSummary,
     signoff,
     subscriptionLapsed,
@@ -74,13 +75,13 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {!loading && missingExplanations.length > 0 && (
+      {!loading && approvalReadinessBlockerCount > 0 && (
         <ReviewWarningState
-          title="Annual approval is waiting on explanations"
-          description={`${missingExplanations.length} standard${missingExplanations.length === 1 ? '' : 's'} marked not applicable or explain need trustee-ready explanations before the board sign-off can be approved.`}
+          title="Annual approval has readiness blockers"
+          description={`${approvalReadinessSummaryText} Resolve these before the board sign-off can be approved.`}
           action={(
-            <Button as={Link} href="/compliance" size="sm" variant="flat">
-              Review explanations
+            <Button as={Link} href="/export" size="sm" variant="flat">
+              Review blockers
             </Button>
           )}
         />

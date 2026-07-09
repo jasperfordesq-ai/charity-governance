@@ -562,16 +562,24 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   const dashboard = dash('dashboard/page.tsx');
   const dashboardWorkflow = optionalDash('dashboard/use-dashboard-workflow.ts');
   const dashboardProgress = optionalDash('dashboard/dashboard-progress-panels.tsx');
+  const approvalReadiness = lib('approval-readiness.ts');
   const dashboardSurface = [dashboard, dashboardWorkflow, dashboardProgress].join('\n');
   assert.match(dashboardWorkflow, /approval-readiness\?year=\$\{currentYear\}/);
   assert.match(dashboard, /AppPage/);
   assert.match(dashboardSurface, /AppSection/);
-  assert.match(dashboard, /missingExplanations/);
+  assert.match(dashboard, /approvalReadinessBlockerCount/);
+  assert.match(dashboard, /approvalReadinessSummaryText/);
+  assert.match(approvalReadiness, /missingRecords/);
+  assert.match(approvalReadiness, /missingEvidence/);
+  assert.match(approvalReadiness, /missingExplanations/);
+  assert.match(approvalReadiness, /profileIssues/);
 
   const compliance = dash('compliance/page.tsx');
   const complianceWorkflow = optionalDash('compliance/use-compliance-overview-workflow.ts');
   const complianceSurface = [compliance, complianceWorkflow].join('\n');
   assert.match(complianceWorkflow, /approval-readiness\?year=\$\{year\}/);
+  assert.match(compliance, /approvalReadinessBlockerCount/);
+  assert.match(compliance, /approvalReadinessSummaryText/);
   assert.match(compliance, /EvidenceReadiness/);
   assert.match(complianceSurface, /IRISH_COMPLIANCE_MATRIX/);
   assert.match(compliance, /review-ready/i);
@@ -1344,6 +1352,7 @@ test('export approval-readiness issue UI is extracted and uses shared review pri
   const workflowSrc = optionalDash('export/use-export-workflow.ts');
   const pageWorkflowSurface = [pageSrc, workflowSrc].join('\n');
   const readinessPath = dashPath('export/export-approval-readiness.tsx');
+  const approvalReadiness = lib('approval-readiness.ts');
   assert.ok(existsSync(readinessPath), 'export approval-readiness UI should be split out of page.tsx');
   const readinessSrc = readFileSync(readinessPath, 'utf8');
 
@@ -1357,8 +1366,8 @@ test('export approval-readiness issue UI is extracted and uses shared review pri
 
   assert.match(readinessSrc, /export function ApprovalReadinessIssues/);
   assert.match(readinessSrc, /export function ConditionalReviewPrompts/);
-  assert.match(readinessSrc, /export function countApprovalReadinessBlockers/);
-  assert.match(readinessSrc, /export function approvalReadinessBlockerCodes/);
+  assert.match(approvalReadiness, /export function countApprovalReadinessBlockers/);
+  assert.match(approvalReadiness, /export function approvalReadinessBlockerCodes/);
   assert.match(readinessSrc, /from '@\/components\/ui\/status'/);
   assert.match(readinessSrc, /ReviewFlag/);
   assert.match(readinessSrc, /StatusChip/);

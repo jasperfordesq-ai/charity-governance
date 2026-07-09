@@ -2,6 +2,7 @@
 
 import { Card } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
+import { countApprovalReadinessBlockers } from '@/lib/approval-readiness';
 import { SourceReferenceList } from '@/components/ui/source-reference';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
@@ -14,25 +15,6 @@ function evidenceGapLabel(item: ApprovalReadiness['missingEvidence'][number]) {
   if (item.missingActionTaken && item.missingEvidence) return 'Missing action taken and evidence';
   if (item.missingActionTaken) return 'Missing action taken';
   return 'Missing evidence';
-}
-
-export function countApprovalReadinessBlockers(readiness: ApprovalReadiness | null | undefined) {
-  if (!readiness) return 0;
-  return (
-    readiness.missingRecords.length +
-    readiness.missingEvidence.length +
-    readiness.missingExplanations.length +
-    readiness.profileIssues.length
-  );
-}
-
-export function approvalReadinessBlockerCodes(readiness: ApprovalReadiness | null | undefined) {
-  if (!readiness) return [];
-  return [
-    ...readiness.missingRecords.map((item) => item.standardCode),
-    ...readiness.missingEvidence.map((item) => item.standardCode),
-    ...readiness.missingExplanations.map((item) => item.standardCode),
-  ];
 }
 
 function ReadinessIssueCard({

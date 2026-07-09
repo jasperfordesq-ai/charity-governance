@@ -3,25 +3,20 @@
 import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable, isSubscriptionLapseError } from '@/lib/plan-feature';
 import { api } from '@/lib/api';
+import { approvalReadinessSummary, countApprovalReadinessBlockers } from '@/lib/approval-readiness';
 import { useAuth } from '@/lib/auth-context';
 import { useCallback, useEffect, useState } from 'react';
 import type {
   BoardAlert,
   BoardMemberResponse,
+  ComplianceApprovalReadinessResponse,
   ComplianceSignoffResponse,
   ComplianceSummary,
   DeadlineResponse,
   GovernanceRegistersSummary,
 } from '@charitypilot/shared';
 
-type ApprovalReadiness = {
-  ready: boolean;
-  missingExplanations: Array<{
-    standardId: string;
-    standardCode: string;
-    status: 'NOT_APPLICABLE' | 'EXPLAIN';
-  }>;
-};
+type ApprovalReadiness = ComplianceApprovalReadinessResponse;
 
 export function useDashboardWorkflow() {
   const { user } = useAuth();
@@ -126,9 +121,12 @@ export function useDashboardWorkflow() {
     void fetchDashboard();
   }, [fetchDashboard]);
 
-  const missingExplanations = approvalReadiness?.missingExplanations ?? [];
+  const approvalReadinessBlockerCount = countApprovalReadinessBlockers(approvalReadiness);
+  const approvalReadinessSummaryText = approvalReadinessSummary(approvalReadiness);
 
   return {
+    approvalReadinessBlockerCount,
+    approvalReadinessSummaryText,
     boardAlerts,
     boardMemberCount,
     compliance,
@@ -137,7 +135,6 @@ export function useDashboardWorkflow() {
     error,
     fetchDashboard,
     loading,
-    missingExplanations,
     registerSummary,
     signoff,
     subscriptionLapsed,

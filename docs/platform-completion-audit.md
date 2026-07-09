@@ -16,7 +16,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | API/backend | 12 route groups scanned with route-local guard heuristics and 45 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 19 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-08; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 16 web unit test files, 45 API test files, 13 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 17 web unit test files, 45 API test files, 13 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -324,9 +324,9 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 144 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 145 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 100 | yes | no obvious static risk; verify in browser |
-| P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 132 | yes | no obvious static risk; verify in browser |
+| P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 133 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 127 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 201 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 116 | yes | no obvious static risk; verify in browser |

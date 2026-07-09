@@ -17,6 +17,8 @@
     "src/lib/api.test.ts",
     "src/lib/api-config.ts",
     "src/lib/api-config.test.ts",
+    "src/lib/approval-readiness.ts",
+    "src/lib/approval-readiness.test.ts",
     "src/lib/content-security-policy.ts",
     "src/lib/content-security-policy.test.ts",
     "src/lib/chunk-load-recovery.ts",
