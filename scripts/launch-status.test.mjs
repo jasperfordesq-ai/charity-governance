@@ -290,6 +290,8 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
   assert.ok(s.expectedProductionValueGroups.some((group) => group.keys.includes('CADDY_ACME_EMAIL')));
+  assert.match(JSON.stringify(s.expectedProductionValueGroups), /https:\/\/<project-ref>\.supabase\.co \(replace <project-ref> before use\)/);
+  assert.doesNotMatch(JSON.stringify(s.expectedProductionValueGroups), /Supabase project URL, https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.equal(s.evidenceLedger.exists, true);
   assert.deepEqual(s.launchProgress.productionValues, { completed: 26, total: 28, remaining: 2 });
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);

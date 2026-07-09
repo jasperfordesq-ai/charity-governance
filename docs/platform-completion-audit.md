@@ -271,7 +271,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This is not current for generated base commit 40eb993; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This is not current for generated base commit a94bcfa; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 330/330 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -523,7 +523,7 @@ Grouped by source:
 - Supabase storage:
   - `SUPABASE_URL`: Same Supabase project URL (Step 2)
   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
-  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://REPLACE_ME_SUPABASE_PROJECT_REF.supabase.co (Step 2)
+  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)
   - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`: Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)
 - Observability:
   - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)
