@@ -1703,6 +1703,10 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /`npm run release:ready`/);
   assert.match(handoff, /95 Playwright E2E tests passed/);
   assert.doesNotMatch(handoff, /only Playwright E2E was skipped/);
+  assert.match(handoff, /73eda7ddaeaa8d6fdbe273cd541296b90dbe8049/);
+  assert.match(handoff, /29007934895/);
+  assert.doesNotMatch(handoff, /a4c110fc0cbd6bbdd318cd5b94ef94207514e0f1/);
+  assert.doesNotMatch(handoff, /29002966630/);
   assert.doesNotMatch(handoff, /322\/322 production-tooling checks/);
   assert.doesNotMatch(handoff, /321\/321 production-tooling checks/);
   assert.doesNotMatch(handoff, /320\/320 production-tooling checks/);

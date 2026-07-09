@@ -34,9 +34,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 - Latest verified pushed commit at the time of this handoff refresh:
-  `a4c110fc0cbd6bbdd318cd5b94ef94207514e0f1`.
+  `73eda7ddaeaa8d6fdbe273cd541296b90dbe8049`.
 - GitHub CI for that commit passed:
-  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29002966630`.
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29007934895`.
 - Fresh public DNS/HTTPS spot check on 2026-07-09 found both canonical
   production hosts unresolved from this workstation:
   `app.charitypilot.ie` and `api.charitypilot.ie`.
