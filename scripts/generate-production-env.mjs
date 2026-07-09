@@ -81,9 +81,24 @@ export function buildProductionEnv(exampleContent, makeSecret = generateSecret) 
   return out.join('\n');
 }
 
+export function parseGeneratorArgs(args) {
+  const allowedArgs = new Set(['--force']);
+  const unknownArg = args.find((arg) => !allowedArgs.has(arg));
+  return {
+    force: args.includes('--force'),
+    error: unknownArg ? `Unknown option: ${unknownArg}` : null,
+  };
+}
+
 function main() {
-  const args = process.argv.slice(2);
-  const force = args.includes('--force');
+  const parsedArgs = parseGeneratorArgs(process.argv.slice(2));
+  if (parsedArgs.error) {
+    console.error(parsedArgs.error);
+    console.error('Usage: node scripts/generate-production-env.mjs [--force]');
+    process.exit(2);
+  }
+
+  const force = parsedArgs.force;
   const examplePath = join(repoRoot, '.env.production.example');
   const targetPath = join(repoRoot, '.env.production');
 

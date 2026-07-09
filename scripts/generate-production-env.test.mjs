@@ -9,6 +9,7 @@ import {
   OPERATOR_SUPPLIED_KEYS,
   buildProductionEnv,
   generateSecret,
+  parseGeneratorArgs,
 } from './generate-production-env.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,4 +110,16 @@ test('operator-facing production env generator text is ASCII-safe', () => {
   assert.doesNotMatch(source, /Supabase project URL, https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.doesNotMatch(source, /https:\/\/<ref>\.supabase\.co/);
   assert.doesNotMatch(source, /sk_live_\.\.\.|whsec_\.\.\.|pk_live_\.\.\.|re_\.\.\./);
+});
+
+test('production env generator rejects unknown options before writing', () => {
+  assert.deepEqual(parseGeneratorArgs(['--force']), { force: true, error: null });
+  assert.deepEqual(parseGeneratorArgs(['--dry-run']), {
+    force: false,
+    error: 'Unknown option: --dry-run',
+  });
+  assert.deepEqual(parseGeneratorArgs(['--force', '--dry-run']), {
+    force: true,
+    error: 'Unknown option: --dry-run',
+  });
 });
