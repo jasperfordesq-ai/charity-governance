@@ -97,6 +97,19 @@ function evidenceText(entries) {
     : '';
 }
 
+function mergeEvidenceHints(areaId, checkId, storedHints) {
+  const merged = [];
+  const seen = new Set();
+  for (const hint of [...storedHints, ...defaultEvidenceHints(areaId, checkId)]) {
+    if (typeof hint !== 'string') continue;
+    const trimmed = hint.trim();
+    if (trimmed.length === 0 || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    merged.push(trimmed);
+  }
+  return merged;
+}
+
 function finalApprovalProgressStatus(approval, releaseCommitSha) {
   const status = statusOf(approval?.status);
   if (status !== 'approved') return status;
@@ -176,7 +189,7 @@ export function summarizeEvidence(evidence) {
         const storedHints = Array.isArray(actualCheck?.requiredEvidenceHints)
           ? actualCheck.requiredEvidenceHints.filter((hint) => typeof hint === 'string' && hint.trim().length > 0)
           : [];
-        const hints = storedHints.length > 0 ? storedHints : defaultEvidenceHints(area.id, check.id);
+        const hints = mergeEvidenceHints(area.id, check.id, storedHints);
         incompleteChecks.push(`${path} (${status})`);
         incompleteCheckDetails.push({
           path,

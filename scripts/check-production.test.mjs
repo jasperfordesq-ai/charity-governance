@@ -1707,7 +1707,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /351\/351 production-tooling checks/);
+  assert.match(productionTodo, /352\/352 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /351\/351 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /349\/349 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /346\/346 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /345\/345 production-tooling checks/);
@@ -1758,7 +1759,8 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /351\s*\/\s*351`? checks/);
+  assert.match(handoff, /352\s*\/\s*352`? checks/);
+  assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
@@ -1771,8 +1773,9 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /isolated restore target/);
   assert.match(handoff, /non-production restore target/);
   assert.match(handoff, /production project was not overwritten/);
-  assert.match(handoff, /351 \/ 351/);
-  assert.match(handoff, /351\/351 production-tooling checks/);
+  assert.match(handoff, /352 \/ 352/);
+  assert.match(handoff, /352\/352 production-tooling checks/);
+  assert.doesNotMatch(handoff, /351\/351 production-tooling checks/);
   assert.match(handoff, /338\/338 production-tooling checks/);
   assert.doesNotMatch(handoff, /333\/333 production-tooling checks/);
   assert.doesNotMatch(handoff, /332\/332 production-tooling checks/);
@@ -2473,7 +2476,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 352\/352/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 350\/350/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 349\/349/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 346\/346/);

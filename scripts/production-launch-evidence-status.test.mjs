@@ -257,6 +257,57 @@ test('production launch evidence status falls back to current hints for older le
   }
 });
 
+test('production launch evidence status merges current hints into stale stored ledger hints', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = {
+    approvedForLaunch: false,
+    finalSignoff: { status: 'pending', approvals: {} },
+    areas: {
+      browserQa: {
+        status: 'pending',
+        checks: {
+          'browser-qa-completed': {
+            status: 'pending',
+            requiredEvidenceHints: [
+              'E2E_DEPLOYED_QA=true',
+              'E2E_WEB_URL=https://app.charitypilot.ie',
+              'E2E_API_URL=https://api.charitypilot.ie',
+              'npm run test:e2e:responsive',
+            ],
+            evidence: [],
+          },
+        },
+      },
+    },
+  };
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    const browserQa = payload.workQueueByArea.find((area) => area.id === 'browserQa');
+    const browserQaCompleted = browserQa.checks.find((check) => check.path === 'browserQa.browser-qa-completed');
+    assert.deepEqual(browserQaCompleted.requiredEvidenceHints.slice(0, 4), [
+      'E2E_DEPLOYED_QA=true',
+      'E2E_WEB_URL=https://app.charitypilot.ie',
+      'E2E_API_URL=https://api.charitypilot.ie',
+      'npm run test:e2e:responsive',
+    ]);
+    assert.ok(
+      browserQaCompleted.requiredEvidenceHints.includes('npm run check:production:browser-qa-env'),
+      'stale stored browser QA hints must be enriched with the current deployed-env preflight command',
+    );
+    assert.ok(
+      browserQaCompleted.requiredEvidenceHints.includes('Deployed browser QA environment preflight passed'),
+      'stale stored browser QA hints must be enriched with the current preflight success marker',
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence status complete flag requires area statuses', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
   const evidence = await launchEvidenceTemplate();
