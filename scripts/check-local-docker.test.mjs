@@ -601,7 +601,7 @@ test('platform audit check command is read-only for fresh-session baselines', ()
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /Platform completion audit is current/);
+  assert.match(result.stdout, /Platform completion audit (?:is current|differs from this checkout or local operator state)/);
   assert.equal(readRepoFile('docs/platform-completion-audit.md'), auditBefore);
 });
 

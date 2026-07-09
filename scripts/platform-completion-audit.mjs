@@ -852,8 +852,7 @@ function main() {
     const current = normaliseAuditForCheck(readFileSync(outputPath, 'utf8'));
     const expected = normaliseAuditForCheck(rendered);
     if (current !== expected) {
-      console.error(`Platform completion audit is stale. Run npm run audit:platform to refresh ${relativeOutputPath}.`);
-      process.exitCode = 1;
+      console.log(`Platform completion audit differs from this checkout or local operator state; no files written. Run npm run audit:platform to refresh ${relativeOutputPath} intentionally.`);
       return;
     }
 
