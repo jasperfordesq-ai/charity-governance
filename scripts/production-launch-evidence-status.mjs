@@ -279,6 +279,7 @@ export function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(e
   return (
     evidence?.approvedForLaunch === true &&
     evidence?.finalSignoff?.status === 'approved' &&
+    releaseBindingStatus(evidence).complete &&
     summary.completedChecks === summary.totalChecks &&
     summary.areaSummaries.every((area) => area.status === 'complete') &&
     summary.approvedFinalSignoffRoles === summary.totalFinalSignoffRoles

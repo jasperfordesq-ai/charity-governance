@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `6d17ae6`
+Working-tree base commit when generated: `c7f6a75`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -244,6 +244,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Strict launch-evidence JSON validation now includes the next incomplete checklist items and evidence hints so failing launch-gate output can drive operator work queues.
 - Final signoff approval-role evidence now has to name the promoted release.commitSha, so engineering, operations, security, legal/compliance, and business signoffs cannot float across releases.
 - Launch evidence status now counts final approval roles only when their approval evidence is bound to the promoted release.commitSha.
+- Launch evidence status completion now requires the full release artifact binding, not only completed checklist statuses and final approval roles.
 - Launch status now keeps the full source-grouped production value checklist visible even after .env.production exists, while separately listing the currently missing values.
 - Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
 - Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.
@@ -270,15 +271,15 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 6d17ae6; rerun the selected gate on the final release ref before treating it as current release evidence.
-- `npm run test:production-check` passed locally on 2026-07-09 with 319/319 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
+- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit c7f6a75; rerun the selected gate on the final release ref before treating it as current release evidence.
+- `npm run test:production-check` passed locally on 2026-07-09 with 320/320 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.
 - `cd e2e && npm test -- tests/accessibility.spec.ts --grep "/blog/understanding-the-charities-governance-code is axe-clean" --repeat-each=3` passed locally on 2026-07-09 after blog article dark-mode contrast hardening.
 - Local responsive browser QA revalidated cleanly on 2026-07-09 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, and launch-evidence hardening; production-tooling checks passed 319/319.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, and launch-evidence hardening; production-tooling checks passed 320/320.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.

@@ -265,6 +265,47 @@ test('production launch evidence status complete flag requires area statuses', a
   }
 });
 
+test('production launch evidence status complete flag requires release binding', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = await launchEvidenceTemplate();
+  evidence.release.commitSha = 'b'.repeat(40);
+  evidence.approvedForLaunch = true;
+  evidence.finalSignoff.status = 'approved';
+
+  for (const area of Object.values(evidence.areas)) {
+    area.status = 'complete';
+    for (const check of Object.values(area.checks)) {
+      check.status = 'complete';
+    }
+  }
+  for (const [roleId, approval] of Object.entries(evidence.finalSignoff.approvals)) {
+    approval.status = 'approved';
+    approval.evidence = [
+      {
+        type: 'approval',
+        reference: `https://evidence.charitypilot.ie/launch/final-signoff/${roleId}`,
+        description: `${roleId} launch approval for release ${evidence.release.commitSha}`,
+        capturedAt: '2026-07-06T12:00:00.000Z',
+      },
+    ];
+  }
+
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.completedChecks, 85);
+    assert.equal(payload.approvedFinalSignoffRoles, 5);
+    assert.equal(payload.releaseBinding.complete, false);
+    assert.equal(payload.evidenceStatusesComplete, false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence status fails closed when evidence file is missing', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
 
