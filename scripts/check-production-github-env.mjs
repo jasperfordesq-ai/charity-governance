@@ -143,6 +143,15 @@ function validateVariableRows(rows, environment) {
   return issues;
 }
 
+function remediationCommands(environment, repository) {
+  return [
+    'Safe remediation commands:',
+    `- gh variable set NEXT_PUBLIC_API_URL --env ${environment} --repo ${repository} --body "${CANONICAL_API_ORIGIN}"`,
+    `- gh variable set NEXT_PUBLIC_SUPABASE_URL --env ${environment} --repo ${repository} --body "https://<project-ref>.supabase.co"`,
+    'Replace <project-ref> with the real production Supabase project ref before running the Supabase command.',
+  ];
+}
+
 export function runProductionGitHubEnvironmentCheckFromArgs(
   args = process.argv.slice(2),
   { runGh = defaultRunGh } = {},
@@ -184,6 +193,7 @@ export function runProductionGitHubEnvironmentCheckFromArgs(
       [
         `Production GitHub environment check failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
         ...issues.map((issue) => `- ${issue}`),
+        ...remediationCommands(options.environment, options.repository),
         '',
       ].join('\n'),
     );

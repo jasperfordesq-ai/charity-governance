@@ -80,6 +80,10 @@ test('production GitHub environment check fails for missing and placeholder vari
     result.stderr,
     /GitHub production variable NEXT_PUBLIC_SUPABASE_URL must not contain placeholder text/,
   );
+  assert.match(
+    result.stderr,
+    /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"/,
+  );
   assert.doesNotMatch(result.stderr, /REAL_SUPABASE_PROJECT_REF/);
 });
 
