@@ -27,6 +27,7 @@ export const TEST_PASSWORD = 'TestPass123';
 const AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS = 900_000;
 const AUTH_FORM_HEADING_TIMEOUT_MS = 60_000;
 const POST_LOGIN_DASHBOARD_TIMEOUT_MS = IS_DEPLOYED_QA ? 60_000 : 180_000;
+const AUTH_FORM_HYDRATION_SETTLE_MS = IS_DEPLOYED_QA ? 0 : 1_000;
 
 async function suppressCookieConsent(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -67,6 +68,10 @@ async function fillAndSubmit(
   submitRequest?: { url: RegExp; method: string },
 ): Promise<void> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    await page.waitForLoadState('load').catch(() => undefined);
+    if (AUTH_FORM_HYDRATION_SETTLE_MS > 0) {
+      await page.waitForTimeout(AUTH_FORM_HYDRATION_SETTLE_MS);
+    }
     await fill();
     const submitted = submitRequest
       ? page

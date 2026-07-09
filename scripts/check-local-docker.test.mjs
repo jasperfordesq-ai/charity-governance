@@ -374,6 +374,8 @@ test('e2e authenticated owner setup has cold compile headroom', () => {
 
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
   assert.match(fixtures, /const POST_LOGIN_DASHBOARD_TIMEOUT_MS = IS_DEPLOYED_QA \? 60_000 : 180_000/);
+  assert.match(fixtures, /const AUTH_FORM_HYDRATION_SETTLE_MS = IS_DEPLOYED_QA \? 0 : 1_000/);
+  assert.match(fixtures, /await page\.waitForLoadState\('load'\)\.catch\(\(\) => undefined\)/);
   assert.match(fixtures, /const \{ userId, organisationId \} = await createVerifiedOwner/);
   assert.match(fixtures, /if \(IS_DEPLOYED_QA\) \{[\s\S]*await loginViaUi\(page,\s*existingOwner\.email,\s*existingOwner\.password\)/);
   assert.match(
@@ -431,12 +433,21 @@ test('local direct owner setup mirrors registration without using deployed QA se
 
 test('auth journey helpers still exercise registration UI directly', () => {
   const fixtures = readRepoFile('e2e/fixtures.ts');
+  const authSpec = readRepoFile('e2e/tests/auth.spec.ts');
+  const db = readRepoFile('e2e/helpers/db.ts');
+  const e2eReadme = readRepoFile('e2e/README.md');
 
   assert.match(fixtures, /export async function registerViaUi/);
   assert.match(fixtures, /async function suppressCookieConsent\(page: Page\): Promise<void>/);
   assert.match(fixtures, /localStorage\.setItem\('cookie-consent', 'declined'\)/);
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/register',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
+  assert.match(authSpec, /requestPasswordResetViaUi\(page,\s*email\)/);
+  assert.match(authSpec, /injectResetToken\(email\)/);
+  assert.match(authSpec, /\/reset-password#token=\$\{token\}/);
+  assert.match(authSpec, /invalid reset token shows the failure state/);
+  assert.match(db, /export async function injectResetToken/);
+  assert.match(e2eReadme, /forgot-password -> reset-password -> log in with the new password/);
 });
 
 test('deployed browser QA mode does not reset or mutate databases through local seams', () => {

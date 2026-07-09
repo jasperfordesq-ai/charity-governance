@@ -302,6 +302,28 @@ export async function injectVerifyToken(email: string): Promise<string> {
   return token;
 }
 
+/**
+ * Inject a known password-reset token for a user. The API stores
+ * User.resetToken as sha256(token) with a 1h expiry, so we set the hash of a
+ * token we control and then drive /reset-password#token=<plaintext>.
+ * Returns the plaintext token to navigate with.
+ */
+export async function injectResetToken(email: string): Promise<string> {
+  const token = randomToken();
+  const n = await withDb(async (client) => {
+    const res = await client.query(
+      `UPDATE "User"
+         SET "resetToken" = $1,
+             "resetTokenExpiry" = NOW() + INTERVAL '1 hour'
+       WHERE "email" = $2`,
+      [sha256Hex(token), email.trim().toLowerCase()],
+    );
+    return res.rowCount ?? 0;
+  });
+  if (n !== 1) throw new Error(`injectResetToken: expected 1 row for ${email}, updated ${n}`);
+  return token;
+}
+
 /** Read whether a user's email is verified (for assertions). */
 export async function isEmailVerified(email: string): Promise<boolean> {
   return withDb(async (client) => {
