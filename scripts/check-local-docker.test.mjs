@@ -812,6 +812,58 @@ test('local Docker migrations restart previously running app services when migra
   assert.ok(failedMigrationIndex < restartIndex, 'services must restart after the failing migration');
 });
 
+test('local Docker migrations force-stop stuck app services before refreshing dependencies', async () => {
+  const originalArgv = process.argv;
+  let module;
+  try {
+    process.argv = ['node', 'scripts/migrate-local-docker.mjs', '--dry-run'];
+    module = await import(`${pathToFileURL(join(repoRoot, 'scripts', 'migrate-local-docker.mjs')).href}?force-stop-test`);
+  } finally {
+    process.argv = originalArgv;
+  }
+  const calls = [];
+  const spawnSyncImpl = (executable, args) => {
+    const command = [executable, ...args];
+    calls.push(command.join(' '));
+    if (args.includes('ps') && args.includes('--format') && args.includes('json')) {
+      return {
+        status: 0,
+        stdout: [
+          JSON.stringify({ Service: 'api', State: 'running' }),
+          JSON.stringify({ Service: 'web', State: 'running' }),
+          '',
+        ].join('\n'),
+        stderr: '',
+      };
+    }
+    if (args.includes('stop') && args.includes('api') && args.includes('web')) {
+      return { status: 1, stdout: '', stderr: 'cannot stop container: tried to kill container, but did not receive an exit event\n' };
+    }
+    return { status: 0, stdout: '', stderr: '' };
+  };
+
+  assert.equal(typeof module.runLocalDockerMigrations, 'function');
+  assert.doesNotThrow(() => module.runLocalDockerMigrations({
+    args: [],
+    processEnv: {},
+    spawnSyncImpl,
+    writeOutput: () => {},
+  }));
+
+  const stopIndex = calls.indexOf('docker compose -f compose.yml -f compose.local.yml stop api web');
+  const killIndex = calls.indexOf('docker compose -f compose.yml -f compose.local.yml kill api web');
+  const depsIndex = calls.findIndex((call) => call.includes('run --rm --no-deps -T deps'));
+  const restartIndex = calls.indexOf('docker compose -f compose.yml -f compose.local.yml up --wait --wait-timeout 180 -d api web');
+
+  assert.notEqual(stopIndex, -1, 'migration runner must attempt a graceful stop first');
+  assert.notEqual(killIndex, -1, 'migration runner must force-stop services when graceful stop fails');
+  assert.notEqual(depsIndex, -1, 'dependency refresh must still run after stuck services are force-stopped');
+  assert.notEqual(restartIndex, -1, 'previously running services must still restart after migrations');
+  assert.ok(stopIndex < killIndex, 'force-stop must happen after the graceful stop failure');
+  assert.ok(killIndex < depsIndex, 'stuck services must be force-stopped before dependency refresh');
+  assert.ok(depsIndex < restartIndex, 'services must restart after dependency refresh and migrations');
+});
+
 test('local Docker smoke reapplies migrations even when services are already running', () => {
   const smokeScript = readRepoFile('scripts/smoke-local-docker.mjs');
 

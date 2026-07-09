@@ -132,7 +132,12 @@ function stopLocalAppServices(services, context) {
     return;
   }
 
-  runCommand(['docker', ...composeArgs, 'stop', ...services], context);
+  try {
+    runCommand(['docker', ...composeArgs, 'stop', ...services], context);
+  } catch (error) {
+    context.writeOutput(`Graceful stop failed for local app services; forcing stop before dependency refresh: ${error.message}\n`);
+    runCommand(['docker', ...composeArgs, 'kill', ...services], context);
+  }
 }
 
 function startLocalAppServices(services, context) {

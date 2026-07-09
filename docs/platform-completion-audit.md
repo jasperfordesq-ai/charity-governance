@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `8a5e030`
+Working-tree base commit when generated: `e8e2287`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -293,6 +293,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --check scripts\production-launch-evidence-status.mjs`, focused launch-evidence status tests, and `npm run test:production-check` passed locally after aligning status completion with area statuses.
 - `node --check scripts\launch-status.mjs scripts\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.
 - `npm run test:local-docker:smoke` passed locally on 2026-07-08 after stabilizing the local Docker QA stack, covering API health/readiness, registration, local admin document storage, and the web root over loopback.
+- `npm run test:local-docker:smoke` was rerun on 2026-07-09 after stuck-service migration hardening; API health/readiness, registration, and local document storage passed, but the web-root check exposed an intermittent Next dev-server compile hang that remains an open local QA blocker.
 - This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.
 
 ## Independent Audit Findings Still Driving Next Work
