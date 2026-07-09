@@ -4,9 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `7ea20d4`
-
-Generation note: inspect `git status` before release because this report is committed as part of the audit work.
+Generation note: repository state is intentionally live-only; run `npm run launch:status -- --json` from the release checkout before collecting launch evidence.
 
 This ledger is a current-state engineering audit. It is not legal advice and does not claim CharityPilot is legally complete, guaranteed, or ready to process real charity data.
 
@@ -273,7 +271,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This is not current for generated base commit 7ea20d4; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This is not current for generated base commit 40eb993; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 330/330 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -463,15 +461,10 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Repository State For Launch Evidence
 
-- Branch: `master`
-- Head: `7ea20d439a3284e98976b983acbb31d53a3d6b7d`
-- Upstream: `origin/master`
-- Upstream head: `7ea20d439a3284e98976b983acbb31d53a3d6b7d`
-- Dirty worktree: `true`
-- Synced with upstream: `true`
-- Launch evidence risk: `dirty_worktree`
-- Repository has uncommitted changes; do not collect launch evidence from this worktree.
-- Collect external launch evidence only from a clean, synced ref and record the final release commit in the ignored evidence ledger.
+- Do not use this committed audit file as proof that the current checkout is clean, synced, or release-bound.
+- Run `npm run launch:status -- --json` and inspect `repositoryState` immediately before collecting external launch evidence.
+- Required live state: branch `master`, clean worktree, synced with `origin/master`, and `launchEvidenceRisk: clean_synced`.
+- Record the exact final release commit in the ignored launch evidence ledger after the release workflow and deployed checks complete.
 
 ### Local Production Environment State
 

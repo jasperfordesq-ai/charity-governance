@@ -501,7 +501,6 @@ test('platform audit ledger records deployed browser QA hardening', () => {
 test('platform audit ledger records local browser evidence without closing deployed gates', () => {
   const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
-  const auditBaseCommit = auditLedger.match(/Working-tree base commit when generated: `([a-f0-9]+)`/)?.[1];
 
   assert.match(auditGenerator, /Local Verification Evidence/);
   assert.match(auditGenerator, /npm run release:ready/);
@@ -511,17 +510,12 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.doesNotMatch(auditGenerator, /remains an open local QA blocker/);
   assert.match(auditLedger, /Local Verification Evidence/);
-  assert.ok(auditBaseCommit, 'audit ledger must record the generated base commit');
+  assert.match(auditLedger, /repository state is intentionally live-only/);
+  assert.doesNotMatch(auditLedger, /Working-tree base commit when generated/);
   const recordedReleaseGateCommit = auditLedger.match(/`npm run release:ready` passed locally on 2026-07-09 at commit ([a-f0-9]{7,40})/)?.[1];
   assert.ok(recordedReleaseGateCommit, 'audit ledger must record the latest local release-gate commit');
   assert.match(auditLedger, /(Current|Historical) local release-gate evidence/i);
-  if (recordedReleaseGateCommit === auditBaseCommit) {
-    assert.match(auditLedger, /Current local release-gate evidence/);
-    assert.doesNotMatch(auditLedger, /not current for generated base commit/);
-  } else {
-    assert.match(auditLedger, /Historical local release-gate evidence/);
-    assert.match(auditLedger, /not current for generated base commit/);
-  }
+  assert.match(auditLedger, /not current for generated base commit|Current local release-gate evidence/);
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/86 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/86 evidence checks/);
@@ -625,33 +619,25 @@ test('platform audit records repository state for launch evidence handoff', () =
   assert.match(auditGenerator, /launchEvidenceRisk/);
   assert.match(auditGenerator, /clean, synced ref/);
   assert.match(auditLedger, /Repository State For Launch Evidence/);
-  assert.match(auditLedger, /Launch evidence risk: `/);
-  assert.match(auditLedger, /Dirty worktree: `/);
-  assert.match(auditLedger, /Synced with upstream: `/);
+  assert.match(auditLedger, /Do not use this committed audit file as proof/);
+  assert.match(auditLedger, /npm run launch:status -- --json/);
+  assert.match(auditLedger, /launchEvidenceRisk: clean_synced/);
+  assert.doesNotMatch(auditLedger, /- Head: `/);
+  assert.doesNotMatch(auditLedger, /- Dirty worktree: `/);
+  assert.doesNotMatch(auditLedger, /- Synced with upstream: `/);
 });
 
-test('platform audit check ignores volatile repository state snapshot drift', async () => {
+test('platform audit keeps repository state live-only instead of committing volatile snapshots', async () => {
   const { normaliseAuditForCheck } = await import('../scripts/platform-completion-audit.mjs');
-  const committedSnapshot = [
-    'Working-tree base commit when generated: `abc1234`',
-    '- Head: `abc1234`',
-    '- Upstream head: `abc1234`',
-    '- Dirty worktree: `true`',
-    '- Synced with upstream: `true`',
-    '- Launch evidence risk: `dirty_worktree`',
-    '- Repository has uncommitted changes; do not collect launch evidence from this worktree.',
-  ].join('\n');
-  const currentSnapshot = [
-    'Working-tree base commit when generated: `def5678`',
-    '- Head: `def5678`',
-    '- Upstream head: `def5678`',
-    '- Dirty worktree: `false`',
-    '- Synced with upstream: `true`',
-    '- Launch evidence risk: `clean_synced`',
-    '- Repository is clean and synced with its upstream ref.',
-  ].join('\n');
+  const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
+  const auditLedger = readRepoFile('docs/platform-completion-audit.md');
 
-  assert.equal(normaliseAuditForCheck(committedSnapshot), normaliseAuditForCheck(currentSnapshot));
+  assert.match(auditGenerator, /repository state is intentionally live-only/);
+  assert.match(auditGenerator, /Required live state: branch/);
+  assert.match(auditGenerator, /launchEvidenceRisk: clean_synced/);
+  assert.doesNotMatch(auditGenerator, /Dirty worktree: `\$\{formatOptionalLaunchValue/);
+  assert.doesNotMatch(auditLedger, /launchEvidenceRisk: `(?:dirty_worktree|clean_synced|unpushed|unknown)`/);
+  assert.equal(normaliseAuditForCheck('- Branch: `master`'), '- Branch: `CURRENT`');
 });
 
 test('platform audit check command is read-only for fresh-session baselines', () => {

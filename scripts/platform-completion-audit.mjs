@@ -619,7 +619,7 @@ function render() {
   const compliance = readComplianceSummary();
   const launch = readLaunchSummary();
   const tests = readTestSurfaceSummary();
-  const { branch, commit } = currentGitBranchAndCommit();
+  const { branch } = currentGitBranchAndCommit();
 
   const oversizedRoutes = routes
     .filter((route) => route.lines >= 450)
@@ -654,8 +654,7 @@ function render() {
   let md = `# CharityPilot Platform Completion Audit\n\n`;
   md += `Generated: ${auditDate}\n\n`;
   md += `Branch: \`${branch}\`\n\n`;
-  md += `Working-tree base commit when generated: \`${commit}\`\n\n`;
-  md += `Generation note: inspect \`git status\` before release because this report is committed as part of the audit work.\n\n`;
+  md += `Generation note: repository state is intentionally live-only; run \`npm run launch:status -- --json\` from the release checkout before collecting launch evidence.\n\n`;
   md += `This ledger is a current-state engineering audit. It is not legal advice and does not claim CharityPilot is legally complete, guaranteed, or ready to process real charity data.\n\n`;
 
   md += `## Executive Readiness\n\n`;
@@ -782,15 +781,10 @@ function render() {
   }
   if (launch.repositoryState) {
     md += `### Repository State For Launch Evidence\n\n`;
-    md += `- Branch: \`${formatOptionalLaunchValue(launch.repositoryState.branch)}\`\n`;
-    md += `- Head: \`${formatOptionalLaunchValue(launch.repositoryState.headSha)}\`\n`;
-    md += `- Upstream: \`${formatOptionalLaunchValue(launch.repositoryState.upstreamRef)}\`\n`;
-    md += `- Upstream head: \`${formatOptionalLaunchValue(launch.repositoryState.upstreamSha)}\`\n`;
-    md += `- Dirty worktree: \`${formatOptionalLaunchValue(launch.repositoryState.dirty)}\`\n`;
-    md += `- Synced with upstream: \`${formatOptionalLaunchValue(launch.repositoryState.syncedWithUpstream)}\`\n`;
-    md += `- Launch evidence risk: \`${launch.repositoryState.launchEvidenceRisk}\`\n`;
-    md += `- ${launch.repositoryState.headline}\n`;
-    md += `- Collect external launch evidence only from a clean, synced ref and record the final release commit in the ignored evidence ledger.\n\n`;
+    md += `- Do not use this committed audit file as proof that the current checkout is clean, synced, or release-bound.\n`;
+    md += `- Run \`npm run launch:status -- --json\` and inspect \`repositoryState\` immediately before collecting external launch evidence.\n`;
+    md += `- Required live state: branch \`master\`, clean worktree, synced with \`origin/master\`, and \`launchEvidenceRisk: clean_synced\`.\n`;
+    md += `- Record the exact final release commit in the ignored launch evidence ledger after the release workflow and deployed checks complete.\n\n`;
   }
   md += `### Local Production Environment State\n\n`;
   md += `- Phase: \`${launch.phase}\`\n`;
@@ -852,17 +846,8 @@ function render() {
 
 export function normaliseAuditForCheck(value) {
   return value
-    .replace(/Working-tree base commit when generated: `[^`]+`/g, 'Working-tree base commit when generated: `CURRENT`')
     .replace(/not current for generated base commit [a-f0-9]+/g, 'not current for generated base commit CURRENT')
-    .replace(/- Head: `[^`]+`/g, '- Head: `CURRENT`')
-    .replace(/- Upstream head: `[^`]+`/g, '- Upstream head: `CURRENT`')
-    .replace(/- Dirty worktree: `(?:true|false|unknown)`/g, '- Dirty worktree: `CURRENT`')
-    .replace(/- Synced with upstream: `(?:true|false|unknown)`/g, '- Synced with upstream: `CURRENT`')
-    .replace(/- Launch evidence risk: `[^`]+`/g, '- Launch evidence risk: `CURRENT`')
-    .replace(/- Repository has uncommitted changes; do not collect launch evidence from this worktree\./g, '- Repository state headline: CURRENT')
-    .replace(/- Repository is clean and synced with its upstream ref\./g, '- Repository state headline: CURRENT')
-    .replace(/- Repository HEAD is not synced with its upstream; push or pull before collecting launch evidence\./g, '- Repository state headline: CURRENT')
-    .replace(/- Repository upstream state could not be verified; collect launch evidence only from a known release ref\./g, '- Repository state headline: CURRENT');
+    .replace(/- Branch: `[^`]+`/g, '- Branch: `CURRENT`');
 }
 
 function main() {
