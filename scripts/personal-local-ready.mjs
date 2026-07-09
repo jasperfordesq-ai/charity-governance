@@ -178,8 +178,13 @@ try {
   }
 
   console.log('\nPersonal local readiness passed.');
-  console.log(`Database backup: ${backupPath}`);
-  console.log(`Document backup: ${documentBackupDir}`);
+  if (skipBackup) {
+    console.log('Database backup: skipped');
+    console.log('Document backup: skipped');
+  } else {
+    console.log(`Database backup: ${backupPath}`);
+    console.log(`Document backup: ${documentBackupDir}`);
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

@@ -226,6 +226,9 @@ test('personal local readiness gate is non-production and non-destructive by def
   assert.match(readinessScript, /personal-local-readiness\.spec\.ts/);
   assert.match(readinessScript, /--no-browser/);
   assert.match(readinessScript, /--no-backup/);
+  assert.match(readinessScript, /if \(skipBackup\) \{[\s\S]*Database backup: skipped[\s\S]*Document backup: skipped[\s\S]*\} else \{/);
+  assert.match(readinessScript, /console\.log\(`Database backup: \$\{backupPath\}`\);/);
+  assert.match(readinessScript, /console\.log\(`Document backup: \$\{documentBackupDir\}`\);/);
   assert.match(readinessScript, /--keep-web-cache/);
   assert.match(readinessScript, /Generated web cache cleanup/);
   assert.match(readinessScript, /localWebContainerIsRunning/);
