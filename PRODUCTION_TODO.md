@@ -62,7 +62,11 @@ Status marks reflect completed repository hardening work. Open items require rea
 > `Production deploy smoke passed`, and both canonical production origins. A later
 > local `npm run release:ready` run passed on 2026-07-09 at commit
 > `cf683f1`: security scan, lint, build, workspace tests, dependency audit,
-> reliability ledger, and 95 Playwright E2E tests passed; `OVERALL: GREEN - repository release gates passed`. This still does not replace deployed QA,
+> reliability ledger, and 95 Playwright E2E tests passed; `OVERALL: GREEN - repository release gates passed`. Subsequent release-gate hardening on
+> `master` scopes failed Playwright cleanup to CharityPilot processes on Windows
+> and runs npm/npx child gates without shell execution, so failed local E2E
+> evidence collection is less likely to disturb unrelated processes or emit
+> shell-argument deprecation warnings. This still does not replace deployed QA,
 > real provider checks, legal/privacy review, pentest, or final production
 > signoffs.
 

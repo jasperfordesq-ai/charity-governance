@@ -1701,6 +1701,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /local `npm run release:ready` run passed on 2026-07-09/);
   assert.match(productionTodo, /95 Playwright E2E tests passed/);
   assert.match(productionTodo, /GREEN - repository release gates passed/);
+  assert.match(productionTodo, /scopes failed Playwright cleanup to CharityPilot processes on Windows/);
+  assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
   assert.match(productionTodo, /333\/333 production-tooling checks/);
@@ -1753,8 +1755,11 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /`npm run release:ready`/);
   assert.match(handoff, /95 Playwright E2E tests passed/);
   assert.doesNotMatch(handoff, /only Playwright E2E was skipped/);
-  assert.match(handoff, /0d2988772504b73189d8ce9c500d92800d1de92f/);
-  assert.match(handoff, /29012705817/);
+  assert.match(handoff, /cb78eb85bb0127150ad448037b5d03b8060869bf/);
+  assert.match(handoff, /29021018683/);
+  assert.match(handoff, /repo-scoped failed E2E cleanup hardening/);
+  assert.match(handoff, /no-shell release gate execution hardening/);
+  assert.doesNotMatch(handoff, /Latest verified pushed commit[\s\S]{0,120}0d2988772504b73189d8ce9c500d92800d1de92f/);
   assert.doesNotMatch(handoff, /73eda7ddaeaa8d6fdbe273cd541296b90dbe8049/);
   assert.doesNotMatch(handoff, /29007934895/);
   assert.doesNotMatch(handoff, /a4c110fc0cbd6bbdd318cd5b94ef94207514e0f1/);

@@ -34,9 +34,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 - Latest verified pushed commit at the time of this handoff refresh:
-  `0d2988772504b73189d8ce9c500d92800d1de92f`.
+  `cb78eb85bb0127150ad448037b5d03b8060869bf`.
 - GitHub CI for that commit passed:
-  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29012705817`.
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - The generated platform audit intentionally keeps repository clean/synced state
   live-only; run `npm run launch:status -- --json` and inspect
   `repositoryState` from the release checkout before collecting launch evidence.
@@ -232,6 +232,12 @@ Correct posture:
 - Production launch evidence initializes outside the repo root in `.charitypilot-launch-evidence/`.
 - Launch evidence status has read-only progress output and strict final validation.
 - The platform audit generator records launch evidence state and falls back to direct `.git` metadata reads if shelling out to git is unavailable.
+- Failed release E2E cleanup is repo-scoped on Windows before stopping related
+  Node processes, so a CharityPilot timeout does not match unrelated
+  `npm run test:e2e` processes on a shared workstation.
+- Release readiness child gates resolve `npm` and `npx` through explicit Node
+  CLI entrypoints on Windows instead of shell execution, keeping launch
+  evidence transcripts free of shell-argument deprecation warnings.
 
 ### Launch Evidence Hardening
 
@@ -276,6 +282,18 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- `gh run watch 29021018683 --exit-status`
+  - Passed on 2026-07-09 for commit `cb78eb8`.
+  - Covered CI security scan, Prisma validation/migration, PostgreSQL
+    backup/restore, lint, tests, reliability ledger, local Docker smoke,
+    workspace builds, Docker image builds/smokes, scheduled-job smoke, and
+    dependency audit after no-shell release gate execution hardening.
+- `gh run watch 29020485769 --exit-status`
+  - Passed on 2026-07-09 for commit `11b0f5b`.
+  - Covered CI security scan, Prisma validation/migration, PostgreSQL
+    backup/restore, lint, tests, reliability ledger, local Docker smoke,
+    workspace builds, Docker image builds/smokes, scheduled-job smoke, and
+    dependency audit after repo-scoped failed E2E cleanup hardening.
 - `gh run watch 29012705817 --exit-status`
   - Passed on 2026-07-09 for commit `0d29887`.
   - Covered CI security scan, Prisma validation/migration, PostgreSQL
