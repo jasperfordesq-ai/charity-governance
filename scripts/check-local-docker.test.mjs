@@ -983,9 +983,11 @@ test('deployed browser QA matrix is runnable as focused launch evidence commands
   assert.match(playwrightConfig, /E2E_DEPLOYED_QA/);
   assert.match(readRepoFile('scripts/check-deployed-browser-qa-env.mjs'), /CANONICAL_PRODUCTION_WEB_ORIGIN/);
   assert.match(readRepoFile('scripts/check-deployed-browser-qa-env.mjs'), /secretValuesPrinted:\s*false/);
+  assert.match(readRepoFile('scripts/check-deployed-browser-qa-env.mjs'), /SECRET_PLACEHOLDER_PATTERN/);
   assert.match(browserQa, /test:e2e:deployed:responsive:cross-browser/);
   assert.match(browserQa, /test:e2e:deployed:accessibility:cross-browser/);
   assert.match(browserQa, /check:production:browser-qa-env/);
+  assert.match(browserQa, /literal `SECRET_STORE_\*` placeholders/);
   assert.match(e2eReadme, /test:e2e:deployed:responsive:cross-browser/);
   assert.match(e2eReadme, /check:production:browser-qa-env/);
   assert.match(e2eReadme, /Desktop Firefox/);

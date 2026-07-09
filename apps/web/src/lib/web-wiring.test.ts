@@ -1555,6 +1555,7 @@ test('documents standard-link modal is extracted from the oversized route file',
   assert.doesNotMatch(pageSrc, /This document will appear as evidence on the selected standard/);
   assert.match(modalSrc, /<ModalHeader>Link standard<\/ModalHeader>/);
   assert.match(modalSrc, /link-disabled-hint/);
+  assert.match(modalSrc, /aria-describedby="link-disabled-hint"/);
   assert.match(modalSrc, /This document will appear as evidence on the selected standard/);
   assert.match(modalSrc, /ModalFormActions/);
   assert.doesNotMatch(modalSrc, /ModalFooter/);

@@ -10,6 +10,8 @@ const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evi
 const defaultArtifactName = 'production-launch-evidence';
 const defaultEvidenceFileName = 'production-launch-evidence.json';
 const workflowDispatchInputWarningThreshold = 60000;
+const artifactNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const evidenceFileNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/;
 
 function usage() {
   return 'Usage: node scripts/prepare-production-launch-evidence-upload.mjs [--json] [--evidence-file <path>] [--artifact-name <name>] [--evidence-file-name <name>]\n';
@@ -17,6 +19,15 @@ function usage() {
 
 function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
+}
+
+function validateWorkflowInputNames(options) {
+  if (!artifactNamePattern.test(options.artifactName)) {
+    throw new Error('--artifact-name must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/');
+  }
+  if (!evidenceFileNamePattern.test(options.evidenceFileName)) {
+    throw new Error('--evidence-file-name must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\\.json$/');
+  }
 }
 
 function parseArgs(argv) {
@@ -68,6 +79,8 @@ function parseArgs(argv) {
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
+
+  validateWorkflowInputNames(options);
 
   return options;
 }

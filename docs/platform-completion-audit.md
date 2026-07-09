@@ -149,6 +149,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.
 - Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.
 - Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
+- Protected production launch evidence workflows now validate dispatch-controlled artifact and evidence file names before using them in artifact or shell-path operations.
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
@@ -157,6 +158,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Billing current-plan summary now uses shared status panel styling instead of route-local brand panel markup.
 - Browser QA launch evidence now requires a dedicated deployed accessibility command transcript for light and dark theme checks.
 - Deployed browser QA now has cross-browser responsive and accessibility script wiring for Chromium desktop, Chromium mobile emulation, Firefox, and WebKit evidence runs while keeping real iOS Safari as manual or cloud-device evidence.
+- Deployed browser QA preflight now rejects copied credential placeholders like SECRET_STORE_E2E_OWNER_EMAIL while keeping owner credential values out of operator transcripts.
 - Supabase launch evidence now requires backup policy or PITR evidence plus restore-test owner/date/recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
 - The team member list, role edit controls, loading/error/empty states, and shared role display metadata are split out of the team route behind a wiring regression test.
 - The team invite form and pending-invite list are split out of the team route behind a wiring regression test while preserving invite role gates and revoke states.

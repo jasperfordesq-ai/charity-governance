@@ -39,6 +39,24 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Validate dispatch input names
+        env:
+          EVIDENCE_ARTIFACT_NAME: ${{ inputs.evidence_artifact_name }}
+          EVIDENCE_FILE_NAME: ${{ inputs.evidence_file_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_pattern='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+          evidence_file_pattern='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$'
+          if [[ ! "${EVIDENCE_ARTIFACT_NAME}" =~ ${artifact_pattern} ]]; then
+            echo "production launch evidence artifact name is invalid"
+            exit 1
+          fi
+          if [[ ! "${EVIDENCE_FILE_NAME}" =~ ${evidence_file_pattern} ]]; then
+            echo "production launch evidence file name is invalid"
+            exit 1
+          fi
+
       - name: Download production launch evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -48,34 +66,37 @@ jobs:
           run-id: ${{ inputs.evidence_artifact_run_id }}
 
       - name: Verify evidence file exists
+        env:
+          EVIDENCE_FILE_NAME: ${{ inputs.evidence_file_name }}
         shell: bash
         run: |
           set -euo pipefail
-          test -f "launch-evidence/${{ inputs.evidence_file_name }}"
+          test -f "launch-evidence/${EVIDENCE_FILE_NAME}"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Validate launch evidence
         env:
+          EVIDENCE_FILE_NAME: ${{ inputs.evidence_file_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           echo "Release-run evidence verification" | tee production-launch-evidence-validation.log
           set +e
-          npm run check:production:release-run -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" 2>&1 |
+          npm run check:production:release-run -- --evidence-file="launch-evidence/${EVIDENCE_FILE_NAME}" 2>&1 |
             tee -a production-launch-evidence-validation.log
           release_run_text_status=${PIPESTATUS[0]}
-          npm run check:production:release-run -- --json --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" \
+          npm run check:production:release-run -- --json --evidence-file="launch-evidence/${EVIDENCE_FILE_NAME}" \
             > production-release-run-evidence.json 2>> production-launch-evidence-validation.log
           release_run_json_status=$?
           echo "" | tee -a production-launch-evidence-validation.log
           echo "Strict launch evidence validation" | tee -a production-launch-evidence-validation.log
-          npm run check:production:evidence -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" 2>&1 |
+          npm run check:production:evidence -- --evidence-file="launch-evidence/${EVIDENCE_FILE_NAME}" 2>&1 |
             tee -a production-launch-evidence-validation.log
           evidence_text_status=${PIPESTATUS[0]}
-          npm run check:production:evidence -- --json --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" \
+          npm run check:production:evidence -- --json --evidence-file="launch-evidence/${EVIDENCE_FILE_NAME}" \
             > production-launch-evidence-validation.json 2>> production-launch-evidence-validation.log
           evidence_json_status=$?
           set -e

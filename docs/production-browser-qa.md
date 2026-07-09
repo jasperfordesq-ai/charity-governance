@@ -17,6 +17,10 @@ These local checks do not replace deployed production QA, but they should be gre
 - [ ] Cross-browser deployed responsive and accessibility smoke completed where runner support exists for Chromium desktop, Chromium mobile, Firefox, and WebKit, with evidence recorded in `browserQa.checks.cross-browser-coverage`.
 - [ ] Real-device or cloud-device iOS Safari evidence completed and recorded in `browserQa.checks.ios-safari-device-coverage`.
 
+In the examples below, replace the `SECRET_STORE_*` labels with values loaded
+from the approved secret store before running the command. The preflight rejects
+literal `SECRET_STORE_*` placeholders and does not print the credential values.
+
 Example deployed responsive smoke command:
 
 ```bash

@@ -3724,20 +3724,25 @@ test('manual production launch evidence workflow validates final signoff evidenc
   assert.match(workflow, /environment:\s+production/);
   assert.match(workflow, /uses:\s+actions\/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd\s+# v5/);
   assert.match(workflow, /uses:\s+actions\/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e\s+# v6/);
+  assert.match(workflow, /name:\s+Validate dispatch input names/);
+  assert.match(workflow, /EVIDENCE_ARTIFACT_NAME:\s+\$\{\{\s*inputs\.evidence_artifact_name\s*\}\}/);
+  assert.match(workflow, /EVIDENCE_FILE_NAME:\s+\$\{\{\s*inputs\.evidence_file_name\s*\}\}/);
+  assert.match(workflow, /production launch evidence artifact name is invalid/);
+  assert.match(workflow, /production launch evidence file name is invalid/);
   assert.match(workflow, /uses:\s+actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093\s+# v4\.3\.0/);
   assert.match(workflow, /name:\s+\$\{\{\s*inputs\.evidence_artifact_name\s*\}\}/);
   assert.match(workflow, /path:\s+launch-evidence/);
   assert.match(workflow, /run-id:\s+\$\{\{\s*inputs\.evidence_artifact_run_id\s*\}\}/);
-  assert.match(workflow, /test -f "launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /test -f "launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /set \+e/);
-  assert.match(workflow, /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}" 2>&1/);
+  assert.match(workflow, /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}" 2>&1/);
   assert.match(workflow, /release_run_text_status=\$\{PIPESTATUS\[0\]\}/);
-  assert.match(workflow, /npm run check:production:release-run -- --json --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /npm run check:production:release-run -- --json --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/);
   assert.match(workflow, /release_run_json_status=\$\?/);
-  assert.match(workflow, /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}" 2>&1/);
+  assert.match(workflow, /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}" 2>&1/);
   assert.match(workflow, /evidence_text_status=\$\{PIPESTATUS\[0\]\}/);
-  assert.match(workflow, /npm run check:production:evidence -- --json --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /npm run check:production:evidence -- --json --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/);
   assert.match(workflow, /evidence_json_status=\$\?/);
   assert.match(workflow, /tee production-launch-evidence-validation\.log/);
   assert.match(workflow, /> production-release-run-evidence\.json/);
@@ -3797,6 +3802,7 @@ test('protected production launch evidence upload workflow creates the validator
   assert.equal(packageJson.scripts['prepare:production:evidence-upload'], 'node scripts/prepare-production-launch-evidence-upload.mjs');
   assert.match(helper, /gzipSync/);
   assert.match(helper, /createHash\('sha256'\)/);
+  assert.match(helper, /validateWorkflowInputNames/);
   assert.match(helper, /workflow_dispatch inputs may reject very large evidence ledgers/);
   assert.match(helper, /gh workflow run upload-production-launch-evidence\.yml --ref master --json/);
   assert.match(workflow, /name:\s+Upload Production Launch Evidence/);
@@ -3810,6 +3816,11 @@ test('protected production launch evidence upload workflow creates the validator
   assert.match(workflow, /^permissions:\s*\n\s+contents:\s+read\s*$/m);
   assert.match(workflow, /environment:\s+production/);
   assert.match(workflow, /uses:\s+actions\/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e\s+# v6/);
+  assert.match(workflow, /name:\s+Validate dispatch input names/);
+  assert.match(workflow, /ARTIFACT_NAME:\s+\$\{\{\s*inputs\.artifact_name\s*\}\}/);
+  assert.match(workflow, /EVIDENCE_FILE_NAME:\s+\$\{\{\s*inputs\.evidence_file_name\s*\}\}/);
+  assert.match(workflow, /production launch evidence artifact name is invalid/);
+  assert.match(workflow, /production launch evidence file name is invalid/);
   assert.match(workflow, /base64 --decode \| gzip -d > "\$\{evidence_path\}"/);
   assert.match(workflow, /sha256sum "\$\{evidence_path\}"/);
   assert.match(workflow, /Evidence SHA-256 mismatch; refusing to upload artifact/);
@@ -3825,6 +3836,54 @@ test('protected production launch evidence upload workflow creates the validator
   assert.match(launchChecklist, /upload-production-launch-evidence\.yml/);
   assert.match(launchChecklist, /without committing it to git/);
   assert.match(launchChecklist, /evidence_artifact_run_id/);
+});
+
+test('production launch evidence upload helper rejects unsafe artifact and file names', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-evidence-upload-names-'));
+  const evidencePath = join(tempDir, 'production-launch-evidence.json');
+  writeFileSync(evidencePath, JSON.stringify({ version: 1, approvedForLaunch: false }));
+
+  try {
+    for (const artifactName of ['../x', 'bad/name', '$(touch x)', 'bad name', 'production-launch-evidence\nnext']) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          'scripts/prepare-production-launch-evidence-upload.mjs',
+          '--json',
+          '--evidence-file',
+          evidencePath,
+          '--artifact-name',
+          artifactName,
+        ],
+        { cwd: repoRoot, encoding: 'utf8' },
+      );
+
+      assert.equal(result.status, 2, `artifact name ${JSON.stringify(artifactName)} should be rejected`);
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /--artifact-name must match/);
+    }
+
+    for (const evidenceFileName of ['../production-launch-evidence.json', 'x.json;echo bad', 'x', 'x.txt', 'bad name.json']) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          'scripts/prepare-production-launch-evidence-upload.mjs',
+          '--json',
+          '--evidence-file',
+          evidencePath,
+          '--evidence-file-name',
+          evidenceFileName,
+        ],
+        { cwd: repoRoot, encoding: 'utf8' },
+      );
+
+      assert.equal(result.status, 2, `evidence file name ${JSON.stringify(evidenceFileName)} should be rejected`);
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /--evidence-file-name must match/);
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('CI builds API and web production Docker images', () => {

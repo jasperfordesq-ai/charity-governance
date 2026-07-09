@@ -7,6 +7,7 @@ import {
 } from './production-hostnames.mjs';
 
 const USAGE_TEXT = 'Usage: node scripts/check-deployed-browser-qa-env.mjs [--json]';
+const SECRET_PLACEHOLDER_PATTERN = /(?:secret_store|replace_me|change-me|your_|your-|todo|tbd|pending|placeholder)/i;
 
 function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
@@ -33,6 +34,10 @@ function parseArgs(argv) {
 
 function trimmed(env, key) {
   return String(env[key] ?? '').trim();
+}
+
+function looksLikePlaceholderSecret(value) {
+  return SECRET_PLACEHOLDER_PATTERN.test(String(value ?? ''));
 }
 
 function requireCanonicalOrigin({ env, key, expected, label, issues }) {
@@ -77,24 +82,36 @@ function collectIssues(env) {
     issues,
   });
 
-  if (!trimmed(env, 'E2E_OWNER_EMAIL')) {
+  const ownerEmail = trimmed(env, 'E2E_OWNER_EMAIL');
+  const ownerPassword = trimmed(env, 'E2E_OWNER_PASSWORD');
+  let credentialsReady = true;
+
+  if (!ownerEmail) {
     issues.push('E2E_OWNER_EMAIL must be supplied from the approved non-sensitive test workspace secret store.');
+    credentialsReady = false;
+  } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ownerEmail) || looksLikePlaceholderSecret(ownerEmail)) {
+    issues.push('E2E_OWNER_EMAIL must come from the approved non-sensitive test workspace secret store.');
+    credentialsReady = false;
   }
-  if (!trimmed(env, 'E2E_OWNER_PASSWORD')) {
+  if (!ownerPassword) {
     issues.push('E2E_OWNER_PASSWORD must be supplied from the approved non-sensitive test workspace secret store.');
+    credentialsReady = false;
+  } else if (looksLikePlaceholderSecret(ownerPassword)) {
+    issues.push('E2E_OWNER_PASSWORD must come from the approved non-sensitive test workspace secret store.');
+    credentialsReady = false;
   }
 
-  return { issues, webUrl, apiUrl };
+  return { issues, webUrl, apiUrl, credentialsReady };
 }
 
-function payloadFor(env, issues, webUrl, apiUrl) {
+function payloadFor(env, issues, webUrl, apiUrl, credentialsReady) {
   return {
     ok: issues.length === 0,
     issueCount: issues.length,
     issues,
     webUrl,
     apiUrl,
-    credentialsPresent: Boolean(trimmed(env, 'E2E_OWNER_EMAIL') && trimmed(env, 'E2E_OWNER_PASSWORD')),
+    credentialsPresent: credentialsReady === true,
     requiredEnvironment: [
       'E2E_DEPLOYED_QA=true',
       `E2E_WEB_URL=${CANONICAL_PRODUCTION_WEB_ORIGIN}`,
@@ -142,8 +159,8 @@ export function runDeployedBrowserQaEnvCheckFromArgs(args = process.argv.slice(2
   if (options.error) return result(2, '', `${USAGE_TEXT}\n${options.error}\n`);
   if (options.help) return result(0, `${USAGE_TEXT}\n`, '');
 
-  const { issues, webUrl, apiUrl } = collectIssues(env);
-  const payload = payloadFor(env, issues, webUrl, apiUrl);
+  const { issues, webUrl, apiUrl, credentialsReady } = collectIssues(env);
+  const payload = payloadFor(env, issues, webUrl, apiUrl, credentialsReady);
   if (options.json) return jsonResult(payload.ok ? 0 : 1, payload);
   return payload.ok ? result(0, renderText(payload), '') : result(1, '', renderText(payload));
 }

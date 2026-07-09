@@ -47,6 +47,7 @@ export function DocumentLinkModal({
               </p>
               <Select
                 label="Standard"
+                aria-describedby="link-disabled-hint"
                 selectedKeys={linkStandardId ? new Set([linkStandardId]) : new Set()}
                 onSelectionChange={(keys) => {
                   const value = Array.from(keys)[0] as string | undefined;
