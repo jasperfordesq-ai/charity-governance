@@ -252,7 +252,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Launch evidence status completion now requires the full release artifact binding, not only completed checklist statuses and final approval roles.
 - Launch status now exposes repository branch, HEAD, upstream sync, and dirty-worktree risk so operators do not collect launch evidence from an unpushed or modified ref.
 - Launch status now keeps the full source-grouped production value checklist visible even after .env.production exists, while separately listing the currently missing values.
-- Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
+- Launch status now exposes the deployed browser QA command set, including required environment values, the browserQa.browser-qa-completed preflight success marker, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.
 - Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.
 - Platform audit now surfaces the release image promotion GitHub environment variables, workflow command, digest artifact, and evidence target from launch status so deploy operators do not miss the signed-image prerequisite.
 - Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.
@@ -429,7 +429,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Cross-browser responsive: `npm run test:e2e:deployed:responsive:cross-browser`
 - Cross-browser accessibility: `npm run test:e2e:deployed:accessibility:cross-browser`
 - iOS Safari: Record real iOS Safari manual or cloud-device evidence for the promoted release.
-- Evidence target: Record outputs under browserQa.checks.* in the production launch evidence ledger.
+- Evidence target: Record the preflight command and success marker in browserQa.checks.browser-qa-completed, including Deployed browser QA environment preflight passed; record the remaining outputs under browserQa.checks.* in the production launch evidence ledger.
 
 ### Production Launch Command Sequence
 

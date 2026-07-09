@@ -1694,6 +1694,9 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.doesNotMatch(productionTodo, /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i);
   assert.doesNotMatch(productionTodo, /full accessibility suite must be rerun for the final release transcript/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
+  assert.match(productionTodo, /browserQa\.checks\.browser-qa-completed/);
+  assert.match(productionTodo, /npm run check:production:browser-qa-env/);
+  assert.match(productionTodo, /Deployed browser QA environment preflight passed/);
   assert.match(productionTodo, /87 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
   assert.match(productionTodo, /release\s+image promotion/i);
@@ -2392,6 +2395,8 @@ test('production runbook documents deployed browser QA evidence commands', () =>
   assert.match(runbook, /npm run test:e2e -- tests\/accessibility\.spec\.ts/);
   assert.match(runbook, /npm run test:e2e:deployed:responsive:cross-browser/);
   assert.match(runbook, /npm run test:e2e:deployed:accessibility:cross-browser/);
+  assert.match(runbook, /browserQa\.checks\.browser-qa-completed/);
+  assert.match(runbook, /Deployed browser QA environment preflight passed/);
   assert.match(runbook, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(runbook, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(runbook, /production-launch-evidence\.json/);
@@ -2512,6 +2517,9 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /Local browser QA has current 2026-07-09 evidence/);
   assert.match(launchGuide, /public desktop 14\/14/);
   assert.match(launchGuide, /public mobile 14\/14/);
+  assert.match(launchGuide, /browserQa\.checks\.browser-qa-completed/);
+  assert.match(launchGuide, /npm run check:production:browser-qa-env/);
+  assert.match(launchGuide, /Deployed browser QA environment preflight passed/);
   assert.match(launchGuide, /dashboard desktop 12\/12/);
   assert.match(launchGuide, /dashboard mobile 12\/12/);
   assert.match(launchGuide, /full local accessibility suite passed 26\/26 checks on 2026-07-09/);

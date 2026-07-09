@@ -43,6 +43,10 @@ The machine-readable launch evidence file must also pass all
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
+The deployed browser QA preflight transcript must be recorded in
+`browserQa.checks.browser-qa-completed`, including
+`npm run check:production:browser-qa-env` and
+`Deployed browser QA environment preflight passed`.
 The deployed browser evidence must also complete the Launch-Critical Route Inventory
 in `docs/production-browser-qa.md`, proving every route in desktop, mobile, light-mode, and dark-mode evidence before launch signoff. Every browser QA
 evidence slot must name the exact promoted `release.commitSha`:

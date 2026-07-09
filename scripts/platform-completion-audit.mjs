@@ -290,7 +290,7 @@ const fixedInThisAuditBranch = [
     'Launch evidence status completion now requires the full release artifact binding, not only completed checklist statuses and final approval roles.',
     'Launch status now exposes repository branch, HEAD, upstream sync, and dirty-worktree risk so operators do not collect launch evidence from an unpushed or modified ref.',
   'Launch status now keeps the full source-grouped production value checklist visible even after .env.production exists, while separately listing the currently missing values.',
-  'Launch status now exposes the deployed browser QA command set, including required environment values, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
+  'Launch status now exposes the deployed browser QA command set, including required environment values, the browserQa.browser-qa-completed preflight success marker, responsive/accessibility commands, cross-browser commands, iOS Safari evidence expectations, and the browserQa evidence target.',
   'Launch status now exposes the full production check, provider, deploy, rollback, release-run evidence, and final evidence validation command sequence needed to close the launch ledger.',
   'Platform audit now surfaces the release image promotion GitHub environment variables, workflow command, digest artifact, and evidence target from launch status so deploy operators do not miss the signed-image prerequisite.',
   'Launch status now exposes the required final signoff roles, solicitor/governance/privacy review, external pentest, release binding, and review-ready legal posture without legal-certainty claims.',

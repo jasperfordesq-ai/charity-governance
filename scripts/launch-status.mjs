@@ -67,7 +67,8 @@ const DEPLOYED_BROWSER_QA = Object.freeze({
   crossBrowserResponsiveCommand: 'npm run test:e2e:deployed:responsive:cross-browser',
   crossBrowserAccessibilityCommand: 'npm run test:e2e:deployed:accessibility:cross-browser',
   iosSafariEvidence: 'Record real iOS Safari manual or cloud-device evidence for the promoted release.',
-  evidenceTarget: 'Record outputs under browserQa.checks.* in the production launch evidence ledger.',
+  evidenceTarget:
+    'Record the preflight command and success marker in browserQa.checks.browser-qa-completed, including Deployed browser QA environment preflight passed; record the remaining outputs under browserQa.checks.* in the production launch evidence ledger.',
 });
 
 const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
@@ -155,7 +156,7 @@ const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 87 machine-readable checks, including GitHub production environment, GitHub production secret-store verification, release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
-  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, critical-flow evidence must include pending-navigation confirmation, conditional obligations, and readiness blockers, and every browser QA evidence slot must bind to the exact promoted release.commitSha: browserQa.checks.browser-qa-completed, browserQa.checks.desktop-coverage, browserQa.checks.mobile-coverage, browserQa.checks.accessibility-coverage, browserQa.checks.cross-browser-coverage, browserQa.checks.ios-safari-device-coverage, and browserQa.checks.critical-flows-covered.',
+  'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; first run npm run check:production:browser-qa-env and record Deployed browser QA environment preflight passed in browserQa.checks.browser-qa-completed; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, critical-flow evidence must include pending-navigation confirmation, conditional obligations, and readiness blockers, and every browser QA evidence slot must bind to the exact promoted release.commitSha: browserQa.checks.browser-qa-completed, browserQa.checks.desktop-coverage, browserQa.checks.mobile-coverage, browserQa.checks.accessibility-coverage, browserQa.checks.cross-browser-coverage, browserQa.checks.ios-safari-device-coverage, and browserQa.checks.critical-flows-covered.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
 ]);

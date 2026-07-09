@@ -71,6 +71,8 @@ function assertExternalLaunchEvidenceGates(state) {
   assert.match(gates, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(gates, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(gates, /E2E_DEPLOYED_QA=true/);
+  assert.match(gates, /npm run check:production:browser-qa-env/);
+  assert.match(gates, /Deployed browser QA environment preflight passed/);
   assert.match(gates, /all four focused route chunks/);
   assert.match(gates, /npm run test:e2e:responsive/);
   assert.match(gates, /Launch-Critical Route Inventory/);
@@ -98,6 +100,8 @@ function assertDeployedBrowserQaCommands(commands) {
   ]);
   assert.equal(commands.preflightCommand, 'npm run check:production:browser-qa-env');
   assert.equal(commands.preflightJsonCommand, 'npm run check:production:browser-qa-env -- --json');
+  assert.match(commands.evidenceTarget, /browserQa\.checks\.browser-qa-completed/);
+  assert.match(commands.evidenceTarget, /Deployed browser QA environment preflight passed/);
   assert.equal(commands.responsiveCommand, 'npm run test:e2e:responsive');
   assert.deepEqual(commands.focusedResponsiveCommands, [
     'npm run test:e2e:responsive:public:desktop',
