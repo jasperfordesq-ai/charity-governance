@@ -41,7 +41,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm audit --omit=dev --audit-level=moderate` completed with no moderate-or-higher production vulnerabilities.
 - [ ] `npm run check:production -- --production-env-file=.env.production` completed against the real production secret source.
 - [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with digest-pinned API, web, and migration images.
-- [ ] `npm run deploy:production -- --production-env-file=.env.production` completed on the production Docker host using `compose.production.yml`, `compose.production-tls.yml`, `release-image-digests.env`, and digest-pinned images.
+- [ ] `npm run deploy:production -- --production-env-file=.env.production` completed on the production Docker host using `compose.production.yml`, `release-image-digests.env`, and digest-pinned images. Record either the default Caddy/TLS overlay evidence with `compose.production-tls.yml`, or the managed-load-balancer/hosting TLS evidence when deploying with `--no-tls-proxy`.
 - [ ] The deploy command's post-deploy public HTTPS smoke completed against the production web and API origins.
 - [ ] `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env` rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence, including post-rollback public HTTPS smoke proof.
 - [ ] `cosign signature verification` passed for all promoted image digests.

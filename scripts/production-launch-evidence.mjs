@@ -486,6 +486,19 @@ function requireEvidenceText(text, needle, message, issues) {
   }
 }
 
+function hasManagedTlsDeployEvidence(text) {
+  const lowerText = text.toLowerCase();
+  return (
+    lowerText.includes('--no-tls-proxy') &&
+    (
+      lowerText.includes('managed load balancer tls') ||
+      lowerText.includes('managed hosting platform tls') ||
+      lowerText.includes('external tls')
+    ) &&
+    lowerText.includes('tls certificate evidence')
+  );
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -694,11 +707,18 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     );
     for (const marker of [
       'compose.production.yml',
-      'compose.production-tls.yml',
       'release-image-digests.env',
       'digest-pinned images',
     ]) {
       requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
+    }
+    if (!hasManagedTlsDeployEvidence(text)) {
+      requireEvidenceText(
+        text,
+        'compose.production-tls.yml',
+        `${checkPath}.evidence must include compose.production-tls.yml or --no-tls-proxy with managed TLS certificate evidence`,
+        issues,
+      );
     }
   }
 

@@ -14,6 +14,11 @@ function providerField(error: unknown, field: string): string | undefined {
 
 function scrubProviderMessage(message: string): string {
   return capMessage(message
+    .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, 'stripe-key=[redacted]')
+    .replace(/\bwhsec_[A-Za-z0-9_=-]+/g, 'stripe-webhook-secret=[redacted]')
+    .replace(/\bre_[A-Za-z0-9_=-]+/g, 'resend-key=[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(apikey)=([^&#\s]+)/gi, '$1=[redacted]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
     .replace(/\b(token|access_token|refresh_token|signature|sig)=([^&#\s]+)/gi, '$1=[redacted]')
     .replace(/#[^\s"'<>]*\b(token|access_token|refresh_token)=([^&\s"'<>]+)/gi, '#$1=[redacted]')

@@ -414,6 +414,30 @@ test('formatProviderError redacts emails, tokens, storage paths and caps length'
 });
 
 // ── x-degradation-observability-8 ──────────────────────────────────────────────
+test('formatProviderError redacts provider key material from messages', () => {
+  const error = new Error([
+    'sk_live_secretA pk_live_secretB',
+    'whsec_secretC',
+    're_secretD',
+    'Bearer secretE',
+    'apikey=secretF',
+  ].join(' '));
+
+  const output = formatProviderError(error);
+
+  assert.match(output, /stripe-key=\[redacted\]/);
+  assert.match(output, /stripe-webhook-secret=\[redacted\]/);
+  assert.match(output, /resend-key=\[redacted\]/);
+  assert.match(output, /Bearer \[redacted\]/);
+  assert.match(output, /apikey=\[redacted\]/);
+  assert.doesNotMatch(output, /sk_live_secretA/);
+  assert.doesNotMatch(output, /pk_live_secretB/);
+  assert.doesNotMatch(output, /whsec_secretC/);
+  assert.doesNotMatch(output, /re_secretD/);
+  assert.doesNotMatch(output, /secretE/);
+  assert.doesNotMatch(output, /secretF/);
+});
+
 test('readiness reports 503 not_ready with billingConfigured false when Stripe env is unconfigured', { concurrency: false }, async () => {
   const snapshot = snapshotEnv([
     'READINESS_API_KEY',

@@ -1586,6 +1586,31 @@ test('production launch evidence validator requires post-deploy smoke command ou
   }
 });
 
+test('production launch evidence validator accepts managed TLS deploy evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.releaseGate.checks['deploy-production'].evidence[0].description = [
+    'npm run deploy:production -- --production-env-file=.env.production --no-tls-proxy',
+    'compose.production.yml was used for the production deploy.',
+    'Managed load balancer TLS terminated HTTPS for https://app.charitypilot.ie and https://api.charitypilot.ie.',
+    'External TLS certificate evidence confirmed app.charitypilot.ie and api.charitypilot.ie certificates.',
+    'release-image-digests.env supplied digest-pinned images for API, web, and migration services.',
+    'Production deploy preflight passed: env, compose config, and image signatures verified.',
+    'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
+    'Production compose deploy completed.',
+  ].join(' ');
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Production launch evidence passed/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires production deploy and rollback command output', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
