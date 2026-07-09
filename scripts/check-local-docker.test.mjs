@@ -500,8 +500,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /E2E_DEPLOYED_QA=true/);
   assert.match(auditLedger, /Local Verification Evidence/);
   assert.ok(auditBaseCommit, 'audit ledger must record the generated base commit');
-  assert.match(auditLedger, /passed locally on 2026-07-08 at commit [a-f0-9]{7,40}/);
-  assert.doesNotMatch(auditLedger, /passed locally on 2026-07-08 at commit 73e8484/);
+  assert.match(auditLedger, /passed locally on 2026-07-09 at commit [a-f0-9]{7,40}/);
+  assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/85 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/85 evidence checks/);
   assert.match(auditLedger, /315\/315 production-tooling checks/);
