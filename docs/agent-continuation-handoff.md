@@ -20,6 +20,7 @@ Run this first in a fresh session:
 git status --short --branch
 npm run launch:status -- --json
 npm run audit:platform:check
+node scripts/platform-completion-audit.mjs --json
 ```
 
 Local personal-use safety before heavy work:
@@ -318,6 +319,10 @@ Recently successful checks in this workstream:
     latest handoff refresh.
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
+- `node scripts/platform-completion-audit.mjs --json`
+  - Read-only machine-readable audit output for route, backend, launch,
+    compliance, and next-action handoff automation; it must not rewrite
+    `docs/platform-completion-audit.md`.
 - `gh run watch 29021018683 --exit-status`
   - Passed on 2026-07-09 for commit `cb78eb8`.
   - Covered CI security scan, Prisma validation/migration, PostgreSQL

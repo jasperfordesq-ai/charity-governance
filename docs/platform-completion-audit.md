@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Generation note: repository state is intentionally live-only; run `npm run launch:status -- --json` from the release checkout before collecting launch evidence.
+Generation note: repository state is intentionally live-only; run `npm run launch:status -- --json` from the release checkout before collecting launch evidence. Use `node scripts/platform-completion-audit.mjs --json` for machine-readable route, backend, launch, compliance, and next-action data without rewriting this Markdown ledger.
 
 This ledger is a current-state engineering audit. It is not legal advice and does not claim CharityPilot is legally complete, guaranteed, or ready to process real charity data.
 

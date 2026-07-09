@@ -615,14 +615,7 @@ function markdownList(items) {
   return items.map((item) => `- ${item}`).join('\n');
 }
 
-function render() {
-  const routes = readRouteInventory();
-  const apis = readApiInventory();
-  const compliance = readComplianceSummary();
-  const launch = readLaunchSummary();
-  const tests = readTestSurfaceSummary();
-  const { branch } = currentGitBranchAndCommit();
-
+function deriveFrontendAuditState(routes) {
   const oversizedRoutes = routes
     .filter((route) => route.lines >= 450)
     .sort((a, b) => b.lines - a.lines);
@@ -653,10 +646,123 @@ function render() {
     ? 'Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.'
     : 'Use deployed QA findings to fix route-specific state or visual regressions with shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.';
 
+  return {
+    oversizedRoutes,
+    p0Routes,
+    inlineSvgRoutes,
+    decorativeRoutes,
+    productUiNextAction,
+    frontendPolishFinding,
+    workflowPolishStep,
+    stateUiFollowupStep,
+  };
+}
+
+export function buildAuditPayload() {
+  const routes = readRouteInventory();
+  const apis = readApiInventory();
+  const compliance = readComplianceSummary();
+  const launch = readLaunchSummary();
+  const tests = readTestSurfaceSummary();
+  const { branch, commit } = currentGitBranchAndCommit();
+  const frontend = deriveFrontendAuditState(routes);
+  const launchStateNote = localLaunchStateNote(launch);
+  const nextCompletionSequence = [
+    'Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.',
+    frontend.workflowPolishStep,
+    frontend.stateUiFollowupStep,
+    'Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.',
+    'Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.',
+  ];
+
+  return {
+    generated: auditDate,
+    branch,
+    commit,
+    generationNote:
+      'Repository state is live-only; run npm run launch:status -- --json from the release checkout before collecting launch evidence.',
+    legalPosture:
+      'This ledger is an engineering audit, not legal advice, and does not claim CharityPilot is legally complete, guaranteed, or ready to process real charity data.',
+    auditCommands: {
+      writeMarkdown: 'npm run audit:platform',
+      checkMarkdown: 'npm run audit:platform:check',
+      json: 'node scripts/platform-completion-audit.mjs --json',
+    },
+    counts: {
+      routes: routes.length,
+      p0Routes: frontend.p0Routes.length,
+      oversizedRouteFiles: frontend.oversizedRoutes.length,
+      inlineSvgRouteFindings: frontend.inlineSvgRoutes.length,
+      decorativeRouteFindings: frontend.decorativeRoutes.length,
+      apiRouteGroups: apis.length,
+      webTestFiles: tests.webTests,
+      apiTestFiles: tests.apiTests,
+      e2eSpecs: tests.e2eTests,
+    },
+    executiveReadiness: {
+      productUi: {
+        currentState: `${routes.length} page routes scanned; ${frontend.p0Routes.length} are P0 trustee/compliance workflows; ${frontend.oversizedRoutes.length} route files are 450+ lines.`,
+        nextAction: frontend.productUiNextAction,
+      },
+      apiBackend: {
+        currentState: `${apis.length} route groups scanned with route-local guard heuristics and ${tests.apiTests} API test files.`,
+        nextAction: 'Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects.',
+      },
+      launchOperations: {
+        currentState: launch.headline,
+        nextAction: 'Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data.',
+      },
+      irishComplianceModel: {
+        currentState: `${compliance.entries} matrix entries; last checked ${compliance.lastChecked}; statuses ${Object.entries(compliance.statuses).map(([k, v]) => `${k}:${v}`).join(', ')}.`,
+        nextAction: 'Refresh official sources before legal copy changes and record professional-review signoff outside git.',
+      },
+      verificationSurface: {
+        currentState: `${tests.webTests} web unit test files, ${tests.apiTests} API test files, ${tests.e2eTests} Playwright specs.`,
+        nextAction: 'Run full release, production-check, accessibility, and deployed-browser gates before launch signoff.',
+      },
+    },
+    fixedInThisAuditPass: fixedInThisAuditBranch,
+    localVerificationEvidence: localVerificationEvidence(),
+    independentAuditFindings: [
+      ...independentAuditFindings.map(([priority, area, finding]) => ({ priority, area, finding })),
+      { priority: 'P1', area: 'Frontend polish', finding: frontend.frontendPolishFinding },
+    ],
+    routeAudit: routes,
+    apiAndBackendAudit: apis,
+    launch: {
+      ...launch,
+      launchBlockers,
+      localStateNote: launchStateNote,
+    },
+    compliance: {
+      ...compliance,
+      officialSources: officialSources.map(([title, owner, url]) => ({ title, owner, url })),
+    },
+    tests,
+    nextCompletionSequence,
+  };
+}
+
+function render() {
+  const routes = readRouteInventory();
+  const apis = readApiInventory();
+  const compliance = readComplianceSummary();
+  const launch = readLaunchSummary();
+  const tests = readTestSurfaceSummary();
+  const { branch } = currentGitBranchAndCommit();
+  const {
+    oversizedRoutes,
+    p0Routes,
+    productUiNextAction,
+    frontendPolishFinding,
+    workflowPolishStep,
+    stateUiFollowupStep,
+  } = deriveFrontendAuditState(routes);
+
   let md = `# CharityPilot Platform Completion Audit\n\n`;
   md += `Generated: ${auditDate}\n\n`;
   md += `Branch: \`${branch}\`\n\n`;
-  md += `Generation note: repository state is intentionally live-only; run \`npm run launch:status -- --json\` from the release checkout before collecting launch evidence.\n\n`;
+  md += `Generation note: repository state is intentionally live-only; run \`npm run launch:status -- --json\` from the release checkout before collecting launch evidence. Use \`node scripts/platform-completion-audit.mjs --json\` for machine-readable route, backend, launch, compliance, and next-action data without rewriting this Markdown ledger.\n\n`;
   md += `This ledger is a current-state engineering audit. It is not legal advice and does not claim CharityPilot is legally complete, guaranteed, or ready to process real charity data.\n\n`;
 
   md += `## Executive Readiness\n\n`;
@@ -876,6 +982,12 @@ export function normaliseAuditForCheck(value) {
 
 function main() {
   const args = new Set(process.argv.slice(2));
+
+  if (args.has('--json')) {
+    process.stdout.write(`${JSON.stringify(buildAuditPayload(), null, 2)}\n`);
+    return;
+  }
+
   const rendered = render();
 
   if (args.has('--stdout')) {

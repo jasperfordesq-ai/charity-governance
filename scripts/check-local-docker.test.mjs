@@ -767,6 +767,43 @@ test('platform audit check command is read-only for fresh-session baselines', ()
   assert.equal(readRepoFile('docs/platform-completion-audit.md'), auditBefore);
 });
 
+test('platform audit JSON command is read-only and machine-readable', () => {
+  const pkg = packageJson();
+  const handoff = readRepoFile('docs/agent-continuation-handoff.md');
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
+  const auditBefore = readRepoFile('docs/platform-completion-audit.md');
+
+  assert.equal(pkg.scripts['audit:platform:json'], 'node scripts/platform-completion-audit.mjs --json');
+  assert.match(handoff, /node scripts\/platform-completion-audit\.mjs --json/);
+  assert.match(runbook, /node scripts\/platform-completion-audit\.mjs --json/);
+  assert.match(auditGenerator, /buildAuditPayload/);
+  assert.match(auditGenerator, /node scripts\/platform-completion-audit\.mjs --json/);
+  assert.match(auditBefore, /node scripts\/platform-completion-audit\.mjs --json/);
+
+  const result = spawnSync(process.execPath, ['scripts/platform-completion-audit.mjs', '--json'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+
+  assert.equal(payload.auditCommands.json, 'node scripts/platform-completion-audit.mjs --json');
+  assert.match(payload.legalPosture, /not legal advice/);
+  assert.equal(payload.counts.routes, 26);
+  assert.equal(payload.counts.p0Routes, 15);
+  assert.equal(payload.counts.oversizedRouteFiles, 0);
+  assert.ok(payload.routeAudit.some((route) => route.route === '/dashboard' && route.priority === 'P0'));
+  assert.ok(payload.apiAndBackendAudit.some((routeGroup) => routeGroup.group === 'documents'));
+  assert.equal(payload.launch.localStateNote.includes('non-committed'), true);
+  assert.equal(Array.isArray(payload.launch.launchBlockers), true);
+  assert.equal(payload.compliance.sourceLogExists, true);
+  assert.ok(payload.compliance.officialSources.some((source) => source.owner === 'Charities Regulator'));
+  assert.ok(payload.nextCompletionSequence.some((step) => step.includes('deployed HTTPS browser QA')));
+  assert.equal(readRepoFile('docs/platform-completion-audit.md'), auditBefore);
+});
+
 test('product revamp page inventory is not stale pre-revamp guidance', () => {
   const pageInventory = readRepoFile('docs/product-revamp/page-inventory.md');
 
