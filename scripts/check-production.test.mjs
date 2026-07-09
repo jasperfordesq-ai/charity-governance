@@ -1683,7 +1683,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /GREEN - repository release gates passed/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /331\/331 production-tooling checks/);
+  assert.match(productionTodo, /332\/332 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /331\/331 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /330\/330 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /322\/322 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /321\/321 production-tooling checks/);
@@ -1725,7 +1726,8 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /isolated restore target/);
   assert.match(handoff, /non-production restore target/);
   assert.match(handoff, /production project was not overwritten/);
-  assert.match(handoff, /331\/331 production-tooling checks/);
+  assert.match(handoff, /332\/332 production-tooling checks/);
+  assert.doesNotMatch(handoff, /331\/331 production-tooling checks/);
   assert.match(handoff, /`npm run release:ready`/);
   assert.match(handoff, /95 Playwright E2E tests passed/);
   assert.doesNotMatch(handoff, /only Playwright E2E was skipped/);
@@ -2414,7 +2416,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 331\/331/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 332\/332/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 331\/331/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 330\/330/);
   assert.match(launchGuide, /local `npm run release:ready` run passed on 2026-07-09/);
   assert.match(launchGuide, /95 Playwright E2E tests passed/);
