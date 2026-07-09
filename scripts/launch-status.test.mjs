@@ -112,6 +112,7 @@ function assertDeployedBrowserQaCommands(commands) {
 function assertProductionLaunchCommands(commands) {
   assert.equal(commands.corePreflight, 'npm run check:production -- --production-env-file=.env.production');
   assert.equal(commands.githubEnvironment, 'npm run check:production:github-env -- --environment=production');
+  assert.equal(commands.githubSecretStore, 'npm run check:production:github-secrets -- --environment=production');
   assert.equal(commands.hosting, 'npm run check:production:hosting -- --production-env-file=.env.production');
   assert.equal(
     commands.database,

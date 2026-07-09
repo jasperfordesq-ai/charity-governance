@@ -26,6 +26,7 @@ npm run build -w @charitypilot/web
 npm audit --omit=dev --audit-level=moderate
 npm run check:production -- --production-env-file=.env.production
 npm run check:production:github-env -- --environment=production
+npm run check:production:github-secrets -- --environment=production
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
@@ -54,6 +55,12 @@ gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-a
 npm run check:production:github-env -- --environment=production
 gh workflow run release-images.yml --ref master
 gh run watch RELEASE_RUN_ID --exit-status
+```
+
+If GitHub `production` is the approved secret store for the deployment, also verify the required production secret names before promotion. This command lists secret metadata only; it does not read secret values:
+
+```bash
+npm run check:production:github-secrets -- --environment=production
 ```
 
 Download the release-image-digests artifact from the release workflow run and copy the values from `release-image-digests.env` into the approved production secret source:

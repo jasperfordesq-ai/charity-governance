@@ -41,6 +41,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm audit --omit=dev --audit-level=moderate` completed with no moderate-or-higher production vulnerabilities.
 - [ ] `npm run check:production -- --production-env-file=.env.production` completed against the real production secret source.
 - [ ] `npm run check:production:github-env -- --environment=production` completed before release image promotion, proving GitHub `production` has the required public web build variables without reading secret values.
+- [ ] `npm run check:production:github-secrets -- --environment=production` completed if GitHub `production` is the approved secret store, proving the required production secret names exist without reading secret values.
 - [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with digest-pinned API, web, and migration images.
 - [ ] `npm run deploy:production -- --production-env-file=.env.production` completed on the production Docker host using `compose.production.yml`, `release-image-digests.env`, and digest-pinned images. Record either the default Caddy/TLS overlay evidence with `compose.production-tls.yml`, or the managed-load-balancer/hosting TLS evidence when deploying with `--no-tls-proxy`.
 - [ ] The deploy command's post-deploy public HTTPS smoke completed against the production web and API origins.

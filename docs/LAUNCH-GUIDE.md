@@ -57,7 +57,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 333/333 on 2026-07-09; rerun for the final release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 338/338 on 2026-07-09; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
@@ -188,6 +188,12 @@ You need four external services. Create the **production/live** versions
   npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
   npm run check:production:observability -- --production-env-file=.env.production
   ```
+- If GitHub `production` is the approved secret store for deploys, also run:
+  ```bash
+  npm run check:production:github-secrets -- --environment=production
+  ```
+  This confirms the required production secret names exist without reading or
+  printing secret values. It does not replace the provider checks above.
 - **Why:** These catch misconfiguration (wrong keys, public bucket, missing TLS)
   before real data is at risk.
 - **Effort:** A couple of hours, iterating until all checks pass.

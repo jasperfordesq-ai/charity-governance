@@ -51,6 +51,7 @@ const DEPLOYED_BROWSER_QA = Object.freeze({
 const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
   corePreflight: 'npm run check:production -- --production-env-file=.env.production',
   githubEnvironment: 'npm run check:production:github-env -- --environment=production',
+  githubSecretStore: 'npm run check:production:github-secrets -- --environment=production',
   hosting: 'npm run check:production:hosting -- --production-env-file=.env.production',
   database: 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
   supabase: 'npm run check:production:supabase -- --production-env-file=.env.production',
@@ -708,6 +709,7 @@ export function renderLaunchStatusText(state) {
     lines.push('', 'Production launch command sequence:');
     lines.push(`  Core preflight:  ${state.productionLaunchCommands.corePreflight}`);
     lines.push(`  GitHub production environment:  ${state.productionLaunchCommands.githubEnvironment}`);
+    lines.push(`  GitHub production secret store:  ${state.productionLaunchCommands.githubSecretStore}`);
     lines.push(`  Hosting/DNS/TLS:  ${state.productionLaunchCommands.hosting}`);
     lines.push(`  Database backup/restore:  ${state.productionLaunchCommands.database}`);
     lines.push(`  Supabase storage:  ${state.productionLaunchCommands.supabase}`);

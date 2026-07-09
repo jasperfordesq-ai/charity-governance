@@ -30,6 +30,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > variables for `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SUPABASE_URL` before
 > `gh workflow run release-images.yml --ref master` can produce the
 > `release-image-digests.env` artifact used by deploy preflight.
+> If GitHub `production` is used as the deployment secret store, run
+> `npm run check:production:github-secrets -- --environment=production` to
+> prove the required secret names exist without reading their values.
 > The JSON output also keeps the full source-grouped production value checklist
 > visible after `.env.production` exists, while separately listing only the
 > currently missing values. This is the handoff order for filling the real secret store.
@@ -109,7 +112,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 
 - [x] `npm run lint`
 - [x] `npm run test`
-- [x] `npm run test:production-check` - passed locally on 2026-07-09 with 333/333 production-tooling checks.
+- [x] `npm run test:production-check` - passed locally on 2026-07-09 with 338/338 production-tooling checks.
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`

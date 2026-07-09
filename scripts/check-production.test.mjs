@@ -1705,7 +1705,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /333\/333 production-tooling checks/);
+  assert.match(productionTodo, /338\/338 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /333\/333 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /332\/332 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /331\/331 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /330\/330 production-tooling checks/);
@@ -1747,12 +1748,15 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /releaseGate\.github-environment/);
   assert.match(handoff, /releaseGate\.deploy-preflight/);
   assert.match(handoff, /GitHub production environment/);
+  assert.match(handoff, /check:production:github-secrets -- --environment=production/);
+  assert.match(handoff, /required GitHub `production` secret names without reading secret/);
   assert.match(handoff, /Re-run launch status/);
   assert.match(handoff, new RegExp(`commit \`${escapeRegExp(selectedGateCommit)}\``));
   assert.match(handoff, /isolated restore target/);
   assert.match(handoff, /non-production restore target/);
   assert.match(handoff, /production project was not overwritten/);
-  assert.match(handoff, /333\/333 production-tooling checks/);
+  assert.match(handoff, /338\/338 production-tooling checks/);
+  assert.doesNotMatch(handoff, /333\/333 production-tooling checks/);
   assert.doesNotMatch(handoff, /332\/332 production-tooling checks/);
   assert.doesNotMatch(handoff, /331\/331 production-tooling checks/);
   assert.match(handoff, /`npm run release:ready`/);
@@ -2351,6 +2355,8 @@ test('production operations docs explain the compose runtime web public origins'
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_API_URL`/);
   assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_SUPABASE_URL`/);
+  assert.match(launchChecklist, /npm run check:production:github-secrets -- --environment=production/);
+  assert.match(launchChecklist, /required production secret names exist without reading secret values/);
 });
 
 test('production runbook documents deployed browser QA evidence commands', () => {
@@ -2449,7 +2455,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 338\/338/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 332\/332/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 331\/331/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 330\/330/);
@@ -2499,6 +2506,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
   assert.match(launchGuide, /Current known GitHub environment blocker/);
   assert.match(launchGuide, /check:production:github-env -- --environment=production/);
+  assert.match(launchGuide, /check:production:github-secrets -- --environment=production/);
+  assert.match(launchGuide, /required production secret names exist without reading or\s+printing secret values/);
   assert.match(launchGuide, /NEXT_PUBLIC_SUPABASE_URL` is still missing/);
   assert.match(launchGuide, /Do not run\s+`release-images\.yml` until the real Supabase project origin is configured/);
   assert.match(launchGuide, /release-image-digests\.env/);
@@ -2730,12 +2739,14 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-hosting.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-observability.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-database.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-github-secrets.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'smoke-production-deploy.mjs')));
   assert.equal(packageJson.scripts['check:production:database'], 'node scripts/check-production-database.mjs');
   assert.equal(packageJson.scripts['check:production:observability'], 'node scripts/check-production-observability.mjs');
   assert.equal(packageJson.scripts['check:production:hosting'], 'node scripts/check-production-hosting.mjs');
   assert.equal(packageJson.scripts['check:production:providers'], 'node scripts/check-production-providers.mjs');
   assert.equal(packageJson.scripts['check:production:supabase'], 'node scripts/check-production-supabase.mjs');
+  assert.equal(packageJson.scripts['check:production:github-secrets'], 'node scripts/check-production-github-secrets.mjs');
   assert.equal(packageJson.scripts['check:production:evidence'], 'node scripts/production-launch-evidence.mjs');
   assert.equal(packageJson.scripts['check:production:evidence:init'], 'node scripts/init-production-launch-evidence.mjs');
   assert.equal(packageJson.scripts['check:production:evidence:status'], 'node scripts/production-launch-evidence-status.mjs');
@@ -2751,6 +2762,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence-status\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-release-run-evidence\.test\.mjs/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-github-secrets\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-supabase\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-providers\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-hosting\.test\.mjs/);
@@ -2789,12 +2801,15 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/check-production-hosting.mjs'), /runProductionHostingCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-observability.mjs'), /runProductionObservabilityCheckFromArgs/);
   assert.match(readRepoFile('scripts/check-production-database.mjs'), /runProductionDatabaseCheckFromArgs/);
+  assert.match(readRepoFile('scripts/check-production-github-secrets.mjs'), /runProductionGitHubSecretsCheckFromArgs/);
 
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
+  assert.match(runbook, /npm run check:production:github-secrets -- --environment=production/);
+  assert.match(runbook, /lists secret metadata only; it does not read secret values/);
   assert.doesNotMatch(runbook, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:deployed:responsive:cross-browser/);
