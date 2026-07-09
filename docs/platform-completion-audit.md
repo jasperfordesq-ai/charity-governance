@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `d1d319c`
+Working-tree base commit when generated: `25e57a8`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -18,7 +18,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | API/backend | 12 route groups scanned with route-local guard heuristics and 45 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 19 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-08; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 16 web unit test files, 45 API test files, 11 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 16 web unit test files, 45 API test files, 12 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -273,7 +273,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit d1d319c; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 25e57a8; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 322/322 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -463,9 +463,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Repository State For Launch Evidence
 
 - Branch: `master`
-- Head: `d1d319c00564481f316edc8e68b41f0d31d7f8f6`
+- Head: `25e57a8695bfc5fbd0a880463132f474ef65b5a8`
 - Upstream: `origin/master`
-- Upstream head: `d1d319c00564481f316edc8e68b41f0d31d7f8f6`
+- Upstream head: `25e57a8695bfc5fbd0a880463132f474ef65b5a8`
 - Dirty worktree: `true`
 - Synced with upstream: `true`
 - Launch evidence risk: `dirty_worktree`

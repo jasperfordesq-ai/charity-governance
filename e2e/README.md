@@ -15,6 +15,7 @@ monorepo, so Playwright never enters the API/web production installs or images.
 | `tests/auth.spec.ts` | register -> email-verify (real `/verify-email` flow) -> log in -> dashboard; forgot-password -> reset-password -> log in with the new password; plus invalid verification/reset-token cases |
 | `tests/compliance.spec.ts` | record a governance standard's status (auto-saved) -> board sign-off on the Export page; pending standard edits trigger the in-app navigation confirmation |
 | `tests/documents.spec.ts` | upload a document -> download it and verify the bytes |
+| `tests/dashboard-navigation.spec.ts` | mobile dashboard sidebar opens, moves focus into navigation, closes with Escape, restores focus, and removes closed links from tab order |
 | `tests/deadlines-team.spec.ts` | create a deadline -> mark it complete; team invite -> accept -> join the workspace |
 | `tests/billing.spec.ts` | billing page renders tier + trial + Complete-plan feature gating (Stripe test mode) |
 | `tests/tenant-isolation.spec.ts` | an unknown/foreign principle id renders a clean not-found, never leaked content |
