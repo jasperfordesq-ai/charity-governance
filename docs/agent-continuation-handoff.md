@@ -22,6 +22,13 @@ npm run launch:status -- --json
 npm run audit:platform:check
 ```
 
+Local personal-use safety before heavy work:
+
+- `npm run personal:ready` is the non-destructive local confidence gate for one-person use on this computer without Stripe, payments, public hosting, or production providers.
+- It checks local Docker boot/login/document storage, PostgreSQL backup and restore verification, local document-storage backup, and a personal browser smoke with billing safely disabled when Stripe is absent.
+- Do not run the default full E2E suite against a personal database you care about; it can reset tenant/app tables.
+- This local safety gate does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
+
 Known current state from `npm run launch:status -- --json` on 2026-07-09:
 
 - Phase: `ENV_INCOMPLETE`

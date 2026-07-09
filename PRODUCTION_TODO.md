@@ -5,6 +5,10 @@ Status marks reflect completed repository hardening work. Open items require rea
 > **New here / not sure what to do next?** Read [`docs/LAUNCH-GUIDE.md`](docs/LAUNCH-GUIDE.md)
 > first - it explains, in plain English, what is already done and the exact
 > human steps (accounts, hosting, legal, security review) that remain.
+> For one-person local use without Stripe, payments, public hosting, or
+> production providers, run `npm run personal:ready`. It is the non-destructive
+> local confidence gate. Do not run the default full E2E suite against a
+> personal database you care about because it can reset tenant/app tables.
 
 > **Current local status checked 2026-07-09:** `npm run launch:status -- --json`
 > still reports `ENV_INCOMPLETE`: 9 of 28 production values are complete and 19

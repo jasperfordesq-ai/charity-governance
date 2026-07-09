@@ -26,6 +26,25 @@ const EVIDENCE_STATUS_JSON_COMMAND = `npm run check:production:evidence:status -
 const EVIDENCE_VALIDATION_COMMAND = `npm run check:production:evidence -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 const EVIDENCE_VALIDATION_JSON_COMMAND = `npm run check:production:evidence -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 
+const LOCAL_PERSONAL_READINESS = Object.freeze({
+  command: 'npm run personal:ready',
+  docs: 'docs/personal-local-use.md',
+  purpose:
+    'Non-destructive local confidence gate for one-person use without Stripe, Supabase, Resend, public hosting, or payments.',
+  proves: Object.freeze([
+    'local Docker API/web/PostgreSQL boot over loopback',
+    'seeded local owner sign-in',
+    'local document storage upload/download',
+    'PostgreSQL backup and restore verification',
+    'local document storage backup copy',
+    'core personal-use browser smoke with billing safely disabled when Stripe is absent',
+  ]),
+  warning:
+    'Do not run the default full E2E suite against a personal database you care about; it can reset tenant/app tables.',
+  notLaunchEvidence:
+    'This protects local personal use only. It does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.',
+});
+
 const DEPLOYED_BROWSER_QA = Object.freeze({
   requiredEnvironment: Object.freeze([
     'E2E_DEPLOYED_QA=true',
@@ -508,6 +527,7 @@ export function assessLaunchState(state) {
       repositoryState: state.repositoryState ?? null,
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
+      localPersonalReadiness: LOCAL_PERSONAL_READINESS,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
       finalLaunchEvidenceWorkflow: FINAL_LAUNCH_EVIDENCE_WORKFLOW,
       releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
@@ -535,6 +555,7 @@ export function assessLaunchState(state) {
       repositoryState: state.repositoryState ?? null,
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
+      localPersonalReadiness: LOCAL_PERSONAL_READINESS,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
       finalLaunchEvidenceWorkflow: FINAL_LAUNCH_EVIDENCE_WORKFLOW,
       releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
@@ -559,6 +580,7 @@ export function assessLaunchState(state) {
     repositoryState: state.repositoryState ?? null,
     evidenceLedger,
     deployedBrowserQa: DEPLOYED_BROWSER_QA,
+    localPersonalReadiness: LOCAL_PERSONAL_READINESS,
     productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
     finalLaunchEvidenceWorkflow: FINAL_LAUNCH_EVIDENCE_WORKFLOW,
     releaseImagePromotion: RELEASE_IMAGE_PROMOTION,
@@ -591,6 +613,7 @@ export function renderLaunchStatusJson(state) {
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
       deployedBrowserQa: state.deployedBrowserQa,
+      localPersonalReadiness: state.localPersonalReadiness,
       productionLaunchCommands: state.productionLaunchCommands,
       finalLaunchEvidenceWorkflow: state.finalLaunchEvidenceWorkflow,
       releaseImagePromotion: state.releaseImagePromotion,
@@ -667,6 +690,16 @@ export function renderLaunchStatusText(state) {
   }
   lines.push('Next:');
   for (const action of state.nextActions) lines.push(`  ${action}`);
+  if (state.localPersonalReadiness) {
+    lines.push('', 'Local personal data safety:');
+    lines.push(`  Command:  ${state.localPersonalReadiness.command}`);
+    lines.push(`  Docs:  ${state.localPersonalReadiness.docs}`);
+    lines.push(`  Purpose:  ${state.localPersonalReadiness.purpose}`);
+    lines.push('  Proves:');
+    for (const item of state.localPersonalReadiness.proves) lines.push(`    - ${item}`);
+    lines.push(`  Warning:  ${state.localPersonalReadiness.warning}`);
+    lines.push(`  Launch evidence limit:  ${state.localPersonalReadiness.notLaunchEvidence}`);
+  }
   lines.push('', 'Evidence ledger:', `  ${state.evidenceLedger.headline}`);
   if (state.evidenceLedger.exists && typeof state.evidenceLedger.approvedForLaunch === 'boolean') {
     lines.push(`  approvedForLaunch: ${state.evidenceLedger.approvedForLaunch ? 'true' : 'false'}`);

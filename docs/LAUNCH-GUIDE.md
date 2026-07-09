@@ -8,6 +8,10 @@
 > For CI, handoff notes, or an operations dashboard, run
 > `npm run launch:status -- --json` to get the same missing-value and evidence
 > ledger state as machine-readable JSON without exposing secret values.
+> For one-person local use on this computer, run `npm run personal:ready`.
+> That is a non-destructive local confidence gate; it does not replace deployed
+> production evidence, and the default full E2E suite must not be run against a
+> personal database you care about because it can reset tenant/app tables.
 
 ---
 

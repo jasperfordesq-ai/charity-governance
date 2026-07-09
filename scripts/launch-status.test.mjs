@@ -110,6 +110,21 @@ function assertDeployedBrowserQaCommands(commands) {
   assert.match(commands.evidenceTarget, /browserQa\.checks/);
 }
 
+function assertLocalPersonalReadiness(readiness) {
+  assert.equal(readiness.command, 'npm run personal:ready');
+  assert.equal(readiness.docs, 'docs/personal-local-use.md');
+  assert.match(readiness.purpose, /Non-destructive local confidence gate/);
+  assert.match(readiness.purpose, /without Stripe, Supabase, Resend, public hosting, or payments/);
+  assert.ok(readiness.proves.includes('seeded local owner sign-in'));
+  assert.ok(readiness.proves.includes('PostgreSQL backup and restore verification'));
+  assert.ok(readiness.proves.includes('local document storage backup copy'));
+  assert.ok(readiness.proves.some((item) => /billing safely disabled/.test(item)));
+  assert.match(readiness.warning, /Do not run the default full E2E suite/);
+  assert.match(readiness.warning, /reset tenant\/app tables/);
+  assert.match(readiness.notLaunchEvidence, /does not replace production provider/);
+  assert.match(readiness.notLaunchEvidence, /final signoff evidence/);
+}
+
 function assertProductionLaunchCommands(commands) {
   assert.equal(commands.corePreflight, 'npm run check:production -- --production-env-file=.env.production');
   assert.equal(commands.githubEnvironment, 'npm run check:production:github-env -- --environment=production');
@@ -264,6 +279,7 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   assertFinalLaunchEvidenceWorkflow(payload.finalLaunchEvidenceWorkflow);
   assertReleaseImagePromotion(payload.releaseImagePromotion);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
+  assertLocalPersonalReadiness(payload.localPersonalReadiness);
   assertFinalSignoffRequirements(payload.finalSignoffRequirements);
   assertExternalLaunchEvidenceGates(s);
 });
@@ -553,6 +569,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assertFinalLaunchEvidenceWorkflow(payload.finalLaunchEvidenceWorkflow);
   assertReleaseImagePromotion(payload.releaseImagePromotion);
   assertDeployedBrowserQaCommands(payload.deployedBrowserQa);
+  assertLocalPersonalReadiness(payload.localPersonalReadiness);
   assertFinalSignoffRequirements(payload.finalSignoffRequirements);
   assert.ok(payload.nextActions.some((action) => action.includes('check:production')));
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
@@ -584,6 +601,9 @@ test('launch status exposes repository state so release evidence is tied to a cl
 
   assert.deepEqual(payload.repositoryState, repositoryState);
   assert.match(text, /Repository state:/);
+  assert.match(text, /Local personal data safety:/);
+  assert.match(text, /npm run personal:ready/);
+  assert.match(text, /Do not run the default full E2E suite/);
   assert.match(text, /branch: master/);
   assert.match(text, /head: dddddddddddddddddddddddddddddddddddddddd/);
   assert.match(text, /upstream: origin\/master/);

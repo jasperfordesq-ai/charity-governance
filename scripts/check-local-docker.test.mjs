@@ -622,6 +622,11 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditLedger, /dashboard mobile 12\/12/);
   assert.match(auditLedger, /public\/auth and dashboard routes[\s\S]*light and dark themes/);
   assert.match(auditLedger, /CI local Docker smoke passed on 2026-07-09/);
+  assert.match(auditGenerator, /Local Personal Data Safety/);
+  assert.match(auditLedger, /Local Personal Data Safety/);
+  assert.match(auditLedger, /npm run personal:ready/);
+  assert.match(auditLedger, /default full E2E suite can reset tenant\/app tables/);
+  assert.match(auditLedger, /does not replace production provider/);
   assert.doesNotMatch(auditLedger, /remains an open local QA blocker/);
   assert.match(auditLedger, /deployed HTTPS QA/);
 });

@@ -251,6 +251,7 @@ const fixedInThisAuditBranch = [
   'The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.',
   'The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.',
   'The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.',
+  'The personal local readiness gate now gives operators a non-destructive local confidence command for one-person use without Stripe, payments, or production providers, while warning that the default full E2E suite can reset tenant/app tables.',
   'Local-driver document downloads now require the requested storage path to belong to a live document row for the caller organisation before any file read occurs.',
   'The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.',
   'The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.',
@@ -353,6 +354,7 @@ function localVerificationEvidence() {
     '`node --check scripts\\launch-status.mjs scripts\\production-launch-evidence-status.mjs`, focused launch-status/evidence-status tests, and `npm run test:production-check` passed locally after surfacing launch-evidence status commands in launch status.',
     '`npm run test:local-docker:smoke` passed locally on 2026-07-08 after stabilizing the local Docker QA stack, covering API health/readiness, registration, local admin document storage, and the web root over loopback.',
     'CI local Docker smoke passed on 2026-07-09 at commit 91e26b9, covering API health/readiness, registration, local admin document storage, and the web root over loopback before production Docker image gates.',
+    '`npm run personal:ready` passed locally on 2026-07-09, covering local Docker smoke, PostgreSQL backup, restore verification, local document storage backup, and a non-destructive personal browser smoke with billing disabled when Stripe is absent.',
     'This is local Docker evidence only; deployed HTTPS QA with `E2E_DEPLOYED_QA=true` remains a launch gate.',
   ];
 }
@@ -581,6 +583,7 @@ function readLaunchSummary() {
     launchProgress: state.launchProgress,
     evidenceLedger: state.evidenceLedger,
     deployedBrowserQa: state.deployedBrowserQa,
+    localPersonalReadiness: state.localPersonalReadiness,
     productionLaunchCommands: state.productionLaunchCommands,
     finalLaunchEvidenceWorkflow: state.finalLaunchEvidenceWorkflow,
     releaseImagePromotion: state.releaseImagePromotion,
@@ -719,6 +722,16 @@ function render() {
     md += `- Strict validation JSON: \`${launch.evidenceLedger.jsonValidationCommand}\`\n`;
   }
   md += `\n`;
+  if (launch.localPersonalReadiness) {
+    md += `### Local Personal Data Safety\n\n`;
+    md += `- Command: \`${launch.localPersonalReadiness.command}\`\n`;
+    md += `- Docs: \`${launch.localPersonalReadiness.docs}\`\n`;
+    md += `- Purpose: ${launch.localPersonalReadiness.purpose}\n`;
+    md += `- Proves:\n`;
+    for (const item of launch.localPersonalReadiness.proves) md += `  - ${item}\n`;
+    md += `- Warning: ${launch.localPersonalReadiness.warning}\n`;
+    md += `- Launch evidence limit: ${launch.localPersonalReadiness.notLaunchEvidence}\n\n`;
+  }
   if (launch.deployedBrowserQa) {
     md += `### Deployed Browser QA Commands\n\n`;
     md += `- Required environment:\n`;
