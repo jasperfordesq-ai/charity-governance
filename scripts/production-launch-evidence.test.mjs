@@ -1959,6 +1959,17 @@ test('production launch evidence template covers every required area and final s
       JSON.stringify(template.areas.releaseGate.checks['deploy-smoke'].requiredEvidenceHints),
       /smoke:production-deploy/,
     );
+    assert.deepEqual(
+      template.areas.releaseGate.checks['deploy-production'].requiredEvidenceHints,
+      [
+        'npm run deploy:production -- --production-env-file=.env.production',
+        'compose.production.yml',
+        'compose.production-tls.yml or --no-tls-proxy with managed TLS certificate evidence',
+        'release-image-digests.env',
+        'digest-pinned images',
+        'post-deploy smoke',
+      ],
+    );
     assert.ok(
       template.areas.supabaseStorage.checks['supabase-backups-enabled'].requiredEvidenceHints.includes(
         'Supabase backup policy',

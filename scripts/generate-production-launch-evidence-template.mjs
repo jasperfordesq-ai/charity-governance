@@ -17,7 +17,14 @@ const evidenceHintsByCheck = new Map([
   ['releaseGate.audit', ['npm audit --omit=dev --audit-level=moderate', 'no moderate-or-higher production vulnerabilities']],
   ['releaseGate.check-production', ['npm run check:production -- --production-env-file=.env.production', 'Production configuration check passed']],
   ['releaseGate.deploy-preflight', ['npm run deploy:preflight -- --production-env-file=.env.production', 'digest-pinned API, web, and migration images']],
-  ['releaseGate.deploy-production', ['npm run deploy:production -- --production-env-file=.env.production', 'compose.production.yml', 'compose.production-tls.yml', 'post-deploy smoke']],
+  ['releaseGate.deploy-production', [
+    'npm run deploy:production -- --production-env-file=.env.production',
+    'compose.production.yml',
+    'compose.production-tls.yml or --no-tls-proxy with managed TLS certificate evidence',
+    'release-image-digests.env',
+    'digest-pinned images',
+    'post-deploy smoke',
+  ]],
   ['releaseGate.deploy-smoke', [
     'npm run deploy:production -- --production-env-file=.env.production',
     'node scripts/smoke-production-deploy.mjs --production-env-file .env.production',
