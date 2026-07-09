@@ -50,6 +50,8 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] The release workflow evidence identifies `.github/workflows/release-images.yml` and a release ref of `refs/heads/master` or `refs/tags/v*`.
 - [ ] `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` verified the GitHub Actions run metadata and `release-image-digests` artifact through the GitHub API.
 - [ ] `npm run check:production:release-run -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` was captured when machine-readable release workflow identity, artifact, release binding, and issue details were needed for operator handoff automation.
+- [ ] `npm run prepare:production:evidence-upload -- --json | gh workflow run upload-production-launch-evidence.yml --ref master --json` uploaded the completed non-secret evidence JSON as a protected `production-launch-evidence` artifact without committing it to git.
+- [ ] The successful `upload-production-launch-evidence.yml` run id was used as `evidence_artifact_run_id` for `.github/workflows/production-launch-evidence.yml`.
 - [ ] The protected `production-launch-evidence-validation` artifact uploads even on validation failure and contains `production-launch-evidence-validation.log`, `production-release-run-evidence.json`, and `production-launch-evidence-validation.json`.
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 - [ ] The release manifest's web image build origins match the promoted production public origins.

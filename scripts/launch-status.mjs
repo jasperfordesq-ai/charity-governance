@@ -93,6 +93,7 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
 });
 
 const FINAL_LAUNCH_EVIDENCE_WORKFLOW = Object.freeze({
+  uploadWorkflowFile: '.github/workflows/upload-production-launch-evidence.yml',
   workflowFile: '.github/workflows/production-launch-evidence.yml',
   githubEnvironment: 'production',
   requiredInput: 'evidence_artifact_run_id',
@@ -104,6 +105,10 @@ const FINAL_LAUNCH_EVIDENCE_WORKFLOW = Object.freeze({
     'production-release-run-evidence.json',
     'production-launch-evidence-validation.json',
   ]),
+  prepareUploadCommand:
+    'npm run prepare:production:evidence-upload -- --json | gh workflow run upload-production-launch-evidence.yml --ref master --json',
+  uploadEvidenceTarget:
+    'Use the successful upload-production-launch-evidence.yml run id as evidence_artifact_run_id for the protected validation workflow.',
   runCommand:
     'gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json',
   evidenceTarget:
@@ -772,6 +777,7 @@ export function renderLaunchStatusText(state) {
   }
   if (state.finalLaunchEvidenceWorkflow) {
     lines.push('', 'Protected final launch evidence workflow:');
+    lines.push(`  Upload workflow file:  ${state.finalLaunchEvidenceWorkflow.uploadWorkflowFile}`);
     lines.push(`  Workflow file:  ${state.finalLaunchEvidenceWorkflow.workflowFile}`);
     lines.push(`  GitHub environment:  ${state.finalLaunchEvidenceWorkflow.githubEnvironment}`);
     lines.push(`  Required input:  ${state.finalLaunchEvidenceWorkflow.requiredInput}`);
@@ -780,6 +786,8 @@ export function renderLaunchStatusText(state) {
     lines.push(`  Validation artifact:  ${state.finalLaunchEvidenceWorkflow.validationArtifactName}`);
     lines.push('  Validation artifact files:');
     for (const artifactFile of state.finalLaunchEvidenceWorkflow.validationArtifactFiles) lines.push(`    - ${artifactFile}`);
+    lines.push(`  Prepare/upload:  ${state.finalLaunchEvidenceWorkflow.prepareUploadCommand}`);
+    lines.push(`  Upload evidence target:  ${state.finalLaunchEvidenceWorkflow.uploadEvidenceTarget}`);
     lines.push(`  Run:  ${state.finalLaunchEvidenceWorkflow.runCommand}`);
     lines.push(`  Evidence target:  ${state.finalLaunchEvidenceWorkflow.evidenceTarget}`);
   }

@@ -170,6 +170,7 @@ function assertProductionLaunchCommands(commands) {
 }
 
 function assertFinalLaunchEvidenceWorkflow(workflow) {
+  assert.equal(workflow.uploadWorkflowFile, '.github/workflows/upload-production-launch-evidence.yml');
   assert.equal(workflow.workflowFile, '.github/workflows/production-launch-evidence.yml');
   assert.equal(workflow.githubEnvironment, 'production');
   assert.equal(workflow.requiredInput, 'evidence_artifact_run_id');
@@ -181,6 +182,12 @@ function assertFinalLaunchEvidenceWorkflow(workflow) {
     'production-release-run-evidence.json',
     'production-launch-evidence-validation.json',
   ]);
+  assert.equal(
+    workflow.prepareUploadCommand,
+    'npm run prepare:production:evidence-upload -- --json | gh workflow run upload-production-launch-evidence.yml --ref master --json',
+  );
+  assert.match(workflow.uploadEvidenceTarget, /upload-production-launch-evidence\.yml run id/);
+  assert.match(workflow.uploadEvidenceTarget, /evidence_artifact_run_id/);
   assert.equal(
     workflow.runCommand,
     'gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json',
@@ -644,6 +651,9 @@ test('launch status exposes repository state so release evidence is tied to a cl
   assert.match(text, /Validation artifact files:/);
   assert.match(text, /production-release-run-evidence\.json/);
   assert.match(text, /production-launch-evidence-validation\.json/);
+  assert.match(text, /Upload workflow file:  \.github\/workflows\/upload-production-launch-evidence\.yml/);
+  assert.match(text, /Prepare\/upload:  npm run prepare:production:evidence-upload -- --json \| gh workflow run upload-production-launch-evidence\.yml --ref master --json/);
+  assert.match(text, /Upload evidence target:  Use the successful upload-production-launch-evidence\.yml run id as evidence_artifact_run_id/);
   assert.match(text, /Preflight GitHub environment JSON:  npm run check:production:github-env -- --environment=production --json/);
   assert.match(text, /branch: master/);
   assert.match(text, /head: dddddddddddddddddddddddddddddddddddddddd/);

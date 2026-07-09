@@ -32,6 +32,7 @@
     "check:production:evidence:init": "node scripts/init-production-launch-evidence.mjs",
     "check:production:evidence:status": "node scripts/production-launch-evidence-status.mjs",
     "check:production:release-run": "node scripts/production-release-run-evidence.mjs",
+    "prepare:production:evidence-upload": "node scripts/prepare-production-launch-evidence-upload.mjs",
     "check:production:github-env": "node scripts/check-production-github-env.mjs",
     "check:production:github-secrets": "node scripts/check-production-github-secrets.mjs",
     "check:production:supabase": "node scripts/check-production-supabase.mjs",

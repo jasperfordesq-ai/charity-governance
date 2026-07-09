@@ -276,7 +276,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 ## Local Verification Evidence
 
 - Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This may be stale for the current checkout; rerun the selected gate on the final release ref and verify `npm run launch:status -- --json` reports the intended `repositoryState.headSha` before treating it as current release evidence.
-- `npm run test:production-check` passed locally on 2026-07-09 with 344/344 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, and CI/release workflow guards.
+- `npm run test:production-check` passed locally on 2026-07-09 with 345/345 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.
@@ -284,7 +284,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Local responsive browser QA revalidated cleanly on 2026-07-09 with focused `npm run test:e2e:responsive:*` chunk commands: public desktop 14/14, public mobile 14/14, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-09 with 26/26 accessibility checks across launch-critical public/auth and dashboard routes in light and dark themes.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, launch-evidence hardening, GitHub secret-store checker hardening, and release-ready stack probe/repo-scoped child-process cleanup/no-shell gate execution hardening; production-tooling checks passed 344/344.
+- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, launch-evidence hardening, GitHub secret-store checker hardening, and release-ready stack probe/repo-scoped child-process cleanup/no-shell gate execution hardening; production-tooling checks passed 345/345.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.
@@ -449,6 +449,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Protected Final Launch Evidence Workflow
 
+- Upload workflow file: `.github/workflows/upload-production-launch-evidence.yml`
 - Workflow file: `.github/workflows/production-launch-evidence.yml`
 - GitHub environment: `production`
 - Required input: `evidence_artifact_run_id`
@@ -459,6 +460,8 @@ Local-state note: This generated section reflects the local non-committed `.env.
   - `production-launch-evidence-validation.log`
   - `production-release-run-evidence.json`
   - `production-launch-evidence-validation.json`
+- Prepare/upload: `npm run prepare:production:evidence-upload -- --json | gh workflow run upload-production-launch-evidence.yml --ref master --json`
+- Upload evidence target: Use the successful upload-production-launch-evidence.yml run id as evidence_artifact_run_id for the protected validation workflow.
 - Run: `gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json`
 - Evidence target: Record the protected workflow run URL and production-launch-evidence-validation artifact, including pass/fail command statuses, the text log, and JSON validation files, in the launch evidence ledger.
 

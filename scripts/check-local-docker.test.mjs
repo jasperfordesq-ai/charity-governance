@@ -590,7 +590,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/87 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/87 evidence checks/);
-  assert.match(auditLedger, /344\/344 production-tooling checks/);
+  assert.match(auditLedger, /345\/345 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /340\/340 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /338\/338 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /333\/333 production-tooling checks/);
@@ -669,6 +669,9 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /Local Production Environment State/);
   assert.match(auditLedger, /Release Image Promotion/);
   assert.match(auditLedger, /Protected Final Launch Evidence Workflow/);
+  assert.match(auditLedger, /Upload workflow file: `\.github\/workflows\/upload-production-launch-evidence\.yml`/);
+  assert.match(auditLedger, /Prepare\/upload: `npm run prepare:production:evidence-upload -- --json \| gh workflow run upload-production-launch-evidence\.yml --ref master --json`/);
+  assert.match(auditLedger, /Upload evidence target: Use the successful upload-production-launch-evidence\.yml run id as evidence_artifact_run_id/);
   assert.match(auditLedger, /GitHub production environment: `npm run check:production:github-env -- --environment=production`/);
   assert.match(auditLedger, /GitHub production environment JSON: `npm run check:production:github-env -- --environment=production --json`/);
   assert.match(auditLedger, /GitHub production secret store: `npm run check:production:github-secrets -- --environment=production`/);

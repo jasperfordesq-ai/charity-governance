@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { gunzipSync } from 'node:zlib';
 import { runProductionPreflightFromArgs } from './check-production.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -1705,7 +1707,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /344\/344 production-tooling checks/);
+  assert.match(productionTodo, /345\/345 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /340\/340 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /338\/338 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /333\/333 production-tooling checks/);
@@ -1753,7 +1755,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /344\s*\/\s*344`? checks/);
+  assert.match(handoff, /345\s*\/\s*345`? checks/);
   assert.match(handoff, /Older `338 \/ 338` and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
   assert.match(handoff, /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/);
   assert.match(handoff, /still fails with six[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,240}`ERROR_ALERT_WEBHOOK_URL`/);
@@ -2463,7 +2465,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 344\/344/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 345\/345/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 340\/340/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 338\/338/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
@@ -2762,6 +2764,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.equal(packageJson.scripts['check:production:evidence:init'], 'node scripts/init-production-launch-evidence.mjs');
   assert.equal(packageJson.scripts['check:production:evidence:status'], 'node scripts/production-launch-evidence-status.mjs');
   assert.equal(packageJson.scripts['check:production:release-run'], 'node scripts/production-release-run-evidence.mjs');
+  assert.equal(packageJson.scripts['prepare:production:evidence-upload'], 'node scripts/prepare-production-launch-evidence-upload.mjs');
   assert.equal(packageJson.scripts['check:production:evidence:template'], 'node scripts/generate-production-launch-evidence-template.mjs');
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.equal(packageJson.scripts['deploy:production'], 'node scripts/production-compose-deploy.mjs');
@@ -3716,6 +3719,76 @@ test('manual production launch evidence workflow validates final signoff evidenc
   assert.match(runbook, /production-launch-evidence-validation/);
   assert.match(runbook, /production-release-run-evidence\.json/);
   assert.match(runbook, /production-launch-evidence-validation\.json/);
+});
+
+test('protected production launch evidence upload workflow creates the validator source artifact', () => {
+  const workflow = readRepoFile('.github/workflows/upload-production-launch-evidence.yml');
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
+  const packageJson = JSON.parse(readRepoFile('package.json'));
+  const helper = readRepoFile('scripts/prepare-production-launch-evidence-upload.mjs');
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-evidence-upload-'));
+  const evidencePath = join(tempDir, 'production-launch-evidence.json');
+  const evidence = {
+    version: 1,
+    approvedForLaunch: false,
+    release: {
+      commitSha: 'a'.repeat(40),
+      workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+      workflowFile: '.github/workflows/release-images.yml',
+      gitRef: 'refs/heads/master',
+    },
+  };
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+
+  try {
+    const result = spawnSync(process.execPath, ['scripts/prepare-production-launch-evidence-upload.mjs', '--json', '--evidence-file', evidencePath], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const inputs = JSON.parse(result.stdout);
+    const original = readFileSync(evidencePath);
+    assert.equal(inputs.artifact_name, 'production-launch-evidence');
+    assert.equal(inputs.evidence_file_name, 'production-launch-evidence.json');
+    assert.equal(inputs.evidence_sha256, createHash('sha256').update(original).digest('hex'));
+    assert.deepEqual(JSON.parse(gunzipSync(Buffer.from(inputs.evidence_json_gzip_base64, 'base64')).toString('utf8')), evidence);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+
+  assert.equal(packageJson.scripts['prepare:production:evidence-upload'], 'node scripts/prepare-production-launch-evidence-upload.mjs');
+  assert.match(helper, /gzipSync/);
+  assert.match(helper, /createHash\('sha256'\)/);
+  assert.match(helper, /workflow_dispatch inputs may reject very large evidence ledgers/);
+  assert.match(helper, /gh workflow run upload-production-launch-evidence\.yml --ref master --json/);
+  assert.match(workflow, /name:\s+Upload Production Launch Evidence/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /evidence_json_gzip_base64:/);
+  assert.match(workflow, /evidence_sha256:/);
+  assert.match(workflow, /artifact_name:/);
+  assert.match(workflow, /default:\s+production-launch-evidence/);
+  assert.match(workflow, /evidence_file_name:/);
+  assert.match(workflow, /default:\s+production-launch-evidence\.json/);
+  assert.match(workflow, /^permissions:\s*\n\s+contents:\s+read\s*$/m);
+  assert.match(workflow, /environment:\s+production/);
+  assert.match(workflow, /uses:\s+actions\/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e\s+# v6/);
+  assert.match(workflow, /base64 --decode \| gzip -d > "\$\{evidence_path\}"/);
+  assert.match(workflow, /sha256sum "\$\{evidence_path\}"/);
+  assert.match(workflow, /Evidence SHA-256 mismatch; refusing to upload artifact/);
+  assert.match(workflow, /production launch evidence must be a JSON object/);
+  assert.match(workflow, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);
+  assert.match(workflow, /name:\s+\$\{\{\s*inputs\.artifact_name\s*\}\}/);
+  assert.match(workflow, /path:\s+launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}/);
+  assert.match(workflow, /retention-days:\s+90/);
+  assert.match(runbook, /upload-production-launch-evidence\.yml/);
+  assert.match(runbook, /prepare:production:evidence-upload -- --json \| gh workflow run upload-production-launch-evidence\.yml --ref master --json/);
+  assert.match(runbook, /verifies the SHA-256/);
+  assert.match(runbook, /without committing it to git/);
+  assert.match(launchChecklist, /upload-production-launch-evidence\.yml/);
+  assert.match(launchChecklist, /without committing it to git/);
+  assert.match(launchChecklist, /evidence_artifact_run_id/);
 });
 
 test('CI builds API and web production Docker images', () => {
