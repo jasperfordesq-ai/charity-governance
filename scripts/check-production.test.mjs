@@ -1635,6 +1635,10 @@ test('release readiness child gates have finite process timeouts', () => {
   assert.match(releaseReady, /timeout: opts\.timeoutMs \?\? RELEASE_READY_GATE_TIMEOUT_MS/);
   assert.match(releaseReady, /res\.error\?\.code === 'ETIMEDOUT'/);
   assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);
+  assert.match(releaseReady, /function resolveGateCommand/);
+  assert.match(releaseReady, /process\.env\.npm_execpath/);
+  assert.match(releaseReady, /npx-cli\.js/);
+  assert.doesNotMatch(releaseReady, /shell:\s*true/);
   assert.match(releaseReady, /taskkill', \['\/PID', String\(pid\), '\/T', '\/F'\]/);
   assert.match(releaseReady, /Gate timed out after \$\{\(timeoutMs \/ 1000\)\.toFixed\(0\)\}s/);
   assert.match(releaseReady, /timeoutMs:\s*RELEASE_READY_E2E_TIMEOUT_MS/);

@@ -101,14 +101,34 @@ function cleanupRepoPlaywrightProcesses() {
   }
 }
 
+function packageManagerCli(name) {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath) {
+    return name === 'npx' ? join(dirname(npmExecPath), 'npx-cli.js') : npmExecPath;
+  }
+
+  return join(dirname(process.execPath), `node_modules/npm/bin/${name}-cli.js`);
+}
+
+function resolveGateCommand(cmd, cmdArgs) {
+  if (process.platform !== 'win32' || (cmd !== 'npm' && cmd !== 'npx')) {
+    return { cmd, cmdArgs };
+  }
+
+  return {
+    cmd: process.execPath,
+    cmdArgs: [packageManagerCli(cmd), ...cmdArgs],
+  };
+}
+
 function run(name, cmd, cmdArgs, opts = {}) {
   const started = Date.now();
   process.stdout.write(`\n-- ${name} --\n`);
   const timeoutMs = opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS;
-  const res = spawnSync(cmd, cmdArgs, {
+  const resolved = resolveGateCommand(cmd, cmdArgs);
+  const res = spawnSync(resolved.cmd, resolved.cmdArgs, {
     cwd: ROOT,
     stdio: 'inherit',
-    shell: true,
     timeout: opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS,
   });
   const ms = Date.now() - started;
