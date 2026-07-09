@@ -34,9 +34,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 - Latest verified pushed commit at the time of this handoff refresh:
-  `786d7ff6cdb3bedfe7af5a630dd3047bd44212ff`.
+  `a4c110fc0cbd6bbdd318cd5b94ef94207514e0f1`.
 - GitHub CI for that commit passed:
-  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29001831333`.
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29002966630`.
 - Fresh public DNS/HTTPS spot check on 2026-07-09 found both canonical
   production hosts unresolved from this workstation:
   `app.charitypilot.ie` and `api.charitypilot.ie`.
@@ -44,6 +44,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
   `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`, but
   `NEXT_PUBLIC_SUPABASE_URL` is still missing because the real Supabase project
   ref has not been provided.
+- `npm run check:production:github-env -- --environment=production` now verifies
+  the release-image GitHub environment without reading secret values; the latest
+  live run failed only because `NEXT_PUBLIC_SUPABASE_URL` is missing.
 - GitHub `production` environment secrets list is currently empty, so provider
   secrets still need to be configured outside git before release images or live
   deploy evidence can be completed.
