@@ -1649,7 +1649,10 @@ test('release readiness child gates clean up process trees after failed child ex
   assert.match(releaseReady, /if \(!ok && opts\.cleanupRepoPlaywrightProcessesOnFailure\)/);
   assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);
   assert.match(releaseReady, /cleanupRepoPlaywrightProcesses\(\)/);
-  assert.match(releaseReady, /npm-cli\.js\*run\*test:e2e/);
+  assert.doesNotMatch(releaseReady, /npm-cli\.js\*run\*test:e2e/);
+  assert.match(releaseReady, /\$repoMatchedProcessIds = @\(\)/);
+  assert.match(releaseReady, /ParentProcessId/);
+  assert.match(releaseReady, /New-Object System\.Collections\.Queue/);
   assert.match(releaseReady, /'test:e2e', '@playwright\\\\test', 'playwright\\\\lib\\\\worker\\\\workerProcessEntry'/);
 });
 
