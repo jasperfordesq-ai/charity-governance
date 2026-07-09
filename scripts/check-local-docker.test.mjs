@@ -777,6 +777,20 @@ test('platform audit check command is read-only for fresh-session baselines', ()
   assert.equal(readRepoFile('docs/platform-completion-audit.md'), auditBefore);
 });
 
+test('platform audit rejects unknown options without rewriting the ledger', () => {
+  const auditBefore = readRepoFile('docs/platform-completion-audit.md');
+
+  const result = spawnSync(process.execPath, ['scripts/platform-completion-audit.mjs', '--chekc'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Unknown option: --chekc/);
+  assert.match(result.stderr, /Usage: node scripts\/platform-completion-audit\.mjs \[--json\] \[--stdout\] \[--check\]/);
+  assert.equal(readRepoFile('docs/platform-completion-audit.md'), auditBefore);
+});
+
 test('platform audit JSON command is read-only and machine-readable', () => {
   const pkg = packageJson();
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');

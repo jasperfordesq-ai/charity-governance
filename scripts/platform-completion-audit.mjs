@@ -990,6 +990,14 @@ export function normaliseAuditForCheck(value) {
 
 function main() {
   const args = new Set(process.argv.slice(2));
+  const usageText = 'Usage: node scripts/platform-completion-audit.mjs [--json] [--stdout] [--check]';
+  for (const arg of args) {
+    if (!['--json', '--stdout', '--check'].includes(arg)) {
+      console.error(`Unknown option: ${arg}`);
+      console.error(usageText);
+      process.exit(2);
+    }
+  }
 
   if (args.has('--json')) {
     process.stdout.write(`${JSON.stringify(buildAuditPayload(), null, 2)}\n`);
