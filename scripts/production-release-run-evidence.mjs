@@ -11,11 +11,15 @@ const releaseWorkflowFile = '.github/workflows/release-images.yml';
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
 
 function usage() {
-  return 'Usage: node scripts/production-release-run-evidence.mjs --evidence-file <path>\n';
+  return 'Usage: node scripts/production-release-run-evidence.mjs [--json] --evidence-file <path>\n';
 }
 
 function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
+}
+
+function jsonResult(status, payload) {
+  return result(status, `${JSON.stringify(payload, null, 2)}\n`, '');
 }
 
 function redactReleaseRunTranscript(value) {
@@ -28,10 +32,15 @@ function redactReleaseRunTranscript(value) {
 function parseArgs(argv) {
   const options = {
     evidenceFile: defaultEvidenceFile,
+    json: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
     if (arg === '--evidence-file') {
       const value = argv[index + 1];
       if (!value) throw new Error('--evidence-file requires a value');
@@ -47,6 +56,10 @@ function parseArgs(argv) {
   }
 
   return options;
+}
+
+function argsWantJson(argv) {
+  return argv.includes('--json');
 }
 
 function isPlainObject(value) {
@@ -181,6 +194,54 @@ function releaseBindingSummary(release) {
     .map(([key, value]) => `${key}=${value}`);
 }
 
+function releaseBindingObject(release) {
+  const manifest = release?.imageDigestManifest ?? {};
+  return Object.fromEntries(
+    [
+      ['apiImage', manifest.apiImage],
+      ['webImage', manifest.webImage],
+      ['migrationImage', manifest.migrationImage],
+      ['webBuildNextPublicApiUrl', manifest.webBuildNextPublicApiUrl],
+      ['webBuildNextPublicSupabaseUrl', manifest.webBuildNextPublicSupabaseUrl],
+    ].filter(([, value]) => typeof value === 'string' && value.length > 0),
+  );
+}
+
+function releaseRunPayload({ ok, evidenceFile, runId = null, release = null, issues = [] }) {
+  return {
+    ok,
+    repository,
+    evidenceFile,
+    workflowRunId: runId,
+    workflowRunUrl: release?.workflowRunUrl ?? null,
+    workflowFile: release?.workflowFile ?? null,
+    commitSha: release?.commitSha ?? null,
+    gitRef: release?.gitRef ?? null,
+    artifactName: 'release-image-digests',
+    releaseBinding: releaseBindingObject(release),
+    issues: issues.map((issue) => redactReleaseRunTranscript(issue)),
+  };
+}
+
+function failedReleaseRunResult(options, status, issue, details = {}) {
+  const issues = Array.isArray(issue) ? issue : [issue];
+  if (options?.json) {
+    return jsonResult(status, releaseRunPayload({ ok: false, evidenceFile: options.evidenceFile, issues, ...details }));
+  }
+  if (issues.length === 1 && !details.asList) {
+    return result(status, '', `Production release run evidence failed: ${redactReleaseRunTranscript(issues[0])}\n`);
+  }
+  return result(
+    status,
+    '',
+    [
+      `Production release run evidence failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+      ...issues.map((entry) => `- ${redactReleaseRunTranscript(entry)}`),
+      '',
+    ].join('\n'),
+  );
+}
+
 function findEndOfCentralDirectory(zipBytes) {
   for (let offset = zipBytes.length - 22; offset >= 0; offset -= 1) {
     if (zipBytes.readUInt32LE(offset) === 0x06054b50) return offset;
@@ -301,33 +362,37 @@ export async function runProductionReleaseRunEvidenceFromArgs(
   try {
     options = parseArgs(args);
   } catch (error) {
+    if (argsWantJson(args)) {
+      return jsonResult(2, {
+        ok: false,
+        repository,
+        usage: usage().trim(),
+        issues: [redactReleaseRunTranscript(error.message)],
+      });
+    }
     return result(2, '', `${usage()}${error.message}\n`);
   }
 
   if (typeof fetchImpl !== 'function') {
-    return result(1, '', 'Production release run evidence failed: fetch is unavailable in this Node runtime.\n');
+    return failedReleaseRunResult(options, 1, 'fetch is unavailable in this Node runtime.');
   }
 
   const evidencePath = resolve(process.cwd(), options.evidenceFile);
   if (!existsSync(evidencePath)) {
-    return result(1, '', `Production release run evidence failed: evidence file not found: ${options.evidenceFile}\n`);
+    return failedReleaseRunResult(options, 1, `evidence file not found: ${options.evidenceFile}`);
   }
 
   let evidence;
   try {
     evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
   } catch (error) {
-    return result(1, '', `Production release run evidence failed: evidence file is not valid JSON. ${error.message}\n`);
+    return failedReleaseRunResult(options, 1, `evidence file is not valid JSON. ${error.message}`);
   }
 
   const issues = [];
   const runId = validateReleaseShape(evidence.release, issues);
   if (runId === null || issues.length > 0) {
-    return result(
-      1,
-      '',
-      [`Production release run evidence failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`, ...issues.map((issue) => `- ${issue}`), ''].join('\n'),
-    );
+    return failedReleaseRunResult(options, 1, issues, { runId, release: evidence.release, asList: true });
   }
 
   const headers = githubHeaders(processEnv);
@@ -339,7 +404,7 @@ export async function runProductionReleaseRunEvidenceFromArgs(
     validateWorkflowRun(workflowRun, evidence.release, issues);
     releaseDigestArtifact = validateArtifacts(artifacts, issues);
   } catch (error) {
-    return result(1, '', `Production release run evidence failed: ${redactReleaseRunTranscript(error.message)}\n`);
+    return failedReleaseRunResult(options, 1, error.message, { runId, release: evidence.release });
   }
 
   if (issues.length === 0 && releaseDigestArtifact) {
@@ -347,16 +412,21 @@ export async function runProductionReleaseRunEvidenceFromArgs(
       const artifactArchive = await fetchBytes(fetchImpl, releaseDigestArtifact.archive_download_url, headers, 'release-image-digests artifact');
       validateArtifactManifest(extractZipFile(artifactArchive, 'release-image-digests.env'), evidence.release, issues);
     } catch (error) {
-      return result(1, '', `Production release run evidence failed: ${redactReleaseRunTranscript(error.message)}\n`);
+      return failedReleaseRunResult(options, 1, error.message, { runId, release: evidence.release });
     }
   }
 
   if (issues.length > 0) {
-    return result(
-      1,
-      '',
-      [`Production release run evidence failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`, ...issues.map((issue) => `- ${issue}`), ''].join('\n'),
-    );
+    return failedReleaseRunResult(options, 1, issues, { runId, release: evidence.release, asList: true });
+  }
+
+  if (options.json) {
+    return jsonResult(0, releaseRunPayload({
+      ok: true,
+      evidenceFile: options.evidenceFile,
+      runId,
+      release: evidence.release,
+    }));
   }
 
   return result(

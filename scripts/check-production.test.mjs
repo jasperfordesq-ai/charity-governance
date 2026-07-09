@@ -1705,7 +1705,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /342\/342 production-tooling checks/);
+  assert.match(productionTodo, /344\/344 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /340\/340 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /338\/338 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /333\/333 production-tooling checks/);
@@ -1753,7 +1753,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /342\s*\/\s*342`? checks/);
+  assert.match(handoff, /344\s*\/\s*344`? checks/);
   assert.match(handoff, /Older `338 \/ 338` and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
   assert.match(handoff, /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/);
   assert.match(handoff, /still fails with six[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,240}`ERROR_ALERT_WEBHOOK_URL`/);
@@ -2463,7 +2463,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 342\/342/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 344\/344/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 340\/340/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 338\/338/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 333\/333/);
@@ -2842,8 +2842,11 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /--evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
   assert.match(runbook, /npm run check:production:evidence:status -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
   assert.match(runbook, /npm run check:production:release-run -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(runbook, /npm run check:production:release-run -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(runbook, /machine-readable workflow identity, release binding, artifact name, pass\/fail, and issue details/);
   assert.match(runbook, /GitHub API/);
   assert.match(runbook, /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(runbook, /npm run check:production:evidence -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
   assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
   assert.match(runbook, /\.github\/workflows\/release-images\.yml/);
   assert.match(runbook, /refs\/heads\/master/);
@@ -2888,6 +2891,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:evidence:init/);
   assert.match(launchChecklist, /\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
   assert.match(launchChecklist, /npm run check:production:release-run -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(launchChecklist, /npm run check:production:release-run -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(launchChecklist, /machine-readable release workflow identity, artifact, release binding, and issue details/);
   assert.match(launchChecklist, /GitHub API release-run verification output/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
   assert.match(launchChecklist, /Release workflow run URL/);

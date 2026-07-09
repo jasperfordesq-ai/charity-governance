@@ -49,6 +49,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `cosign signature verification` passed for all promoted image digests.
 - [ ] The release workflow evidence identifies `.github/workflows/release-images.yml` and a release ref of `refs/heads/master` or `refs/tags/v*`.
 - [ ] `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` verified the GitHub Actions run metadata and `release-image-digests` artifact through the GitHub API.
+- [ ] `npm run check:production:release-run -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` was captured when machine-readable release workflow identity, artifact, release binding, and issue details were needed for operator handoff automation.
 - [ ] Release image digest manifest artifact `release-image-digests.env` was downloaded from the signed release workflow and used as the promoted image source.
 - [ ] The release manifest's web image build origins match the promoted production public origins.
 - [ ] `npm run check:production:evidence:init` was used to create `.charitypilot-launch-evidence/production-launch-evidence.json` as the starting schema for the non-committed external launch evidence ledger.

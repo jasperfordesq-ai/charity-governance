@@ -156,8 +156,16 @@ function assertProductionLaunchCommands(commands) {
     'npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
   );
   assert.equal(
+    commands.releaseRunEvidenceJson,
+    'npm run check:production:release-run -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  );
+  assert.equal(
     commands.finalEvidenceValidation,
     'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  );
+  assert.equal(
+    commands.finalEvidenceValidationJson,
+    'npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
   );
 }
 
@@ -617,6 +625,14 @@ test('launch status exposes repository state so release evidence is tied to a cl
   assert.match(
     text,
     /GitHub production secret-store JSON:  npm run check:production:github-secrets -- --environment=production --json/,
+  );
+  assert.match(
+    text,
+    /Release-run evidence JSON:  npm run check:production:release-run -- --json --evidence-file=.charitypilot-launch-evidence\/production-launch-evidence.json/,
+  );
+  assert.match(
+    text,
+    /Final evidence validation JSON:  npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence\/production-launch-evidence.json/,
   );
   assert.match(text, /Preflight GitHub environment JSON:  npm run check:production:github-env -- --environment=production --json/);
   assert.match(text, /branch: master/);

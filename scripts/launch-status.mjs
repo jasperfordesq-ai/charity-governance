@@ -84,8 +84,12 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
     'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
   releaseRunEvidence:
     'npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  releaseRunEvidenceJson:
+    'npm run check:production:release-run -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
   finalEvidenceValidation:
     'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+  finalEvidenceValidationJson:
+    'npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
 });
 
 const FINAL_LAUNCH_EVIDENCE_WORKFLOW = Object.freeze({
@@ -757,7 +761,9 @@ export function renderLaunchStatusText(state) {
     lines.push(`  Deploy production:  ${state.productionLaunchCommands.deployProduction}`);
     lines.push(`  Rollback rehearsal:  ${state.productionLaunchCommands.rollbackRehearsal}`);
     lines.push(`  Release-run evidence:  ${state.productionLaunchCommands.releaseRunEvidence}`);
+    lines.push(`  Release-run evidence JSON:  ${state.productionLaunchCommands.releaseRunEvidenceJson}`);
     lines.push(`  Final evidence validation:  ${state.productionLaunchCommands.finalEvidenceValidation}`);
+    lines.push(`  Final evidence validation JSON:  ${state.productionLaunchCommands.finalEvidenceValidationJson}`);
   }
   if (state.finalLaunchEvidenceWorkflow) {
     lines.push('', 'Protected final launch evidence workflow:');

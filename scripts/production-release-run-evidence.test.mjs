@@ -155,6 +155,64 @@ test('production release run checker verifies GitHub workflow metadata and diges
   }
 });
 
+test('production release run checker emits redacted machine-readable JSON', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence());
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/actions/runs/123456789')) {
+      return response(200, {
+        html_url: workflowRunUrl,
+        path: '.github/workflows/release-images.yml',
+        head_sha: commitSha,
+        head_branch: 'master',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'workflow_dispatch',
+      });
+    }
+    if (url.endsWith('/actions/runs/123456789/artifacts')) {
+      return response(200, {
+        artifacts: [
+          { name: 'release-image-digests', expired: false, archive_download_url: 'https://api.github.com/artifact.zip' },
+        ],
+      });
+    }
+    if (url === 'https://api.github.com/artifact.zip') {
+      return binaryResponse(200, zipWithReleaseManifest(releaseDigestManifest()));
+    }
+    return response(404, {});
+  };
+
+  try {
+    const result = await runProductionReleaseRunEvidenceFromArgs(['--json', '--evidence-file', evidencePath], {
+      fetchImpl,
+      processEnv: { GITHUB_TOKEN: 'ghp_not_printed_token' },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.repository, 'jasperfordesq-ai/charity-governance');
+    assert.equal(payload.evidenceFile, evidencePath);
+    assert.equal(payload.workflowRunId, '123456789');
+    assert.equal(payload.workflowRunUrl, workflowRunUrl);
+    assert.equal(payload.workflowFile, '.github/workflows/release-images.yml');
+    assert.equal(payload.commitSha, commitSha);
+    assert.equal(payload.gitRef, 'refs/heads/master');
+    assert.equal(payload.artifactName, 'release-image-digests');
+    assert.equal(
+      payload.releaseBinding.apiImage,
+      `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'a'.repeat(64)}`,
+    );
+    assert.equal(payload.releaseBinding.webBuildNextPublicApiUrl, 'https://api.charitypilot.ie');
+    assert.deepEqual(payload.issues, []);
+    assert.doesNotMatch(result.stdout + result.stderr, /ghp_not_printed_token/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production release run checker rejects digest artifact contents that do not match launch evidence', async () => {
   const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
   const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence());
@@ -327,6 +385,38 @@ test('production release run checker rejects non-release workflow evidence befor
     assert.match(result.stderr, /release\.workflowFile must be \.github\/workflows\/release-images\.yml/);
     assert.match(result.stderr, /release\.gitRef must be refs\/heads\/master or refs\/tags\/v/);
     assert.doesNotMatch(result.stderr, /fetch should not be called/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production release run checker JSON mode redacts GitHub request failures', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence());
+
+  try {
+    const result = await runProductionReleaseRunEvidenceFromArgs(['--json', '--evidence-file', evidencePath], {
+      fetchImpl: async () => {
+        throw new Error(
+          [
+            'GitHub request failed with Bearer ghp_not_printed_token',
+            'GITHUB_TOKEN=github_pat_secretToken_123456',
+            'download=https://api.github.com/artifact.zip?token=secret-download-token',
+          ].join(' '),
+        );
+      },
+      processEnv: { GITHUB_TOKEN: 'ghp_not_printed_token' },
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.workflowRunId, '123456789');
+    assert.match(payload.issues.join('\n'), /Bearer \[redacted\]/);
+    assert.match(payload.issues.join('\n'), /GITHUB_TOKEN=\[redacted\]/);
+    assert.match(payload.issues.join('\n'), /token=\[redacted\]/);
+    assert.doesNotMatch(result.stdout + result.stderr, /ghp_not_printed_token|github_pat_secretToken_123456|secret-download-token/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

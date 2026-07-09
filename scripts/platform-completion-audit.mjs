@@ -325,7 +325,7 @@ function localVerificationEvidence() {
 
   return [
     selectedGateEvidence,
-    '`npm run test:production-check` passed locally on 2026-07-09 with 342/342 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, and CI/release workflow guards.',
+    '`npm run test:production-check` passed locally on 2026-07-09 with 344/344 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, and CI/release workflow guards.',
     '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
     '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
     '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.',
@@ -333,7 +333,7 @@ function localVerificationEvidence() {
     'Local responsive browser QA revalidated cleanly on 2026-07-09 with focused `npm run test:e2e:responsive:*` chunk commands: public desktop 14/14, public mobile 14/14, dashboard desktop 12/12, and dashboard mobile 12/12.',
     '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-09 with 26/26 accessibility checks across launch-critical public/auth and dashboard routes in light and dark themes.',
     '`npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.',
-    '`npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, launch-evidence hardening, GitHub secret-store checker hardening, and release-ready stack probe/repo-scoped child-process cleanup/no-shell gate execution hardening; production-tooling checks passed 342/342.',
+    '`npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, launch-evidence hardening, GitHub secret-store checker hardening, and release-ready stack probe/repo-scoped child-process cleanup/no-shell gate execution hardening; production-tooling checks passed 344/344.',
     '`node --check scripts\\clean-next-export.cjs`, `node --test scripts\\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.',
     '`node --check scripts\\postgres-backup.mjs`, `node --test scripts\\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.',
     '`node --check scripts\\check-production-supabase.mjs`, `node --test scripts\\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.',
@@ -761,7 +761,9 @@ function render() {
     md += `- Deploy production: \`${launch.productionLaunchCommands.deployProduction}\`\n`;
     md += `- Rollback rehearsal: \`${launch.productionLaunchCommands.rollbackRehearsal}\`\n`;
     md += `- Release-run evidence: \`${launch.productionLaunchCommands.releaseRunEvidence}\`\n`;
-    md += `- Final evidence validation: \`${launch.productionLaunchCommands.finalEvidenceValidation}\`\n\n`;
+    md += `- Release-run evidence JSON: \`${launch.productionLaunchCommands.releaseRunEvidenceJson}\`\n`;
+    md += `- Final evidence validation: \`${launch.productionLaunchCommands.finalEvidenceValidation}\`\n`;
+    md += `- Final evidence validation JSON: \`${launch.productionLaunchCommands.finalEvidenceValidationJson}\`\n\n`;
   }
   if (launch.finalLaunchEvidenceWorkflow) {
     md += `### Protected Final Launch Evidence Workflow\n\n`;
