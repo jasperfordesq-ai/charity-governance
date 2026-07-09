@@ -244,6 +244,11 @@ Correct posture:
 - Release readiness child gates resolve `npm` and `npx` through explicit Node
   CLI entrypoints on Windows instead of shell execution, keeping launch
   evidence transcripts free of shell-argument deprecation warnings.
+- Responsive/accessibility route QA now fails fast when protected-route
+  navigation hits a 500, a Next.js/runtime overlay, a login redirect, or a
+  browser JavaScript page error while resolving the compliance principle detail
+  route. This keeps deployed/browser-QA evidence actionable instead of ending in
+  a vague missing-selector timeout.
 
 ### Launch Evidence Hardening
 
@@ -288,6 +293,15 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- `cd e2e; E2E_SKIP_ROUTE_WARMING=true npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route /compliance/\$\{principleId\} renders in desktop light and dark"`
+  - Passed on 2026-07-09 after the compliance-detail resolver was hardened to
+    report page-level failures and still tolerate slow local Next dev compiles.
+- `node --test scripts/check-local-docker.test.mjs`
+  - Passed on 2026-07-09 with 38/38 local Docker and browser-QA wiring checks.
+- `npm run test:production-check`
+  - Passed on 2026-07-09 with 339/339 production-tooling checks.
+- `npm run audit:platform:check`
+  - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
 - `gh run watch 29021018683 --exit-status`
   - Passed on 2026-07-09 for commit `cb78eb8`.
   - Covered CI security scan, Prisma validation/migration, PostgreSQL
