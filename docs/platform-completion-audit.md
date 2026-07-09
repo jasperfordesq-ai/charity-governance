@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `3805d29`
+Working-tree base commit when generated: `b1b42b1`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -147,6 +147,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Strict production launch evidence validation now prints checklist and final-signoff progress before the detailed issue list.
 - Strict production launch evidence validation now supports --json output for CI and operator dashboards.
 - Launch status now includes the next launch-evidence hint details in text and JSON output so operator dashboards can show the next proof to collect.
+- Platform audit now records repository branch, HEAD, upstream sync, and dirty-worktree launch-evidence risk so external proof is tied to a clean, synced ref.
 - Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.
 - Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.
 - Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
@@ -272,7 +273,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 3805d29; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit b1b42b1; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 322/322 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -458,6 +459,18 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Release binding: Every final signoff evidence entry must bind to release.commitSha for the promoted release.
 - Evidence target: Record approvals under finalSignoff and finalSignoff.approvals.* in the production launch evidence ledger.
 - Legal posture: Review-ready, source-cited, and not legal advice; no legal-certainty or guarantee claims.
+
+### Repository State For Launch Evidence
+
+- Branch: `master`
+- Head: `b1b42b17a201cfa499f10b982c24b2168dfb9352`
+- Upstream: `origin/master`
+- Upstream head: `b1b42b17a201cfa499f10b982c24b2168dfb9352`
+- Dirty worktree: `true`
+- Synced with upstream: `true`
+- Launch evidence risk: `dirty_worktree`
+- Repository has uncommitted changes; do not collect launch evidence from this worktree.
+- Collect external launch evidence only from a clean, synced ref and record the final release commit in the ignored evidence ledger.
 
 ### Local Production Environment State
 

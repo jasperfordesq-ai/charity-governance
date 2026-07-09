@@ -592,6 +592,20 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /legal\/compliance final approval/);
 });
 
+test('platform audit records repository state for launch evidence handoff', () => {
+  const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
+  const auditLedger = readRepoFile('docs/platform-completion-audit.md');
+
+  assert.match(auditGenerator, /collectRepositoryState/);
+  assert.match(auditGenerator, /Repository State For Launch Evidence/);
+  assert.match(auditGenerator, /launchEvidenceRisk/);
+  assert.match(auditGenerator, /clean, synced ref/);
+  assert.match(auditLedger, /Repository State For Launch Evidence/);
+  assert.match(auditLedger, /Launch evidence risk: `/);
+  assert.match(auditLedger, /Dirty worktree: `/);
+  assert.match(auditLedger, /Synced with upstream: `/);
+});
+
 test('platform audit check command is read-only for fresh-session baselines', () => {
   const pkg = packageJson();
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');

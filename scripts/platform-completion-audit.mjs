@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assessLaunchState } from './launch-status.mjs';
+import { assessLaunchState, collectRepositoryState } from './launch-status.mjs';
 import { decodeJsonFile } from './production-launch-evidence-status.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -183,6 +183,7 @@ const fixedInThisAuditBranch = [
   'Strict production launch evidence validation now prints checklist and final-signoff progress before the detailed issue list.',
   'Strict production launch evidence validation now supports --json output for CI and operator dashboards.',
   'Launch status now includes the next launch-evidence hint details in text and JSON output so operator dashboards can show the next proof to collect.',
+  'Platform audit now records repository branch, HEAD, upstream sync, and dirty-worktree launch-evidence risk so external proof is tied to a clean, synced ref.',
   'Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.',
   'Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.',
   'Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.',
@@ -559,11 +560,13 @@ function readComplianceSummary() {
 function readLaunchSummary() {
   const envPath = join(repoRoot, '.env.production');
   const evidenceFileExists = existsSync(launchEvidencePath);
+  const repositoryState = collectRepositoryState();
   const state = assessLaunchState({
     envExists: existsSync(envPath),
     envContent: existsSync(envPath) ? readFileSync(envPath, 'utf8') : '',
     evidenceContent: evidenceFileExists ? decodeJsonFile(launchEvidencePath) : '',
     evidenceFileExists,
+    repositoryState,
   });
   return {
     phase: state.phase,
@@ -578,7 +581,12 @@ function readLaunchSummary() {
     finalLaunchEvidenceWorkflow: state.finalLaunchEvidenceWorkflow,
     releaseImagePromotion: state.releaseImagePromotion,
     finalSignoffRequirements: state.finalSignoffRequirements,
+    repositoryState: state.repositoryState,
   };
+}
+
+function formatOptionalLaunchValue(value) {
+  return value === null || value === undefined || value === '' ? 'unknown' : String(value);
 }
 
 function localLaunchStateNote(launch) {
@@ -770,6 +778,18 @@ function render() {
     md += `- Release binding: ${launch.finalSignoffRequirements.releaseBinding}\n`;
     md += `- Evidence target: ${launch.finalSignoffRequirements.evidenceTarget}\n`;
     md += `- Legal posture: ${launch.finalSignoffRequirements.legalPosture}\n\n`;
+  }
+  if (launch.repositoryState) {
+    md += `### Repository State For Launch Evidence\n\n`;
+    md += `- Branch: \`${formatOptionalLaunchValue(launch.repositoryState.branch)}\`\n`;
+    md += `- Head: \`${formatOptionalLaunchValue(launch.repositoryState.headSha)}\`\n`;
+    md += `- Upstream: \`${formatOptionalLaunchValue(launch.repositoryState.upstreamRef)}\`\n`;
+    md += `- Upstream head: \`${formatOptionalLaunchValue(launch.repositoryState.upstreamSha)}\`\n`;
+    md += `- Dirty worktree: \`${formatOptionalLaunchValue(launch.repositoryState.dirty)}\`\n`;
+    md += `- Synced with upstream: \`${formatOptionalLaunchValue(launch.repositoryState.syncedWithUpstream)}\`\n`;
+    md += `- Launch evidence risk: \`${launch.repositoryState.launchEvidenceRisk}\`\n`;
+    md += `- ${launch.repositoryState.headline}\n`;
+    md += `- Collect external launch evidence only from a clean, synced ref and record the final release commit in the ignored evidence ledger.\n\n`;
   }
   md += `### Local Production Environment State\n\n`;
   md += `- Phase: \`${launch.phase}\`\n`;
