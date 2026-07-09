@@ -49,8 +49,8 @@ The production preflight command requires a real `.env.production` file or equiv
 Production Docker promotion must use digest-pinned GHCR image references from the signed release workflow output. Before running the release workflow, configure the GitHub `production` environment variables that are baked into the web image:
 
 ```bash
-gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie
-gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first
+gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"
+gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first
 npm run check:production:github-env -- --environment=production
 gh workflow run release-images.yml --ref master
 gh run watch RELEASE_RUN_ID --exit-status
@@ -63,7 +63,7 @@ CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<a
 CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<web-digest>
 CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
 CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
-CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co
+CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 npm run deploy:preflight -- --production-env-file=.env.production
 npm run deploy:production -- --production-env-file=.env.production
 ```

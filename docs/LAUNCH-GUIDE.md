@@ -196,8 +196,8 @@ You need four external services. Create the **production/live** versions
 - **What:** Run migrations against the production DB, then deploy the signed images.
   ```bash
   npm run db:migrate:deploy -w @charitypilot/api
-  gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie
-  gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first
+gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"
+gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first
   npm run check:production:github-env -- --environment=production
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status

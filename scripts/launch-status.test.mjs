@@ -158,12 +158,14 @@ function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.githubEnvironment, 'production');
   assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co (replace REAL_SUPABASE_PROJECT_REF before running release-images.yml)',
+    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co (replace <project-ref> before running release-images.yml)',
   ]);
   assert.deepEqual(promotion.configureCommands, [
-    'gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first',
+    'gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"',
+    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first',
   ]);
+  assert.doesNotMatch(promotion.requiredGitHubEnvironmentVariables.join('\n'), /REAL_SUPABASE_PROJECT_REF/);
+  assert.doesNotMatch(promotion.configureCommands.join('\n'), /REAL_SUPABASE_PROJECT_REF/);
   assert.doesNotMatch(promotion.requiredGitHubEnvironmentVariables.join('\n'), /YOUR_SUPABASE_PROJECT_REF/);
   assert.doesNotMatch(promotion.configureCommands.join('\n'), /YOUR_SUPABASE_PROJECT_REF/);
   assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');

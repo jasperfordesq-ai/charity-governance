@@ -2426,8 +2426,9 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 86` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
-  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
-  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co"\s+# replace REAL_SUPABASE_PROJECT_REF first/);
+  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
+  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
+  assert.doesNotMatch(launchGuide, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
   assert.match(launchGuide, /release-image-digests\.env/);
   assert.match(launchGuide, /CHARITYPILOT_WEB_BUILD_\*/);
@@ -2721,8 +2722,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
-  assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --body https:\/\/api\.charitypilot\.ie/);
-  assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co"\s+# replace REAL_SUPABASE_PROJECT_REF first/);
+  assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
+  assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
+  assert.doesNotMatch(runbook, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:deployed:responsive:cross-browser/);
   assert.match(runbook, /SECRET_STORE_E2E_OWNER_EMAIL/);
@@ -2765,6 +2767,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /CHARITYPILOT_MIGRATION_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL/);
   assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/<project-ref>\.supabase\.co/);
+  assert.doesNotMatch(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(runbook, /cosign verify/);
   assert.match(runbook, /Do not deploy mutable image tags/);
 

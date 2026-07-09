@@ -79,7 +79,7 @@ release-images.yml --ref master` can produce the `release-image-digests.env`
 artifact:
 
 - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
-- `NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co` (replace `REAL_SUPABASE_PROJECT_REF` before running `release-images.yml`)
+- `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co` (replace `<project-ref>` before running `release-images.yml`)
 
 Validate those non-secret GitHub `production` environment variables before
 running the image workflow:
