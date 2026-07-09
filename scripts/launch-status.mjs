@@ -16,6 +16,7 @@ import {
   isEvidenceStatusComplete,
   releaseBindingStatus,
   summarizeEvidence,
+  workQueueByArea,
 } from './production-launch-evidence-status.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -513,6 +514,7 @@ function evidenceLedgerStatus(evidenceFileExists, evidenceContent) {
           : 'missing',
       nextIncompleteChecks: summary.incompleteChecks.slice(0, 5),
       nextIncompleteCheckDetails: summary.incompleteCheckDetails.slice(0, 5),
+      workQueueByArea: workQueueByArea(summary),
       totalFinalSignoffRoles: summary.totalFinalSignoffRoles,
       totalChecks: summary.totalChecks,
       releaseBinding: releaseBindingStatus(evidence),

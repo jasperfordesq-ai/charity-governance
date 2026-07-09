@@ -96,6 +96,8 @@ function assertDeployedBrowserQaCommands(commands) {
     'E2E_OWNER_EMAIL from the approved non-sensitive test workspace',
     'E2E_OWNER_PASSWORD from the approved non-sensitive test workspace',
   ]);
+  assert.equal(commands.preflightCommand, 'npm run check:production:browser-qa-env');
+  assert.equal(commands.preflightJsonCommand, 'npm run check:production:browser-qa-env -- --json');
   assert.equal(commands.responsiveCommand, 'npm run test:e2e:responsive');
   assert.deepEqual(commands.focusedResponsiveCommands, [
     'npm run test:e2e:responsive:public:desktop',
@@ -145,6 +147,8 @@ function assertProductionLaunchCommands(commands) {
     commands.observability,
     'npm run check:production:observability -- --production-env-file=.env.production',
   );
+  assert.equal(commands.deployedBrowserQaPreflight, 'npm run check:production:browser-qa-env');
+  assert.equal(commands.deployedBrowserQaPreflightJson, 'npm run check:production:browser-qa-env -- --json');
   assert.equal(commands.deployPreflight, 'npm run deploy:preflight -- --production-env-file=.env.production');
   assert.equal(commands.deployProduction, 'npm run deploy:production -- --production-env-file=.env.production');
   assert.equal(
@@ -479,6 +483,9 @@ test('reports launch evidence completion counts when the evidence ledger exists'
   assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 87/);
   assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
+  assert.equal(s.evidenceLedger.workQueueByArea[0].id, 'releaseGate');
+  assert.equal(s.evidenceLedger.workQueueByArea[0].remaining, 20);
+  assert.equal(s.evidenceLedger.workQueueByArea.find((area) => area.id === 'browserQa').remaining, 7);
 });
 
 test('reports missing operator-supplied production values instead of treating a trimmed env as complete', () => {
@@ -592,6 +599,13 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.equal(payload.evidenceLedger.nextIncompleteCheckDetails[0].path, 'releaseGate.npm-ci');
   assert.equal(payload.evidenceLedger.nextIncompleteCheckDetails[0].status, 'pending');
   assert.deepEqual(payload.evidenceLedger.nextIncompleteCheckDetails[0].requiredEvidenceHints, ['npm ci', 'exit 0']);
+  assert.equal(payload.evidenceLedger.workQueueByArea[0].id, 'releaseGate');
+  assert.equal(payload.evidenceLedger.workQueueByArea[0].remaining, 20);
+  assert.equal(payload.evidenceLedger.workQueueByArea.find((area) => area.id === 'browserQa').remaining, 7);
+  assert.equal(
+    payload.evidenceLedger.workQueueByArea.reduce((total, area) => total + area.remaining, 0),
+    87,
+  );
   assert.match(payload.evidenceLedger.statusCommand, /check:production:evidence:status/);
   assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
   assert.match(payload.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);

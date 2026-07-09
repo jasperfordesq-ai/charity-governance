@@ -226,6 +226,31 @@ export function summarizeEvidence(evidence) {
   };
 }
 
+export function workQueueByArea(summary) {
+  const areaById = new Map(summary.areaSummaries.map((area) => [area.id, area]));
+  const grouped = new Map();
+
+  for (const detail of summary.incompleteCheckDetails) {
+    const [areaId] = detail.path.split('.');
+    const area = areaById.get(areaId);
+    if (!area) continue;
+    if (!grouped.has(areaId)) {
+      grouped.set(areaId, {
+        id: area.id,
+        label: area.label,
+        completed: area.completed,
+        remaining: Math.max(0, area.total - area.completed),
+        total: area.total,
+        status: area.status,
+        checks: [],
+      });
+    }
+    grouped.get(areaId).checks.push(detail);
+  }
+
+  return [...grouped.values()];
+}
+
 function renderStatus(evidence) {
   const summary = summarizeEvidence(evidence);
   const evidenceStatusesComplete = isEvidenceStatusComplete(evidence, summary);
@@ -309,6 +334,7 @@ function renderJsonStatus(evidence) {
         })),
       nextIncompleteChecks: summary.incompleteChecks.slice(0, 10),
       nextIncompleteCheckDetails: summary.incompleteCheckDetails.slice(0, 10),
+      workQueueByArea: workQueueByArea(summary),
       incompleteCheckCount: summary.incompleteChecks.length,
     },
     null,

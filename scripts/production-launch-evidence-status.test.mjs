@@ -130,6 +130,40 @@ test('production launch evidence status renders non-secret JSON for automation',
   }
 });
 
+test('production launch evidence status exposes a grouped work queue for every incomplete area', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = await launchEvidenceTemplate();
+  evidence.areas.releaseGate.checks['npm-ci'].status = 'complete';
+  evidence.areas.releaseGate.checks['db-generate'].status = 'complete';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.ok(Array.isArray(payload.workQueueByArea));
+    assert.equal(payload.workQueueByArea[0].id, 'releaseGate');
+    assert.equal(payload.workQueueByArea[0].remaining, 18);
+    assert.equal(payload.workQueueByArea[0].total, 20);
+    assert.equal(payload.workQueueByArea[0].status, 'pending');
+    assert.equal(payload.workQueueByArea[0].checks[0].path, 'releaseGate.prisma-validate');
+    const checkProduction = payload.workQueueByArea[0].checks.find((check) => check.path === 'releaseGate.check-production');
+    assert.ok(checkProduction);
+    assert.deepEqual(checkProduction.requiredEvidenceHints, [
+      'npm run check:production -- --production-env-file=.env.production',
+      'Production configuration check passed',
+    ]);
+    assert.ok(payload.workQueueByArea.some((area) => area.id === 'browserQa' && area.remaining === 7));
+    assert.equal(
+      payload.workQueueByArea.reduce((total, area) => total + area.remaining, 0),
+      payload.incompleteCheckCount,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence status does not count unbound final approval roles', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
   const evidence = await launchEvidenceTemplate();
