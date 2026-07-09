@@ -47,3 +47,50 @@ test('production launch evidence init refuses to overwrite without --force', asy
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production launch evidence init renders machine-readable handoff output', async () => {
+  const { runInitProductionLaunchEvidenceFromArgs } = await loadInitRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-evidence-init-json-'));
+
+  try {
+    const result = runInitProductionLaunchEvidenceFromArgs(['--json'], { cwd: tempDir });
+    const evidencePath = join(tempDir, '.charitypilot-launch-evidence', 'production-launch-evidence.json');
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+    assert.ok(existsSync(evidencePath));
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.status, 'created');
+    assert.equal(payload.evidenceFile, '.charitypilot-launch-evidence/production-launch-evidence.json');
+    assert.match(payload.gitPolicy, /Keep this file out of git/);
+    assert.equal(
+      payload.commands.status,
+      'npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+    );
+    assert.equal(
+      payload.commands.statusJson,
+      'npm run check:production:evidence:status -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+    );
+    assert.equal(
+      payload.commands.validate,
+      'npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+    );
+    assert.equal(
+      payload.commands.validateJson,
+      'npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
+    );
+
+    const second = runInitProductionLaunchEvidenceFromArgs(['--json'], { cwd: tempDir });
+    assert.equal(second.status, 1);
+    const existingPayload = JSON.parse(second.stdout);
+    assert.equal(existingPayload.status, 'exists');
+    assert.match(existingPayload.nextAction, /--force/);
+
+    const forced = runInitProductionLaunchEvidenceFromArgs(['--json', '--force'], { cwd: tempDir });
+    assert.equal(forced.status, 0);
+    assert.equal(JSON.parse(forced.stdout).status, 'replaced');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
