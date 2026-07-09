@@ -1744,7 +1744,10 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /The evidence ledger is currently `9 \/ 86`/);
   assert.match(handoff, /77 \/ 86` machine-readable launch checks remain/);
   assert.match(handoff, /releaseGate\.check-production/);
+  assert.match(handoff, /releaseGate\.github-environment/);
   assert.match(handoff, /releaseGate\.deploy-preflight/);
+  assert.match(handoff, /GitHub production environment/);
+  assert.match(handoff, /Re-run launch status/);
   assert.match(handoff, new RegExp(`commit \`${escapeRegExp(selectedGateCommit)}\``));
   assert.match(handoff, /isolated restore target/);
   assert.match(handoff, /non-production restore target/);

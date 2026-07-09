@@ -396,17 +396,19 @@ release-gate basics only; they do not replace real production env validation,
 digest-pinned deployment, public HTTPS smoke, rollback, provider, backup/restore,
 deployed browser QA, legal, pentest, or final signoff evidence.
 
-The first incomplete evidence checks currently reported are:
+The first incomplete evidence checks currently reported by
+`npm run launch:status -- --json` are:
 
 - `releaseGate.check-production`
+- `releaseGate.github-environment`
 - `releaseGate.deploy-preflight`
 - `releaseGate.deploy-production`
 - `releaseGate.deploy-smoke`
-- `releaseGate.deploy-rollback`
 
 Do not fill these with local or fake evidence. They need final real production
-configuration, deployment, rollback, and public HTTPS smoke evidence tied to the
-promoted release.
+configuration, GitHub production environment, digest-pinned deployment, and
+public HTTPS smoke evidence tied to the promoted release. Re-run launch status
+before acting; this ordered list changes as evidence is completed.
 
 ### Deployed Browser QA Still Open
 
