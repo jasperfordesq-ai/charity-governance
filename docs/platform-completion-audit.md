@@ -205,6 +205,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.
 - Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare AGPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.
 - The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.
+- The release readiness command now times out local stack reachability probes so a half-started web/API stack fails the E2E gate cleanly instead of hanging operator evidence collection.
 - The production readiness TODO now reflects the current 19-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/86 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
@@ -271,7 +272,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This is not current for generated base commit a94bcfa; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This is not current for generated base commit ec54eec; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 330/330 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.

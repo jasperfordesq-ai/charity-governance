@@ -22,6 +22,7 @@ const noBuild = args.includes('--no-build');
 
 const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
+const STACK_REACHABILITY_TIMEOUT_MS = 5000;
 
 function run(name, cmd, cmdArgs, opts = {}) {
   const started = Date.now();
@@ -34,7 +35,10 @@ function run(name, cmd, cmdArgs, opts = {}) {
 
 async function reachable(url) {
   try {
-    const res = await fetch(url, { redirect: 'manual' });
+    const res = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(STACK_REACHABILITY_TIMEOUT_MS),
+    });
     return res.status < 500;
   } catch {
     return false;

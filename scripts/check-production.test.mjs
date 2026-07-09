@@ -1615,6 +1615,14 @@ test('release readiness command distinguishes skipped gates from full readiness'
   assert.doesNotMatch(releaseReady, /failed\.length === 0 \? 'GREEN - platform is release-ready'/);
 });
 
+test('release readiness stack reachability probes time out instead of hanging', () => {
+  const releaseReady = readRepoFile('scripts/release-ready.mjs');
+
+  assert.match(releaseReady, /STACK_REACHABILITY_TIMEOUT_MS = 5000/);
+  assert.match(releaseReady, /AbortSignal\.timeout\(STACK_REACHABILITY_TIMEOUT_MS\)/);
+  assert.match(releaseReady, /Stack not reachable at \$\{WEB_URL\} \/ \$\{API_URL\}/);
+});
+
 test('reliability report emits ASCII-safe operator output', () => {
   const result = spawnSync(process.execPath, ['scripts/reliability-report.mjs', '--no-run'], {
     cwd: repoRoot,
