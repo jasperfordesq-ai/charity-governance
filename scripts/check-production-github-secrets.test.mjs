@@ -89,6 +89,36 @@ test('production GitHub secret-store check fails for missing required secret nam
   assert.doesNotMatch(result.stderr, /sk_live_/);
 });
 
+test('production GitHub secret-store check renders name-only JSON for automation', () => {
+  const result = runProductionGitHubSecretsCheckFromArgs(['--json'], {
+    runGh: () =>
+      okGh([
+        { name: 'JWT_SECRET', updatedAt: '2026-07-09T00:00:00Z' },
+        { name: 'READINESS_API_KEY', updatedAt: '2026-07-09T00:00:00Z' },
+      ]),
+  });
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, '');
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.environment, 'production');
+  assert.deepEqual(payload.presentRequiredSecretNames, ['JWT_SECRET', 'READINESS_API_KEY']);
+  assert.deepEqual(payload.missingSecretNames, [
+    'DATABASE_URL',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'RESEND_API_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'ERROR_ALERT_WEBHOOK_URL',
+  ]);
+  assert.equal(payload.issueCount, 6);
+  assert.match(payload.issues.join('\n'), /GitHub production secret DATABASE_URL is missing/);
+  assert.equal(payload.secretValuesRead, false);
+  assert.doesNotMatch(result.stdout, /postgresql:\/\//);
+  assert.doesNotMatch(result.stdout, /sk_live_/);
+});
+
 test('production GitHub secret-store check rejects unknown options', () => {
   const result = runProductionGitHubSecretsCheckFromArgs(['--surprise']);
 

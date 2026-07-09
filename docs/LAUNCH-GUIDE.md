@@ -61,7 +61,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 340/340 on 2026-07-09; rerun for the final release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 342/342 on 2026-07-09; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
@@ -197,7 +197,9 @@ You need four external services. Create the **production/live** versions
   npm run check:production:github-secrets -- --environment=production
   ```
   This confirms the required production secret names exist without reading or
-  printing secret values. It does not replace the provider checks above.
+  printing secret values. Add `--json` to either GitHub check when an evidence
+  dashboard needs machine-readable missing-name status without provider values.
+  It does not replace the provider checks above.
 - **Why:** These catch misconfiguration (wrong keys, public bucket, missing TLS)
   before real data is at risk.
 - **Effort:** A couple of hours, iterating until all checks pass.

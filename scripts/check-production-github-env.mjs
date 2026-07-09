@@ -12,7 +12,7 @@ const DEFAULT_REPOSITORY = 'jasperfordesq-ai/charity-governance';
 const CANONICAL_API_ORIGIN = 'https://api.charitypilot.ie';
 const PLACEHOLDER_PATTERN = /(?:replace_me|real_|todo|tbd|pending|placeholder|change-me|your_|your-|project_ref)/i;
 const USAGE_TEXT =
-  'Usage: node scripts/check-production-github-env.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance]';
+  'Usage: node scripts/check-production-github-env.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance] [--json]';
 
 export const REQUIRED_GITHUB_PRODUCTION_VARIABLES = Object.freeze([
   {
@@ -50,12 +50,17 @@ function parseArgs(argv) {
   const options = {
     environment: DEFAULT_ENVIRONMENT,
     repository: DEFAULT_REPOSITORY,
+    json: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
       return { ...options, help: true };
+    }
+    if (arg === '--json') {
+      options.json = true;
+      continue;
     }
     if (arg === '--environment') {
       const value = argv[index + 1];
@@ -91,6 +96,10 @@ function parseArgs(argv) {
 
 function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
+}
+
+function jsonResult(status, payload) {
+  return result(status, `${JSON.stringify(payload, null, 2)}\n`, '');
 }
 
 function defaultRunGh(args) {
@@ -143,6 +152,25 @@ function validateVariableRows(rows, environment) {
   return issues;
 }
 
+function variableStatusPayload(options, rows, issues) {
+  const presentNames = new Set(rows.map((row) => String(row.name ?? '').trim()).filter(Boolean));
+  const requiredVariableNames = REQUIRED_GITHUB_PRODUCTION_VARIABLES.map((variable) => variable.name);
+  const missingVariableNames = requiredVariableNames.filter((name) => !presentNames.has(name));
+
+  return {
+    ok: issues.length === 0,
+    environment: options.environment,
+    repository: options.repository,
+    requiredVariableNames,
+    missingVariableNames,
+    issueCount: issues.length,
+    issues,
+    valuesRead: true,
+    secretValuesRead: false,
+    note: 'GitHub variable values are validated but not printed.',
+  };
+}
+
 function remediationCommands(environment, repository) {
   return [
     'Safe remediation commands:',
@@ -173,6 +201,18 @@ export function runProductionGitHubEnvironmentCheckFromArgs(
 
   if (!variableResult || variableResult.status !== 0) {
     const details = redactedGhFailure(variableResult ?? {});
+    if (options.json) {
+      return jsonResult(1, {
+        ok: false,
+        environment: options.environment,
+        repository: options.repository,
+        requiredVariableNames: REQUIRED_GITHUB_PRODUCTION_VARIABLES.map((variable) => variable.name),
+        missingVariableNames: [],
+        issueCount: 1,
+        issues: [`gh variable list failed${details ? `: ${details}` : ''}`],
+        secretValuesRead: false,
+      });
+    }
     return result(
       1,
       '',
@@ -182,10 +222,26 @@ export function runProductionGitHubEnvironmentCheckFromArgs(
 
   const rows = parseVariableRows(variableResult.stdout ?? '');
   if (!rows) {
+    if (options.json) {
+      return jsonResult(1, {
+        ok: false,
+        environment: options.environment,
+        repository: options.repository,
+        requiredVariableNames: REQUIRED_GITHUB_PRODUCTION_VARIABLES.map((variable) => variable.name),
+        missingVariableNames: [],
+        issueCount: 1,
+        issues: ['gh variable list returned invalid JSON'],
+        secretValuesRead: false,
+      });
+    }
     return result(1, '', 'Production GitHub environment check failed: gh variable list returned invalid JSON.\n');
   }
 
   const issues = validateVariableRows(rows, options.environment);
+  if (options.json) {
+    return jsonResult(issues.length > 0 ? 1 : 0, variableStatusPayload(options, rows, issues));
+  }
+
   if (issues.length > 0) {
     return result(
       1,

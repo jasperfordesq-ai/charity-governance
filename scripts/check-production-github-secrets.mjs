@@ -10,7 +10,7 @@ const repoRoot = resolve(scriptsDir, '..');
 const DEFAULT_ENVIRONMENT = 'production';
 const DEFAULT_REPOSITORY = 'jasperfordesq-ai/charity-governance';
 const USAGE_TEXT =
-  'Usage: node scripts/check-production-github-secrets.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance]';
+  'Usage: node scripts/check-production-github-secrets.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance] [--json]';
 
 export const REQUIRED_GITHUB_PRODUCTION_SECRETS = Object.freeze([
   { name: 'DATABASE_URL', hint: 'Managed production PostgreSQL URL with sslmode=require' },
@@ -27,12 +27,17 @@ function parseArgs(argv) {
   const options = {
     environment: DEFAULT_ENVIRONMENT,
     repository: DEFAULT_REPOSITORY,
+    json: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
       return { ...options, help: true };
+    }
+    if (arg === '--json') {
+      options.json = true;
+      continue;
     }
     if (arg === '--environment') {
       const value = argv[index + 1];
@@ -68,6 +73,10 @@ function parseArgs(argv) {
 
 function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
+}
+
+function jsonResult(status, payload) {
+  return result(status, `${JSON.stringify(payload, null, 2)}\n`, '');
 }
 
 function defaultRunGh(args) {
@@ -108,6 +117,24 @@ function missingRequiredSecrets(rows) {
   return REQUIRED_GITHUB_PRODUCTION_SECRETS.filter((secret) => !presentNames.has(secret.name));
 }
 
+function secretStatusPayload(options, rows, issues, missingSecrets) {
+  const presentNames = new Set(rows.map((row) => String(row.name ?? '').trim()).filter(Boolean));
+  const requiredSecretNames = REQUIRED_GITHUB_PRODUCTION_SECRETS.map((secret) => secret.name);
+
+  return {
+    ok: issues.length === 0,
+    environment: options.environment,
+    repository: options.repository,
+    requiredSecretNames,
+    presentRequiredSecretNames: requiredSecretNames.filter((name) => presentNames.has(name)),
+    missingSecretNames: missingSecrets.map((secret) => secret.name),
+    issueCount: issues.length,
+    issues,
+    secretValuesRead: false,
+    note: 'Only GitHub secret names are listed; secret values are never read or printed.',
+  };
+}
+
 function remediationCommands(environment, repository, missingSecrets) {
   return [
     'Safe remediation commands:',
@@ -137,6 +164,19 @@ export function runProductionGitHubSecretsCheckFromArgs(args = process.argv.slic
 
   if (!secretResult || secretResult.status !== 0) {
     const details = redactedGhFailure(secretResult ?? {});
+    if (options.json) {
+      return jsonResult(1, {
+        ok: false,
+        environment: options.environment,
+        repository: options.repository,
+        requiredSecretNames: REQUIRED_GITHUB_PRODUCTION_SECRETS.map((secret) => secret.name),
+        presentRequiredSecretNames: [],
+        missingSecretNames: [],
+        issueCount: 1,
+        issues: [`gh secret list failed${details ? `: ${details}` : ''}`],
+        secretValuesRead: false,
+      });
+    }
     return result(
       1,
       '',
@@ -146,11 +186,28 @@ export function runProductionGitHubSecretsCheckFromArgs(args = process.argv.slic
 
   const rows = parseSecretRows(secretResult.stdout ?? '');
   if (!rows) {
+    if (options.json) {
+      return jsonResult(1, {
+        ok: false,
+        environment: options.environment,
+        repository: options.repository,
+        requiredSecretNames: REQUIRED_GITHUB_PRODUCTION_SECRETS.map((secret) => secret.name),
+        presentRequiredSecretNames: [],
+        missingSecretNames: [],
+        issueCount: 1,
+        issues: ['gh secret list returned invalid JSON'],
+        secretValuesRead: false,
+      });
+    }
     return result(1, '', 'Production GitHub secret-store check failed: gh secret list returned invalid JSON.\n');
   }
 
   const missingSecrets = missingRequiredSecrets(rows);
   const issues = validateSecretRows(rows, options.environment);
+  if (options.json) {
+    return jsonResult(issues.length > 0 ? 1 : 0, secretStatusPayload(options, rows, issues, missingSecrets));
+  }
+
   if (issues.length > 0) {
     return result(
       1,

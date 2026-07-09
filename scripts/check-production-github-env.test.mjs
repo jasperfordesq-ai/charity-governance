@@ -111,6 +111,33 @@ test('production GitHub environment check validates canonical API and Supabase o
   );
 });
 
+test('production GitHub environment check renders redacted JSON for automation', () => {
+  const result = runProductionGitHubEnvironmentCheckFromArgs(['--json'], {
+    runGh: () =>
+      okGh([
+        { name: 'NEXT_PUBLIC_API_URL', value: 'https://api.charitypilot.ie', updatedAt: '2026-07-09T00:00:00Z' },
+        {
+          name: 'NEXT_PUBLIC_SUPABASE_URL',
+          value: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+          updatedAt: '2026-07-09T00:00:00Z',
+        },
+      ]),
+  });
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, '');
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.environment, 'production');
+  assert.deepEqual(payload.requiredVariableNames, ['NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_SUPABASE_URL']);
+  assert.deepEqual(payload.missingVariableNames, []);
+  assert.equal(payload.issueCount, 1);
+  assert.match(payload.issues.join('\n'), /NEXT_PUBLIC_SUPABASE_URL must not contain placeholder text/);
+  assert.equal(payload.secretValuesRead, false);
+  assert.equal(payload.valuesRead, true);
+  assert.doesNotMatch(result.stdout, /REAL_SUPABASE_PROJECT_REF/);
+});
+
 test('production GitHub environment check rejects unknown options', () => {
   const result = runProductionGitHubEnvironmentCheckFromArgs(['--surprise']);
 
