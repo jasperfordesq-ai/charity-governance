@@ -36,7 +36,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > Strict launch-evidence JSON validation reports the next incomplete checklist
 > items and evidence hints, so failing launch-gate output can drive an operator
 > work queue without weakening the final validator.
-> Local browser QA has current 2026-07-09 evidence from focused responsive route chunks across desktop/mobile and light/dark: public desktop 14/14, public mobile 14/14, dashboard desktop 12/12, and dashboard mobile 12/12. The prior full local accessibility suite passed 25/25 checks before `/about` was added to the launch-critical route inventory; the focused `/about` axe check passed locally on 2026-07-09, but the full accessibility suite must be rerun for the final release transcript. Deployed production QA still remains open and must be rerun against the live HTTPS URLs.
+> Local browser QA has current 2026-07-09 evidence from focused responsive route chunks across desktop/mobile and light/dark: public desktop 14/14, public mobile 14/14, dashboard desktop 12/12, and dashboard mobile 12/12. The full local accessibility suite passed 26/26 checks on 2026-07-09, including `/about` and both light and dark themes. Deployed production QA still remains open and must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in `browserQa.checks.accessibility-coverage`,
 > cross-browser QA in `browserQa.checks.cross-browser-coverage`, and real iOS Safari device QA in
 > `browserQa.checks.ios-safari-device-coverage`.

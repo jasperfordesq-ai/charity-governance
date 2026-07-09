@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `9255ab0`
+Working-tree base commit when generated: `034032c`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -273,13 +273,14 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 9255ab0; rerun the selected gate on the final release ref before treating it as current release evidence.
+- Historical local selected-gate evidence: `npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit 8a5e030: security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped. This is not current for generated base commit 034032c; rerun the selected gate on the final release ref before treating it as current release evidence.
 - `npm run test:production-check` passed locally on 2026-07-09 with 330/330 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.
 - `cd e2e && npm test -- tests/accessibility.spec.ts --grep "/blog/understanding-the-charities-governance-code is axe-clean" --repeat-each=3` passed locally on 2026-07-09 after blog article dark-mode contrast hardening.
 - Local responsive browser QA revalidated cleanly on 2026-07-09 with focused `npm run test:e2e:responsive:*` chunk commands: public desktop 14/14, public mobile 14/14, dashboard desktop 12/12, and dashboard mobile 12/12.
+- `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-09 with 26/26 accessibility checks across launch-critical public/auth and dashboard routes in light and dark themes.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
 - `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, and launch-evidence hardening; production-tooling checks passed 330/330.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
@@ -463,9 +464,9 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Repository State For Launch Evidence
 
 - Branch: `master`
-- Head: `9255ab052c83905b3198454392ccbfe976f40638`
+- Head: `034032c8ac67a4a3431a23cd75373e3c61a8ee57`
 - Upstream: `origin/master`
-- Upstream head: `9255ab052c83905b3198454392ccbfe976f40638`
+- Upstream head: `034032c8ac67a4a3431a23cd75373e3c61a8ee57`
 - Dirty worktree: `true`
 - Synced with upstream: `true`
 - Launch evidence risk: `dirty_worktree`

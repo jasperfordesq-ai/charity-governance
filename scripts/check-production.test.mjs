@@ -1642,8 +1642,10 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /public mobile 14\/14/);
   assert.match(productionTodo, /dashboard desktop 12\/12/);
   assert.match(productionTodo, /dashboard mobile 12\/12/);
-  assert.match(productionTodo, /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i);
-  assert.match(productionTodo, /focused `\/about` axe check passed locally on 2026-07-09/i);
+  assert.match(productionTodo, /full local accessibility suite passed 26\/26 checks on 2026-07-09/i);
+  assert.match(productionTodo, /including `\/about` and both light and dark themes/i);
+  assert.doesNotMatch(productionTodo, /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i);
+  assert.doesNotMatch(productionTodo, /full accessibility suite must be rerun for the final release transcript/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /86 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
@@ -2396,9 +2398,10 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /public mobile 14\/14/);
   assert.match(launchGuide, /dashboard desktop 12\/12/);
   assert.match(launchGuide, /dashboard mobile 12\/12/);
-  assert.match(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
-  assert.match(launchGuide, /focused `\/about` axe check passed locally on 2026-07-09/);
-  assert.match(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
+  assert.match(launchGuide, /full local accessibility suite passed 26\/26 checks on 2026-07-09/);
+  assert.match(launchGuide, /including `\/about` and both light and dark themes/);
+  assert.doesNotMatch(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
+  assert.doesNotMatch(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /86 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
