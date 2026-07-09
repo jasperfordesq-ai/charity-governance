@@ -152,7 +152,7 @@ test('production launch evidence status exposes a grouped work queue for every i
     assert.ok(checkProduction);
     assert.deepEqual(checkProduction.requiredEvidenceHints, [
       'npm run check:production -- --production-env-file=.env.production',
-      'Production configuration check passed',
+      'Production preflight passed',
     ]);
     assert.ok(payload.workQueueByArea.some((area) => area.id === 'browserQa' && area.remaining === 7));
     assert.equal(

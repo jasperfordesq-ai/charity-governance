@@ -840,7 +840,7 @@ test('production launch evidence validator renders machine-readable JSON status'
         status: 'pending',
         requiredEvidenceHints: [
           'npm run check:production -- --production-env-file=.env.production',
-          'Production configuration check passed',
+          'Production preflight passed',
         ],
       },
     ]);
@@ -2265,6 +2265,18 @@ test('production launch evidence template covers every required area and final s
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test('production launch evidence template uses the strict check-production success marker', async () => {
+  const { renderProductionLaunchEvidenceTemplate } = await loadEvidenceTemplateGenerator();
+  const template = JSON.parse(renderProductionLaunchEvidenceTemplate());
+  const hints = template.areas.releaseGate.checks['check-production'].requiredEvidenceHints;
+
+  assert.deepEqual(hints, [
+    'npm run check:production -- --production-env-file=.env.production',
+    'Production preflight passed',
+  ]);
+  assert.doesNotMatch(JSON.stringify(hints), /Production configuration check passed/);
 });
 
 test('production launch evidence validator rejects chronologically impossible evidence dates', async () => {
