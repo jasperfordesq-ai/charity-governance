@@ -8,7 +8,7 @@ the generated audit is the current route inventory source of truth.
 
 ## Current Snapshot
 
-- 25 page routes scanned.
+- 26 page routes scanned.
 - 15 routes are P0 trustee, compliance, billing, auth, or conversion-critical workflows.
 - 0 route files are 450+ lines.
 - Route page inline icon cleanup is closed for the audited app-route files.

@@ -20,10 +20,11 @@ const webImage = `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${diges
 const migrationImage = `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`;
 const launchCriticalRoutes = [
   '/',
+  '/about',
   '/features',
   '/pricing',
   '/blog',
-  '/blog/[slug]',
+  '/blog/understanding-the-charities-governance-code',
   '/privacy',
   '/terms',
   '/login',
@@ -34,7 +35,7 @@ const launchCriticalRoutes = [
   '/accept-invite',
   '/dashboard',
   '/compliance',
-  '/compliance/[principleId]',
+  '/compliance/${principleId}',
   '/documents',
   '/deadlines',
   '/board',
@@ -2080,7 +2081,7 @@ test('production launch evidence template covers every required area and final s
     );
     assert.ok(
       template.areas.browserQa.checks['critical-flows-covered'].requiredEvidenceHints.some((hint) =>
-        hint.includes('/compliance/[principleId]') && hint.includes('/export'),
+        hint.includes('/compliance/${principleId}') && hint.includes('/export'),
       ),
     );
     assert.ok(

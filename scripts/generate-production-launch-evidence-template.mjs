@@ -242,7 +242,7 @@ const evidenceHintsByCheck = new Map([
     'every route',
     'desktop, mobile, light-mode, and dark-mode evidence',
     'release.commitSha',
-    'routes: /, /features, /pricing, /blog, /blog/[slug], /privacy, /terms, /login, /register, /forgot-password, /reset-password, /verify-email, /accept-invite, /dashboard, /compliance, /compliance/[principleId], /documents, /deadlines, /board, /registers, /regulator, /organisation, /team, /billing, /export',
+    'routes: /, /about, /features, /pricing, /blog, /blog/understanding-the-charities-governance-code, /privacy, /terms, /login, /register, /forgot-password, /reset-password, /verify-email, /accept-invite, /dashboard, /compliance, /compliance/${principleId}, /documents, /deadlines, /board, /registers, /regulator, /organisation, /team, /billing, /export',
     'auth flow',
     'dashboard flow',
     'billing flow',

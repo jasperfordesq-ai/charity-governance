@@ -526,7 +526,8 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed/);
   assert.match(auditLedger, /only Playwright E2E was skipped/);
   assert.match(auditLedger, /Local responsive browser QA revalidated cleanly on 2026-07-09/);
-  assert.match(auditLedger, /public desktop 13\/13/);
+  assert.match(auditLedger, /public desktop 14\/14/);
+  assert.match(auditLedger, /public mobile 14\/14/);
   assert.match(auditLedger, /dashboard desktop 12\/12/);
   assert.match(auditLedger, /dashboard mobile 12\/12/);
   assert.match(auditLedger, /public\/auth and dashboard routes[\s\S]*light and dark themes/);
@@ -654,7 +655,7 @@ test('product revamp page inventory is not stale pre-revamp guidance', () => {
 
   assert.match(pageInventory, /Superseded by the generated platform completion audit/);
   assert.match(pageInventory, /docs\/platform-completion-audit\.md/);
-  assert.match(pageInventory, /25 page routes scanned/);
+  assert.match(pageInventory, /26 page routes scanned/);
   assert.match(pageInventory, /0 route files are 450\+ lines/);
   assert.match(pageInventory, /Deployed browser QA remains the proof gate/);
   assert.doesNotMatch(pageInventory, /manual inline SVG/i);
@@ -716,7 +717,7 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
   assert.match(browserQa, /test:e2e:responsive:public:mobile/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:desktop/);
   assert.match(browserQa, /test:e2e:responsive:dashboard:mobile/);
-  assert.match(e2eReadme, /full 50-test matrix/);
+  assert.match(e2eReadme, /full 52-test matrix/);
   assert.match(e2eReadme, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive:public:desktop/);
   assert.match(e2eReadme, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:deployed:responsive:cross-browser/);
   assert.match(e2eReadme, /SECRET_STORE_E2E_OWNER_EMAIL/);
@@ -731,8 +732,12 @@ test('responsive route smoke is runnable as a focused launch QA command', () => 
 
 test('responsive route smoke covers every shipped page route', () => {
   const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
+  const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
+  const globalSetup = readRepoFile('e2e/global-setup.ts');
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
   const requiredRoutes = [
     '/',
+    '/about',
     '/features',
     '/pricing',
     '/blog',
@@ -760,11 +765,28 @@ test('responsive route smoke covers every shipped page route', () => {
   ];
 
   for (const route of requiredRoutes) {
+    const routePattern = new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     assert.match(
       responsiveSpec,
-      new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      routePattern,
       `responsive smoke must cover ${route}`,
     );
+    assert.match(accessibilitySpec, routePattern, `accessibility scan must cover ${route}`);
+    assert.match(browserQa, routePattern, `production browser QA inventory must cover ${route}`);
+    if (!route.startsWith('/dashboard') && route !== '/compliance/${principleId}' && ![
+      '/compliance',
+      '/board',
+      '/documents',
+      '/deadlines',
+      '/registers',
+      '/regulator',
+      '/organisation',
+      '/team',
+      '/billing',
+      '/export',
+    ].includes(route)) {
+      assert.match(globalSetup, routePattern, `local route warming must cover public route ${route}`);
+    }
   }
 });
 

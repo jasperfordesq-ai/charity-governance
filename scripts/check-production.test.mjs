@@ -1638,12 +1638,12 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
   assert.match(productionTodo, /Local browser QA has current 2026-07-09 evidence/);
-  assert.match(productionTodo, /public desktop 13\/13/);
-  assert.match(productionTodo, /public mobile 13\/13/);
+  assert.match(productionTodo, /public desktop 14\/14/);
+  assert.match(productionTodo, /public mobile 14\/14/);
   assert.match(productionTodo, /dashboard desktop 12\/12/);
   assert.match(productionTodo, /dashboard mobile 12\/12/);
-  assert.match(productionTodo, /local accessibility suite passed 25\/25 checks across launch-critical public\/auth and dashboard routes/i);
-  assert.match(productionTodo, /focused repeated dark-mode blog article contrast check/i);
+  assert.match(productionTodo, /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i);
+  assert.match(productionTodo, /focused `\/about` axe check passed locally on 2026-07-09/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /85 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
@@ -2297,10 +2297,11 @@ test('production browser QA checklist points browser evidence at the dedicated l
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
   const requiredRouteLabels = [
     '/',
+    '/about',
     '/features',
     '/pricing',
     '/blog',
-    '/blog/[slug]',
+    '/blog/understanding-the-charities-governance-code',
     '/privacy',
     '/terms',
     '/login',
@@ -2311,7 +2312,7 @@ test('production browser QA checklist points browser evidence at the dedicated l
     '/accept-invite',
     '/dashboard',
     '/compliance',
-    '/compliance/[principleId]',
+    '/compliance/${principleId}',
     '/documents',
     '/deadlines',
     '/board',
@@ -2388,14 +2389,13 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /final signoffs are\s+`0 \/ 5`/);
   assert.match(launchGuide, /`approvedForLaunch` is `false`/);
   assert.match(launchGuide, /Local browser QA has current 2026-07-09 evidence/);
-  assert.match(launchGuide, /public desktop 13\/13/);
-  assert.match(launchGuide, /public mobile 13\/13/);
+  assert.match(launchGuide, /public desktop 14\/14/);
+  assert.match(launchGuide, /public mobile 14\/14/);
   assert.match(launchGuide, /dashboard desktop 12\/12/);
   assert.match(launchGuide, /dashboard mobile 12\/12/);
-  assert.match(launchGuide, /current accessibility suite passed 25\/25 checks across the launch-critical public\/auth routes/);
-  assert.match(launchGuide, /dynamic compliance principle-detail page/);
-  assert.match(launchGuide, /blog article dark-mode contrast check passed three repeated focused runs/);
-  assert.match(launchGuide, /rerun it for the final release transcript/);
+  assert.match(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
+  assert.match(launchGuide, /focused `\/about` axe check passed locally on 2026-07-09/);
+  assert.match(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /85 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);

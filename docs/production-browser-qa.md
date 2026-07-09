@@ -141,10 +141,11 @@ were exercised against the promoted production release.
 | Route | Area | Required evidence |
 | --- | --- | --- |
 | `/` | Marketing | Public landing page renders, navigation works, and CTAs point at production routes. |
+| `/about` | Marketing/legal attribution | About page renders, AGPL/source attribution remains visible, and public contact links work. |
 | `/features` | Marketing | Feature content renders without layout overlap. |
 | `/pricing` | Marketing | Public plan messaging and billing entry points render safely. |
 | `/blog` | Marketing | Blog index renders with filters/search usable on mobile. |
-| `/blog/[slug]` | Marketing | Blog detail renders with source/navigation links usable. |
+| `/blog/understanding-the-charities-governance-code` | Marketing | Blog detail renders with source/navigation links usable. |
 | `/privacy` | Legal/policy | Production policy page renders and matches approved policy reference. |
 | `/terms` | Legal/policy | Production terms page renders and matches approved policy reference. |
 | `/login` | Auth | Login form, validation, cookie-consent interaction, and error state work. |
@@ -155,7 +156,7 @@ were exercised against the promoted production release.
 | `/accept-invite` | Auth/team | Invite acceptance handles valid, invalid, expired, and signed-in states. |
 | `/dashboard` | Dashboard | Summary, actions, plan status, and empty/progress states render after login. |
 | `/compliance` | Compliance | Principle overview, filters, review warnings, and source flags render. |
-| `/compliance/[principleId]` | Compliance | Standard editor, autosave, retry, pending-navigation confirmation, and invalid principle states work. |
+| `/compliance/${principleId}` | Compliance | Standard editor, autosave, retry, pending-navigation confirmation, and invalid principle states work. |
 | `/documents` | Documents | Upload, list, link, download, delete, empty, and permission states work. |
 | `/deadlines` | Deadlines | Generated/custom deadlines, completion toggle, add/edit/delete, and empty states work. |
 | `/board` | Board | Trustee list, add/edit, conduct/induction evidence, tenure flags, and empty states work. |

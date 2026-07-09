@@ -16,6 +16,7 @@ const ROUTE_WARM_BUDGET_MS = positiveIntEnv('E2E_ROUTE_WARM_BUDGET_MS', 240_000)
 const SKIP_ROUTE_WARMING = process.env.E2E_SKIP_ROUTE_WARMING === 'true';
 const PUBLIC_ROUTES_TO_WARM = [
   '/',
+  '/about',
   '/features',
   '/pricing',
   '/blog',

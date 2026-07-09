@@ -216,10 +216,11 @@ const BROWSER_QA_RELEASE_BOUND_CHECKS = new Set([
 
 export const LAUNCH_CRITICAL_ROUTES = [
   '/',
+  '/about',
   '/features',
   '/pricing',
   '/blog',
-  '/blog/[slug]',
+  '/blog/understanding-the-charities-governance-code',
   '/privacy',
   '/terms',
   '/login',
@@ -230,7 +231,7 @@ export const LAUNCH_CRITICAL_ROUTES = [
   '/accept-invite',
   '/dashboard',
   '/compliance',
-  '/compliance/[principleId]',
+  '/compliance/${principleId}',
   '/documents',
   '/deadlines',
   '/board',

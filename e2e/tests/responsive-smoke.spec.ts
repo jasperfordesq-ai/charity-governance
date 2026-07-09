@@ -18,6 +18,7 @@ const FONT_SETTLE_TIMEOUT_MS = 5_000;
 
 const PUBLIC_ROUTES = [
   '/',
+  '/about',
   '/features',
   '/pricing',
   '/blog',

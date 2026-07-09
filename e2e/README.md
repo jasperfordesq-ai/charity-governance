@@ -54,7 +54,7 @@ npx playwright test tests/auth.spec.ts   # a single spec
 
 The responsive route matrix can also be run in four focused chunks from the repo
 root. Use these when a local browser host or deployed QA runner cannot keep the
-full 50-test matrix stable in one process:
+full 52-test matrix stable in one process:
 
 ```bash
 npm run test:e2e:responsive:public:desktop
