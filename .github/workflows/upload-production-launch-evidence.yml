@@ -42,17 +42,23 @@ jobs:
         env:
           ARTIFACT_NAME: ${{ inputs.artifact_name }}
           EVIDENCE_FILE_NAME: ${{ inputs.evidence_file_name }}
+          EVIDENCE_SHA256: ${{ inputs.evidence_sha256 }}
         shell: bash
         run: |
           set -euo pipefail
           artifact_pattern='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
           evidence_file_pattern='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$'
+          sha256_pattern='^[a-f0-9]{64}$'
           if [[ ! "${ARTIFACT_NAME}" =~ ${artifact_pattern} ]]; then
             echo "production launch evidence artifact name is invalid"
             exit 1
           fi
           if [[ ! "${EVIDENCE_FILE_NAME}" =~ ${evidence_file_pattern} ]]; then
             echo "production launch evidence file name is invalid"
+            exit 1
+          fi
+          if [[ ! "${EVIDENCE_SHA256}" =~ ${sha256_pattern} ]]; then
+            echo "production launch evidence SHA-256 is invalid"
             exit 1
           fi
 

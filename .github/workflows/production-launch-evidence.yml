@@ -41,13 +41,19 @@ jobs:
 
       - name: Validate dispatch input names
         env:
+          EVIDENCE_ARTIFACT_RUN_ID: ${{ inputs.evidence_artifact_run_id }}
           EVIDENCE_ARTIFACT_NAME: ${{ inputs.evidence_artifact_name }}
           EVIDENCE_FILE_NAME: ${{ inputs.evidence_file_name }}
         shell: bash
         run: |
           set -euo pipefail
+          run_id_pattern='^[0-9]+$'
           artifact_pattern='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
           evidence_file_pattern='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$'
+          if [[ ! "${EVIDENCE_ARTIFACT_RUN_ID}" =~ ${run_id_pattern} ]]; then
+            echo "production launch evidence upload run id is invalid"
+            exit 1
+          fi
           if [[ ! "${EVIDENCE_ARTIFACT_NAME}" =~ ${artifact_pattern} ]]; then
             echo "production launch evidence artifact name is invalid"
             exit 1

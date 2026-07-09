@@ -149,7 +149,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence templates now include operator evidence hints for every required launch check behind a regression test.
 - Production launch evidence status now falls back to current template hints for older evidence ledgers that were initialized before hint coverage was complete.
 - Production launch evidence initialization now writes the template to an ignored .charitypilot-launch-evidence directory to keep real launch evidence out of the repo root.
-- Protected production launch evidence workflows now validate dispatch-controlled artifact and evidence file names before using them in artifact or shell-path operations.
+- Protected production launch evidence workflows now validate dispatch-controlled artifact names, evidence file names, upload run ids, and SHA-256 values before using them in artifact or shell-path operations.
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.

@@ -3725,8 +3725,10 @@ test('manual production launch evidence workflow validates final signoff evidenc
   assert.match(workflow, /uses:\s+actions\/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd\s+# v5/);
   assert.match(workflow, /uses:\s+actions\/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e\s+# v6/);
   assert.match(workflow, /name:\s+Validate dispatch input names/);
+  assert.match(workflow, /EVIDENCE_ARTIFACT_RUN_ID:\s+\$\{\{\s*inputs\.evidence_artifact_run_id\s*\}\}/);
   assert.match(workflow, /EVIDENCE_ARTIFACT_NAME:\s+\$\{\{\s*inputs\.evidence_artifact_name\s*\}\}/);
   assert.match(workflow, /EVIDENCE_FILE_NAME:\s+\$\{\{\s*inputs\.evidence_file_name\s*\}\}/);
+  assert.match(workflow, /production launch evidence upload run id is invalid/);
   assert.match(workflow, /production launch evidence artifact name is invalid/);
   assert.match(workflow, /production launch evidence file name is invalid/);
   assert.match(workflow, /uses:\s+actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093\s+# v4\.3\.0/);
@@ -3819,8 +3821,10 @@ test('protected production launch evidence upload workflow creates the validator
   assert.match(workflow, /name:\s+Validate dispatch input names/);
   assert.match(workflow, /ARTIFACT_NAME:\s+\$\{\{\s*inputs\.artifact_name\s*\}\}/);
   assert.match(workflow, /EVIDENCE_FILE_NAME:\s+\$\{\{\s*inputs\.evidence_file_name\s*\}\}/);
+  assert.match(workflow, /EVIDENCE_SHA256:\s+\$\{\{\s*inputs\.evidence_sha256\s*\}\}/);
   assert.match(workflow, /production launch evidence artifact name is invalid/);
   assert.match(workflow, /production launch evidence file name is invalid/);
+  assert.match(workflow, /production launch evidence SHA-256 is invalid/);
   assert.match(workflow, /base64 --decode \| gzip -d > "\$\{evidence_path\}"/);
   assert.match(workflow, /sha256sum "\$\{evidence_path\}"/);
   assert.match(workflow, /Evidence SHA-256 mismatch; refusing to upload artifact/);
