@@ -100,7 +100,15 @@ function evidenceText(entries) {
 function mergeEvidenceHints(areaId, checkId, storedHints) {
   const merged = [];
   const seen = new Set();
-  for (const hint of [...storedHints, ...defaultEvidenceHints(areaId, checkId)]) {
+  const defaultHints = defaultEvidenceHints(areaId, checkId);
+  const defaultHasRouteInventory = defaultHints.some((hint) =>
+    typeof hint === 'string' && hint.trim().startsWith('routes: '),
+  );
+  const effectiveStoredHints = defaultHasRouteInventory
+    ? storedHints.filter((hint) => !hint.trim().startsWith('routes: '))
+    : storedHints;
+
+  for (const hint of [...effectiveStoredHints, ...defaultHints]) {
     if (typeof hint !== 'string') continue;
     const trimmed = hint.trim();
     if (trimmed.length === 0 || seen.has(trimmed)) continue;

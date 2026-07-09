@@ -276,6 +276,15 @@ test('production launch evidence status merges current hints into stale stored l
             ],
             evidence: [],
           },
+          'critical-flows-covered': {
+            status: 'pending',
+            requiredEvidenceHints: [
+              'docs/production-browser-qa.md',
+              'routes: /, /features, /pricing, /blog, /blog/[slug], /privacy, /terms, /login, /register, /forgot-password, /reset-password, /verify-email, /accept-invite, /dashboard, /compliance, /compliance/[principleId], /documents, /deadlines, /board, /registers, /regulator, /organisation, /team, /billing, /export',
+              'zero critical or high-severity browser QA defects',
+            ],
+            evidence: [],
+          },
         },
       },
     },
@@ -302,6 +311,19 @@ test('production launch evidence status merges current hints into stale stored l
     assert.ok(
       browserQaCompleted.requiredEvidenceHints.includes('Deployed browser QA environment preflight passed'),
       'stale stored browser QA hints must be enriched with the current preflight success marker',
+    );
+    const criticalFlows = browserQa.checks.find((check) => check.path === 'browserQa.critical-flows-covered');
+    assert.ok(
+      criticalFlows.requiredEvidenceHints.some((hint) =>
+        hint.includes('routes: /, /about, /features, /pricing'),
+      ),
+      'current launch route inventory must be present',
+    );
+    assert.ok(
+      !criticalFlows.requiredEvidenceHints.some((hint) =>
+        hint.includes('routes: /, /features, /pricing'),
+      ),
+      'stale stored launch route inventory must be replaced by the current default route inventory',
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
