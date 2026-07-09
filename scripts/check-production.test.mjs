@@ -2497,6 +2497,10 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
   assert.doesNotMatch(launchGuide, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
+  assert.match(launchGuide, /Current known GitHub environment blocker/);
+  assert.match(launchGuide, /check:production:github-env -- --environment=production/);
+  assert.match(launchGuide, /NEXT_PUBLIC_SUPABASE_URL` is still missing/);
+  assert.match(launchGuide, /Do not run\s+`release-images\.yml` until the real Supabase project origin is configured/);
   assert.match(launchGuide, /release-image-digests\.env/);
   assert.match(launchGuide, /CHARITYPILOT_WEB_BUILD_\*/);
   assert.doesNotMatch(launchGuide, /optional reverse proxy/);

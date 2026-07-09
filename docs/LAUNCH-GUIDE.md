@@ -204,6 +204,11 @@ gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-a
   npm run deploy:preflight -- --production-env-file=.env.production
   npm run deploy:production -- --production-env-file=.env.production
   ```
+- **Current known GitHub environment blocker:** the latest live
+  `npm run check:production:github-env -- --environment=production` check
+  failed because `NEXT_PUBLIC_SUPABASE_URL` is still missing. Do not run
+  `release-images.yml` until the real Supabase project origin is configured in
+  the GitHub `production` environment.
 - **Why:** The GitHub `production` environment variables let the release workflow
   build the web image for the real API and Supabase origins. The workflow then
   uploads `release-image-digests.env`; copy its digest-pinned image values and
