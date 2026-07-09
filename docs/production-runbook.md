@@ -193,7 +193,7 @@ E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:deployed:accessibility:cross-browser
 ```
 
-The launch evidence validator requires deployed responsive and accessibility command transcripts, `E2E_DEPLOYED_QA=true`, the canonical web/API URLs, and references showing `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` came from the approved secret store. Record the deployed accessibility transcript in `browserQa.checks.accessibility-coverage`, the cross-browser transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
+The launch evidence validator requires the redacted deployed browser QA environment preflight transcript in `browserQa.checks.browser-qa-completed`, including `npm run check:production:browser-qa-env` and `Deployed browser QA environment preflight passed`. It also requires deployed responsive and accessibility command transcripts, `E2E_DEPLOYED_QA=true`, the canonical web/API URLs, and references showing `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` came from the approved secret store. Record the deployed accessibility transcript in `browserQa.checks.accessibility-coverage`, the cross-browser transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
 
 ## Incident Basics
 

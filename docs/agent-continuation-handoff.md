@@ -46,7 +46,7 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `350 / 350` checks on
+  `npm run test:production-check` passed with `351 / 351` checks on
   2026-07-09. Older `338 / 338` and `339 / 339` entries in the
   verification chronology below are historical counts from earlier commits,
   not the current gate size.
@@ -315,7 +315,7 @@ Recently successful checks in this workstream:
 - `node --test scripts/check-local-docker.test.mjs`
   - Passed on 2026-07-09 with 38/38 local Docker and browser-QA wiring checks.
 - `npm run test:production-check`
-  - Passed on 2026-07-09 with 350/350 production-tooling checks during the
+  - Passed on 2026-07-09 with 351/351 production-tooling checks during the
     latest handoff refresh.
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
@@ -368,7 +368,7 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
-    Historical count; the current local production-tooling gate is 350/350.
+    Historical count; the current local production-tooling gate is 351/351.
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -381,14 +381,14 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
-  - Historical count; the current local production-tooling gate is 350/350.
+  - Historical count; the current local production-tooling gate is 351/351.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
   - Passed again with 338/338 production-tooling checks after launch-evidence, release-ready, continuation-doc, and GitHub secret-store checker hardening.
-  - Historical count; the current local production-tooling gate is 350/350.
+  - Historical count; the current local production-tooling gate is 351/351.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests

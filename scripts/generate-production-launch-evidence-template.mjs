@@ -204,6 +204,8 @@ const evidenceHintsByCheck = new Map([
   ]],
   ['browserQa.browser-qa-completed', [
     'release.commitSha',
+    'npm run check:production:browser-qa-env',
+    'Deployed browser QA environment preflight passed',
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',

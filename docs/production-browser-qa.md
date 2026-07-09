@@ -11,7 +11,7 @@ These local checks do not replace deployed production QA, but they should be gre
 - [ ] `npm run test:e2e:responsive` completed against the local Docker stack, or all four focused route chunks below completed and their transcripts were kept together as one local responsive evidence set.
 - [ ] `npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
 - [ ] Deployed browser QA credentials exist for an approved non-sensitive test workspace with owner/admin access.
-- [ ] `npm run check:production:browser-qa-env` passes in the same shell that will run deployed Playwright checks. Use `npm run check:production:browser-qa-env -- --json` for a redacted machine-readable preflight transcript.
+- [ ] `npm run check:production:browser-qa-env` passes in the same shell that will run deployed Playwright checks. Use `npm run check:production:browser-qa-env -- --json` for a redacted machine-readable preflight transcript, and record the command plus `Deployed browser QA environment preflight passed` in `browserQa.checks.browser-qa-completed`.
 - [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store, either as one full run or as all four focused route chunks below.
 - [ ] Deployed accessibility smoke completed with the same deployed QA environment, and the transcript is recorded in `browserQa.checks.accessibility-coverage`.
 - [ ] Cross-browser deployed responsive and accessibility smoke completed where runner support exists for Chromium desktop, Chromium mobile, Firefox, and WebKit, with evidence recorded in `browserQa.checks.cross-browser-coverage`.
@@ -148,6 +148,9 @@ promoted `release.commitSha`, including `browserQa.checks.browser-qa-completed`,
 `browserQa.checks.cross-browser-coverage`,
 `browserQa.checks.ios-safari-device-coverage`, and
 `browserQa.checks.critical-flows-covered`.
+The `browserQa.checks.browser-qa-completed` evidence must also include the
+redacted deployed environment preflight transcript from
+`npm run check:production:browser-qa-env`.
 The `browserQa.checks.critical-flows-covered` evidence must explicitly confirm
 pending-navigation confirmation, conditional obligations, and readiness blockers
 were exercised against the promoted production release.

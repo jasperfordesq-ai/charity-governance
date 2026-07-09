@@ -579,6 +579,8 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       `Browser QA release commit: ${commitSha}.`,
+      'npm run check:production:browser-qa-env',
+      'Deployed browser QA environment preflight passed.',
       'E2E_DEPLOYED_QA=true',
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
@@ -1357,6 +1359,8 @@ test('production launch evidence validator requires deployed browser QA command 
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_API_URL=https:\/\/api\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_EMAIL/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include E2E_OWNER_PASSWORD/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run check:production:browser-qa-env/);
+    assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include Deployed browser QA environment preflight passed/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run test:e2e:responsive or all four focused responsive route chunks/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include release\.commitSha/);
     assert.match(result.stderr, /areas\.browserQa\.checks\.desktop-coverage\.evidence must include command-output evidence/);
@@ -1399,6 +1403,8 @@ test('production launch evidence validator accepts complete chunked responsive Q
 
   evidence.areas.browserQa.checks['browser-qa-completed'].evidence[0].description = [
     `Browser QA release commit: ${commitSha}.`,
+    'npm run check:production:browser-qa-env',
+    'Deployed browser QA environment preflight passed.',
     'E2E_DEPLOYED_QA=true',
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
@@ -1434,6 +1440,34 @@ test('production launch evidence validator accepts complete chunked responsive Q
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator requires deployed browser QA env preflight evidence', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+
+  evidence.areas.browserQa.checks['browser-qa-completed'].evidence[0].description = [
+    `Browser QA release commit: ${commitSha}.`,
+    'E2E_DEPLOYED_QA=true',
+    'E2E_WEB_URL=https://app.charitypilot.ie',
+    'E2E_API_URL=https://api.charitypilot.ie',
+    'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
+    'npm run test:e2e:responsive',
+    'responsive-smoke.spec.ts passed against deployed HTTPS production URL',
+  ].join(' ');
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /areas\.browserQa\.checks\.browser-qa-completed\.evidence must include npm run check:production:browser-qa-env/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -2113,6 +2147,16 @@ test('production launch evidence template covers every required area and final s
     assert.ok(
       template.areas.browserQa.checks['browser-qa-completed'].requiredEvidenceHints.some((hint) =>
         hint.includes('test:e2e:responsive:dashboard:mobile'),
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['browser-qa-completed'].requiredEvidenceHints.includes(
+        'npm run check:production:browser-qa-env',
+      ),
+    );
+    assert.ok(
+      template.areas.browserQa.checks['browser-qa-completed'].requiredEvidenceHints.includes(
+        'Deployed browser QA environment preflight passed',
       ),
     );
     assert.ok(
