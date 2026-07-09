@@ -176,12 +176,19 @@ function assertFinalLaunchEvidenceWorkflow(workflow) {
   assert.equal(workflow.defaultArtifactName, 'production-launch-evidence');
   assert.equal(workflow.defaultEvidenceFileName, 'production-launch-evidence.json');
   assert.equal(workflow.validationArtifactName, 'production-launch-evidence-validation');
+  assert.deepEqual(workflow.validationArtifactFiles, [
+    'production-launch-evidence-validation.log',
+    'production-release-run-evidence.json',
+    'production-launch-evidence-validation.json',
+  ]);
   assert.equal(
     workflow.runCommand,
     'gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json',
   );
   assert.match(workflow.evidenceTarget, /protected workflow run URL/);
   assert.match(workflow.evidenceTarget, /production-launch-evidence-validation/);
+  assert.match(workflow.evidenceTarget, /pass\/fail command statuses/);
+  assert.match(workflow.evidenceTarget, /JSON validation files/);
 }
 
 function assertReleaseImagePromotion(promotion) {
@@ -634,6 +641,9 @@ test('launch status exposes repository state so release evidence is tied to a cl
     text,
     /Final evidence validation JSON:  npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence\/production-launch-evidence.json/,
   );
+  assert.match(text, /Validation artifact files:/);
+  assert.match(text, /production-release-run-evidence\.json/);
+  assert.match(text, /production-launch-evidence-validation\.json/);
   assert.match(text, /Preflight GitHub environment JSON:  npm run check:production:github-env -- --environment=production --json/);
   assert.match(text, /branch: master/);
   assert.match(text, /head: dddddddddddddddddddddddddddddddddddddddd/);

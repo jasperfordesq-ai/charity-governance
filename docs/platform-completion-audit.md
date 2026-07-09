@@ -455,8 +455,12 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Default evidence artifact: `production-launch-evidence`
 - Default evidence file: `production-launch-evidence.json`
 - Validation artifact: `production-launch-evidence-validation`
+- Validation artifact files:
+  - `production-launch-evidence-validation.log`
+  - `production-release-run-evidence.json`
+  - `production-launch-evidence-validation.json`
 - Run: `gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json`
-- Evidence target: Record the protected workflow run URL and production-launch-evidence-validation artifact in the launch evidence ledger.
+- Evidence target: Record the protected workflow run URL and production-launch-evidence-validation artifact, including pass/fail command statuses, the text log, and JSON validation files, in the launch evidence ledger.
 
 ### Release Image Promotion
 

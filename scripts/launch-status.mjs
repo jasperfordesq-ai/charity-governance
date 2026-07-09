@@ -99,10 +99,15 @@ const FINAL_LAUNCH_EVIDENCE_WORKFLOW = Object.freeze({
   defaultArtifactName: 'production-launch-evidence',
   defaultEvidenceFileName: 'production-launch-evidence.json',
   validationArtifactName: 'production-launch-evidence-validation',
+  validationArtifactFiles: Object.freeze([
+    'production-launch-evidence-validation.log',
+    'production-release-run-evidence.json',
+    'production-launch-evidence-validation.json',
+  ]),
   runCommand:
     'gh workflow run production-launch-evidence.yml --ref master -f evidence_artifact_run_id=EVIDENCE_ARTIFACT_RUN_ID -f evidence_artifact_name=production-launch-evidence -f evidence_file_name=production-launch-evidence.json',
   evidenceTarget:
-    'Record the protected workflow run URL and production-launch-evidence-validation artifact in the launch evidence ledger.',
+    'Record the protected workflow run URL and production-launch-evidence-validation artifact, including pass/fail command statuses, the text log, and JSON validation files, in the launch evidence ledger.',
 });
 
 const RELEASE_IMAGE_PROMOTION = Object.freeze({
@@ -773,6 +778,8 @@ export function renderLaunchStatusText(state) {
     lines.push(`  Default evidence artifact:  ${state.finalLaunchEvidenceWorkflow.defaultArtifactName}`);
     lines.push(`  Default evidence file:  ${state.finalLaunchEvidenceWorkflow.defaultEvidenceFileName}`);
     lines.push(`  Validation artifact:  ${state.finalLaunchEvidenceWorkflow.validationArtifactName}`);
+    lines.push('  Validation artifact files:');
+    for (const artifactFile of state.finalLaunchEvidenceWorkflow.validationArtifactFiles) lines.push(`    - ${artifactFile}`);
     lines.push(`  Run:  ${state.finalLaunchEvidenceWorkflow.runCommand}`);
     lines.push(`  Evidence target:  ${state.finalLaunchEvidenceWorkflow.evidenceTarget}`);
   }

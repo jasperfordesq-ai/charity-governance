@@ -2895,6 +2895,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /machine-readable release workflow identity, artifact, release binding, and issue details/);
   assert.match(launchChecklist, /GitHub API release-run verification output/);
   assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(launchChecklist, /npm run check:production:evidence -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(launchChecklist, /machine-readable strict validation status, issue list, completion counts, and next incomplete evidence hints/);
   assert.match(launchChecklist, /Release workflow run URL/);
   assert.match(launchChecklist, /Release workflow file/);
   assert.match(launchChecklist, /\.github\/workflows\/release-images\.yml/);
@@ -3689,17 +3691,31 @@ test('manual production launch evidence workflow validates final signoff evidenc
   assert.match(workflow, /run-id:\s+\$\{\{\s*inputs\.evidence_artifact_run_id\s*\}\}/);
   assert.match(workflow, /test -f "launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
   assert.match(workflow, /npm ci/);
-  assert.match(workflow, /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
-  assert.match(workflow, /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /set \+e/);
+  assert.match(workflow, /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}" 2>&1/);
+  assert.match(workflow, /release_run_text_status=\$\{PIPESTATUS\[0\]\}/);
+  assert.match(workflow, /npm run check:production:release-run -- --json --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /release_run_json_status=\$\?/);
+  assert.match(workflow, /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}" 2>&1/);
+  assert.match(workflow, /evidence_text_status=\$\{PIPESTATUS\[0\]\}/);
+  assert.match(workflow, /npm run check:production:evidence -- --json --evidence-file="launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}"/);
+  assert.match(workflow, /evidence_json_status=\$\?/);
   assert.match(workflow, /tee production-launch-evidence-validation\.log/);
+  assert.match(workflow, /> production-release-run-evidence\.json/);
+  assert.match(workflow, /> production-launch-evidence-validation\.json/);
+  assert.match(workflow, /Validation command statuses:/);
+  assert.match(workflow, /exit 1/);
   assert.match(workflow, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);
+  assert.match(workflow, /if:\s+always\(\)/);
   assert.match(workflow, /name:\s+production-launch-evidence-validation/);
-  assert.match(workflow, /path:\s+production-launch-evidence-validation\.log/);
+  assert.match(workflow, /path:\s+\|[\s\S]*production-launch-evidence-validation\.log[\s\S]*production-release-run-evidence\.json[\s\S]*production-launch-evidence-validation\.json/);
   assert.match(workflow, /if-no-files-found:\s+error/);
   assert.match(workflow, /retention-days:\s+90/);
   assert.match(runbook, /\.github\/workflows\/production-launch-evidence\.yml/);
   assert.match(runbook, /evidence_artifact_run_id/);
   assert.match(runbook, /production-launch-evidence-validation/);
+  assert.match(runbook, /production-release-run-evidence\.json/);
+  assert.match(runbook, /production-launch-evidence-validation\.json/);
 });
 
 test('CI builds API and web production Docker images', () => {

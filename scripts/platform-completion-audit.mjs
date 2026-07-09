@@ -773,6 +773,8 @@ function render() {
     md += `- Default evidence artifact: \`${launch.finalLaunchEvidenceWorkflow.defaultArtifactName}\`\n`;
     md += `- Default evidence file: \`${launch.finalLaunchEvidenceWorkflow.defaultEvidenceFileName}\`\n`;
     md += `- Validation artifact: \`${launch.finalLaunchEvidenceWorkflow.validationArtifactName}\`\n`;
+    md += `- Validation artifact files:\n`;
+    for (const artifactFile of launch.finalLaunchEvidenceWorkflow.validationArtifactFiles) md += `  - \`${artifactFile}\`\n`;
     md += `- Run: \`${launch.finalLaunchEvidenceWorkflow.runCommand}\`\n`;
     md += `- Evidence target: ${launch.finalLaunchEvidenceWorkflow.evidenceTarget}\n\n`;
   }

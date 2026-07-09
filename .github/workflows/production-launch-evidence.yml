@@ -62,15 +62,43 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run check:production:release-run -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" |
-            tee production-launch-evidence-validation.log
-          npm run check:production:evidence -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" |
+          echo "Release-run evidence verification" | tee production-launch-evidence-validation.log
+          set +e
+          npm run check:production:release-run -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" 2>&1 |
             tee -a production-launch-evidence-validation.log
+          release_run_text_status=${PIPESTATUS[0]}
+          npm run check:production:release-run -- --json --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" \
+            > production-release-run-evidence.json 2>> production-launch-evidence-validation.log
+          release_run_json_status=$?
+          echo "" | tee -a production-launch-evidence-validation.log
+          echo "Strict launch evidence validation" | tee -a production-launch-evidence-validation.log
+          npm run check:production:evidence -- --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" 2>&1 |
+            tee -a production-launch-evidence-validation.log
+          evidence_text_status=${PIPESTATUS[0]}
+          npm run check:production:evidence -- --json --evidence-file="launch-evidence/${{ inputs.evidence_file_name }}" \
+            > production-launch-evidence-validation.json 2>> production-launch-evidence-validation.log
+          evidence_json_status=$?
+          set -e
+          {
+            echo ""
+            echo "Validation command statuses:"
+            echo "- release-run text: ${release_run_text_status}"
+            echo "- release-run JSON: ${release_run_json_status}"
+            echo "- strict evidence text: ${evidence_text_status}"
+            echo "- strict evidence JSON: ${evidence_json_status}"
+          } | tee -a production-launch-evidence-validation.log
+          if [ "${release_run_text_status}" -ne 0 ] || [ "${release_run_json_status}" -ne 0 ] || [ "${evidence_text_status}" -ne 0 ] || [ "${evidence_json_status}" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Upload launch evidence validation output
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: production-launch-evidence-validation
-          path: production-launch-evidence-validation.log
+          path: |
+            production-launch-evidence-validation.log
+            production-release-run-evidence.json
+            production-launch-evidence-validation.json
           if-no-files-found: error
           retention-days: 90
