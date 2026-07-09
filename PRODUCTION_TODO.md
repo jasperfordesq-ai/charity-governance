@@ -105,7 +105,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 
 - [x] `npm run lint`
 - [x] `npm run test`
-- [x] `npm run test:production-check` - passed locally on 2026-07-09 with 330/330 production-tooling checks.
+- [x] `npm run test:production-check` - passed locally on 2026-07-09 with 331/331 production-tooling checks.
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`
