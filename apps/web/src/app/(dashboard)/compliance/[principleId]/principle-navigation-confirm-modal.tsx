@@ -36,8 +36,8 @@ export function PrincipleNavigationConfirmModal({
       onConfirm={onSaveAndContinue}
     >
       <p>
-        Some standard updates have not finished saving yet. You can stay on this page, save the pending edits now, or leave and rely on
-        the last saved state.
+        Some standard updates have not finished saving yet. You can stay on this page, save the pending edits now, or leave without
+        waiting. Any save already underway may still finish; queued edits that have not started will be left behind.
       </p>
       {saveError ? (
         <p role="alert" className="mt-3 text-rose-700 dark:text-rose-300">

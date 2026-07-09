@@ -731,7 +731,10 @@ test('principle detail uses an in-app confirmation dialog while saves are pendin
   for (const term of [
     'hasPendingComplianceSaves',
     'requestComplianceNavigation',
-    'handleInAppNavigationClick',
+    'interceptInAppNavigation',
+    'clearPendingSaveTimers',
+    'discardPendingComplianceSaves',
+    'skipNextUnmountFlush',
     "closest('a[href]')",
     'PrincipleNavigationConfirmModal',
     'navigationConfirmOpen',
@@ -744,8 +747,14 @@ test('principle detail uses an in-app confirmation dialog while saves are pendin
     'Save now and leave',
     'Leave without waiting',
     'Keep editing',
-    "document.addEventListener('click', handleInAppNavigationClick, true)",
-    "document.removeEventListener('click', handleInAppNavigationClick, true)",
+    'Any save already underway may still finish',
+    'queued edits that have not started will be left behind',
+    "document.addEventListener('pointerdown', interceptInAppNavigation, true)",
+    "document.addEventListener('mousedown', interceptInAppNavigation, true)",
+    "document.addEventListener('click', interceptInAppNavigation, true)",
+    "document.removeEventListener('pointerdown', interceptInAppNavigation, true)",
+    "document.removeEventListener('mousedown', interceptInAppNavigation, true)",
+    "document.removeEventListener('click', interceptInAppNavigation, true)",
     'event.preventDefault()',
     'event.stopPropagation()',
     'navigateBackToCompliance',
@@ -916,11 +925,11 @@ test('principle detail workflow state is extracted from the oversized route file
   assert.match(pageSrc, /usePrincipleDetailWorkflow/);
   assert.doesNotMatch(pageSrc, /debounceTimers/);
   assert.doesNotMatch(pageSrc, /pendingSaveData/);
-  assert.doesNotMatch(pageSrc, /handleInAppNavigationClick/);
+  assert.doesNotMatch(pageSrc, /interceptInAppNavigation/);
   assert.match(hookSrc, /export function usePrincipleDetailWorkflow/);
   assert.match(hookSrc, /debounceTimers/);
   assert.match(hookSrc, /pendingSaveData/);
-  assert.match(hookSrc, /handleInAppNavigationClick/);
+  assert.match(hookSrc, /interceptInAppNavigation/);
   assert.match(hookSrc, /refreshApprovalReadiness/);
 });
 

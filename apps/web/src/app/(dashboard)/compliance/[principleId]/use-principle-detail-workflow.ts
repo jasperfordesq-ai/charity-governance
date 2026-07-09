@@ -40,7 +40,13 @@ export function usePrincipleDetailWorkflow() {
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingSaveData = useRef<Record<string, StandardFormState>>({});
+  const skipNextUnmountFlush = useRef(false);
   const readinessRequestSeq = useRef(0);
+
+  const clearPendingSaveTimers = useCallback(() => {
+    Object.values(debounceTimers.current).forEach(clearTimeout);
+    debounceTimers.current = {};
+  }, []);
 
   const refreshApprovalReadiness = useCallback(async () => {
     const requestSeq = ++readinessRequestSeq.current;
@@ -161,8 +167,7 @@ export function usePrincipleDetailWorkflow() {
 
   const flushAllPendingComplianceSaves = useCallback(
     async (options: { silent?: boolean } = {}) => {
-      Object.values(debounceTimers.current).forEach(clearTimeout);
-      debounceTimers.current = {};
+      clearPendingSaveTimers();
 
       const pendingEntries = Object.entries({ ...pendingSaveData.current });
       await Promise.all(
@@ -171,8 +176,13 @@ export function usePrincipleDetailWorkflow() {
         ),
       );
     },
-    [saveStandardNow],
+    [clearPendingSaveTimers, saveStandardNow],
   );
+
+  const discardPendingComplianceSaves = useCallback(() => {
+    clearPendingSaveTimers();
+    pendingSaveData.current = {};
+  }, [clearPendingSaveTimers]);
 
   const autoSave = useCallback(
     (standardId: string, data: StandardFormState) => {
@@ -205,6 +215,7 @@ export function usePrincipleDetailWorkflow() {
 
   useEffect(() => {
     return () => {
+      if (skipNextUnmountFlush.current) return;
       void flushAllPendingComplianceSaves({ silent: true });
     };
   }, [flushAllPendingComplianceSaves]);
@@ -222,24 +233,32 @@ export function usePrincipleDetailWorkflow() {
         return;
       }
 
+      clearPendingSaveTimers();
       setNavigationConfirmError('');
       setPendingNavigationHref(href);
       setNavigationConfirmOpen(true);
     },
-    [hasPendingComplianceSaves, router],
+    [clearPendingSaveTimers, hasPendingComplianceSaves, router],
   );
 
   const stayOnCompliancePage = useCallback(() => {
     if (navigationConfirmBusy) return;
+    Object.keys(pendingSaveData.current).forEach((standardId) => {
+      debounceTimers.current[standardId] = setTimeout(() => {
+        void flushSave(standardId);
+      }, 800);
+    });
     setNavigationConfirmError('');
     setNavigationConfirmOpen(false);
-  }, [navigationConfirmBusy]);
+  }, [flushSave, navigationConfirmBusy]);
 
   const leaveWithoutSaving = useCallback(() => {
+    skipNextUnmountFlush.current = true;
+    discardPendingComplianceSaves();
     setNavigationConfirmError('');
     setNavigationConfirmOpen(false);
     router.push(pendingNavigationHref);
-  }, [pendingNavigationHref, router]);
+  }, [discardPendingComplianceSaves, pendingNavigationHref, router]);
 
   const saveAndContinueNavigation = useCallback(async () => {
     setNavigationConfirmBusy(true);
@@ -259,7 +278,7 @@ export function usePrincipleDetailWorkflow() {
   }, [flushAllPendingComplianceSaves, pendingNavigationHref, router]);
 
   useEffect(() => {
-    const handleInAppNavigationClick = (event: MouseEvent) => {
+    const interceptInAppNavigation = (event: MouseEvent | PointerEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
       }
@@ -284,8 +303,14 @@ export function usePrincipleDetailWorkflow() {
       requestComplianceNavigation(`${destination.pathname}${destination.search}${destination.hash}`);
     };
 
-    document.addEventListener('click', handleInAppNavigationClick, true);
-    return () => document.removeEventListener('click', handleInAppNavigationClick, true);
+    document.addEventListener('pointerdown', interceptInAppNavigation, true);
+    document.addEventListener('mousedown', interceptInAppNavigation, true);
+    document.addEventListener('click', interceptInAppNavigation, true);
+    return () => {
+      document.removeEventListener('pointerdown', interceptInAppNavigation, true);
+      document.removeEventListener('mousedown', interceptInAppNavigation, true);
+      document.removeEventListener('click', interceptInAppNavigation, true);
+    };
   }, [hasPendingComplianceSaves, requestComplianceNavigation]);
 
   useEffect(() => {
