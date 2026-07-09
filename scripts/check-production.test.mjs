@@ -2819,7 +2819,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
   assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
+  assert.match(runbook, /npm run check:production:github-env -- --environment=production --json/);
   assert.match(runbook, /npm run check:production:github-secrets -- --environment=production/);
+  assert.match(runbook, /npm run check:production:github-secrets -- --environment=production --json/);
   assert.match(runbook, /lists secret metadata only; it does not read secret values/);
   assert.doesNotMatch(runbook, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(runbook, /E2E_DEPLOYED_QA=true[\s\S]*npm run test:e2e:responsive/);
