@@ -259,6 +259,15 @@ function completeProductionEnv(overrides = {}) {
   return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
 }
 
+test('production preflight rejects unknown options before reading configuration', () => {
+  const result = runPreflight(['--production-env-file=.env.production', '--surprise']);
+
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /Unknown option: --surprise/);
+  assert.match(result.stderr, /Usage: node scripts\/check-production\.mjs \[--production-env-file=<path>\]/);
+});
+
 test('fails clearly when the explicit production env file is missing', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-missing-'));
   const envPath = join(tempDir, 'missing-production.env');

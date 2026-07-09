@@ -51,6 +51,7 @@ const REQUIRED = [
 ];
 
 const ENV_FILE_FLAG = '--production-env-file=';
+const USAGE_TEXT = 'Usage: node scripts/check-production.mjs [--production-env-file=<path>]';
 const COMPOSE_RUNTIME_WEB_API_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL';
 const COMPOSE_RUNTIME_WEB_SUPABASE_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL';
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
@@ -565,6 +566,15 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
 }
 
 export function runProductionPreflightFromArgs(args = process.argv.slice(2), processEnv = process.env) {
+  for (const arg of args) {
+    if (!arg.startsWith(ENV_FILE_FLAG)) {
+      return result(2, '', `Unknown option: ${arg}\n${USAGE_TEXT}\n`);
+    }
+    if (arg.slice(ENV_FILE_FLAG.length).trim().length === 0) {
+      return result(2, '', `${ENV_FILE_FLAG.slice(0, -1)} requires a value\n${USAGE_TEXT}\n`);
+    }
+  }
+
   const envFileArg = args.find((arg) => arg.startsWith(ENV_FILE_FLAG));
   const envFile = envFileArg ? envFileArg.slice(ENV_FILE_FLAG.length) : '.env.production';
   return runProductionPreflight({ envFile, processEnv });
