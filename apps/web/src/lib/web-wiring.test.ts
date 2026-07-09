@@ -1917,6 +1917,11 @@ test('blog article content avoids decorative dot bullets and oversized cards', (
     assert.doesNotMatch(src, /w-2 h-2 rounded-full/, `${file} should not use decorative dot bullets`);
     assert.doesNotMatch(src, /rounded-xl/, `${file} should use standard-radius content cards`);
     assert.match(src, /rounded-lg/, `${file} should use standard-radius callouts/cards`);
+    assert.doesNotMatch(
+      src,
+      /text-gray-(?:700|800|900)(?![^\n"]*dark:text-)/,
+      `${file} should pair dark-mode text colors with hard-coded gray article copy`,
+    );
   }
 });
 

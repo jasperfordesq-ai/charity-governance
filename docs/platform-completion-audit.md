@@ -1,10 +1,10 @@
 # CharityPilot Platform Completion Audit
 
-Generated: 2026-07-08
+Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `cc28699`
+Working-tree base commit when generated: `42a3945`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -178,6 +178,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Auth email and password-recovery status illustrations now use a shared dark-mode-aware status icon primitive instead of repeated route-local icon containers.
 - Auth invite, reset-password, and verify-email async fallbacks now use shared loading primitives instead of route-local skeleton or spinner markup.
 - Marketing blog search now uses the shared empty-state primitive for no-result filters instead of route-local dashed-panel markup.
+- Marketing blog article copy now pairs hard-coded gray text colors with dark-mode text variants, closing the dark article contrast regression behind wiring and axe checks.
 - Marketing landing workflow signal tiles now use shared status panel styling instead of route-local grey card markup.
 - Compliance standard autosave, organisation profile saving, governance register saving, document vault mutations, export board sign-off, and board/deadline/team list mutations now use the shared save-status primitive instead of route-local status markup.
 - Compliance overview summary and principle cards now use shared status panel styling instead of route-local neutral card markup.
@@ -269,7 +270,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.
-- Local responsive browser QA completed cleanly on 2026-07-08 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
+- `cd e2e && npm test -- tests/accessibility.spec.ts --grep "/blog/understanding-the-charities-governance-code is axe-clean" --repeat-each=3` passed locally on 2026-07-09 after blog article dark-mode contrast hardening.
+- Local responsive browser QA revalidated cleanly on 2026-07-09 with all four `npm run test:e2e:responsive:*` focused chunk commands: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
 - `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, and launch-evidence hardening; production-tooling checks passed 315/315.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.

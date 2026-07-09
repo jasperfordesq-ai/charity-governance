@@ -515,7 +515,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /286\/286 production-tooling checks/);
   assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed/);
   assert.match(auditLedger, /only Playwright E2E was skipped/);
-  assert.match(auditLedger, /Local responsive browser QA completed cleanly on 2026-07-08/);
+  assert.match(auditLedger, /Local responsive browser QA revalidated cleanly on 2026-07-09/);
   assert.match(auditLedger, /public desktop 13\/13/);
   assert.match(auditLedger, /dashboard desktop 12\/12/);
   assert.match(auditLedger, /dashboard mobile 12\/12/);

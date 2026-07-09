@@ -14,55 +14,55 @@ export const meta: PostMeta = {
 
 export default function SimpleVsComplexCharityClassification() {
   return (
-    <article className="max-w-3xl mx-auto px-4 py-10 text-gray-900">
+    <article className="max-w-3xl mx-auto px-4 py-10 text-gray-900 dark:text-white">
 
       {/* Intro */}
-      <p className="text-lg leading-relaxed text-gray-700 mb-6">
+      <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300 mb-6">
         One of the first questions any trustee needs to answer when working through the Charities
         Governance Code is: does our charity need to meet 32 standards or 49? The answer depends on
         whether the CRA classifies you as a <em>non-complex</em> charity or a <em>complex</em>{' '}
         charity. Getting this right is not just a formality — it determines the entire scope of your
         compliance obligations.
       </p>
-      <p className="text-lg leading-relaxed text-gray-700 mb-10">
+      <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300 mb-10">
         This article explains the classification criteria in plain terms, walks through what changes
         at each tier, and gives practical guidance on what to do if you are unsure which category
         your charity falls into.
       </p>
 
       {/* Section 1 */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">
         The CRA's Two-Tier Classification
       </h2>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         The Charities Governance Code acknowledges that a small community group run entirely by
         volunteers has very different governance needs from a national charity with dozens of staff
         and multimillion-euro income. Rather than applying a one-size-fits-all set of obligations,
         the Code creates two tiers of compliance based on the nature and scale of the organisation.
       </p>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         Both tiers share a common foundation of 32 core standards that every registered Irish
         charity must meet, regardless of size. But charities that meet any one of three specific
         criteria are classified as complex and must additionally comply with 17 further standards,
         bringing their total to 49.
       </p>
-      <p className="text-base leading-relaxed text-gray-700 mb-10">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-10">
         Critically, these criteria are framed as an <span className="font-semibold">OR</span>{' '}
         condition, not an AND. You do not need to meet all three to be classified as complex — any
         single criterion is sufficient.
       </p>
 
       {/* Section 2 — Three Criteria */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-6">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-6">
         Signals That Your Charity Should Apply the Additional Standards
       </h2>
 
       {/* Criterion 1 */}
       <div className="bg-teal-primary/10 rounded-lg p-6 mb-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
           1. Scale, Income, and Financial Complexity
         </h3>
-        <p className="text-base leading-relaxed text-gray-700">
+        <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
           A charity with substantial income, multiple funders, restricted funds, trading activity,
           subsidiaries, or higher financial risk should consider whether the additional standards
           are appropriate. Trustees should make and record that judgement in the context of the
@@ -72,10 +72,10 @@ export default function SimpleVsComplexCharityClassification() {
 
       {/* Criterion 2 */}
       <div className="bg-teal-primary/10 rounded-lg p-6 mb-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
           2. Paid Staff, Volunteers, and Delegated Work
         </h3>
-        <p className="text-base leading-relaxed text-gray-700">
+        <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
           Paid staff, large volunteer teams, contractors, branches, or committees can increase the
           governance load. The additional standards help trustees document roles, supervision,
           delegation, training, and accountability where work is no longer carried out directly by
@@ -85,10 +85,10 @@ export default function SimpleVsComplexCharityClassification() {
 
       {/* Criterion 3 */}
       <div className="bg-teal-primary/10 rounded-lg p-6 mb-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
           3. Complex Activities, Structures, or Risk
         </h3>
-        <p className="text-base leading-relaxed text-gray-700">
+        <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
           Cross-border work, regulated services, safeguarding exposure, fundraising at scale,
           partnerships, mergers, restricted grants, or public-contract delivery can all increase the
           level of oversight needed. The point is whether the board has enough structure to control
@@ -97,22 +97,22 @@ export default function SimpleVsComplexCharityClassification() {
       </div>
 
       <div className="border-l-4 border-amber-accent pl-5 mb-10">
-        <p className="text-base leading-relaxed text-gray-700 font-medium">
+        <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 font-medium">
           Record your reasoning. If the board decides that the additional standards apply, keep
           that decision with the annual Compliance Record Form and review it each year.
         </p>
       </div>
 
       {/* Section 3 — The 32 Core Standards */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">
         The 32 Core Standards: The Foundation for Everyone
       </h2>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         The 32 core standards span all six principles of the Charities Governance Code and
         represent the baseline of good governance that every Irish charity — however small — must
         demonstrate. They include:
       </p>
-      <ul className="list-disc list-outside pl-6 space-y-3 text-base leading-relaxed text-gray-700 mb-6">
+      <ul className="list-disc list-outside pl-6 space-y-3 text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-6">
         <li>
           Having an up-to-date governing document that clearly describes the charity's purpose,
           the role of trustees, and how decisions are made.
@@ -146,21 +146,21 @@ export default function SimpleVsComplexCharityClassification() {
           the charity's own governing document.
         </li>
       </ul>
-      <p className="text-base leading-relaxed text-gray-700 mb-10">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-10">
         These are not optional even for the smallest charity. A volunteer-run community group with
         five trustees and €15,000 in annual donations is still required to have a written conflicts
         of interest policy, to minute its meetings, and to file its Annual Report on time.
       </p>
 
       {/* Section 4 — The 17 Additional Standards */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">
         The 17 Additional Standards: What Complex Charities Must Also Meet
       </h2>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         The 17 additional standards build on the core foundation and address the increased risks
         and responsibilities that come with greater scale. They broadly cover:
       </p>
-      <ul className="list-disc list-outside pl-6 space-y-3 text-base leading-relaxed text-gray-700 mb-6">
+      <ul className="list-disc list-outside pl-6 space-y-3 text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-6">
         <li>
           <span className="font-semibold">HR and people management</span> — Written employment
           policies covering recruitment, performance management, disciplinary and grievance
@@ -197,15 +197,15 @@ export default function SimpleVsComplexCharityClassification() {
       </ul>
 
       {/* Section 5 — Classification Changes Year to Year */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">
         What If Your Classification Changes Year to Year?
       </h2>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         This is a genuinely common situation. A charity might receive a once-off bequest that pushes
         its income above €100,000 in one year but falls back below in the next. Or a charity might
         take on its first employee mid-year and then let that contract lapse.
       </p>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         The CRA's guidance is clear: you assess your classification at the start of each reporting
         year based on the position at the end of the most recently completed financial year. If you
         were complex last year, you report against all 49 standards in your current year's self-
@@ -213,18 +213,18 @@ export default function SimpleVsComplexCharityClassification() {
         genuinely and permanently changed (for example, the bequest was clearly a one-time event),
         you should document that reasoning carefully.
       </p>
-      <p className="text-base leading-relaxed text-gray-700 mb-10">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-10">
         The administrative burden of temporarily reverting to the 32-core-only framework is
         generally not worth the risk of misclassifying yourself. Which brings us to the most
         important piece of practical advice in this article.
       </p>
 
       {/* Section 6 — When in Doubt */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">
         Practical Advice: When in Doubt, Treat Yourself as Complex
       </h2>
       <div className="border-l-4 border-teal-primary pl-5 mb-6">
-        <p className="text-base leading-relaxed text-gray-700">
+        <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
           If you are genuinely unsure whether your charity meets one of the three complexity
           criteria, the safest and most defensible course of action is to comply with all 49
           standards. The additional 17 standards represent genuinely good governance practice that
@@ -233,7 +233,7 @@ export default function SimpleVsComplexCharityClassification() {
           can be difficult to explain if the CRA queries your self-assessment.
         </p>
       </div>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         There is also a reputational dimension. Major funders and institutional donors increasingly
         ask charities to demonstrate governance quality as part of due diligence. A charity that
         voluntarily meets the higher standard, even where not legally required, sends a strong
@@ -241,24 +241,24 @@ export default function SimpleVsComplexCharityClassification() {
       </p>
 
       {/* Section 7 — CharityPilot Plans */}
-      <h2 className="text-2xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">
         How CharityPilot Maps to This Classification
       </h2>
-      <p className="text-base leading-relaxed text-gray-700 mb-4">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
         CharityPilot's two plans are designed precisely around this classification framework.
       </p>
       <div className="grid sm:grid-cols-2 gap-5 mb-6">
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-5">
-          <h3 className="text-base font-semibold text-gray-900 mb-2">Essentials Plan</h3>
-          <p className="text-sm leading-relaxed text-gray-700">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Essentials Plan</h3>
+          <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
             Covers all 32 core standards. Designed for non-complex charities: volunteer-run
             organisations applying the core standards only. Includes templates, document storage,
             and annual filing reminders.
           </p>
         </div>
         <div className="bg-teal-primary/10 border border-teal-primary/30 rounded-lg p-5">
-          <h3 className="text-base font-semibold text-gray-900 mb-2">Complete Plan</h3>
-          <p className="text-sm leading-relaxed text-gray-700">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Complete Plan</h3>
+          <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
             Covers all 49 standards. Designed for complex charities and for any non-complex charity
             that wants the confidence of meeting the higher bar. Adds HR policy templates,
             subcommittee tracking, enhanced financial oversight tools, and a full Trustees' Annual
@@ -266,7 +266,7 @@ export default function SimpleVsComplexCharityClassification() {
           </p>
         </div>
       </div>
-      <p className="text-base leading-relaxed text-gray-700">
+      <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
         When you set up your CharityPilot account, the platform asks you a short series of questions
         to determine your classification and automatically configures your compliance dashboard with
         the correct set of standards. If your status changes, updating it takes seconds and the
