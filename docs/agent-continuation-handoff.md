@@ -34,9 +34,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 - Latest verified pushed commit at the time of this handoff refresh:
-  `7c182f3379568765387772b382c4d596105a839a`.
+  `0d2988772504b73189d8ce9c500d92800d1de92f`.
 - GitHub CI for that commit passed:
-  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29010531551`.
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29012705817`.
 - The generated platform audit intentionally keeps repository clean/synced state
   live-only; run `npm run launch:status -- --json` and inspect
   `repositoryState` from the release checkout before collecting launch evidence.
@@ -276,6 +276,12 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- `gh run watch 29012705817 --exit-status`
+  - Passed on 2026-07-09 for commit `0d29887`.
+  - Covered CI security scan, Prisma validation/migration, PostgreSQL
+    backup/restore, lint, tests, reliability ledger, local Docker smoke,
+    workspace builds, Docker image builds/smokes, scheduled-job smoke, and
+    dependency audit after release-ready stack reachability timeout hardening.
 - `gh run watch 29010531551 --exit-status`
   - Passed on 2026-07-09 for commit `7c182f3`.
   - Covered CI security scan, Prisma validation/migration, PostgreSQL
@@ -301,7 +307,7 @@ Recently successful checks in this workstream:
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same changes.
 - `npm run test:production-check`
-  - Passed on 2026-07-09 with 330/330 production-tooling checks passing after
+  - Passed on 2026-07-09 with 331/331 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
 
 - `npm test -w @charitypilot/web`
@@ -313,14 +319,14 @@ Recently successful checks in this workstream:
   - Security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed.
   - Final summary included `OVERALL: GREEN - repository release gates passed`.
 - `npm run test:production-check`
-  - Passed on 2026-07-09 with 330/330 production-tooling checks passing.
+  - Passed on 2026-07-09 with 331/331 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
-  - Passed again with 330/330 production-tooling checks after launch-evidence and continuation-doc hardening.
+  - Passed again with 331/331 production-tooling checks after launch-evidence, release-ready, and continuation-doc hardening.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests
