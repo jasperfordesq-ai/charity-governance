@@ -4,7 +4,13 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { assessLaunchState, groupRemainingKeys, renderLaunchStatusJson } from './launch-status.mjs';
+import {
+  assessLaunchState,
+  collectRepositoryState,
+  groupRemainingKeys,
+  renderLaunchStatusJson,
+  renderLaunchStatusText,
+} from './launch-status.mjs';
 import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import { renderProductionLaunchEvidenceTemplate } from './generate-production-launch-evidence-template.mjs';
 
@@ -529,6 +535,62 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.ok(payload.externalEvidenceGates.some((gate) => gate.includes('external penetration test')));
   assert.equal(payload.remainingKeyGroups[0].label, 'PostgreSQL');
   assert.equal(payload.remainingKeyGroups[1].label, 'Stripe billing');
+});
+
+test('launch status exposes repository state so release evidence is tied to a clean pushed ref', () => {
+  const repositoryState = {
+    branch: 'master',
+    headSha: 'd'.repeat(40),
+    upstreamRef: 'origin/master',
+    upstreamSha: 'c'.repeat(40),
+    dirty: true,
+    syncedWithUpstream: false,
+    launchEvidenceRisk: 'dirty_worktree',
+    headline: 'Repository has uncommitted changes; do not collect launch evidence from this worktree.',
+  };
+  const state = assessLaunchState({
+    envExists: true,
+    envContent: productionEnv(),
+    evidenceFileExists: true,
+    evidenceContent: renderProductionLaunchEvidenceTemplate(),
+    repositoryState,
+  });
+
+  const payload = JSON.parse(renderLaunchStatusJson(state));
+  const text = renderLaunchStatusText(state);
+
+  assert.deepEqual(payload.repositoryState, repositoryState);
+  assert.match(text, /Repository state:/);
+  assert.match(text, /branch: master/);
+  assert.match(text, /head: dddddddddddddddddddddddddddddddddddddddd/);
+  assert.match(text, /upstream: origin\/master/);
+  assert.match(text, /dirty_worktree/);
+  assert.match(text, /do not collect launch evidence/);
+});
+
+test('repository state collector classifies dirty and unpushed launch evidence risk', () => {
+  const outputs = new Map([
+    ['branch --show-current', { status: 0, stdout: 'master\n' }],
+    ['rev-parse HEAD', { status: 0, stdout: `${'e'.repeat(40)}\n` }],
+    ['rev-parse --abbrev-ref --symbolic-full-name @{upstream}', { status: 0, stdout: 'origin/master\n' }],
+    ['rev-parse @{upstream}', { status: 0, stdout: `${'f'.repeat(40)}\n` }],
+    ['status --porcelain', { status: 0, stdout: ' M scripts/launch-status.mjs\n' }],
+  ]);
+
+  const state = collectRepositoryState({
+    runGit: (args) => outputs.get(args.join(' ')) ?? { status: 1, stdout: '', stderr: 'missing fixture' },
+  });
+
+  assert.deepEqual(state, {
+    branch: 'master',
+    headSha: 'e'.repeat(40),
+    upstreamRef: 'origin/master',
+    upstreamSha: 'f'.repeat(40),
+    dirty: true,
+    syncedWithUpstream: false,
+    launchEvidenceRisk: 'dirty_worktree',
+    headline: 'Repository has uncommitted changes; do not collect launch evidence from this worktree.',
+  });
 });
 
 test('reports ENV_INCOMPLETE for CRLF production env files', () => {

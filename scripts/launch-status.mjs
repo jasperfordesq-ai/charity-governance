@@ -6,6 +6,7 @@
 // - the external gates (hosting, legal, pentest, sign-off) live in
 // docs/LAUNCH-GUIDE.md and docs/production-launch-checklist.md.
 
+import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -192,6 +193,60 @@ const PLACEHOLDER_TOKENS = Object.freeze([
 function parseArgs(argv) {
   return {
     json: argv.includes('--json'),
+  };
+}
+
+function defaultRunGit(args) {
+  const result = spawnSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+  };
+}
+
+function gitOutput(runGit, args) {
+  const result = runGit(args);
+  if (!result || result.status !== 0) return null;
+  const value = String(result.stdout ?? '').trim();
+  return value.length > 0 ? value : null;
+}
+
+export function collectRepositoryState({ runGit = defaultRunGit } = {}) {
+  const branch = gitOutput(runGit, ['branch', '--show-current']);
+  const headSha = gitOutput(runGit, ['rev-parse', 'HEAD']);
+  const upstreamRef = gitOutput(runGit, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']);
+  const upstreamSha = gitOutput(runGit, ['rev-parse', '@{upstream}']);
+  const statusResult = runGit(['status', '--porcelain']);
+  const dirty = statusResult?.status === 0 ? String(statusResult.stdout ?? '').trim().length > 0 : null;
+  const syncedWithUpstream = headSha && upstreamSha ? headSha === upstreamSha : null;
+  let launchEvidenceRisk = 'unknown_upstream';
+  let headline = 'Repository upstream state could not be verified; collect launch evidence only from a known release ref.';
+
+  if (dirty === true) {
+    launchEvidenceRisk = 'dirty_worktree';
+    headline = 'Repository has uncommitted changes; do not collect launch evidence from this worktree.';
+  } else if (syncedWithUpstream === false) {
+    launchEvidenceRisk = 'not_synced_with_upstream';
+    headline = 'Repository HEAD is not synced with its upstream; push or pull before collecting launch evidence.';
+  } else if (syncedWithUpstream === true && dirty === false) {
+    launchEvidenceRisk = 'clean_synced';
+    headline = 'Repository is clean and synced with its upstream ref.';
+  }
+
+  return {
+    branch,
+    headSha,
+    upstreamRef,
+    upstreamSha,
+    dirty,
+    syncedWithUpstream,
+    launchEvidenceRisk,
+    headline,
   };
 }
 
@@ -438,6 +493,7 @@ export function assessLaunchState(state) {
       remainingKeyDetails: [],
       remainingKeyGroups: [],
       expectedProductionValueGroups: expectedProductionValueGroups(),
+      repositoryState: state.repositoryState ?? null,
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
@@ -464,6 +520,7 @@ export function assessLaunchState(state) {
       remainingKeyDetails,
       remainingKeyGroups: groupRemainingKeys(remainingKeys),
       expectedProductionValueGroups: expectedProductionValueGroups(),
+      repositoryState: state.repositoryState ?? null,
       evidenceLedger,
       deployedBrowserQa: DEPLOYED_BROWSER_QA,
       productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
@@ -487,6 +544,7 @@ export function assessLaunchState(state) {
     remainingKeyDetails: [],
     remainingKeyGroups: [],
     expectedProductionValueGroups: [],
+    repositoryState: state.repositoryState ?? null,
     evidenceLedger,
     deployedBrowserQa: DEPLOYED_BROWSER_QA,
     productionLaunchCommands: PRODUCTION_LAUNCH_COMMANDS,
@@ -516,6 +574,7 @@ export function renderLaunchStatusJson(state) {
       remainingKeyDetails: state.remainingKeyDetails ?? [],
       remainingKeyGroups: state.remainingKeyGroups,
       expectedProductionValueGroups: state.expectedProductionValueGroups ?? [],
+      repositoryState: state.repositoryState ?? null,
       launchProgress: state.launchProgress,
       nextActions: state.nextActions,
       evidenceLedger: state.evidenceLedger,
@@ -531,7 +590,7 @@ export function renderLaunchStatusJson(state) {
   )}\n`;
 }
 
-function renderLaunchStatusText(state) {
+export function renderLaunchStatusText(state) {
   const lines = [];
 
   lines.push('CharityPilot launch status', '==========================', '', state.headline, '');
@@ -580,6 +639,19 @@ function renderLaunchStatusText(state) {
       `  Strict launch gates: ${state.launchProgress.strictLaunchGates.completed} / ${state.launchProgress.strictLaunchGates.total} complete (${state.launchProgress.strictLaunchGates.remaining} remaining, ${state.launchProgress.percentages.strictLaunchGates}% complete)`,
     );
     lines.push(`  approvedForLaunch: ${state.launchProgress.approvedForLaunch ? 'true' : 'false'}`, '');
+  }
+  if (state.repositoryState) {
+    lines.push('Repository state:');
+    lines.push(`  branch: ${state.repositoryState.branch ?? 'unknown'}`);
+    lines.push(`  head: ${state.repositoryState.headSha ?? 'unknown'}`);
+    lines.push(`  upstream: ${state.repositoryState.upstreamRef ?? 'unknown'}`);
+    lines.push(`  upstream head: ${state.repositoryState.upstreamSha ?? 'unknown'}`);
+    lines.push(`  dirty: ${state.repositoryState.dirty === null ? 'unknown' : String(state.repositoryState.dirty)}`);
+    lines.push(
+      `  syncedWithUpstream: ${state.repositoryState.syncedWithUpstream === null ? 'unknown' : String(state.repositoryState.syncedWithUpstream)}`,
+    );
+    lines.push(`  launchEvidenceRisk: ${state.repositoryState.launchEvidenceRisk}`);
+    lines.push(`  ${state.repositoryState.headline}`, '');
   }
   lines.push('Next:');
   for (const action of state.nextActions) lines.push(`  ${action}`);
@@ -684,6 +756,7 @@ function main(argv = process.argv.slice(2)) {
     envContent: envExists ? readFileSync(envPath, 'utf8') : '',
     evidenceContent: existsSync(evidencePath) ? decodeJsonFile(evidencePath) : '',
     evidenceFileExists: existsSync(evidencePath),
+    repositoryState: collectRepositoryState(),
   });
 
   process.stdout.write(options.json ? renderLaunchStatusJson(state) : renderLaunchStatusText(state));

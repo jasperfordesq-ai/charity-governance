@@ -507,7 +507,9 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
   assert.match(auditLedger, /9\/85 evidence checks/);
   assert.doesNotMatch(auditLedger, /0\/85 evidence checks/);
-  assert.match(auditLedger, /320\/320 production-tooling checks/);
+  assert.match(auditLedger, /322\/322 production-tooling checks/);
+  assert.doesNotMatch(auditLedger, /321\/321 production-tooling checks/);
+  assert.doesNotMatch(auditLedger, /320\/320 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /319\/319 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /318\/318 production-tooling checks/);
   assert.doesNotMatch(auditLedger, /317\/317 production-tooling checks/);
