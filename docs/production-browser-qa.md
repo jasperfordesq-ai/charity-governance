@@ -86,6 +86,12 @@ lower `E2E_ROUTE_WARM_TIMEOUT_MS` / `E2E_ROUTE_WARM_BUDGET_MS` before running a
 focused chunk. Do not use that as a substitute for deployed production QA; the
 launch ledger still requires deployed HTTPS evidence.
 
+If the responsive or accessibility suite reports an HTTP 500, a Next.js/runtime
+overlay, an unexpected login redirect, or a browser JavaScript `pageerror` while
+resolving a protected route, treat it as a launch-blocking QA finding until it is
+reproduced, fixed, or formally risk-accepted. Do not downgrade it to a selector
+flake without stronger evidence.
+
 Use the same `E2E_DEPLOYED_QA=true`, URL, and secret-store credential environment
 shown above when those chunks are run against production.
 

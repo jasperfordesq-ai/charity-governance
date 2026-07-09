@@ -68,6 +68,11 @@ npm run test:e2e:responsive:dashboard:mobile
 Keep all four transcripts together if they are used as launch browser-QA
 evidence.
 
+The shared navigation helper fails protected-route resolution with explicit
+diagnostics for HTTP 500 responses, Next.js/runtime overlays, unexpected login
+redirects, and browser JavaScript `pageerror` events. Treat those as real route
+readiness failures to investigate, not as missing-selector flakes.
+
 If Chromium fails before a page opens with `Invalid file descriptor to ICU data
 received`, the local Playwright browser cache is incomplete or corrupted. Rebuild
 it from the repo root:
