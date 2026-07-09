@@ -44,6 +44,11 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
   `cb78eb85bb0127150ad448037b5d03b8060869bf`.
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
+- Most recent local production-tooling gate captured by this handoff:
+  `npm run test:production-check` passed with `340 / 340` checks on
+  2026-07-09. Older `338 / 338` and `339 / 339` entries in the
+  verification chronology below are historical counts from earlier commits,
+  not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
   `npm run launch:status -- --json` and its `repositoryState.headSha` as the
   live source of truth for the current checkout before collecting evidence.
@@ -63,9 +68,12 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - `npm run check:production:github-secrets -- --environment=production` now
   verifies required GitHub `production` secret names without reading secret
   values when GitHub is the approved deployment secret store.
-- GitHub `production` environment secrets list is currently empty, so provider
-  secrets still need to be configured outside git before release images or live
-  deploy evidence can be completed.
+- GitHub `production` environment secrets currently include the generated
+  non-provider entries `JWT_SECRET` and `READINESS_API_KEY`. The live
+  `check:production:github-secrets` run on 2026-07-09 still fails with six
+  missing provider/operator secrets: `DATABASE_URL`, `STRIPE_SECRET_KEY`,
+  `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
+  `ERROR_ALERT_WEBHOOK_URL`.
 
 The 19 missing production values are:
 
@@ -306,7 +314,8 @@ Recently successful checks in this workstream:
 - `node --test scripts/check-local-docker.test.mjs`
   - Passed on 2026-07-09 with 38/38 local Docker and browser-QA wiring checks.
 - `npm run test:production-check`
-  - Passed on 2026-07-09 with 339/339 production-tooling checks.
+  - Passed on 2026-07-09 with 340/340 production-tooling checks during the
+    latest handoff refresh.
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
 - `gh run watch 29021018683 --exit-status`
@@ -354,6 +363,7 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
+    Historical count; the current local production-tooling gate is 340/340.
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -366,12 +376,14 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
+  - Historical count; the current local production-tooling gate is 340/340.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
   - Passed again with 338/338 production-tooling checks after launch-evidence, release-ready, continuation-doc, and GitHub secret-store checker hardening.
+  - Historical count; the current local production-tooling gate is 340/340.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests
@@ -425,6 +437,7 @@ The first incomplete evidence checks currently reported by
 
 - `releaseGate.check-production`
 - `releaseGate.github-environment`
+- `releaseGate.github-secret-store`
 - `releaseGate.deploy-preflight`
 - `releaseGate.deploy-production`
 - `releaseGate.deploy-smoke`
@@ -496,6 +509,7 @@ npm run launch:status -- --json
 ```powershell
 npm run check:production -- --production-env-file=.env.production
 npm run check:production:github-env -- --environment=production
+npm run check:production:github-secrets -- --environment=production
 npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
 npm run check:production:supabase -- --production-env-file=.env.production
