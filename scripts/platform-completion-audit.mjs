@@ -247,6 +247,7 @@ const fixedInThisAuditBranch = [
   'The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.',
   'The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.',
   'The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.',
+  'Local-driver document downloads now require the requested storage path to belong to a live document row for the caller organisation before any file read occurs.',
   'The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.',
   'The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.',
   'The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.',
@@ -819,8 +820,35 @@ function render() {
 }
 
 function main() {
+  const args = new Set(process.argv.slice(2));
+  const rendered = render();
+
+  if (args.has('--stdout')) {
+    process.stdout.write(rendered);
+    return;
+  }
+
+  if (args.has('--check')) {
+    const relativeOutputPath = normalizePath(relative(repoRoot, outputPath));
+
+    if (!existsSync(outputPath)) {
+      console.error(`Platform completion audit is missing. Run npm run audit:platform to create ${relativeOutputPath}.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    if (readFileSync(outputPath, 'utf8') !== rendered) {
+      console.error(`Platform completion audit is stale. Run npm run audit:platform to refresh ${relativeOutputPath}.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(`Platform completion audit is current: ${relativeOutputPath}`);
+    return;
+  }
+
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, render(), 'utf8');
+  writeFileSync(outputPath, rendered, 'utf8');
   console.log(`Wrote ${normalizePath(relative(repoRoot, outputPath))}`);
 }
 

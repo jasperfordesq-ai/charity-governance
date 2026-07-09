@@ -4,7 +4,7 @@ Generated: 2026-07-09
 
 Branch: `master`
 
-Working-tree base commit when generated: `bbfdc72`
+Working-tree base commit when generated: `484e548`
 
 Generation note: inspect `git status` before release because this report is committed as part of the audit work.
 
@@ -211,6 +211,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.
 - The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.
+- Local-driver document downloads now require the requested storage path to belong to a live document row for the caller organisation before any file read occurs.
 - The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.
 - The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.
 - The launch status script now keeps its operator-facing source text ASCII-safe for cleaner status transcripts.
@@ -346,7 +347,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `documents` | `apps/api/src/routes/documents/index.ts` | 314 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `documents` | `apps/api/src/routes/documents/index.ts` | 316 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 90 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |

@@ -23,6 +23,7 @@
     "security:sast": "node scripts/security-scan.mjs sast",
     "security:scan": "npm run security:secrets && npm run security:sast",
     "audit:platform": "node scripts/platform-completion-audit.mjs",
+    "audit:platform:check": "node scripts/platform-completion-audit.mjs --check",
     "setup:production-env": "node scripts/generate-production-env.mjs",
     "launch:status": "node scripts/launch-status.mjs",
     "check:production": "node scripts/check-production.mjs",

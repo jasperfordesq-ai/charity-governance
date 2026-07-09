@@ -584,6 +584,25 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /legal\/compliance final approval/);
 });
 
+test('platform audit check command is read-only for fresh-session baselines', () => {
+  const pkg = packageJson();
+  const handoff = readRepoFile('docs/agent-continuation-handoff.md');
+  const auditBefore = readRepoFile('docs/platform-completion-audit.md');
+
+  assert.equal(pkg.scripts['audit:platform:check'], 'node scripts/platform-completion-audit.mjs --check');
+  assert.match(handoff, /npm run audit:platform:check/);
+  assert.doesNotMatch(handoff, /npm run audit:platform\n/);
+
+  const result = spawnSync(process.execPath, ['scripts/platform-completion-audit.mjs', '--check'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Platform completion audit is current/);
+  assert.equal(readRepoFile('docs/platform-completion-audit.md'), auditBefore);
+});
+
 test('product revamp page inventory is not stale pre-revamp guidance', () => {
   const pageInventory = readRepoFile('docs/product-revamp/page-inventory.md');
 

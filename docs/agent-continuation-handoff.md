@@ -19,7 +19,7 @@ Run this first in a fresh session:
 ```powershell
 git status --short --branch
 npm run launch:status -- --json
-npm run audit:platform
+npm run audit:platform:check
 ```
 
 Known current state from `npm run launch:status -- --json` on 2026-07-09:
