@@ -189,8 +189,17 @@ const PLACEHOLDER_TOKENS = Object.freeze([
   'TBD',
   'placeholder',
 ]);
+const USAGE_TEXT = 'Usage: node scripts/launch-status.mjs [--json]';
 
 function parseArgs(argv) {
+  const unknownOptions = argv.filter((arg) => arg !== '--json');
+  if (unknownOptions.length > 0) {
+    return {
+      error: `Unknown option: ${unknownOptions[0]}`,
+      usage: USAGE_TEXT,
+    };
+  }
+
   return {
     json: argv.includes('--json'),
   };
@@ -748,6 +757,12 @@ export function renderLaunchStatusText(state) {
 
 function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
+  if (options.error) {
+    process.stderr.write(`${options.error}\n${options.usage}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const envPath = join(repoRoot, '.env.production');
   const evidencePath = join(repoRoot, DEFAULT_EVIDENCE_FILE);
   const envExists = existsSync(envPath);

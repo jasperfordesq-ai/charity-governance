@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -15,6 +16,7 @@ import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import { renderProductionLaunchEvidenceTemplate } from './generate-production-launch-evidence-template.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const launchStatusScript = join(repoRoot, 'scripts', 'launch-status.mjs');
 const VALID_PRODUCTION_VALUES = {
   DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
   FRONTEND_URL: 'https://app.charitypilot.ie',
@@ -196,6 +198,18 @@ test('launch status script text is ASCII-safe for operator transcripts', () => {
   assert.doesNotMatch(source, /[^\x00-\x7F]/);
   assert.match(source, /external gates/);
   assert.match(source, /Release image promotion/);
+});
+
+test('launch status rejects unknown CLI options before producing operator evidence', () => {
+  const result = spawnSync(process.execPath, [launchStatusScript, '--definitely-not-a-real-option'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /Unknown option: --definitely-not-a-real-option/);
+  assert.match(result.stderr, /Usage: node scripts\/launch-status\.mjs \[--json\]/);
 });
 
 test('reports NO_ENV and points at the generator when .env.production is absent', () => {
