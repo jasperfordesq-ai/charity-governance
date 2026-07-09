@@ -110,6 +110,7 @@ function assertDeployedBrowserQaCommands(commands) {
 
 function assertProductionLaunchCommands(commands) {
   assert.equal(commands.corePreflight, 'npm run check:production -- --production-env-file=.env.production');
+  assert.equal(commands.githubEnvironment, 'npm run check:production:github-env -- --environment=production');
   assert.equal(commands.hosting, 'npm run check:production:hosting -- --production-env-file=.env.production');
   assert.equal(
     commands.database,
@@ -166,6 +167,7 @@ function assertReleaseImagePromotion(promotion) {
   assert.doesNotMatch(promotion.configureCommands.join('\n'), /YOUR_SUPABASE_PROJECT_REF/);
   assert.equal(promotion.workflowCommand, 'gh workflow run release-images.yml --ref master');
   assert.equal(promotion.watchCommand, 'gh run watch RELEASE_RUN_ID --exit-status');
+  assert.equal(promotion.githubEnvironmentCheckCommand, 'npm run check:production:github-env -- --environment=production');
   assert.equal(promotion.evidenceArtifact, 'release-image-digests.env');
   assert.match(promotion.evidenceTarget, /CHARITYPILOT_\*_IMAGE/);
   assert.match(promotion.evidenceTarget, /CHARITYPILOT_WEB_BUILD_\*/);

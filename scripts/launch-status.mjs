@@ -50,6 +50,7 @@ const DEPLOYED_BROWSER_QA = Object.freeze({
 
 const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
   corePreflight: 'npm run check:production -- --production-env-file=.env.production',
+  githubEnvironment: 'npm run check:production:github-env -- --environment=production',
   hosting: 'npm run check:production:hosting -- --production-env-file=.env.production',
   database: 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
   supabase: 'npm run check:production:supabase -- --production-env-file=.env.production',
@@ -90,6 +91,7 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
   ]),
   workflowCommand: 'gh workflow run release-images.yml --ref master',
   watchCommand: 'gh run watch RELEASE_RUN_ID --exit-status',
+  githubEnvironmentCheckCommand: 'npm run check:production:github-env -- --environment=production',
   evidenceArtifact: 'release-image-digests.env',
   evidenceTarget:
     'Copy digest-pinned CHARITYPILOT_*_IMAGE and CHARITYPILOT_WEB_BUILD_* values into the production secret source and release evidence ledger.',
@@ -705,6 +707,7 @@ export function renderLaunchStatusText(state) {
   if (state.productionLaunchCommands) {
     lines.push('', 'Production launch command sequence:');
     lines.push(`  Core preflight:  ${state.productionLaunchCommands.corePreflight}`);
+    lines.push(`  GitHub production environment:  ${state.productionLaunchCommands.githubEnvironment}`);
     lines.push(`  Hosting/DNS/TLS:  ${state.productionLaunchCommands.hosting}`);
     lines.push(`  Database backup/restore:  ${state.productionLaunchCommands.database}`);
     lines.push(`  Supabase storage:  ${state.productionLaunchCommands.supabase}`);
@@ -736,6 +739,7 @@ export function renderLaunchStatusText(state) {
     for (const command of state.releaseImagePromotion.configureCommands) lines.push(`    - ${command}`);
     lines.push(`  Workflow:  ${state.releaseImagePromotion.workflowCommand}`);
     lines.push(`  Watch:  ${state.releaseImagePromotion.watchCommand}`);
+    lines.push(`  Preflight GitHub environment:  ${state.releaseImagePromotion.githubEnvironmentCheckCommand}`);
     lines.push(`  Digest artifact:  ${state.releaseImagePromotion.evidenceArtifact}`);
     lines.push(`  Evidence target:  ${state.releaseImagePromotion.evidenceTarget}`);
   }

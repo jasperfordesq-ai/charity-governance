@@ -25,6 +25,7 @@ npm run build -w @charitypilot/api
 npm run build -w @charitypilot/web
 npm audit --omit=dev --audit-level=moderate
 npm run check:production -- --production-env-file=.env.production
+npm run check:production:github-env -- --environment=production
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production
@@ -50,6 +51,7 @@ Production Docker promotion must use digest-pinned GHCR image references from th
 ```bash
 gh variable set NEXT_PUBLIC_API_URL --env production --body https://api.charitypilot.ie
 gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --body "https://REAL_SUPABASE_PROJECT_REF.supabase.co"  # replace REAL_SUPABASE_PROJECT_REF first
+npm run check:production:github-env -- --environment=production
 gh workflow run release-images.yml --ref master
 gh run watch RELEASE_RUN_ID --exit-status
 ```

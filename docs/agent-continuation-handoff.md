@@ -78,6 +78,13 @@ artifact:
 - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
 - `NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co` (replace `REAL_SUPABASE_PROJECT_REF` before running `release-images.yml`)
 
+Validate those non-secret GitHub `production` environment variables before
+running the image workflow:
+
+```powershell
+npm run check:production:github-env -- --environment=production
+```
+
 ## Non-Negotiable Product Posture
 
 Do not claim CharityPilot is legally guaranteed, "100% legally bombproof", or a substitute for legal advice.
@@ -422,6 +429,7 @@ npm run launch:status -- --json
 
 ```powershell
 npm run check:production -- --production-env-file=.env.production
+npm run check:production:github-env -- --environment=production
 npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
 npm run check:production:supabase -- --production-env-file=.env.production
