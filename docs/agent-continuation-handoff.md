@@ -291,8 +291,8 @@ Recently successful checks in this workstream:
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same changes.
 - `npm run test:production-check`
-  - Passed on 2026-07-09 with 323/323 production-tooling checks passing after
-    the same changes.
+  - Passed on 2026-07-09 with 330/330 production-tooling checks passing after
+    the same changes and the GitHub production environment evidence gate.
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -303,14 +303,14 @@ Recently successful checks in this workstream:
   - Security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed.
   - Playwright E2E intentionally skipped.
 - `npm run test:production-check`
-  - Passed on 2026-07-09 with 322/322 production-tooling checks passing.
+  - Passed on 2026-07-09 with 330/330 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
-  - Passed again with 322/322 production-tooling checks after launch-evidence and continuation-doc hardening.
+  - Passed again with 330/330 production-tooling checks after launch-evidence and continuation-doc hardening.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests

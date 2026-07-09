@@ -1653,7 +1653,8 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(productionTodo, /npm run release:ready -- --no-e2e/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /322\/322 production-tooling checks/);
+  assert.match(productionTodo, /330\/330 production-tooling checks/);
+  assert.doesNotMatch(productionTodo, /322\/322 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /321\/321 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /320\/320 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /319\/319 production-tooling checks/);
@@ -1693,7 +1694,8 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /isolated restore target/);
   assert.match(handoff, /non-production restore target/);
   assert.match(handoff, /production project was not overwritten/);
-  assert.match(handoff, /322\/322 production-tooling checks/);
+  assert.match(handoff, /330\/330 production-tooling checks/);
+  assert.doesNotMatch(handoff, /322\/322 production-tooling checks/);
   assert.doesNotMatch(handoff, /321\/321 production-tooling checks/);
   assert.doesNotMatch(handoff, /320\/320 production-tooling checks/);
   assert.doesNotMatch(handoff, /319\/319 production-tooling checks/);
@@ -2371,7 +2373,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 322\/322/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 330\/330/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 322\/322/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 321\/321/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 320\/320/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 319\/319/);
