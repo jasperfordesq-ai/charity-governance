@@ -22,27 +22,70 @@ const noBuild = args.includes('--no-build');
 
 const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
-const STACK_REACHABILITY_TIMEOUT_MS = 5000;
+const STACK_REACHABILITY_TOTAL_TIMEOUT_MS = 90000;
+const STACK_REACHABILITY_REQUEST_TIMEOUT_MS = 10000;
+const STACK_REACHABILITY_POLL_MS = 2000;
+const RELEASE_READY_GATE_TIMEOUT_MS = positiveIntEnv('RELEASE_READY_GATE_TIMEOUT_MS', 900000);
+const RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv('RELEASE_READY_E2E_TIMEOUT_MS', 1500000);
+
+function positiveIntEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function cleanupTimedOutProcessTree(pid) {
+  if (process.platform !== 'win32' || !pid) {
+    return;
+  }
+  try {
+    spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+  } catch {
+    // Best-effort cleanup only; the timed-out gate remains failed either way.
+  }
+}
 
 function run(name, cmd, cmdArgs, opts = {}) {
   const started = Date.now();
   process.stdout.write(`\n-- ${name} --\n`);
-  const res = spawnSync(cmd, cmdArgs, { cwd: ROOT, stdio: 'inherit', shell: true, ...opts });
+  const timeoutMs = opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS;
+  const res = spawnSync(cmd, cmdArgs, {
+    cwd: ROOT,
+    stdio: 'inherit',
+    shell: true,
+    timeout: opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS,
+  });
   const ms = Date.now() - started;
+  if (res.error?.code === 'ETIMEDOUT') {
+    cleanupTimedOutProcessTree(res.pid);
+    process.stdout.write(`Gate timed out after ${(timeoutMs / 1000).toFixed(0)}s.\n`);
+  }
   const ok = res.status === 0;
   return { name, ok, ms, skipped: false };
 }
 
-async function reachable(url) {
+async function probeReachable(url) {
   try {
     const res = await fetch(url, {
       redirect: 'manual',
-      signal: AbortSignal.timeout(STACK_REACHABILITY_TIMEOUT_MS),
+      signal: AbortSignal.timeout(STACK_REACHABILITY_REQUEST_TIMEOUT_MS),
     });
     return res.status < 500;
   } catch {
     return false;
   }
+}
+
+async function waitUntilReachable(url) {
+  const deadline = Date.now() + STACK_REACHABILITY_TOTAL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (await probeReachable(url)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, STACK_REACHABILITY_POLL_MS));
+  }
+  return false;
 }
 
 const results = [];
@@ -68,7 +111,11 @@ results.push(run('Reliability ledger (api + web)', 'npm', ['run', 'reliability:r
 if (noE2e) {
   results.push({ name: 'End-to-end (Playwright)', ok: true, ms: 0, skipped: true });
 } else {
-  const up = (await reachable(`${API_URL}/api/v1/health`)) && (await reachable(`${WEB_URL}/`));
+  const [apiUp, webUp] = await Promise.all([
+    waitUntilReachable(`${API_URL}/api/v1/health`),
+    waitUntilReachable(`${WEB_URL}/`),
+  ]);
+  const up = apiUp && webUp;
   if (!up) {
     process.stdout.write(
       `\n-- End-to-end (Playwright) --\n` +
@@ -78,7 +125,7 @@ if (noE2e) {
     );
     results.push({ name: 'End-to-end (Playwright)', ok: false, ms: 0, skipped: false });
   } else {
-    results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e']));
+    results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], { timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS }));
   }
 }
 

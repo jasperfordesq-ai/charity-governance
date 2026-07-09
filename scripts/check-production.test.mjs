@@ -1618,9 +1618,26 @@ test('release readiness command distinguishes skipped gates from full readiness'
 test('release readiness stack reachability probes time out instead of hanging', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
 
-  assert.match(releaseReady, /STACK_REACHABILITY_TIMEOUT_MS = 5000/);
-  assert.match(releaseReady, /AbortSignal\.timeout\(STACK_REACHABILITY_TIMEOUT_MS\)/);
+  assert.match(releaseReady, /STACK_REACHABILITY_TOTAL_TIMEOUT_MS = 90000/);
+  assert.match(releaseReady, /STACK_REACHABILITY_REQUEST_TIMEOUT_MS = 10000/);
+  assert.match(releaseReady, /STACK_REACHABILITY_POLL_MS = 2000/);
+  assert.match(releaseReady, /AbortSignal\.timeout\(STACK_REACHABILITY_REQUEST_TIMEOUT_MS\)/);
+  assert.match(releaseReady, /while \(Date\.now\(\) < deadline\)/);
+  assert.match(releaseReady, /await new Promise\(\(resolve\) => setTimeout\(resolve, STACK_REACHABILITY_POLL_MS\)\)/);
   assert.match(releaseReady, /Stack not reachable at \$\{WEB_URL\} \/ \$\{API_URL\}/);
+});
+
+test('release readiness child gates have finite process timeouts', () => {
+  const releaseReady = readRepoFile('scripts/release-ready.mjs');
+
+  assert.match(releaseReady, /RELEASE_READY_GATE_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_GATE_TIMEOUT_MS', 900000\)/);
+  assert.match(releaseReady, /RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_E2E_TIMEOUT_MS', 1500000\)/);
+  assert.match(releaseReady, /timeout: opts\.timeoutMs \?\? RELEASE_READY_GATE_TIMEOUT_MS/);
+  assert.match(releaseReady, /res\.error\?\.code === 'ETIMEDOUT'/);
+  assert.match(releaseReady, /cleanupTimedOutProcessTree\(res\.pid\)/);
+  assert.match(releaseReady, /taskkill', \['\/PID', String\(pid\), '\/T', '\/F'\]/);
+  assert.match(releaseReady, /Gate timed out after \$\{\(timeoutMs \/ 1000\)\.toFixed\(0\)\}s/);
+  assert.match(releaseReady, /run\('End-to-end \(Playwright\)', 'npm', \['run', 'test:e2e'\], \{ timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS \}\)/);
 });
 
 test('reliability report emits ASCII-safe operator output', () => {
