@@ -5,9 +5,49 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { assessLaunchState, groupRemainingKeys, renderLaunchStatusJson } from './launch-status.mjs';
+import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import { renderProductionLaunchEvidenceTemplate } from './generate-production-launch-evidence-template.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const VALID_PRODUCTION_VALUES = {
+  DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+  FRONTEND_URL: 'https://app.charitypilot.ie',
+  NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+  CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+  NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+  SUPABASE_URL: 'https://configured-project.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
+  STRIPE_SECRET_KEY: 'sk_live_configured',
+  STRIPE_WEBHOOK_SECRET: 'whsec_configured',
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configured',
+  STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_essentials_monthly',
+  STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentials_yearly',
+  STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_complete_monthly',
+  STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_complete_yearly',
+  RESEND_API_KEY: 're_configured',
+  EMAIL_FROM: 'noreply@charitypilot.ie',
+  ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
+  TRUSTED_PROXY_ADDRESSES: '203.0.113.10/32',
+  AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
+  CADDY_ACME_EMAIL: 'ops@charitypilot.ie',
+  CHARITYPILOT_WEB_DOMAIN: 'app.charitypilot.ie',
+  CHARITYPILOT_API_DOMAIN: 'api.charitypilot.ie',
+  CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'a'.repeat(64)}`,
+  CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'b'.repeat(64)}`,
+  CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'c'.repeat(64)}`,
+  CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+  CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+};
+
+function productionEnv(overrides = {}) {
+  return [
+    'NODE_ENV=production',
+    'JWT_SECRET=already-generated-secret-value-1234567890',
+    'READINESS_API_KEY=already-generated-readiness-key-1234567890',
+    ...OPERATOR_SUPPLIED_KEYS.map(([key]) => `${key}=${Object.hasOwn(overrides, key) ? overrides[key] : VALID_PRODUCTION_VALUES[key]}`),
+  ].join('\n');
+}
 
 function assertExternalLaunchEvidenceGates(state) {
   assert.ok(
@@ -202,13 +242,10 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
 });
 
 test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
-  const env = [
-    'NODE_ENV=production',
-    'JWT_SECRET=already-generated-secret-value-1234567890',
-    'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
-    'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
-    'EMAIL_FROM=noreply@charitypilot.ie',
-  ].join('\n');
+  const env = productionEnv({
+    DATABASE_URL: 'REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+    STRIPE_SECRET_KEY: 'REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
+  });
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.match(s.headline, /production value issue\(s\) still need resolution/);
@@ -239,25 +276,23 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
 });
 
 test('reports ENV_INCOMPLETE for non-REPLACE_ME production placeholders', () => {
-  const env = [
-    'NODE_ENV=production',
-    'DATABASE_URL=postgresql://u:p@db.example.com:5432/cp?sslmode=require',
-    'STRIPE_SECRET_KEY=TODO_STRIPE_LIVE_SECRET_KEY',
-    'NEXT_PUBLIC_SUPABASE_URL=https://REAL_SUPABASE_PROJECT_REF.supabase.co',
-    'CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:placeholder',
-  ].join('\n');
+  const env = productionEnv({
+    STRIPE_SECRET_KEY: 'TODO_STRIPE_LIVE_SECRET_KEY',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+    CHARITYPILOT_WEB_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:placeholder',
+  });
 
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
 
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys, [
-    'STRIPE_SECRET_KEY',
     'NEXT_PUBLIC_SUPABASE_URL',
+    'STRIPE_SECRET_KEY',
     'CHARITYPILOT_WEB_IMAGE',
   ]);
   assert.deepEqual(s.remainingKeyDetails, [
-    { key: 'STRIPE_SECRET_KEY', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
     { key: 'NEXT_PUBLIC_SUPABASE_URL', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
+    { key: 'STRIPE_SECRET_KEY', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
     { key: 'CHARITYPILOT_WEB_IMAGE', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
   ]);
   assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 28, remaining: 3 });
@@ -287,13 +322,10 @@ test('groups missing production values by operator source', () => {
 });
 
 test('reports TLS and shared-cookie production drift before deploy preflight', () => {
-  const env = [
-    'NODE_ENV=production',
-    'AUTH_COOKIE_DOMAIN=',
-    'CADDY_ACME_EMAIL=ops@charitypilot.ie',
-    'CHARITYPILOT_WEB_DOMAIN=charitypilot.ie',
-    'CHARITYPILOT_API_DOMAIN=api.charitypilot.ie',
-  ].join('\n');
+  const env = productionEnv({
+    AUTH_COOKIE_DOMAIN: '',
+    CHARITYPILOT_WEB_DOMAIN: 'charitypilot.ie',
+  });
 
   const s = assessLaunchState({ envExists: true, envContent: env });
 
@@ -302,7 +334,7 @@ test('reports TLS and shared-cookie production drift before deploy preflight', (
   assert.deepEqual(
     s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason, expected: issue.expected })),
     [
-      { key: 'AUTH_COOKIE_DOMAIN', reason: 'canonical-drift', expected: '.charitypilot.ie' },
+      { key: 'AUTH_COOKIE_DOMAIN', reason: 'missing', expected: undefined },
       { key: 'CHARITYPILOT_WEB_DOMAIN', reason: 'canonical-drift', expected: 'app.charitypilot.ie' },
     ],
   );
@@ -315,12 +347,11 @@ test('reports TLS and shared-cookie production drift before deploy preflight', (
 });
 
 test('keeps placeholder issue reasons ahead of canonical drift checks', () => {
-  const env = [
-    'NODE_ENV=production',
-    'AUTH_COOKIE_DOMAIN=REPLACE_ME_SHARED_COOKIE_DOMAIN',
-    'CADDY_ACME_EMAIL=REPLACE_ME_ACME_EMAIL',
-    'CHARITYPILOT_WEB_DOMAIN=charitypilot.ie',
-  ].join('\n');
+  const env = productionEnv({
+    AUTH_COOKIE_DOMAIN: 'REPLACE_ME_SHARED_COOKIE_DOMAIN',
+    CADDY_ACME_EMAIL: 'REPLACE_ME_ACME_EMAIL',
+    CHARITYPILOT_WEB_DOMAIN: 'charitypilot.ie',
+  });
 
   const s = assessLaunchState({ envExists: true, envContent: env });
 
@@ -335,10 +366,9 @@ test('keeps placeholder issue reasons ahead of canonical drift checks', () => {
 });
 
 test('reports launch evidence completion counts when the evidence ledger exists', () => {
-  const env = [
-    'NODE_ENV=production',
-    'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
-  ].join('\n');
+  const env = productionEnv({
+    DATABASE_URL: 'REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+  });
   const s = assessLaunchState({
     envExists: true,
     envContent: env,
@@ -375,11 +405,34 @@ test('reports launch evidence completion counts when the evidence ledger exists'
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
 });
 
+test('reports missing operator-supplied production values instead of treating a trimmed env as complete', () => {
+  const env = [
+    'NODE_ENV=production',
+    'JWT_SECRET=already-generated-secret-value-1234567890',
+    'DATABASE_URL=postgresql://u:p@db.charitypilot.ie:5432/cp?sslmode=require',
+  ].join('\n');
+
+  const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: false });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.ok(s.remainingKeys.includes('FRONTEND_URL'));
+  assert.ok(s.remainingKeys.includes('STRIPE_SECRET_KEY'));
+  assert.ok(s.remainingKeys.includes('CHARITYPILOT_WEB_IMAGE'));
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 1, total: 28, remaining: 27 });
+  assert.deepEqual(s.remainingKeyDetails.find((issue) => issue.key === 'FRONTEND_URL'), {
+    key: 'FRONTEND_URL',
+    reason: 'missing',
+    detail: 'Value is missing from .env.production or the approved production secret source.',
+  });
+  assert.ok(s.remainingKeyGroups.some((group) => group.label === 'Hosting, DNS, TLS, and proxy'));
+  assert.ok(s.nextActions.some((a) => /resolve each listed value/.test(a)));
+});
+
 test('reports whether launch evidence is bound to a concrete release identity', () => {
   const templateEvidence = renderProductionLaunchEvidenceTemplate();
   const placeholderState = assessLaunchState({
     envExists: true,
-    envContent: 'NODE_ENV=production',
+    envContent: productionEnv(),
     evidenceFileExists: true,
     evidenceContent: templateEvidence,
   });
@@ -407,7 +460,7 @@ test('reports whether launch evidence is bound to a concrete release identity', 
 
   const concreteState = assessLaunchState({
     envExists: true,
-    envContent: 'NODE_ENV=production',
+    envContent: productionEnv(),
     evidenceFileExists: true,
     evidenceContent: JSON.stringify(concreteEvidence),
   });
@@ -422,11 +475,10 @@ test('reports whether launch evidence is bound to a concrete release identity', 
 test('renders machine-readable launch status for operator dashboards', () => {
   const state = assessLaunchState({
     envExists: true,
-    envContent: [
-      'NODE_ENV=production',
-      'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
-      'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
-    ].join('\n'),
+    envContent: productionEnv({
+      DATABASE_URL: 'REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+      STRIPE_SECRET_KEY: 'REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
+    }),
     evidenceFileExists: true,
     evidenceContent: renderProductionLaunchEvidenceTemplate(),
   });
@@ -480,23 +532,16 @@ test('renders machine-readable launch status for operator dashboards', () => {
 });
 
 test('reports ENV_INCOMPLETE for CRLF production env files', () => {
-  const env = [
-    'NODE_ENV=production',
-    'JWT_SECRET=already-generated-secret-value-1234567890',
-    'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
-    'READINESS_API_KEY=already-generated-readiness-key-1234567890',
-  ].join('\r\n');
+  const env = productionEnv({
+    DATABASE_URL: 'REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
+  }).split('\n').join('\r\n');
   const s = assessLaunchState({ envExists: true, envContent: env });
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys, ['DATABASE_URL']);
 });
 
 test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
-  const env = [
-    'NODE_ENV=production',
-    'JWT_SECRET=already-generated-secret-value-1234567890',
-    'DATABASE_URL=postgresql://u:p@db.example.com:5432/cp?sslmode=require',
-  ].join('\n');
+  const env = productionEnv();
   const s = assessLaunchState({ envExists: true, envContent: env });
   assert.equal(s.phase, 'ENV_COMPLETE');
   assert.match(s.headline, /no unresolved production value issues/);

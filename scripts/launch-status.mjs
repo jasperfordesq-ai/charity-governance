@@ -231,12 +231,23 @@ function productionEnvAssignments(envContent) {
 }
 
 function productionValueIssueDetails(envContent) {
+  const assignments = productionEnvAssignments(envContent);
   const issues = new Map();
+
+  for (const key of EXPECTED_PRODUCTION_VALUE_KEYS) {
+    if (!assignments.has(key) || (assignments.get(key) ?? '').trim().length === 0) {
+      issues.set(key, {
+        key,
+        reason: 'missing',
+        detail: 'Value is missing from .env.production or the approved production secret source.',
+      });
+    }
+  }
+
   for (const issue of placeholderIssues(envContent)) {
     issues.set(issue.key, issue);
   }
 
-  const assignments = productionEnvAssignments(envContent);
   const expectedExactValues = [
     ['AUTH_COOKIE_DOMAIN', '.charitypilot.ie'],
     ['CHARITYPILOT_WEB_DOMAIN', 'app.charitypilot.ie'],
