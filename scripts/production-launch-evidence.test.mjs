@@ -1062,6 +1062,33 @@ test('production launch evidence validator requires operational sentinel databas
   }
 });
 
+test('production launch evidence validator treats the operational sentinel flag as part of the required database command', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.areas.database.checks['database-check'].evidence = [
+    {
+      type: 'command-output',
+      reference: 'https://evidence.charitypilot.ie/launch/database/database-check',
+      description: [
+        'npm run check:production:database -- --production-env-file=.env.production',
+        'Production database check passed: production PostgreSQL backup completed and restore verification succeeded.',
+      ].join(' '),
+      capturedAt,
+    },
+  ];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must include the check:production:database command/);
+    assert.match(result.stderr, /areas\.database\.checks\.database-check\.evidence must show check:production:database was run with --expect-operational-sentinel/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires executable checker command transcripts', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);

@@ -573,7 +573,7 @@ const executableCheckerEvidenceRequirements = new Map([
   }],
   ['database.database-check', {
     commandLabel: 'check:production:database',
-    command: 'npm run check:production:database -- --production-env-file=.env.production',
+    command: 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
     successText: 'Production database check passed',
   }],
   ['supabaseStorage.supabase-check', {
