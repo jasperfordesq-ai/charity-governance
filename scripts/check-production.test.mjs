@@ -70,7 +70,7 @@ function readRepoFile(path) {
 
 function currentAuditSelectedGateCommit() {
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
-  const match = auditLedger.match(/`npm run release:ready -- --no-e2e` passed locally on 2026-07-08 at commit ([a-f0-9]{7,40})/);
+  const match = auditLedger.match(/`npm run release:ready -- --no-e2e` passed locally on 2026-07-09 at commit ([a-f0-9]{7,40})/);
   assert.ok(match, 'platform completion audit must record the latest local selected-gate commit');
   return match[1];
 }
@@ -1631,20 +1631,19 @@ test('production todo reflects current launch blockers without overclaiming loca
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(productionTodo, /Current local status checked 2026-07-08/);
+  assert.match(productionTodo, /Current local status checked 2026-07-09/);
   assert.match(productionTodo, /9 of 28 production values are complete/);
   assert.match(productionTodo, /9 of 28 production values are complete[\s\S]*19[\s\S]*production values still require real data/);
   assert.match(productionTodo, /launch evidence ledger is now 9 of 85 checks\s+>\s+complete from local\/CI release-gate evidence/s);
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
-  assert.match(productionTodo, /Local browser QA has current 2026-07-08 evidence/);
+  assert.match(productionTodo, /Local browser QA has current 2026-07-09 evidence/);
   assert.match(productionTodo, /public desktop 13\/13/);
   assert.match(productionTodo, /public mobile 13\/13/);
   assert.match(productionTodo, /dashboard desktop 12\/12/);
   assert.match(productionTodo, /dashboard mobile 12\/12/);
-  assert.match(productionTodo, /transient first-attempt `\/dashboard` timeout/);
-  assert.match(productionTodo, /isolated `\/dashboard` desktop rerun also passed/);
   assert.match(productionTodo, /local accessibility suite passed 25\/25 checks across launch-critical public\/auth and dashboard routes/i);
+  assert.match(productionTodo, /focused repeated dark-mode blog article contrast check/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /85 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
@@ -1677,7 +1676,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-08/);
+  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-09/);
   assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 85`/);
   assert.match(handoff, /The evidence ledger is currently `9 \/ 85`/);
   assert.match(handoff, /76 \/ 85` machine-readable launch checks remain/);
@@ -2353,7 +2352,7 @@ test('plain English launch guide names every final approval role', () => {
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
-  assert.match(launchGuide, /Last updated: 2026-07-08/);
+  assert.match(launchGuide, /Last updated: 2026-07-09/);
   assert.match(launchGuide, /19 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 28` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 85` complete/);
@@ -2368,15 +2367,14 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /`91baf75`|`db025c7`|`73e8484`/);
   assert.match(launchGuide, /final signoffs are\s+`0 \/ 5`/);
   assert.match(launchGuide, /`approvedForLaunch` is `false`/);
-  assert.match(launchGuide, /Local browser QA has current 2026-07-08 evidence/);
+  assert.match(launchGuide, /Local browser QA has current 2026-07-09 evidence/);
   assert.match(launchGuide, /public desktop 13\/13/);
   assert.match(launchGuide, /public mobile 13\/13/);
   assert.match(launchGuide, /dashboard desktop 12\/12/);
   assert.match(launchGuide, /dashboard mobile 12\/12/);
-  assert.match(launchGuide, /transient first-attempt `\/dashboard` timeout/);
-  assert.match(launchGuide, /isolated `\/dashboard` desktop rerun also passed/);
   assert.match(launchGuide, /current accessibility suite passed 25\/25 checks across the launch-critical public\/auth routes/);
   assert.match(launchGuide, /dynamic compliance principle-detail page/);
+  assert.match(launchGuide, /blog article dark-mode contrast check passed three repeated focused runs/);
   assert.match(launchGuide, /rerun it for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
   assert.match(launchGuide, /85 machine-readable launch evidence checks/);

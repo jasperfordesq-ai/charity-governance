@@ -15,8 +15,8 @@ const launchEvidencePath = join(repoRoot, '.charitypilot-launch-evidence', 'prod
 const auditDate = new Date().toISOString().slice(0, 10);
 const RECORDED_SELECTED_GATE_EVIDENCE = Object.freeze({
   command: 'npm run release:ready -- --no-e2e',
-  date: '2026-07-08',
-  commit: '14dfe47',
+  date: '2026-07-09',
+  commit: '8a5e030',
   summary:
     'security scan, lint, build, workspace tests, dependency audit, and reliability ledger passed; only Playwright E2E was skipped',
 });
@@ -307,7 +307,7 @@ const independentAuditFindings = [
 function localVerificationEvidence() {
   return [
     `\`${RECORDED_SELECTED_GATE_EVIDENCE.command}\` passed locally on ${RECORDED_SELECTED_GATE_EVIDENCE.date} at commit ${RECORDED_SELECTED_GATE_EVIDENCE.commit}: ${RECORDED_SELECTED_GATE_EVIDENCE.summary}.`,
-    '`npm run test:production-check` passed locally on 2026-07-08 with 315/315 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.',
+    '`npm run test:production-check` passed locally on 2026-07-09 with 315/315 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, deployment tooling, and CI/release workflow guards.',
     '`node --test scripts\\check-production-providers.test.mjs scripts\\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.',
     '`npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.',
     '`npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.',

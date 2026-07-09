@@ -6,7 +6,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > first - it explains, in plain English, what is already done and the exact
 > human steps (accounts, hosting, legal, security review) that remain.
 
-> **Current local status checked 2026-07-08:** `npm run launch:status -- --json`
+> **Current local status checked 2026-07-09:** `npm run launch:status -- --json`
 > still reports `ENV_INCOMPLETE`: 9 of 28 production values are complete and 19
 > production values still require real data in `.env.production` or the approved
 > production secret store. The launch evidence ledger is now 9 of 85 checks
@@ -36,7 +36,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > Strict launch-evidence JSON validation reports the next incomplete checklist
 > items and evidence hints, so failing launch-gate output can drive an operator
 > work queue without weakening the final validator.
-> Local browser QA has current 2026-07-08 evidence from the four focused responsive route chunks across desktop/mobile and light/dark: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12. The dashboard desktop chunk had one transient first-attempt `/dashboard` timeout and then passed on retry; an isolated `/dashboard` desktop rerun also passed. The local accessibility suite passed 25/25 checks across launch-critical public/auth and dashboard routes on the local stack, but deployed production QA still remains open and must be rerun against the live HTTPS URLs.
+> Local browser QA has current 2026-07-09 evidence from the four focused responsive route chunks across desktop/mobile and light/dark: public desktop 13/13, public mobile 13/13, dashboard desktop 12/12, and dashboard mobile 12/12. The local accessibility suite passed 25/25 checks across launch-critical public/auth and dashboard routes on the local stack, including a focused repeated dark-mode blog article contrast check, but deployed production QA still remains open and must be rerun against the live HTTPS URLs.
 > Deployed accessibility QA must be recorded in `browserQa.checks.accessibility-coverage`,
 > cross-browser QA in `browserQa.checks.cross-browser-coverage`, and real iOS Safari device QA in
 > `browserQa.checks.ios-safari-device-coverage`.
@@ -60,8 +60,8 @@ Status marks reflect completed repository hardening work. Open items require rea
 > hints with the strict validator: `npm run deploy:production -- --production-env-file=.env.production`,
 > `node scripts/smoke-production-deploy.mjs --production-env-file .env.production`,
 > `Production deploy smoke passed`, and both canonical production origins. A later
-> local `npm run release:ready -- --no-e2e` run passed on 2026-07-08 at commit
-> `14dfe47`: security scan, lint, build, workspace tests, dependency audit, and
+> local `npm run release:ready -- --no-e2e` run passed on 2026-07-09 at commit
+> `8a5e030`: security scan, lint, build, workspace tests, dependency audit, and
 > reliability ledger passed; only Playwright E2E was skipped. This still does not
 > replace deployed QA, real provider checks, legal/privacy review, pentest, or
 > final production signoffs.
@@ -105,7 +105,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 
 - [x] `npm run lint`
 - [x] `npm run test`
-- [x] `npm run test:production-check` - passed locally on 2026-07-08 with 315/315 production-tooling checks.
+- [x] `npm run test:production-check` - passed locally on 2026-07-09 with 315/315 production-tooling checks.
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`
