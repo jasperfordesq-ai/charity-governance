@@ -1757,8 +1757,11 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.doesNotMatch(handoff, /only Playwright E2E was skipped/);
   assert.match(handoff, /cb78eb85bb0127150ad448037b5d03b8060869bf/);
   assert.match(handoff, /29021018683/);
+  assert.match(handoff, /Latest verified release-gate hardening commit captured by this handoff/);
+  assert.match(handoff, /repositoryState\.headSha/);
   assert.match(handoff, /repo-scoped failed E2E cleanup hardening/);
   assert.match(handoff, /no-shell release gate execution hardening/);
+  assert.doesNotMatch(handoff, /Latest verified pushed commit at the time of this handoff refresh/);
   assert.doesNotMatch(handoff, /Latest verified pushed commit[\s\S]{0,120}0d2988772504b73189d8ce9c500d92800d1de92f/);
   assert.doesNotMatch(handoff, /73eda7ddaeaa8d6fdbe273cd541296b90dbe8049/);
   assert.doesNotMatch(handoff, /29007934895/);

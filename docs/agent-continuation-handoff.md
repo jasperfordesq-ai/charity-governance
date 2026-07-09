@@ -33,10 +33,13 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
-- Latest verified pushed commit at the time of this handoff refresh:
+- Latest verified release-gate hardening commit captured by this handoff:
   `cb78eb85bb0127150ad448037b5d03b8060869bf`.
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
+- This handoff may be committed by a later docs-only refresh commit. Treat
+  `npm run launch:status -- --json` and its `repositoryState.headSha` as the
+  live source of truth for the current checkout before collecting evidence.
 - The generated platform audit intentionally keeps repository clean/synced state
   live-only; run `npm run launch:status -- --json` and inspect
   `repositoryState` from the release checkout before collecting launch evidence.
