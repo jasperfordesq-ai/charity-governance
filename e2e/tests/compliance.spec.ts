@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
-import { getPrincipleIdByNumber, getSignoff, countRows } from '../helpers/db';
+import { getComplianceRecord, getPrincipleIdByNumber, getSignoff, countRows } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
@@ -77,5 +77,36 @@ test.describe('Compliance', () => {
     expect(signoff?.status).toBe('BOARD_REVIEW');
     expect(signoff?.approvedByName).toBe('Jane Chairperson');
     expect(signoff?.approvedAt).toBeNull();
+  });
+
+  test('pending standard edits ask for confirmation before in-app navigation', async ({ ownerPage, owner }) => {
+    const principleId = await getPrincipleIdByNumber(1);
+    await gotoWithDevServerRetry(ownerPage, `/compliance/${principleId}`);
+    await expect(ownerPage.getByRole('heading', { name: /Principle 1:/ })).toBeVisible();
+
+    await ownerPage
+      .getByLabel('Action Taken')
+      .first()
+      .fill(`Pending navigation guard exercised at ${Date.now()}.`);
+    await ownerPage.getByRole('link', { name: 'Documents' }).click();
+
+    const dialog = ownerPage.getByRole('dialog', { name: 'Compliance edits are still saving' });
+    await expect(dialog).toBeVisible({ timeout: 60_000 });
+    await expect(ownerPage).toHaveURL(new RegExp(`/compliance/${principleId}`));
+
+    await dialog.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(ownerPage).toHaveURL(new RegExp(`/compliance/${principleId}`));
+
+    const saveAndLeaveAction = `Pending navigation save-and-leave exercised at ${Date.now()}.`;
+    await ownerPage.getByLabel('Action Taken').first().fill(saveAndLeaveAction);
+    await ownerPage.getByRole('link', { name: 'Documents' }).click();
+    await expect(dialog).toBeVisible({ timeout: 60_000 });
+    await dialog.getByRole('button', { name: 'Save now and leave' }).click();
+    await expect(ownerPage).toHaveURL(/\/documents/, { timeout: 60_000 });
+    await expect.poll(async () => {
+      const record = await getComplianceRecord(owner.organisationId, '1.1', YEAR);
+      return record?.actionTaken ?? '';
+    }, { timeout: 60_000 }).toBe(saveAndLeaveAction);
   });
 });

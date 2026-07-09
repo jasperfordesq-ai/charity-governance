@@ -914,6 +914,20 @@ test('local Docker migrations restart previously running app services when migra
   assert.ok(failedMigrationIndex < restartIndex, 'services must restart after the failing migration');
 });
 
+test('compliance browser QA covers pending navigation confirmation', () => {
+  const complianceSpec = readRepoFile('e2e/tests/compliance.spec.ts');
+  const e2eReadme = readRepoFile('e2e/README.md');
+  const browserQa = readRepoFile('docs/production-browser-qa.md');
+
+  assert.match(complianceSpec, /pending standard edits ask for confirmation before in-app navigation/);
+  assert.match(complianceSpec, /Compliance edits are still saving/);
+  assert.match(complianceSpec, /Keep editing/);
+  assert.match(complianceSpec, /Save now and leave/);
+  assert.match(complianceSpec, /getComplianceRecord\(owner\.organisationId,\s*'1\.1',\s*YEAR\)/);
+  assert.match(e2eReadme, /pending standard edits trigger the in-app navigation confirmation/);
+  assert.match(browserQa, /pending-navigation confirmation/);
+});
+
 test('local Docker migrations force-stop stuck app services before refreshing dependencies', async () => {
   const originalArgv = process.argv;
   let module;
