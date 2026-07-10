@@ -587,6 +587,7 @@ test('local destructive e2e database reset requires an explicit operator opt-in'
   const personalDocs = readRepoFile('docs/personal-local-use.md');
   const rootReadme = readRepoFile('README.md');
   const browserQa = readRepoFile('docs/production-browser-qa.md');
+  const handoff = readRepoFile('docs/agent-continuation-handoff.md');
 
   assert.match(globalSetup, /E2E_ALLOW_LOCAL_DB_RESET/);
   assert.match(globalSetup, /const ALLOW_LOCAL_DB_RESET = process\.env\.E2E_ALLOW_LOCAL_DB_RESET === 'true'/);
@@ -603,6 +604,8 @@ test('local destructive e2e database reset requires an explicit operator opt-in'
   assert.match(rootReadme, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm run test:e2e/);
   assert.match(browserQa, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm run test:e2e:responsive/);
   assert.match(browserQa, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm run test:e2e -- tests\/accessibility\.spec\.ts/);
+  assert.match(handoff, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm test -- tests\/responsive-smoke\.spec\.ts/);
+  assert.match(handoff, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm test -- tests\/compliance\.spec\.ts/);
 });
 
 test('platform audit ledger records deployed browser QA hardening', () => {

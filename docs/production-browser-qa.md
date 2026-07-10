@@ -8,8 +8,8 @@ Do not use real charity records for launch QA. Use an approved non-sensitive tes
 
 These local checks do not replace deployed production QA, but they should be green before booking a production browser run:
 
-- [ ] `npm run test:e2e:responsive` completed against the local Docker stack, or all four focused route chunks below completed and their transcripts were kept together as one local responsive evidence set.
-- [ ] `npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
+- [ ] `E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive` completed against the local Docker stack, or all four focused route chunks below completed with the same reset opt-in and their transcripts were kept together as one local responsive evidence set.
+- [ ] `E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
 - [ ] Deployed browser QA credentials exist for an approved non-sensitive test workspace with owner/admin access.
 - [ ] `npm run check:production:browser-qa-env` passes in the same shell that will run deployed Playwright checks. Use `npm run check:production:browser-qa-env -- --json` for a redacted machine-readable preflight transcript, and record the command plus `Deployed browser QA environment preflight passed` in `browserQa.checks.browser-qa-completed`.
 - [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store, either as one full run or as all four focused route chunks below.

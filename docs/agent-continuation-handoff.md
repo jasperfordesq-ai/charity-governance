@@ -309,7 +309,7 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
-- `cd e2e; E2E_SKIP_ROUTE_WARMING=true npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route /compliance/\$\{principleId\} renders in desktop light and dark"`
+- `cd e2e; E2E_ALLOW_LOCAL_DB_RESET=true E2E_SKIP_ROUTE_WARMING=true npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route /compliance/\$\{principleId\} renders in desktop light and dark"`
   - Passed on 2026-07-09 after the compliance-detail resolver was hardened to
     report page-level failures and still tolerate slow local Next dev compiles.
 - `node --test scripts/check-local-docker.test.mjs`
@@ -356,7 +356,7 @@ Recently successful checks in this workstream:
 - `npm run test -w @charitypilot/web`
   - Passed on 2026-07-09 with 232 web tests after compliance navigation
     confirmation copy/timer-guard hardening.
-- `cd e2e; npm test -- tests/compliance.spec.ts`
+- `cd e2e; E2E_ALLOW_LOCAL_DB_RESET=true npm test -- tests/compliance.spec.ts`
   - Passed on 2026-07-09 with both compliance browser journeys passing after
     the same navigation-confirmation hardening.
 - `npm run lint -w @charitypilot/web`
