@@ -1842,6 +1842,7 @@ test('auth status illustrations use the shared status icon primitive', () => {
 
 test('auth async fallbacks use shared loading primitives instead of route-local skeletons', () => {
   const primitive = component('ui/auth-card-loading.tsx');
+  assert.match(primitive, /export const authCardClassName/);
   assert.match(primitive, /export function AuthCardLoading/);
   assert.match(primitive, /LoadingState/);
   assert.match(primitive, /CardBody/);
@@ -1861,6 +1862,31 @@ test('auth async fallbacks use shared loading primitives instead of route-local 
   }
 
   assert.match(app('(auth)/verify-email/page.tsx'), /LoadingState/, 'verify-email should use shared LoadingState for in-card verification progress');
+});
+
+test('auth pages use the shared auth card shell styling', () => {
+  const routes = [
+    '(auth)/login/page.tsx',
+    '(auth)/register/page.tsx',
+    '(auth)/forgot-password/page.tsx',
+    '(auth)/reset-password/page.tsx',
+    '(auth)/accept-invite/page.tsx',
+    '(auth)/verify-email/page.tsx',
+  ];
+
+  for (const route of routes) {
+    const src = app(route);
+    assert.match(src, /authCardClassName/, `${route} should use the shared auth card shell class`);
+    assert.doesNotMatch(
+      src,
+      /<Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">/,
+      `${route} should not duplicate auth card panel styling`,
+    );
+  }
+
+  const primitive = component('ui/auth-card-loading.tsx');
+  assert.match(primitive, /statusPanelClassName\('neutral', 'w-full shadow-lg'\)/);
+  assert.match(primitive, /<Card className=\{authCardClassName\}>/);
 });
 
 test('auth password visibility controls use the shared HeroUI icon button primitive', () => {

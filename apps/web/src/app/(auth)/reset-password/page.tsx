@@ -8,7 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
-import { AuthCardLoading } from '@/components/ui/auth-card-loading';
+import { AuthCardLoading, authCardClassName } from '@/components/ui/auth-card-loading';
 import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
@@ -68,7 +68,7 @@ function ResetPasswordForm() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
+        <Card className={authCardClassName}>
           <CardBody className="p-8 sm:p-10">
             {isSuccess ? (
               <div className="text-center py-4">

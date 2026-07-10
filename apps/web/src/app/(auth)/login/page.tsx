@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { loginSchema, firstSchemaError } from '@/lib/form-schemas';
 import { safeNextPath } from '@/lib/safe-next-path';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { authCardClassName } from '@/components/ui/auth-card-loading';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
@@ -53,7 +54,7 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
+      <Card className={authCardClassName}>
         <CardBody className="p-6 sm:p-10">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-950 dark:text-white">Welcome back</h1>

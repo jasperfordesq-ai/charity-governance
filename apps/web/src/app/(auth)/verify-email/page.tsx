@@ -5,7 +5,7 @@ import { Button, Card, CardBody, Link } from '@heroui/react';
 import { Check, CircleAlert, Mail } from 'lucide-react';
 import { FormAlert } from '@/components/ui/form-alert';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
-import { AuthCardLoading } from '@/components/ui/auth-card-loading';
+import { AuthCardLoading, authCardClassName } from '@/components/ui/auth-card-loading';
 import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
 import { LoadingState } from '@/components/ui/states';
 import { api } from '@/lib/api';
@@ -90,7 +90,7 @@ function VerifyEmailContent() {
 
   return (
     <div className="w-full max-w-md min-w-0">
-        <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
+        <Card className={authCardClassName}>
           <CardBody className="p-8 sm:p-10">
             {status === 'loading' && (
               <LoadingState title="Verifying your email" description="This should only take a moment." />

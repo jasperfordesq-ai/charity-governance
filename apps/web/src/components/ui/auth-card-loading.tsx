@@ -1,5 +1,8 @@
 import { Card, CardBody } from '@heroui/react';
+import { statusPanelClassName } from '@/components/ui/status';
 import { LoadingState } from '@/components/ui/states';
+
+export const authCardClassName = statusPanelClassName('neutral', 'w-full shadow-lg');
 
 export function AuthCardLoading({
   title,
@@ -10,7 +13,7 @@ export function AuthCardLoading({
 }) {
   return (
     <div className="w-full max-w-md min-w-0">
-      <Card className="w-full border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900">
+      <Card className={authCardClassName}>
         <CardBody className="p-8 sm:p-10">
           <LoadingState title={title} description={description} />
         </CardBody>
