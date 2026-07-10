@@ -125,6 +125,26 @@ test('production provider checker verifies live Stripe prices, webhook endpoint,
   }
 });
 
+test('production provider checker rejects empty production env file option as usage error', async () => {
+  const runProductionProvidersCheckFromArgs = await loadProviderRunner();
+  let called = false;
+
+  const result = await runProductionProvidersCheckFromArgs(
+    ['--production-env-file='],
+    {
+      fetchImpl: async () => {
+        called = true;
+        return response(200, {});
+      },
+    },
+  );
+
+  assert.equal(result.status, 2);
+  assert.equal(called, false);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('production provider checker fails when a Stripe price is inactive or not live recurring', async () => {
   const runProductionProvidersCheckFromArgs = await loadProviderRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

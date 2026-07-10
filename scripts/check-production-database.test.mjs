@@ -107,6 +107,26 @@ test('production database checker can require an operational restore sentinel', 
   }
 });
 
+test('production database checker rejects empty production env file option as usage error', async () => {
+  const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
+  let called = false;
+
+  const result = await runProductionDatabaseCheckFromArgs(
+    ['--production-env-file='],
+    {
+      runPostgresBackupFromArgs: async () => {
+        called = true;
+        return { status: 0, stdout: '', stderr: '' };
+      },
+    },
+  );
+
+  assert.equal(result.status, 2);
+  assert.equal(called, false);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('production database checker rejects missing, local, and non-TLS database URLs before backup', async () => {
   const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv({

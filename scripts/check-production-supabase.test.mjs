@@ -95,6 +95,26 @@ test('production Supabase checker verifies private bucket, signed URL, public de
   }
 });
 
+test('production Supabase checker rejects empty production env file option as usage error', async () => {
+  const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
+  let called = false;
+
+  const result = await runProductionSupabaseCheckFromArgs(
+    ['--production-env-file='],
+    {
+      fetchImpl: async () => {
+        called = true;
+        return response(200, {});
+      },
+    },
+  );
+
+  assert.equal(result.status, 2);
+  assert.equal(called, false);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('production Supabase checker fails when the bucket is public', async () => {
   const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

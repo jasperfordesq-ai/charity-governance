@@ -88,6 +88,30 @@ test('production observability checker sends a sanitized test alert to the confi
   }
 });
 
+test('production observability checker rejects empty production env file option as usage error', async () => {
+  const runProductionObservabilityCheckFromArgs = await loadObservabilityRunner();
+  let called = false;
+
+  const result = await runProductionObservabilityCheckFromArgs(
+    ['--production-env-file='],
+    {
+      resolveHost: async () => {
+        called = true;
+        return [];
+      },
+      fetchImpl: async () => {
+        called = true;
+        return response(202);
+      },
+    },
+  );
+
+  assert.equal(result.status, 2);
+  assert.equal(called, false);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('production observability checker rejects missing, local, and non-HTTPS webhook URLs before sending', async () => {
   const runProductionObservabilityCheckFromArgs = await loadObservabilityRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv({

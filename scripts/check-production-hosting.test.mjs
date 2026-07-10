@@ -100,6 +100,34 @@ test('production hosting checker verifies DNS, TLS, reachability, and security h
   }
 });
 
+test('production hosting checker rejects empty production env file option as usage error', async () => {
+  const runProductionHostingCheckFromArgs = await loadHostingRunner();
+  let called = false;
+
+  const result = await runProductionHostingCheckFromArgs(
+    ['--production-env-file='],
+    {
+      resolveHost: async () => {
+        called = true;
+        return [];
+      },
+      inspectTlsCertificate: async () => {
+        called = true;
+        return { authorized: true, validTo: '2030-01-01T00:00:00.000Z' };
+      },
+      fetchImpl: async () => {
+        called = true;
+        return response(200, secureHeaders());
+      },
+    },
+  );
+
+  assert.equal(result.status, 2);
+  assert.equal(called, false);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('production hosting checker rejects reserved documentation DNS ranges', async () => {
   const runProductionHostingCheckFromArgs = await loadHostingRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());
