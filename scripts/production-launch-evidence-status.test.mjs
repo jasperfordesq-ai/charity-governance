@@ -9,6 +9,13 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const statusScriptPath = join(scriptsDir, 'production-launch-evidence-status.mjs');
 const templateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
 const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
+const releaseCommitSha = 'b'.repeat(40);
+const genericEvidence = {
+  type: 'artifact',
+  reference: 'https://evidence.charitypilot.ie/launch/generic-evidence',
+  description: `Generic launch evidence bundle for release ${releaseCommitSha}.`,
+  capturedAt: '2026-07-06T12:00:00.000Z',
+};
 
 async function loadStatusRunner() {
   assert.ok(existsSync(statusScriptPath), 'production launch evidence status script must exist');
@@ -27,6 +34,60 @@ function writeEvidenceFile(evidence) {
   const evidencePath = join(tempDir, 'production-launch-evidence.json');
   writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
   return { tempDir, evidencePath };
+}
+
+function completeAllStatusFlagsWithGenericEvidence(evidence) {
+  const digest = 'a'.repeat(64);
+  evidence.release = {
+    commitSha: releaseCommitSha,
+    workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+    workflowFile: '.github/workflows/release-images.yml',
+    gitRef: 'refs/heads/master',
+    imageDigestManifest: {
+      apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
+      webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
+      migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+      webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
+      webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
+    },
+  };
+  evidence.approvedForLaunch = true;
+  evidence.finalSignoff.status = 'approved';
+  evidence.finalSignoff.owner = 'Launch Control';
+  evidence.finalSignoff.approvedAt = '2026-07-06T13:00:00.000Z';
+  evidence.finalSignoff.evidence = [
+    {
+      ...genericEvidence,
+      type: 'approval',
+      reference: 'https://evidence.charitypilot.ie/launch/final-signoff',
+      description: `Final launch approval for release ${releaseCommitSha}.`,
+    },
+  ];
+
+  for (const area of Object.values(evidence.areas)) {
+    area.status = 'complete';
+    area.owner = 'Launch Control';
+    for (const check of Object.values(area.checks)) {
+      check.status = 'complete';
+      check.evidence = [genericEvidence];
+    }
+  }
+
+  for (const [roleId, approval] of Object.entries(evidence.finalSignoff.approvals)) {
+    approval.status = 'approved';
+    approval.owner = `${roleId} owner`;
+    approval.approvedAt = '2026-07-06T13:00:00.000Z';
+    approval.evidence = [
+      {
+        ...genericEvidence,
+        type: 'approval',
+        reference: `https://evidence.charitypilot.ie/launch/final-signoff/${roleId}`,
+        description: `${roleId} launch approval for release ${releaseCommitSha}.`,
+      },
+    ];
+  }
+
+  return evidence;
 }
 
 test('production launch evidence status reports pending template progress without approving launch', async () => {
@@ -126,6 +187,32 @@ test('production launch evidence status renders non-secret JSON for automation',
       'exit 0',
     ]);
     assert.equal(payload.areas.find((area) => area.id === 'releaseGate').completed, 1);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence status refuses strict completion for generic evidence entries', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = completeAllStatusFlagsWithGenericEvidence(await launchEvidenceTemplate());
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.completedChecks, 87);
+    assert.equal(payload.approvedFinalSignoffRoles, 5);
+    assert.equal(payload.releaseBinding.complete, true);
+    assert.equal(payload.evidenceStatusesComplete, false);
+    assert.equal(payload.strictEvidenceValidation.valid, false);
+    assert.ok(payload.strictEvidenceValidation.issueCount > 0);
+    assert.ok(
+      payload.strictEvidenceValidation.nextIssues.some((issue) =>
+        /releaseGate|command|evidence/i.test(issue),
+      ),
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -178,6 +178,7 @@ const fixedInThisAuditBranch = [
   'Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 87 checks.',
   'Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.',
   'Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.',
+  'Launch evidence status now includes strict evidence validation and refuses status-complete approval when generic status flags would fail the final evidence validator.',
   'Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.',
   'Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.',
   'Launch status and production readiness TODO now name all 87 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',

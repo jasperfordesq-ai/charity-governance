@@ -7,6 +7,7 @@ import {
   FINAL_SIGNOFF_ROLES,
   REQUIRED_LAUNCH_AREAS,
   redactLaunchEvidenceTranscript,
+  validateLaunchEvidence,
 } from './production-launch-evidence.mjs';
 import { evidenceHints as defaultEvidenceHints } from './generate-production-launch-evidence-template.mjs';
 
@@ -293,8 +294,18 @@ export function workQueueByArea(summary) {
   return [...grouped.values()];
 }
 
+function strictEvidenceValidationStatus(evidence) {
+  const issues = validateLaunchEvidence(evidence);
+  return {
+    valid: issues.length === 0,
+    issueCount: issues.length,
+    nextIssues: issues.slice(0, 10).map((issue) => redactLaunchEvidenceTranscript(issue)),
+  };
+}
+
 function renderStatus(evidence) {
   const summary = summarizeEvidence(evidence);
+  const strictEvidenceValidation = strictEvidenceValidationStatus(evidence);
   const evidenceStatusesComplete = isEvidenceStatusComplete(evidence, summary);
   const releaseBinding = releaseBindingStatus(evidence);
   const lines = [
@@ -306,6 +317,7 @@ function renderStatus(evidence) {
     `finalSignoff: ${statusOf(evidence?.finalSignoff?.status)}`,
     `Final approval roles approved: ${summary.approvedFinalSignoffRoles} / ${summary.totalFinalSignoffRoles} (${summary.percentages.finalSignoffs}% complete)`,
     `Checklist checks complete: ${summary.completedChecks} / ${summary.totalChecks} (${summary.percentages.evidenceChecks}% complete)`,
+    `Strict evidence validation: ${strictEvidenceValidation.valid ? 'pass' : `fail (${strictEvidenceValidation.issueCount} issue(s))`}`,
     `Release binding: ${releaseBinding.headline}`,
     '',
     'Areas:',
@@ -347,6 +359,7 @@ export function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(e
     evidence?.approvedForLaunch === true &&
     evidence?.finalSignoff?.status === 'approved' &&
     releaseBindingStatus(evidence).complete &&
+    strictEvidenceValidationStatus(evidence).valid &&
     summary.completedChecks === summary.totalChecks &&
     summary.areaSummaries.every((area) => area.status === 'complete') &&
     summary.approvedFinalSignoffRoles === summary.totalFinalSignoffRoles
@@ -355,12 +368,14 @@ export function isEvidenceStatusComplete(evidence, summary = summarizeEvidence(e
 
 function renderJsonStatus(evidence) {
   const summary = summarizeEvidence(evidence);
+  const strictEvidenceValidation = strictEvidenceValidationStatus(evidence);
   return `${JSON.stringify(
     {
       approvedForLaunch: evidence?.approvedForLaunch === true,
       completedChecks: summary.completedChecks,
       releaseBinding: releaseBindingStatus(evidence),
       evidenceStatusesComplete: isEvidenceStatusComplete(evidence, summary),
+      strictEvidenceValidation,
       finalSignoffStatus: statusOf(evidence?.finalSignoff?.status),
       approvedFinalSignoffRoles: summary.approvedFinalSignoffRoles,
       totalChecks: summary.totalChecks,

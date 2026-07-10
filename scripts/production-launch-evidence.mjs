@@ -1461,7 +1461,7 @@ function validateFinalSignoffEvidence(finalSignoff, release, issues) {
   }
 }
 
-function validateLaunchEvidence(evidence) {
+export function validateLaunchEvidence(evidence) {
   const issues = [];
 
   if (!isPlainObject(evidence)) {
