@@ -136,7 +136,9 @@ The API runs on <http://localhost:3002> and the web app on
 - **End-to-end (Playwright)** drives a real browser against the local Docker stack —
   register/verify/login, a compliance sign-off, document upload/download, deadlines,
   team invite/accept, and billing tier gating. One-time `npm run test:e2e:install`,
-  then `npm run test:e2e` (stack must be up). See [`e2e/README.md`](e2e/README.md).
+  then `E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e` (stack must be up, and
+  the local database must be disposable or backed up). See
+  [`e2e/README.md`](e2e/README.md).
 
 ---
 
