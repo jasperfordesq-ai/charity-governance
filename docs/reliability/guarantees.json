@@ -3219,10 +3219,10 @@
     "id": "x-degradation-graceful-degradation-4",
     "group": "x-degradation",
     "concern": "graceful-degradation",
-    "guarantee": "EmailService._send never throws: when Resend is unconfigured (RESEND_API_KEY missing/placeholder or EMAIL_FROM has no '@') or the Resend SDK rejects, the send method returns false and the calling registration/auth/reminder flow proceeds.",
+    "guarantee": "EmailService._send never throws: when Resend is unconfigured, the provider resolves an error or malformed acceptance response, or the SDK rejects, the send method returns false so each caller can apply its documented failure policy.",
     "status": "covered",
     "testFile": "apps/api/src/tests/degradation-reliability.test.ts",
-    "testTitle": "_send returns false without throwing when Resend is unconfigured or the SDK rejects",
+    "testTitle": "_send returns false without throwing when Resend is unconfigured, resolves an error, or rejects",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"

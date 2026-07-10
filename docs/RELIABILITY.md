@@ -11,7 +11,7 @@ documented n/a), the job is finished and stays finished.
 
 ## At a glance
 
-Generated: 2026-07-08 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-07-10 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Generated: 2026-07-08 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 95 | 0 | 0 | 7 | 102 |
 | **Total** | **354** | **0** | **0** | **22** | **376** |
 
-**API suite:** 428 passing, 0 failing. **Web suite:** 230 passing, 0 failing. **E2E:** 16 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 438 passing, 0 failing. **Web suite:** 244 passing, 0 failing. **E2E:** 22 Playwright titles linked (executed by the CI E2E gate).
 
 **Linkage:** 354/354 covered guarantees verified against a passing/linked test.
 
@@ -432,7 +432,7 @@ _9 guarantees - covered 9_
 | Graceful degradation | When Supabase is unconfigured (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing/placeholder), StorageService.getSupabaseClient() throws AppError(503, 'STORAGE_NOT_CONFIGURED') and no upload/signed-url/delete is attempted against Supabase. | covered | `storage operations throw 503 STORAGE_NOT_CONFIGURED when Supabase is unconfigured and local driver is off`<br/><sub>degradation-reliability.test.ts</sub> |
 | Graceful degradation | A failing Supabase API call on upload/signed-url/delete (provider returns an error object) is mapped to a stable AppError 500 with code STORAGE_UPLOAD_FAILED / STORAGE_SIGNED_URL_FAILED / STORAGE_DELETE_FAILED carrying a generic message, never leaking the raw provider error. | covered | `Supabase storage errors map to stable STORAGE_* AppErrors without leaking provider detail`<br/><sub>degradation-reliability.test.ts</sub> |
 | Graceful degradation | StorageService.verifyBucket() returns false (rather than throwing) when the bucket is public, when Supabase is unreachable/erroring, or when the readiness probe times out — so readiness degrades cleanly instead of crashing. | covered | `verifyBucket returns false when Supabase getBucket errors or is unconfigured`<br/><sub>degradation-reliability.test.ts</sub> |
-| Graceful degradation | EmailService._send never throws: when Resend is unconfigured (RESEND_API_KEY missing/placeholder or EMAIL_FROM has no '@') or the Resend SDK rejects, the send method returns false and the calling registration/auth/reminder flow proceeds. | covered | `_send returns false without throwing when Resend is unconfigured or the SDK rejects`<br/><sub>degradation-reliability.test.ts</sub> |
+| Graceful degradation | EmailService._send never throws: when Resend is unconfigured, the provider resolves an error or malformed acceptance response, or the SDK rejects, the send method returns false so each caller can apply its documented failure policy. | covered | `_send returns false without throwing when Resend is unconfigured, resolves an error, or rejects`<br/><sub>degradation-reliability.test.ts</sub> |
 | Graceful degradation | When Stripe is unconfigured (STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / price IDs missing or placeholder), the billing endpoints (/checkout, /portal, /webhooks) surface a clean 503 BILLING_NOT_CONFIGURED via getStripe()/constructWebhookEvent()/getPriceId() and never mutate the subscription. | covered | `billing webhook returns 503 BILLING_NOT_CONFIGURED when Stripe secret is unconfigured`<br/><sub>degradation-reliability.test.ts</sub> |
 | Graceful degradation | A document upload against an unconfigured Supabase returns a clean 503 STORAGE_NOT_CONFIGURED at the HTTP boundary (via handleError) rather than a 500 or stack leak, and no Document row is persisted. | covered | `document upload returns 503 STORAGE_NOT_CONFIGURED and persists nothing when storage is unconfigured`<br/><sub>degradation-reliability.test.ts</sub> |
 | Graceful degradation | formatProviderError scrubs email addresses, token/signature query+fragment params, and storage paths and caps message length, so a provider failure logged anywhere (logger, document outbox, route logs) never leaks PII or secrets. | covered | `formatProviderError redacts emails, tokens, storage paths and caps length`<br/><sub>degradation-reliability.test.ts</sub> |
