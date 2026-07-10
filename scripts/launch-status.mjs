@@ -241,6 +241,19 @@ const SUPABASE_URL_KEYS = Object.freeze([
   'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
   'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
 ]);
+const PROVIDER_VALUE_KEYS = Object.freeze([
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
+  'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+  'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+  'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+  'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+  'RESEND_API_KEY',
+]);
+const PROVIDER_SAMPLE_VALUE_PATTERN =
+  /(?:configured|example|sample|dummy|placeholder|change[-_]?me|test[-_]?value|secret[-_]?store|from[-_]?dashboard)/i;
+const STRIPE_SAMPLE_PRICE_PATTERN = /^price_(?:essentials|complete)(?:_|$)/i;
 const USAGE_TEXT = 'Usage: node scripts/launch-status.mjs [--json]';
 
 function parseArgs(argv) {
@@ -366,6 +379,22 @@ function sampleSupabaseProjectRefIssueForValue(key, value) {
   };
 }
 
+function providerPlaceholderIssueForValue(key, value) {
+  if (!PROVIDER_VALUE_KEYS.includes(key)) return null;
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  if (!PROVIDER_SAMPLE_VALUE_PATTERN.test(text) && !STRIPE_SAMPLE_PRICE_PATTERN.test(text)) {
+    return null;
+  }
+
+  return {
+    key,
+    reason: 'provider-placeholder',
+    detail: 'Value still looks like copied provider setup text; replace it with the real production provider value.',
+  };
+}
+
 function productionValueIssueDetails(envContent) {
   const assignments = productionEnvAssignments(envContent);
   const issues = new Map();
@@ -386,6 +415,13 @@ function productionValueIssueDetails(envContent) {
 
   for (const [key, value] of assignments.entries()) {
     const issue = sampleSupabaseProjectRefIssueForValue(key, value);
+    if (issue && !issues.has(key)) {
+      issues.set(key, issue);
+    }
+  }
+
+  for (const [key, value] of assignments.entries()) {
+    const issue = providerPlaceholderIssueForValue(key, value);
     if (issue && !issues.has(key)) {
       issues.set(key, issue);
     }

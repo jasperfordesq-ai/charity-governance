@@ -18,6 +18,10 @@ import { renderProductionLaunchEvidenceTemplate } from './generate-production-la
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const launchStatusScript = join(repoRoot, 'scripts', 'launch-status.mjs');
 const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
+const stripeSecretFixture = ['sk', 'live', 'fixture'].join('_');
+const stripeWebhookFixture = ['whsec', 'fixture'].join('_');
+const stripePublishableFixture = ['pk', 'live', 'fixture'].join('_');
+const resendApiFixture = ['re', 'fixture'].join('_');
 const VALID_PRODUCTION_VALUES = {
   DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
   FRONTEND_URL: 'https://app.charitypilot.ie',
@@ -27,14 +31,14 @@ const VALID_PRODUCTION_VALUES = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
   SUPABASE_URL: productionSupabaseUrl,
   SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
-  STRIPE_SECRET_KEY: 'sk_live_configured',
-  STRIPE_WEBHOOK_SECRET: 'whsec_configured',
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configured',
-  STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_essentials_monthly',
-  STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentials_yearly',
-  STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_complete_monthly',
-  STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_complete_yearly',
-  RESEND_API_KEY: 're_configured',
+  STRIPE_SECRET_KEY: stripeSecretFixture,
+  STRIPE_WEBHOOK_SECRET: stripeWebhookFixture,
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: stripePublishableFixture,
+  STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_1R9xEssentialsMonthly',
+  STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_1R9xEssentialsYearly',
+  STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_1R9xCompleteMonthly',
+  STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_1R9xCompleteYearly',
+  RESEND_API_KEY: resendApiFixture,
   EMAIL_FROM: 'noreply@charitypilot.ie',
   ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
   TRUSTED_PROXY_ADDRESSES: '203.0.113.10/32',
@@ -411,6 +415,48 @@ test('reports ENV_INCOMPLETE for sample Supabase project refs', () => {
   );
   assert.deepEqual(s.launchProgress.productionValues, { completed: 24, total: 28, remaining: 4 });
   assert.doesNotMatch(renderLaunchStatusText(s), /configured-project/);
+});
+
+test('reports ENV_INCOMPLETE for copied provider placeholder values', () => {
+  const env = productionEnv({
+    STRIPE_SECRET_KEY: 'sk_live_configured',
+    STRIPE_WEBHOOK_SECRET: 'whsec_configured',
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configured',
+    STRIPE_ESSENTIALS_MONTHLY_PRICE_ID: 'price_essentials_monthly',
+    STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentials_yearly',
+    STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_complete_monthly',
+    STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_complete_yearly',
+    RESEND_API_KEY: 're_configured',
+  });
+
+  const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, [
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
+    'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+    'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+    'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+    'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+    'RESEND_API_KEY',
+  ]);
+  assert.deepEqual(
+    s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })),
+    [
+      { key: 'STRIPE_SECRET_KEY', reason: 'provider-placeholder' },
+      { key: 'STRIPE_WEBHOOK_SECRET', reason: 'provider-placeholder' },
+      { key: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', reason: 'provider-placeholder' },
+      { key: 'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID', reason: 'provider-placeholder' },
+      { key: 'STRIPE_ESSENTIALS_YEARLY_PRICE_ID', reason: 'provider-placeholder' },
+      { key: 'STRIPE_COMPLETE_MONTHLY_PRICE_ID', reason: 'provider-placeholder' },
+      { key: 'STRIPE_COMPLETE_YEARLY_PRICE_ID', reason: 'provider-placeholder' },
+      { key: 'RESEND_API_KEY', reason: 'provider-placeholder' },
+    ],
+  );
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 20, total: 28, remaining: 8 });
+  assert.doesNotMatch(renderLaunchStatusText(s), /sk_live_configured|whsec_configured|pk_live_configured|re_configured|price_essentials/);
 });
 
 test('groups missing production values by operator source', () => {
