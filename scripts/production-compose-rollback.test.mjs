@@ -9,6 +9,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const rollbackScriptPath = join(scriptsDir, 'production-compose-rollback.mjs');
 const currentDigest = 'b'.repeat(64);
 const rollbackDigest = 'a'.repeat(64);
+const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 
 function cleanEnv() {
   return {
@@ -46,20 +47,20 @@ function productionEnv(overrides = {}) {
     STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
     RESEND_API_KEY: 're_configuredSecret',
     EMAIL_FROM: 'noreply@charitypilot.ie',
-    SUPABASE_URL: 'https://configured-project.supabase.co',
+    SUPABASE_URL: productionSupabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${currentDigest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${currentDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${currentDigest}`,
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 
@@ -72,7 +73,7 @@ function rollbackManifest(overrides = {}) {
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${rollbackDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`,
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 
@@ -122,7 +123,7 @@ test('production rollback dry-run delegates to deploy with rollback digests merg
     assert.match(deployCalls[0].mergedEnv, new RegExp(`CHARITYPILOT_WEB_IMAGE=ghcr\\.io/jasperfordesq-ai/charity-governance-web@sha256:${rollbackDigest}`));
     assert.match(deployCalls[0].mergedEnv, new RegExp(`CHARITYPILOT_MIGRATION_IMAGE=ghcr\\.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`));
     assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
-    assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/configured-project\.supabase\.co/);
+    assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/xjvdkmqbtczrnlqpswfa\.supabase\.co/);
     assert.match(deployCalls[0].mergedEnv, /JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5/);
     assert.doesNotMatch(deployCalls[0].mergedEnv, new RegExp(currentDigest));
     assert.match(result.stdout, /Production compose rollback dry-run/);

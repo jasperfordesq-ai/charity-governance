@@ -9,6 +9,7 @@ import {
 } from './production-deploy-preflight.mjs';
 
 const digest = 'a'.repeat(64);
+const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 
 function completeDeployEnv(overrides = {}) {
   const values = {
@@ -28,15 +29,15 @@ function completeDeployEnv(overrides = {}) {
     STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
     RESEND_API_KEY: 're_configuredSecret',
     EMAIL_FROM: 'noreply@charitypilot.ie',
-    SUPABASE_URL: 'https://configured-project.supabase.co',
+    SUPABASE_URL: productionSupabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     CADDY_ACME_EMAIL: 'ops@charitypilot.ie',
     CHARITYPILOT_WEB_DOMAIN: 'app.charitypilot.ie',
     CHARITYPILOT_API_DOMAIN: 'api.charitypilot.ie',
@@ -44,7 +45,7 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 

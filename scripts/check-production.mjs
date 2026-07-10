@@ -57,6 +57,7 @@ const COMPOSE_RUNTIME_WEB_SUPABASE_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_
 const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
+const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
 function parseEnvFile(path) {
   return Object.fromEntries(
@@ -244,23 +245,30 @@ function envList(value) {
 function validateUrlValue(key, value, issues, options = {}) {
   try {
     const url = new URL(value);
+    const hostname = normaliseHostname(url.hostname);
     if (url.protocol !== 'https:') {
       issues.push(`${key} must use https:// for production`);
     }
-    if (isLocalHost(url.hostname)) {
+    if (isLocalHost(hostname)) {
       issues.push(`${key} must not point at localhost for production`);
     }
     if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
       issues.push(`${key} must be an origin-only URL for production`);
     }
-    if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
+    if (options.requireApprovedPublicHost && !isApprovedPublicHostname(hostname)) {
       issues.push(`${key} must use an approved CharityPilot production hostname`);
     }
     if (options.canonicalOriginRole) {
       const issue = canonicalOriginIssue(key, url.origin, options.canonicalOriginRole);
       if (issue) issues.push(issue);
     }
-    if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
+    if (options.rejectSampleSupabaseProjectRef && hostname.endsWith('.supabase.co')) {
+      const projectRef = hostname.slice(0, -'.supabase.co'.length);
+      if (SAMPLE_SUPABASE_PROJECT_REF_PATTERN.test(projectRef)) {
+        issues.push(`${key} must not use a sample Supabase project ref`);
+      }
+    }
+    if (options.requirePublicHost && !isPublicHost(hostname) && !isLocalHost(hostname)) {
       issues.push(`${key} must use a public, non-local URL for production`);
     }
   } catch {
@@ -462,6 +470,7 @@ function requireComposeRuntimeWebSupabaseUrl(env, runtimeEnv, issues) {
   requireUrl(runtimeEnv, COMPOSE_RUNTIME_WEB_SUPABASE_URL, issues, {
     requireOrigin: true,
     requirePublicHost: true,
+    rejectSampleSupabaseProjectRef: true,
   });
 
   if (issues.length !== issueCountBeforeUrlValidation) return;
@@ -558,7 +567,7 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
     requireApprovedPublicHost: true,
     canonicalOriginRole: 'web',
   });
-  requireUrl(env, 'SUPABASE_URL', issues, { requirePublicHost: true });
+  requireUrl(env, 'SUPABASE_URL', issues, { requirePublicHost: true, rejectSampleSupabaseProjectRef: true });
   requireProductionDocumentStorageDriver(env, issues);
   requireUrl(env, 'ERROR_ALERT_WEBHOOK_URL', issues, { requirePublicHost: true });
   requireUrl(env, 'NEXT_PUBLIC_API_URL', issues, {
@@ -566,7 +575,11 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
     requireApprovedPublicHost: true,
     canonicalOriginRole: 'api',
   });
-  requireUrl(env, 'NEXT_PUBLIC_SUPABASE_URL', issues, { requireOrigin: true, requirePublicHost: true });
+  requireUrl(env, 'NEXT_PUBLIC_SUPABASE_URL', issues, {
+    requireOrigin: true,
+    requirePublicHost: true,
+    rejectSampleSupabaseProjectRef: true,
+  });
   requirePublicSupabaseUrlMatchesApiSupabaseUrl(env, issues);
   requireComposeRuntimeWebApiUrl(env, runtimeEnv, issues);
   requireComposeRuntimeWebSupabaseUrl(env, runtimeEnv, issues);

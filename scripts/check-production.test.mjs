@@ -11,9 +11,10 @@ import { runProductionPreflightFromArgs } from './check-production.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
+const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const validRuntimeWebApiUrlEnv = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
 };
 const forbiddenApiRuntimePackages = [
   'typescript',
@@ -246,12 +247,12 @@ function completeProductionEnv(overrides = {}) {
     STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
     RESEND_API_KEY: 're_configuredSecret',
     EMAIL_FROM: 'noreply@charitypilot.ie',
-    SUPABASE_URL: 'https://configured-project.supabase.co',
+    SUPABASE_URL: productionSupabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     ...overrides,
   };
@@ -327,12 +328,12 @@ test('passes when the selected env file contains complete production values', ()
       'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
       'RESEND_API_KEY=re_configuredSecret',
       'EMAIL_FROM=noreply@charitypilot.ie',
-      'SUPABASE_URL=https://configured-project.supabase.co',
+      `SUPABASE_URL=${productionSupabaseUrl}`,
       'SUPABASE_SERVICE_ROLE_KEY=configured-service-role-key',
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+      `NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -341,7 +342,7 @@ test('passes when the selected env file contains complete production values', ()
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -373,6 +374,33 @@ test('fails when production Supabase URLs still contain project-ref placeholder 
     assert.match(result.stderr, /SUPABASE_URL is missing or still contains a placeholder value/);
     assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
     assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when production Supabase URLs use sample project refs', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-sample-supabase-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      SUPABASE_URL: 'https://configured-project.supabase.co',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`], {
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /SUPABASE_URL must not use a sample Supabase project ref/);
+    assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref/);
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref/);
+    assert.doesNotMatch(result.stderr, /configured-project/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -710,7 +738,7 @@ test('passes when the compose runtime web API URL is supplied by the selected en
     envPath,
     completeProductionEnv({
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     }),
   );
 
