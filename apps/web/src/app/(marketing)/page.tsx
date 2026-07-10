@@ -190,7 +190,7 @@ export default function LandingPage() {
                 body: 'Track annual returns, CRO filings, policy reviews, meetings, and custom governance dates in one place.',
               },
             ].map((pain) => (
-              <Card key={pain.title} className="border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <Card key={pain.title} className={statusPanelClassName('neutral', 'shadow-sm')}>
                 <CardBody className="p-7">
                   <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
                     <Clock className="h-5 w-5" aria-hidden="true" />
@@ -259,7 +259,7 @@ export default function LandingPage() {
             {principles.map((p) => (
               <div
                 key={p.number}
-                className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+                className={statusPanelClassName('neutral', 'p-5 shadow-sm')}
               >
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-teal-primary text-sm font-bold text-white">
                   {p.number}

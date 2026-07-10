@@ -7,15 +7,16 @@ import { ArrowRight, BookOpen, Search, ShieldCheck } from 'lucide-react';
 import { getCategories, formatDate } from '@/lib/blog';
 import type { PostMeta } from '@/lib/blog';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { statusPanelClassName } from '@/components/ui/status';
 import { EmptyState } from '@/components/ui/states';
 
 function PostCard({ post, featured = false }: { post: PostMeta; featured?: boolean }) {
   return (
     <Link
       href={`/blog/${post.slug}`}
-      className={`group block rounded-lg border border-gray-200 bg-white transition-all hover:border-teal-primary hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-teal-bright ${
+      className={statusPanelClassName('neutral', `group block transition-all hover:border-teal-primary hover:shadow-md dark:hover:border-teal-bright ${
         featured ? 'p-8 md:p-10' : 'p-6'
-      }`}
+      }`)}
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="rounded-md bg-teal-primary/10 px-3 py-1 text-xs font-semibold text-teal-dark dark:bg-teal-bright/10 dark:text-teal-bright">

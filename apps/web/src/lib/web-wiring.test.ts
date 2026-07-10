@@ -1766,6 +1766,17 @@ test('marketing blog search and CTA use HeroUI controls instead of route-local f
   assert.doesNotMatch(src, /inline-flex items-center rounded-lg bg-teal-primary px-6/);
 });
 
+test('marketing blog cards use shared status panel styling', () => {
+  const src = app('(marketing)/blog/BlogClient.tsx');
+
+  assert.match(src, /statusPanelClassName/);
+  assert.match(src, /className=\{statusPanelClassName\('neutral', `group block transition-all hover:border-teal-primary hover:shadow-md dark:hover:border-teal-bright \$\{/);
+  assert.doesNotMatch(
+    src,
+    /group block rounded-lg border border-gray-200 bg-white transition-all hover:border-teal-primary hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-teal-bright/,
+  );
+});
+
 test('public marketing and cookie action controls use HeroUI Button primitives', () => {
   const expectations: Array<['app' | 'component', string]> = [
     ['app', '(marketing)/MobileNav.tsx'],
@@ -1934,7 +1945,11 @@ test('marketing landing workflow signals use shared status panel styling', () =>
 
   assert.match(page, /statusPanelClassName/);
   assert.match(page, /className=\{statusPanelClassName\('neutral', 'p-4'\)\}/);
+  assert.match(page, /className=\{statusPanelClassName\('neutral', 'shadow-sm'\)\}/);
+  assert.match(page, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
   assert.doesNotMatch(page, /rounded-lg border border-gray-200 bg-gray-50 p-4/);
+  assert.doesNotMatch(page, /border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900/);
+  assert.doesNotMatch(page, /rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/);
 });
 
 test('blog article content avoids decorative dot bullets and oversized cards', () => {
