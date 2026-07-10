@@ -18,6 +18,7 @@ const releaseGitRef = 'refs/heads/master';
 const apiImage = `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`;
 const webImage = `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`;
 const migrationImage = `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`;
+const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const launchCriticalRoutes = [
   '/',
   '/about',
@@ -164,7 +165,7 @@ function evidenceEntry(areaId, checkId) {
       'npm run check:production:github-env -- --environment=production',
       'Production GitHub environment check passed: production has the required release-image public variables; secret values were not read.',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+      `NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
     ].join(' ');
   }
 
@@ -477,7 +478,7 @@ function evidenceEntry(areaId, checkId) {
       `webImage=${webImage}`,
       `migrationImage=${migrationImage}`,
       'webBuildNextPublicApiUrl=https://api.charitypilot.ie',
-      'webBuildNextPublicSupabaseUrl=https://configured-project.supabase.co',
+      `webBuildNextPublicSupabaseUrl=${productionSupabaseUrl}`,
     ].join(' ');
   }
 
@@ -544,7 +545,7 @@ function evidenceEntry(areaId, checkId) {
       webImage,
       migrationImage,
       'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+      `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
     ].join(' ');
   }
 
@@ -682,7 +683,7 @@ function completeEvidence(requiredAreas) {
         webImage,
         migrationImage,
         webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-        webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+        webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
       },
     },
     areas: Object.fromEntries(requiredAreas.map((area) => [
@@ -808,6 +809,25 @@ test('production launch evidence validator accepts complete dated external evide
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
     assert.match(result.stdout, /87 check\(s\)/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence validator rejects sample Supabase project refs', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  evidence.release.imageDigestManifest.webBuildNextPublicSupabaseUrl = 'https://configured-project.supabase.co';
+  evidence.areas.releaseGate.checks['github-environment'].evidence[0].description +=
+    ' NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co';
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /must not use a sample Supabase project ref/);
+    assert.doesNotMatch(result.stderr, /configured-project/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -2099,7 +2119,7 @@ test('production launch evidence template covers every required area and final s
         'npm run check:production:github-env -- --environment=production',
         'Production GitHub environment check passed',
         'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-        'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+        'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
         'secret values were not read',
       ],
     );

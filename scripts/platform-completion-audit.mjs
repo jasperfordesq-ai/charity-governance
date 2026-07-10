@@ -195,6 +195,7 @@ const fixedInThisAuditBranch = [
   'Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.',
   'Production preflight now rejects obvious low-entropy or sample JWT_SECRET and READINESS_API_KEY values instead of accepting length-only secrets.',
   'GitHub production environment validation now rejects sample Supabase project refs such as configured-project before release image promotion.',
+  'Production launch evidence templates and validators now reject sample Supabase project refs so release evidence cannot contradict the GitHub environment preflight.',
   'Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.',
   'Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.',
   'Billing checkout and portal handoffs now use a shared visible inline status instead of a route-local hidden live-region message.',

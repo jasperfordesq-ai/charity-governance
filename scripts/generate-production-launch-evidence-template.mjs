@@ -20,7 +20,7 @@ const evidenceHintsByCheck = new Map([
     'npm run check:production:github-env -- --environment=production',
     'Production GitHub environment check passed',
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
+    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
     'secret values were not read',
   ]],
   ['releaseGate.github-secret-store', [

@@ -175,6 +175,7 @@ const allowedEvidenceTypes = new Set([
 ]);
 
 const placeholderOrLocalPattern = /\b(todo|tbd|pending(?!-navigation confirmation)|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|project_ref|change-me|your_|your-|file:\/\//i;
+const sampleSupabaseProjectRefPattern = /https:\/\/(?:configured-project|example|ci-project|test-project|demo-project|sample-project)\.supabase\.co\b/i;
 const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|RESEND_API_KEY=)\b/;
 const approvedEvidenceReferenceHosts = ['charitypilot.ie', 'github.com'];
 const sensitiveEvidenceReferenceQueryKeys = new Set([
@@ -327,6 +328,9 @@ function validateExternalText(value, path, issues) {
   const trimmed = String(value ?? '').trim();
   if (placeholderOrLocalPattern.test(trimmed)) {
     issues.push(`${path} must not be a placeholder or local reference`);
+  }
+  if (sampleSupabaseProjectRefPattern.test(trimmed)) {
+    issues.push(`${path} must not use a sample Supabase project ref`);
   }
   if (rawSecretPattern.test(trimmed)) {
     issues.push(`${path} must not contain raw secret-looking values`);
