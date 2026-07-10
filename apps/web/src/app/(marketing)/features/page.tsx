@@ -1,6 +1,7 @@
 import { Button, Card, CardBody, Link } from '@/components/heroui-client';
 import type { Metadata } from 'next';
 import { CalendarDays, Check, CircleCheck, FileText, FolderOpen, UsersRound } from 'lucide-react';
+import { statusPanelClassName } from '@/components/ui/status';
 
 export const metadata: Metadata = {
   title: 'Features — CharityPilot',
@@ -156,7 +157,7 @@ export default function FeaturesPage() {
 
               {/* Feature preview */}
               <div className="flex-1 w-full">
-                <Card className="border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
+                <Card className={statusPanelClassName('neutral', 'shadow-sm overflow-hidden')}>
                   <CardBody className="p-0">
                     <div className="h-64 lg:h-80 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                       <div className="text-center">
@@ -201,7 +202,7 @@ export default function FeaturesPage() {
                 text: 'Priced for charity budgets, not enterprise IT departments. Starting at just EUR 19/month.',
               },
             ].map((item) => (
-              <Card key={item.title} className="border border-gray-200 shadow-sm bg-white dark:border-gray-800 dark:bg-gray-950">
+              <Card key={item.title} className={statusPanelClassName('neutral', 'shadow-sm')}>
                 <CardBody className="p-6">
                   <h3 className="text-base font-semibold text-gray-950 dark:text-white mb-2">{item.title}</h3>
                   <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{item.text}</p>

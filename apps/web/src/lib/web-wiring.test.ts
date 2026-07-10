@@ -1952,6 +1952,16 @@ test('marketing landing workflow signals use shared status panel styling', () =>
   assert.doesNotMatch(page, /rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/);
 });
 
+test('marketing features cards use shared status panel styling', () => {
+  const features = app('(marketing)/features/page.tsx');
+
+  assert.match(features, /statusPanelClassName/);
+  assert.match(features, /className=\{statusPanelClassName\('neutral', 'shadow-sm overflow-hidden'\)\}/);
+  assert.match(features, /className=\{statusPanelClassName\('neutral', 'shadow-sm'\)\}/);
+  assert.doesNotMatch(features, /border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900/);
+  assert.doesNotMatch(features, /border border-gray-200 shadow-sm bg-white dark:border-gray-800 dark:bg-gray-950/);
+});
+
 test('blog article content avoids decorative dot bullets and oversized cards', () => {
   const articles = [
     'blog/annual-reporting-guide-irish-charities.tsx',
