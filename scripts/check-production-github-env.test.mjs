@@ -40,7 +40,7 @@ test('production GitHub environment check passes with canonical release variable
       { name: 'NEXT_PUBLIC_API_URL', value: 'https://api.charitypilot.ie', updatedAt: '2026-07-09T00:00:00Z' },
       {
         name: 'NEXT_PUBLIC_SUPABASE_URL',
-        value: 'https://configured-project.supabase.co',
+        value: 'https://xjvdkmqbtczrnlqpswfa.supabase.co',
         updatedAt: '2026-07-09T00:00:00Z',
       },
     ]);
@@ -57,7 +57,30 @@ test('production GitHub environment check passes with canonical release variable
   assert.match(result.stdout, /Production GitHub environment check passed/);
   assert.match(result.stdout, /secret values were not read/);
   assert.equal(result.stderr, '');
-  assert.doesNotMatch(result.stdout, /configured-project/);
+  assert.doesNotMatch(result.stdout, /xjvdkmqbtczrnlqpswfa/);
+});
+
+test('production GitHub environment check rejects sample Supabase project refs', () => {
+  for (const projectRef of ['configured-project', 'example', 'ci-project']) {
+    const result = runProductionGitHubEnvironmentCheckFromArgs([], {
+      runGh: () =>
+        okGh([
+          { name: 'NEXT_PUBLIC_API_URL', value: 'https://api.charitypilot.ie', updatedAt: '2026-07-09T00:00:00Z' },
+          {
+            name: 'NEXT_PUBLIC_SUPABASE_URL',
+            value: `https://${projectRef}.supabase.co`,
+            updatedAt: '2026-07-09T00:00:00Z',
+          },
+        ]),
+    });
+
+    assert.equal(result.status, 1, `${projectRef} must be rejected`);
+    assert.match(
+      result.stderr,
+      /GitHub production variable NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref/,
+    );
+    assert.doesNotMatch(result.stderr, new RegExp(projectRef));
+  }
 });
 
 test('production GitHub environment check fails for missing and placeholder variables', () => {

@@ -156,6 +156,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence now requires legal/compliance final approval alongside engineering, operations, security, and business signoffs.
 - Production launch evidence now requires named solicitor/governance/privacy review evidence inside the legal/compliance checklist area.
 - Production preflight now rejects obvious low-entropy or sample JWT_SECRET and READINESS_API_KEY values instead of accepting length-only secrets.
+- GitHub production environment validation now rejects sample Supabase project refs such as configured-project before release image promotion.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.
 - Billing checkout and portal handoffs now use a shared visible inline status instead of a route-local hidden live-region message.

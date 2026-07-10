@@ -11,6 +11,7 @@ const DEFAULT_ENVIRONMENT = 'production';
 const DEFAULT_REPOSITORY = 'jasperfordesq-ai/charity-governance';
 const CANONICAL_API_ORIGIN = 'https://api.charitypilot.ie';
 const PLACEHOLDER_PATTERN = /(?:replace_me|real_|todo|tbd|pending|placeholder|change-me|your_|your-|project_ref)/i;
+const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 const USAGE_TEXT =
   'Usage: node scripts/check-production-github-env.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance] [--json]';
 
@@ -36,6 +37,10 @@ export const REQUIRED_GITHUB_PRODUCTION_VARIABLES = Object.freeze([
         const originOnly = url.origin === value.replace(/\/+$/, '');
         if (url.protocol !== 'https:' || !originOnly || !url.hostname.toLowerCase().endsWith('.supabase.co')) {
           return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL';
+        }
+        const projectRef = url.hostname.slice(0, -'.supabase.co'.length);
+        if (SAMPLE_SUPABASE_PROJECT_REF_PATTERN.test(projectRef)) {
+          return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref';
         }
       } catch {
         return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must be a valid HTTPS Supabase project URL';
