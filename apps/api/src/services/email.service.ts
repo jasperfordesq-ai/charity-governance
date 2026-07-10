@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { isConfiguredSecret } from '../utils/env.js';
 import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
+import { formatProviderError } from '../utils/provider-errors.js';
 
 const BRAND_TEAL = '#0D7377';
 const BRAND_TEAL_LIGHT = '#e6f4f5';
@@ -82,8 +83,7 @@ function smallNote(text: string): string {
 }
 
 function formatEmailDeliveryError(err: unknown): string {
-  if (err instanceof Error && err.name) return err.name;
-  return 'unknown error';
+  return formatProviderError(err);
 }
 
 type EmailLogger = {
@@ -263,7 +263,23 @@ export class EmailService {
     }
 
     try {
-      await this.resend.emails.send({ from: this.from, to, subject, html });
+      const response = await this.resend.emails.send({ from: this.from, to, subject, html });
+      if (response.error !== null) {
+        this.logger.error(`[EmailService] Failed to send email: ${formatEmailDeliveryError(response.error)}`);
+        return false;
+      }
+
+      const acceptanceId = response.data?.id;
+      if (typeof acceptanceId !== 'string' || acceptanceId.trim() === '') {
+        this.logger.error(
+          `[EmailService] Failed to send email: ${formatEmailDeliveryError({
+            name: 'InvalidProviderResponse',
+            message: 'Email provider did not return an acceptance id',
+          })}`,
+        );
+        return false;
+      }
+
       return true;
     } catch (err) {
       this.logger.error(`[EmailService] Failed to send email: ${formatEmailDeliveryError(err)}`);

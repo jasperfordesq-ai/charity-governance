@@ -42,6 +42,27 @@ test('forgotPassword sends a reset link for a known account and returns the gene
   assert.equal(email.sent.filter((s) => s.name === 'reset').length, 1);
 });
 
+test('forgotPassword keeps its neutral response when email delivery resolves false', async () => {
+  let emailAttempted = false;
+  const prisma = {
+    user: {
+      findUnique: async () => ({ id: 'u1', email: 'owner@example.org', name: 'Owner' }),
+      update: async () => ({}),
+    },
+  };
+  const service = new AuthService(prisma as never, {
+    sendPasswordReset: async () => {
+      emailAttempted = true;
+      return false;
+    },
+  } as never);
+
+  const result = await service.forgotPassword('owner@example.org');
+
+  assert.match(result.message, /if an account with that email exists/i);
+  assert.equal(emailAttempted, true);
+});
+
 test('forgotPassword returns the same message and does nothing for an unknown account', async () => {
   const updates: Call[] = [];
   const email = emailSpy();

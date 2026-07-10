@@ -336,42 +336,23 @@ test('invite still succeeds when the email provider fails', async () => {
       },
     },
   };
-  // The service dispatches the email fire-and-forget (void this.emailService.sendTeamInvite),
-  // so a genuine provider rejection is never awaited by the caller. Install a scoped
-  // unhandledRejection listener to deterministically absorb that escaping rejection (proving
-  // it does not surface to the caller) and restore the original handlers afterwards.
+  // EmailService contains both resolved provider errors and thrown SDK failures,
+  // returning false so this enumeration-resistant endpoint stays neutral.
   let invoked = false;
   const failingEmail = {
     sendTeamInvite: async () => {
       invoked = true;
-      throw new Error('resend down');
+      return false;
     },
   } as never;
   const service = new TeamService(prisma as never, failingEmail);
 
-  const priorListeners = process.listeners('unhandledRejection');
-  process.removeAllListeners('unhandledRejection');
-  let absorbed: Error | null = null;
-  process.on('unhandledRejection', (reason) => {
-    absorbed = reason as Error;
+  const result = await service.invite('org-1', 'owner-1', 'OWNER', {
+    email: 'x@example.org',
+    role: 'MEMBER',
   });
-  try {
-    const result = await service.invite('org-1', 'owner-1', 'OWNER', {
-      email: 'x@example.org',
-      role: 'MEMBER',
-    });
 
-    assert.deepEqual(result, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
-    assert.equal(createCalled, true, 'the invite must have been created');
-    assert.equal(invoked, true, 'the email provider was invoked');
-
-    // Drain microtasks/ticks so the fire-and-forget rejection is delivered to our listener.
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.ok(absorbed, 'the provider rejection was raised asynchronously, not to the caller');
-  } finally {
-    process.removeAllListeners('unhandledRejection');
-    for (const listener of priorListeners) {
-      process.on('unhandledRejection', listener);
-    }
-  }
+  assert.deepEqual(result, { message: TEAM_INVITE_ACCEPTED_MESSAGE });
+  assert.equal(createCalled, true, 'the invite must have been created');
+  assert.equal(invoked, true, 'the email provider was invoked');
 });

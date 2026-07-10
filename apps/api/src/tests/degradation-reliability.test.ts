@@ -215,7 +215,7 @@ test('verifyBucket returns false when Supabase getBucket errors or is unconfigur
 });
 
 // ── x-degradation-graceful-degradation-4 ───────────────────────────────────────
-test('_send returns false without throwing when Resend is unconfigured or the SDK rejects', { concurrency: false }, async () => {
+test('_send returns false without throwing when Resend is unconfigured, resolves an error, or rejects', { concurrency: false }, async () => {
   const snapshot = snapshotEnv(['RESEND_API_KEY', 'EMAIL_FROM', 'FRONTEND_URL']);
 
   try {
@@ -260,6 +260,22 @@ test('_send returns false without throwing when Resend is unconfigured or the SD
       resultB = await configured.sendWelcomeEmail('a@b.org', 'N', 'Org');
     });
     assert.equal(resultB, false);
+
+    // Case C: Resend represents most API failures as a resolved error result.
+    (configured as unknown as { resend: { emails: { send: () => Promise<unknown> } } }).resend = {
+      emails: {
+        send: async () => ({
+          data: null,
+          error: { name: 'validation_error', message: 'Rejected re_live_secret_key', statusCode: 422 },
+        }),
+      },
+    };
+
+    let resultC: boolean | undefined;
+    await assert.doesNotReject(async () => {
+      resultC = await configured.sendWelcomeEmail('a@b.org', 'N', 'Org');
+    });
+    assert.equal(resultC, false);
   } finally {
     restoreEnv(snapshot);
   }
@@ -436,6 +452,23 @@ test('formatProviderError redacts provider key material from messages', () => {
   assert.doesNotMatch(output, /re_secretD/);
   assert.doesNotMatch(output, /secretE/);
   assert.doesNotMatch(output, /secretF/);
+});
+
+test('formatProviderError preserves sanitized diagnostics from plain provider error objects', () => {
+  const output = formatProviderError({
+    name: 'validation_error',
+    code: 'invalid_from_address',
+    statusCode: 422,
+    message: 'Rejected owner@example.org token=raw-token re_live_secret-key',
+  });
+
+  assert.match(output, /name=validation_error/);
+  assert.match(output, /code=invalid_from_address/);
+  assert.match(output, /status=422/);
+  assert.match(output, /\[email\]/);
+  assert.match(output, /token=\[redacted\]/);
+  assert.match(output, /resend-key=\[redacted\]/);
+  assert.doesNotMatch(output, /owner@example\.org|raw-token|re_live_secret-key/);
 });
 
 test('readiness reports 503 not_ready with billingConfigured false when Stripe env is unconfigured', { concurrency: false }, async () => {

@@ -9,18 +9,31 @@ type SentEmail = {
   html: string;
 };
 
-function captureEmailService(frontendUrl = 'https://app.example.org') {
+type SendBehaviour = (message: SentEmail) => Promise<unknown>;
+
+type TestEmailLogger = {
+  warn(message: string): void;
+  error(message: string): void;
+};
+
+function captureEmailService(
+  frontendUrl = 'https://app.example.org',
+  sendBehaviour?: SendBehaviour,
+  logger?: TestEmailLogger,
+) {
   process.env.RESEND_API_KEY = 're_test_key';
   process.env.EMAIL_FROM = 'noreply@example.org';
   process.env.FRONTEND_URL = frontendUrl;
 
   const sentMessages: SentEmail[] = [];
-  const service = new EmailService();
+  const service = logger ? new EmailService(logger) : new EmailService();
   (service as unknown as { resend: { emails: { send: (message: SentEmail) => Promise<unknown> } } }).resend = {
     emails: {
       send: async (message: SentEmail) => {
         sentMessages.push(message);
-        return {};
+        return sendBehaviour
+          ? sendBehaviour(message)
+          : { data: { id: 'email_test_acceptance' }, error: null };
       },
     },
   };
@@ -35,6 +48,89 @@ function captureEmailService(frontendUrl = 'https://app.example.org') {
     sentMessages: () => sentMessages,
   };
 }
+
+test('email send succeeds only when Resend returns a non-empty acceptance id', async () => {
+  const { service } = captureEmailService();
+
+  const delivered = await service.sendEmailVerification('owner@example.org', 'Owner', 'verify-token');
+
+  assert.equal(delivered, true);
+});
+
+test('email send treats a resolved Resend error as failed and logs only sanitized diagnostics', async () => {
+  const errors: string[] = [];
+  const { service } = captureEmailService(
+    'https://app.example.org',
+    async () => ({
+      data: null,
+      error: {
+        name: 'validation_error',
+        message: 'Rejected owner@example.org token=raw-token re_live_secret-provider-payload',
+        statusCode: 422,
+      },
+    }),
+    {
+      warn: () => undefined,
+      error: (message) => errors.push(message),
+    },
+  );
+
+  const delivered = await service.sendEmailVerification('owner@example.org', 'Owner', 'verify-token');
+
+  assert.equal(delivered, false);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /name=validation_error/);
+  assert.match(errors[0], /status=422/);
+  assert.match(errors[0], /\[email\]/);
+  assert.match(errors[0], /token=\[redacted\]/);
+  assert.match(errors[0], /resend-key=\[redacted\]/);
+  assert.doesNotMatch(errors[0], /owner@example\.org|raw-token|re_live_secret-provider-payload/);
+  assert.doesNotMatch(errors[0], /"data"|"error"/);
+});
+
+test('email send rejects a malformed success response without leaking the response', async () => {
+  const errors: string[] = [];
+  const { service } = captureEmailService(
+    'https://app.example.org',
+    async () => ({ data: { id: '   ' }, error: null, rawPayload: 'provider-secret' }),
+    {
+      warn: () => undefined,
+      error: (message) => errors.push(message),
+    },
+  );
+
+  const delivered = await service.sendWelcomeEmail('owner@example.org', 'Owner', 'Good Works');
+
+  assert.equal(delivered, false);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /name=InvalidProviderResponse/);
+  assert.match(errors[0], /acceptance id/);
+  assert.doesNotMatch(errors[0], /provider-secret|rawPayload/);
+});
+
+test('email send contains thrown provider failures and sanitizes their logs', async () => {
+  const errors: string[] = [];
+  const { service } = captureEmailService(
+    'https://app.example.org',
+    async () => {
+      throw new Error('Network failure for owner@example.org token=raw-token re_test_secret');
+    },
+    {
+      warn: () => undefined,
+      error: (message) => errors.push(message),
+    },
+  );
+
+  const delivered = await service.sendPasswordReset('owner@example.org', 'Owner', 'reset-token');
+
+  assert.equal(delivered, false);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /name=Error/);
+  assert.match(errors[0], /\[email\]/);
+  assert.match(errors[0], /token=\[redacted\]/);
+  assert.match(errors[0], /resend-key=\[redacted\]/);
+  assert.doesNotMatch(errors[0], /owner@example\.org|raw-token|re_test_secret/);
+});
 
 test('welcome email escapes user-controlled HTML values', async () => {
   const { service, sent } = captureEmailService();

@@ -26,10 +26,15 @@ function scrubProviderMessage(message: string): string {
 }
 
 export function formatProviderError(error: unknown): string {
-  const name = error instanceof Error && error.name ? error.name : 'ProviderError';
+  const name = error instanceof Error && error.name
+    ? error.name
+    : providerField(error, 'name') ?? 'ProviderError';
   const code = providerField(error, 'code');
   const status = providerField(error, 'status') ?? providerField(error, 'statusCode');
-  const message = error instanceof Error && error.message ? scrubProviderMessage(error.message) : undefined;
+  const rawMessage = error instanceof Error && error.message
+    ? error.message
+    : providerField(error, 'message');
+  const message = rawMessage ? scrubProviderMessage(rawMessage) : undefined;
 
   return [
     `name=${name}`,

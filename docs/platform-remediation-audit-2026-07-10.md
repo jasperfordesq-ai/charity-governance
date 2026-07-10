@@ -140,7 +140,7 @@ exists.
 
 ### P0-01 - Unsafe annual-reporting legal and accounting claims
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Evidence:
 
@@ -198,7 +198,10 @@ Local verification:
 - Final repository search found the removed legal claims only inside the new
   negative regression patterns, not in public product copy.
 
-Commit SHA / CI run: pending publication of this verified slice.
+Commit SHA / CI run:
+
+- `97f64b0285eb2d19489c062cda52134fda8f9a53`
+- `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29073803773`
 
 External owner/blocker: named qualified-accountant and Irish-solicitor review is
 still required launch evidence. Agent-authored containment is not professional
@@ -206,7 +209,7 @@ approval.
 
 ### P0-02 - Resend resolved failures counted as successful delivery
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
 Evidence:
 
@@ -229,6 +232,36 @@ Acceptance:
 - Tests cover provider success, resolved error, thrown exception, sanitized
   logging/alerting, endpoint behavior, and reminder retry state.
 - No secret, address, token, or provider payload leaks into client responses.
+
+Repository remediation completed on 2026-07-10:
+
+- Email delivery now succeeds only when Resend returns `error: null` and a
+  non-empty provider acceptance ID. Resolved provider errors, malformed success
+  envelopes, and thrown SDK/network errors all return `false`.
+- Resend's plain-object error shape now flows through the shared bounded provider
+  redactor, preserving safe name/code/status diagnostics while removing email
+  addresses, tokens, provider keys, storage paths, and raw payloads.
+- Failed deadline sends are finalized as `FAILED`, remain reclaimable on the next
+  run, and are processed before the job throws one count-only
+  `DeadlineReminderDeliveryFailure` so the existing production scheduler emits a
+  sanitized operational alert.
+- Resend-verification still returns its safe `503 EMAIL_DELIVERY_FAILED`; forgot
+  password and team invitation flows retain enumeration-resistant neutral
+  responses when delivery resolves `false`.
+
+Local verification:
+
+- `npm run build -w @charitypilot/api`: passed.
+- Focused email/degradation/reminder/auth/team/scheduler/idempotency tests:
+  `73 / 73` passed from the API workspace.
+- `npm test -w @charitypilot/api`: `438 / 438` passed.
+- `npm run test:production-check`: `396 / 396` passed.
+
+Commit SHA / CI run: pending publication of this verified slice.
+
+External evidence note: these tests prove the SDK contract and retry/alert state
+with controlled provider responses. A real Resend-domain/provider acceptance
+check remains a separate production launch-evidence gate.
 
 ### P0-03 - Duplicate Stripe subscription and double-billing path
 

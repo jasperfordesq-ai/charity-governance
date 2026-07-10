@@ -647,6 +647,40 @@ test('deadline reminders skip sending when another worker already reserved the r
   assert.deepEqual(operations, ['reserve']);
 });
 
+test('deadline reminder provider rejection stays retryable and fails the run with a count-only signal', async () => {
+  let finalized: { where: { id: string }; data: { status: string; error: string | null; sentAt: Date } } | undefined;
+  const prisma = {
+    deadline: {
+      findMany: async () => [reminderDeadline()],
+    },
+    deadlineReminderLog: {
+      create: async (args: { data: Record<string, unknown> }) => ({ id: 'log_failed', ...args.data }),
+      update: async (args: typeof finalized) => {
+        finalized = args;
+      },
+    },
+  };
+
+  const service = new DeadlineRemindersService(prisma as never, {
+    sendDeadlineReminder: async () => false,
+  } as never);
+
+  await assert.rejects(
+    () => service.sendDueReminders(),
+    (error: unknown) => {
+      assert.equal((error as Error).name, 'DeadlineReminderDeliveryFailure');
+      assert.match((error as Error).message, /failed for 1 reminder\(s\)/);
+      assert.doesNotMatch((error as Error).message, /owner@example\.org|Annual report|Governance Charity/);
+      return true;
+    },
+  );
+
+  assert.equal(finalized?.where.id, 'log_failed');
+  assert.equal(finalized?.data.status, 'FAILED');
+  assert.equal(finalized?.data.error, 'Email provider was not configured or rejected the message');
+  assert.ok(finalized?.data.sentAt instanceof Date);
+});
+
 test('deadline reminders retry a previously failed reminder log instead of suppressing it', async () => {
   const operations: string[] = [];
   const prisma = {

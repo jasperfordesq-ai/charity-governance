@@ -227,11 +227,18 @@ export class DeadlineRemindersService {
         continue;
       }
 
-      const delivered = await this.emailService.sendDeadlineReminder(owner.email, deadline.organisation.name, {
-        title: deadline.title,
-        dueDate: deadline.dueDate,
-        daysUntilDue,
-      });
+      let delivered = false;
+      try {
+        delivered = await this.emailService.sendDeadlineReminder(owner.email, deadline.organisation.name, {
+          title: deadline.title,
+          dueDate: deadline.dueDate,
+          daysUntilDue,
+        });
+      } catch {
+        // EmailService normally resolves false for provider failures. Keep the
+        // reservation retryable even if an unexpected implementation throws.
+        delivered = false;
+      }
 
       await this.prisma.deadlineReminderLog.update({
         where: { id: reservation.id },
@@ -252,5 +259,11 @@ export class DeadlineRemindersService {
     this.logger.info(
       `[DeadlineReminders] Run complete - ${sent} reminder(s) sent, ${failed} failed, ${skipped} deadline(s) skipped`,
     );
+
+    if (failed > 0) {
+      const deliveryFailure = new Error(`Deadline reminder delivery failed for ${failed} reminder(s).`);
+      deliveryFailure.name = 'DeadlineReminderDeliveryFailure';
+      throw deliveryFailure;
+    }
   }
 }
