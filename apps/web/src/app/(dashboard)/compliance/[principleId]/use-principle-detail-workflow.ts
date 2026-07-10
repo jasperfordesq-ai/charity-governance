@@ -2,6 +2,11 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { api } from '@/lib/api';
+import {
+  ComplianceAutosaveQueue,
+  type ComplianceAutosaveFlushOutcome,
+  type ComplianceRevisionConflict,
+} from '@/lib/compliance-autosave-queue';
 import { apiErrorMessage } from '@/lib/errors';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,6 +26,44 @@ type ApprovalReadiness = {
   }>;
 };
 
+type RevisionConflictPayload = {
+  response?: {
+    data?: {
+      code?: string;
+      details?: {
+        expectedRevision?: number;
+        currentRevision?: number;
+      };
+    };
+  };
+};
+
+function parseRevisionConflict(error: unknown): ComplianceRevisionConflict | null {
+  const payload = (error as RevisionConflictPayload)?.response?.data;
+  if (
+    payload?.code !== 'COMPLIANCE_RECORD_REVISION_CONFLICT' ||
+    !Number.isInteger(payload.details?.expectedRevision) ||
+    !Number.isInteger(payload.details?.currentRevision)
+  ) {
+    return null;
+  }
+
+  return {
+    expectedRevision: payload.details?.expectedRevision as number,
+    currentRevision: payload.details?.currentRevision as number,
+  };
+}
+
+function complianceRecordToForm(record?: ComplianceRecordResponse): StandardFormState {
+  return {
+    status: record?.status ?? ComplianceStatus.NOT_STARTED,
+    actionTaken: record?.actionTaken ?? '',
+    evidence: record?.evidence ?? '',
+    notes: record?.notes ?? '',
+    explanationIfNA: record?.explanationIfNA ?? '',
+  };
+}
+
 export function usePrincipleDetailWorkflow() {
   const params = useParams();
   const router = useRouter();
@@ -39,9 +82,13 @@ export function usePrincipleDetailWorkflow() {
   const [pendingNavigationHref, setPendingNavigationHref] = useState('/compliance');
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const pendingSaveData = useRef<Record<string, StandardFormState>>({});
+  // The former pendingSaveData ref was not request-generation aware. Each
+  // standard now owns a serialized revision-aware queue instead.
+  const saveQueues = useRef<Record<string, ComplianceAutosaveQueue<StandardFormState>>>({});
+  const formStateRef = useRef<Record<string, StandardFormState>>({});
   const skipNextUnmountFlush = useRef(false);
   const readinessRequestSeq = useRef(0);
+  const principleLoadRequestSeq = useRef(0);
 
   const clearPendingSaveTimers = useCallback(() => {
     Object.values(debounceTimers.current).forEach(clearTimeout);
@@ -63,130 +110,146 @@ export function usePrincipleDetailWorkflow() {
     }
   }, [currentYear]);
 
+  const createSaveQueue = useCallback(
+    (standardId: string, initialRevision: number) => {
+      const queue = new ComplianceAutosaveQueue<StandardFormState>({
+        initialRevision,
+        parseConflict: parseRevisionConflict,
+        onError: (error) => logClientError(`Failed to save standard ${standardId}`, error),
+        save: async (data, expectedRevision) => {
+          const response = await api.put(`/compliance/records/${standardId}`, {
+            reportingYear: currentYear,
+            expectedRevision,
+            status: data.status,
+            actionTaken: data.actionTaken || null,
+            evidence: data.evidence || null,
+            notes: data.notes || null,
+            explanationIfNA: data.explanationIfNA || null,
+          });
+          const revision = Number((response.data as { revision?: number } | null)?.revision);
+          if (!Number.isInteger(revision) || revision < 1) {
+            throw new Error('Compliance save response did not include a valid revision');
+          }
+          return { revision };
+        },
+        onStateChange: (snapshot) => {
+          if (snapshot.phase === 'saved') {
+            const durableGeneration = snapshot.durableGeneration;
+            void (async () => {
+              await refreshApprovalReadiness();
+              const latest = saveQueues.current[standardId]?.getSnapshot();
+              if (
+                latest?.phase === 'saved' &&
+                latest.localGeneration === durableGeneration &&
+                latest.durableGeneration === durableGeneration
+              ) {
+                setSaveState((prev) => ({ ...prev, [standardId]: 'saved' }));
+              }
+            })();
+            return;
+          }
+
+          setSaveState((prev) => ({ ...prev, [standardId]: snapshot.phase }));
+        },
+      });
+      return queue;
+    },
+    [currentYear, refreshApprovalReadiness],
+  );
+
   useEffect(() => {
+    const requestSeq = ++principleLoadRequestSeq.current;
+    const controller = new AbortController();
+    let active = true;
+
     async function fetchData() {
       setLoading(true);
       setLoadError('');
       try {
         const [principleRes, recordsRes] = await Promise.all([
-          api.get(`/compliance/principles/${principleId}`),
-          api.get(`/compliance/records?principleId=${principleId}&year=${currentYear}`),
+          api.get(`/compliance/principles/${principleId}`, { signal: controller.signal }),
+          api.get(`/compliance/records?principleId=${principleId}&year=${currentYear}`, { signal: controller.signal }),
         ]);
+        if (!active || requestSeq !== principleLoadRequestSeq.current) return;
 
         const nextPrinciple = principleRes.data as GovernancePrincipleResponse;
         setPrinciple(nextPrinciple);
 
         const records = recordsRes.data?.data ?? recordsRes.data ?? [];
         const initialForm: Record<string, StandardFormState> = {};
+        const initialQueues: Record<string, ComplianceAutosaveQueue<StandardFormState>> = {};
 
         for (const standard of nextPrinciple.standards ?? []) {
           const record = records.find((item: ComplianceRecordResponse) => item.standardId === standard.id);
-          if (record) {
-            initialForm[standard.id] = {
-              status: record.status,
-              actionTaken: record.actionTaken ?? '',
-              evidence: record.evidence ?? '',
-              notes: record.notes ?? '',
-              explanationIfNA: record.explanationIfNA ?? '',
-            };
-          } else {
-            initialForm[standard.id] = {
-              status: ComplianceStatus.NOT_STARTED,
-              actionTaken: '',
-              evidence: '',
-              notes: '',
-              explanationIfNA: '',
-            };
-          }
+          initialForm[standard.id] = complianceRecordToForm(record);
+          initialQueues[standard.id] = createSaveQueue(standard.id, record?.revision ?? 0);
         }
 
+        Object.values(saveQueues.current).forEach((queue) => queue.dispose());
+        saveQueues.current = initialQueues;
+        formStateRef.current = initialForm;
         setFormState(initialForm);
+        setSaveState({});
         await refreshApprovalReadiness();
       } catch (err) {
+        if (!active || requestSeq !== principleLoadRequestSeq.current) return;
         const message = apiErrorMessage(err, 'Compliance principle could not be loaded. Please try again.');
         logClientError('Failed to load principle data', err);
         setPrinciple(null);
         setLoadError(message);
       } finally {
-        setLoading(false);
+        if (active && requestSeq === principleLoadRequestSeq.current) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchData();
-  }, [principleId, currentYear, refreshApprovalReadiness]);
-
-  const saveStandardNow = useCallback(
-    async (standardId: string, data: StandardFormState, options: { silent?: boolean } = {}) => {
-      if (!options.silent) {
-        setSaveState((prev) => ({ ...prev, [standardId]: 'saving' }));
-      }
-
-      try {
-        await api.put(`/compliance/records/${standardId}`, {
-          reportingYear: currentYear,
-          status: data.status,
-          actionTaken: data.actionTaken || null,
-          evidence: data.evidence || null,
-          notes: data.notes || null,
-          explanationIfNA: data.explanationIfNA || null,
-        });
-
-        delete pendingSaveData.current[standardId];
-
-        if (!options.silent) {
-          await refreshApprovalReadiness();
-          setSaveState((prev) => ({ ...prev, [standardId]: 'saved' }));
-
-          setTimeout(() => {
-            setSaveState((prev) => ({ ...prev, [standardId]: 'idle' }));
-          }, 2000);
-        }
-      } catch (err) {
-        logClientError(`Failed to save standard ${standardId}`, err);
-        if (!options.silent) {
-          setSaveState((prev) => ({ ...prev, [standardId]: 'error' }));
-        }
-      }
-    },
-    [currentYear, refreshApprovalReadiness],
-  );
+    void fetchData();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [principleId, currentYear, createSaveQueue, refreshApprovalReadiness]);
 
   const flushSave = useCallback(
-    async (standardId: string, options: { silent?: boolean } = {}) => {
+    async (standardId: string): Promise<ComplianceAutosaveFlushOutcome | undefined> => {
       if (debounceTimers.current[standardId]) {
         clearTimeout(debounceTimers.current[standardId]);
         delete debounceTimers.current[standardId];
       }
 
-      const pending = pendingSaveData.current[standardId];
-      if (!pending) return;
-      await saveStandardNow(standardId, pending, options);
+      const queue = saveQueues.current[standardId];
+      if (!queue) return undefined;
+      return queue.flush();
     },
-    [saveStandardNow],
+    [],
   );
 
   const flushAllPendingComplianceSaves = useCallback(
-    async (options: { silent?: boolean } = {}) => {
+    async () => {
       clearPendingSaveTimers();
-
-      const pendingEntries = Object.entries({ ...pendingSaveData.current });
-      await Promise.all(
-        pendingEntries.map(([standardId, data]) =>
-          saveStandardNow(standardId, data, options),
-        ),
-      );
+      const queues = Object.values(saveQueues.current).filter((queue) => queue.hasUnsettledChanges());
+      const outcomes = await Promise.all(queues.map((queue) => queue.flush()));
+      return outcomes.every((outcome) => outcome.status === 'saved');
     },
-    [clearPendingSaveTimers, saveStandardNow],
+    [clearPendingSaveTimers],
   );
 
   const discardPendingComplianceSaves = useCallback(() => {
     clearPendingSaveTimers();
-    pendingSaveData.current = {};
+    Object.values(saveQueues.current).forEach((queue) => {
+      queue.discardQueuedChanges();
+      queue.dispose();
+    });
+    saveQueues.current = {};
+    setSaveState({});
   }, [clearPendingSaveTimers]);
 
   const autoSave = useCallback(
     (standardId: string, data: StandardFormState) => {
-      pendingSaveData.current[standardId] = data;
+      const queue = saveQueues.current[standardId];
+      if (!queue) return;
+      queue.enqueue(data);
 
       if (debounceTimers.current[standardId]) {
         clearTimeout(debounceTimers.current[standardId]);
@@ -200,31 +263,35 @@ export function usePrincipleDetailWorkflow() {
   );
 
   const updateField = (standardId: string, field: keyof StandardFormState, value: string) => {
-    setFormState((prev) => {
-      const updated = {
-        ...prev,
-        [standardId]: {
-          ...prev[standardId],
-          [field]: value,
-        },
-      };
-      autoSave(standardId, updated[standardId]);
-      return updated;
-    });
+    const current = formStateRef.current[standardId];
+    if (!current) return;
+
+    const nextForm = {
+      ...current,
+      [field]: value,
+    };
+    formStateRef.current = {
+      ...formStateRef.current,
+      [standardId]: nextForm,
+    };
+    setFormState(formStateRef.current);
+    autoSave(standardId, nextForm);
   };
 
   useEffect(() => {
     return () => {
+      clearPendingSaveTimers();
+      // Async React cleanup cannot guarantee delivery. Explicit navigation
+      // drains the queues before leaving; any other unmount only disposes local
+      // callbacks and never starts a late background write.
       if (skipNextUnmountFlush.current) return;
-      void flushAllPendingComplianceSaves({ silent: true });
+      Object.values(saveQueues.current).forEach((queue) => queue.dispose());
     };
-  }, [flushAllPendingComplianceSaves]);
+  }, [clearPendingSaveTimers]);
 
   const hasPendingComplianceSaves = useCallback(() => {
-    const hasPending = Object.keys(pendingSaveData.current).length > 0;
-    const hasSaving = Object.values(saveState).includes('saving');
-    return hasPending || hasSaving;
-  }, [saveState]);
+    return Object.values(saveQueues.current).some((queue) => queue.hasUnsettledChanges());
+  }, []);
 
   const requestComplianceNavigation = useCallback(
     (href = '/compliance') => {
@@ -243,10 +310,13 @@ export function usePrincipleDetailWorkflow() {
 
   const stayOnCompliancePage = useCallback(() => {
     if (navigationConfirmBusy) return;
-    Object.keys(pendingSaveData.current).forEach((standardId) => {
-      debounceTimers.current[standardId] = setTimeout(() => {
-        void flushSave(standardId);
-      }, 800);
+    Object.entries(saveQueues.current).forEach(([standardId, queue]) => {
+      const snapshot = queue.getSnapshot();
+      if (snapshot.phase === 'dirty' && snapshot.hasQueuedSave) {
+        debounceTimers.current[standardId] = setTimeout(() => {
+          void flushSave(standardId);
+        }, 800);
+      }
     });
     setNavigationConfirmError('');
     setNavigationConfirmOpen(false);
@@ -263,9 +333,16 @@ export function usePrincipleDetailWorkflow() {
   const saveAndContinueNavigation = useCallback(async () => {
     setNavigationConfirmBusy(true);
     try {
-      await flushAllPendingComplianceSaves();
-      if (Object.keys(pendingSaveData.current).length > 0) {
-        setNavigationConfirmError('Could not save every pending edit. Please retry or keep editing.');
+      const allSaved = await flushAllPendingComplianceSaves();
+      if (!allSaved || hasPendingComplianceSaves()) {
+        const hasConflict = Object.values(saveQueues.current).some(
+          (queue) => queue.getSnapshot().phase === 'conflict',
+        );
+        setNavigationConfirmError(
+          hasConflict
+            ? 'A newer saved version needs review. Your local draft is preserved; resolve the conflict before leaving.'
+            : 'Could not save every pending edit. Please retry or keep editing.',
+        );
         return;
       }
 
@@ -275,7 +352,7 @@ export function usePrincipleDetailWorkflow() {
     } finally {
       setNavigationConfirmBusy(false);
     }
-  }, [flushAllPendingComplianceSaves, pendingNavigationHref, router]);
+  }, [flushAllPendingComplianceSaves, hasPendingComplianceSaves, pendingNavigationHref, router]);
 
   useEffect(() => {
     const interceptInAppNavigation = (event: MouseEvent | PointerEvent) => {
@@ -343,11 +420,55 @@ export function usePrincipleDetailWorkflow() {
   );
 
   const retrySave = useCallback(
-    (standardId: string, retryForm: StandardFormState) => {
-      pendingSaveData.current[standardId] = retryForm;
-      void flushSave(standardId);
+    (standardId: string) => {
+      const queue = saveQueues.current[standardId];
+      if (!queue) return;
+      void queue.retry();
     },
-    [flushSave],
+    [],
+  );
+
+  const resolveConflictFromServer = useCallback(
+    async (standardId: string): Promise<string | null> => {
+      const conflictedQueue = saveQueues.current[standardId];
+      if (!conflictedQueue || conflictedQueue.getSnapshot().phase !== 'conflict') {
+        return 'This standard no longer has a revision conflict.';
+      }
+      const conflictGeneration = conflictedQueue.getSnapshot().localGeneration;
+
+      try {
+        const recordsRes = await api.get(`/compliance/records?principleId=${principleId}&year=${currentYear}`);
+        const records = (recordsRes.data?.data ?? recordsRes.data ?? []) as ComplianceRecordResponse[];
+        const record = records.find((item: ComplianceRecordResponse) => item.standardId === standardId);
+
+        const latestQueue = saveQueues.current[standardId];
+        if (latestQueue !== conflictedQueue) return null;
+        if (latestQueue.getSnapshot().localGeneration !== conflictGeneration) {
+          return 'Your local draft changed while the saved version was loading, so nothing was discarded. Review the latest draft and try again.';
+        }
+
+        const serverForm = complianceRecordToForm(record);
+        conflictedQueue.dispose();
+        saveQueues.current = {
+          ...saveQueues.current,
+          [standardId]: createSaveQueue(standardId, record?.revision ?? 0),
+        };
+        formStateRef.current = {
+          ...formStateRef.current,
+          [standardId]: serverForm,
+        };
+        setFormState(formStateRef.current);
+        setSaveState((previous) => ({ ...previous, [standardId]: 'idle' }));
+        return null;
+      } catch (error) {
+        logClientError(`Failed to reload conflicted standard ${standardId}`, error);
+        return apiErrorMessage(
+          error,
+          'The latest saved version could not be loaded. Your local draft is still preserved; try again when the connection recovers.',
+        );
+      }
+    },
+    [createSaveQueue, currentYear, principleId],
   );
 
   return {
@@ -365,6 +486,7 @@ export function usePrincipleDetailWorkflow() {
     principleMatrixEntries,
     principleMissingExplanations,
     retrySave,
+    resolveConflictFromServer,
     saveState,
     saveAndContinueNavigation,
     stayOnCompliancePage,

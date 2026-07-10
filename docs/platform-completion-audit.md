@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 46 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 50 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 20 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 19 web unit test files, 46 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 24 web unit test files, 50 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -345,11 +345,11 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 145 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 100 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 102 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 133 | yes | no obvious static risk; verify in browser |
 | P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 127 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 201 | yes | no obvious static risk; verify in browser |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 116 | yes | no obvious static risk; verify in browser |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 157 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 253 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 137 | yes | no obvious static risk; verify in browser |
@@ -371,11 +371,11 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `auth` | `apps/api/src/routes/auth/index.ts` | 211 | public/partial by design | 6 | preserve current guard and tenant boundary |
 | `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 3 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
+| `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `documents` | `apps/api/src/routes/documents/index.ts` | 316 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `export` | `apps/api/src/routes/export/index.ts` | 90 | auth, subscription, plan gate | 2 | preserve current guard and tenant boundary |
+| `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |

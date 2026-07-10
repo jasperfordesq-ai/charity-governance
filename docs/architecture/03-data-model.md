@@ -1,10 +1,10 @@
 # Data Model Reference
 
-CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 23 models and 15 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, every composite unique constraint and `@@index`, and the `onDelete` cascade behaviours.
+CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 25 models and 17 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
 
 ## Migration history
 
-The schema was built up across thirteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
+The schema was built up across fourteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
 
 | Migration directory | Purpose (inferred from name) |
 | --- | --- |
@@ -21,6 +21,7 @@ The schema was built up across thirteen migrations under `apps/api/prisma/migrat
 | `20260608072000_seed_governance_reference_data` | Seed governance principles/standards |
 | `20260703214500_add_conditional_obligation_profile` | Conditional-obligation profile on `Organisation` |
 | `20260710064500_add_billing_checkout_attempts` | Stripe subscription facts and one active Checkout-attempt lease per organisation |
+| `20260710123000_add_compliance_revision_snapshots` | Compliance revisions, immutable approval snapshots, append-only audit history, and truthful legacy-approval invalidation |
 
 A `seed.ts` script also lives at `apps/api/prisma/seed.ts`.
 
@@ -35,6 +36,8 @@ All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:
 | `CharitablePurpose` | `POVERTY_RELIEF`, `EDUCATION`, `RELIGION`, `COMMUNITY_BENEFIT` | `Organisation.charitablePurpose` (array) |
 | `ComplianceStatus` | `COMPLIANT`, `WORKING_TOWARDS`, `NOT_STARTED`, `NOT_APPLICABLE`, `EXPLAIN` | `ComplianceRecord.status` |
 | `ComplianceSignoffStatus` | `DRAFT`, `BOARD_REVIEW`, `APPROVED` | `ComplianceSignoff.status` |
+| `ComplianceAuditEventType` | baseline import, record/signoff change, approval grant/invalidation, legacy invalidation | `ComplianceAuditEvent.type` |
+| `ComplianceApprovalInvalidationReason` | `RECORD_CHANGED`, `MANUAL_STATUS_CHANGE`, `LEGACY_APPROVAL_UNBOUND` | `ComplianceSignoff`, `ComplianceAuditEvent` |
 | `SubscriptionPlan` | `ESSENTIALS`, `COMPLETE` | `Subscription.plan` |
 | `SubscriptionStatus` | `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED` | `Subscription.status` |
 | `BillingCheckoutAttemptStatus` | `PENDING`, `SESSION_CREATED`, `COMPLETED` | `BillingCheckoutAttempt.status` |
@@ -52,15 +55,16 @@ All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:
 
 | Category | Models | Isolation key |
 | --- | --- | --- |
-| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `BoardMember`, `Document`, `DocumentStorageDeletion`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt` | `organisationId` |
+| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `BoardMember`, `Document`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt` | `organisationId` |
 | **Global reference data** (shared across all tenants, no `organisationId`) | `GovernancePrinciple`, `GovernanceStandard` | none — read-only catalogue |
-| **Keyed differently** | `AuthSession` (by `userId`), `DocumentStandardLink` (by `documentId`/`standardId`), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
+| **Keyed differently** | `AuthSession` (by `userId`), `DocumentStandardLink` (by `documentId`/`standardId`), `DocumentStorageDeletion` and `ComplianceAuditEvent` (retain tenant identifiers as scalar history), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
 
 Notes on the differently-keyed models:
 
 - **`AuthSession`** (`apps/api/prisma/schema.prisma:178-191`) belongs to a `User`, not directly to an `Organisation`; tenancy is reached transitively through `User.organisationId`.
 - **`DocumentStandardLink`** (`apps/api/prisma/schema.prisma:315-323`) is a join table between an (org-scoped) `Document` and a (global) `GovernanceStandard`; it inherits tenancy from its `Document`.
 - **`DocumentStorageDeletion`** (`apps/api/prisma/schema.prisma:325-339`) stores `organisationId` as a plain string column with no relation back to `Organisation` — it is a background deletion queue keyed by `storagePath`, so the row can outlive the parent organisation row.
+- **`ComplianceAuditEvent`** stores organisation, actor and entity identifiers as scalar historical facts rather than cascading relations. Removing a user must not erase who changed governance evidence. Retention and eventual erasure policy still require external privacy/legal approval before production use.
 - **`StripeWebhookEvent`** (`apps/api/prisma/schema.prisma:581-588`) is entirely global; its `id` is the Stripe event ID and the row exists purely for webhook idempotency.
 
 ## Models
@@ -81,7 +85,8 @@ Notes on the differently-keyed models:
 | `stripeCustomerId` | `String? @unique` | links to the organisation's metadata-verified Stripe customer |
 | `createdAt` / `updatedAt` | `DateTime` | |
 
-Has-many relations to nearly every org-scoped model, plus one-to-one optional
+Has-many relations to nearly every org-scoped model, including immutable
+`complianceApprovalSnapshots`, plus one-to-one optional
 `subscription` (`Subscription?`) and `billingCheckoutAttempt`
 (`BillingCheckoutAttempt?`) relations. Deleting an organisation cascades its
 Checkout-attempt lease; the subscription relation retains Prisma's default
@@ -153,6 +158,7 @@ Relations: `complianceRecords`, `documentLinks`. Index `@@index([principleId])` 
 | `reportingYear` | `Int` | |
 | `status` | `ComplianceStatus` | `@default(NOT_STARTED)` |
 | `actionTaken`, `evidence`, `notes`, `explanationIfNA` | `String?` | |
+| `revision` | `Int` | Optimistic-concurrency version, starting at 1 |
 | `updatedById` | `String?` | FK → `User` (`UpdatedBy` relation) |
 
 Constraint `@@unique([organisationId, standardId, reportingYear])` (`apps/api/prisma/schema.prisma:239`) enforces a single record per (tenant, standard, year). Index `@@index([organisationId, reportingYear])` (`apps/api/prisma/schema.prisma:240`) supports per-year compliance dashboards.
@@ -168,9 +174,43 @@ Constraint `@@unique([organisationId, standardId, reportingYear])` (`apps/api/pr
 | `status` | `ComplianceSignoffStatus` | `@default(DRAFT)` |
 | `boardMeetingDate`, `approvedAt` | `DateTime?` | |
 | `minuteReference`, `approvedByName`, `approvedByRole`, `approvalNotes` | `String?` | |
+| `revision` | `Int` | Optimistic-concurrency version, starting at 1 |
+| `approvalSequence` | `Int` | Monotonic immutable-snapshot sequence for the year |
+| `currentApprovalSnapshotId` | `String? @unique` | Current approved snapshot; cleared on invalidation |
+| `invalidatedAt`, `invalidationReason`, `invalidatedById` | nullable | Why and when a current approval stopped applying |
 | `updatedById` | `String?` | FK → `User` (`SignoffUpdatedBy` relation) |
 
 Constraint `@@unique([organisationId, reportingYear])` (`apps/api/prisma/schema.prisma:262`) — one sign-off per tenant per year. Index `@@index([organisationId, reportingYear])` (`apps/api/prisma/schema.prisma:263`).
+
+The migration adds a database check that an `APPROVED` signoff must have both
+`approvedAt` and a current snapshot, while every non-approved signoff has
+neither. Existing pre-migration approvals are downgraded to `DRAFT` with
+`LEGACY_APPROVAL_UNBOUND`; the migration does not fabricate a historical
+snapshot from whatever mutable records happen to exist during deployment.
+
+### ComplianceApprovalSnapshot
+
+An append-only, tenant/year-scoped JSON evidence envelope created only inside
+the serializable approval transaction. It stores a per-year sequence,
+`formatVersion`, lowercase SHA-256 `evidenceHash` and `snapshotHash`, the
+canonical payload, approval timestamp, and recording-user identity snapshot.
+The unique `(organisationId, reportingYear, approvalSequence)` key preserves
+every reapproval version. The hash is an integrity check, not an electronic
+signature or proof that the recorded meeting occurred.
+
+PostgreSQL `BEFORE UPDATE OR DELETE` triggers reject mutation of snapshot rows.
+Approved exports re-validate tenant, year, sequence, approval time, payload and
+both hashes before rendering. Deletion/retention policy for this personal and
+governance data remains a named external privacy/legal decision.
+
+### ComplianceAuditEvent
+
+Append-only history for record baselines, creates/updates, signoff baselines,
+approval grants, approval invalidations, and unbound legacy approvals. Events
+retain before/after revision snapshots, actor identity, relevant entity IDs,
+reason and occurrence time. Unique record/signoff revision keys prevent two
+events from claiming the same entity revision, and a database trigger rejects
+`UPDATE` and `DELETE`.
 
 ### BoardMember
 `apps/api/prisma/schema.prisma:266-286`

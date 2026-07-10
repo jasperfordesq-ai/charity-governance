@@ -1,12 +1,14 @@
 'use client';
 
 import { Button, Card, Select, SelectItem, Textarea } from '@heroui/react';
+import { useState } from 'react';
 import {
   ComplianceStatus,
   type GovernancePrincipleResponse,
 } from '@charitypilot/shared';
 import { StatusChip, StatusDot, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 import { SaveStatusIndicator } from '@/components/ui/states';
+import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
 
 export interface StandardFormState {
   status: ComplianceStatus;
@@ -17,7 +19,7 @@ export interface StandardFormState {
 }
 
 export interface SaveState {
-  [standardId: string]: 'idle' | 'saving' | 'saved' | 'error';
+  [standardId: string]: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict';
 }
 
 type ComplianceStandard = GovernancePrincipleResponse['standards'][number];
@@ -61,18 +63,38 @@ export function StandardEditorCard({
   updateField,
   flushSave,
   onRetrySave,
+  onResolveConflict,
 }: {
   standard: ComplianceStandard;
   form: StandardFormState;
   save: SaveState[string];
   updateField: (standardId: string, field: keyof StandardFormState, value: string) => void;
-  flushSave: (standardId: string) => void | Promise<void>;
+  flushSave: (standardId: string) => void | Promise<unknown>;
   onRetrySave: (standardId: string, form: StandardFormState) => void;
+  onResolveConflict: (standardId: string) => Promise<string | null>;
 }) {
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileError, setReconcileError] = useState('');
   const statusTone = statusTones[form.status] ?? 'neutral';
   const showExplanation =
     form.status === ComplianceStatus.NOT_APPLICABLE ||
     form.status === ComplianceStatus.EXPLAIN;
+
+  const reconcileWithServer = async () => {
+    setReconciling(true);
+    setReconcileError('');
+    try {
+      const error = await onResolveConflict(standard.id);
+      if (error) {
+        setReconcileError(error);
+        return;
+      }
+      setReconcileOpen(false);
+    } finally {
+      setReconciling(false);
+    }
+  };
 
   return (
     <Card
@@ -120,6 +142,31 @@ export function StandardEditorCard({
             />
           </div>
         </div>
+
+        {save === 'conflict' ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-5 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100"
+          >
+            <p>
+              Someone else saved a newer version of this standard. Your local draft is preserved in the fields below and has not
+              overwritten their changes.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="flat"
+              color="danger"
+              className="mt-3"
+              onPress={() => {
+                setReconcileError('');
+                setReconcileOpen(true);
+              }}
+            >
+              Discard my draft and reload saved version
+            </Button>
+          </div>
+        ) : null}
 
         <Select
           label="Status"
@@ -211,6 +258,30 @@ export function StandardEditorCard({
           />
         )}
       </div>
+      <ConfirmActionModal
+        isOpen={reconcileOpen}
+        onOpenChange={(open) => {
+          if (!reconciling) setReconcileOpen(open);
+        }}
+        ariaLabel="Confirm replacing the local compliance draft"
+        title="Reload the saved server version?"
+        cancelLabel="Keep my draft"
+        confirmLabel="Discard draft and reload"
+        confirmColor="danger"
+        confirming={reconciling}
+        onCancel={() => setReconcileOpen(false)}
+        onConfirm={reconcileWithServer}
+      >
+        <p>
+          This will discard your preserved local draft and load the latest saved version. CharityPilot will not retry or overwrite
+          the newer server revision.
+        </p>
+        {reconcileError ? (
+          <p role="alert" className="mt-3 text-rose-700 dark:text-rose-300">
+            {reconcileError}
+          </p>
+        ) : null}
+      </ConfirmActionModal>
     </Card>
   );
 }

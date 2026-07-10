@@ -2,7 +2,10 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { Button, Card, Input, Select, SelectItem, Textarea } from '@heroui/react';
-import { ComplianceSignoffStatus, type ComplianceSignoffResponse } from '@charitypilot/shared';
+import {
+  ComplianceSignoffStatus,
+  type ComplianceSignoffResponse,
+} from '@charitypilot/shared';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { SaveStatusIndicator } from '@/components/ui/states';
@@ -24,35 +27,56 @@ function signoffTone(color: 'success' | 'warning' | 'default'): StatusTone {
 }
 
 export function ExportBoardApprovalPanel({
+  approvalLabel,
+  approvalCurrent,
+  approvalSaveBlocked,
+  approvalTone,
+  approvalUnavailable,
+  onAcknowledgeReview,
+  onDiscardSignoff,
+  onRetryConflictRefresh,
   onSaveSignoff,
+  refreshingConflict,
   savingSignoff,
   setSignoffForm,
   signoff,
-  signoffChipColor,
+  signoffDirty,
+  signoffConflictRefreshFailed,
   signoffError,
   signoffForm,
+  signoffReviewRequired,
+  signoffSaveStatus,
   signoffStatusLabels,
 }: {
+  approvalLabel: string;
+  approvalCurrent: boolean;
+  approvalSaveBlocked: boolean;
+  approvalTone: 'success' | 'warning' | 'default';
+  approvalUnavailable: boolean;
+  onAcknowledgeReview: () => void;
+  onDiscardSignoff: () => void;
+  onRetryConflictRefresh: () => void | Promise<void>;
   onSaveSignoff: () => void;
+  refreshingConflict: boolean;
   savingSignoff: boolean;
   setSignoffForm: Dispatch<SetStateAction<ExportSignoffForm>>;
   signoff: ComplianceSignoffResponse | null;
-  signoffChipColor: 'success' | 'warning' | 'default';
+  signoffDirty: boolean;
+  signoffConflictRefreshFailed: boolean;
   signoffError: string;
   signoffForm: ExportSignoffForm;
+  signoffReviewRequired: boolean;
+  signoffSaveStatus: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
   signoffStatusLabels: Record<ComplianceSignoffStatus, string>;
 }) {
-  const signoffSaveStatus: 'idle' | 'saving' | 'saved' | 'error' =
-    savingSignoff ? 'saving' : signoffError ? 'error' : 'idle';
-
   return (
     <Card className={statusPanelClassName('neutral', 'p-6 shadow-sm')}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Board approval</h2>
-            <StatusChip tone={signoffTone(signoffChipColor)}>
-              {signoffStatusLabels[signoffForm.status]}
+            <StatusChip tone={signoffTone(approvalTone)}>
+              {approvalLabel}
             </StatusChip>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
@@ -72,10 +96,21 @@ export function ExportBoardApprovalPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SaveStatusIndicator status={signoffSaveStatus} />
+          {(signoffDirty || signoffReviewRequired) ? (
+            <Button
+              type="button"
+              variant="flat"
+              onPress={onDiscardSignoff}
+              isDisabled={savingSignoff}
+            >
+              Discard changes
+            </Button>
+          ) : null}
           <Button
             className={primaryActionButtonClassName}
             onPress={onSaveSignoff}
             isLoading={savingSignoff}
+            isDisabled={!signoffDirty || approvalSaveBlocked || signoffReviewRequired}
           >
             Save sign-off
           </Button>
@@ -89,6 +124,55 @@ export function ExportBoardApprovalPanel({
           </FormAlert>
         </div>
       )}
+
+      {signoffReviewRequired ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          {signoffConflictRefreshFailed ? (
+            <>
+              <p>
+                The latest saved sign-off could not be loaded. Your local form remains preserved, and saving stays blocked until the
+                canonical position is refreshed.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="flat"
+                color="warning"
+                className="mt-3"
+                onPress={onRetryConflictRefresh}
+                isLoading={refreshingConflict}
+              >
+                Retry loading latest position
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>
+                The canonical sign-off or evidence changed during this save. Your form remains unsaved. Review the refreshed
+                readiness and persisted approval status above before deliberately retrying it.
+              </p>
+              <Button type="button" size="sm" variant="flat" color="warning" className="mt-3" onPress={onAcknowledgeReview}>
+                I have reviewed the refreshed position
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {approvalUnavailable && signoffForm.status === ComplianceSignoffStatus.APPROVED ? (
+        <div className="mt-4">
+          <FormAlert>Approval readiness and its evidence hash must load successfully before board approval can be saved.</FormAlert>
+        </div>
+      ) : null}
+
+      {signoff?.latestApproval ? (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+          Latest retained approval: snapshot #{signoff.latestApproval.approvalSequence}, approved{' '}
+          {new Date(signoff.latestApproval.approvedAt).toLocaleString('en-IE')}, hash{' '}
+          <span className="font-mono">{signoff.latestApproval.snapshotHash.slice(0, 12)}...</span>
+          {!approvalCurrent ? ' This snapshot is retained, but current work requires reapproval.' : ''}
+        </div>
+      ) : null}
 
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         <Select

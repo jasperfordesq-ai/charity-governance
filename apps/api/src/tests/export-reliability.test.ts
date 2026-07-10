@@ -48,6 +48,48 @@ function falseProfile() {
   };
 }
 
+const principleRef = {
+  id: 'p1',
+  number: 1,
+  title: 'Principle One',
+  description: 'Principle description',
+  sortOrder: 1,
+};
+
+function standardRef(id: string, code: string, title = `Standard ${code}`, sortOrder = 1) {
+  return {
+    id,
+    principleId: principleRef.id,
+    principle: principleRef,
+    code,
+    title,
+    isCore: true,
+    isAdditional: false,
+    sortOrder,
+  };
+}
+
+function recordRef(overrides: Record<string, unknown>) {
+  const standardId = String(overrides.standardId ?? 's1');
+  return {
+    id: `record-${standardId}`,
+    organisationId: 'org-1',
+    standardId,
+    reportingYear: 2026,
+    status: 'NOT_STARTED',
+    actionTaken: null,
+    evidence: null,
+    notes: null,
+    explanationIfNA: null,
+    revision: 1,
+    updatedById: null,
+    updatedAt: new Date('2026-07-10T09:00:00.000Z'),
+    standard: standardRef(standardId, standardId),
+    updatedBy: null,
+    ...overrides,
+  };
+}
+
 // Base read mocks that produce an empty-but-valid compliance report.
 function emptyComplianceReads(): Record<string, unknown> {
   return {
@@ -55,6 +97,7 @@ function emptyComplianceReads(): Record<string, unknown> {
     governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },
@@ -261,6 +304,7 @@ test('Complete plan governance registers are scoped to the token organisation', 
     governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: findManyScoped('conflict') },
     riskRecord: { findMany: findManyScoped('risk') },
     complaintRecord: { findMany: findManyScoped('complaint') },
@@ -436,21 +480,21 @@ test('export HTML-escapes stored record and register values', async () => {
         },
       ],
     },
-    governanceStandard: { findMany: async () => [{ id: 's1', code: 'S1', isCore: true }] },
+    governanceStandard: { findMany: async () => [standardRef('s1', 'S1', payload)] },
     complianceRecord: {
       findMany: async () => [
-        {
+        recordRef({
           standardId: 's1',
           status: 'COMPLIANT',
           actionTaken: payload,
           evidence: null,
           explanationIfNA: null,
-          standard: {},
-          updatedBy: null,
-        },
+          standard: standardRef('s1', 'S1', payload),
+        }),
       ],
     },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: {
       findMany: async () => [
         {
@@ -504,21 +548,21 @@ test('export includes an escaped approval-readiness warning when explanations ar
         },
       ],
     },
-    governanceStandard: { findMany: async () => [{ id: 's1', code: unsafeCode, isCore: true }] },
+    governanceStandard: { findMany: async () => [standardRef('s1', unsafeCode, 'Standard one')] },
     complianceRecord: {
       findMany: async () => [
-        {
+        recordRef({
           standardId: 's1',
           status: 'NOT_APPLICABLE',
           actionTaken: null,
           evidence: null,
           explanationIfNA: '   ',
-          standard: { id: 's1', code: unsafeCode, principle: {} },
-          updatedBy: null,
-        },
+          standard: standardRef('s1', unsafeCode, 'Standard one'),
+        }),
       ],
     },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },
@@ -565,24 +609,24 @@ test('export includes missing records and evidence gaps in the approval-readines
     },
     governanceStandard: {
       findMany: async () => [
-        { id: 's1', code: '1.1', isCore: true },
-        { id: 's2', code: '1.2', isCore: true },
+        standardRef('s1', '1.1', 'Standard one', 1),
+        standardRef('s2', '1.2', 'Standard two', 2),
       ],
     },
     complianceRecord: {
       findMany: async () => [
-        {
+        recordRef({
           standardId: 's1',
           status: 'COMPLIANT',
           actionTaken: '',
           evidence: ' ',
           explanationIfNA: null,
-          standard: { id: 's1', code: '1.1', principle: {} },
-          updatedBy: null,
-        },
+          standard: standardRef('s1', '1.1', 'Standard one'),
+        }),
       ],
     },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },
@@ -635,21 +679,21 @@ test('export surfaces conditional obligation review prompts from the organisatio
         },
       ],
     },
-    governanceStandard: { findMany: async () => [{ id: 's1', code: '1.1', isCore: true }] },
+    governanceStandard: { findMany: async () => [standardRef('s1', '1.1', 'Standard one')] },
     complianceRecord: {
       findMany: async () => [
-        {
+        recordRef({
           standardId: 's1',
           status: 'COMPLIANT',
           actionTaken: 'Reviewed by trustees',
           evidence: 'Board pack and minutes',
           explanationIfNA: null,
-          standard: { id: 's1', code: '1.1', principle: {} },
-          updatedBy: null,
-        },
+          standard: standardRef('s1', '1.1', 'Standard one'),
+        }),
       ],
     },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },
@@ -690,21 +734,21 @@ test('export omits the approval-readiness warning when explanations are complete
         },
       ],
     },
-    governanceStandard: { findMany: async () => [{ id: 's1', code: '1.1', isCore: true }] },
+    governanceStandard: { findMany: async () => [standardRef('s1', '1.1', 'Standard one')] },
     complianceRecord: {
       findMany: async () => [
-        {
+        recordRef({
           standardId: 's1',
           status: 'EXPLAIN',
           actionTaken: null,
           evidence: null,
           explanationIfNA: 'Explained for the trustees',
-          standard: { id: 's1', code: '1.1', principle: {} },
-          updatedBy: null,
-        },
+          standard: standardRef('s1', '1.1', 'Standard one'),
+        }),
       ],
     },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },

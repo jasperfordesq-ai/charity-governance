@@ -55,6 +55,29 @@ The detailed issue contract remains in
   all P0-03 tests were integrated. Production tooling is `399 / 399`, the
   reliability report is green with `365 / 365` covered links, and the platform
   audit is current.
+- **P0-04 compliance concurrency and immutable board approval -
+  `LOCALLY_VERIFIED`.** Compliance record/sign-off writes now use explicit
+  revisions, serializable organisation locking, compare-and-swap updates,
+  idempotent replay handling, and append-only full before/after history. Board
+  approval is bound to a canonical immutable evidence snapshot and hash;
+  approved-record changes invalidate the current pointer while retaining prior
+  snapshots for tenant/year-scoped historical export and deliberate reapproval.
+  Legacy approvals are truthfully invalidated rather than reconstructed from
+  mutable deployment-time data. Current/approved exports verify freshness,
+  tenant scope, row metadata and hashes and preserve CSP when opened through the
+  authenticated browser client. The frontend serializes autosave, preserves
+  newer drafts across old responses and failures, provides safe conflict
+  reconciliation, guards dirty navigation, sequences principle loads, and
+  never presents stale approval as current. Local evidence is API `477 / 477`,
+  web `272 / 272`, shared `23 / 23`, production tooling `399 / 399`, local-Docker
+  tooling `43 / 43`, reliability `374 / 374`, lint, production builds, Prisma
+  generation/validation, security scans, zero-vulnerability dependency audits,
+  refreshed generated audits, and a clean 14-migration deployment plus
+  rollback-only trigger/constraint probes on a dedicated throwaway
+  `charitypilot_ci` PostgreSQL container. Destructive Playwright was deliberately
+  not run: P0-05 must first supply a genuinely isolated disposable database. The
+  implementation still needs a commit-bound green CI run before promotion to
+  `CI_VERIFIED`.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,

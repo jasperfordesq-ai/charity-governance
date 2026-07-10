@@ -24,7 +24,7 @@ export function PrincipleNavigationConfirmModal({
       onOpenChange={(open) => {
         if (!open) onKeepEditing();
       }}
-      title="Compliance edits are still saving"
+      title="Compliance edits are not fully saved"
       cancelLabel="Keep editing"
       secondaryLabel="Leave without waiting"
       confirmLabel="Save now and leave"
@@ -36,8 +36,8 @@ export function PrincipleNavigationConfirmModal({
       onConfirm={onSaveAndContinue}
     >
       <p>
-        Some standard updates have not finished saving yet. You can stay on this page, save the pending edits now, or leave without
-        waiting. Any save already underway may still finish; queued edits that have not started will be left behind.
+        Some standard updates are queued, saving, failed, or need conflict review. You can stay on this page, save the pending edits
+        now, or leave without waiting. Any save already underway may still finish; queued edits that have not started will be left behind.
       </p>
       {saveError ? (
         <p role="alert" className="mt-3 text-rose-700 dark:text-rose-300">

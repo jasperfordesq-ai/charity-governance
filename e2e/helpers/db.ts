@@ -57,6 +57,8 @@ const APP_TABLES = [
   'AuthSession',
   'ComplianceRecord',
   'ComplianceSignoff',
+  'ComplianceApprovalSnapshot',
+  'ComplianceAuditEvent',
   'BoardMember',
   'Document',
   'DocumentStandardLink',

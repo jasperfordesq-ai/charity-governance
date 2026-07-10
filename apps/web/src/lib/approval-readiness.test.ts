@@ -5,6 +5,7 @@ import type { ApprovalReadiness } from './approval-readiness';
 
 const readiness = (overrides: Partial<ApprovalReadiness> = {}): ApprovalReadiness => ({
   ready: false,
+  evidenceHash: 'a'.repeat(64),
   missingRecords: [],
   missingEvidence: [],
   missingExplanations: [],

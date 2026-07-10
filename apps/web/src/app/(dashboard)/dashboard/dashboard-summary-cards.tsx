@@ -24,25 +24,40 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
   }
 
   const signoffStatus = signoff?.status ?? ComplianceSignoffStatus.DRAFT;
-  const signoffMeta = {
-    [ComplianceSignoffStatus.APPROVED]: {
-      tone: 'success' as const,
+  const approvalCurrent = Boolean(
+    signoffStatus === ComplianceSignoffStatus.APPROVED && signoff?.approvalCurrent,
+  );
+  const reapprovalRequired = Boolean(
+    !approvalCurrent && (signoffStatus === ComplianceSignoffStatus.APPROVED || signoff?.latestApproval),
+  );
+  let signoffMeta: { tone: StatusTone; label: string; text: string };
+  if (approvalCurrent) {
+    signoffMeta = {
+      tone: 'success',
       label: 'Approved',
       text: signoff?.boardMeetingDate
         ? `Approved at board meeting on ${new Date(signoff.boardMeetingDate).toLocaleDateString('en-IE')}.`
         : 'The annual Compliance Record has been marked approved.',
-    },
-    [ComplianceSignoffStatus.BOARD_REVIEW]: {
-      tone: 'warning' as const,
+    };
+  } else if (reapprovalRequired) {
+    signoffMeta = {
+      tone: 'warning',
+      label: 'Reapproval required',
+      text: 'A prior approved snapshot is retained, but current compliance work must be reviewed and approved again.',
+    };
+  } else if (signoffStatus === ComplianceSignoffStatus.BOARD_REVIEW) {
+    signoffMeta = {
+      tone: 'warning',
       label: 'Board review',
       text: 'The Compliance Record is ready for trustee review and board minute approval.',
-    },
-    [ComplianceSignoffStatus.DRAFT]: {
-      tone: 'neutral' as const,
+    };
+  } else {
+    signoffMeta = {
+      tone: 'neutral',
       label: 'Draft',
       text: 'Record board approval before reporting the annual compliance position.',
-    },
-  }[signoffStatus];
+    };
+  }
   const openRegisterItems = registerSummary
     ? registerSummary.openRisks + registerSummary.openConflicts + registerSummary.openComplaints
     : 0;
@@ -60,11 +75,16 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
               </StatusChip>
             </div>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{signoffMeta.text}</p>
-            {signoff?.minuteReference && (
+            {approvalCurrent && signoff?.minuteReference && (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Minute reference: {signoff.minuteReference}
               </p>
             )}
+            {reapprovalRequired && signoff?.latestApproval ? (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Retained approved snapshot #{signoff.latestApproval.approvalSequence}
+              </p>
+            ) : null}
           </div>
           <Button as={Link} href="/export" size="sm" variant="flat">
             Manage sign-off

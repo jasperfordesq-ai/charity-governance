@@ -31,9 +31,50 @@ function buildService(opts: {
   signoff?: Record<string, unknown> | null;
 } = {}) {
   const calls: Call[] = [];
-  const prisma = {
+  const fullStandards = (opts.standards ?? []).map((standard, index) => ({
+    isAdditional: false,
+    sortOrder: index + 1,
+    ...standard,
+    code: standard.code ?? `${index + 1}.1`,
+    isCore: standard.isCore ?? true,
+    principle: {
+      id: standard.principleId,
+      sortOrder: index + 1,
+      ...standard.principle,
+    },
+  }));
+  const fullRecords = (opts.records ?? []).map((record, index) => ({
+    id: `rec_${index + 1}`,
+    organisationId: 'org_1',
+    reportingYear: 2026,
+    revision: 1,
+    actionTaken: null,
+    evidence: null,
+    notes: null,
+    explanationIfNA: null,
+    updatedById: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...record,
+  }));
+  let persistedRecord: Record<string, unknown> | null = null;
+  let persistedSignoff = opts.signoff
+    ? {
+        id: 'so_1', organisationId: 'org_1', reportingYear: 2026, status: 'DRAFT', updatedById: 'u1',
+        updatedAt: new Date(), createdAt: new Date(), boardMeetingDate: null, minuteReference: null,
+        approvedByName: null, approvedByRole: null, approvalNotes: null, approvedAt: null,
+        revision: 1, approvalSequence: 0, currentApprovalSnapshotId: null, currentApprovalSnapshot: null,
+        invalidatedAt: null, invalidationReason: null, invalidatedById: null,
+        ...opts.signoff,
+      }
+    : null;
+  const prisma: Record<string, any> = {
+    $queryRaw: async (...args: unknown[]) => { calls.push({ name: '$queryRaw', args }); return [{ id: 'org_1' }]; },
     organisation: {
       findUniqueOrThrow: async () => ({
+        id: 'org_1',
+        name: 'Example Charity',
+        rcnNumber: 'RCN-1',
         complexity: opts.complexity ?? 'SIMPLE',
         conditionalObligationProfile: opts.conditionalObligationProfile,
       }),
@@ -42,22 +83,63 @@ function buildService(opts: {
       findUnique: async () => (opts.plan === null ? null : { plan: opts.plan ?? 'ESSENTIALS' }),
     },
     governanceStandard: {
-      findUnique: async () => (opts.standard === undefined ? { id: 's1', isCore: true } : opts.standard),
-      findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return opts.standards ?? []; },
+      findUnique: async () => {
+        if (opts.standard === null) return null;
+        const standard = opts.standard ?? { id: 's1', isCore: true };
+        return {
+          principleId: 'p1', code: '1.1', title: 'Standard', isAdditional: false, sortOrder: 1,
+          principle: { id: 'p1', number: 1, title: 'Principle', description: '', sortOrder: 1 },
+          ...standard,
+        };
+      },
+      findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return fullStandards; },
     },
     governancePrinciple: {
       findMany: async (args: unknown) => { calls.push({ name: 'governancePrinciple.findMany', args }); return []; },
       findUnique: async (args: unknown) => { calls.push({ name: 'governancePrinciple.findUnique', args }); return null; },
     },
     complianceRecord: {
-      findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return opts.records ?? []; },
-      findUnique: async (args: unknown) => { calls.push({ name: 'complianceRecord.findUnique', args }); return null; },
-      upsert: async (args: { data?: unknown }) => { calls.push({ name: 'complianceRecord.upsert', args }); return { id: 'rec_1' }; },
+      findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return fullRecords; },
+      findUnique: async (args: unknown) => { calls.push({ name: 'complianceRecord.findUnique', args }); return persistedRecord; },
+      findUniqueOrThrow: async () => persistedRecord,
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'complianceRecord.create', args });
+        persistedRecord = {
+          id: 'rec_1', standard: { id: args.data.standardId }, updatedBy: { id: 'u1', name: 'User' },
+          createdAt: new Date(), updatedAt: new Date(), ...args.data,
+        };
+        return persistedRecord;
+      },
+      updateMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.updateMany', args }); return { count: 1 }; },
     },
     complianceSignoff: {
-      findUnique: async () => opts.signoff ?? null,
-      upsert: async (args: unknown) => { calls.push({ name: 'complianceSignoff.upsert', args }); return { id: 'so_1', organisationId: 'org_1', reportingYear: 2026, status: 'DRAFT', updatedById: 'u1', updatedAt: new Date(), boardMeetingDate: null, minuteReference: null, approvedByName: null, approvedByRole: null, approvalNotes: null, approvedAt: null }; },
+      findUnique: async () => persistedSignoff,
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'complianceSignoff.create', args });
+        persistedSignoff = {
+          id: 'so_1', createdAt: new Date(), updatedAt: new Date(), currentApprovalSnapshot: null,
+          ...args.data,
+        } as typeof persistedSignoff;
+        return persistedSignoff;
+      },
+      update: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'complianceSignoff.update', args });
+        persistedSignoff = { ...persistedSignoff, ...args.data, updatedAt: new Date(), currentApprovalSnapshot: null } as typeof persistedSignoff;
+        return persistedSignoff;
+      },
     },
+    complianceApprovalSnapshot: {
+      findFirst: async () => null,
+      create: async (args: unknown) => { calls.push({ name: 'complianceApprovalSnapshot.create', args }); return null; },
+    },
+    complianceAuditEvent: {
+      create: async (args: unknown) => { calls.push({ name: 'complianceAuditEvent.create', args }); return {}; },
+    },
+    user: { findUnique: async () => ({ name: 'User' }) },
+  };
+  prisma.$transaction = async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => {
+    calls.push({ name: '$transaction', args: options });
+    return callback(prisma);
   };
   return { service: new ComplianceService(prisma as never), calls };
 }
@@ -260,31 +342,31 @@ test('getApprovalReadiness ignores complete, irrelevant, and out-of-scope record
 test('upsertRecord blocks a non-core standard for an Essentials org (no billing bypass)', async () => {
   const { service, calls } = buildService({ plan: 'ESSENTIALS', complexity: 'SIMPLE', standard: { id: 's_extra', isCore: false } });
   await assert.rejects(
-    () => service.upsertRecord('org_1', 's_extra', 'u1', { reportingYear: 2026, status: 'COMPLIANT' } as never),
+    () => service.upsertRecord('org_1', 's_extra', 'u1', { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' } as never),
     (e: unknown) => codeOf(e) === 'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN',
   );
-  assert.equal(calls.some((c) => c.name === 'complianceRecord.upsert'), false, 'must not write a record for an out-of-plan standard');
+  assert.equal(calls.some((c) => c.name === 'complianceRecord.create'), false, 'must not write a record for an out-of-plan standard');
 });
 
 test('upsertRecord rejects an unknown standard', async () => {
   const { service } = buildService({ plan: 'COMPLETE', complexity: 'COMPLEX', standard: null });
   await assert.rejects(
-    () => service.upsertRecord('org_1', 's_missing', 'u1', { reportingYear: 2026 } as never),
+    () => service.upsertRecord('org_1', 's_missing', 'u1', { reportingYear: 2026, expectedRevision: 0 } as never),
     (e: unknown) => codeOf(e) === 'STANDARD_NOT_FOUND',
   );
 });
 
 test('upsertRecord allows a non-core standard for a Complete/Complex org', async () => {
   const { service, calls } = buildService({ plan: 'COMPLETE', complexity: 'COMPLEX', standard: { id: 's_extra', isCore: false } });
-  await service.upsertRecord('org_1', 's_extra', 'u1', { reportingYear: 2026, status: 'COMPLIANT' } as never);
-  const upsert = calls.find((c) => c.name === 'complianceRecord.upsert');
-  assert.ok(upsert, 'upsert should run for an in-plan additional standard');
+  await service.upsertRecord('org_1', 's_extra', 'u1', { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' } as never);
+  const create = calls.find((c) => c.name === 'complianceRecord.create');
+  assert.ok(create, 'create should run for an in-plan additional standard');
 });
 
 test('upsertRecord allows a core standard regardless of plan', async () => {
   const { service, calls } = buildService({ plan: 'ESSENTIALS', complexity: 'SIMPLE', standard: { id: 's_core', isCore: true } });
-  await service.upsertRecord('org_1', 's_core', 'u1', { reportingYear: 2026, status: 'COMPLIANT' } as never);
-  assert.ok(calls.find((c) => c.name === 'complianceRecord.upsert'));
+  await service.upsertRecord('org_1', 's_core', 'u1', { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' } as never);
+  assert.ok(calls.find((c) => c.name === 'complianceRecord.create'));
 });
 
 // ── scoring math ──

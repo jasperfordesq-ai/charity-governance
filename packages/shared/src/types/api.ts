@@ -207,7 +207,7 @@ export interface GovernanceStandardResponse {
 // ── Compliance Records ──
 
 export interface ComplianceRecordResponse {
-  id: string;
+  id: string | null;
   organisationId: string;
   standardId: string;
   standard: GovernanceStandardResponse;
@@ -217,8 +217,22 @@ export interface ComplianceRecordResponse {
   evidence: string | null;
   notes: string | null;
   explanationIfNA: string | null;
+  revision: number;
   updatedById: string | null;
-  updatedAt: string;
+  updatedAt: string | null;
+}
+
+export type ComplianceApprovalInvalidationReason =
+  | 'RECORD_CHANGED'
+  | 'MANUAL_STATUS_CHANGE'
+  | 'LEGACY_APPROVAL_UNBOUND';
+
+export interface ComplianceApprovalSnapshotSummary {
+  id: string;
+  approvalSequence: number;
+  evidenceHash: string;
+  snapshotHash: string;
+  approvedAt: string;
 }
 
 export interface ComplianceSignoffResponse {
@@ -232,6 +246,15 @@ export interface ComplianceSignoffResponse {
   approvedByRole: string | null;
   approvalNotes: string | null;
   approvedAt: string | null;
+  revision: number;
+  approvalSequence: number;
+  approvalCurrent: boolean;
+  currentApprovalSnapshotId: string | null;
+  currentApproval: ComplianceApprovalSnapshotSummary | null;
+  latestApproval: ComplianceApprovalSnapshotSummary | null;
+  invalidatedAt: string | null;
+  invalidationReason: ComplianceApprovalInvalidationReason | null;
+  invalidatedById: string | null;
   updatedById: string | null;
   updatedAt: string | null;
 }
@@ -285,6 +308,7 @@ export interface ComplianceApprovalMatrixReviewItem {
 
 export interface ComplianceApprovalReadinessResponse {
   ready: boolean;
+  evidenceHash: string;
   missingRecords: ComplianceApprovalMissingRecord[];
   missingEvidence: ComplianceApprovalMissingEvidence[];
   missingExplanations: ComplianceApprovalMissingExplanation[];
@@ -296,6 +320,7 @@ export interface ComplianceApprovalReadinessResponse {
 
 export interface UpsertComplianceRecordRequest {
   reportingYear: number;
+  expectedRevision: number;
   status?: ComplianceStatus;
   actionTaken?: string | null;
   evidence?: string | null;
@@ -305,12 +330,78 @@ export interface UpsertComplianceRecordRequest {
 
 export interface UpsertComplianceSignoffRequest {
   reportingYear: number;
+  expectedRevision: number;
+  expectedEvidenceHash?: string;
   status: ComplianceSignoffStatus;
   boardMeetingDate?: string | null;
   minuteReference?: string | null;
   approvedByName?: string | null;
   approvedByRole?: string | null;
   approvalNotes?: string | null;
+}
+
+export interface ComplianceEvidenceRecordSnapshot {
+  id: string;
+  revision: number;
+  status: 'COMPLIANT' | 'WORKING_TOWARDS' | 'NOT_STARTED' | 'NOT_APPLICABLE' | 'EXPLAIN';
+  actionTaken: string | null;
+  evidence: string | null;
+  notes: string | null;
+  explanationIfNA: string | null;
+  updatedById: string | null;
+  updatedAt: string;
+}
+
+export interface ComplianceEvidenceStandardSnapshot {
+  principle: {
+    id: string;
+    number: number;
+    title: string;
+    sortOrder: number;
+  };
+  standard: {
+    id: string;
+    code: string;
+    title: string;
+    isCore: boolean;
+    isAdditional: boolean;
+    sortOrder: number;
+  };
+  record: ComplianceEvidenceRecordSnapshot | null;
+}
+
+export interface ComplianceEvidenceSnapshotPayload {
+  organisation: {
+    id: string;
+    name: string;
+    rcnNumber: string | null;
+  };
+  reportingYear: number;
+  scope: {
+    complexity: 'SIMPLE' | 'COMPLEX';
+    plan: 'ESSENTIALS' | 'COMPLETE';
+    conditionalObligationProfile: ConditionalObligationProfile | null;
+  };
+  matrixLastChecked: string;
+  standards: ComplianceEvidenceStandardSnapshot[];
+  readiness: Omit<ComplianceApprovalReadinessResponse, 'evidenceHash'>;
+}
+
+export interface ComplianceApprovalSnapshotPayload {
+  kind: 'charitypilot.compliance-approval';
+  formatVersion: 1;
+  evidence: ComplianceEvidenceSnapshotPayload;
+  approval: {
+    sequence: number;
+    boardMeetingDate: string;
+    minuteReference: string;
+    approvedByName: string;
+    approvedByRole: string | null;
+    approvalNotes: string | null;
+    recordedById: string;
+    recordedByName: string | null;
+    approvedAt: string;
+  };
 }
 
 export interface ComplianceSummary {

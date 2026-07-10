@@ -65,7 +65,7 @@ export async function complianceRoutes(app: FastifyInstance) {
     try {
       const { year } = complianceQuerySchema.parse(request.query);
       const record = await service.getRecord(request.user.organisationId, request.params.standardId, year);
-      return sendSuccess(reply, record ?? { status: 'NOT_STARTED' });
+      return sendSuccess(reply, record);
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -77,6 +77,16 @@ export async function complianceRoutes(app: FastifyInstance) {
   // PUT /records/:standardId — upsert compliance record (auto-save)
   app.put<{ Params: { standardId: string } }>('/records/:standardId', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
+      if (
+        !request.body
+        || typeof request.body !== 'object'
+        || !Object.prototype.hasOwnProperty.call(request.body, 'expectedRevision')
+      ) {
+        return reply.status(428).send({
+          error: 'Reload this compliance record before saving it.',
+          code: 'COMPLIANCE_RECORD_REVISION_REQUIRED',
+        });
+      }
       const data = upsertComplianceRecordSchema.parse(request.body) as UpsertComplianceRecordRequest;
       const record = await service.upsertRecord(
         request.user.organisationId,
@@ -135,6 +145,25 @@ export async function complianceRoutes(app: FastifyInstance) {
   // PUT /signoff - create/update the board approval record for the annual Compliance Record
   app.put('/signoff', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
+      if (
+        !request.body
+        || typeof request.body !== 'object'
+        || !Object.prototype.hasOwnProperty.call(request.body, 'expectedRevision')
+      ) {
+        return reply.status(428).send({
+          error: 'Reload the board signoff before saving it.',
+          code: 'COMPLIANCE_SIGNOFF_REVISION_REQUIRED',
+        });
+      }
+      if (
+        (request.body as { status?: unknown }).status === 'APPROVED'
+        && !Object.prototype.hasOwnProperty.call(request.body, 'expectedEvidenceHash')
+      ) {
+        return reply.status(428).send({
+          error: 'Refresh approval readiness before recording board approval.',
+          code: 'COMPLIANCE_APPROVAL_EVIDENCE_REQUIRED',
+        });
+      }
       const data = upsertComplianceSignoffSchema.parse(request.body) as UpsertComplianceSignoffRequest;
       return sendSuccess(reply, await service.upsertSignoff(request.user.organisationId, request.user.userId, data));
     } catch (err) {

@@ -3,11 +3,19 @@ import test from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'export-csp-test-secret';
 
-const [{ default: Fastify }, { exportRoutes }, { signAccessToken }] = await Promise.all([
+const [
+  { default: Fastify },
+  { exportRoutes },
+  { buildApprovedComplianceReportHtml, buildComplianceReportHtml },
+  { signAccessToken },
+] = await Promise.all([
   import('fastify'),
   import('../routes/export/index.js'),
+  import('../routes/export/compliance-report-html.js'),
   import('../utils/jwt.js'),
 ]);
+
+const embeddedCspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">`;
 
 const authHeader = `Bearer ${signAccessToken({
   userId: 'user-1',
@@ -18,7 +26,11 @@ const authHeader = `Bearer ${signAccessToken({
 
 function subscription() {
   return {
-    findUnique: async () => ({ status: 'TRIALING', trialEndsAt: new Date(Date.now() + 60_000) }),
+    findUnique: async () => ({
+      status: 'TRIALING',
+      trialEndsAt: new Date(Date.now() + 60_000),
+      plan: 'ESSENTIALS',
+    }),
   };
 }
 
@@ -54,6 +66,7 @@ test('export HTML route sets a scoped CSP that allows its inline stylesheet', as
     governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },
@@ -73,9 +86,76 @@ test('export HTML route sets a scoped CSP that allows its inline stylesheet', as
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers['content-security-policy']), /default-src 'none'/);
     assert.match(String(response.headers['content-security-policy']), /style-src 'unsafe-inline'/);
+    assert.equal(response.body.includes(embeddedCspMeta), true);
   } finally {
     await app.close();
   }
+});
+
+test('current and approved report documents both embed the blob-safe CSP', () => {
+  const readiness = {
+    ready: true,
+    missingRecords: [],
+    missingEvidence: [],
+    missingExplanations: [],
+    profileIssues: [],
+    conditionalReviewItems: [],
+    matrixReviewItems: [],
+    matrixLastChecked: '2026-07-10',
+    evidenceHash: 'a'.repeat(64),
+  };
+  const current = buildComplianceReportHtml(
+    { name: 'Example Charity', rcnNumber: 'RCN 123' },
+    [],
+    new Map(),
+    {
+      status: 'DRAFT',
+      boardMeetingDate: null,
+      minuteReference: null,
+      approvedByName: null,
+      approvedByRole: null,
+      approvalNotes: null,
+      approvedAt: null,
+      approvalCurrent: false,
+    },
+    readiness,
+    null,
+    2026,
+  );
+  const approved = buildApprovedComplianceReportHtml({
+    kind: 'charitypilot.compliance-approval',
+    formatVersion: 1,
+    evidence: {
+      organisation: { id: 'org-1', name: 'Example Charity', rcnNumber: 'RCN 123' },
+      reportingYear: 2026,
+      scope: {
+        complexity: 'SIMPLE',
+        plan: 'ESSENTIALS',
+        conditionalObligationProfile: falseProfile(),
+      },
+      matrixLastChecked: '2026-07-10',
+      standards: [],
+      readiness,
+    },
+    approval: {
+      sequence: 1,
+      boardMeetingDate: '2026-07-10',
+      minuteReference: 'BM-1',
+      approvedByName: 'Chair',
+      approvedByRole: 'Chairperson',
+      approvalNotes: null,
+      recordedById: 'user-1',
+      recordedByName: 'Admin',
+      approvedAt: '2026-07-10T12:00:00.000Z',
+    },
+  }, {
+    snapshotId: 'snapshot-1',
+    evidenceHash: 'a'.repeat(64),
+    snapshotHash: 'b'.repeat(64),
+  });
+
+  assert.equal(current.includes(embeddedCspMeta), true);
+  assert.equal(approved.includes(embeddedCspMeta), true);
 });
 
 test('Essentials exports do not include Complete-only governance registers', async () => {
@@ -108,6 +188,7 @@ test('Essentials exports do not include Complete-only governance registers', asy
     governanceStandard: { findMany: async () => [] },
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
+    complianceApprovalSnapshot: { findFirst: async () => null },
     conflictRecord: {
       findMany: async () => {
         completeOnlyRegisterRead = true;

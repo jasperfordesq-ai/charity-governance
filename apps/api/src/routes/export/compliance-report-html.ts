@@ -1,5 +1,10 @@
 import type { ComplianceApprovalReadiness } from '../../services/compliance.service.js';
+import type { ComplianceApprovalSnapshotPayloadV1 } from '../../services/compliance-snapshot.js';
 import { IRISH_COMPLIANCE_MATRIX, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
+
+type ReportApprovalReadiness = Omit<ComplianceApprovalReadiness, 'evidenceHash'> & {
+  evidenceHash?: string;
+};
 
 export type GovernanceRegistersForExport = {
   conflicts: Array<{ trusteeName: string; matter: string; status: string; dateDeclared: Date; actionTaken: string; minuteReference: string | null }>;
@@ -55,6 +60,10 @@ export function buildComplianceReportHtml(
     approvedByRole: string | null;
     approvalNotes: string | null;
     approvedAt: string | null;
+    approvalCurrent?: boolean;
+    currentApprovalSnapshotId?: string | null;
+    invalidatedAt?: string | null;
+    invalidationReason?: string | null;
   },
   approvalReadiness: ComplianceApprovalReadiness,
   registers: GovernanceRegistersForExport | null,
@@ -95,7 +104,12 @@ export function buildComplianceReportHtml(
 
   const governanceRegisterRows = registers
     ? `
-      <h2>Governance registers</h2>
+      <h2>Governance registers (generated-time appendix)</h2>
+      <p style="font-size: 13px; color: #4b5563;">
+        This appendix reflects register data when this working report was generated. It is outside
+        the immutable board-approved Compliance Record evidence and must not be read as part of a
+        retained approval snapshot.
+      </p>
       <h3>Conflicts of interest</h3>
       ${simpleTable(
         ['Trustee', 'Matter', 'Status', 'Declared', 'Action taken', 'Minute'],
@@ -161,15 +175,21 @@ export function buildComplianceReportHtml(
       )}`
     : '';
 
+  const approvalIsCurrent = signoff.status === 'APPROVED' && signoff.approvalCurrent === true;
+  const approvalIsStale = !approvalIsCurrent && Boolean(
+    signoff.status === 'APPROVED' || signoff.invalidatedAt || signoff.invalidationReason,
+  );
   const signoffLabel =
-    signoff.status === 'APPROVED'
+    approvalIsCurrent
       ? 'Approved'
+      : approvalIsStale
+        ? 'Previous approval no longer applies to this report'
       : signoff.status === 'BOARD_REVIEW'
         ? 'Ready for board review'
         : 'Draft';
 
   const signoffHtml =
-    signoff.status === 'APPROVED'
+    approvalIsCurrent
       ? `
         <p><strong>Status:</strong> ${signoffLabel}</p>
         <p><strong>Approved at Board Meeting on:</strong> ${formatDate(signoff.boardMeetingDate)}</p>
@@ -177,7 +197,14 @@ export function buildComplianceReportHtml(
         <p><strong>Approved by:</strong> ${escapeHtml(signoff.approvedByName ?? '')}${signoff.approvedByRole ? ', ' + escapeHtml(signoff.approvedByRole) : ''}</p>
         <p><strong>Recorded in CharityPilot on:</strong> ${formatDate(signoff.approvedAt)}</p>
         ${signoff.approvalNotes ? `<p><strong>Approval notes:</strong> ${escapeHtml(signoff.approvalNotes)}</p>` : ''}`
-      : `
+      : approvalIsStale
+        ? `
+        <p><strong>Status:</strong> ${signoffLabel}</p>
+        <p style="color: #92400e;"><strong>Reapproval required:</strong> Compliance Record content changed after the retained approval. This generated-time report is not board approved.</p>
+        ${signoff.invalidatedAt ? `<p><strong>Approval invalidated in CharityPilot on:</strong> ${formatDate(signoff.invalidatedAt)}</p>` : ''}
+        ${signoff.invalidationReason ? `<p><strong>Reason:</strong> ${escapeHtml(signoff.invalidationReason.replace(/_/g, ' ').toLowerCase())}</p>` : ''}
+        <p>Use the approved-snapshot export to retrieve the retained historical approval evidence.</p>`
+        : `
         <p><strong>Status:</strong> ${signoffLabel}</p>
         <p><strong>Approved at Board Meeting on:</strong> ____________________</p>
         <p><strong>Board minute reference:</strong> ____________________</p>
@@ -192,6 +219,7 @@ export function buildComplianceReportHtml(
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
   <title>Compliance Record Form — ${escapeHtml(org.name)} — ${year}</title>
   <style>
     body { font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 1100px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a; }
@@ -230,7 +258,140 @@ export function buildComplianceReportHtml(
 </html>`;
 }
 
-function buildReadinessWarningHtml(approvalReadiness: ComplianceApprovalReadiness): string {
+export interface ApprovedComplianceReportMetadata {
+  snapshotId: string;
+  evidenceHash: string;
+  snapshotHash: string;
+}
+
+/**
+ * Render retained approval evidence without consulting current tenant rows or
+ * the process's current compliance matrix. Every substantive value comes from
+ * the already verified immutable snapshot payload.
+ */
+export function buildApprovedComplianceReportHtml(
+  snapshot: ComplianceApprovalSnapshotPayloadV1,
+  metadata: ApprovedComplianceReportMetadata,
+): string {
+  const principleGroups = new Map<
+    string,
+    {
+      principle: ComplianceApprovalSnapshotPayloadV1['evidence']['standards'][number]['principle'];
+      standards: ComplianceApprovalSnapshotPayloadV1['evidence']['standards'];
+    }
+  >();
+
+  for (const entry of snapshot.evidence.standards) {
+    const existing = principleGroups.get(entry.principle.id);
+    if (existing) {
+      existing.standards.push(entry);
+    } else {
+      principleGroups.set(entry.principle.id, {
+        principle: entry.principle,
+        standards: [entry],
+      });
+    }
+  }
+
+  const standardRows = [...principleGroups.values()]
+    .map(({ principle, standards }) => `
+      <h2>Principle ${principle.number}: ${escapeHtml(principle.title)}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Standard</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Actions Taken</th>
+            <th>Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${standards.map(({ standard, record }) => `
+            <tr>
+              <td><strong>${escapeHtml(standard.code)}</strong> ${escapeHtml(standard.title)}</td>
+              <td>${standard.isCore ? 'Core' : 'Additional'}</td>
+              <td>${escapeHtml(record?.status.replace(/_/g, ' ') ?? 'NOT STARTED')}</td>
+              <td>${escapeHtml(record?.actionTaken ?? '')}</td>
+              <td>${escapeHtml(record?.evidence ?? '')}${record?.explanationIfNA ? `<br><em>Explanation: ${escapeHtml(record.explanationIfNA)}</em>` : ''}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`)
+    .join('');
+
+  const approval = snapshot.approval;
+  const sourceReviewAppendixHtml = buildSnapshotSourceReviewAppendixHtml(snapshot);
+  const conditionalReviewHtml = buildConditionalReviewHtml(snapshot.evidence.readiness);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>Approved Compliance Record snapshot - ${escapeHtml(snapshot.evidence.organisation.name)} - ${snapshot.evidence.reportingYear}</title>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', Arial, sans-serif; max-width: 1100px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a; }
+    h1 { color: #0D7377; border-bottom: 3px solid #0D7377; padding-bottom: 8px; }
+    h2 { color: #0D7377; margin-top: 32px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background-color: #f0fdfa; font-weight: 600; }
+    .header-info { margin-bottom: 32px; }
+    .header-info p { margin: 4px 0; }
+    .snapshot-meta { margin: 24px 0; padding: 14px 16px; border: 1px solid #99f6e4; background: #f0fdfa; }
+    .snapshot-meta code { overflow-wrap: anywhere; }
+    @media print { body { padding: 0; } h1 { font-size: 20px; } table { font-size: 11px; } }
+  </style>
+</head>
+<body>
+  <h1>Charities Governance Code - Approved Compliance Record Snapshot</h1>
+  <div class="header-info">
+    <p><strong>Charity Name:</strong> ${escapeHtml(snapshot.evidence.organisation.name)}</p>
+    <p><strong>Registered Charity Number:</strong> ${escapeHtml(snapshot.evidence.organisation.rcnNumber ?? 'N/A')}</p>
+    <p><strong>Reporting Year:</strong> ${snapshot.evidence.reportingYear}</p>
+    <p><strong>Snapshot approved and created:</strong> ${formatDate(approval.approvedAt)}</p>
+    <p><strong>Matrix last checked:</strong> ${escapeHtml(snapshot.evidence.matrixLastChecked)}</p>
+  </div>
+  <section class="snapshot-meta">
+    <h2 style="margin-top: 0;">Immutable approval evidence</h2>
+    <p>This report is rendered only from the retained approval snapshot. It does not incorporate later edits, current organisation data, current registers, or a later compliance-source matrix.</p>
+    <p><strong>Snapshot ID:</strong> <code>${escapeHtml(metadata.snapshotId)}</code></p>
+    <p><strong>Approval sequence:</strong> ${approval.sequence}</p>
+    <p><strong>Evidence SHA-256:</strong> <code>${escapeHtml(metadata.evidenceHash)}</code></p>
+    <p><strong>Snapshot SHA-256:</strong> <code>${escapeHtml(metadata.snapshotHash)}</code></p>
+    <p><strong>Format:</strong> ${escapeHtml(snapshot.kind)} version ${snapshot.formatVersion}</p>
+  </section>
+  ${standardRows}
+  ${conditionalReviewHtml}
+  ${sourceReviewAppendixHtml}
+  <section style="margin-top: 40px; border: 1px solid #d1d5db; background: #f9fafb; padding: 14px 16px;">
+    <h2 style="margin-top: 0;">Registers and later changes</h2>
+    <p style="font-size: 13px; color: #374151;">
+      Governance registers and data changed after this approval are not part of this immutable snapshot.
+      A current working report may include a separately labelled generated-time register appendix, but it
+      must not be treated as board-approved evidence under this snapshot.
+    </p>
+  </section>
+  <div style="margin-top: 48px; border-top: 2px solid #0D7377; padding-top: 16px;">
+    <h2>Board approval retained in this snapshot</h2>
+    <p><strong>Status:</strong> Approved</p>
+    <p><strong>Approved at Board Meeting on:</strong> ${formatDate(approval.boardMeetingDate)}</p>
+    <p><strong>Board minute reference:</strong> ${escapeHtml(approval.minuteReference)}</p>
+    <p><strong>Approved by:</strong> ${escapeHtml(approval.approvedByName)}${approval.approvedByRole ? `, ${escapeHtml(approval.approvedByRole)}` : ''}</p>
+    <p><strong>Recorded in CharityPilot on:</strong> ${formatDate(approval.approvedAt)}</p>
+    <p><strong>Recorded by account user:</strong> ${escapeHtml(approval.recordedByName ?? approval.recordedById)}</p>
+    ${approval.approvalNotes ? `<p><strong>Approval notes:</strong> ${escapeHtml(approval.approvalNotes)}</p>` : ''}
+  </div>
+  <footer style="margin-top: 32px; font-size: 11px; color: #6b7280;">
+    Generated by CharityPilot.ie from verified retained snapshot ${escapeHtml(metadata.snapshotId)}.
+    The integrity hashes bind the stored evidence; they are not an electronic signature, legal advice,
+    or a certificate of compliance.
+  </footer>
+</body>
+</html>`;
+}
+
+function buildReadinessWarningHtml(approvalReadiness: ReportApprovalReadiness): string {
   if (approvalReadiness.ready) {
     return '';
   }
@@ -270,7 +431,7 @@ function buildReadinessWarningHtml(approvalReadiness: ComplianceApprovalReadines
     </section>`;
 }
 
-function buildConditionalReviewHtml(approvalReadiness: ComplianceApprovalReadiness): string {
+function buildConditionalReviewHtml(approvalReadiness: ReportApprovalReadiness): string {
   if (approvalReadiness.conditionalReviewItems.length === 0) {
     return '';
   }
@@ -298,6 +459,65 @@ function missingEvidenceLabel(missingActionTaken: boolean, missingEvidence: bool
   if (missingActionTaken && missingEvidence) return 'Missing action taken and evidence';
   if (missingActionTaken) return 'Missing action taken';
   return 'Missing evidence';
+}
+
+function buildSnapshotSourceReviewAppendixHtml(
+  snapshot: ComplianceApprovalSnapshotPayloadV1,
+): string {
+  const readiness = snapshot.evidence.readiness;
+  const sourceMap = new Map<string, { name: string; owner: string; url: string; lastChecked: string }>();
+  const statusCounts = new Map<string, number>();
+  const reviewFlags = new Set<string>();
+
+  for (const item of readiness.matrixReviewItems) {
+    statusCounts.set(item.commencementStatus, (statusCounts.get(item.commencementStatus) ?? 0) + 1);
+    for (const flag of item.professionalReview) reviewFlags.add(flag.replace(/_/g, ' '));
+    for (const source of item.sourceRefs) {
+      sourceMap.set(source.url, {
+        name: source.name,
+        owner: source.owner,
+        url: source.url,
+        lastChecked: source.lastChecked,
+      });
+    }
+  }
+  for (const item of readiness.conditionalReviewItems) {
+    for (const flag of item.professionalReview) reviewFlags.add(flag.replace(/_/g, ' '));
+    for (const source of item.sourceRefs) {
+      sourceMap.set(source.url, {
+        name: source.name,
+        owner: source.owner,
+        url: source.url,
+        lastChecked: source.lastChecked,
+      });
+    }
+  }
+
+  const statusRows = [...statusCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => [status.replace(/_/g, ' '), String(count)]);
+  const sourceRows = [...sourceMap.values()]
+    .sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name) || a.url.localeCompare(b.url))
+    .map((source) => [source.name, source.owner, source.lastChecked, source.url]);
+
+  return `
+    <section style="margin-top: 40px; border: 1px solid #d1d5db; background: #f9fafb; padding: 14px 16px;">
+      <h2 style="margin-top: 0;">Snapshot source and professional-review appendix</h2>
+      <p style="font-size: 13px; color: #374151;">
+        These are the source and review metadata retained with this approval snapshot. They are not
+        recomputed from the current CharityPilot compliance matrix when this report is downloaded.
+      </p>
+      <p style="font-size: 13px; color: #374151;">
+        Matrix last checked: ${escapeHtml(snapshot.evidence.matrixLastChecked)}. This report remains
+        review evidence rather than legal advice or a certificate of compliance.
+      </p>
+      <h3>Commencement status summary</h3>
+      ${simpleTable(['Status', 'Mapped prompts'], statusRows)}
+      <h3>Professional review flags retained in this snapshot</h3>
+      <p style="font-size: 13px; color: #374151;">${escapeHtml([...reviewFlags].sort().join(', ') || 'None recorded')}</p>
+      <h3>Sources retained in this snapshot</h3>
+      ${simpleTable(['Source', 'Owner', 'Last checked', 'URL'], sourceRows)}
+    </section>`;
 }
 
 function buildSourceReviewAppendixHtml(): string {
@@ -354,7 +574,7 @@ function escapeHtml(text: string): string {
 
 function formatDate(value: string | null): string {
   if (!value) return '';
-  return new Date(value).toLocaleDateString('en-IE');
+  return new Date(value).toLocaleDateString('en-IE', { timeZone: 'UTC' });
 }
 
 function yesNo(value: boolean | null | undefined): string {

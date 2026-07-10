@@ -10,6 +10,11 @@ const complianceStatusValues = [
 ] as const;
 
 const complianceSignoffStatusValues = ['DRAFT', 'BOARD_REVIEW', 'APPROVED'] as const;
+const complianceEvidenceHashPattern = /^[0-9a-f]{64}$/;
+
+export const complianceEvidenceHashSchema = z
+  .string()
+  .regex(complianceEvidenceHashPattern, 'Expected a lowercase SHA-256 hash');
 
 const nullableTrimmedString = (max: number) =>
   z
@@ -22,6 +27,7 @@ const nullableTrimmedString = (max: number) =>
 
 export const upsertComplianceRecordSchema = z.object({
   reportingYear: z.number().int().min(2018).max(2100),
+  expectedRevision: z.number().int().min(0),
   status: z.enum(complianceStatusValues).optional(),
   actionTaken: z.string().max(5000).nullable().optional(),
   evidence: z.string().max(5000).nullable().optional(),
@@ -36,6 +42,8 @@ export const complianceQuerySchema = z.object({
 export const upsertComplianceSignoffSchema = z
   .object({
     reportingYear: z.number().int().min(2018).max(2100),
+    expectedRevision: z.number().int().min(0),
+    expectedEvidenceHash: complianceEvidenceHashSchema.optional(),
     status: z.enum(complianceSignoffStatusValues),
     boardMeetingDate: nullableDateInputSchema,
     minuteReference: nullableTrimmedString(200),
@@ -45,6 +53,14 @@ export const upsertComplianceSignoffSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.status !== 'APPROVED') return;
+
+    if (!value.expectedEvidenceHash) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expectedEvidenceHash'],
+        message: 'Required when marking the Compliance Record as approved',
+      });
+    }
 
     for (const field of ['boardMeetingDate', 'minuteReference', 'approvedByName'] as const) {
       if (!value[field]) {

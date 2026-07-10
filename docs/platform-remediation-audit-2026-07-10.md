@@ -373,7 +373,7 @@ Stripe/no-duplicate evidence is claimed by the controlled local tests.
 
 ### P0-04 - Compliance autosave data loss and stale board approval
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
 Evidence:
 
@@ -402,6 +402,68 @@ Acceptance:
   concurrent clients, mutation after approval, approval invalidation, export
   binding, reapproval, and history preservation.
 - The UI never reports `Saved` for data that was not durably stored.
+
+Repository remediation completed on 2026-07-10:
+
+- Compliance records and annual sign-off now carry explicit revisions. Writes
+  run in serializable transactions behind an organisation-row lock and use
+  compare-and-swap semantics. Exact stale retries/no-ops succeed without a
+  second revision or audit event; unrelated unique errors are not hidden by the
+  narrowly scoped concurrency retry policy.
+- Each record and sign-off change appends canonical before/after history.
+  PostgreSQL triggers reject updates or deletes to `ComplianceAuditEvent` and
+  `ComplianceApprovalSnapshot`; current-snapshot validation binds the pointer to
+  the same organisation, reporting year, and approval sequence.
+- Board approval rebuilds deterministic evidence, checks the evidence hash the
+  client reviewed, and creates an immutable canonical snapshot in the same
+  transaction. The snapshot binds organisation/profile/plan scope, standards,
+  record revisions and provenance, readiness, conditional review prompts, and
+  compliance-matrix metadata. Its SHA-256 hashes are integrity checks, not
+  signatures or evidence that a meeting occurred.
+- A later approved-record mutation returns the sign-off to draft, clears the
+  current pointer, preserves the prior snapshot, and records approval
+  invalidation. A stale board-review draft is reset without being misreported
+  as an invalidated approval. Scope/profile/plan drift also makes
+  `approvalCurrent` fail closed until trustees deliberately reapprove.
+- The migration records full truthful baselines and downgrades pre-contract
+  `APPROVED` rows to `DRAFT` with `LEGACY_APPROVAL_UNBOUND`; it does not invent
+  historical evidence from mutable deployment-time records.
+- Working exports render live evidence and never attach a stale approval.
+  Approved exports select a tenant-and-year-scoped retained snapshot, verify
+  row metadata and both hashes, and render only the snapshot payload. Current
+  and approved HTML carry both an HTTP CSP and an in-document blob-safe CSP.
+- The web editor now serializes one revision-aware queue per standard, coalesces
+  newer drafts, treats same-revision server no-ops as durable, preserves failed
+  and conflicted drafts, and offers an explicit confirmed reload of the server
+  version with a generation-race guard. Principle loads are request-sequenced.
+- Board sign-off uses live draft generation ownership, so response A cannot
+  overwrite or report `Saved` over edit B. Failed conflict refresh stays on the
+  page with the draft preserved, dirty SPA navigation requires explicit discard,
+  and report retrieval uses the authenticated Axios refresh path before opening
+  an opener-isolated, revoked object URL.
+
+Local verification:
+
+- Prisma client generation and schema validation passed.
+- All `14` migrations deployed cleanly to the dedicated throwaway
+  `charitypilot_ci` PostgreSQL database. Transactional probes verified that a
+  mismatched current-snapshot sequence is rejected and that snapshot mutation
+  and audit deletion are blocked; the proof transaction was rolled back and the
+  throwaway container removed.
+- API `477 / 477`, web `272 / 272`, and shared `23 / 23` tests passed.
+- Root lint and all production builds passed.
+- Secret/SAST scans passed across `481` files; production-only and full
+  dependency audits reported zero vulnerabilities.
+- Production tooling passed `399 / 399`; local-Docker tooling passed `43 / 43`.
+- Reliability linkage is green with `374 / 374` covered guarantees linked to
+  passing tests; the generated reliability and platform-audit documents were
+  refreshed.
+
+Deliberate limitation: the destructive Playwright suite was not run. A real
+PostgreSQL concurrency/reset/browser proof must use the isolated disposable
+database delivered under P0-05; the personal local-development database remains
+strictly out of scope. CI migration deployment and the final commit-bound CI run
+are still required before this item can become `CI_VERIFIED`.
 
 ### P0-05 - Destructive E2E database identity guard
 

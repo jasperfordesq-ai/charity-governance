@@ -28,6 +28,7 @@ export default function PrincipleDetailPage() {
     principleMatrixEntries,
     principleMissingExplanations,
     retrySave,
+    resolveConflictFromServer,
     saveState,
     saveAndContinueNavigation,
     stayOnCompliancePage,
@@ -84,6 +85,7 @@ export default function PrincipleDetailPage() {
           updateField={updateField}
           flushSave={flushSave}
           onRetrySave={retrySave}
+          onResolveConflict={resolveConflictFromServer}
         />
       </AppPage>
       <PrincipleNavigationConfirmModal

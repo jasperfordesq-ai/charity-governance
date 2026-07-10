@@ -186,12 +186,17 @@ export function SaveStatusIndicator({
   status,
   retryAction,
 }: {
-  status: 'idle' | 'saving' | 'saved' | 'error';
+  status: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict';
   retryAction?: ReactNode;
 }) {
   if (status === 'idle') return null;
 
   const content = {
+    dirty: {
+      label: 'Unsaved changes',
+      className: 'font-medium text-amber-700 dark:text-amber-300',
+      icon: <Clock className="h-3.5 w-3.5" aria-hidden="true" />,
+    },
     saving: {
       label: 'Saving...',
       className: 'text-gray-500 dark:text-gray-400',
@@ -207,11 +212,16 @@ export function SaveStatusIndicator({
       className: 'font-medium text-rose-600 dark:text-rose-300',
       icon: <TriangleAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />,
     },
+    conflict: {
+      label: 'Newer saved version',
+      className: 'font-medium text-rose-600 dark:text-rose-300',
+      icon: <CircleAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />,
+    },
   }[status];
 
   return (
     <span
-      role={status === 'error' ? 'alert' : 'status'}
+      role={status === 'error' || status === 'conflict' ? 'alert' : 'status'}
       aria-live={status === 'error' ? 'assertive' : 'polite'}
       className={classes('flex min-w-0 flex-wrap items-center justify-end gap-2 text-xs', content.className)}
     >

@@ -61,14 +61,19 @@ The professional-review flags are deliberately conservative prompts for human re
 flowchart TD
   P["GovernancePrinciple<br/>number, title, sortOrder"]
   S["GovernanceStandard<br/>code, isCore, isAdditional"]
-  CR["ComplianceRecord<br/>per organisation + standard + reportingYear<br/>ComplianceStatus, evidence, notes"]
-  CS["ComplianceSignoff<br/>per organisation + reportingYear<br/>DRAFT to BOARD_REVIEW to APPROVED"]
+  CR["ComplianceRecord<br/>per organisation + standard + reportingYear<br/>revision, status, evidence, notes"]
+  CS["ComplianceSignoff<br/>per organisation + reportingYear<br/>revision + current approval pointer"]
+  SNAP["ComplianceApprovalSnapshot<br/>immutable canonical evidence + hashes"]
+  AUDIT["ComplianceAuditEvent<br/>append-only revision history"]
   DOC["Document"]
   DSL["DocumentStandardLink"]
 
   P -->|"1 to many standards"| S
   S -->|"1 to many records<br/>(scoped per org + year)"| CR
   CR -->|"aggregated into annual"| CS
+  CS -->|"approval creates"| SNAP
+  CR --> AUDIT
+  CS --> AUDIT
   S -->|"linked evidence"| DSL
   DOC --> DSL
 ```
@@ -84,13 +89,27 @@ A `ComplianceRecord` is the per-organisation, per-standard, per-year compliance 
 | `evidence` | `String?` | Evidence narrative / reference. |
 | `notes` | `String?` | Free notes. |
 | `explanationIfNA` | `String?` | Explanation when the standard does not apply. |
+| `revision` | `Int` | Optimistic-concurrency version; clients send the revision they loaded. |
 | `updatedById` | `String?` → `User` | Last editor (relation `"UpdatedBy"`). |
 
 (Source: `apps/api/prisma/schema.prisma:219-241`.)
 
 `ComplianceStatus` values are `COMPLIANT`, `WORKING_TOWARDS`, `NOT_STARTED`, `NOT_APPLICABLE`, `EXPLAIN` (`apps/api/prisma/schema.prisma:29-35`).
 
-Records are read for a year via `getRecords()`, which joins each record's `standard` (and its `principle`) and applies the plan scope to the joined standard (`apps/api/src/services/compliance.service.ts:121-139`). A single record is read by composite key in `getRecord()` (`apps/api/src/services/compliance.service.ts:141-157`). Writes go through `upsertRecord()`, an upsert keyed on `organisationId_standardId_reportingYear` that defaults missing status to `NOT_STARTED` on create and stamps `updatedById` (`apps/api/src/services/compliance.service.ts:159-201`).
+Records are read for a year via `getRecords()`, which joins each record's
+standard and principle and applies the organisation's plan scope. A missing
+single record is represented with revision `0`; persisted records begin at
+revision `1`. Every write supplies `expectedRevision`. The service takes a
+serializable transaction and locks the organisation row, then creates at
+revision 1 or uses a compare-and-swap update. A stale different write returns
+`409 COMPLIANCE_RECORD_REVISION_CONFLICT`; a stale request whose complete
+result already matches the database is an idempotent success. Every real change
+appends a before/after audit event.
+
+The web editor has one serialized queue per standard. Edits made during an
+in-flight request replace the queued full draft and run only after the earlier
+response advances the revision. An older response therefore cannot clear a
+newer edit or display `Saved` for data that was not durably acknowledged.
 
 ### Reporting-year scoping and the summary score
 
@@ -111,11 +130,30 @@ The annual board approval is a single `ComplianceSignoff` per organisation per y
 | `approvedByRole` | `String?` | Role of approver (e.g. Chair). |
 | `approvalNotes` | `String?` | Notes. |
 | `approvedAt` | `DateTime?` | Timestamp set when status is `APPROVED`. |
+| `revision` | `Int` | Signoff optimistic-concurrency version. |
+| `approvalSequence` | `Int` | Monotonic immutable approval version. |
+| `currentApprovalSnapshotId` | `String?` | Snapshot that alone makes `APPROVED` current. |
+| invalidation fields | nullable | Time, reason and actor when approval stopped applying. |
 | `updatedById` | `String?` → `User` | Last editor (relation `"SignoffUpdatedBy"`). |
 
 (Source: `apps/api/prisma/schema.prisma:243-264`.)
 
-`getSignoff()` returns a synthetic default object with `status: DRAFT` and null fields when no row exists yet, so the client always has a shape to render (`apps/api/src/services/compliance.service.ts`). `getApprovalReadiness()` evaluates the in-scope standards for a reporting year and returns missing standard records, missing action/evidence fields, missing comply-or-explain explanations, missing conditional obligation profile facts, conditional review prompts, matrix review metadata and the matrix last-checked date. `upsertSignoff()` checks that readiness only when `data.status === 'APPROVED'`: incomplete readiness raises `400 COMPLIANCE_APPROVAL_INCOMPLETE` before writing; otherwise it writes the row and stamps `approvedAt` for `APPROVED`, clearing it for non-approved states.
+`getSignoff()` returns a synthetic revision-0 `DRAFT` when no row exists and
+also exposes the current and latest retained snapshot summaries. Approval is a
+single serializable transaction: it locks the organisation row, checks the
+client's signoff revision, rebuilds current readiness/evidence, compares the
+reviewed `expectedEvidenceHash`, inserts an immutable canonical snapshot,
+advances the approval sequence, points the signoff at that snapshot, and writes
+an audit event. Incomplete readiness returns
+`COMPLIANCE_APPROVAL_INCOMPLETE`; stale signoff and evidence preconditions
+return explicit 409 conflicts.
+
+Changing an approved record in the same locked transaction clears the current
+snapshot pointer, returns the signoff to `DRAFT`, records
+`RECORD_CHANGED`, and appends `APPROVAL_INVALIDATED`. The prior snapshot is not
+changed or deleted. Reapproval creates the next sequence. Legacy approvals from
+before this contract are marked `LEGACY_APPROVAL_UNBOUND` and require explicit
+review; no migration-time evidence is invented.
 
 `ComplianceSignoffStatus` has three states (`apps/api/prisma/schema.prisma:37-41`):
 
@@ -125,16 +163,17 @@ stateDiagram-v2
   DRAFT --> BOARD_REVIEW
   BOARD_REVIEW --> APPROVED
   BOARD_REVIEW --> DRAFT
-  APPROVED --> BOARD_REVIEW
-  APPROVED --> [*]
+  APPROVED --> DRAFT: record change or manual invalidation
+  APPROVED --> APPROVED: explicit reapproval creates next snapshot
   note right of APPROVED
-    upsertSignoff stamps approvedAt
-    when status becomes APPROVED;
-    clears it otherwise
+    Current only while linked to
+    the matching immutable snapshot
   end note
 ```
 
-> Note: the transition arrows above reflect the meaning of the three enum states. The service does not enforce a specific transition order. `DRAFT` and `BOARD_REVIEW` remain flexible; `APPROVED` is the only state with the approval-readiness gate and `approvedAt` derivation.
+`DRAFT` and `BOARD_REVIEW` remain flexible working states. `APPROVED` is valid
+only with a current snapshot and timestamp. A later record mutation cannot
+silently leave the old approval attached to current evidence.
 
 ### Approval-readiness enforcement
 
@@ -144,6 +183,7 @@ Approval readiness is a service-level check, not a schema-only validation rule, 
 {
   "data": {
     "ready": false,
+    "evidenceHash": "<lowercase SHA-256 of canonical evidence>",
     "missingRecords": [],
     "missingEvidence": [],
     "missingExplanations": [],
@@ -155,9 +195,26 @@ Approval readiness is a service-level check, not a schema-only validation rule, 
 }
 ```
 
-`missingRecords` lists in-scope standards with no captured Compliance Record status. `missingEvidence` lists `COMPLIANT` and `WORKING_TOWARDS` records missing action/evidence fields. `missingExplanations` lists `NOT_APPLICABLE` and `EXPLAIN` records with blank `explanationIfNA`. `profileIssues` currently flags a missing conditional obligation profile before board approval. `conditionalReviewItems` are generated from selected organisation profile facts such as paid staff, fundraising, safeguarding, personal-data processing and data processors. `matrixReviewItems` and `matrixLastChecked` carry source metadata, commencement status, board-approval prompts and professional-review flags from the Irish compliance matrix.
+`missingRecords` lists in-scope standards with no captured Compliance Record status. `missingEvidence` lists `COMPLIANT` and `WORKING_TOWARDS` records missing action/evidence fields. `missingExplanations` lists `NOT_APPLICABLE` and `EXPLAIN` records with blank `explanationIfNA`. `profileIssues` currently flags a missing conditional obligation profile before board approval. `conditionalReviewItems` are generated from selected organisation profile facts such as paid staff, fundraising, safeguarding, personal-data processing and data processors. `matrixReviewItems` and `matrixLastChecked` carry source metadata, commencement status, board-approval prompts and professional-review flags from the Irish compliance matrix. `evidenceHash` binds the exact deterministic organisation scope, standards, record revisions/provenance, readiness result and matrix metadata reviewed by the client.
 
-Draft editing remains deliberately flexible: admins can autosave records without complete evidence and can move the annual signoff to `BOARD_REVIEW`. The hard gate is limited to `APPROVED`, where `upsertSignoff()` raises `COMPLIANCE_APPROVAL_INCOMPLETE` before the database upsert if readiness is incomplete. Conditional review prompts and matrix review metadata are professional-review prompts, not legal certification and not automatic blockers unless they also create a missing profile/record/evidence/explanation issue.
+Draft editing remains deliberately flexible: admins can autosave records without complete evidence and can move the annual signoff to `BOARD_REVIEW`. The hard gate is limited to `APPROVED`, where the transaction requires both complete readiness and the exact evidence hash the user reviewed. Conditional review prompts and matrix review metadata are professional-review prompts, not legal certification and not automatic blockers unless they also create a missing profile/record/evidence/explanation issue. Snapshot hashes are integrity checks, not signatures or compliance certificates.
+
+### Immutable and working exports
+
+`GET /api/v1/export/compliance-report?year=YYYY&version=current` renders a
+working report from live data. It compares the live evidence hash with the
+linked snapshot before displaying any persisted approval; a mismatch is shown
+as reapproval required. Complete-plan governance registers in this working
+report are explicitly labelled generated-time and outside the approved
+Compliance Record evidence.
+
+`version=approved` selects the latest retained snapshot, while `snapshotId=`
+selects a specific version using one tenant-and-year-scoped lookup. Approved
+rendering verifies the stored payload, tenant, reporting year, sequence,
+approval timestamp, evidence hash and full snapshot hash, then renders only
+that payload. It performs no live organisation, record, register, subscription
+or matrix read. Integrity failure is a fail-closed server error and triggers the
+normal sanitized operational-alert path.
 
 ### Linking standards to evidence documents
 
@@ -172,12 +229,12 @@ All compliance routes register `authGuard` then `subscriptionGuard` as `onReques
 | `GET /principles` | `getPrinciplesForOrganisation` | auth + subscription |
 | `GET /principles/:principleId` | `getPrincipleForOrganisation` (404 if missing) | auth + subscription |
 | `GET /records?year=` | `getRecords` | auth + subscription |
-| `GET /records/:standardId?year=` | `getRecord` (falls back to `{ status: 'NOT_STARTED' }`) | auth + subscription |
-| `PUT /records/:standardId` | `upsertRecord` (auto-save) | `requireAdmin` |
+| `GET /records/:standardId?year=` | `getRecord` (revision-0 synthetic record when missing) | auth + subscription |
+| `PUT /records/:standardId` | revision-checked serialized autosave | `requireAdmin` |
 | `GET /summary?year=` | `getSummary` | auth + subscription |
 | `GET /signoff?year=` | `getSignoff` | auth + subscription |
 | `GET /approval-readiness?year=` | `getApprovalReadiness` | auth + subscription |
-| `PUT /signoff` | `upsertSignoff` | `requireAdmin` |
+| `PUT /signoff` | revision/evidence-hash checked approval transaction | `requireAdmin` |
 
 (Source: `apps/api/src/routes/compliance/index.ts:24-145`.)
 

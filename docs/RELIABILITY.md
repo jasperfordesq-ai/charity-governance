@@ -15,13 +15,13 @@ Generated: 2026-07-10 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 268 | 0 | 0 | 15 | 283 |
-| Web | 97 | 0 | 0 | 7 | 104 |
-| **Total** | **365** | **0** | **0** | **22** | **387** |
+| API | 273 | 0 | 0 | 14 | 287 |
+| Web | 101 | 0 | 0 | 7 | 108 |
+| **Total** | **374** | **0** | **0** | **21** | **395** |
 
-**API suite:** 454 passing, 0 failing. **Web suite:** 248 passing, 0 failing. **E2E:** 22 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 477 passing, 0 failing. **Web suite:** 272 passing, 0 failing. **E2E:** 22 Playwright titles linked (executed by the CI E2E gate).
 
-**Linkage:** 365/365 covered guarantees verified against a passing/linked test.
+**Linkage:** 374/374 covered guarantees verified against a passing/linked test.
 
 **Overall: GREEN**
 
@@ -51,7 +51,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (283 guarantees)
+## API surface - the matrix (287 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -102,7 +102,7 @@ _10 guarantees - covered 10_
 
 ### compliance - `/api/v1/compliance`
 
-_18 guarantees - covered 16  n/a 2_
+_20 guarantees - covered 19  n/a 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -111,7 +111,7 @@ _18 guarantees - covered 16  n/a 2_
 | Authorization boundary | PUT /signoff with a MEMBER token returns 403 {code:'FORBIDDEN'} and the complianceSignoff.upsert mock is NOT called. | covered | `a MEMBER cannot update the board sign-off (requireAdmin)`<br/><sub>compliance-reliability.test.ts</sub> |
 | Authorization boundary | An ADMIN (and OWNER) token is accepted by requireAdmin on both PUT /records/:standardId and PUT /signoff (reaches the service and returns 2xx). | covered | `an ADMIN may upsert a compliance record and the board sign-off`<br/><sub>compliance-reliability.test.ts</sub> |
 | Graceful degradation | Not applicable: the compliance route group calls no external provider (Stripe/Supabase/Resend) — it only reads/writes Prisma — so there is no provider-unconfigured 503 path to prove. | n/a | _ComplianceService and the route handlers depend solely on app.prisma; no Stripe/Supabase/Resend client is constructed or invoked anywhere in routes/compliance/index.ts or services/compliance.service.t_ |
-| At-least-once / idempotency | Not applicable: compliance writes are upserts keyed on (organisationId, standardId, reportingYear) for records and (organisationId, reportingYear) for sign-off, which are naturally idempotent; there are no webhooks, reminder dedupe logs, or reconciliation retries in this route group. | n/a | _The idempotency concern targets StripeWebhookEvent / DeadlineReminderLog / document-deletion reconciliation, none of which exist in the compliance area. The upsert-by-composite-key design means repeat_ |
+| At-least-once / idempotency | Compliance record writes use a serializable organisation lock plus revision compare-and-swap: two different clients cannot both commit from one revision, while an exact stale retry/no-op returns the durable row without another revision or audit event. | covered | `record revisions reject stale changes while allowing an exact ambiguous retry`<br/><sub>compliance-concurrency.test.ts</sub> |
 | Input validation | PUT /records/:standardId rejects a malformed body (e.g. reportingYear out of [2018,2100], a non-enum status, or an over-5000-char text field) with 400 {code:'VALIDATION_ERROR'} and does NOT call complianceRecord.upsert. | covered | `PUT /records rejects an invalid body before writing`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | PUT /signoff enforces the superRefine rule: status 'APPROVED' without boardMeetingDate/minuteReference/approvedByName returns 400 {code:'VALIDATION_ERROR'} and does NOT call complianceSignoff.upsert; an invalid status enum or a non-ISO boardMeetingDate is also 400. | covered | `PUT /signoff requires approval evidence when status is APPROVED`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | GET endpoints that require ?year reject a missing or non-numeric/out-of-range year with 400 {code:'VALIDATION_ERROR'} (complianceQuerySchema), not a 500. | covered | `compliance year-scoped reads reject a missing or invalid year`<br/><sub>compliance-reliability.test.ts</sub> |
@@ -121,6 +121,8 @@ _18 guarantees - covered 16  n/a 2_
 | Subscription / plan gating | An ESSENTIALS/SIMPLE org's compliance reads (records, summary, principles) are restricted to isCore standards; a COMPLETE/COMPLEX org receives additional standards. | covered | `getRecords for an Essentials/Simple org restricts to core standards`<br/><sub>compliance-service.test.ts</sub> |
 | Subscription / plan gating | upsertRecord for an out-of-plan (non-core) standard on an ESSENTIALS org throws 403 {code:'COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN'} and does NOT write the record; an unknown standard throws 404 STANDARD_NOT_FOUND; a core standard or a COMPLETE/COMPLEX additional standard is allowed. | covered | `upsertRecord blocks a non-core standard for an Essentials org (no billing bypass)`<br/><sub>compliance-service.test.ts</sub> |
 | Subscription / plan gating | getRecord for a non-core standard on an ESSENTIALS org throws 403 COMPLIANCE_STANDARD_NOT_INCLUDED_IN_PLAN (read path is gated identically to the write path via ensureStandardIncludedInPlan). | covered | `getRecord refuses an out-of-plan standard for an Essentials org`<br/><sub>compliance-reliability.test.ts</sub> |
+| State integrity / no data loss | The migration truthfully baselines existing records/signoffs, invalidates legacy approvals without inventing snapshots, and database triggers reject UPDATE or DELETE on approval snapshots and compliance audit events. | covered | `compliance snapshots and audit events are database-enforced append-only tables`<br/><sub>compliance-migration.test.ts</sub> |
+| State integrity / no data loss | Board approval is created in the same serializable transaction as a canonical evidence-hash check and immutable snapshot; a later record mutation invalidates the current pointer, preserves the old snapshot, and reapproval advances the sequence. | covered | `approval is hash-bound, mutation invalidates it, and reapproval retains both immutable snapshots`<br/><sub>compliance-concurrency.test.ts</sub> |
 | Tenant isolation | getRecord/getRecords/getSummary never return another org's compliance records: each prisma query embeds organisationId from request.user (composite key for getRecord, where.organisationId for getRecords/getSummary). | covered | `compliance reads are scoped to the caller organisation`<br/><sub>compliance-reliability.test.ts</sub> |
 | Tenant isolation | upsertSignoff and getSignoff operate only on the caller org's sign-off: the complianceSignoff composite key organisationId_reportingYear is built from request.user.organisationId, so org B can never read or overwrite org A's board approval. | covered | `upsertSignoff scopes the composite key to the caller organisation`<br/><sub>compliance-reliability.test.ts</sub> |
 | Tenant isolation | upsertRecord writes only to the requesting org: the complianceRecord.upsert where-key and create payload carry organisationId from request.user, so a record for standard s1 in org A can never be created/overwritten under org B. | covered | `upsertRecord scopes the composite key and create payload to the caller organisation`<br/><sub>compliance-reliability.test.ts</sub> |
@@ -241,18 +243,20 @@ _27 guarantees - covered 25  n/a 2_
 
 ### export - `/api/v1/export`
 
-_10 guarantees - covered 9  n/a 1_
+_12 guarantees - covered 11  n/a 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Authorization boundary | A request with no/invalid/expired token, a revoked session, or a missing user is rejected by authGuard with 401 {code:'UNAUTHORIZED'} before the export handler runs; an authenticated but email-unverified user is rejected with 403 {code:'EMAIL_NOT_VERIFIED'}. | covered | `export rejects missing token, revoked session, and unverified email`<br/><sub>export-reliability.test.ts</sub> |
 | Graceful degradation | The export does not depend on Stripe/Supabase/Resend at request time (no checkout, storage, or email call), so it stays available when those externals are down; conversely if the org row is missing, organisation.findUniqueOrThrow surfaces a clean error via handleError (404/500) rather than leaking a stack. | n/a | _The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The only error path is Prisma findUniqueOrT_ |
+| Graceful degradation | A changed snapshot payload, hash, tenant, year, sequence, format, or approval timestamp fails closed without rendering stored report content; a working report never applies a stale approval to changed live evidence. | covered | `approved export fails closed when retained evidence or metadata does not match its hashes`<br/><sub>export-snapshot.test.ts</sub> |
 | Input validation | GET /compliance-record with a malformed, missing, out-of-range, or oversized year (e.g. year=abc, year omitted, year=1999, year=99999) returns 400 {code:'VALIDATION_ERROR'} (never a 500 or stack leak) and the report HTML / organisation lookup is never reached for the invalid value. | covered | `export rejects malformed year with 400 VALIDATION_ERROR`<br/><sub>export-reliability.test.ts</sub> |
 | Input validation | User-supplied compliance/register text (e.g. standard titles, actionTaken, evidence, explanationIfNA, trusteeName, matter, mitigation, complaint summary, controls) is HTML-escaped via escapeHtml/simpleTable before being embedded in the exported report, so a stored '<script>' or '"' in a record cannot break out of its cell or inject markup into the generated HTML. | covered | `export HTML-escapes stored record and register values`<br/><sub>export-reliability.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is ESSENTIALS (or anything other than COMPLETE) never invokes loadGovernanceRegisters: none of conflictRecord/riskRecord/complaintRecord/fundraisingRecord/annualReportReadiness/financialControlReview findMany/findUnique are called, and the response body contains no 'Governance registers' heading nor any register data. | covered | `Essentials exports do not include Complete-only governance registers`<br/><sub>export-csp.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is COMPLETE DOES read and embed the governance registers: loadGovernanceRegisters runs and the response body includes the 'Governance registers' heading plus the org's conflict/risk/complaint/fundraising rows. | covered | `Complete plan exports include governance registers`<br/><sub>export-reliability.test.ts</sub> |
 | Subscription / plan gating | An org with no active subscription cannot reach the export at all: subscriptionGuard returns 403 {code:'NO_SUBSCRIPTION'} before the handler runs, and organisation.findUniqueOrThrow / the compliance reads are never executed. | covered | `export rejects organisation with no subscription`<br/><sub>export-reliability.test.ts</sub> |
 | Subscription / plan gating | An org whose trial has expired (status TRIALING, trialEndsAt in the past) is blocked from the export with 403 {code:'TRIAL_EXPIRED'} and the report HTML is never built. | covered | `export rejects organisation with expired trial`<br/><sub>export-reliability.test.ts</sub> |
+| State integrity / no data loss | Approved export selects a retained snapshot with organisation and reporting year in the same query, verifies row metadata plus evidence/full-payload SHA-256 hashes, and renders only escaped snapshot content without live tenant or matrix reads. | covered | `approved export selects the latest retained tenant snapshot and renders only verified snapshot evidence`<br/><sub>export-snapshot.test.ts</sub> |
 | Tenant isolation | The report is always built for request.user.organisationId only: organisation.findUniqueOrThrow is called with where{id: request.user.organisationId} and the compliance principle/record/signoff/subscription reads are scoped to that same id, so a caller authenticated as org A can never render org B's organisation header, RCN, principles, records or signoff. | covered | `export scopes the organisation and compliance reads to the token organisation`<br/><sub>export-reliability.test.ts</sub> |
 | Tenant isolation | On the COMPLETE plan, every governance-register read in loadGovernanceRegisters is scoped to request.user.organisationId: conflictRecord/riskRecord/complaintRecord/fundraisingRecord findMany are called with where{organisationId}, and annualReportReadiness/financialControlReview findUnique with where{organisationId_reportingYear:{organisationId, reportingYear}}, so a COMPLETE org A export can never embed org B's registers. | covered | `Complete plan governance registers are scoped to the token organisation`<br/><sub>export-reliability.test.ts</sub> |
 
@@ -450,7 +454,7 @@ _9 guarantees - covered 9_
 
 ---
 
-## Web surface - the matrix (104 guarantees)
+## Web surface - the matrix (108 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -544,13 +548,15 @@ _4 guarantees - covered 4_
 
 ### compliance - `/compliance`, `/compliance/[principleId]`
 
-_4 guarantees - covered 3  n/a 1_
+_6 guarantees - covered 5  n/a 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The compliance overview and principle pages are axe-clean in both light and dark themes. | covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
-| Graceful degradation | The auto-save per-standard editor shows an aria-live Saving/Saved/Save-failed indicator and never loses the field on a failed save. | covered | `the per-standard compliance editor announces its save state (Saving / Saved / Save failed)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Graceful degradation | Each compliance standard has one serialized autosave queue: edits made during an in-flight request remain queued, use the returned revision, and Saved appears only after the newest local generation is durably acknowledged. | covered | `serializes one standard and sends a newer edit after the active revision is acknowledged`<br/><sub>lib/compliance-autosave-queue.test.ts</sub> |
 | Input validation | The reporting-year filter only ever selects from a fixed list of valid years (server-validated 2018–2100); no free-form year reaches the API. | n/a | _Year is chosen from a bounded Select (last 5 years); there is no free-text input to validate, and the server enforces the 2018–2100 range (API ledger)._ |
+| State integrity / no data loss | Board approval is presented as current only from persisted signoff state when its retained snapshot evidence hash matches freshly loaded readiness; a mismatch or invalidation is labelled reapproval required. | covered | `reports approval only when persisted current snapshot hash matches fresh readiness`<br/><sub>lib/compliance-approval-ui.test.ts</sub> |
+| State integrity / no data loss | A 409 revision conflict pauses network writes and preserves the newest local draft instead of retrying a blind overwrite; explicit retryable failures also retain the latest draft. | covered | `revision conflict pauses writes and preserves the newest local draft`<br/><sub>lib/compliance-autosave-queue.test.ts</sub> |
 | Tenant isolation | The [principleId] route param is a global governance-reference id, never a tenant id; an unknown/foreign principleId renders a clean "Principle not found." screen, never another org's content. | covered | `an unknown principle id renders a clean not-found, never leaked content` <sup>e2e</sup><br/><sub>tests/tenant-isolation.spec.ts</sub> |
 
 ### board - `/board`
@@ -635,13 +641,15 @@ _8 guarantees - covered 7  n/a 1_
 
 ### export - `/export`
 
-_3 guarantees - covered 3_
+_5 guarantees - covered 5_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Auth & session integrity | Recording a standard then completing board sign-off works end to end. | covered | `record a standard then block premature approval and save board-review sign-off` <sup>e2e</sup><br/><sub>tests/compliance.spec.ts</sub> |
+| Auth & session integrity | Report generation uses the authenticated API client so an expired access token can refresh before an opener-isolated popup receives the report blob; blocked, closed and failed popups are handled without leaking an opener or object URL. | covered | `opens the popup synchronously, severs its opener, then navigates to the authenticated blob`<br/><sub>lib/authenticated-report-open.test.ts</sub> |
 | State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
-| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; the report opens in a new tab whose CSP is enforced server-side. | covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+| State integrity / no data loss | A board sign-off response owns only the exact local draft generation it submitted, so an older response cannot replace newer edits or report them as Saved. | covered | `a save response only owns the exact draft generation it submitted`<br/><sub>lib/compliance-approval-ui.test.ts</sub> |
+| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; authenticated report blobs preserve the no-script CSP inside the rendered document as well as on the HTTP response. | covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### regulator - `/regulator`
 

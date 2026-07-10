@@ -2769,7 +2769,7 @@ test('export board sign-off uses the shared save-status primitive', () => {
   const approvalPanel = readRepoFile('apps/web/src/app/(dashboard)/export/export-board-approval-panel.tsx');
 
   assert.match(approvalPanel, /SaveStatusIndicator/);
-  assert.match(approvalPanel, /const signoffSaveStatus: 'idle' \| 'saving' \| 'saved' \| 'error'/);
+  assert.match(approvalPanel, /signoffSaveStatus: 'idle' \| 'dirty' \| 'saving' \| 'saved' \| 'error'/);
   assert.match(approvalPanel, /<SaveStatusIndicator\s+status=\{signoffSaveStatus\}/);
 });
 
@@ -3623,16 +3623,23 @@ test('web proxy transitions legacy query auth tokens to URL fragments before ren
   assert.match(proxy, /redirectSensitiveQueryToken\(request, csp\)/);
 });
 
-test('web export opens the API-rendered report directly with opener isolation', () => {
+test('web export refreshes authentication before opening an isolated CSP-protected report blob', () => {
   const exportPage = [
     readRepoFile('apps/web/src/app/(dashboard)/export/page.tsx'),
     readRepoFile('apps/web/src/app/(dashboard)/export/use-export-workflow.ts'),
+    readRepoFile('apps/web/src/lib/authenticated-report-open.ts'),
   ].join('\n');
+  const reportRenderer = readRepoFile('apps/api/src/routes/export/compliance-report-html.ts');
 
-  assert.match(exportPage, /api\.getUri\(\{\s*url:\s*`\/export\/compliance-report\?year=\$\{year\}`\s*\}\)/);
-  assert.match(exportPage, /window\.open\([^)]*'noopener,noreferrer'[^)]*\)/);
+  assert.match(exportPage, /api\.get\('\/export\/compliance-report',[\s\S]*responseType:\s*'blob'/);
+  assert.match(exportPage, /openPopup:\s*\(\)\s*=>\s*window\.open\('',\s*'_blank'\)/);
+  assert.match(exportPage, /popup\.opener\s*=\s*null/);
+  assert.match(exportPage, /URL\.createObjectURL/);
+  assert.match(exportPage, /URL\.revokeObjectURL/);
+  assert.match(reportRenderer, /http-equiv="Content-Security-Policy"/);
+  assert.match(reportRenderer, /default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'/);
+  assert.doesNotMatch(exportPage, /api\.getUri/);
   assert.doesNotMatch(exportPage, /new Blob\(/);
-  assert.doesNotMatch(exportPage, /URL\.createObjectURL/);
 });
 
 test('registers page handles Complete-plan denial as an upgrade state', () => {

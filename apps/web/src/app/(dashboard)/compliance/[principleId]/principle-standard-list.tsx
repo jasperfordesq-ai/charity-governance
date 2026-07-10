@@ -8,13 +8,15 @@ export type { SaveState, StandardFormState } from './standard-editor-card';
 export function PrincipleStandardList({
   flushSave,
   formState,
+  onResolveConflict,
   onRetrySave,
   saveState,
   standards,
   updateField,
 }: {
-  flushSave: (standardId: string, options?: { silent?: boolean }) => Promise<void>;
+  flushSave: (standardId: string) => Promise<unknown>;
   formState: Record<string, StandardFormState>;
+  onResolveConflict: (standardId: string) => Promise<string | null>;
   onRetrySave: (standardId: string, form: StandardFormState) => void;
   saveState: SaveState;
   standards: GovernancePrincipleResponse['standards'];
@@ -40,6 +42,7 @@ export function PrincipleStandardList({
               updateField={updateField}
               flushSave={flushSave}
               onRetrySave={onRetrySave}
+              onResolveConflict={onResolveConflict}
             />
           );
         })}

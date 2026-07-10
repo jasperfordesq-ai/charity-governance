@@ -12,6 +12,7 @@ import {
 } from './export-approval-readiness';
 import { ExportBoardApprovalPanel } from './export-board-approval-panel';
 import { ExportControlsPanel } from './export-controls-panel';
+import { ExportNavigationConfirmModal } from './export-navigation-confirm-modal';
 import { ExportReportPreview } from './export-report-preview';
 import { useExportWorkflow } from './use-export-workflow';
 
@@ -24,23 +25,38 @@ const signoffStatusLabels = {
 export default function ExportPage() {
   useDocumentTitle('Export Report');
   const {
+    acknowledgeSignoffReview,
     approvalReadiness,
+    approvalPresentation,
+    approvalSaveBlocked,
+    approvalUnavailable,
     conditionalReviewItems,
-    exporting,
+    discardSignoffChanges,
+    displayedSignoffSaveState,
+    exportingApproved,
+    exportingCurrent,
     fetchSummary,
-    handleExport,
+    handleExportApproved,
+    handleExportCurrent,
     handleSaveSignoff,
+    latestApproval,
     loading,
     loadError,
+    navigationConfirmOpen,
+    discardSignoffAndContinueNavigation,
     readinessBlockerCodes,
     readinessBlockerCount,
+    requestYearChange,
+    retrySignoffConflictRefresh,
     savingSignoff,
     setSignoffForm,
-    setYear,
     signoff,
-    signoffChipColor,
+    signoffConflictRefreshFailed,
+    signoffDirty,
     signoffError,
     signoffForm,
+    signoffReviewRequired,
+    stayOnExportPage,
     summary,
     year,
     yearOptions,
@@ -67,49 +83,74 @@ export default function ExportPage() {
   }
 
   return (
-    <AppPage
-      eyebrow={`Reporting year ${year}`}
-      title="Export Compliance Report"
-      description="Generate a review-ready, evidence-led report for trustee review and filing records. CharityPilot supports workflow preparation; it is not legal advice."
-    >
-      <ExportControlsPanel
-        exporting={exporting}
-        onExport={handleExport}
-        onYearChange={setYear}
-        readinessBlockerCodes={readinessBlockerCodes}
-        readinessBlockerCount={readinessBlockerCount}
-        year={year}
-        yearOptions={yearOptions}
+    <>
+      <AppPage
+        eyebrow={`Reporting year ${year}`}
+        title="Export Compliance Report"
+        description="Generate a review-ready, evidence-led report for trustee review and filing records. CharityPilot supports workflow preparation; it is not legal advice."
+      >
+        <ExportControlsPanel
+          approvalCurrent={approvalPresentation.approvalCurrent}
+          approvalUnavailable={approvalUnavailable}
+          exportingApproved={exportingApproved}
+          exportingCurrent={exportingCurrent}
+          latestApproval={latestApproval}
+          onExportApproved={handleExportApproved}
+          onExportCurrent={handleExportCurrent}
+          onYearChange={requestYearChange}
+          readinessBlockerCodes={readinessBlockerCodes}
+          readinessBlockerCount={readinessBlockerCount}
+          signoffDirty={signoffDirty}
+          year={year}
+          yearOptions={yearOptions}
+        />
+
+        <ApprovalReadinessIssues readiness={approvalReadiness} />
+
+        <ConditionalReviewPrompts items={conditionalReviewItems} />
+
+        <MatrixSourceSummary readiness={approvalReadiness} />
+
+        <ExportBoardApprovalPanel
+          approvalCurrent={approvalPresentation.approvalCurrent}
+          approvalLabel={approvalPresentation.label}
+          approvalSaveBlocked={approvalSaveBlocked}
+          approvalTone={approvalPresentation.tone}
+          approvalUnavailable={approvalUnavailable}
+          onAcknowledgeReview={acknowledgeSignoffReview}
+          onDiscardSignoff={discardSignoffChanges}
+          onRetryConflictRefresh={retrySignoffConflictRefresh}
+          onSaveSignoff={handleSaveSignoff}
+          refreshingConflict={loading}
+          savingSignoff={savingSignoff}
+          setSignoffForm={setSignoffForm}
+          signoff={signoff}
+          signoffConflictRefreshFailed={signoffConflictRefreshFailed}
+          signoffDirty={signoffDirty}
+          signoffError={signoffError}
+          signoffForm={signoffForm}
+          signoffReviewRequired={signoffReviewRequired}
+          signoffSaveStatus={displayedSignoffSaveState}
+          signoffStatusLabels={signoffStatusLabels}
+        />
+
+        <ExportReportPreview
+          loading={loading}
+          summary={summary}
+          signoffLabel={approvalPresentation.label}
+          signoffChipColor={approvalPresentation.tone}
+        />
+
+        <ReviewWarningState
+          title="Before exporting"
+          description="Make sure all compliance records are up to date, the organisation profile is complete, and trustees have reviewed the annual position. Internal notes are excluded from the exported report. Use your browser's Print to PDF option to save a copy."
+        />
+      </AppPage>
+      <ExportNavigationConfirmModal
+        isOpen={navigationConfirmOpen}
+        onKeepEditing={stayOnExportPage}
+        onDiscardAndLeave={discardSignoffAndContinueNavigation}
       />
-
-      <ApprovalReadinessIssues readiness={approvalReadiness} />
-
-      <ConditionalReviewPrompts items={conditionalReviewItems} />
-
-      <MatrixSourceSummary readiness={approvalReadiness} />
-
-      <ExportBoardApprovalPanel
-        onSaveSignoff={handleSaveSignoff}
-        savingSignoff={savingSignoff}
-        setSignoffForm={setSignoffForm}
-        signoff={signoff}
-        signoffChipColor={signoffChipColor}
-        signoffError={signoffError}
-        signoffForm={signoffForm}
-        signoffStatusLabels={signoffStatusLabels}
-      />
-
-      <ExportReportPreview
-        loading={loading}
-        summary={summary}
-        signoffLabel={signoffStatusLabels[signoffForm.status]}
-        signoffChipColor={signoffChipColor}
-      />
-
-      <ReviewWarningState
-        title="Before exporting"
-        description="Make sure all compliance records are up to date, the organisation profile is complete, and trustees have reviewed the annual position. Internal notes are excluded from the exported report. Use your browser's Print to PDF option to save a copy."
-      />
-    </AppPage>
+    </>
   );
 }

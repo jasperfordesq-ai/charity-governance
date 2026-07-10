@@ -32,6 +32,8 @@ test('risk register validation enforces 1-5 likelihood and impact scores', () =>
 test('board approval sign-off requires meeting date, minute reference, and approver', () => {
   const result = upsertComplianceSignoffSchema.safeParse({
     reportingYear: 2026,
+    expectedRevision: 0,
+    expectedEvidenceHash: 'a'.repeat(64),
     status: 'APPROVED',
   });
 
@@ -287,12 +289,21 @@ test('Essentials organisations cannot write compliance records for additional st
       },
     },
   };
-  const service = new ComplianceService(prisma as never);
+  const transactionalPrisma = {
+    ...prisma,
+    $queryRaw: async () => [{ id: 'org-1' }],
+  };
+  const service = new ComplianceService({
+    ...prisma,
+    $transaction: async (operation: (tx: typeof transactionalPrisma) => Promise<unknown>) =>
+      operation(transactionalPrisma),
+  } as never);
 
   await assert.rejects(
     () =>
       service.upsertRecord('org-1', 'standard-additional', 'user-1', {
         reportingYear: 2026,
+        expectedRevision: 0,
         status: ComplianceStatus.COMPLIANT,
         actionTaken: 'Additional standard evidence',
       }),

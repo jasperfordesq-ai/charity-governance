@@ -73,7 +73,7 @@ export function ExportReportPreview({
   return (
     <AppSection
       title="Report Preview"
-      description="The exported report will include the following sections:"
+      description="The current working report will include the following sections. Retained approved snapshots preserve the exact evidence captured when approval was recorded."
     >
       {loading ? (
         <LoadingState
@@ -85,7 +85,7 @@ export function ExportReportPreview({
           <PreviewCard
             icon={<Building2 className={previewIconClassName} strokeWidth={1.5} />}
             title="Organisation Details"
-            description="Name, RCN, legal form, complexity, charitable purpose, contact details."
+            description="Organisation name, registered charity number, and reporting year."
           />
 
           {summary ? (
@@ -162,12 +162,6 @@ export function ExportReportPreview({
             description="Each standard with its compliance status, action taken, and evidence. Internal notes are excluded from the export."
           />
 
-          <PreviewCard
-            icon={<UsersRound className={previewIconClassName} strokeWidth={1.5} />}
-            title="Board Members Register"
-            description="Active board members with roles, appointment dates, conduct signed status, and induction status."
-          />
-
           <Card className={statusPanelClassName(signoffTone(signoffChipColor), 'p-5 shadow-sm')}>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -188,10 +182,11 @@ export function ExportReportPreview({
           </Card>
 
           <PreviewCard
-            icon={<FileText className={previewIconClassName} strokeWidth={1.5} />}
-            title="Supporting Documents"
-            description="List of uploaded documents with their categories and linked standards."
+            icon={<UsersRound className={previewIconClassName} strokeWidth={1.5} />}
+            title="Approval Attribution"
+            description="When a sign-off is recorded, the report includes the approver name and role entered for that board decision."
           />
+
         </div>
       )}
     </AppSection>

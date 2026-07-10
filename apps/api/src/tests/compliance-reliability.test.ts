@@ -63,13 +63,62 @@ async function buildComplianceApp(
   subscription: unknown = activeSubscription(),
 ) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', {
+  let record: Record<string, unknown> | null = null;
+  let signoff: Record<string, unknown> | null = null;
+  const base: Record<string, any> = {
     ...authModels(role, subscription),
-    // Default organisation scope lookup (used by the service's getOrganisationComplianceScope);
-    // overridable so subscription-guard tests can prove it is never reached.
-    organisation: { findUniqueOrThrow: async () => ({ complexity: 'COMPLEX', conditionalObligationProfile: falseProfile() }) },
-    ...prismaOverrides,
-  } as never);
+    $queryRaw: async () => [{ id: 'org-1' }],
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org-1', name: 'Example Charity', rcnNumber: 'RCN-1',
+        complexity: 'COMPLEX', conditionalObligationProfile: falseProfile(),
+      }),
+    },
+    governanceStandard: {
+      findUnique: async () => ({
+        id: 's1', principleId: 'p1', code: '1.1', title: 'Standard', isCore: true,
+        isAdditional: false, sortOrder: 1,
+        principle: { id: 'p1', number: 1, title: 'Principle', description: '', sortOrder: 1 },
+      }),
+      findMany: async () => [],
+    },
+    complianceRecord: {
+      findMany: async () => [],
+      findUnique: async () => record,
+      findUniqueOrThrow: async () => record,
+      create: async (args: { data: Record<string, unknown> }) => {
+        record = {
+          id: 'rec_1', revision: 1, createdAt: new Date(), updatedAt: new Date(),
+          standard: { id: 's1' }, updatedBy: { id: 'u1', name: 'Owner' }, ...args.data,
+        };
+        return record;
+      },
+      updateMany: async () => ({ count: 1 }),
+    },
+    complianceSignoff: {
+      findUnique: async () => signoff,
+      create: async (args: { data: Record<string, unknown> }) => {
+        signoff = {
+          id: 'so_1', createdAt: new Date(), updatedAt: new Date(), currentApprovalSnapshot: null,
+          ...args.data,
+        };
+        return signoff;
+      },
+      update: async (args: { data: Record<string, unknown> }) => {
+        signoff = { ...signoff, ...args.data, updatedAt: new Date(), currentApprovalSnapshot: null };
+        return signoff;
+      },
+    },
+    complianceApprovalSnapshot: { findFirst: async () => null },
+    complianceAuditEvent: { create: async () => ({}) },
+  };
+  for (const [key, value] of Object.entries(prismaOverrides)) {
+    base[key] = value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(base[key] ?? {}), ...value as Record<string, unknown> }
+      : value;
+  }
+  base.$transaction = async (callback: (tx: unknown) => Promise<unknown>) => callback(base);
+  app.decorate('prisma', base as never);
   await app.register(complianceRoutes);
   return app;
 }
@@ -93,9 +142,25 @@ function buildService(opts: {
   upsertRecordError?: unknown;
 } = {}) {
   const calls: Call[] = [];
-  const prisma = {
+  const standards = (opts.standards ?? []).map((standard, index) => ({
+    isAdditional: false,
+    sortOrder: index + 1,
+    ...standard,
+    principle: { id: standard.principleId, sortOrder: index + 1, ...standard.principle },
+  }));
+  const records = (opts.records ?? []).map((record, index) => ({
+    id: `rec_${index + 1}`, organisationId: 'org_A', reportingYear: 2026, revision: 1,
+    actionTaken: null, evidence: null, notes: null, explanationIfNA: null, updatedById: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'), updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...record,
+  }));
+  let persistedRecord: Record<string, unknown> | null = null;
+  let persistedSignoff: Record<string, unknown> | null = null;
+  const prisma: Record<string, any> = {
+    $queryRaw: async (...args: unknown[]) => { calls.push({ name: '$queryRaw', args }); return [{ id: 'org_A' }]; },
     organisation: {
       findUniqueOrThrow: async () => ({
+        id: 'org_A', name: 'Example Charity', rcnNumber: 'RCN-1',
         complexity: opts.complexity ?? 'SIMPLE',
         conditionalObligationProfile: falseProfile(),
       }),
@@ -104,35 +169,51 @@ function buildService(opts: {
       findUnique: async () => (opts.plan === null ? null : { plan: opts.plan ?? 'ESSENTIALS' }),
     },
     governanceStandard: {
-      findUnique: async () => (opts.standard === undefined ? { id: 's1', isCore: true } : opts.standard),
-      findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return opts.standards ?? []; },
-    },
-    complianceRecord: {
-      findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return opts.records ?? []; },
-      findUnique: async (args: unknown) => { calls.push({ name: 'complianceRecord.findUnique', args }); return null; },
-      upsert: async (args: unknown) => {
-        calls.push({ name: 'complianceRecord.upsert', args });
-        if (opts.upsertRecordError) {
-          throw opts.upsertRecordError;
-        }
-        return { id: 'rec_1', standard: {}, updatedBy: {} };
-      },
-      update: async (args: unknown) => {
-        calls.push({ name: 'complianceRecord.update', args });
-        return { id: 'rec_1', standard: {}, updatedBy: {} };
-      },
-    },
-    complianceSignoff: {
-      findUnique: async (args: unknown) => { calls.push({ name: 'complianceSignoff.findUnique', args }); return null; },
-      upsert: async (args: unknown) => {
-        calls.push({ name: 'complianceSignoff.upsert', args });
+      findUnique: async () => {
+        if (opts.standard === null) return null;
         return {
-          id: 'so_1', organisationId: 'org_A', reportingYear: 2026, status: 'DRAFT', updatedById: 'u1',
-          updatedAt: new Date(), boardMeetingDate: null, minuteReference: null, approvedByName: null,
-          approvedByRole: null, approvalNotes: null, approvedAt: null,
+          principleId: 'p1', code: '1.1', title: 'Standard', isAdditional: false, sortOrder: 1,
+          principle: { id: 'p1', number: 1, title: 'Principle', description: '', sortOrder: 1 },
+          ...(opts.standard ?? { id: 's1', isCore: true }),
         };
       },
+      findMany: async (args: unknown) => { calls.push({ name: 'governanceStandard.findMany', args }); return standards; },
     },
+    complianceRecord: {
+      findMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.findMany', args }); return records; },
+      findUnique: async (args: unknown) => { calls.push({ name: 'complianceRecord.findUnique', args }); return persistedRecord; },
+      findUniqueOrThrow: async () => persistedRecord,
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'complianceRecord.create', args });
+        if (opts.upsertRecordError) throw opts.upsertRecordError;
+        persistedRecord = {
+          id: 'rec_1', revision: 1, createdAt: new Date(), updatedAt: new Date(),
+          standard: {}, updatedBy: {}, ...args.data,
+        };
+        return persistedRecord;
+      },
+      updateMany: async (args: unknown) => { calls.push({ name: 'complianceRecord.updateMany', args }); return { count: 1 }; },
+    },
+    complianceSignoff: {
+      findUnique: async (args: unknown) => { calls.push({ name: 'complianceSignoff.findUnique', args }); return persistedSignoff; },
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'complianceSignoff.create', args });
+        persistedSignoff = { id: 'so_1', createdAt: new Date(), updatedAt: new Date(), currentApprovalSnapshot: null, ...args.data };
+        return persistedSignoff;
+      },
+      update: async (args: { data: Record<string, unknown> }) => {
+        calls.push({ name: 'complianceSignoff.update', args });
+        persistedSignoff = { ...persistedSignoff, ...args.data, updatedAt: new Date(), currentApprovalSnapshot: null };
+        return persistedSignoff;
+      },
+    },
+    complianceApprovalSnapshot: { findFirst: async () => null },
+    complianceAuditEvent: { create: async (args: unknown) => { calls.push({ name: 'complianceAuditEvent.create', args }); return {}; } },
+    user: { findUnique: async () => ({ name: 'User' }) },
+  };
+  prisma.$transaction = async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => {
+    calls.push({ name: '$transaction', args: options });
+    return callback(prisma);
   };
   return { service: new ComplianceService(prisma as never), calls };
 }
@@ -152,7 +233,7 @@ test('a MEMBER cannot upsert a compliance record (requireAdmin)', async () => {
     const res = await app.inject({
       method: 'PUT', url: '/records/s1',
       headers: { authorization: tokenFor('MEMBER') },
-      payload: { reportingYear: 2026, status: 'COMPLIANT' },
+      payload: { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' },
     });
     assert.equal(res.statusCode, 403);
     assert.equal(res.json().code, 'FORBIDDEN');
@@ -176,7 +257,7 @@ test('a MEMBER cannot update the board sign-off (requireAdmin)', async () => {
     const res = await app.inject({
       method: 'PUT', url: '/signoff',
       headers: { authorization: tokenFor('MEMBER') },
-      payload: { reportingYear: 2026, status: 'DRAFT' },
+      payload: { reportingYear: 2026, expectedRevision: 0, status: 'DRAFT' },
     });
     assert.equal(res.statusCode, 403);
     assert.equal(res.json().code, 'FORBIDDEN');
@@ -210,14 +291,14 @@ test('an ADMIN may upsert a compliance record and the board sign-off', async () 
     const record = await app.inject({
       method: 'PUT', url: '/records/s1',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { reportingYear: 2026, status: 'COMPLIANT' },
+      payload: { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' },
     });
     assert.equal(record.statusCode, 200, 'ADMIN may upsert a compliance record');
 
     const signoff = await app.inject({
       method: 'PUT', url: '/signoff',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { reportingYear: 2026, status: 'DRAFT' },
+      payload: { reportingYear: 2026, expectedRevision: 0, status: 'DRAFT' },
     });
     assert.equal(signoff.statusCode, 200, 'ADMIN may upsert the board sign-off');
   } finally {
@@ -228,16 +309,30 @@ test('an ADMIN may upsert a compliance record and the board sign-off', async () 
 test('GET /approval-readiness returns readiness for authenticated subscribed members and validates year', async () => {
   const records = [
     {
+      id: 'rec_1',
+      organisationId: 'org-1',
       standardId: 's1',
+      reportingYear: 2026,
+      revision: 1,
       status: 'EXPLAIN',
+      actionTaken: null,
+      evidence: null,
+      notes: null,
       explanationIfNA: '',
+      updatedById: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
       standard: { id: 's1', code: '1.1', principle: {} },
       updatedBy: null,
     },
   ];
   const app = await buildComplianceApp(
     {
-      governanceStandard: { findMany: async () => [{ id: 's1', code: '1.1', isCore: true }] },
+      governanceStandard: { findMany: async () => [{
+        id: 's1', principleId: 'p1', code: '1.1', title: 'Standard', isCore: true,
+        isAdditional: false, sortOrder: 1,
+        principle: { id: 'p1', number: 1, title: 'Principle', description: '', sortOrder: 1 },
+      }] },
       complianceRecord: { findMany: async () => records },
     },
     'MEMBER',
@@ -252,6 +347,7 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
     assert.equal(ok.statusCode, 200);
     assert.deepEqual(ok.json().data, {
       ready: false,
+      evidenceHash: ok.json().data.evidenceHash,
       missingRecords: [],
       missingEvidence: [],
       missingExplanations: [{ standardId: 's1', standardCode: '1.1', status: 'EXPLAIN' }],
@@ -313,11 +409,11 @@ test('compliance routes require authentication', async () => {
 test('compliance writes are refused (and not persisted) without a subscription', async () => {
   const { service, calls } = buildService({ plan: null });
   await assert.rejects(
-    () => service.upsertRecord('org_1', 's1', 'u1', { reportingYear: 2026, status: 'COMPLIANT' } as never),
+    () => service.upsertRecord('org_1', 's1', 'u1', { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' } as never),
     (e: unknown) => codeOf(e) === 'NO_SUBSCRIPTION',
   );
   assert.equal(
-    calls.some((c) => c.name === 'complianceRecord.upsert'),
+    calls.some((c) => c.name === 'complianceRecord.create'),
     false,
     'no record may be written without a subscription',
   );
@@ -352,54 +448,33 @@ test('upsertRecord scopes the composite key and create payload to the caller org
     complexity: 'COMPLEX',
     standard: { id: 's1', isCore: true },
   });
-  await service.upsertRecord('org_A', 's1', 'u1', { reportingYear: 2026, status: 'COMPLIANT' } as never);
-  const upsert = calls.find((c) => c.name === 'complianceRecord.upsert');
-  assert.ok(upsert, 'upsert should run for an in-plan standard');
-  const args = upsert!.args as {
-    where: { organisationId_standardId_reportingYear: { organisationId: string } };
-    create: { organisationId: string; updatedById: string };
-  };
-  assert.equal(args.where.organisationId_standardId_reportingYear.organisationId, 'org_A');
-  assert.equal(args.create.organisationId, 'org_A');
-  assert.equal(args.create.updatedById, 'u1');
+  await service.upsertRecord('org_A', 's1', 'u1', { reportingYear: 2026, expectedRevision: 0, status: 'COMPLIANT' } as never);
+  const create = calls.find((c) => c.name === 'complianceRecord.create');
+  assert.ok(create, 'create should run for an in-plan standard');
+  const args = create!.args as { data: { organisationId: string; updatedById: string } };
+  assert.equal(args.data.organisationId, 'org_A');
+  assert.equal(args.data.updatedById, 'u1');
 });
 
 // ── compliance-tenant-isolation-10 ──
 
-test('upsertRecord recovers from a concurrent create race with a scoped update', async () => {
-  const duplicateRecordError = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+test('upsertRecord serializes tenant writes behind an organisation row lock', async () => {
   const { service, calls } = buildService({
     plan: 'COMPLETE',
     complexity: 'COMPLEX',
     standard: { id: 's1', isCore: true },
-    upsertRecordError: duplicateRecordError,
   });
 
   await service.upsertRecord('org_A', 's1', 'u1', {
     reportingYear: 2026,
+    expectedRevision: 0,
     status: 'COMPLIANT',
     evidence: 'Board-approved policy pack',
   } as never);
 
-  const update = calls.find((c) => c.name === 'complianceRecord.update');
-  assert.ok(update, 'a duplicate upsert create must retry as an update');
-  const args = update!.args as {
-    where: {
-      organisationId_standardId_reportingYear: {
-        organisationId: string;
-        standardId: string;
-        reportingYear: number;
-      };
-    };
-    data: { evidence: string; updatedById: string };
-  };
-  assert.deepEqual(args.where.organisationId_standardId_reportingYear, {
-    organisationId: 'org_A',
-    standardId: 's1',
-    reportingYear: 2026,
-  });
-  assert.equal(args.data.evidence, 'Board-approved policy pack');
-  assert.equal(args.data.updatedById, 'u1');
+  assert.ok(calls.find((c) => c.name === '$queryRaw'), 'the organisation row must be locked before writing');
+  const transaction = calls.find((c) => c.name === '$transaction');
+  assert.deepEqual(transaction?.args, { isolationLevel: 'Serializable' });
 });
 
 test('compliance reads are scoped to the caller organisation', async () => {
@@ -426,16 +501,12 @@ test('compliance reads are scoped to the caller organisation', async () => {
 
 test('upsertSignoff scopes the composite key to the caller organisation', async () => {
   const { service, calls } = buildService({ plan: 'COMPLETE', complexity: 'COMPLEX' });
-  await service.upsertSignoff('org_A', 'u1', { reportingYear: 2026, status: 'DRAFT' } as never);
-  const upsert = calls.find((c) => c.name === 'complianceSignoff.upsert');
-  assert.ok(upsert, 'upsertSignoff should call complianceSignoff.upsert');
-  const args = upsert!.args as {
-    where: { organisationId_reportingYear: { organisationId: string } };
-    create: { organisationId: string; updatedById: string };
-  };
-  assert.equal(args.where.organisationId_reportingYear.organisationId, 'org_A');
-  assert.equal(args.create.organisationId, 'org_A');
-  assert.equal(args.create.updatedById, 'u1');
+  await service.upsertSignoff('org_A', 'u1', { reportingYear: 2026, expectedRevision: 0, status: 'DRAFT' } as never);
+  const create = calls.find((c) => c.name === 'complianceSignoff.create');
+  assert.ok(create, 'upsertSignoff should create the tenant-scoped signoff');
+  const args = create!.args as { data: { organisationId: string; updatedById: string } };
+  assert.equal(args.data.organisationId, 'org_A');
+  assert.equal(args.data.updatedById, 'u1');
 });
 
 test('upsertSignoff rejects APPROVED when approval readiness is incomplete and does not write', async () => {
@@ -452,6 +523,8 @@ test('upsertSignoff rejects APPROVED when approval readiness is incomplete and d
     () =>
       service.upsertSignoff('org_A', 'u1', {
         reportingYear: 2026,
+        expectedRevision: 0,
+        expectedEvidenceHash: 'a'.repeat(64),
         status: 'APPROVED',
         boardMeetingDate: '2026-02-01',
         minuteReference: 'BM-2026-02',
@@ -460,7 +533,7 @@ test('upsertSignoff rejects APPROVED when approval readiness is incomplete and d
     (e: unknown) => codeOf(e) === 'COMPLIANCE_APPROVAL_INCOMPLETE',
   );
   assert.equal(
-    calls.some((c) => c.name === 'complianceSignoff.upsert'),
+    calls.some((c) => c.name === 'complianceSignoff.create'),
     false,
     'incomplete readiness must not write the signoff',
   );
@@ -476,10 +549,10 @@ test('upsertSignoff allows DRAFT and BOARD_REVIEW when approval readiness is inc
       ],
     });
 
-    await service.upsertSignoff('org_A', 'u1', { reportingYear: 2026, status } as never);
+    await service.upsertSignoff('org_A', 'u1', { reportingYear: 2026, expectedRevision: 0, status } as never);
 
     assert.ok(
-      calls.find((c) => c.name === 'complianceSignoff.upsert'),
+      calls.find((c) => c.name === 'complianceSignoff.create'),
       `${status} should remain editable without readiness completeness`,
     );
     assert.equal(
@@ -505,7 +578,7 @@ test('PUT /records rejects an invalid body before writing', async () => {
     const tooLow = await app.inject({
       method: 'PUT', url: '/records/s1',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { reportingYear: 1999 }, // below min 2018
+      payload: { reportingYear: 1999, expectedRevision: 0 }, // below min 2018
     });
     assert.equal(tooLow.statusCode, 400);
     assert.equal(tooLow.json().code, 'VALIDATION_ERROR');
@@ -513,7 +586,7 @@ test('PUT /records rejects an invalid body before writing', async () => {
     const badStatus = await app.inject({
       method: 'PUT', url: '/records/s1',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { reportingYear: 2026, status: 'BOGUS' }, // not a status enum
+      payload: { reportingYear: 2026, expectedRevision: 0, status: 'BOGUS' }, // not a status enum
     });
     assert.equal(badStatus.statusCode, 400);
     assert.equal(badStatus.json().code, 'VALIDATION_ERROR');
@@ -538,7 +611,7 @@ test('PUT /signoff requires approval evidence when status is APPROVED', async ()
     const missingEvidence = await app.inject({
       method: 'PUT', url: '/signoff',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { reportingYear: 2026, status: 'APPROVED' }, // missing boardMeetingDate/minuteReference/approvedByName
+      payload: { reportingYear: 2026, expectedRevision: 0, expectedEvidenceHash: 'a'.repeat(64), status: 'APPROVED' }, // missing boardMeetingDate/minuteReference/approvedByName
     });
     assert.equal(missingEvidence.statusCode, 400);
     assert.equal(missingEvidence.json().code, 'VALIDATION_ERROR');
@@ -548,6 +621,8 @@ test('PUT /signoff requires approval evidence when status is APPROVED', async ()
       headers: { authorization: tokenFor('ADMIN') },
       payload: {
         reportingYear: 2026,
+        expectedRevision: 0,
+        expectedEvidenceHash: 'a'.repeat(64),
         status: 'APPROVED',
         boardMeetingDate: 'not-a-date',
         minuteReference: 'M-1',
