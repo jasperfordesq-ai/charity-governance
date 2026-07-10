@@ -135,8 +135,8 @@ export default function SimpleVsComplexCharityClassification() {
           requirements, and separation of financial duties.
         </li>
         <li>
-          Annual filing of the Charities Regulator Annual Report and financial statements within
-          the statutory deadline.
+          Annual filing of the Charities Regulator Annual Report, with the financial information
+          or documents that apply to the charity&apos;s legal form and current reporting period.
         </li>
         <li>
           A complaints procedure accessible to members of the public.
@@ -147,9 +147,9 @@ export default function SimpleVsComplexCharityClassification() {
         </li>
       </ul>
       <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-10">
-        These are not optional even for the smallest charity. A volunteer-run community group with
-        five trustees and €15,000 in annual donations is still required to have a written conflicts
-        of interest policy, to minute its meetings, and to file its Annual Report on time.
+        A small volunteer-run charity should still work through the core standards, record its
+        governance decisions, and file its Annual Report on time. The accounting material attached
+        to that report must be checked separately against its legal form and current requirements.
       </p>
 
       {/* Section 4 — The 17 Additional Standards */}
@@ -175,8 +175,9 @@ export default function SimpleVsComplexCharityClassification() {
         <li>
           <span className="font-semibold">Enhanced financial oversight</span> — More robust
           internal controls, formal budget approval processes, regular financial reporting to the
-          board (typically monthly or quarterly management accounts), and, for charities above the
-          relevant threshold, an independent audit rather than a simple compilation of accounts.
+          board (typically monthly or quarterly management accounts), plus any independent audit,
+          examination, or other scrutiny required by entity-specific law, a regulator direction,
+          the governing document, or a funder. A qualified professional should confirm what applies.
         </li>
         <li>
           <span className="font-semibold">Trustee skills audit and succession planning</span> —
@@ -186,8 +187,8 @@ export default function SimpleVsComplexCharityClassification() {
         <li>
           <span className="font-semibold">Stakeholder engagement and reporting</span> — A more
           structured approach to engaging with beneficiaries, funders, and the public, and a
-          Trustees' Annual Report that meets the detailed content requirements set out in the
-          Charities (Accounts and Audit) Regulations.
+          review-ready narrative and financial reporting appropriate to the charity&apos;s legal form
+          and the current official reporting guidance.
         </li>
         <li>
           <span className="font-semibold">External review of governance</span> — Complex charities
@@ -201,22 +202,20 @@ export default function SimpleVsComplexCharityClassification() {
         What If Your Classification Changes Year to Year?
       </h2>
       <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
-        This is a genuinely common situation. A charity might receive a once-off bequest that pushes
-        its income above €100,000 in one year but falls back below in the next. Or a charity might
-        take on its first employee mid-year and then let that contract lapse.
+        This is a genuinely common situation. A charity might receive a once-off bequest, take on
+        its first employee, start a regulated service, create a subsidiary, or later simplify its
+        activities. Each change can affect the board&apos;s view of organisational complexity.
       </p>
       <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
-        The CRA's guidance is clear: you assess your classification at the start of each reporting
-        year based on the position at the end of the most recently completed financial year. If you
-        were complex last year, you report against all 49 standards in your current year's self-
-        assessment, even if your circumstances have changed. If you believe your classification has
-        genuinely and permanently changed (for example, the bequest was clearly a one-time event),
-        you should document that reasoning carefully.
+        Reassess the additional standards against the current Governance Code guidance and the
+        charity&apos;s actual size, structure, activities, staffing, and risk. The board should record
+        what it considered, the source version it used, and why it selected its current scope. Do
+        not use a single income figure or an unsupported year-to-year carry-over rule as a shortcut.
       </p>
       <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-10">
-        The administrative burden of temporarily reverting to the 32-core-only framework is
-        generally not worth the risk of misclassifying yourself. Which brings us to the most
-        important piece of practical advice in this article.
+        If the appropriate scope remains unclear, use the Regulator&apos;s current material and seek
+        governance or legal advice before making a certainty claim. Additional standards can still
+        be adopted as good practice without presenting that choice as a legal classification.
       </p>
 
       {/* Section 6 — When in Doubt */}
@@ -225,12 +224,10 @@ export default function SimpleVsComplexCharityClassification() {
       </h2>
       <div className="border-l-4 border-teal-primary pl-5 mb-6">
         <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
-          If you are genuinely unsure whether your charity meets one of the three complexity
-          criteria, the safest and most defensible course of action is to comply with all 49
-          standards. The additional 17 standards represent genuinely good governance practice that
-          any well-run organisation should be working toward regardless of its legal obligation to
-          do so. Over-complying carries no regulatory risk. Under-complying — even innocently —
-          can be difficult to explain if the CRA queries your self-assessment.
+          If the board is unsure, it may choose to work through all 49 standards as a governance
+          improvement exercise while it verifies the applicable scope. Record that choice and any
+          professional advice. Applying extra controls can be useful, but CharityPilot does not
+          determine the charity&apos;s legal obligations or remove the need to check official guidance.
         </p>
       </div>
       <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
@@ -267,11 +264,11 @@ export default function SimpleVsComplexCharityClassification() {
         </div>
       </div>
       <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
-        When you set up your CharityPilot account, the platform asks you a short series of questions
-        to determine your classification and automatically configures your compliance dashboard with
-        the correct set of standards. If your status changes, updating it takes seconds and the
-        dashboard adjusts immediately — so you always know exactly what is required of your charity
-        this year.
+        When you set up your CharityPilot account, the platform helps trustees record a working
+        scope and configures the compliance dashboard with the selected standards. If that scope
+        changes, updating it adjusts the dashboard immediately. The configuration is a workflow aid,
+        not a legal conclusion; trustees remain responsible for checking current official guidance
+        and recording why the selected scope is appropriate.
       </p>
     </article>
   );

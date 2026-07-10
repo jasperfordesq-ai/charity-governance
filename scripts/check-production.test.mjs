@@ -1879,12 +1879,12 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /352\s*\/\s*352`? checks/);
+  assert.match(handoff, /396\s*\/\s*396`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
-  assert.match(handoff, /Older `338 \/ 338` and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
+  assert.match(handoff, /Older `352 \/ 352`, `338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
   assert.match(handoff, /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/);
   assert.match(handoff, /still fails with six[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,240}`ERROR_ALERT_WEBHOOK_URL`/);
   assert.doesNotMatch(handoff, /GitHub `production` environment secrets list is currently empty/);

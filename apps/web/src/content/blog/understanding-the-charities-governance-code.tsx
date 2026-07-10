@@ -173,11 +173,11 @@ export default function UnderstandingTheCharitiesGovernanceCode() {
           with the CRA's own reporting requirements.
         </p>
         <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
-          Standards under this principle include filing the Annual Report and accounts with the CRA
-          on time, making financial information publicly accessible, and having a procedure for
-          handling complaints from members of the public. Larger charities must also submit a
-          Trustees' Annual Report that meets specific content requirements set out in the Charities
-          (Accounts and Audit) Regulations.
+          Standards under this principle include filing the Annual Report on time, providing the
+          financial information or documents applicable to the charity&apos;s legal form, communicating
+          transparently, and having a procedure for handling complaints from members of the public.
+          The source-checked annual-reporting guide explains why boards must verify current official
+          accounting guidance instead of relying on an unsupported threshold or regulations table.
         </p>
       </div>
 

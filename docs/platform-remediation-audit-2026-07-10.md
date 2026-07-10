@@ -140,7 +140,7 @@ exists.
 
 ### P0-01 - Unsafe annual-reporting legal and accounting claims
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
 Evidence:
 
@@ -170,6 +170,39 @@ Acceptance:
 - Source log and visible copy agree.
 - Official-source verification is dated.
 - Named accounting/legal approval remains an explicit launch-evidence item.
+
+Repository remediation completed on 2026-07-10:
+
+- Replaced the unsupported income-band and universal audit claims with a dated,
+  source-checked guide that distinguishes current law, proposed guidance,
+  uncommenced amendments, legal-form differences, CRO company obligations, and
+  professional review.
+- Removed the same unsupported threshold, carry-over, and nonexistent-regulation
+  claims from the adjacent simple/complex and Governance Code articles.
+- Added `apps/web/src/lib/legal-content-safety.test.ts` to scan the full blog
+  corpus for the removed claims and require the current revised-Act, regulator,
+  commencement, SORP, and CRO sources.
+- Updated `docs/product-revamp/irish-source-log.md` with the targeted 2026-07-10
+  recheck while preserving the truthful 2026-07-09 whole-matrix check date.
+
+Local verification:
+
+- `npm test -w @charitypilot/web`: `244 / 244` passed.
+- `npm test -w @charitypilot/shared`: `19 / 19` passed.
+- `npm run lint -w @charitypilot/web`: passed.
+- `npm run build -w @charitypilot/web`: passed.
+- `npm run audit:platform:check`: passed after regenerating the audit's web-test
+  inventory from 17 to 18 files.
+- `npm run test:production-check`: `396 / 396` passed after aligning the
+  continuation-handoff assertion with its current documented gate count.
+- Final repository search found the removed legal claims only inside the new
+  negative regression patterns, not in public product copy.
+
+Commit SHA / CI run: pending publication of this verified slice.
+
+External owner/blocker: named qualified-accountant and Irish-solicitor review is
+still required launch evidence. Agent-authored containment is not professional
+approval.
 
 ### P0-02 - Resend resolved failures counted as successful delivery
 

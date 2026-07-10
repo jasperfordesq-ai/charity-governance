@@ -25,6 +25,7 @@
     "src/lib/chunk-load-recovery.test.ts",
     "src/lib/json-ld.ts",
     "src/lib/json-ld.test.ts",
+    "src/lib/legal-content-safety.test.ts",
     "src/lib/plan-feature.ts",
     "src/lib/plan-feature.test.ts",
     "src/lib/protected-routes.ts",
