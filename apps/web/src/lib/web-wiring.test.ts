@@ -1001,6 +1001,18 @@ test('shared state primitives keep long text and actions inside narrow layouts',
   assert.match(src, /flex-wrap justify-center gap-2/);
 });
 
+test('governance evidence readiness rows use shared status panel styling', () => {
+  const src = component('governance/evidence-readiness.tsx');
+
+  assert.match(src, /statusPanelClassName/);
+  assert.match(
+    src,
+    /const evidenceRowClassName = statusPanelClassName\(\s*'neutral',\s*'flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between',\s*\)/,
+  );
+  assert.match(src, /className=\{evidenceRowClassName\}/);
+  assert.doesNotMatch(src, /rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900/);
+});
+
 test('phase 6B operational workflows use shared primitives and review-ready safeguards', () => {
   const expectations: Array<{
     file: string;

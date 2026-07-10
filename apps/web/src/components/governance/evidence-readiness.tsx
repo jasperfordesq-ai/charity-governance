@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react';
-import { EvidenceChip, ReviewFlag, type EvidenceStatus, type ReviewFlagTone } from '@/components/ui/status';
+import {
+  EvidenceChip,
+  ReviewFlag,
+  statusPanelClassName,
+  type EvidenceStatus,
+  type ReviewFlagTone,
+} from '@/components/ui/status';
 import { ReviewWarningState } from '@/components/ui/states';
 
 type EvidencePrompt = {
@@ -19,6 +25,11 @@ type EvidenceReviewFlag = {
   tone?: ReviewFlagTone;
 };
 
+const evidenceRowClassName = statusPanelClassName(
+  'neutral',
+  'flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between',
+);
+
 export function EvidencePromptList({ prompts }: { prompts: Array<string | EvidencePrompt> }) {
   if (prompts.length === 0) return null;
 
@@ -29,7 +40,7 @@ export function EvidencePromptList({ prompts }: { prompts: Array<string | Eviden
         return (
           <li
             key={`${item.label}-${index}`}
-            className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-start sm:justify-between"
+            className={evidenceRowClassName}
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-950 dark:text-gray-50">{item.label}</p>
@@ -53,7 +64,7 @@ export function EvidenceSourceList({ sources }: { sources: Array<string | Eviden
         return (
           <li
             key={`${item.label}-${index}`}
-            className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-start sm:justify-between"
+            className={evidenceRowClassName}
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-950 dark:text-gray-50">{item.label}</p>
