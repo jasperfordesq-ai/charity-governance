@@ -160,6 +160,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - GitHub production environment validation now rejects sample Supabase project refs such as configured-project before release image promotion.
 - Production launch evidence templates and validators now reject sample Supabase project refs so release evidence cannot contradict the GitHub environment preflight.
 - Production Supabase storage checks now reject sample project refs before making any provider probe.
+- Production release-run evidence validation now rejects sample Supabase build origins before GitHub API calls.
 - Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.
 - Billing checkout and portal handoffs now use a shared visible inline status instead of a route-local hidden live-region message.

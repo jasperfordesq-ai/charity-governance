@@ -9,6 +9,7 @@ import { redactProductionDeployTranscript } from './production-deploy-preflight.
 const repository = 'jasperfordesq-ai/charity-governance';
 const releaseWorkflowFile = '.github/workflows/release-images.yml';
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
+const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
 function usage() {
   return 'Usage: node scripts/production-release-run-evidence.mjs [--json] --evidence-file <path>\n';
@@ -139,6 +140,21 @@ function validateReleaseShape(release, issues) {
   }
   if (typeof release.gitRef !== 'string' || !/^refs\/(?:heads\/master|tags\/v.+)$/.test(release.gitRef)) {
     issues.push('release.gitRef must be refs/heads/master or refs/tags/v*');
+  }
+  const supabaseOrigin = release?.imageDigestManifest?.webBuildNextPublicSupabaseUrl;
+  if (typeof supabaseOrigin === 'string') {
+    try {
+      const url = new URL(supabaseOrigin);
+      const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+      if (hostname.endsWith('.supabase.co')) {
+        const projectRef = hostname.slice(0, -'.supabase.co'.length);
+        if (SAMPLE_SUPABASE_PROJECT_REF_PATTERN.test(projectRef)) {
+          issues.push('release.imageDigestManifest.webBuildNextPublicSupabaseUrl must not use a sample Supabase project ref');
+        }
+      }
+    } catch {
+      // Final launch evidence validation owns detailed URL shape errors.
+    }
   }
 
   return runId;
