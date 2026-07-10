@@ -33,7 +33,7 @@ function completeDeployEnv(overrides = {}) {
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
     READINESS_API_KEY: 'configured-readiness-key-32-chars',
-    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
     JWT_SECRET: 'a'.repeat(40),
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',

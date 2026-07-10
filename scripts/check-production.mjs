@@ -313,6 +313,9 @@ function requireDatabaseUrl(env, key, issues) {
     if (isLocalHost(url.hostname)) {
       issues.push(`${key} must not point at localhost for production`);
     }
+    if (isReservedDocumentationHostname(url.hostname)) {
+      issues.push(`${key} must not use a reserved documentation hostname`);
+    }
     const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
     if (!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) {
       issues.push(`${key} must require TLS with sslmode=require, verify-ca, or verify-full for production`);

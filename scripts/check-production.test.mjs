@@ -234,7 +234,7 @@ function completeProductionEnv(overrides = {}) {
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
     READINESS_API_KEY: 'configured-readiness-key-32-chars',
-    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
     JWT_SECRET: 'a'.repeat(40),
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
@@ -315,7 +315,7 @@ test('passes when the selected env file contains complete production values', ()
       'PORT=3002',
       'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
       'READINESS_API_KEY=configured-readiness-key-32-chars',
-      'DATABASE_URL=postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
       `JWT_SECRET=${'a'.repeat(40)}`,
       'FRONTEND_URL=https://app.charitypilot.ie',
       'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
@@ -373,6 +373,27 @@ test('fails when production Supabase URLs still contain project-ref placeholder 
     assert.match(result.stderr, /SUPABASE_URL is missing or still contains a placeholder value/);
     assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
     assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when production database URL uses a reserved documentation hostname', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-db-doc-host-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      DATABASE_URL: 'postgresql://user:pass@db.charitypilot.example:5432/charitypilot?sslmode=require',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /DATABASE_URL must not use a reserved documentation hostname/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
