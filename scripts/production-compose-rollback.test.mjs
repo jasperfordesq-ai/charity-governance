@@ -33,9 +33,9 @@ function productionEnv(overrides = {}) {
     NODE_ENV: 'production',
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
-    READINESS_API_KEY: 'configured-readiness-key-32-chars',
+    READINESS_API_KEY: 'r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
     DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
-    JWT_SECRET: 'a'.repeat(40),
+    JWT_SECRET: 'J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
     STRIPE_SECRET_KEY: 'sk_live_configuredSecret',
@@ -123,7 +123,7 @@ test('production rollback dry-run delegates to deploy with rollback digests merg
     assert.match(deployCalls[0].mergedEnv, new RegExp(`CHARITYPILOT_MIGRATION_IMAGE=ghcr\\.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`));
     assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
     assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/configured-project\.supabase\.co/);
-    assert.match(deployCalls[0].mergedEnv, /JWT_SECRET=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/);
+    assert.match(deployCalls[0].mergedEnv, /JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5/);
     assert.doesNotMatch(deployCalls[0].mergedEnv, new RegExp(currentDigest));
     assert.match(result.stdout, /Production compose rollback dry-run/);
     assert.match(result.stdout, /deploy dry-run ok/);

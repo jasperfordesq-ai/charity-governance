@@ -367,6 +367,26 @@ function requireRefreshTokenTtlDays(env, issues) {
   }
 }
 
+function looksLikeLowEntropyProductionSecret(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  const compact = normalized.replace(/[^a-z0-9]/g, '');
+  if (!compact) return true;
+  if (new Set(compact).size === 1) return true;
+  return /(?:configured|example|sample|dummy|placeholder|change[-_]?me|already[-_]?generated|jwt[-_]?secret|readiness[-_]?key[-_]?32[-_]?chars)/i.test(normalized);
+}
+
+function requireProductionSecretStrength(env, key, issues) {
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+  if (value.length < 32) {
+    issues.push(`${key} must be at least 32 characters`);
+    return;
+  }
+  if (looksLikeLowEntropyProductionSecret(value)) {
+    issues.push(`${key} must not be a repeated-character or sample value`);
+  }
+}
+
 function hostMatchesCookieDomain(hostname, cookieDomain) {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -529,12 +549,8 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   requireAccessTokenExpiry(env, issues);
   requireRefreshTokenTtlDays(env, issues);
 
-  for (const key of ['JWT_SECRET', 'READINESS_API_KEY']) {
-    const value = envValue(env, key);
-    if (isConfigured(value) && value.length < 32) {
-      issues.push(`${key} must be at least 32 characters`);
-    }
-  }
+  requireProductionSecretStrength(env, 'JWT_SECRET', issues);
+  requireProductionSecretStrength(env, 'READINESS_API_KEY', issues);
 
   requireUrl(env, 'FRONTEND_URL', issues, {
     allowCommaSeparated: true,

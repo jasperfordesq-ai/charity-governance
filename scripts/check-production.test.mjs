@@ -233,9 +233,9 @@ function completeProductionEnv(overrides = {}) {
     NODE_ENV: 'production',
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
-    READINESS_API_KEY: 'configured-readiness-key-32-chars',
+    READINESS_API_KEY: 'r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
     DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
-    JWT_SECRET: 'a'.repeat(40),
+    JWT_SECRET: 'J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
     STRIPE_SECRET_KEY: 'sk_live_configuredSecret',
@@ -314,9 +314,9 @@ test('passes when the selected env file contains complete production values', ()
       'NODE_ENV=production',
       'PORT=3002',
       'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
-      'READINESS_API_KEY=configured-readiness-key-32-chars',
+      'READINESS_API_KEY=r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
       'DATABASE_URL=postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
-      `JWT_SECRET=${'a'.repeat(40)}`,
+      'JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
       'FRONTEND_URL=https://app.charitypilot.ie',
       'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
       'STRIPE_SECRET_KEY=sk_live_configuredSecret',
@@ -1129,6 +1129,26 @@ test('fails when the detailed readiness key is too short for production config',
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /READINESS_API_KEY must be at least 32 characters/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when production secret keys are low entropy or sample values', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-low-entropy-secrets-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(envPath, completeProductionEnv({
+    JWT_SECRET: 'a'.repeat(40),
+    READINESS_API_KEY: 'configured-readiness-key-32-chars',
+  }));
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /JWT_SECRET must not be a repeated-character or sample value/);
+    assert.match(result.stderr, /READINESS_API_KEY must not be a repeated-character or sample value/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
