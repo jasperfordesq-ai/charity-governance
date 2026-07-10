@@ -9,7 +9,7 @@ import { AppSection } from '@/components/ui/app-page';
 import { DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
 import { EmptyState, PermissionHint } from '@/components/ui/states';
-import { StatusChip } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { ROLE_META, formatDate, inviteStatus } from './team-display';
 
 export function TeamInvitesPanel({
@@ -48,7 +48,7 @@ export function TeamInvitesPanel({
   return (
     <div className="space-y-5">
       <form
-        className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className={statusPanelClassName('neutral', 'p-5 shadow-sm')}
         onSubmit={inviteMember}
       >
         <FieldGroup
@@ -103,7 +103,7 @@ export function TeamInvitesPanel({
                 const status = inviteStatus(invite);
                 const active = status.label === 'Pending';
                 return (
-                  <article key={invite.id} className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                  <article key={invite.id} className={statusPanelClassName('neutral', 'p-3')}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-gray-950 dark:text-gray-50">{invite.email}</p>

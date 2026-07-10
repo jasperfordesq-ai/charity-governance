@@ -2654,7 +2654,7 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
     ['@/components/ui/app-page', ['AppPage', 'AppSection']],
     ['@/components/ui/states', ['LoadingState', 'EmptyState', 'ErrorState']],
     ['@/components/ui/data-list', ['DataList', 'DataListItems']],
-    ['@/components/ui/status', ['ReviewFlag', 'StatusChip']],
+    ['@/components/ui/status', ['ReviewFlag', 'StatusChip', 'statusPanelClassName']],
     ['@/components/ui/forms', ['FieldGroup', 'FormHint']],
   ];
 
@@ -2731,6 +2731,11 @@ test('team invite form and pending invite list are extracted from the oversized 
   assert.match(panelSrc, /isLoading=\{revokeInviteId === invite\.id\}/);
   assert.match(panelSrc, /isDisabled=\{!canInvite/);
   assert.match(panelSrc, /aria-describedby="team-invite-disabled-hint"/);
+  assert.match(panelSrc, /statusPanelClassName/);
+  assert.match(panelSrc, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
+  assert.match(panelSrc, /className=\{statusPanelClassName\('neutral', 'p-3'\)\}/);
+  assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/);
+  assert.doesNotMatch(panelSrc, /rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900/);
   assert.match(displaySrc, /export function inviteStatus/);
 });
 
