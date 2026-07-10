@@ -35,8 +35,12 @@ The detailed issue contract remains in
   idempotency tests `73 / 73`, full API `438 / 438`, API build, and production
   tooling `396 / 396`. A real accepted Resend send and verified production
   domain remain external launch evidence.
-- **P0-03 duplicate Stripe subscription path - `LOCALLY_VERIFIED`, not yet
-  published.** The repository now has a one-per-organisation
+- **P0-03 duplicate Stripe subscription path - `CI_VERIFIED`.** Implementation
+  commit `ce9a5ed9701776bb2a957da647b3620288be173b` plus the launch-counter and
+  readiness-test repairs through `7ffc8f862d863f559365668c19550be00d0bb382`
+  passed CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29077589143`.
+  The repository now has a one-per-organisation
   `BillingCheckoutAttempt` lease/migration, attempt-bound Stripe idempotency and
   metadata, remote customer/subscription reconciliation, strict terminal-state
   restart rules, expired-session reconciliation, stale/superseded webhook
@@ -50,8 +54,7 @@ The detailed issue contract remains in
   and production build pass; and the final full API suite is `454 / 454` after
   all P0-03 tests were integrated. Production tooling is `399 / 399`, the
   reliability report is green with `365 / 365` covered links, and the platform
-  audit is current. Publication and CI remain before this item can move beyond
-  local verification.
+  audit is current.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -400,6 +403,9 @@ Recently successful checks in this workstream:
     covered-guarantee links resolved.
 - `npm run audit:platform:check`
   - Passed on 2026-07-10; `docs/platform-completion-audit.md` is current.
+- `gh run watch 29077589143 --exit-status`
+  - Passed on 2026-07-10 for the complete P0-03 implementation and CI-repair
+    chain through `7ffc8f862d863f559365668c19550be00d0bb382`.
 - `gh run watch 29074651622 --exit-status`
   - Passed on 2026-07-10 for P0-02 commit `fbd5ce4`.
 - `gh run watch 29073803773 --exit-status`

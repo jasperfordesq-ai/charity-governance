@@ -268,7 +268,7 @@ check remains a separate production launch-evidence gate.
 
 ### P0-03 - Duplicate Stripe subscription and double-billing path
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Evidence:
 
@@ -297,7 +297,7 @@ Acceptance:
   webhook-order cases are covered.
 - UI copy matches the implemented Stripe behavior.
 
-Repository remediation completed locally on 2026-07-10:
+Repository remediation completed and CI-verified on 2026-07-10:
 
 - Added the `BillingCheckoutAttempt` model, enum, migration, one-row-per-
   organisation constraint, Stripe-session uniqueness, expiry index, and
@@ -354,7 +354,14 @@ Local verification:
 - `npm run audit:platform:check`: passed; the generated platform audit is
   current.
 
-Commit SHA / CI run: pending publication and CI verification.
+Commit SHA / CI run:
+
+- implementation: `ce9a5ed9701776bb2a957da647b3620288be173b`;
+- launch-counter repair: `cba1a5df10538ccb2b84445123de097d0db7a57e`;
+- production-readiness assertion repair and verified head:
+  `7ffc8f862d863f559365668c19550be00d0bb382`;
+- successful CI:
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29077589143`.
 
 External owner/blocker: an accountable billing operator must prove the pinned
 live Stripe portal policy, inventory and expire every legacy open
