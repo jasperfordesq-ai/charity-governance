@@ -521,6 +521,9 @@ test('compliance overview summary and principle cards use shared status panel st
   }
   assert.match(pageSrc, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
   assert.match(principleListSrc, /className=\{statusPanelClassName\('neutral', 'shadow-sm overflow-hidden'\)\}/);
+  assert.match(principleListSrc, /className=\{statusPanelClassName\('neutral', 'flex items-start gap-3 p-3'\)\}/);
+  assert.match(principleListSrc, /className=\{statusPanelClassName\('brand', 'flex items-start gap-3 p-3'\)\}/);
+  assert.doesNotMatch(principleListSrc, /p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800/);
 });
 
 test('deadline completion uses HeroUI Checkbox instead of a button with checkbox ARIA', () => {

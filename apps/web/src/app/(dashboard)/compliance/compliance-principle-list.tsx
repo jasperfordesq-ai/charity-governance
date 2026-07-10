@@ -153,7 +153,7 @@ export function CompliancePrincipleList({
                             {coreStandards.map((s) => (
                               <div
                                 key={s.id}
-                                className="flex items-start gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800"
+                                className={statusPanelClassName('neutral', 'flex items-start gap-3 p-3')}
                               >
                                 <StatusChip tone="neutral" className="mt-0.5 flex-shrink-0 font-mono">
                                   {s.code}
@@ -173,7 +173,7 @@ export function CompliancePrincipleList({
                               {additionalStandards.map((s) => (
                                 <div
                                   key={s.id}
-                                  className="flex items-start gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800"
+                                  className={statusPanelClassName('brand', 'flex items-start gap-3 p-3')}
                                 >
                                   <StatusChip tone="brand" className="mt-0.5 flex-shrink-0 font-mono">
                                     {s.code}
