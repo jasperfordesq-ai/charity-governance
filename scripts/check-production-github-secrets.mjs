@@ -47,7 +47,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--environment=')) {
-      options.environment = arg.slice('--environment='.length);
+      const value = arg.slice('--environment='.length);
+      if (!value) return { error: '--environment requires a value' };
+      options.environment = value;
       continue;
     }
     if (arg === '--repo' || arg === '--repository') {
@@ -58,11 +60,15 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--repo=')) {
-      options.repository = arg.slice('--repo='.length);
+      const value = arg.slice('--repo='.length);
+      if (!value) return { error: '--repo requires a value' };
+      options.repository = value;
       continue;
     }
     if (arg.startsWith('--repository=')) {
-      options.repository = arg.slice('--repository='.length);
+      const value = arg.slice('--repository='.length);
+      if (!value) return { error: '--repository requires a value' };
+      options.repository = value;
       continue;
     }
     return { error: `Unknown option: ${arg}` };

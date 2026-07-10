@@ -89,6 +89,15 @@ test('scanner falls back to the working tree when git tracked-file listing is un
   });
 });
 
+test('security scanner rejects empty inline path options', () => {
+  const result = runScanner(['scan', '--path=']);
+
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--path requires a value/);
+});
+
 test('scanner skips generated Next build output directories', () => {
   withTempProject((tempDir) => {
     mkdirSync(join(tempDir, '.next-build-verify'));

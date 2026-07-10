@@ -89,7 +89,11 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--path=')) {
-      paths.push(arg.slice('--path='.length));
+      const value = arg.slice('--path='.length);
+      if (!value) {
+        throw new Error('--path requires a value');
+      }
+      paths.push(value);
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);

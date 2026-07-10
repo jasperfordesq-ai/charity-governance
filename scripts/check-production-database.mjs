@@ -54,7 +54,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--backup-output-dir=')) {
-      options.backupOutputDir = arg.slice('--backup-output-dir='.length);
+      const value = arg.slice('--backup-output-dir='.length);
+      if (!value) throw new Error('--backup-output-dir requires a value');
+      options.backupOutputDir = value;
       continue;
     }
     if (arg === '--keep-backup') {

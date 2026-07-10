@@ -147,6 +147,28 @@ test('production GitHub environment check rejects unknown options', () => {
   assert.match(result.stderr, /Usage: node scripts\/check-production-github-env\.mjs/);
 });
 
+test('production GitHub environment check rejects empty inline options before gh calls', () => {
+  for (const args of [
+    ['--environment='],
+    ['--repo='],
+    ['--repository='],
+  ]) {
+    let called = false;
+    const result = runProductionGitHubEnvironmentCheckFromArgs(args, {
+      runGh: () => {
+        called = true;
+        return okGh([]);
+      },
+    });
+
+    assert.equal(result.status, 2, `${args.join(' ')} should be rejected as usage`);
+    assert.equal(called, false);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /requires a value/);
+    assert.match(result.stderr, /Usage: node scripts\/check-production-github-env\.mjs/);
+  }
+});
+
 test('production GitHub environment check CLI prints usage', () => {
   const result = spawnSync(process.execPath, [scriptPath, '--help'], {
     cwd: repoRoot,

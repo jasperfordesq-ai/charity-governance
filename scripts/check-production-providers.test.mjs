@@ -145,6 +145,31 @@ test('production provider checker rejects empty production env file option as us
   assert.match(result.stderr, /--production-env-file requires a value/);
 });
 
+test('production provider checker rejects empty expected API origin option as usage error', async () => {
+  const runProductionProvidersCheckFromArgs = await loadProviderRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv());
+  let called = false;
+
+  try {
+    const result = await runProductionProvidersCheckFromArgs(
+      ['--production-env-file', envPath, '--expect-api-origin='],
+      {
+        fetchImpl: async () => {
+          called = true;
+          return response(200, {});
+        },
+      },
+    );
+
+    assert.equal(result.status, 2);
+    assert.equal(called, false);
+    assert.match(result.stderr, /Usage:/);
+    assert.match(result.stderr, /--expect-api-origin requires a value/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production provider checker fails when a Stripe price is inactive or not live recurring', async () => {
   const runProductionProvidersCheckFromArgs = await loadProviderRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

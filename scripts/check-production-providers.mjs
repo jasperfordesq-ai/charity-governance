@@ -59,7 +59,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--expect-api-origin=')) {
-      options.expectApiOrigin = arg.slice('--expect-api-origin='.length);
+      const value = arg.slice('--expect-api-origin='.length);
+      if (!value) throw new Error('--expect-api-origin requires a value');
+      options.expectApiOrigin = value;
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);
