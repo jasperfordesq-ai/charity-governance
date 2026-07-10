@@ -56,7 +56,10 @@ The detailed issue contract remains in
   reliability report is green with `365 / 365` covered links, and the platform
   audit is current.
 - **P0-04 compliance concurrency and immutable board approval -
-  `LOCALLY_VERIFIED`.** Compliance record/sign-off writes now use explicit
+  `CI_VERIFIED`.** Commit `e03b80a44150c384485b5e47e524b9ee60475f70`
+  passed CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29082113651`.
+  Compliance record/sign-off writes now use explicit
   revisions, serializable organisation locking, compare-and-swap updates,
   idempotent replay handling, and append-only full before/after history. Board
   approval is bound to a canonical immutable evidence snapshot and hash;
@@ -75,9 +78,7 @@ The detailed issue contract remains in
   refreshed generated audits, and a clean 14-migration deployment plus
   rollback-only trigger/constraint probes on a dedicated throwaway
   `charitypilot_ci` PostgreSQL container. Destructive Playwright was deliberately
-  not run: P0-05 must first supply a genuinely isolated disposable database. The
-  implementation still needs a commit-bound green CI run before promotion to
-  `CI_VERIFIED`.
+  not run: P0-05 must first supply a genuinely isolated disposable database.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,

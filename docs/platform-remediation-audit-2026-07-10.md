@@ -373,7 +373,7 @@ Stripe/no-duplicate evidence is claimed by the controlled local tests.
 
 ### P0-04 - Compliance autosave data loss and stale board approval
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Evidence:
 
@@ -462,8 +462,13 @@ Local verification:
 Deliberate limitation: the destructive Playwright suite was not run. A real
 PostgreSQL concurrency/reset/browser proof must use the isolated disposable
 database delivered under P0-05; the personal local-development database remains
-strictly out of scope. CI migration deployment and the final commit-bound CI run
-are still required before this item can become `CI_VERIFIED`.
+strictly out of scope. No browser or destructive-reset evidence is claimed by
+the controlled API/web/database verification above.
+
+Commit SHA / CI run:
+
+- `e03b80a44150c384485b5e47e524b9ee60475f70`
+- `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29082113651`
 
 ### P0-05 - Destructive E2E database identity guard
 
