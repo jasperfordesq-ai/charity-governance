@@ -525,6 +525,41 @@ test('reports TLS and shared-cookie production drift before deploy preflight', (
   assert.ok(s.nextActions.some((a) => /correct drifted TLS\/cookie settings/.test(a)));
 });
 
+test('reports structurally invalid production values before ENV_COMPLETE', () => {
+  const env = productionEnv({
+    TRUSTED_PROXY_ADDRESSES: '0.0.0.0/0',
+    DATABASE_URL: 'postgresql://charitypilot:secret@localhost:5432/charitypilot',
+    FRONTEND_URL: 'http://app.charitypilot.ie/path',
+    NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie/v1',
+  });
+
+  const s = assessLaunchState({ envExists: true, envContent: env });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, [
+    'TRUSTED_PROXY_ADDRESSES',
+    'DATABASE_URL',
+    'FRONTEND_URL',
+    'NEXT_PUBLIC_API_URL',
+  ]);
+  assert.deepEqual(
+    s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })),
+    [
+      { key: 'TRUSTED_PROXY_ADDRESSES', reason: 'preflight-invalid' },
+      { key: 'DATABASE_URL', reason: 'preflight-invalid' },
+      { key: 'FRONTEND_URL', reason: 'preflight-invalid' },
+      { key: 'NEXT_PUBLIC_API_URL', reason: 'preflight-invalid' },
+    ],
+  );
+  const details = s.remainingKeyDetails.map((issue) => issue.detail).join('\n');
+  assert.match(details, /explicit proxy IP addresses or CIDR ranges/);
+  assert.match(details, /must not point at localhost/);
+  assert.match(details, /sslmode=require/);
+  assert.match(details, /must use https:\/\//);
+  assert.match(details, /origin-only URL/);
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 24, total: 28, remaining: 4 });
+});
+
 test('keeps placeholder issue reasons ahead of canonical drift checks', () => {
   const env = productionEnv({
     AUTH_COOKIE_DOMAIN: 'REPLACE_ME_SHARED_COOKIE_DOMAIN',

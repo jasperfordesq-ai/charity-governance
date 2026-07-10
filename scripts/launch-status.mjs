@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
+import { validateProductionEnvContent } from './check-production.mjs';
 import {
   decodeJsonFile,
   isEvidenceStatusComplete,
@@ -460,7 +461,29 @@ function productionValueIssueDetails(envContent) {
     }
   }
 
+  for (const issue of productionPreflightValueIssues(envContent)) {
+    if (!issues.has(issue.key)) {
+      issues.set(issue.key, issue);
+    }
+  }
+
   return [...issues.values()];
+}
+
+function productionPreflightValueIssues(envContent) {
+  const issuesByKey = new Map();
+  const expectedKeys = new Set(EXPECTED_PRODUCTION_VALUE_KEYS);
+  for (const issue of validateProductionEnvContent(envContent, {})) {
+    const key = EXPECTED_PRODUCTION_VALUE_KEYS.find((candidate) => issue.startsWith(candidate));
+    if (!key || !expectedKeys.has(key)) continue;
+    const existing = issuesByKey.get(key);
+    issuesByKey.set(key, existing ? `${existing}\n${issue}` : issue);
+  }
+  return [...issuesByKey.entries()].map(([key, detail]) => ({
+    key,
+    reason: 'preflight-invalid',
+    detail,
+  }));
 }
 
 export function groupRemainingKeys(keys) {

@@ -60,9 +60,9 @@ const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
-function parseEnvFile(path) {
+export function parseProductionEnvContent(content) {
   return Object.fromEntries(
-    readFileSync(path, 'utf8')
+    String(content ?? '')
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith('#') && line.includes('='))
@@ -73,6 +73,10 @@ function parseEnvFile(path) {
         return [key, value];
       }),
   );
+}
+
+function parseEnvFile(path) {
+  return parseProductionEnvContent(readFileSync(path, 'utf8'));
 }
 
 function envValue(env, key) {
@@ -525,6 +529,25 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   }
 
   const env = parseEnvFile(envFile);
+  const issues = validateProductionEnvironment(env, processEnv);
+
+  if (issues.length) {
+    const stderr = [
+      `Production preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
+      ...issues.map((issue) => `- ${issue}`),
+      '',
+    ].join('\n');
+    return result(1, '', stderr, issues);
+  }
+
+  return result(0, `Production preflight passed using ${envFile}\n`);
+}
+
+export function validateProductionEnvContent(envContent, processEnv = process.env) {
+  return validateProductionEnvironment(parseProductionEnvContent(envContent), processEnv);
+}
+
+export function validateProductionEnvironment(env, processEnv = process.env) {
   const runtimeWebApiUrlFromProcess = processEnv[COMPOSE_RUNTIME_WEB_API_URL] ?? '';
   const runtimeWebSupabaseUrlFromProcess = processEnv[COMPOSE_RUNTIME_WEB_SUPABASE_URL] ?? '';
   const runtimeEnv = {
@@ -590,16 +613,7 @@ export function runProductionPreflight({ envFile = '.env.production', processEnv
   requireComposeRuntimeWebSupabaseUrl(env, runtimeEnv, issues);
   requireAuthCookieDomain(env, issues);
 
-  if (issues.length) {
-    const stderr = [
-      `Production preflight failed (${issues.length} issue${issues.length === 1 ? '' : 's'}):`,
-      ...issues.map((issue) => `- ${issue}`),
-      '',
-    ].join('\n');
-    return result(1, '', stderr, issues);
-  }
-
-  return result(0, `Production preflight passed using ${envFile}\n`);
+  return issues;
 }
 
 export function runProductionPreflightFromArgs(args = process.argv.slice(2), processEnv = process.env) {
