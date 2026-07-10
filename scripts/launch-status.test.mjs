@@ -572,7 +572,7 @@ test('reports whether launch evidence is bound to a concrete release identity', 
       webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'c'.repeat(64)}`,
       migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'d'.repeat(64)}`,
       webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-      webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+      webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
     },
   };
 

@@ -19,6 +19,7 @@ const releaseImagePatterns = Object.freeze({
   webImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}$/,
   migrationImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:[a-f0-9]{64}$/,
 });
+const sampleSupabaseProjectRefPattern = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
 function usage() {
   return 'Usage: node scripts/production-launch-evidence-status.mjs [--json] [--evidence-file <path>]\n';
@@ -158,7 +159,25 @@ export function releaseBindingStatus(evidence) {
     if (typeof manifest.webBuildNextPublicApiUrl !== 'string' || manifest.webBuildNextPublicApiUrl !== 'https://api.charitypilot.ie') {
       missingFields.push('release.imageDigestManifest.webBuildNextPublicApiUrl');
     }
-    if (typeof manifest.webBuildNextPublicSupabaseUrl !== 'string' || !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(manifest.webBuildNextPublicSupabaseUrl)) {
+    let supabaseUrlUsesSampleProjectRef = false;
+    if (typeof manifest.webBuildNextPublicSupabaseUrl === 'string') {
+      try {
+        const url = new URL(manifest.webBuildNextPublicSupabaseUrl);
+        const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+        if (hostname.endsWith('.supabase.co')) {
+          supabaseUrlUsesSampleProjectRef = sampleSupabaseProjectRefPattern.test(
+            hostname.slice(0, -'.supabase.co'.length),
+          );
+        }
+      } catch {
+        // The existing shape check below reports the field path.
+      }
+    }
+    if (
+      typeof manifest.webBuildNextPublicSupabaseUrl !== 'string' ||
+      !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(manifest.webBuildNextPublicSupabaseUrl) ||
+      supabaseUrlUsesSampleProjectRef
+    ) {
       missingFields.push('release.imageDigestManifest.webBuildNextPublicSupabaseUrl');
     }
   }

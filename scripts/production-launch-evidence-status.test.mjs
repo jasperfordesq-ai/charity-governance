@@ -8,6 +8,7 @@ import { test } from 'node:test';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const statusScriptPath = join(scriptsDir, 'production-launch-evidence-status.mjs');
 const templateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
+const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 
 async function loadStatusRunner() {
   assert.ok(existsSync(statusScriptPath), 'production launch evidence status script must exist');
@@ -210,7 +211,7 @@ test('production launch evidence status recognises the published migration image
         webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
         migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
         webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-        webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+        webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
       },
     },
   };
@@ -224,6 +225,32 @@ test('production launch evidence status recognises the published migration image
   const singularStatus = releaseBindingStatus(evidence);
   assert.equal(singularStatus.complete, false);
   assert.ok(singularStatus.missingFields.includes('release.imageDigestManifest.migrationImage'));
+});
+
+test('production launch evidence status rejects sample Supabase release bindings', async () => {
+  const { releaseBindingStatus } = await loadStatusRunner();
+  const digest = 'a'.repeat(64);
+  const evidence = {
+    release: {
+      commitSha: 'b'.repeat(40),
+      workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
+      workflowFile: '.github/workflows/release-images.yml',
+      gitRef: 'refs/heads/master',
+      imageDigestManifest: {
+        apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
+        webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
+        migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+        webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
+        webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
+      },
+    },
+  };
+
+  const status = releaseBindingStatus(evidence);
+
+  assert.equal(status.complete, false);
+  assert.ok(status.missingFields.includes('release.imageDigestManifest.webBuildNextPublicSupabaseUrl'));
+  assert.doesNotMatch(status.headline, /configured-project/);
 });
 
 test('production launch evidence status falls back to current hints for older ledgers', async () => {

@@ -200,6 +200,7 @@ const fixedInThisAuditBranch = [
   'Production Supabase storage checks now reject sample project refs before making any provider probe.',
   'Production release-run evidence validation now rejects sample Supabase build origins before GitHub API calls.',
   'Launch status now reports copied sample Supabase project refs as unresolved production values instead of ENV_COMPLETE.',
+  'Production launch evidence status now treats sample Supabase release bindings as incomplete release identity evidence.',
   'Billing/email launch evidence now requires Stripe webhook subscription-event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.',
   'Billing disabled checkout and portal actions now describe the visible provider-degraded or current-plan reason for assistive technology.',
   'Billing checkout and portal handoffs now use a shared visible inline status instead of a route-local hidden live-region message.',
