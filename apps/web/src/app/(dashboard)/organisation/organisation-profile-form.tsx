@@ -12,7 +12,7 @@ import {
 import { AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, StickyFormActions, ValidationSummary } from '@/components/ui/forms';
-import { StatusChip } from '@/components/ui/status';
+import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { SaveStatusIndicator } from '@/components/ui/states';
 import type { ConditionalObligationProfile } from '@charitypilot/shared';
 import {
@@ -115,7 +115,7 @@ export function OrganisationProfileForm({
       title="Profile fields"
       description={`${readyCount} of ${completionItems.length} setup fields are ready for operational review.`}
     >
-      <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+      <div className={statusPanelClassName('neutral', 'overflow-hidden')}>
         <div className="space-y-7 p-4 sm:p-6">
           <ValidationSummary errors={validationErrors} />
 

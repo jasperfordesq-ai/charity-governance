@@ -216,6 +216,17 @@ test('organisation profile form is extracted from the oversized route file', () 
   assert.match(formSrc, /Save profile/);
 });
 
+test('organisation profile form shell uses the shared status panel styling', () => {
+  const formSrc = dash('organisation/organisation-profile-form.tsx');
+
+  assert.match(formSrc, /statusPanelClassName/);
+  assert.match(formSrc, /className=\{statusPanelClassName\('neutral', 'overflow-hidden'\)\}/);
+  assert.doesNotMatch(
+    formSrc,
+    /<div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">/,
+  );
+});
+
 test('organisation review warnings use the shared inline status primitive', () => {
   const pageSrc = dash('organisation/page.tsx');
   const modalSrc = dash('organisation/organisation-complexity-modal.tsx');
