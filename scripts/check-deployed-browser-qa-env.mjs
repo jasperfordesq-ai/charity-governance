@@ -40,6 +40,21 @@ function looksLikePlaceholderSecret(value) {
   return SECRET_PLACEHOLDER_PATTERN.test(String(value ?? ''));
 }
 
+function usesDocumentationEmailDomain(value) {
+  const domain = String(value ?? '').split('@').pop()?.toLowerCase().replace(/\.$/, '') ?? '';
+  return (
+    domain === 'example.com' ||
+    domain === 'example.net' ||
+    domain === 'example.org' ||
+    domain.endsWith('.example') ||
+    domain.endsWith('.example.com') ||
+    domain.endsWith('.example.net') ||
+    domain.endsWith('.example.org') ||
+    domain.endsWith('.test') ||
+    domain.endsWith('.invalid')
+  );
+}
+
 function requireCanonicalOrigin({ env, key, expected, label, issues }) {
   const value = trimmed(env, key);
   if (!value) {
@@ -89,7 +104,11 @@ function collectIssues(env) {
   if (!ownerEmail) {
     issues.push('E2E_OWNER_EMAIL must be supplied from the approved non-sensitive test workspace secret store.');
     credentialsReady = false;
-  } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ownerEmail) || looksLikePlaceholderSecret(ownerEmail)) {
+  } else if (
+    !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ownerEmail) ||
+    looksLikePlaceholderSecret(ownerEmail) ||
+    usesDocumentationEmailDomain(ownerEmail)
+  ) {
     issues.push('E2E_OWNER_EMAIL must come from the approved non-sensitive test workspace secret store.');
     credentialsReady = false;
   }

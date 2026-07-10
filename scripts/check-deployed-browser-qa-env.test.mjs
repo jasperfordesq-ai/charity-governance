@@ -9,7 +9,7 @@ const completeEnv = Object.freeze({
   E2E_DEPLOYED_QA: 'true',
   E2E_WEB_URL: 'https://app.charitypilot.ie',
   E2E_API_URL: 'https://api.charitypilot.ie',
-  E2E_OWNER_EMAIL: 'launch-owner@example.com',
+  E2E_OWNER_EMAIL: 'launch-owner@qa.charitypilot.ie',
   E2E_OWNER_PASSWORD: 'correct horse battery staple',
 });
 
@@ -27,7 +27,7 @@ test('deployed browser QA env preflight passes without printing credentials', as
   assert.equal(payload.credentialsPresent, true);
   assert.equal(payload.secretValuesPrinted, false);
   assert.doesNotMatch(result.stdout, /correct horse battery staple/);
-  assert.doesNotMatch(result.stdout, /launch-owner@example\.com/);
+  assert.doesNotMatch(result.stdout, /launch-owner@qa\.charitypilot\.ie/);
 });
 
 test('deployed browser QA env preflight fails closed for local or incomplete configuration', async () => {
@@ -73,6 +73,25 @@ test('deployed browser QA env preflight rejects copied credential placeholders',
   assert.equal(payload.secretValuesPrinted, false);
   assert.doesNotMatch(result.stdout, /SECRET_STORE_E2E_OWNER_EMAIL/);
   assert.doesNotMatch(result.stdout, /SECRET_STORE_E2E_OWNER_PASSWORD/);
+});
+
+test('deployed browser QA env preflight rejects documentation owner email domains', async () => {
+  const { runDeployedBrowserQaEnvCheckFromArgs } = await loadRunner();
+
+  const result = runDeployedBrowserQaEnvCheckFromArgs(['--json'], {
+    env: {
+      ...completeEnv,
+      E2E_OWNER_EMAIL: 'launch-owner@example.com',
+    },
+  });
+  const payload = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 1);
+  assert.equal(payload.ok, false);
+  assert.match(payload.issues.join('\n'), /E2E_OWNER_EMAIL must come from the approved non-sensitive test workspace secret store/);
+  assert.equal(payload.credentialsPresent, false);
+  assert.equal(payload.secretValuesPrinted, false);
+  assert.doesNotMatch(result.stdout, /launch-owner@example\.com/);
 });
 
 test('deployed browser QA env preflight renders operator-safe text guidance', async () => {
