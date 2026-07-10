@@ -5,7 +5,7 @@ import { Button } from '@heroui/react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { EmptyState } from '@/components/ui/states';
-import { EvidenceChip, ReviewFlag, StatusChip } from '@/components/ui/status';
+import { EvidenceChip, ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   ConflictStatus,
   RegisterStatus,
@@ -309,7 +309,7 @@ function RegisterRow({
   action: ReactNode;
 }) {
   return (
-    <article className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+    <article className={statusPanelClassName('neutral', 'p-4')}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

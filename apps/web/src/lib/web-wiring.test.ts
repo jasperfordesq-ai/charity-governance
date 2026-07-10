@@ -2637,6 +2637,9 @@ test('registers operational record list sections are extracted from the oversize
   assert.match(listsSrc, /Fundraising register/);
   assert.match(listsSrc, /export function RegisterRecordsPanel/);
   assert.match(listsSrc, /export function riskScore/);
+  assert.match(listsSrc, /statusPanelClassName/);
+  assert.match(listsSrc, /className=\{statusPanelClassName\('neutral', 'p-4'\)\}/);
+  assert.doesNotMatch(listsSrc, /rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/);
 });
 
 test('phase 6C team page clarifies permissions, disabled states, and invite feedback', () => {
