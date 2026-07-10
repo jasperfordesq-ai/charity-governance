@@ -72,7 +72,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--production-env-file=')) {
-      options.productionEnvFile = arg.slice('--production-env-file='.length);
+      const value = arg.slice('--production-env-file='.length);
+      if (!value) throw new Error('--production-env-file requires a value');
+      options.productionEnvFile = value;
       continue;
     }
     if (arg === '--rollback-digest-file' || arg === '--image-digest-file') {
@@ -83,11 +85,15 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--rollback-digest-file=')) {
-      options.rollbackDigestFile = arg.slice('--rollback-digest-file='.length);
+      const value = arg.slice('--rollback-digest-file='.length);
+      if (!value) throw new Error('--rollback-digest-file requires a value');
+      options.rollbackDigestFile = value;
       continue;
     }
     if (arg.startsWith('--image-digest-file=')) {
-      options.rollbackDigestFile = arg.slice('--image-digest-file='.length);
+      const value = arg.slice('--image-digest-file='.length);
+      if (!value) throw new Error('--image-digest-file requires a value');
+      options.rollbackDigestFile = value;
       continue;
     }
     if (arg === '--wait-timeout') {

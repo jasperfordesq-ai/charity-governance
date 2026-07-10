@@ -304,6 +304,43 @@ test('production rollback requires an explicit rollback digest manifest', async 
   assert.match(result.stderr, /--rollback-digest-file is required/);
 });
 
+test('production rollback rejects empty path options before deploy', async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  let deployCalled = false;
+
+  const emptyEnvResult = runProductionComposeRollbackFromArgs(
+    ['--production-env-file=', '--rollback-digest-file', 'release-image-digests.previous.env'],
+    {
+      processEnv: cleanEnv(),
+      runDeploy: () => {
+        deployCalled = true;
+        return { status: 0, stdout: '', stderr: '' };
+      },
+    },
+  );
+
+  assert.equal(emptyEnvResult.status, 2);
+  assert.equal(deployCalled, false);
+  assert.match(emptyEnvResult.stderr, /Usage:/);
+  assert.match(emptyEnvResult.stderr, /--production-env-file requires a value/);
+
+  const emptyDigestResult = runProductionComposeRollbackFromArgs(
+    ['--production-env-file', '.env.production', '--rollback-digest-file='],
+    {
+      processEnv: cleanEnv(),
+      runDeploy: () => {
+        deployCalled = true;
+        return { status: 0, stdout: '', stderr: '' };
+      },
+    },
+  );
+
+  assert.equal(emptyDigestResult.status, 2);
+  assert.equal(deployCalled, false);
+  assert.match(emptyDigestResult.stderr, /Usage:/);
+  assert.match(emptyDigestResult.stderr, /--rollback-digest-file requires a value/);
+});
+
 test('production rollback can opt out of the TLS overlay when deploy uses managed load-balancer TLS', async () => {
   const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-production-rollback-no-tls-proxy-'));

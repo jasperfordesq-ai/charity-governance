@@ -219,6 +219,14 @@ test('deploy preflight rejects placeholder TLS ACME contact emails', () => {
   }
 });
 
+test('deploy preflight rejects empty production env file option as usage error', () => {
+  const result = runPreflight(['--production-env-file=', '--dry-run']);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('deploy preflight dry-run emits production validation and signature verification commands', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-valid-'));
   const envPath = join(tempDir, 'production.env');

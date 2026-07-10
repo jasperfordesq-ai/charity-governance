@@ -51,7 +51,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--production-env-file=')) {
-      options.productionEnvFile = arg.slice('--production-env-file='.length);
+      const value = arg.slice('--production-env-file='.length);
+      if (!value) throw new Error('--production-env-file requires a value');
+      options.productionEnvFile = value;
       continue;
     }
     if (arg === '--wait-timeout') {

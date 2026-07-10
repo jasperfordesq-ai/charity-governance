@@ -265,6 +265,27 @@ test('production deploy rejects invalid wait timeouts before preflight', async (
   assert.match(result.stderr, /--wait-timeout must be a positive integer number of seconds/);
 });
 
+test('production deploy rejects empty production env file option before preflight', async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  let preflightCalled = false;
+
+  const result = runProductionComposeDeployFromArgs(
+    ['--production-env-file=', '--dry-run'],
+    {
+      processEnv: cleanEnv(),
+      runPreflight: () => {
+        preflightCalled = true;
+        return { status: 0, stdout: '', stderr: '' };
+      },
+    },
+  );
+
+  assert.equal(result.status, 2);
+  assert.equal(preflightCalled, false);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--production-env-file requires a value/);
+});
+
 test('production deploy can opt out of the TLS overlay when a managed load balancer terminates HTTPS', async () => {
   const runProductionComposeDeployFromArgs = await loadDeployRunner();
   const envPath = join(tmpdir(), 'charitypilot-managed-lb-production.env');
