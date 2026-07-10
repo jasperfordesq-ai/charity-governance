@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 const DEFAULT_BUCKET = 'documents';
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60;
+const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
 function usage() {
   return [
@@ -105,6 +106,11 @@ function validateEnv(env) {
       const url = new URL(env.SUPABASE_URL);
       if (url.protocol !== 'https:' || !url.hostname.endsWith('.supabase.co')) {
         issues.push('SUPABASE_URL must be an HTTPS Supabase project URL');
+      } else {
+        const projectRef = url.hostname.toLowerCase().slice(0, -'.supabase.co'.length);
+        if (SAMPLE_SUPABASE_PROJECT_REF_PATTERN.test(projectRef)) {
+          issues.push('SUPABASE_URL must not use a sample Supabase project ref');
+        }
       }
     } catch {
       issues.push('SUPABASE_URL must be a valid URL');
