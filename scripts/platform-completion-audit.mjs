@@ -75,6 +75,7 @@ const fixedInThisAuditBranch = [
   'Email delivery degradation logs now route through an injectable logger contract instead of direct console warn/error calls.',
   'Runtime provider-error formatting now redacts Stripe, Stripe webhook, Resend, bearer-token, and Supabase apikey-shaped values before log serialization.',
   'Production preflight now rejects reserved documentation hostnames in DATABASE_URL so copied sample PostgreSQL values cannot pass as real launch configuration.',
+  'Production database backup/restore checks now also reject reserved documentation hostnames before attempting a production PostgreSQL backup.',
   'Compliance/export/dashboard aggregate progress labels now say recorded progress rather than implying legal compliance certification.',
   'API-rendered exports now include a source/professional-review appendix and a not-legal-advice/non-certificate disclaimer.',
   'The API export route now delegates source-cited HTML report rendering to a dedicated module behind a production tooling regression test.',

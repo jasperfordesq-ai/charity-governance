@@ -207,6 +207,33 @@ test('production database checker rejects copied placeholder database hosts befo
   }
 });
 
+test('production database checker rejects reserved documentation database hosts before backup', async () => {
+  const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    DATABASE_URL: 'postgresql://user:secret@db.charitypilot.example:5432/charitypilot?sslmode=require',
+  }));
+  let called = false;
+
+  try {
+    const result = await runProductionDatabaseCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        runPostgresBackupFromArgs: async () => {
+          called = true;
+          return { status: 0, stdout: '', stderr: '' };
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(called, false, 'checker must stop before backing up a reserved documentation database host');
+    assert.match(result.stderr, /DATABASE_URL must not use a reserved documentation hostname/);
+    assert.doesNotMatch(result.stderr, /user:secret|db\.charitypilot\.example/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production database checker propagates backup and restore failures without leaking credentials', async () => {
   const runProductionDatabaseCheckFromArgs = await loadDatabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());

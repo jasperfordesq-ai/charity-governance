@@ -120,6 +120,21 @@ function isLocalDatabaseHost(hostname) {
   );
 }
 
+function isReservedDocumentationHostname(hostname) {
+  const normalized = normaliseHostname(hostname);
+  return (
+    normalized === 'example.com' ||
+    normalized === 'example.net' ||
+    normalized === 'example.org' ||
+    normalized.endsWith('.example') ||
+    normalized.endsWith('.example.com') ||
+    normalized.endsWith('.example.net') ||
+    normalized.endsWith('.example.org') ||
+    normalized.endsWith('.test') ||
+    normalized.endsWith('.invalid')
+  );
+}
+
 function databaseUrlIssues(databaseUrl) {
   const issues = [];
   if (!isConfigured(databaseUrl)) {
@@ -134,6 +149,9 @@ function databaseUrlIssues(databaseUrl) {
     }
     if (isLocalDatabaseHost(url.hostname)) {
       issues.push('DATABASE_URL must not point at localhost in production');
+    }
+    if (isReservedDocumentationHostname(url.hostname)) {
+      issues.push('DATABASE_URL must not use a reserved documentation hostname');
     }
     const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
     if (!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) {
