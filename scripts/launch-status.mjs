@@ -234,6 +234,13 @@ const PLACEHOLDER_TOKENS = Object.freeze([
   'TBD',
   'placeholder',
 ]);
+const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
+const SUPABASE_URL_KEYS = Object.freeze([
+  'SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
+  'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
+]);
 const USAGE_TEXT = 'Usage: node scripts/launch-status.mjs [--json]';
 
 function parseArgs(argv) {
@@ -339,6 +346,26 @@ function productionEnvAssignments(envContent) {
   return assignments;
 }
 
+function sampleSupabaseProjectRefIssueForValue(key, value) {
+  if (!SUPABASE_URL_KEYS.includes(key)) return null;
+
+  try {
+    const url = new URL(String(value ?? ''));
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+    if (!hostname.endsWith('.supabase.co')) return null;
+    const projectRef = hostname.slice(0, -'.supabase.co'.length);
+    if (!SAMPLE_SUPABASE_PROJECT_REF_PATTERN.test(projectRef)) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    key,
+    reason: 'sample-supabase-project-ref',
+    detail: 'Value must use the real production Supabase project ref, not a copied sample project ref.',
+  };
+}
+
 function productionValueIssueDetails(envContent) {
   const assignments = productionEnvAssignments(envContent);
   const issues = new Map();
@@ -355,6 +382,13 @@ function productionValueIssueDetails(envContent) {
 
   for (const issue of placeholderIssues(envContent)) {
     issues.set(issue.key, issue);
+  }
+
+  for (const [key, value] of assignments.entries()) {
+    const issue = sampleSupabaseProjectRefIssueForValue(key, value);
+    if (issue && !issues.has(key)) {
+      issues.set(key, issue);
+    }
   }
 
   const expectedExactValues = [

@@ -17,14 +17,15 @@ import { renderProductionLaunchEvidenceTemplate } from './generate-production-la
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const launchStatusScript = join(repoRoot, 'scripts', 'launch-status.mjs');
+const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const VALID_PRODUCTION_VALUES = {
   DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
   FRONTEND_URL: 'https://app.charitypilot.ie',
   NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-  NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
-  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
-  SUPABASE_URL: 'https://configured-project.supabase.co',
+  NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
+  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
+  SUPABASE_URL: productionSupabaseUrl,
   SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
   STRIPE_SECRET_KEY: 'sk_live_configured',
   STRIPE_WEBHOOK_SECRET: 'whsec_configured',
@@ -45,7 +46,7 @@ const VALID_PRODUCTION_VALUES = {
   CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'b'.repeat(64)}`,
   CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'c'.repeat(64)}`,
   CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-  CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+  CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
 };
 
 function productionEnv(overrides = {}) {
@@ -380,6 +381,36 @@ test('reports ENV_INCOMPLETE for non-REPLACE_ME production placeholders', () => 
     { key: 'CHARITYPILOT_WEB_IMAGE', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
   ]);
   assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 28, remaining: 3 });
+});
+
+test('reports ENV_INCOMPLETE for sample Supabase project refs', () => {
+  const env = productionEnv({
+    SUPABASE_URL: 'https://configured-project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
+  });
+
+  const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, [
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
+    'SUPABASE_URL',
+    'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
+  ]);
+  assert.deepEqual(
+    s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })),
+    [
+      { key: 'NEXT_PUBLIC_SUPABASE_URL', reason: 'sample-supabase-project-ref' },
+      { key: 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL', reason: 'sample-supabase-project-ref' },
+      { key: 'SUPABASE_URL', reason: 'sample-supabase-project-ref' },
+      { key: 'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL', reason: 'sample-supabase-project-ref' },
+    ],
+  );
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 24, total: 28, remaining: 4 });
+  assert.doesNotMatch(renderLaunchStatusText(s), /configured-project/);
 });
 
 test('groups missing production values by operator source', () => {
