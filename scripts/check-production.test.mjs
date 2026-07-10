@@ -406,6 +406,28 @@ test('fails when production Supabase URLs use sample project refs', () => {
   }
 });
 
+test('fails when production Supabase service role uses copied secret-store placeholder text', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-supabase-service-placeholder-'));
+  const envPath = join(tempDir, 'production.env');
+
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
+    }),
+  );
+
+  try {
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /SUPABASE_SERVICE_ROLE_KEY is missing or still contains a placeholder value/);
+    assert.doesNotMatch(result.stderr, /supabase-service-role-key-from-secret-store/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('fails when production database URL uses a reserved documentation hostname', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-db-doc-host-'));
   const envPath = join(tempDir, 'production.env');

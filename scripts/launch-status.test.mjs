@@ -22,6 +22,7 @@ const stripeSecretFixture = ['sk', 'live', 'fixture'].join('_');
 const stripeWebhookFixture = ['whsec', 'fixture'].join('_');
 const stripePublishableFixture = ['pk', 'live', 'fixture'].join('_');
 const resendApiFixture = ['re', 'fixture'].join('_');
+const supabaseServiceRoleFixture = ['supabase', 'service-role', 'fixture'].join('_');
 const VALID_PRODUCTION_VALUES = {
   DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
   FRONTEND_URL: 'https://app.charitypilot.ie',
@@ -30,7 +31,7 @@ const VALID_PRODUCTION_VALUES = {
   NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
   CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
   SUPABASE_URL: productionSupabaseUrl,
-  SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
+  SUPABASE_SERVICE_ROLE_KEY: supabaseServiceRoleFixture,
   STRIPE_SECRET_KEY: stripeSecretFixture,
   STRIPE_WEBHOOK_SECRET: stripeWebhookFixture,
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: stripePublishableFixture,
@@ -457,6 +458,23 @@ test('reports ENV_INCOMPLETE for copied provider placeholder values', () => {
   );
   assert.deepEqual(s.launchProgress.productionValues, { completed: 20, total: 28, remaining: 8 });
   assert.doesNotMatch(renderLaunchStatusText(s), /sk_live_configured|whsec_configured|pk_live_configured|re_configured|price_essentials/);
+});
+
+test('reports ENV_INCOMPLETE for copied Supabase service-role placeholder values', () => {
+  const env = productionEnv({
+    SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
+  });
+
+  const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
+
+  assert.equal(s.phase, 'ENV_INCOMPLETE');
+  assert.deepEqual(s.remainingKeys, ['SUPABASE_SERVICE_ROLE_KEY']);
+  assert.deepEqual(
+    s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })),
+    [{ key: 'SUPABASE_SERVICE_ROLE_KEY', reason: 'provider-placeholder' }],
+  );
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 27, total: 28, remaining: 1 });
+  assert.doesNotMatch(renderLaunchStatusText(s), /supabase-service-role-key-from-secret-store/);
 });
 
 test('groups missing production values by operator source', () => {

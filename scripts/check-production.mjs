@@ -24,6 +24,7 @@ const PLACEHOLDERS = [
   'eyJ...',
   'https://your-project.supabase.co',
 ];
+const COPIED_PLACEHOLDER_PATTERN = /secret[-_]?store/i;
 
 const REQUIRED = [
   'NODE_ENV',
@@ -80,7 +81,11 @@ function envValue(env, key) {
 
 function isConfigured(value) {
   const normalizedValue = value.toLowerCase();
-  return Boolean(value.trim()) && !PLACEHOLDERS.some((placeholder) => normalizedValue.includes(placeholder.toLowerCase()));
+  return (
+    Boolean(value.trim()) &&
+    !PLACEHOLDERS.some((placeholder) => normalizedValue.includes(placeholder.toLowerCase())) &&
+    !COPIED_PLACEHOLDER_PATTERN.test(value)
+  );
 }
 
 function isLocalHost(hostname) {

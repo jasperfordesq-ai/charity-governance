@@ -226,6 +226,33 @@ test('production Supabase checker fails without configured production storage en
   }
 });
 
+test('production Supabase checker rejects copied service-role secret-store placeholder before probing', async () => {
+  const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
+  const { tempDir, envPath } = writeEnvFile(productionEnv({
+    SUPABASE_SERVICE_ROLE_KEY: 'supabase-service-role-key-from-secret-store',
+  }));
+  let probed = false;
+
+  try {
+    const result = await runProductionSupabaseCheckFromArgs(
+      ['--production-env-file', envPath],
+      {
+        fetchImpl: async () => {
+          probed = true;
+          return response(500, {});
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(probed, false, 'checker must stop before probing with a copied service-role placeholder');
+    assert.match(result.stderr, /SUPABASE_SERVICE_ROLE_KEY must be configured/);
+    assert.doesNotMatch(result.stderr, /supabase-service-role-key-from-secret-store/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production Supabase checker rejects copied project-ref placeholder URLs before probing', async () => {
   const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv({
