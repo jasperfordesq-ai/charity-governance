@@ -4,7 +4,7 @@ import { Button } from '@heroui/react';
 import { Check, ChevronDown } from 'lucide-react';
 import { AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { StatusChip, StatusTile } from '@/components/ui/status';
+import { StatusChip, StatusTile, statusPanelClassName } from '@/components/ui/status';
 import type { BillingStatusResponse } from '@charitypilot/shared';
 import { SubscriptionPlan } from '@charitypilot/shared';
 
@@ -83,11 +83,7 @@ export function BillingPlanSections({
             return (
               <article
                 key={plan.plan}
-                className={`relative rounded-lg border bg-white p-5 shadow-sm dark:bg-gray-900 ${
-                  isCurrent
-                    ? 'border-teal-primary dark:border-teal-bright'
-                    : 'border-gray-200 dark:border-gray-800'
-                }`}
+                className={statusPanelClassName(isCurrent ? 'brand' : 'neutral', 'relative p-5 shadow-sm')}
               >
                 {isCurrent ? (
                   <div className="absolute right-3 top-3">
@@ -177,7 +173,7 @@ export function BillingPlanSections({
               a: 'No. Complete adds operational registers and review prompts, but the board remains responsible for decisions and professional advice where needed.',
             },
           ].map(({ q, a }) => (
-            <details key={q} className="group rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <details key={q} className={statusPanelClassName('neutral', 'group overflow-hidden')}>
               <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800">
                 {q}
                 <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true" />

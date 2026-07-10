@@ -2834,6 +2834,19 @@ test('billing current-plan panel uses shared status panel styling', () => {
   assert.doesNotMatch(pageSrc, /rounded-lg border border-teal-primary\/20 bg-white p-5 shadow-sm/);
 });
 
+test('billing plan cards and notes use shared status panel styling', () => {
+  const sectionsSrc = dash('billing/billing-plan-sections.tsx');
+
+  assert.match(sectionsSrc, /statusPanelClassName/);
+  assert.match(
+    sectionsSrc,
+    /className=\{statusPanelClassName\(isCurrent \? 'brand' : 'neutral', 'relative p-5 shadow-sm'\)\}/,
+  );
+  assert.match(sectionsSrc, /className=\{statusPanelClassName\('neutral', 'group overflow-hidden'\)\}/);
+  assert.doesNotMatch(sectionsSrc, /relative rounded-lg border bg-white p-5 shadow-sm dark:bg-gray-900/);
+  assert.doesNotMatch(sectionsSrc, /group rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900/);
+});
+
 test('dashboard navigation manages mobile sidebar focus and meaningful breadcrumbs', () => {
   const dashboardLayout = app('(dashboard)/layout.tsx');
   for (const term of [
