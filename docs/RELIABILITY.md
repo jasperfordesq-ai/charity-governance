@@ -15,13 +15,13 @@ Generated: 2026-07-10 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 259 | 0 | 0 | 15 | 274 |
-| Web | 95 | 0 | 0 | 7 | 102 |
-| **Total** | **354** | **0** | **0** | **22** | **376** |
+| API | 268 | 0 | 0 | 15 | 283 |
+| Web | 97 | 0 | 0 | 7 | 104 |
+| **Total** | **365** | **0** | **0** | **22** | **387** |
 
-**API suite:** 438 passing, 0 failing. **Web suite:** 244 passing, 0 failing. **E2E:** 22 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 454 passing, 0 failing. **Web suite:** 248 passing, 0 failing. **E2E:** 22 Playwright titles linked (executed by the CI E2E gate).
 
-**Linkage:** 354/354 covered guarantees verified against a passing/linked test.
+**Linkage:** 365/365 covered guarantees verified against a passing/linked test.
 
 **Overall: GREEN**
 
@@ -51,7 +51,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (274 guarantees)
+## API surface - the matrix (283 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -207,7 +207,7 @@ _14 guarantees - covered 13  n/a 1_
 
 ### billing - `/api/v1/billing`
 
-_18 guarantees - covered 16  n/a 2_
+_27 guarantees - covered 25  n/a 2_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -215,20 +215,29 @@ _18 guarantees - covered 16  n/a 2_
 | Authorization boundary | All authed billing routes (/checkout, /create-checkout, /portal, /create-portal, /status) reject an unauthenticated request with 401 {code:'UNAUTHORIZED'} via the authGuard onRequest hook, before any service call. | covered | `authed billing routes reject unauthenticated requests with 401`<br/><sub>billing-reliability.test.ts</sub> |
 | Authorization boundary | POST /billing/checkout (and /create-checkout) reject a MEMBER and an ADMIN with 403 {code:'FORBIDDEN'} via requireOwner, and the BillingService createCheckoutSession (organisation.findUniqueOrThrow / Stripe) is never invoked. | covered | `checkout and portal require OWNER (MEMBER and ADMIN are rejected with FORBIDDEN)`<br/><sub>billing-reliability.test.ts</sub> |
 | Authorization boundary | POST /billing/portal (and /create-portal) reject a MEMBER and an ADMIN with 403 FORBIDDEN via requireOwner before createPortalSession runs. | covered | `checkout and portal require OWNER (MEMBER and ADMIN are rejected with FORBIDDEN)`<br/><sub>billing-reliability.test.ts</sub> |
-| Graceful degradation | When STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET/price ids are unconfigured, checkout, portal and the webhook signature step fail with a clean AppError 503 {code:'BILLING_NOT_CONFIGURED'} (handled to a 503 response) rather than a 500 or stack leak. | covered | `checkout returns 503 BILLING_NOT_CONFIGURED when Stripe is unconfigured`<br/><sub>billing-reliability.test.ts</sub> |
+| Graceful degradation | When the Stripe lifecycle configuration is incomplete (secret, webhook secret, pinned portal configuration, or four unique price IDs), checkout and portal fail with a clean AppError 503 {code:'BILLING_NOT_CONFIGURED'} rather than mutating customer or subscription state. | covered | `checkout returns 503 BILLING_NOT_CONFIGURED when Stripe is unconfigured`<br/><sub>billing-reliability.test.ts</sub> |
 | Graceful degradation | GET /billing/status degrades softly when billing is unconfigured: it returns 200 with billingConfigured:false (and hasAccess derived from stored subscription) instead of a 503, so the status endpoint keeps working when Stripe env is absent. | covered | `billing status reports billingConfigured:false without erroring when Stripe is unconfigured`<br/><sub>billing-reliability.test.ts</sub> |
 | At-least-once / idempotency | A Stripe webhook event whose id already exists in StripeWebhookEvent is ignored before any Stripe retrieve or subscription mutation: handleWebhook returns early and neither stripe.subscriptions.retrieve, stripeWebhookEvent.create, nor subscription.upsert is called. | covered | `duplicate Stripe webhook event ids are ignored before subscription mutation`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | Concurrent first-purchase Checkout requests claim one organisation-scoped attempt and use the same attempt-derived Stripe idempotency key, so Stripe cannot create one subscription per request. | covered | `concurrent Checkout requests share one attempt-bound Stripe idempotency key`<br/><sub>billing-subscription-integrity.test.ts</sub> |
 | At-least-once / idempotency | When two concurrent deliveries of the same event race past the pre-check, the in-transaction stripeWebhookEvent.create P2002 unique violation causes the second to return without mutating the subscription, while a P2002 originating from a different write (e.g. subscription.upsert on stripeSubscriptionId) is rethrown rather than swallowed. | covered | `Stripe webhook unique errors outside the event ledger are rethrown`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | An expired local Checkout attempt is replaced only after its Stripe session is retrieved and, when still open, explicitly expired so the old session can no longer create a subscription. | covered | `an expired open Checkout is expired at Stripe before a replacement attempt is created`<br/><sub>billing-subscription-integrity.test.ts</sub> |
+| At-least-once / idempotency | Checkout completion is bound to the active attempt and expected prior subscription, so an unknown or superseded Checkout webhook cannot overwrite the organisation's current subscription. | covered | `unknown and superseded Checkout webhooks cannot overwrite the current subscription`<br/><sub>billing-subscription-integrity.test.ts</sub> |
+| At-least-once / idempotency | Before reconciling checkout.session.completed, Stripe must report the new subscription as the only nonterminal subscription on the customer; another active subscription fails closed without a local overwrite. | covered | `Checkout webhook refuses to reconcile when Stripe reports another nonterminal subscription`<br/><sub>billing-subscription-integrity.test.ts</sub> |
+| At-least-once / idempotency | Subscription update and deletion webhooks retrieve the authoritative current Stripe subscription before opening the database transaction, so delayed event payloads cannot regress plan, interval, status, or cancellation state. | covered | `subscription.updated ignores stale event state and persists the authoritative Stripe subscription`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | If an expired local attempt's Stripe Checkout is already complete, the API refuses to replace it and waits for webhook reconciliation instead of issuing another subscription Checkout. | covered | `an expired attempt whose Stripe Checkout completed blocks replacement pending webhook reconciliation`<br/><sub>billing-subscription-integrity.test.ts</sub> |
 | At-least-once / idempotency | The webhook ledger row is created inside the same $transaction as the subscription mutation (the create-then-mutate is atomic), so a failed subscription write does not leave a ledger row that would suppress a legitimate retry. | covered | `a failed subscription write rolls back the webhook ledger row so the event can be retried`<br/><sub>idempotency-reliability.test.ts</sub> |
+| Input validation | Checkout reconciliation accepts exactly one subscription item with quantity one and one uniquely configured plan-and-interval price; multi-quantity or ambiguous item state is rejected before a subscription write. | covered | `Checkout webhook rejects subscription quantities that do not match the configured single-plan contract`<br/><sub>billing-subscription-integrity.test.ts</sub> |
 | Input validation | POST /billing/webhooks with an invalid stripe-signature header returns 400 {code:'INVALID_STRIPE_SIGNATURE'} and never reaches handleWebhook (no subscription write). | covered | `invalid Stripe webhook signatures return a client error`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Input validation | POST /billing/webhooks with no stripe-signature header returns 400 {code:'MISSING_STRIPE_SIGNATURE'} and never reaches handleWebhook. | covered | `missing Stripe webhook signatures return a client error`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Input validation | createCheckoutSchema accepts only plan in {ESSENTIALS,COMPLETE} and interval in {monthly,yearly}; an unsupported interval/plan is rejected by the schema. | covered | `POST /checkout with an invalid plan returns 400 VALIDATION_ERROR and never calls Stripe`<br/><sub>billing-reliability.test.ts</sub> |
-| Input validation | A webhook event whose checkout metadata is missing/invalid (no organisationId, unrecognised plan, or no subscription id) is rejected with 400 STRIPE_WEBHOOK_MISMATCH and performs no subscription write. | covered | `checkout.session.completed rejects metadata when the customer or price does not match the organisation plan`<br/><sub>billing-reminders-hardening.test.ts</sub> |
-| Observability | BillingService.isConfigured() truthfully reflects Stripe readiness (all of secret key, webhook secret, and every plan price id configured) and feeds the readiness endpoint's billingConfigured check, so readiness reports not_ready when billing secrets are missing. | covered | `isConfigured returns false when any required Stripe price id is missing`<br/><sub>billing-reliability.test.ts</sub> |
+| Input validation | A checkout webhook whose organisation, plan, interval, attempt, session, subscription, customer, single-item quantity, or configured price binding is missing or inconsistent is rejected with STRIPE_WEBHOOK_MISMATCH and performs no subscription write. | covered | `checkout.session.completed rejects metadata when the customer or price does not match the organisation plan`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| Observability | BillingService.isConfigured() requires the Stripe secret, webhook secret, pinned portal configuration, and four distinct configured plan/interval price IDs; it feeds readiness and the UI capability response so incomplete billing lifecycle setup fails closed. | covered | `isConfigured requires a portal configuration and four distinct Stripe price ids`<br/><sub>billing-reliability.test.ts</sub> |
+| Observability | Billing status exposes checkout and portal capabilities from persisted raw Stripe state: only canceled and incomplete_expired Stripe subscriptions are restartable, while incomplete, paused, unpaid, and all other nonterminal states remain portal-only or fail closed. | covered | `billing status offers Checkout only after the Stripe-managed subscription is terminal`<br/><sub>billing-subscription-integrity.test.ts</sub> |
 | Subscription / plan gating | plan-gating (requireCompletePlan / subscriptionGuard blocking expired tenants) does not apply to the billing route group itself. | n/a | _The billing endpoints are intentionally NOT behind subscriptionGuard or requireCompletePlan: checkout/portal/status must remain reachable precisely when a subscription is absent, expired, or past-due _ |
 | Tenant isolation | GET /billing/status returns the subscription for the caller's own organisationId only: getStatus queries subscription.findUnique({where:{organisationId: request.user.organisationId}}), so an OWNER of org A can never observe org B's plan/status/access. | covered | `GET /status scopes the subscription lookup to the caller's organisation`<br/><sub>billing-reliability.test.ts</sub> |
 | Tenant isolation | A checkout.session.completed webhook can only attach a subscription to the organisation that owns the matching stripeCustomerId: if the session/subscription customer id does not equal organisation.stripeCustomerId, the handler throws 400 STRIPE_WEBHOOK_MISMATCH and performs no subscription.upsert (preventing an attacker-controlled session from binding a subscription to a foreign org). | covered | `checkout.session.completed rejects metadata when the customer or price does not match the organisation plan`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Tenant isolation | customer.subscription.updated and .deleted only mutate the local subscription whose stripeSubscriptionId matches and whose organisation.stripeCustomerId matches the event's customer; a mismatched customer id throws 400 STRIPE_WEBHOOK_MISMATCH (via verifyExistingSubscription) and an unknown stripeSubscriptionId returns without writing. | covered | `subscription.updated and .deleted reject a customer that does not own the local subscription and ignore unknown subscription ids`<br/><sub>billing-reliability.test.ts</sub> |
+| Tenant isolation | When a local Stripe subscription exists but the customer link is missing, Checkout retrieves that subscription, verifies the customer metadata belongs to the organisation, and repairs the link before considering customer creation. | covered | `a saved Stripe subscription recovers its verified customer before any new customer is created`<br/><sub>billing-subscription-integrity.test.ts</sub> |
 
 ### export - `/api/v1/export`
 
@@ -441,7 +450,7 @@ _9 guarantees - covered 9_
 
 ---
 
-## Web surface - the matrix (102 guarantees)
+## Web surface - the matrix (104 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -611,14 +620,16 @@ _6 guarantees - covered 6_
 
 ### billing & pricing - `/billing`, `/pricing`
 
-_6 guarantees - covered 5  n/a 1_
+_8 guarantees - covered 7  n/a 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Accessibility & resilience | The billing page (and the public /pricing page) are axe-clean in both light and dark themes. | covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
 | Authorization boundary | The Stripe portal ("Manage Subscription") button renders only for an org with an active subscription; a trialing org has no portal button. | covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
+| Authorization boundary | The billing page fails closed and does not call checkout or portal unless the API response explicitly grants the corresponding server-owned capability. | covered | `billing page fails closed before calling checkout or portal endpoints`<br/><sub>lib/billing-safety.test.ts</sub> |
 | Graceful degradation | When Stripe is unconfigured (503/degraded) the page shows a "Billing setup is temporarily unavailable" notice and disables all checkout/portal buttons — never a broken checkout. | covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
 | Input validation | Checkout plan/interval are constrained to the shared createCheckoutSchema enum values (passed as fixed button literals — no free user input can produce an invalid checkout). | n/a | _plan/interval are hardcoded button literals matching createCheckoutSchema enums; there is no free-form input to validate client-side, and the server validates the payload (API ledger)._ |
+| Observability | Existing Stripe-managed subscriptions are directed to the pinned portal and public billing copy does not promise unverified proration or suggest a second Checkout path. | covered | `billing copy does not promise unverified proration or route existing subscriptions through Checkout`<br/><sub>lib/billing-safety.test.ts</sub> |
 | Subscription / plan gating | The billing page renders the current tier + trial state and the Complete-only feature comparison correctly (test mode). | covered | `renders the trial tier and Complete-plan feature gating (test mode)` <sup>e2e</sup><br/><sub>tests/billing.spec.ts</sub> |
 | Tenant isolation | A Stripe redirect URL returned by the API is validated with getTrustedStripeRedirectUrl before navigation; an unexpected origin shows an error instead of redirecting. | covered | `billing routes Stripe redirects through the trusted-redirect allow-list`<br/><sub>lib/web-wiring.test.ts</sub> |
 

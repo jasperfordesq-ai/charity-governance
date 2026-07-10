@@ -41,6 +41,7 @@ const READINESS_ENV_KEYS = [
   'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
   'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
   'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+  'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
   'RESEND_API_KEY',
   'EMAIL_FROM',
 ] as const;
@@ -118,6 +119,7 @@ test('authenticated readiness returns 200 ready when every dependency check pass
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentials_yearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_complete_monthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_complete_yearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_readiness';
   // Email configured: key + EMAIL_FROM containing '@'.
   process.env.RESEND_API_KEY = 're_live_readiness';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';

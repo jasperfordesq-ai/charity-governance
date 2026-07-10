@@ -47,6 +47,11 @@ export default function BillingPage() {
   }, [fetchBilling]);
 
   const startCheckout = async (plan: SubscriptionPlan, interval: 'monthly' | 'yearly') => {
+    if (!billing?.canStartCheckout) {
+      setBillingError('Checkout is not available for the current billing state. Manage an existing subscription in the Stripe customer portal or contact support.');
+      return;
+    }
+
     const key = `${plan}-${interval}`;
     setCheckoutLoading(key);
     setBillingError(null);
@@ -67,6 +72,11 @@ export default function BillingPage() {
   };
 
   const openPortal = async () => {
+    if (!billing?.canOpenPortal) {
+      setBillingError('The Stripe customer portal is not available for the current billing state. Please contact support.');
+      return;
+    }
+
     setPortalLoading(true);
     setBillingError(null);
     try {
@@ -101,6 +111,8 @@ export default function BillingPage() {
   const isTrialing = billing?.status === SubscriptionStatus.TRIALING;
   const isActive = billing?.status === SubscriptionStatus.ACTIVE;
   const billingConfigured = billing?.billingConfigured ?? false;
+  const canStartCheckout = billing?.canStartCheckout === true;
+  const canOpenPortal = billing?.canOpenPortal === true;
   const currentPlanName = billing?.plan === SubscriptionPlan.COMPLETE ? 'Complete' : billing?.plan === SubscriptionPlan.ESSENTIALS ? 'Essentials' : 'No active plan';
   const billingActionStatus = checkoutLoading
     ? 'Preparing secure Stripe checkout...'
@@ -150,8 +162,14 @@ export default function BillingPage() {
               <div className="max-w-3xl">
                 <div className="flex flex-wrap gap-2">
                   {statusChip()}
-                  <ReviewFlag tone={billingConfigured ? 'draft' : 'needs-review'}>
-                    {billingConfigured ? 'Stripe actions available' : 'Provider-degraded'}
+                  <ReviewFlag tone={canStartCheckout || canOpenPortal ? 'draft' : 'needs-review'}>
+                    {canOpenPortal
+                      ? 'Stripe portal available'
+                      : canStartCheckout
+                        ? 'Stripe checkout available'
+                        : billingConfigured
+                          ? 'Billing review required'
+                          : 'Provider-degraded'}
                   </ReviewFlag>
                 </div>
                 <h2 className="mt-3 text-lg font-semibold text-gray-950 dark:text-gray-50">Current plan</h2>
@@ -174,9 +192,16 @@ export default function BillingPage() {
                     Current period ends {formatDate(billing.currentPeriodEnd)}.
                   </p>
                 ) : null}
+
+                {billing?.cancelAtPeriodEnd ? (
+                  <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+                    Cancellation is scheduled
+                    {billing.currentPeriodEnd ? <> for {formatDate(billing.currentPeriodEnd)}</> : null}.
+                  </p>
+                ) : null}
               </div>
 
-              {isActive ? (
+              {canOpenPortal ? (
                 <Button
                   variant="bordered"
                   onPress={openPortal}
@@ -193,6 +218,8 @@ export default function BillingPage() {
           <BillingPlanSections
             billing={billing}
             billingConfigured={billingConfigured}
+            canStartCheckout={canStartCheckout}
+            canOpenPortal={canOpenPortal}
             checkoutLoading={checkoutLoading}
             isActive={isActive}
             onCheckout={startCheckout}

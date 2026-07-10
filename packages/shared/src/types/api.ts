@@ -660,10 +660,15 @@ export interface PortalResponse {
 export interface BillingStatusResponse {
   plan: SubscriptionPlan | null;
   status: SubscriptionStatus | null;
+  stripeStatus: string | null;
+  billingInterval: 'monthly' | 'yearly' | null;
+  cancelAtPeriodEnd: boolean;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   hasAccess: boolean;
   billingConfigured: boolean;
+  canStartCheckout: boolean;
+  canOpenPortal: boolean;
 }
 
 // ── Dashboard ──

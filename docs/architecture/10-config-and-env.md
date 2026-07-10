@@ -58,6 +58,7 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `STRIPE_ESSENTIALS_YEARLY_PRICE_ID` | Essentials yearly checkout price | `price_` |
 | `STRIPE_COMPLETE_MONTHLY_PRICE_ID` | Complete monthly checkout price | `price_` |
 | `STRIPE_COMPLETE_YEARLY_PRICE_ID` | Complete yearly checkout price | `price_` |
+| `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` | Pinned customer-portal configuration used for existing subscriptions | `bpc_` |
 
 ### Resend (email)
 

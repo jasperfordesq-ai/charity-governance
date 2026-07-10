@@ -17,6 +17,51 @@ blockers, acceptance criteria, and the continuous inspect/fix/verify/commit/push
 loop. Do not narrow the goal to the generated platform audit or stop because
 local gates are green.
 
+## 2026-07-10 Remediation Checkpoint
+
+The detailed issue contract remains in
+`docs/platform-remediation-audit-2026-07-10.md`. The current P0 checkpoint is:
+
+- **P0-01 annual-reporting claim containment - `CI_VERIFIED`.** Commit
+  `97f64b0285eb2d19489c062cda52134fda8f9a53` passed CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29073803773`.
+  Local evidence was web `244 / 244`, shared `19 / 19`, web lint/build,
+  generated-audit currency, and production tooling `396 / 396`. Named
+  accountant/Irish-solicitor approval remains external.
+- **P0-02 Resend acceptance/retry semantics - `CI_VERIFIED`.** Commit
+  `fbd5ce4` passed CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29074651622`.
+  Local evidence was focused email/degradation/reminder/auth/team/scheduler/
+  idempotency tests `73 / 73`, full API `438 / 438`, API build, and production
+  tooling `396 / 396`. A real accepted Resend send and verified production
+  domain remain external launch evidence.
+- **P0-03 duplicate Stripe subscription path - `LOCALLY_VERIFIED`, not yet
+  published.** The repository now has a one-per-organisation
+  `BillingCheckoutAttempt` lease/migration, attempt-bound Stripe idempotency and
+  metadata, remote customer/subscription reconciliation, strict terminal-state
+  restart rules, expired-session reconciliation, stale/superseded webhook
+  protection, authoritative subscription re-retrieval, exact one-item/
+  quantity-one price+interval validation, raw Stripe status/cancel scheduling,
+  server-owned web capabilities, and a pinned Billing Portal configuration.
+  Existing Stripe-managed subscriptions are portal-only; public copy no longer
+  promises unverified proration or offers Checkout as a plan-change route.
+  Focused API billing/idempotency verification is `50 / 50`; provider-checker
+  verification is `13 / 13`; shared is `19 / 19`; web is `248 / 248`; web lint
+  and production build pass; and the final full API suite is `454 / 454` after
+  all P0-03 tests were integrated. Production tooling is `399 / 399`, the
+  reliability report is green with `365 / 365` covered links, and the platform
+  audit is current. Publication and CI remain before this item can move beyond
+  local verification.
+
+P0-03 is not live-provider proof. Before production enablement, the billing
+owner must inventory and reconcile Stripe customer/subscription history,
+confirm at most one non-terminal subscription per organisation/customer,
+expire every legacy open subscription-mode Checkout session created before the
+attempt-bound release, prove the exact pinned portal/price/product/cancellation
+policy, and exercise purchase, duplicate-click, portal change, cancellation,
+terminal restart, and webhook retry/order against the promoted release. Keep
+that redacted evidence outside Git.
+
 ## Project
 
 - Workspace: `C:\platforms\htdocs\CharityPilot`
@@ -236,6 +281,12 @@ Correct posture:
   - organisation-scoped idempotency key;
   - metadata verification before checkout/portal reuse;
   - stale or wrong-organisation IDs repaired through metadata reconciliation.
+- Duplicate-subscription prevention now adds a serializable
+  `BillingCheckoutAttempt` lease, customer-wide provider subscription checks,
+  attempt-bound webhook validation, authoritative Stripe re-retrieval, exact
+  price/interval/quantity enforcement, and a pinned safe portal policy. Checkout
+  is restricted to first purchase or provider-confirmed terminal restart;
+  Stripe-managed changes are portal-only.
 - Document storage paths include UUIDs to avoid same-millisecond filename collisions.
 - Document file privacy is preserved through private storage and signed download URLs.
 - Document metadata responses do not expose internal storage object keys.
@@ -326,6 +377,34 @@ https://api.charitypilot.ie
 ## Recent Verification Evidence
 
 Recently successful checks in this workstream:
+
+- `node --test apps/api/dist/tests/billing-subscription-integrity.test.js apps/api/dist/tests/billing-reliability.test.js apps/api/dist/tests/billing-reminders-hardening.test.js apps/api/dist/tests/idempotency-reliability.test.js`
+  - Passed on 2026-07-10 with `50 / 50` focused P0-03 billing tests.
+- `node --test scripts/check-production-providers.test.mjs`
+  - Passed on 2026-07-10 with `13 / 13` provider-contract tests covering exact
+    prices/product grouping, pinned portal policy, webhook events, and Resend
+    domain verification.
+- `npm test -w @charitypilot/web`
+  - Passed on 2026-07-10 with `248 / 248` tests for the P0-03 checkpoint.
+- `npm test -w @charitypilot/shared`
+  - Passed on 2026-07-10 with `19 / 19` tests for the P0-03 checkpoint.
+- `npm run lint -w @charitypilot/web` and `npm run build -w @charitypilot/web`
+  - Passed on 2026-07-10 for the capability-driven billing UI and truthful copy.
+- `npm test -w @charitypilot/api`
+  - Passed on 2026-07-10 with `454 / 454` tests after all final P0-03 focused
+    regressions were integrated.
+- `npm run test:production-check`
+  - Passed on 2026-07-10 with `399 / 399` production-tooling tests.
+- `npm run reliability:report -- --write`
+  - Passed on 2026-07-10 with API `454 / 454`, web `248 / 248`, and `365 / 365`
+    covered-guarantee links resolved.
+- `npm run audit:platform:check`
+  - Passed on 2026-07-10; `docs/platform-completion-audit.md` is current.
+- `gh run watch 29074651622 --exit-status`
+  - Passed on 2026-07-10 for P0-02 commit `fbd5ce4`.
+- `gh run watch 29073803773 --exit-status`
+  - Passed on 2026-07-10 for P0-01 commit
+    `97f64b0285eb2d19489c062cda52134fda8f9a53`.
 
 - `cd e2e; E2E_ALLOW_LOCAL_DB_RESET=true E2E_SKIP_ROUTE_WARMING=true npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route /compliance/\$\{principleId\} renders in desktop light and dark"`
   - Passed on 2026-07-09 after the compliance-detail resolver was hardened to

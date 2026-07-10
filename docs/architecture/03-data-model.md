@@ -1,10 +1,10 @@
 # Data Model Reference
 
-CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 22 models and 14 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, every composite unique constraint and `@@index`, and the `onDelete` cascade behaviours.
+CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 23 models and 15 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, every composite unique constraint and `@@index`, and the `onDelete` cascade behaviours.
 
 ## Migration history
 
-The schema was built up across eleven migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
+The schema was built up across thirteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
 
 | Migration directory | Purpose (inferred from name) |
 | --- | --- |
@@ -19,12 +19,14 @@ The schema was built up across eleven migrations under `apps/api/prisma/migratio
 | `20260607173000_add_document_storage_deletion_claims` | Claim columns/indexes for deletion worker |
 | `20260608053000_add_active_team_invite_unique_index` | Partial unique index for active invites |
 | `20260608072000_seed_governance_reference_data` | Seed governance principles/standards |
+| `20260703214500_add_conditional_obligation_profile` | Conditional-obligation profile on `Organisation` |
+| `20260710064500_add_billing_checkout_attempts` | Stripe subscription facts and one active Checkout-attempt lease per organisation |
 
 A `seed.ts` script also lives at `apps/api/prisma/seed.ts`.
 
 ## Enums
 
-All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:10-110`).
+All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:10-116`).
 
 | Enum | Values | Used by |
 | --- | --- | --- |
@@ -35,6 +37,7 @@ All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:
 | `ComplianceSignoffStatus` | `DRAFT`, `BOARD_REVIEW`, `APPROVED` | `ComplianceSignoff.status` |
 | `SubscriptionPlan` | `ESSENTIALS`, `COMPLETE` | `Subscription.plan` |
 | `SubscriptionStatus` | `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED` | `Subscription.status` |
+| `BillingCheckoutAttemptStatus` | `PENDING`, `SESSION_CREATED`, `COMPLETED` | `BillingCheckoutAttempt.status` |
 | `DocumentCategory` | `CONSTITUTION`, `POLICY`, `BOARD_MINUTES`, `FINANCIAL_STATEMENT`, `INSURANCE`, `ANNUAL_REPORT`, `RISK_REGISTER`, `CODE_OF_CONDUCT`, `STRATEGIC_PLAN`, `OTHER` | `Document.category` |
 | `RegisterStatus` | `OPEN`, `MONITORING`, `CLOSED` | `RiskRecord`, `ComplaintRecord`, `FundraisingRecord` |
 | `ConflictStatus` | `DECLARED`, `MANAGED`, `CLOSED` | `ConflictRecord.status` |
@@ -45,11 +48,11 @@ All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:
 
 ## Tenant-isolation pattern
 
-`Organisation` (`apps/api/prisma/schema.prisma:112-148`) is the tenant root. Records are partitioned into three categories by how they relate to a tenant:
+`Organisation` (`apps/api/prisma/schema.prisma:118-156`) is the tenant root. Records are partitioned into three categories by how they relate to a tenant:
 
 | Category | Models | Isolation key |
 | --- | --- | --- |
-| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `BoardMember`, `Document`, `DocumentStorageDeletion`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription` | `organisationId` |
+| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `BoardMember`, `Document`, `DocumentStorageDeletion`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt` | `organisationId` |
 | **Global reference data** (shared across all tenants, no `organisationId`) | `GovernancePrinciple`, `GovernanceStandard` | none — read-only catalogue |
 | **Keyed differently** | `AuthSession` (by `userId`), `DocumentStandardLink` (by `documentId`/`standardId`), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
 
@@ -58,12 +61,12 @@ Notes on the differently-keyed models:
 - **`AuthSession`** (`apps/api/prisma/schema.prisma:178-191`) belongs to a `User`, not directly to an `Organisation`; tenancy is reached transitively through `User.organisationId`.
 - **`DocumentStandardLink`** (`apps/api/prisma/schema.prisma:315-323`) is a join table between an (org-scoped) `Document` and a (global) `GovernanceStandard`; it inherits tenancy from its `Document`.
 - **`DocumentStorageDeletion`** (`apps/api/prisma/schema.prisma:325-339`) stores `organisationId` as a plain string column with no relation back to `Organisation` — it is a background deletion queue keyed by `storagePath`, so the row can outlive the parent organisation row.
-- **`StripeWebhookEvent`** (`apps/api/prisma/schema.prisma:552-559`) is entirely global; its `id` is the Stripe event ID and the row exists purely for webhook idempotency.
+- **`StripeWebhookEvent`** (`apps/api/prisma/schema.prisma:581-588`) is entirely global; its `id` is the Stripe event ID and the row exists purely for webhook idempotency.
 
 ## Models
 
 ### Organisation
-`apps/api/prisma/schema.prisma:112-148` — the tenant root.
+`apps/api/prisma/schema.prisma:118-156` — the tenant root.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -75,10 +78,14 @@ Notes on the differently-keyed models:
 | `charitablePurpose` | `CharitablePurpose[]` | enum array |
 | `financialYearEnd`, `dateRegistered`, `lastAgmDate` | `DateTime?` | |
 | `registeredAddress`, `contactEmail`, `contactPhone`, `website` | `String?` | |
-| `stripeCustomerId` | `String? @unique` | links to Stripe customer |
+| `stripeCustomerId` | `String? @unique` | links to the organisation's metadata-verified Stripe customer |
 | `createdAt` / `updatedAt` | `DateTime` | |
 
-Has-many relations to nearly every org-scoped model, plus a one-to-one `subscription` (`Subscription?`) (`apps/api/prisma/schema.prisma:130-144`).
+Has-many relations to nearly every org-scoped model, plus one-to-one optional
+`subscription` (`Subscription?`) and `billingCheckoutAttempt`
+(`BillingCheckoutAttempt?`) relations. Deleting an organisation cascades its
+Checkout-attempt lease; the subscription relation retains Prisma's default
+referential action.
 
 ### User
 `apps/api/prisma/schema.prisma:150-176`
@@ -368,21 +375,55 @@ Indexes: `@@index([organisationId])`, `@@index([email])` (`apps/api/prisma/schem
 Constraint `@@unique([deadlineId, email, reminderDays])` (`apps/api/prisma/schema.prisma:531`) guarantees a given reminder offset is only ever logged once per (deadline, recipient) — the idempotency guard preventing duplicate reminder emails. Indexes: `@@index([organisationId])`, `@@index([userId])` (`apps/api/prisma/schema.prisma:532-533`). Deleting the `Organisation` or `Deadline` cascades the logs; deleting the `User` nulls `userId`.
 
 ### Subscription
-`apps/api/prisma/schema.prisma:536-550` — one-to-one billing record per organisation.
+One-to-one current billing projection per organisation. Stripe webhooks are the
+authority for every Stripe-backed field.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | `String` | `@id @default(cuid())` |
 | `organisationId` | `String @unique` | FK → `Organisation` (one-to-one) |
 | `stripeSubscriptionId` | `String? @unique` | links to Stripe subscription |
+| `stripeStatus` | `String?` | last authoritative raw Stripe subscription status |
 | `plan` | `SubscriptionPlan` | |
 | `status` | `SubscriptionStatus` | `@default(TRIALING)` |
+| `billingInterval` | `String?` | configured `monthly` / `yearly` cadence derived from the exact Stripe price |
+| `cancelAtPeriodEnd` | `Boolean` | `@default(false)`; last authoritative Stripe cancellation schedule |
 | `trialEndsAt`, `currentPeriodStart`, `currentPeriodEnd`, `cancelledAt` | `DateTime?` | |
+| `createdAt`, `updatedAt` | `DateTime` | creation and last local projection update |
 
-The `organisationId @unique` (`apps/api/prisma/schema.prisma:538`) is what makes the relation one-to-one — each organisation has at most one subscription.
+The `organisationId @unique` constraint makes the relation one-to-one: each
+organisation has at most one local current subscription projection. The
+separate unique `stripeSubscriptionId` prevents one provider subscription from
+being attached to multiple local organisations. A nullable
+`stripeSubscriptionId` supports the local trial created at registration.
+
+### BillingCheckoutAttempt
+
+One-to-one current Checkout lease per organisation. It prevents concurrent or
+replayed plan selections from creating multiple Stripe subscription sessions.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `String` | application-generated UUID primary key; also scopes Stripe idempotency and metadata |
+| `organisationId` | `String @unique` | FK → `Organisation`, `onDelete: Cascade` |
+| `requestedPlan` | `SubscriptionPlan` | plan selected when the lease was claimed |
+| `interval` | `String` | `monthly` or `yearly`; the migration adds a database `CHECK` constraint |
+| `status` | `BillingCheckoutAttemptStatus` | `@default(PENDING)` |
+| `stripeCheckoutSessionId` | `String? @unique` | bound Stripe Checkout session, once created |
+| `checkoutUrl` | `String?` | short-lived URL returned only while the attempt is open; cleared on completion |
+| `expectedPreviousStripeSubscriptionId` | `String?` | snapshot used to reject a stale webhook overwrite; deliberately not a local FK |
+| `expiresAt` | `DateTime` | shared local/Stripe lease expiry |
+| `createdAt`, `updatedAt` | `DateTime` | claim creation and last lifecycle transition |
+
+`organisationId @unique` permits one current attempt row per organisation;
+`stripeCheckoutSessionId @unique` prevents one Stripe session from being bound
+to two attempts; and `@@index([expiresAt])` supports expired-attempt operations.
+The row moves from `PENDING` to `SESSION_CREATED` to `COMPLETED`. A safely
+expired attempt can be deleted and replaced only after the API reconciles the
+old session with Stripe.
 
 ### StripeWebhookEvent
-`apps/api/prisma/schema.prisma:552-559` — global webhook idempotency ledger (no tenant key).
+`apps/api/prisma/schema.prisma:581-588` — global webhook idempotency ledger (no tenant key).
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -390,7 +431,7 @@ The `organisationId @unique` (`apps/api/prisma/schema.prisma:538`) is what makes
 | `type` | `String` | Stripe event type |
 | `processedAt`, `createdAt` | `DateTime` | `@default(now())` |
 
-Index `@@index([processedAt])` (`apps/api/prisma/schema.prisma:558`). Recording the Stripe event ID as the primary key means a re-delivered webhook can be detected and skipped.
+Index `@@index([processedAt])` (`apps/api/prisma/schema.prisma:587`). Recording the Stripe event ID as the primary key means a re-delivered webhook can be detected and skipped.
 
 ## onDelete behaviour summary
 
@@ -406,6 +447,7 @@ The schema declares explicit referential actions only where deletion semantics m
 | `ConflictRecord.boardMember` → `BoardMember` | `SetNull` | conflict retained, `boardMemberId` nulled |
 | `TeamInvite.invitedBy` → `User` | `SetNull` | invite retained, `invitedById` nulled |
 | `DeadlineReminderLog.user` → `User` | `SetNull` | log retained, `userId` nulled |
+| `BillingCheckoutAttempt.organisation` → `Organisation` | `Cascade` | short-lived Checkout lease deleted with the organisation |
 
 ## Entity-relationship diagram — tenant root
 
@@ -428,6 +470,7 @@ erDiagram
     Organisation ||--o{ TeamInvite : "has"
     Organisation ||--o{ DeadlineReminderLog : "has"
     Organisation ||--o| Subscription : "has one"
+    Organisation ||--o| BillingCheckoutAttempt : "has one current attempt"
     User ||--o{ AuthSession : "owns"
     BoardMember ||--o{ ConflictRecord : "named in"
     Deadline ||--o{ DeadlineReminderLog : "logs"
@@ -449,6 +492,7 @@ erDiagram
 
 - [Module & Dependency Graph](02-module-dependency-graph.md) — which services read and write each model.
 - [Governance Domain Model](08-governance-domain.md) — the semantics of the governance and register models.
-- [Billing & Subscription Flow](05-billing.md) — the Subscription and StripeWebhookEvent models in context.
+- [Billing & Subscription Flow](05-billing.md) — the Subscription,
+  BillingCheckoutAttempt, and StripeWebhookEvent models in context.
 - [Request Lifecycle, Middleware & Auth](04-request-lifecycle.md) — the AuthSession model and how it is used.
 - [System Overview](01-system-overview.md) — where PostgreSQL/Prisma sits in the topology.

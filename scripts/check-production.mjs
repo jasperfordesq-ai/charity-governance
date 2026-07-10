@@ -20,6 +20,7 @@ const PLACEHOLDERS = [
   'pk_test_...',
   'whsec_...',
   'price_...',
+  'bpc_...',
   're_...',
   'eyJ...',
   'https://your-project.supabase.co',
@@ -40,6 +41,7 @@ const REQUIRED = [
   'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
   'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
   'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+  'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
   'RESEND_API_KEY',
   'EMAIL_FROM',
   'SUPABASE_URL',
@@ -511,7 +513,7 @@ function redactPreflightTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
@@ -580,6 +582,22 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   ]) {
     requirePrefix(env, key, 'price_', 'Stripe price ID', issues);
   }
+  const stripePriceIds = [
+    envValue(env, 'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID'),
+    envValue(env, 'STRIPE_ESSENTIALS_YEARLY_PRICE_ID'),
+    envValue(env, 'STRIPE_COMPLETE_MONTHLY_PRICE_ID'),
+    envValue(env, 'STRIPE_COMPLETE_YEARLY_PRICE_ID'),
+  ].filter(Boolean);
+  if (new Set(stripePriceIds).size !== stripePriceIds.length) {
+    issues.push('Stripe price IDs must be distinct for each plan and billing interval');
+  }
+  requirePrefix(
+    env,
+    'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
+    'bpc_',
+    'Stripe billing portal configuration ID',
+    issues,
+  );
   requirePrefix(env, 'RESEND_API_KEY', 're_', 'Resend API key', issues);
   requirePrefix(env, 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_live_', 'live Stripe publishable key', issues);
   requireApprovedEmailSender(env, 'EMAIL_FROM', issues);

@@ -34,6 +34,7 @@ function setCompleteProductionEnv(overrides: Record<string, string | undefined> 
     STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentialsYearly',
     STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_completeMonthly',
     STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
+    STRIPE_BILLING_PORTAL_CONFIGURATION_ID: 'bpc_configuredPortal',
     RESEND_API_KEY: 're_realisticConfiguredSecret',
     EMAIL_FROM: 'noreply@charitypilot.ie',
     SUPABASE_URL: 'https://configured-project.supabase.co',
@@ -63,6 +64,7 @@ test('validateProductionEnv rejects placeholder production configuration', () =>
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_...';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_...';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_...';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_...';
   process.env.RESEND_API_KEY = 're_...';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
   process.env.SUPABASE_URL = 'https://your-project.supabase.co';
@@ -95,6 +97,7 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_configuredPortal';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
@@ -103,6 +106,24 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateProductionEnv());
+});
+
+test('validateProductionEnv requires a pinned Stripe portal configuration and distinct prices', () => {
+  setCompleteProductionEnv({
+    STRIPE_BILLING_PORTAL_CONFIGURATION_ID: undefined,
+    STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_essentialsMonthly',
+  });
+
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes(
+        'STRIPE_BILLING_PORTAL_CONFIGURATION_ID is missing or still contains a placeholder value',
+      ) &&
+      error.details.includes('Stripe price IDs must be distinct for each plan and billing interval'),
+  );
 });
 
 test('validateProductionEnv rejects copied Supabase project-ref placeholders', () => {
@@ -224,6 +245,7 @@ test('validateProductionEnv rejects unapproved production email sender domains',
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_configuredPortal';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@attacker.example';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
@@ -927,6 +949,7 @@ test('validateProductionEnv rejects the local database smoke override outside Gi
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_configuredPortal';
   process.env.RESEND_API_KEY = 're_configuredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
@@ -963,6 +986,7 @@ test('validateProductionEnv treats Docker host gateway database URLs as local pr
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_configuredPortal';
   process.env.RESEND_API_KEY = 're_configuredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
@@ -996,6 +1020,7 @@ test('validateProductionEnv allows local database URLs only for GitHub Actions p
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentialsYearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_completeMonthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_completeYearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_configuredPortal';
   process.env.RESEND_API_KEY = 're_configuredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';

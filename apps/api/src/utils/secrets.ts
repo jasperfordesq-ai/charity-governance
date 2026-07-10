@@ -8,6 +8,7 @@ const PLACEHOLDER_PATTERNS = [
   'pk_test_...',
   'whsec_...',
   'price_...',
+  'bpc_...',
   're_...',
   'eyJ...',
   'https://your-project.supabase.co',

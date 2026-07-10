@@ -176,7 +176,7 @@ const allowedEvidenceTypes = new Set([
 
 const placeholderOrLocalPattern = /\b(todo|tbd|pending(?!-navigation confirmation)|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|project_ref|change-me|your_|your-|file:\/\//i;
 const sampleSupabaseProjectRefPattern = /https:\/\/(?:configured-project|example|ci-project|test-project|demo-project|sample-project)\.supabase\.co\b/i;
-const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|RESEND_API_KEY=)\b/;
+const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|STRIPE_BILLING_PORTAL_CONFIGURATION_ID=|RESEND_API_KEY=)\b/;
 const approvedEvidenceReferenceHosts = ['charitypilot.ie', 'github.com'];
 const sensitiveEvidenceReferenceQueryKeys = new Set([
   'access_token',
@@ -1010,7 +1010,9 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
         'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
         'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
         'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+        'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
         'active live recurring Stripe prices',
+        'pinned Stripe billing portal configuration',
       ];
       for (const marker of requiredMarkers) {
         if (!text.includes(marker)) {
@@ -1665,7 +1667,7 @@ export function redactLaunchEvidenceTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY|GITHUB_TOKEN)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY|GITHUB_TOKEN)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')

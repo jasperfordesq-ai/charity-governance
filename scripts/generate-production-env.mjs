@@ -42,6 +42,7 @@ export const OPERATOR_SUPPLIED_KEYS = [
   ['STRIPE_ESSENTIALS_YEARLY_PRICE_ID', 'Stripe live Essentials yearly recurring price ID (Step 2)'],
   ['STRIPE_COMPLETE_MONTHLY_PRICE_ID', 'Stripe live Complete monthly recurring price ID (Step 2)'],
   ['STRIPE_COMPLETE_YEARLY_PRICE_ID', 'Stripe live Complete yearly recurring price ID (Step 2)'],
+  ['STRIPE_BILLING_PORTAL_CONFIGURATION_ID', 'Pinned live Stripe billing portal configuration ID (Step 2)'],
   ['RESEND_API_KEY', 'Resend production API key from the secret store (Step 2)'],
   ['EMAIL_FROM', 'Verified sender, e.g. noreply@charitypilot.ie (Step 2)'],
   ['ERROR_ALERT_WEBHOOK_URL', 'HTTPS incident webhook (Slack etc.) (Step 2)'],

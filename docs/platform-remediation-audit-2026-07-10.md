@@ -209,7 +209,7 @@ approval.
 
 ### P0-02 - Resend resolved failures counted as successful delivery
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Evidence:
 
@@ -257,7 +257,10 @@ Local verification:
 - `npm test -w @charitypilot/api`: `438 / 438` passed.
 - `npm run test:production-check`: `396 / 396` passed.
 
-Commit SHA / CI run: pending publication of this verified slice.
+Commit SHA / CI run:
+
+- `fbd5ce4`
+- `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29074651622`
 
 External evidence note: these tests prove the SDK contract and retry/alert state
 with controlled provider responses. A real Resend-domain/provider acceptance
@@ -265,7 +268,7 @@ check remains a separate production launch-evidence gate.
 
 ### P0-03 - Duplicate Stripe subscription and double-billing path
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
 Evidence:
 
@@ -293,6 +296,73 @@ Acceptance:
 - Current-plan, upgrade, downgrade, cancellation, retry, stale-customer, and
   webhook-order cases are covered.
 - UI copy matches the implemented Stripe behavior.
+
+Repository remediation completed locally on 2026-07-10:
+
+- Added the `BillingCheckoutAttempt` model, enum, migration, one-row-per-
+  organisation constraint, Stripe-session uniqueness, expiry index, and
+  database interval constraint. A serializable transaction now claims one
+  plan/interval attempt and uses its UUID as the Stripe idempotency and metadata
+  boundary.
+- Checkout now reconciles the stored/search-derived customer and any saved
+  subscription, lists all provider subscriptions for that customer, and permits
+  a first purchase or restart only when Stripe confirms there is no
+  non-terminal subscription. The restart-terminal set is deliberately limited
+  to `canceled` and `incomplete_expired`; unknown or ambiguous state fails
+  closed.
+- Same-plan concurrent/retried Checkout calls reuse the attempt-bound Stripe
+  session. A conflicting live attempt is rejected. Before replacing an expired
+  attempt, the API retrieves its Stripe session, explicitly expires an open
+  session, and blocks replacement when an old session completed but has not yet
+  reconciled.
+- Checkout webhooks are bound to the current attempt, session, organisation,
+  customer, requested plan/interval, exact prior subscription snapshot, and
+  provider subscription. A completion is rejected when another non-terminal
+  subscription exists. Updated/deleted events re-retrieve authoritative Stripe
+  state rather than trusting the event object's mutable fields.
+- Subscription persistence now retains `stripeStatus`, `billingInterval`, and
+  `cancelAtPeriodEnd`. The configured contract requires exactly one line item at
+  quantity one and maps the exact price ID to both plan and interval.
+- Existing Stripe-managed subscriptions are portal-only. The API pins
+  `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`; production checks require an exact
+  active/live two-product/four-price allow-list, price changes without quantity
+  changes, explicit recognised proration settings, and at-period-end
+  cancellation.
+- Billing status now returns server-owned `canStartCheckout` and
+  `canOpenPortal` capabilities. The web UI fails closed on those capabilities,
+  removes existing-subscription Checkout controls, and no longer promises
+  unverified proration.
+- Production setup/checklist documentation now requires a legacy open-Checkout
+  inventory and expiry/reconciliation pass before rollout because old provider
+  URLs cannot be invalidated by the new local attempt table retroactively.
+
+Local verification:
+
+- `node --test apps/api/dist/tests/billing-subscription-integrity.test.js apps/api/dist/tests/billing-reliability.test.js apps/api/dist/tests/billing-reminders-hardening.test.js apps/api/dist/tests/idempotency-reliability.test.js`:
+  `50 / 50` passed after the authoritative-ordering, customer-recovery, and
+  concurrent-idempotency regressions were added.
+- `node --test scripts/check-production-providers.test.mjs`: `13 / 13` passed.
+- `npm test -w @charitypilot/shared`: `19 / 19` passed.
+- `npm test -w @charitypilot/web`: `248 / 248` passed.
+- `npm run lint -w @charitypilot/web`: passed.
+- `npm run build -w @charitypilot/web`: passed.
+- `npm test -w @charitypilot/api`: `454 / 454` passed after all final focused
+  P0-03 regressions were integrated.
+- `npm run test:production-check`: `399 / 399` passed.
+- `npm run reliability:report -- --write`: green with `454` API and `248` web
+  tests, and `365 / 365` covered-guarantee links resolved.
+- `npm run audit:platform:check`: passed; the generated platform audit is
+  current.
+
+Commit SHA / CI run: pending publication and CI verification.
+
+External owner/blocker: an accountable billing operator must prove the pinned
+live Stripe portal policy, inventory and expire every legacy open
+subscription-mode Checkout session, reconcile customer/subscription history,
+confirm no organisation/customer has multiple non-terminal subscriptions, and
+exercise purchase, duplicate-click, portal change, scheduled cancellation,
+terminal restart, and webhook retry/order against the promoted release. No live
+Stripe/no-duplicate evidence is claimed by the controlled local tests.
 
 ### P0-04 - Compliance autosave data loss and stale board approval
 

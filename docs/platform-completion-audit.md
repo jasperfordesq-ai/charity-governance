@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 45 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | .env.production exists but 19 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 46 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| Launch operations | .env.production exists but 20 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 18 web unit test files, 45 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 19 web unit test files, 46 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -340,7 +340,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 365 | no | no obvious static risk; verify in browser |
 | P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 79 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 163 | yes | no obvious static risk; verify in browser |
-| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
+| P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 232 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 119 | yes | no obvious static risk; verify in browser |
@@ -369,7 +369,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
 | `auth` | `apps/api/src/routes/auth/index.ts` | 211 | public/partial by design | 6 | preserve current guard and tenant boundary |
-| `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 2 | preserve current guard and tenant boundary |
+| `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 3 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 148 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
@@ -526,21 +526,22 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Local Production Environment State
 
 - Phase: `ENV_INCOMPLETE`
-- .env.production exists but 19 production value issue(s) still need resolution.
+- .env.production exists but 20 production value issue(s) still need resolution.
 - This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Progress Summary
 
-- Production values complete: 9 / 28 (19 remaining)
+- Production values complete: 9 / 29 (20 remaining)
 - Launch evidence checks complete: 9 / 87 (78 remaining)
 - Final signoffs approved: 0 / 5 (5 remaining)
-- Strict launch gates complete: 18 / 120 (102 remaining, 15% complete)
+- Strict launch gates complete: 18 / 121 (103 remaining, 14.9% complete)
 - approvedForLaunch: false
 
 ### Local Production Environment Issues
 
-The local non-committed production env still has 19 unresolved value issue(s):
+The local non-committed production env still has 20 unresolved value issue(s):
 
+- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` (missing): Value is missing from .env.production or the approved production secret source.
 - `TRUSTED_PROXY_ADDRESSES` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `DATABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `STRIPE_SECRET_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
@@ -575,6 +576,7 @@ Grouped by source:
   - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Stripe live Essentials yearly recurring price ID (Step 2)
   - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Stripe live Complete monthly recurring price ID (Step 2)
   - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Stripe live Complete yearly recurring price ID (Step 2)
+  - `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`: Pinned live Stripe billing portal configuration ID (Step 2)
 - Resend email:
   - `RESEND_API_KEY`: Resend production API key from the secret store (Step 2)
 - Supabase storage:

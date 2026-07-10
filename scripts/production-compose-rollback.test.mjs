@@ -45,6 +45,7 @@ function productionEnv(overrides = {}) {
     STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentialsYearly',
     STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_completeMonthly',
     STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
+    STRIPE_BILLING_PORTAL_CONFIGURATION_ID: 'bpc_configuredPortal',
     RESEND_API_KEY: 're_configuredSecret',
     EMAIL_FROM: 'noreply@charitypilot.ie',
     SUPABASE_URL: productionSupabaseUrl,

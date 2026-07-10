@@ -8,6 +8,8 @@ import { test } from 'node:test';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'billing-reliability-test-secret';
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? 'sk_test_billing_reliability';
 process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? 'whsec_billing_reliability';
+process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID =
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID ?? 'bpc_billing_reliability';
 process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID =
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID ?? 'price_essentials_monthly';
 process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID =
@@ -40,6 +42,7 @@ function authModels(role: Role, subscription: unknown) {
   return {
     authSession: { findFirst: async () => ({ id: 'sess-1' }) },
     user: { findUnique: async () => ({ id: 'u1', organisationId: 'org-1', role, emailVerified: true }) },
+    organisation: { findUnique: async () => ({ stripeCustomerId: 'cus_org_1' }) },
     subscription: { findUnique: async () => subscription },
   };
 }
@@ -49,6 +52,51 @@ async function buildApp(prismaOverrides: Record<string, unknown>, role: Role = '
   app.decorate('prisma', { ...authModels(role, subscription), ...prismaOverrides } as never);
   await app.register(billingRoutes, { prefix: '/billing' });
   return app;
+}
+
+function checkoutLifecycleMocks() {
+  let attempt: Record<string, unknown> | null = null;
+  const subscription = { findUnique: async () => null };
+  const billingCheckoutAttempt = {
+    findUnique: async ({ where }: { where: { id?: string; organisationId?: string } }) => {
+      if (!attempt) return null;
+      if (where.id && where.id !== attempt.id) return null;
+      if (where.organisationId && where.organisationId !== attempt.organisationId) return null;
+      return attempt;
+    },
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      attempt = {
+        ...data,
+        status: 'PENDING',
+        stripeCheckoutSessionId: null,
+        checkoutUrl: null,
+      };
+      return attempt;
+    },
+    delete: async () => {
+      attempt = null;
+      return {};
+    },
+    updateMany: async ({ where, data }: { where: { id: string; status: string }; data: Record<string, unknown> }) => {
+      if (!attempt || attempt.id !== where.id || attempt.status !== where.status) return { count: 0 };
+      attempt = { ...attempt, ...data };
+      return { count: 1 };
+    },
+  };
+
+  return {
+    prisma: {
+      subscription,
+      billingCheckoutAttempt,
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({ subscription, billingCheckoutAttempt }),
+    },
+    stripe: {
+      subscriptions: {
+        list: async () => ({ data: [], has_more: false }),
+      },
+    },
+  };
 }
 
 // ── billing-input-validation-6 ──
@@ -212,7 +260,10 @@ test('GET /status scopes the subscription lookup to the caller\'s organisation',
 // ── billing-tenant-isolation-13 (service level) ──
 
 test('subscription.updated and .deleted reject a customer that does not own the local subscription and ignore unknown subscription ids', async () => {
-  function harness(existingSubscription: Record<string, unknown> | null) {
+  function harness(
+    existingSubscription: Record<string, unknown> | null,
+    authoritativeOverrides: Record<string, unknown> = {},
+  ) {
     const calls: Array<{ name: string; args: unknown }> = [];
     const prisma = {
       $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
@@ -232,9 +283,11 @@ test('subscription.updated and .deleted reject a customer that does not own the 
       },
     };
     const service = new BillingService(prisma as never);
-    // handleWebhook calls getStripe() unconditionally; a non-checkout event never uses it,
-    // but stub it so the configured/unconfigured env state is irrelevant to this test.
-    (service as unknown as { getStripe: () => unknown }).getStripe = () => ({});
+    (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+      subscriptions: {
+        retrieve: async (id: string) => stripeSub({ id, ...authoritativeOverrides }),
+      },
+    });
     return { service, calls };
   }
 
@@ -246,8 +299,9 @@ test('subscription.updated and .deleted reject a customer that does not own the 
       current_period_start: 1_781_078_400,
       current_period_end: 1_783_670_400,
       canceled_at: null,
+      cancel_at_period_end: false,
       trial_end: null,
-      items: { data: [{ price: { id: 'price_complete_monthly' } }] },
+      items: { data: [{ quantity: 1, price: { id: 'price_complete_monthly' } }] },
       ...overrides,
     };
   }
@@ -257,7 +311,7 @@ test('subscription.updated and .deleted reject a customer that does not own the 
     const { service, calls } = harness({
       id: 'sub_db_1',
       organisation: { stripeCustomerId: 'cus_org_1' },
-    });
+    }, { customer: 'cus_attacker' });
     await assert.rejects(
       () =>
         service.handleWebhook({
@@ -275,7 +329,7 @@ test('subscription.updated and .deleted reject a customer that does not own the 
     const { service, calls } = harness({
       id: 'sub_db_1',
       organisation: { stripeCustomerId: 'cus_org_1' },
-    });
+    }, { customer: 'cus_attacker' });
     await assert.rejects(
       () =>
         service.handleWebhook({
@@ -347,7 +401,9 @@ test('checkout returns 503 BILLING_NOT_CONFIGURED when Stripe is unconfigured', 
 
 test('createCheckoutSession uses an organisation-scoped Stripe idempotency key when creating a customer', async () => {
   const calls: Array<{ name: string; args: unknown[] }> = [];
+  const lifecycle = checkoutLifecycleMocks();
   const prisma = {
+    ...lifecycle.prisma,
     organisation: {
       findUniqueOrThrow: async () => ({
         id: 'org-1',
@@ -363,6 +419,7 @@ test('createCheckoutSession uses an organisation-scoped Stripe idempotency key w
   };
   const service = new BillingService(prisma as never);
   (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    ...lifecycle.stripe,
     customers: {
       create: async (...args: unknown[]) => {
         calls.push({ name: 'stripe.customers.create', args });
@@ -373,7 +430,7 @@ test('createCheckoutSession uses an organisation-scoped Stripe idempotency key w
       sessions: {
         create: async (...args: unknown[]) => {
           calls.push({ name: 'stripe.checkout.sessions.create', args });
-          return { url: 'https://checkout.stripe.test/session' };
+          return { id: 'cs_test_customer_create', url: 'https://checkout.stripe.test/session' };
         },
       },
     },
@@ -394,7 +451,9 @@ test('createCheckoutSession uses an organisation-scoped Stripe idempotency key w
 
 test('createCheckoutSession reconciles an existing Stripe customer by organisation metadata before creating one', async () => {
   const calls: Array<{ name: string; args: unknown[] }> = [];
+  const lifecycle = checkoutLifecycleMocks();
   const prisma = {
+    ...lifecycle.prisma,
     organisation: {
       findUniqueOrThrow: async () => ({
         id: 'org-1',
@@ -410,6 +469,7 @@ test('createCheckoutSession reconciles an existing Stripe customer by organisati
   };
   const service = new BillingService(prisma as never);
   (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    ...lifecycle.stripe,
     customers: {
       search: async (...args: unknown[]) => {
         calls.push({ name: 'stripe.customers.search', args });
@@ -424,7 +484,7 @@ test('createCheckoutSession reconciles an existing Stripe customer by organisati
       sessions: {
         create: async (...args: unknown[]) => {
           calls.push({ name: 'stripe.checkout.sessions.create', args });
-          return { url: 'https://checkout.stripe.test/session' };
+          return { id: 'cs_test_customer_create', url: 'https://checkout.stripe.test/session' };
         },
       },
     },
@@ -447,7 +507,9 @@ test('createCheckoutSession reconciles an existing Stripe customer by organisati
 
 test('createCheckoutSession repairs a stale stored Stripe customer id before checkout', async () => {
   const calls: Array<{ name: string; args: unknown[] }> = [];
+  const lifecycle = checkoutLifecycleMocks();
   const prisma = {
+    ...lifecycle.prisma,
     organisation: {
       findUniqueOrThrow: async () => ({
         id: 'org-1',
@@ -463,6 +525,7 @@ test('createCheckoutSession repairs a stale stored Stripe customer id before che
   };
   const service = new BillingService(prisma as never);
   (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    ...lifecycle.stripe,
     customers: {
       retrieve: async (...args: unknown[]) => {
         calls.push({ name: 'stripe.customers.retrieve', args });
@@ -481,7 +544,7 @@ test('createCheckoutSession repairs a stale stored Stripe customer id before che
       sessions: {
         create: async (...args: unknown[]) => {
           calls.push({ name: 'stripe.checkout.sessions.create', args });
-          return { url: 'https://checkout.stripe.test/session' };
+          return { id: 'cs_test_customer_reconcile', url: 'https://checkout.stripe.test/session' };
         },
       },
     },
@@ -546,6 +609,10 @@ test('createPortalSession reconciles an existing Stripe customer by organisation
   });
   const portalCall = calls.find((call) => call.name === 'stripe.billingPortal.sessions.create');
   assert.equal((portalCall?.args[0] as { customer?: string }).customer, 'cus_reconciled');
+  assert.equal(
+    (portalCall?.args[0] as { configuration?: string }).configuration,
+    'bpc_billing_reliability',
+  );
 });
 
 test('billing status reports billingConfigured:false without erroring when Stripe is unconfigured', async () => {
@@ -553,6 +620,9 @@ test('billing status reports billingConfigured:false without erroring when Strip
   delete process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
 
   const prisma = {
+    organisation: {
+      findUnique: async () => ({ stripeCustomerId: null }),
+    },
     subscription: {
       findUnique: async () => null,
     },
@@ -565,10 +635,15 @@ test('billing status reports billingConfigured:false without erroring when Strip
     assert.deepEqual(status, {
       plan: null,
       status: null,
+      stripeStatus: null,
+      billingInterval: null,
+      cancelAtPeriodEnd: false,
       trialEndsAt: null,
       currentPeriodEnd: null,
       hasAccess: false,
       billingConfigured: false,
+      canStartCheckout: false,
+      canOpenPortal: false,
     });
   } finally {
     if (previousPrice === undefined) {
@@ -581,23 +656,36 @@ test('billing status reports billingConfigured:false without erroring when Strip
 
 // ── billing-observability-16 ──
 
-test('isConfigured returns false when any required Stripe price id is missing', async () => {
+test('isConfigured requires a portal configuration and four distinct Stripe price ids', async () => {
   const service = new BillingService({} as never);
 
   const previousPrice = process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
+  const previousPortalConfiguration = process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
 
   try {
-    // Baseline: secret + webhook + all four price ids are configured.
+    // Baseline: secret + webhook + portal configuration + all four unique price ids are configured.
     assert.equal(service.isConfigured(), true);
 
     // Removing a single required price id flips the readiness signal to false.
     delete process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
+    assert.equal(service.isConfigured(), false);
+
+    process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID;
+    assert.equal(service.isConfigured(), false);
+
+    process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = previousPrice ?? 'price_complete_yearly';
+    delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
     assert.equal(service.isConfigured(), false);
   } finally {
     if (previousPrice === undefined) {
       delete process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
     } else {
       process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = previousPrice;
+    }
+    if (previousPortalConfiguration === undefined) {
+      delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+    } else {
+      process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = previousPortalConfiguration;
     }
   }
 });

@@ -24,6 +24,7 @@ const ENV_KEYS = [
   'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
   'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
   'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+  'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
   'RESEND_API_KEY',
   'EMAIL_FROM',
   'DOCUMENT_STORAGE_DRIVER',
@@ -56,6 +57,7 @@ function setFullyConfiguredProviders(): void {
   process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentials_yearly';
   process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_complete_monthly';
   process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID = 'price_complete_yearly';
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_readiness';
   process.env.RESEND_API_KEY = 're_readiness_key';
   process.env.EMAIL_FROM = 'noreply@example.org';
   // local storage driver => StorageService.isConfigured() and verifyBucket()
@@ -70,6 +72,7 @@ function clearProviderConfiguration(): void {
   delete process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID;
   delete process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID;
   delete process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
+  delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
   delete process.env.RESEND_API_KEY;
   delete process.env.EMAIL_FROM;
   // Supabase-mode storage with no Supabase config => unconfigured.

@@ -124,7 +124,9 @@ const evidenceHintsByCheck = new Map([
     'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
     'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
     'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+    'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
     'active live recurring Stripe prices',
+    'pinned Stripe billing portal configuration',
   ]],
   ['billingAndEmail.stripe-webhook-endpoint', [
     'https://api.charitypilot.ie/api/v1/billing/webhooks',

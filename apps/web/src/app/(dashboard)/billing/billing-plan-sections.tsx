@@ -46,12 +46,16 @@ const PLANS = [
 export function BillingPlanSections({
   billing,
   billingConfigured,
+  canStartCheckout,
+  canOpenPortal,
   checkoutLoading,
   isActive,
   onCheckout,
 }: {
   billing: BillingStatusResponse | null;
   billingConfigured: boolean;
+  canStartCheckout: boolean;
+  canOpenPortal: boolean;
   checkoutLoading: string | null;
   isActive: boolean;
   onCheckout: (plan: SubscriptionPlan, interval: 'monthly' | 'yearly') => void | Promise<void>;
@@ -70,8 +74,12 @@ export function BillingPlanSections({
       </AppSection>
 
       <AppSection
-        title={isActive ? 'Plans' : 'Choose a plan'}
-        description="Prices are shown before Stripe checkout. The checkout and portal redirects are accepted only from trusted Stripe-hosted URLs."
+        title={canStartCheckout ? 'Choose a plan' : 'Plans'}
+        description={canStartCheckout
+          ? 'Prices are shown before Stripe checkout. Redirects are accepted only from trusted Stripe-hosted URLs.'
+          : canOpenPortal
+            ? 'This workspace already has Stripe-managed billing. Use the customer portal above for supported subscription changes.'
+            : 'Checkout is not available for the current billing state. Contact support if a subscription change is needed.'}
       >
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {PLANS.map((plan) => {
@@ -115,30 +123,40 @@ export function BillingPlanSections({
                   ))}
                 </ul>
 
-                <div className="mt-5 flex flex-col gap-2">
-                  <Button
-                    className={primaryActionButtonClassName}
-                    fullWidth
-                    onPress={() => onCheckout(plan.plan, 'yearly')}
-                    isLoading={checkoutLoading === yearlyKey}
-                    isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
-                    aria-describedby={!billingConfigured || isCurrent ? actionHintId : undefined}
-                  >
-                    {isCurrent ? 'Current plan' : `Get ${plan.name} yearly`}
-                  </Button>
-                  <Button
-                    variant="bordered"
-                    fullWidth
-                    onPress={() => onCheckout(plan.plan, 'monthly')}
-                    isLoading={checkoutLoading === monthlyKey}
-                    isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
-                    aria-describedby={!billingConfigured || isCurrent ? actionHintId : undefined}
-                  >
-                    {isCurrent ? 'Current plan' : `Monthly (\u20ac${plan.monthlyPrice}/mo)`}
-                  </Button>
-                </div>
+                {canStartCheckout ? (
+                  <div className="mt-5 flex flex-col gap-2">
+                    <Button
+                      className={primaryActionButtonClassName}
+                      fullWidth
+                      onPress={() => onCheckout(plan.plan, 'yearly')}
+                      isLoading={checkoutLoading === yearlyKey}
+                      isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
+                      aria-describedby={!billingConfigured || isCurrent ? actionHintId : undefined}
+                    >
+                      {isCurrent ? 'Current plan' : `Get ${plan.name} yearly`}
+                    </Button>
+                    <Button
+                      variant="bordered"
+                      fullWidth
+                      onPress={() => onCheckout(plan.plan, 'monthly')}
+                      isLoading={checkoutLoading === monthlyKey}
+                      isDisabled={isCurrent || !billingConfigured || Boolean(checkoutLoading)}
+                      aria-describedby={!billingConfigured || isCurrent ? actionHintId : undefined}
+                    >
+                      {isCurrent ? 'Current plan' : `Monthly (\u20ac${plan.monthlyPrice}/mo)`}
+                    </Button>
+                  </div>
+                ) : null}
 
-                {!billingConfigured ? (
+                {!canStartCheckout && canOpenPortal ? (
+                  <p id={actionHintId} className="mt-5 text-xs leading-5 text-gray-600 dark:text-gray-300">
+                    Manage supported plan changes in the Stripe customer portal. Checkout is not available while Stripe-managed billing exists.
+                  </p>
+                ) : !canStartCheckout ? (
+                  <p id={actionHintId} className="mt-5 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                    Checkout is not available for the current billing state. Please contact support.
+                  </p>
+                ) : !billingConfigured ? (
                   <p id={actionHintId} className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
                     Checkout is disabled until billing setup is available.
                   </p>
@@ -166,7 +184,7 @@ export function BillingPlanSections({
             },
             {
               q: 'Can I switch plans?',
-              a: 'Plan changes are started through checkout or the customer portal, then reflected after the billing status refreshes.',
+              a: 'For an existing Stripe-managed subscription, use the customer portal. The available changes depend on the portal configuration; contact support if the required option is not shown.',
             },
             {
               q: 'Does Complete guarantee compliance?',

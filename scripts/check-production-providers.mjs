@@ -6,12 +6,34 @@ import { pathToFileURL } from 'node:url';
 import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 import { canonicalOriginIssue, isApprovedCharityPilotHostname } from './production-hostnames.mjs';
 
-const stripePriceEnvNames = [
-  'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
-  'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
-  'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
-  'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+const stripePriceDefinitions = [
+  {
+    envName: 'STRIPE_ESSENTIALS_MONTHLY_PRICE_ID',
+    unitAmount: 1900,
+    interval: 'month',
+  },
+  {
+    envName: 'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
+    unitAmount: 19000,
+    interval: 'year',
+  },
+  {
+    envName: 'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
+    unitAmount: 3900,
+    interval: 'month',
+  },
+  {
+    envName: 'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+    unitAmount: 39000,
+    interval: 'year',
+  },
 ];
+
+const recognizedProrationBehaviors = new Set([
+  'always_invoice',
+  'create_prorations',
+  'none',
+]);
 
 const requiredStripeWebhookEvents = [
   'checkout.session.completed',
@@ -145,10 +167,25 @@ function validateEnv(env, expectApiOrigin) {
   if (!isConfigured(env.STRIPE_WEBHOOK_SECRET) || !env.STRIPE_WEBHOOK_SECRET.startsWith('whsec_')) {
     issues.push('STRIPE_WEBHOOK_SECRET must be configured as a Stripe webhook signing secret');
   }
-  for (const envName of stripePriceEnvNames) {
+  const validPriceIds = [];
+  for (const { envName } of stripePriceDefinitions) {
     if (!isConfigured(env[envName]) || !env[envName].startsWith('price_')) {
       issues.push(`${envName} must use a Stripe price ID`);
+    } else {
+      validPriceIds.push(env[envName]);
     }
+  }
+  if (
+    validPriceIds.length === stripePriceDefinitions.length &&
+    new Set(validPriceIds).size !== validPriceIds.length
+  ) {
+    issues.push('the four Stripe price environment values must use distinct price IDs');
+  }
+  if (
+    !isConfigured(env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID) ||
+    !env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID.startsWith('bpc_')
+  ) {
+    issues.push('STRIPE_BILLING_PORTAL_CONFIGURATION_ID must use a Stripe billing portal configuration ID');
   }
   if (!isConfigured(env.RESEND_API_KEY) || !env.RESEND_API_KEY.startsWith('re_')) {
     issues.push('RESEND_API_KEY must be configured as a Resend API key');
@@ -177,7 +214,7 @@ async function fetchJson(fetchImpl, url, options, label, issues) {
     response = await fetchImpl(url, options);
   } catch (error) {
     const errorName = error instanceof Error ? error.name : 'unknown error';
-    const errorMessage = redactProductionDeployTranscript(
+    const errorMessage = redactProviderTranscript(
       error instanceof Error ? error.message : String(error),
     );
     issues.push(`${label} request failed: ${errorName}${errorMessage ? `: ${errorMessage}` : ''}`);
@@ -192,6 +229,13 @@ async function fetchJson(fetchImpl, url, options, label, issues) {
   return readJson(response);
 }
 
+function redactProviderTranscript(value) {
+  return redactProductionDeployTranscript(value)
+    .replace(/\bprice_[A-Za-z0-9_=-]+/g, '[redacted-stripe-price-id]')
+    .replace(/\bbpc_[A-Za-z0-9_=-]+/g, '[redacted-stripe-portal-configuration-id]')
+    .replace(/\bprod_[A-Za-z0-9_=-]+/g, '[redacted-stripe-product-id]');
+}
+
 function stripeHeaders(secretKey) {
   return {
     Authorization: `Bearer ${secretKey}`,
@@ -204,11 +248,15 @@ function resendHeaders(apiKey) {
   };
 }
 
-function priceIssues(envName, price) {
+function priceIssues(definition, expectedPriceId, price) {
+  const { envName, unitAmount, interval } = definition;
   const issues = [];
   if (price?.object !== 'price') {
     issues.push(`${envName} lookup did not return a Stripe price object`);
     return issues;
+  }
+  if (price.id !== expectedPriceId) {
+    issues.push(`${envName} lookup returned a different Stripe price`);
   }
   if (price.active !== true) {
     issues.push(`${envName} must be active`);
@@ -218,12 +266,30 @@ function priceIssues(envName, price) {
   }
   if (!price.recurring) {
     issues.push(`${envName} must be recurring`);
+  } else {
+    if (price.recurring.interval !== interval) {
+      issues.push(`${envName} must recur every ${interval}`);
+    }
+    if (price.recurring.interval_count !== 1) {
+      issues.push(`${envName} must use a recurring interval count of 1`);
+    }
+  }
+  if (price.currency !== 'eur') {
+    issues.push(`${envName} must use EUR currency`);
+  }
+  if (price.unit_amount !== unitAmount) {
+    issues.push(`${envName} must use the approved EUR unit amount of ${unitAmount}`);
+  }
+  if (typeof price.product !== 'string' || !price.product.startsWith('prod_')) {
+    issues.push(`${envName} must reference a Stripe product ID`);
   }
   return issues;
 }
 
 async function verifyStripePrices({ env, fetchImpl, issues }) {
-  for (const envName of stripePriceEnvNames) {
+  const prices = new Map();
+  for (const definition of stripePriceDefinitions) {
+    const { envName } = definition;
     const price = await fetchJson(
       fetchImpl,
       `https://api.stripe.com/v1/prices/${encodeURIComponent(env[envName])}`,
@@ -232,8 +298,147 @@ async function verifyStripePrices({ env, fetchImpl, issues }) {
       issues,
     );
     if (price) {
-      issues.push(...priceIssues(envName, price));
+      prices.set(envName, price);
+      issues.push(...priceIssues(definition, env[envName], price));
     }
+  }
+
+  const priceFor = (envName) => prices.get(envName);
+  const essentialsMonthlyProduct = priceFor('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID')?.product;
+  const essentialsYearlyProduct = priceFor('STRIPE_ESSENTIALS_YEARLY_PRICE_ID')?.product;
+  const completeMonthlyProduct = priceFor('STRIPE_COMPLETE_MONTHLY_PRICE_ID')?.product;
+  const completeYearlyProduct = priceFor('STRIPE_COMPLETE_YEARLY_PRICE_ID')?.product;
+
+  if (
+    typeof essentialsMonthlyProduct === 'string' &&
+    typeof essentialsYearlyProduct === 'string' &&
+    essentialsMonthlyProduct !== essentialsYearlyProduct
+  ) {
+    issues.push('Essentials monthly and yearly Stripe prices must share one product');
+  }
+  if (
+    typeof completeMonthlyProduct === 'string' &&
+    typeof completeYearlyProduct === 'string' &&
+    completeMonthlyProduct !== completeYearlyProduct
+  ) {
+    issues.push('Complete monthly and yearly Stripe prices must share one product');
+  }
+  if (
+    typeof essentialsMonthlyProduct === 'string' &&
+    typeof essentialsYearlyProduct === 'string' &&
+    essentialsMonthlyProduct === essentialsYearlyProduct &&
+    typeof completeMonthlyProduct === 'string' &&
+    typeof completeYearlyProduct === 'string' &&
+    completeMonthlyProduct === completeYearlyProduct &&
+    essentialsMonthlyProduct === completeMonthlyProduct
+  ) {
+    issues.push('Essentials and Complete Stripe prices must use different products');
+  }
+
+  return prices;
+}
+
+function expectedPortalProducts(env, prices) {
+  if (prices.size !== stripePriceDefinitions.length) return null;
+
+  const products = new Map();
+  for (const { envName } of stripePriceDefinitions) {
+    const price = prices.get(envName);
+    if (typeof price?.product !== 'string' || !price.product.startsWith('prod_')) return null;
+    const productPrices = products.get(price.product) ?? [];
+    productPrices.push(env[envName]);
+    products.set(price.product, productPrices);
+  }
+
+  if (products.size !== 2) return null;
+  return [...products.entries()]
+    .map(([product, priceIds]) => ({ product, prices: [...priceIds].sort() }))
+    .sort((left, right) => left.product.localeCompare(right.product));
+}
+
+function normalizedPortalProducts(products) {
+  if (!Array.isArray(products)) return null;
+
+  const seenProducts = new Set();
+  const normalized = [];
+  for (const entry of products) {
+    if (
+      typeof entry?.product !== 'string' ||
+      !entry.product.startsWith('prod_') ||
+      !Array.isArray(entry.prices) ||
+      entry.prices.some((priceId) => typeof priceId !== 'string' || !priceId.startsWith('price_')) ||
+      new Set(entry.prices).size !== entry.prices.length ||
+      seenProducts.has(entry.product)
+    ) {
+      return null;
+    }
+    seenProducts.add(entry.product);
+    normalized.push({ product: entry.product, prices: [...entry.prices].sort() });
+  }
+
+  return normalized.sort((left, right) => left.product.localeCompare(right.product));
+}
+
+async function verifyStripePortalConfiguration({ env, fetchImpl, prices, issues }) {
+  const configuration = await fetchJson(
+    fetchImpl,
+    `https://api.stripe.com/v1/billing_portal/configurations/${encodeURIComponent(env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID)}`,
+    { method: 'GET', headers: stripeHeaders(env.STRIPE_SECRET_KEY) },
+    'Stripe billing portal configuration lookup',
+    issues,
+  );
+  if (!configuration) return;
+
+  if (configuration.object !== 'billing_portal.configuration') {
+    issues.push('Stripe billing portal lookup did not return a billing portal configuration object');
+    return;
+  }
+  if (configuration.id !== env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID) {
+    issues.push('Stripe billing portal lookup returned a different configuration');
+  }
+  if (configuration.active !== true) {
+    issues.push('Stripe billing portal configuration must be active');
+  }
+  if (configuration.livemode !== true) {
+    issues.push('Stripe billing portal configuration must be live mode');
+  }
+
+  const subscriptionUpdate = configuration.features?.subscription_update;
+  if (subscriptionUpdate?.enabled !== true) {
+    issues.push('Stripe billing portal subscription updates must be enabled');
+  }
+  const allowedUpdates = Array.isArray(subscriptionUpdate?.default_allowed_updates)
+    ? subscriptionUpdate.default_allowed_updates
+    : [];
+  if (!allowedUpdates.includes('price')) {
+    issues.push('Stripe billing portal subscription updates must allow price changes');
+  }
+  if (allowedUpdates.includes('quantity')) {
+    issues.push('Stripe billing portal subscription updates must not allow quantity changes');
+  }
+  if (!recognizedProrationBehaviors.has(subscriptionUpdate?.proration_behavior)) {
+    issues.push('Stripe billing portal subscription updates must set a recognized explicit proration behavior');
+  }
+
+  const expectedProducts = expectedPortalProducts(env, prices);
+  const actualProducts = normalizedPortalProducts(subscriptionUpdate?.products);
+  if (
+    expectedProducts === null ||
+    actualProducts === null ||
+    JSON.stringify(actualProducts) !== JSON.stringify(expectedProducts)
+  ) {
+    issues.push('Stripe billing portal subscription updates must use the exact approved product and price allow-list');
+  }
+
+  const subscriptionCancel = configuration.features?.subscription_cancel;
+  if (subscriptionCancel?.enabled !== true) {
+    issues.push('Stripe billing portal subscription cancellation must be enabled');
+  }
+  if (subscriptionCancel?.mode !== 'at_period_end') {
+    issues.push('Stripe billing portal subscription cancellation must take effect at period end');
+  }
+  if (!recognizedProrationBehaviors.has(subscriptionCancel?.proration_behavior)) {
+    issues.push('Stripe billing portal subscription cancellation must set a recognized explicit proration behavior');
   }
 }
 
@@ -320,7 +525,8 @@ export async function runProductionProvidersCheckFromArgs(
   };
   const { issues, apiOrigin, emailDomain } = validateEnv(env, options.expectApiOrigin);
   if (issues.length === 0) {
-    await verifyStripePrices({ env, fetchImpl, issues });
+    const prices = await verifyStripePrices({ env, fetchImpl, issues });
+    await verifyStripePortalConfiguration({ env, fetchImpl, prices, issues });
     await verifyStripeWebhook({ env, fetchImpl, apiOrigin, issues });
     await verifyResendDomain({ env, fetchImpl, emailDomain, issues });
   }
@@ -339,7 +545,7 @@ export async function runProductionProvidersCheckFromArgs(
 
   return result(
     0,
-    'Production provider check passed: active live recurring Stripe prices, enabled live billing webhook endpoint with required subscription events, and verified Resend sender domain confirmed.\n',
+    'Production provider check passed: exact active live Stripe prices and products, safe live billing portal configuration, enabled live billing webhook endpoint with required subscription events, and verified Resend sender domain confirmed.\n',
   );
 }
 

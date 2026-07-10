@@ -89,7 +89,7 @@ Evidence:
 - [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` is set for Docker Compose and matches `NEXT_PUBLIC_API_URL`.
 - [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` is set for Docker Compose and matches `NEXT_PUBLIC_SUPABASE_URL`.
 - [ ] `AUTH_COOKIE_DOMAIN=.charitypilot.ie` covers the canonical web and API subdomains.
-- [ ] Stripe keys are live-mode production keys.
+- [ ] Stripe keys are live-mode production keys; the four price IDs are distinct, and `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` identifies the approved dedicated live portal configuration.
 - [ ] Resend sender domain is verified for production sending.
 - [ ] Supabase service role key is stored only in the API secret store.
 - [ ] Machine-readable launch evidence names each required secret/origin fact without recording raw secret values.
@@ -194,19 +194,32 @@ Evidence:
 
 ## 7. Billing And Email
 
-- [ ] Stripe live products and prices match the four expected price IDs.
+- [ ] Stripe Essentials monthly/yearly prices share one product, Complete monthly/yearly prices share a different product, and all four price IDs are distinct.
+- [ ] The four Stripe prices are active live recurring EUR prices with interval count 1 and exact approved contracts: Essentials EUR19/month and EUR190/year; Complete EUR39/month and EUR390/year.
+- [ ] The dedicated `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` resolves to the exact active live configuration passed by the API, without recording the raw production value in repository evidence.
+- [ ] The pinned portal configuration enables subscription price changes, forbids quantity changes, and allow-lists exactly the two approved products and four approved prices.
+- [ ] The pinned portal configuration has an explicit business-approved proration policy; customer-facing copy was checked against that policy and makes no unsupported proration promise.
+- [ ] Portal cancellation is enabled in `at_period_end` mode with an explicit approved proration policy.
 - [ ] Stripe webhook points to the deployed API webhook endpoint and is subscribed to `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
 - [ ] Stripe webhook signing secret matches `STRIPE_WEBHOOK_SECRET` in the production secret store without recording the raw secret.
+- [ ] Before deploying the attempt-bound Checkout release, the billing owner inventoried every CharityPilot customer, subscription, and legacy subscription-mode Checkout session; duplicate/ambiguous customer mappings were resolved, every customer had at most one non-terminal subscription, and every legacy open Checkout session was explicitly expired.
+- [ ] Every completed legacy Checkout session was reconciled to its organisation/customer/subscription before rollout; any charge, cancellation, or refund decision was approved by the accountable billing owner and recorded outside Git.
+- [ ] The `BillingCheckoutAttempt` migration deployed before the guarded API release, and the post-deploy provider inventory again showed at most one non-terminal subscription per organisation/customer.
+- [ ] Deployed proof covers first purchase, rapid duplicate clicks, supported portal plan/interval change, scheduled cancellation, final cancellation webhook, terminal restart, and webhook retry/order without creating two non-terminal subscriptions.
 - [ ] Resend API key can send from `EMAIL_FROM` on the verified production sender domain, with an accepted message id or equivalent provider delivery reference recorded outside git.
 - [ ] Password reset and verification email links point to the production frontend origin.
-- [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence proving active live recurring Stripe prices, an enabled live billing webhook endpoint, required subscription events, and verified Resend sender domain.
-- [ ] Machine-readable launch evidence identifies all four active live recurring Stripe price IDs without recording raw secret values.
+- [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence proving the exact price amounts/cadences/currency/product grouping, safe pinned portal policy and allow-list, enabled live webhook endpoint and events, and verified Resend sender domain.
+- [ ] Machine-readable launch evidence identifies all four approved active live recurring Stripe prices and the pinned safe portal-policy result without recording raw secret/provider values.
 
 Evidence:
 
 | Field | Value |
 | --- | --- |
 | Stripe evidence location | |
+| Stripe catalogue and portal-policy review owner/date | |
+| Legacy customer/subscription/open-Checkout inventory | |
+| Duplicate-subscription resolution reference | |
+| Deployed purchase/portal/cancellation/restart proof | |
 | Resend evidence location | |
 | Test message location | |
 

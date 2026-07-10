@@ -4,6 +4,8 @@ import { test } from 'node:test';
 // Set every env var the imported modules read at import/construction time, BEFORE imports.
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? 'sk_test_unit';
 process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? 'whsec_unit';
+process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID =
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID ?? 'bpc_idempotency_unit';
 process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID =
   process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID ?? 'price_essentials_monthly';
 process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID =
@@ -44,9 +46,24 @@ function stripeSubscription(overrides: Record<string, unknown> = {}) {
     current_period_start: 1_781_078_400,
     current_period_end: 1_783_670_400,
     canceled_at: null,
+    cancel_at_period_end: false,
     trial_end: null,
-    items: { data: [{ price: { id: 'price_complete_monthly' } }] },
+    items: { data: [{ quantity: 1, price: { id: 'price_complete_monthly' } }] },
     ...overrides,
+  };
+}
+
+function checkoutAttempt() {
+  return {
+    id: 'attempt_race',
+    organisationId: 'org_1',
+    requestedPlan: 'COMPLETE',
+    interval: 'monthly',
+    status: 'SESSION_CREATED',
+    stripeCheckoutSessionId: 'cs_test_race',
+    checkoutUrl: 'https://checkout.stripe.test/race',
+    expectedPreviousStripeSubscriptionId: null,
+    expiresAt: new Date(Date.now() + 60_000),
   };
 }
 
@@ -79,7 +96,21 @@ function billingHarness(options: BillingHarnessOptions = {}) {
         return { id: 'org_1', stripeCustomerId: 'cus_org_1' };
       },
     },
+    billingCheckoutAttempt: {
+      findUnique: async (args: unknown) => {
+        calls.push({ name: 'billingCheckoutAttempt.findUnique', args });
+        return checkoutAttempt();
+      },
+      update: async (args: unknown) => {
+        calls.push({ name: 'billingCheckoutAttempt.update', args });
+        return args;
+      },
+    },
     subscription: {
+      findUnique: async (args: unknown) => {
+        calls.push({ name: 'subscription.findUnique', args });
+        return null;
+      },
       upsert: async (args: unknown) => {
         calls.push({ name: 'subscription.upsert', args });
         if (options.upsert) return options.upsert(args);
@@ -93,6 +124,10 @@ function billingHarness(options: BillingHarnessOptions = {}) {
       retrieve: async (id: string) => {
         calls.push({ name: 'stripe.subscriptions.retrieve', args: { id } });
         return stripeSubscription();
+      },
+      list: async (args: unknown) => {
+        calls.push({ name: 'stripe.subscriptions.list', args });
+        return { data: [stripeSubscription()], has_more: false };
       },
     },
   };
@@ -112,7 +147,12 @@ function checkoutEvent() {
         id: 'cs_test_race',
         customer: 'cus_org_1',
         subscription: 'sub_stripe_1',
-        metadata: { organisationId: 'org_1', plan: 'COMPLETE' },
+        metadata: {
+          organisationId: 'org_1',
+          plan: 'COMPLETE',
+          interval: 'monthly',
+          checkoutAttemptId: 'attempt_race',
+        },
       },
     },
   } as never;
@@ -142,7 +182,12 @@ test('a failed subscription write rolls back the webhook ledger row so the event
       organisation: {
         findUnique: async () => ({ id: 'org_1', stripeCustomerId: 'cus_org_1' }),
       },
+      billingCheckoutAttempt: {
+        findUnique: async () => checkoutAttempt(),
+        update: async () => ({}),
+      },
       subscription: {
+        findUnique: async () => null,
         upsert: async (args: unknown) => {
           upsertAttempts += 1;
           if (failUpsert) {
@@ -170,7 +215,10 @@ test('a failed subscription write rolls back the webhook ledger row so the event
 
   const service = new BillingService(prisma as never);
   (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
-    subscriptions: { retrieve: async () => stripeSubscription() },
+    subscriptions: {
+      retrieve: async () => stripeSubscription(),
+      list: async () => ({ data: [stripeSubscription()], has_more: false }),
+    },
   });
 
   // First delivery: the subscription write throws inside the transaction.

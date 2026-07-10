@@ -465,6 +465,22 @@ export function validateProductionEnv(): void {
   requirePrefix('STRIPE_ESSENTIALS_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
   requirePrefix('STRIPE_COMPLETE_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
   requirePrefix('STRIPE_COMPLETE_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+  requirePrefix(
+    'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
+    'bpc_',
+    'Stripe billing portal configuration ID',
+    issues,
+  );
+
+  const stripePriceIds = [
+    process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID,
+    process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID,
+    process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID,
+    process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID,
+  ].filter((value): value is string => Boolean(value));
+  if (new Set(stripePriceIds).size !== stripePriceIds.length) {
+    issues.push('Stripe price IDs must be distinct for each plan and billing interval');
+  }
 
   requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);

@@ -115,6 +115,7 @@ jobs:
             -e STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_ci_essentials_yearly \
             -e STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_ci_complete_monthly \
             -e STRIPE_COMPLETE_YEARLY_PRICE_ID=price_ci_complete_yearly \
+            -e STRIPE_BILLING_PORTAL_CONFIGURATION_ID=bpc_ci_portal \
             -e RESEND_API_KEY=re_ci_configured_secret \
             -e EMAIL_FROM=noreply@charitypilot.ie \
             -e SUPABASE_URL=https://ci-project.supabase.co \
@@ -153,6 +154,7 @@ jobs:
             -e STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_ci_essentials_yearly \
             -e STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_ci_complete_monthly \
             -e STRIPE_COMPLETE_YEARLY_PRICE_ID=price_ci_complete_yearly \
+            -e STRIPE_BILLING_PORTAL_CONFIGURATION_ID=bpc_ci_portal \
             -e RESEND_API_KEY=re_ci_smoke_key \
             -e EMAIL_FROM=noreply@charitypilot.ie \
             -e SUPABASE_URL=https://ci-project.supabase.co \
@@ -259,6 +261,7 @@ jobs:
             -e STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_ci_essentials_yearly \
             -e STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_ci_complete_monthly \
             -e STRIPE_COMPLETE_YEARLY_PRICE_ID=price_ci_complete_yearly \
+            -e STRIPE_BILLING_PORTAL_CONFIGURATION_ID=bpc_ci_portal \
             -e RESEND_API_KEY=re_ci_smoke_key \
             -e EMAIL_FROM=noreply@charitypilot.ie \
             -e SUPABASE_URL=https://ci-project.supabase.co \

@@ -213,7 +213,7 @@ export default function PricingPage() {
           <div className="space-y-3">
             {[
               { q: 'How do I know if my charity is \u201ccomplex\u201d?', a: 'The Charities Regulator expects trustees to look at the charity size, income, staffing, activities, structure, and risk profile. If your charity needs the additional standards, choose the Complete plan.' },
-              { q: 'Can I switch plans later?', a: 'Absolutely. You can upgrade from Essentials to Complete at any time. If you upgrade mid-billing cycle, we will pro-rate the difference.' },
+              { q: 'Can I switch plans later?', a: 'Existing Stripe-managed subscriptions are changed through the customer portal when that option is available. Contact support if the change you need is not shown.' },
               { q: 'What happens when my trial ends?', a: 'At the end of your 14-day free trial, you will be prompted to choose a plan and add payment details. Your data is safe \u2014 nothing is deleted if you need a few extra days to decide.' },
               { q: 'Can I cancel any time?', a: 'Yes. You can cancel from your account settings at any time. If you cancel an annual plan, you will retain access until the end of your billing period.' },
             ].map(({ q, a }) => (

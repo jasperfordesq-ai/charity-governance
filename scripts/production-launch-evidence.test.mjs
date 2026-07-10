@@ -324,6 +324,8 @@ function evidenceEntry(areaId, checkId) {
       'STRIPE_ESSENTIALS_YEARLY_PRICE_ID',
       'STRIPE_COMPLETE_MONTHLY_PRICE_ID',
       'STRIPE_COMPLETE_YEARLY_PRICE_ID',
+      'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
+      'pinned Stripe billing portal configuration',
     ].join(' ');
   }
 

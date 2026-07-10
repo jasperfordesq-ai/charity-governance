@@ -245,6 +245,7 @@ function completeProductionEnv(overrides = {}) {
     STRIPE_ESSENTIALS_YEARLY_PRICE_ID: 'price_essentialsYearly',
     STRIPE_COMPLETE_MONTHLY_PRICE_ID: 'price_completeMonthly',
     STRIPE_COMPLETE_YEARLY_PRICE_ID: 'price_completeYearly',
+    STRIPE_BILLING_PORTAL_CONFIGURATION_ID: 'bpc_configuredPortal',
     RESEND_API_KEY: 're_configuredSecret',
     EMAIL_FROM: 'noreply@charitypilot.ie',
     SUPABASE_URL: productionSupabaseUrl,
@@ -326,6 +327,7 @@ test('passes when the selected env file contains complete production values', ()
       'STRIPE_ESSENTIALS_YEARLY_PRICE_ID=price_essentialsYearly',
       'STRIPE_COMPLETE_MONTHLY_PRICE_ID=price_completeMonthly',
       'STRIPE_COMPLETE_YEARLY_PRICE_ID=price_completeYearly',
+      'STRIPE_BILLING_PORTAL_CONFIGURATION_ID=bpc_configuredPortal',
       'RESEND_API_KEY=re_configuredSecret',
       'EMAIL_FROM=noreply@charitypilot.ie',
       `SUPABASE_URL=${productionSupabaseUrl}`,
@@ -2419,7 +2421,7 @@ test('document storage deletion has a durable retry outbox and production job', 
   assert.doesNotMatch(cleanupJob, /validateProductionEnv/);
 });
 
-test('backend architecture docs describe hardened storage keys and Stripe customer reconciliation', () => {
+test('backend architecture docs describe hardened storage keys and attempt-bound Stripe reconciliation', () => {
   const storageDoc = readRepoFile('docs/architecture/06-document-storage.md');
   const billingDoc = readRepoFile('docs/architecture/05-billing.md');
 
@@ -2427,10 +2429,12 @@ test('backend architecture docs describe hardened storage keys and Stripe custom
   assert.match(storageDoc, /same-millisecond uploads with the same original filename still produce distinct object keys/);
   assert.doesNotMatch(storageDoc, /<organisationId>\/<epoch-ms>-<sanitised-filename>/);
 
-  assert.match(billingDoc, /Reconciles the Stripe customer before checkout/);
-  assert.match(billingDoc, /stored `organisation\.stripeCustomerId` is retrieved and accepted only when its Stripe metadata still belongs to the same organisation/);
+  assert.match(billingDoc, /Checkout and portal creation reconcile billing ownership/);
+  assert.match(billingDoc, /A stored `Organisation\.stripeCustomerId`, when present, is retrieved/);
   assert.match(billingDoc, /organisation-scoped idempotency key/);
-  assert.match(billingDoc, /runs the same customer reconciliation before opening the Stripe portal/);
+  assert.match(billingDoc, /Portal creation never invents a customer/);
+  assert.match(billingDoc, /`BillingCheckoutAttempt` lifecycle/);
+  assert.match(billingDoc, /STRIPE_BILLING_PORTAL_CONFIGURATION_ID/);
   assert.doesNotMatch(billingDoc, /Lazily creates a Stripe customer if `organisation\.stripeCustomerId` is null/);
 });
 

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 process.env.STRIPE_SECRET_KEY = 'sk_test_unit';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_unit';
+process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = 'bpc_unit';
 process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID = 'price_essentials_monthly';
 process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID = 'price_essentials_yearly';
 process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID = 'price_complete_monthly';
@@ -17,6 +18,8 @@ const { billingRoutes } = await import('../routes/billing/index.js');
 
 type BillingHarnessOptions = {
   existingSubscription?: Record<string, unknown> | null;
+  checkoutExistingSubscription?: Record<string, unknown> | null;
+  checkoutAttempt?: Record<string, unknown> | null;
   existingWebhookEvent?: Record<string, unknown> | null;
   organisation?: Record<string, unknown> | null;
   retrievedSubscription?: Record<string, unknown>;
@@ -27,6 +30,7 @@ type StripeSessionArgs = {
   success_url?: string;
   cancel_url?: string;
   return_url?: string;
+  configuration?: string;
 };
 
 function stripeSubscription(overrides: Record<string, unknown> = {}) {
@@ -37,10 +41,12 @@ function stripeSubscription(overrides: Record<string, unknown> = {}) {
     current_period_start: 1_781_078_400,
     current_period_end: 1_783_670_400,
     canceled_at: null,
+    cancel_at_period_end: false,
     trial_end: null,
     items: {
       data: [
         {
+          quantity: 1,
           price: {
             id: 'price_complete_monthly',
           },
@@ -84,9 +90,35 @@ function billingHarness(options: BillingHarnessOptions = {}) {
         return options.organisation ?? { id: 'org_1', stripeCustomerId: 'cus_org_1' };
       },
     },
+    billingCheckoutAttempt: {
+      findUnique: async (args: unknown) => {
+        calls.push({ name: 'billingCheckoutAttempt.findUnique', args });
+        return options.checkoutAttempt === undefined
+          ? {
+              id: 'attempt_1',
+              organisationId: 'org_1',
+              requestedPlan: 'COMPLETE',
+              interval: 'monthly',
+              status: 'SESSION_CREATED',
+              stripeCheckoutSessionId: null,
+              checkoutUrl: 'https://checkout.stripe.test/session',
+              expectedPreviousStripeSubscriptionId: null,
+              expiresAt: new Date(Date.now() + 60_000),
+            }
+          : options.checkoutAttempt;
+      },
+      update: async (args: unknown) => {
+        calls.push({ name: 'billingCheckoutAttempt.update', args });
+        return args;
+      },
+    },
     subscription: {
       findUnique: async (args: unknown) => {
         calls.push({ name: 'subscription.findUnique', args });
+        const where = (args as { where?: Record<string, unknown> }).where;
+        if (where && 'organisationId' in where) {
+          return options.checkoutExistingSubscription ?? null;
+        }
         return (
           options.existingSubscription ?? {
             id: 'sub_db_1',
@@ -117,6 +149,10 @@ function billingHarness(options: BillingHarnessOptions = {}) {
       retrieve: async (id: string) => {
         calls.push({ name: 'stripe.subscriptions.retrieve', args: { id, inTransaction } });
         return retrievedSubscription;
+      },
+      list: async (args: unknown) => {
+        calls.push({ name: 'stripe.subscriptions.list', args });
+        return { data: [retrievedSubscription], has_more: false };
       },
     },
   };
@@ -199,7 +235,12 @@ test('checkout.session.completed derives subscription status from the retrieved 
         id: 'cs_test_1',
         customer: 'cus_org_1',
         subscription: 'sub_stripe_1',
-        metadata: { organisationId: 'org_1', plan: 'COMPLETE' },
+        metadata: {
+          organisationId: 'org_1',
+          plan: 'COMPLETE',
+          interval: 'monthly',
+          checkoutAttemptId: 'attempt_1',
+        },
       },
     },
   } as never);
@@ -208,6 +249,9 @@ test('checkout.session.completed derives subscription status from the retrieved 
   assert.ok(upsert);
   assert.equal((upsert.args as { create: { status: string } }).create.status, 'PAST_DUE');
   assert.equal((upsert.args as { update: { status: string } }).update.status, 'PAST_DUE');
+  assert.equal((upsert.args as { create: { stripeStatus: string } }).create.stripeStatus, 'past_due');
+  assert.equal((upsert.args as { create: { billingInterval: string } }).create.billingInterval, 'monthly');
+  assert.equal((upsert.args as { create: { cancelAtPeriodEnd: boolean } }).create.cancelAtPeriodEnd, false);
 
   const retrieve = calls.find((call) => call.name === 'stripe.subscriptions.retrieve');
   assert.ok(retrieve);
@@ -215,7 +259,9 @@ test('checkout.session.completed derives subscription status from the retrieved 
 });
 
 test('subscription.updated maps unhandled Stripe statuses to an access-denying status', async () => {
-  const { service, calls } = billingHarness();
+  const { service, calls } = billingHarness({
+    retrievedSubscription: stripeSubscription({ status: 'incomplete' }),
+  });
 
   await service.handleWebhook({
     id: 'evt_subscription_incomplete',
@@ -230,11 +276,45 @@ test('subscription.updated maps unhandled Stripe statuses to an access-denying s
   assert.equal((update.args as { data: { status: string } }).data.status, 'EXPIRED');
 });
 
+test('subscription.updated ignores stale event state and persists the authoritative Stripe subscription', async () => {
+  const { service, calls } = billingHarness({
+    retrievedSubscription: stripeSubscription({
+      status: 'canceled',
+      canceled_at: 1_783_670_400,
+      cancel_at_period_end: false,
+      items: {
+        data: [{ quantity: 1, price: { id: 'price_essentials_yearly' } }],
+      },
+    }),
+  });
+
+  await service.handleWebhook({
+    id: 'evt_stale_subscription_update',
+    type: 'customer.subscription.updated',
+    data: {
+      object: stripeSubscription({
+        status: 'active',
+        items: {
+          data: [{ quantity: 1, price: { id: 'price_complete_monthly' } }],
+        },
+      }),
+    },
+  } as never);
+
+  const update = calls.find((call) => call.name === 'subscription.update');
+  assert.ok(update);
+  const data = (update.args as { data: Record<string, unknown> }).data;
+  assert.equal(data.status, 'CANCELLED');
+  assert.equal(data.stripeStatus, 'canceled');
+  assert.equal(data.plan, 'ESSENTIALS');
+  assert.equal(data.billingInterval, 'yearly');
+});
+
 test('checkout.session.completed rejects metadata when the customer or price does not match the organisation plan', async () => {
   const { service, calls } = billingHarness({
     retrievedSubscription: stripeSubscription({
       customer: 'cus_attacker',
-      items: { data: [{ price: { id: 'price_essentials_monthly' } }] },
+      items: { data: [{ quantity: 1, price: { id: 'price_essentials_monthly' } }] },
     }),
   });
 
@@ -248,7 +328,12 @@ test('checkout.session.completed rejects metadata when the customer or price doe
             id: 'cs_test_2',
             customer: 'cus_attacker',
             subscription: 'sub_stripe_1',
-            metadata: { organisationId: 'org_1', plan: 'COMPLETE' },
+            metadata: {
+              organisationId: 'org_1',
+              plan: 'COMPLETE',
+              interval: 'monthly',
+              checkoutAttemptId: 'attempt_1',
+            },
           },
         },
       } as never),
@@ -271,7 +356,12 @@ test('duplicate Stripe webhook event ids are ignored before subscription mutatio
         id: 'cs_test_3',
         customer: 'cus_org_1',
         subscription: 'sub_stripe_1',
-        metadata: { organisationId: 'org_1', plan: 'COMPLETE' },
+        metadata: {
+          organisationId: 'org_1',
+          plan: 'COMPLETE',
+          interval: 'monthly',
+          checkoutAttemptId: 'attempt_1',
+        },
       },
     },
   } as never);
@@ -289,7 +379,7 @@ test('Stripe webhook unique errors outside the event ledger are rethrown', async
   const { service } = billingHarness({
     retrievedSubscription: stripeSubscription({
       customer: 'cus_org_1',
-      items: { data: [{ price: { id: 'price_complete_monthly' } }] },
+      items: { data: [{ quantity: 1, price: { id: 'price_complete_monthly' } }] },
     }),
   });
 
@@ -299,7 +389,21 @@ test('Stripe webhook unique errors outside the event ledger are rethrown', async
       const tx = {
         stripeWebhookEvent: { create: async () => ({}) },
         organisation: { findUnique: async () => ({ id: 'org_1', stripeCustomerId: 'cus_org_1' }) },
+        billingCheckoutAttempt: {
+          findUnique: async () => ({
+            id: 'attempt_1',
+            organisationId: 'org_1',
+            requestedPlan: 'COMPLETE',
+            interval: 'monthly',
+            status: 'SESSION_CREATED',
+            stripeCheckoutSessionId: 'cs_test_collision',
+            checkoutUrl: 'https://checkout.stripe.test/session',
+            expectedPreviousStripeSubscriptionId: null,
+            expiresAt: new Date(Date.now() + 60_000),
+          }),
+        },
         subscription: {
+          findUnique: async () => null,
           upsert: async () => {
             throw uniqueError;
           },
@@ -319,7 +423,12 @@ test('Stripe webhook unique errors outside the event ledger are rethrown', async
             id: 'cs_test_collision',
             customer: 'cus_org_1',
             subscription: 'sub_stripe_1',
-            metadata: { organisationId: 'org_1', plan: 'COMPLETE' },
+            metadata: {
+              organisationId: 'org_1',
+              plan: 'COMPLETE',
+              interval: 'monthly',
+              checkoutAttemptId: 'attempt_1',
+            },
           },
         },
       } as never),
@@ -336,6 +445,9 @@ test('billing status only allows past-due access inside the grace window', async
     currentPeriodEnd: new Date(now - 8 * 24 * 60 * 60 * 1000),
   };
   const prisma = {
+    organisation: {
+      findUnique: async () => ({ stripeCustomerId: 'cus_org_1' }),
+    },
     subscription: {
       findUnique: async () => subscription,
     },
@@ -362,7 +474,29 @@ test('billing redirects use the primary frontend origin when multiple browser or
   process.env.FRONTEND_URL = 'https://app.example.org, https://admin.example.org';
   const checkoutSessions: StripeSessionArgs[] = [];
   const portalSessions: StripeSessionArgs[] = [];
+  let checkoutAttempt: Record<string, unknown> | null = null;
+  const subscription = { findUnique: async () => null };
+  const billingCheckoutAttempt = {
+    findUnique: async () => checkoutAttempt,
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      checkoutAttempt = {
+        ...data,
+        status: 'PENDING',
+        stripeCheckoutSessionId: null,
+        checkoutUrl: null,
+      };
+      return checkoutAttempt;
+    },
+    updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+      checkoutAttempt = { ...checkoutAttempt, ...data };
+      return { count: 1 };
+    },
+  };
   const prisma = {
+    subscription,
+    billingCheckoutAttempt,
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({ subscription, billingCheckoutAttempt }),
     organisation: {
       findUniqueOrThrow: async () => ({
         id: 'org_1',
@@ -374,6 +508,9 @@ test('billing redirects use the primary frontend origin when multiple browser or
     },
   };
   const stripe = {
+    subscriptions: {
+      list: async () => ({ data: [], has_more: false }),
+    },
     customers: {
       create: async () => ({ id: 'cus_new' }),
     },
@@ -381,7 +518,7 @@ test('billing redirects use the primary frontend origin when multiple browser or
       sessions: {
         create: async (args: StripeSessionArgs) => {
           checkoutSessions.push(args);
-          return { url: 'https://checkout.stripe.example/session' };
+          return { id: 'cs_redirect_test', url: 'https://checkout.stripe.example/session' };
         },
       },
     },
@@ -403,6 +540,7 @@ test('billing redirects use the primary frontend origin when multiple browser or
   assert.equal(checkoutSessions[0]?.success_url, 'https://app.example.org/billing?success=true');
   assert.equal(checkoutSessions[0]?.cancel_url, 'https://app.example.org/billing?cancelled=true');
   assert.equal(portalSessions[0]?.return_url, 'https://app.example.org/billing');
+  assert.equal(portalSessions[0]?.configuration, 'bpc_unit');
 });
 
 test('subscriptionGuard denies past-due tenants after the grace window', async () => {
