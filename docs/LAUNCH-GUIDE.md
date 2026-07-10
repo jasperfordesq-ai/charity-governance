@@ -1,6 +1,6 @@
 # CharityPilot - Plain-English Launch Guide
 
-*Last updated: 2026-07-09. This is the human-friendly companion to the dense
+*Last updated: 2026-07-10. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
@@ -65,7 +65,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 352/352 on 2026-07-09; rerun for the final release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 399/399 on 2026-07-10; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |

@@ -1870,7 +1870,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-09/);
+  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-10/);
   assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 87`/);
   assert.match(handoff, /The evidence ledger is currently `9 \/ 87`/);
   assert.match(handoff, /78 \/ 87` machine-readable launch checks remain/);
@@ -1881,12 +1881,12 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /396\s*\/\s*396`? checks/);
+  assert.match(handoff, /399\s*\/\s*399`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
-  assert.match(handoff, /Older `352 \/ 352`, `338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
+  assert.match(handoff, /Older `396 \/ 396`, `352 \/ 352`, `338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
   assert.match(handoff, /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/);
   assert.match(handoff, /still fails with six[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,240}`ERROR_ALERT_WEBHOOK_URL`/);
   assert.doesNotMatch(handoff, /GitHub `production` environment secrets list is currently empty/);
@@ -2598,11 +2598,11 @@ test('plain English launch guide names every final approval role', () => {
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
-  assert.match(launchGuide, /Last updated: 2026-07-09/);
-  assert.match(launchGuide, /19 production values needing real data/);
-  assert.match(launchGuide, /production values are `9 \/ 28` complete/);
+  assert.match(launchGuide, /Last updated: 2026-07-10/);
+  assert.match(launchGuide, /20 production values needing real data/);
+  assert.match(launchGuide, /production values are `9 \/ 29` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 352\/352/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 399\/399/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 350\/350/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 349\/349/);
