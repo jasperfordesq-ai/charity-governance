@@ -46,23 +46,27 @@ monorepo, so Playwright never enters the API/web production installs or images.
 ## Running
 
 ```bash
-npm run test:e2e               # from the repo root
+E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e   # from the repo root
 # or, from this directory:
-npm test                       # all specs
+E2E_ALLOW_LOCAL_DB_RESET=true npm test           # all specs
 npm run test:ui                # Playwright UI mode
 npm run report                 # open the last HTML report
-npx playwright test tests/auth.spec.ts   # a single spec
+E2E_ALLOW_LOCAL_DB_RESET=true npx playwright test tests/auth.spec.ts   # a single spec
 ```
+
+Without `E2E_ALLOW_LOCAL_DB_RESET=true`, local setup refuses to reset the local
+database. Set it only when the local database is disposable or after you have
+backed up records you care about.
 
 The responsive route matrix can also be run in four focused chunks from the repo
 root. Use these when a local browser host or deployed QA runner cannot keep the
 full 52-test matrix stable in one process:
 
 ```bash
-npm run test:e2e:responsive:public:desktop
-npm run test:e2e:responsive:public:mobile
-npm run test:e2e:responsive:dashboard:desktop
-npm run test:e2e:responsive:dashboard:mobile
+E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive:public:desktop
+E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive:public:mobile
+E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive:dashboard:desktop
+E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive:dashboard:mobile
 ```
 
 Keep all four transcripts together if they are used as launch browser-QA
@@ -92,6 +96,8 @@ The expected cache should include `icudtl.dat` under the Playwright
   reachable, then truncates all tenant/app tables (preserving the seeded governance
   reference data - `GovernancePrinciple` / `GovernanceStandard`). See
   `helpers/db.ts` for the exact table list.
+- **Explicit reset opt-in.** Local runs require `E2E_ALLOW_LOCAL_DB_RESET=true`;
+  otherwise `global-setup.ts` refuses to reset the local database.
 - **Unique data per test.** Emails, deadline titles and document names are suffixed
   with a timestamp so reruns never collide.
 - **One shared owner.** Auth routes are rate-limited to 5 requests/min, so a single

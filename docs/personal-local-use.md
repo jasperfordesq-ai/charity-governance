@@ -35,8 +35,12 @@ default E2E suite resets tenant/app tables and is only safe before you enter
 real personal records. For destructive pre-use QA, start the local stack and run:
 
 ```bash
-npm run test:e2e
+E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e
 ```
+
+Use `E2E_ALLOW_LOCAL_DB_RESET=true` only after backing up records you care about
+or when the local database is disposable. Without that flag, the E2E harness
+refuses to reset the local database.
 
 ## Daily Personal-Use Routine
 

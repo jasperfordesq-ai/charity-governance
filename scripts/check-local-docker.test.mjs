@@ -580,14 +580,36 @@ test('deployed browser QA mode does not reset or mutate databases through local 
   assert.match(browserQa, /approved non-sensitive test workspace/);
 });
 
+test('local destructive e2e database reset requires an explicit operator opt-in', () => {
+  const globalSetup = readRepoFile('e2e/global-setup.ts');
+  const e2eWorkflow = readRepoFile('.github/workflows/e2e.yml');
+  const e2eReadme = readRepoFile('e2e/README.md');
+  const personalDocs = readRepoFile('docs/personal-local-use.md');
+
+  assert.match(globalSetup, /E2E_ALLOW_LOCAL_DB_RESET/);
+  assert.match(globalSetup, /const ALLOW_LOCAL_DB_RESET = process\.env\.E2E_ALLOW_LOCAL_DB_RESET === 'true'/);
+  assert.match(globalSetup, /if \(!ALLOW_LOCAL_DB_RESET\) \{[\s\S]*refusing to reset the local database/i);
+  assert.match(globalSetup, /E2E_ALLOW_LOCAL_DB_RESET=true/);
+  assert.match(globalSetup, /await resetDb\(\);/);
+  assert.match(globalSetup, /if \(!ALLOW_LOCAL_DB_RESET\) \{[\s\S]*await resetDb\(\);/);
+
+  assert.match(e2eWorkflow, /E2E_ALLOW_LOCAL_DB_RESET:\s*'true'/);
+  assert.match(e2eReadme, /E2E_ALLOW_LOCAL_DB_RESET=true/);
+  assert.match(e2eReadme, /refuses to reset the local database/i);
+  assert.match(personalDocs, /E2E_ALLOW_LOCAL_DB_RESET=true/);
+  assert.match(personalDocs, /only after backing up/i);
+});
+
 test('platform audit ledger records deployed browser QA hardening', () => {
   const auditGenerator = readRepoFile('scripts/platform-completion-audit.mjs');
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
 
   assert.match(auditGenerator, /Deployed browser QA mode now uses existing non-sensitive test credentials/);
   assert.match(auditGenerator, /direct database reset or token-injection seams/);
+  assert.match(auditGenerator, /Local destructive E2E resets now require E2E_ALLOW_LOCAL_DB_RESET=true/);
   assert.match(auditLedger, /Deployed browser QA mode now uses existing non-sensitive test credentials/);
   assert.match(auditLedger, /direct database reset or token-injection seams/);
+  assert.match(auditLedger, /Local destructive E2E resets now require E2E_ALLOW_LOCAL_DB_RESET=true/);
 });
 
 test('platform audit ledger records local browser evidence without closing deployed gates', () => {

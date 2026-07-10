@@ -1664,6 +1664,7 @@ test('release readiness child gates clean up process trees after failed child ex
 
   assert.match(releaseReady, /cleanupProcessTreeOnFailure:\s*true/);
   assert.match(releaseReady, /cleanupRepoPlaywrightProcessesOnFailure:\s*true/);
+  assert.match(releaseReady, /env:\s*\{[\s\S]*E2E_ALLOW_LOCAL_DB_RESET:\s*'true'[\s\S]*\}/);
   assert.match(releaseReady, /if \(!ok && opts\.cleanupProcessTreeOnFailure && !timedOut\)/);
   assert.match(releaseReady, /if \(!ok && opts\.cleanupRepoPlaywrightProcessesOnFailure\)/);
   assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);

@@ -137,6 +137,7 @@ function run(name, cmd, cmdArgs, opts = {}) {
   const res = spawnSync(resolved.cmd, resolved.cmdArgs, {
     cwd: ROOT,
     stdio: 'inherit',
+    env: { ...process.env, ...(opts.env ?? {}) },
     timeout: opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS,
   });
   const ms = Date.now() - started;
@@ -217,6 +218,7 @@ if (noE2e) {
   } else {
     results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], {
       timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS,
+      env: { E2E_ALLOW_LOCAL_DB_RESET: 'true' },
       cleanupProcessTreeOnFailure: true,
       cleanupRepoPlaywrightProcessesOnFailure: true,
     }));

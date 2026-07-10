@@ -14,6 +14,7 @@ const WEB_READINESS_TIMEOUT_MS = 600_000;
 const ROUTE_WARM_TIMEOUT_MS = positiveIntEnv('E2E_ROUTE_WARM_TIMEOUT_MS', 60_000);
 const ROUTE_WARM_BUDGET_MS = positiveIntEnv('E2E_ROUTE_WARM_BUDGET_MS', 240_000);
 const SKIP_ROUTE_WARMING = process.env.E2E_SKIP_ROUTE_WARMING === 'true';
+const ALLOW_LOCAL_DB_RESET = process.env.E2E_ALLOW_LOCAL_DB_RESET === 'true';
 const PUBLIC_ROUTES_TO_WARM = [
   '/',
   '/about',
@@ -123,6 +124,13 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   }
 
   // 2. The DB must be reachable and resettable (also validates the DSN/port).
+  if (!ALLOW_LOCAL_DB_RESET) {
+    throw new Error(
+      'Refusing to reset the local database. The default E2E suite truncates tenant/app tables; ' +
+        'set E2E_ALLOW_LOCAL_DB_RESET=true only after backing up or when using a disposable test database.',
+    );
+  }
+
   try {
     await resetDb();
   } catch (err) {

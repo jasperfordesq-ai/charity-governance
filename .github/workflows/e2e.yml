@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 30
     env:
       E2E_ARTIFACT_DIR: playwright-artifacts
+      E2E_ALLOW_LOCAL_DB_RESET: 'true'
 
     steps:
       - name: Checkout
