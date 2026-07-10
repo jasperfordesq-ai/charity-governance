@@ -94,3 +94,19 @@ test('production launch evidence init renders machine-readable handoff output', 
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production launch evidence init rejects empty evidence file option before writing', async () => {
+  const { runInitProductionLaunchEvidenceFromArgs } = await loadInitRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-evidence-init-empty-'));
+
+  try {
+    const result = runInitProductionLaunchEvidenceFromArgs(['--evidence-file='], { cwd: tempDir });
+
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Usage:/);
+    assert.match(result.stderr, /--evidence-file requires a value/);
+    assert.equal(existsSync(join(tempDir, '.charitypilot-launch-evidence')), false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

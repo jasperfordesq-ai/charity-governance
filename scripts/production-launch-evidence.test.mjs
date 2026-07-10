@@ -1790,6 +1790,16 @@ test('production launch evidence validator fails closed when evidence file is mi
   assert.doesNotMatch(redactedResult.stderr, /secret-token|ghp_secretToken/);
 });
 
+test('production launch evidence validator rejects empty evidence file option as usage error', async () => {
+  const { runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+
+  const result = runProductionLaunchEvidenceFromArgs(['--evidence-file=']);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--evidence-file requires a value/);
+});
+
 test('production launch evidence validator requires every checklist check to be complete', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);

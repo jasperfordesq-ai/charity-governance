@@ -425,6 +425,16 @@ test('production launch evidence status fails closed when evidence file is missi
   assert.match(result.stderr, /evidence file not found/);
 });
 
+test('production launch evidence status rejects empty evidence file option as usage error', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+
+  const result = runProductionLaunchEvidenceStatusFromArgs(['--evidence-file=']);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--evidence-file requires a value/);
+});
+
 test('production launch evidence status redacts token-bearing evidence paths', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
 

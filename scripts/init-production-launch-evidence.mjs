@@ -39,7 +39,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--evidence-file=')) {
-      options.evidenceFile = arg.slice('--evidence-file='.length);
+      const value = arg.slice('--evidence-file='.length);
+      if (!value) throw new Error('--evidence-file requires a value');
+      options.evidenceFile = value;
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);

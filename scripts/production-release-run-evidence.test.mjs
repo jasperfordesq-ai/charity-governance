@@ -453,3 +453,13 @@ test('production release run checker redacts GitHub request failure transcripts'
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('production release run checker rejects empty evidence file option as usage error', async () => {
+  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
+
+  const result = await runProductionReleaseRunEvidenceFromArgs(['--evidence-file=']);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage:/);
+  assert.match(result.stderr, /--evidence-file requires a value/);
+});

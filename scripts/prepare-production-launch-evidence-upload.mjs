@@ -52,7 +52,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--evidence-file=')) {
-      options.evidenceFile = arg.slice('--evidence-file='.length);
+      const value = arg.slice('--evidence-file='.length);
+      if (!value) throw new Error('--evidence-file requires a value');
+      options.evidenceFile = value;
       continue;
     }
     if (arg === '--artifact-name') {
@@ -63,7 +65,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--artifact-name=')) {
-      options.artifactName = arg.slice('--artifact-name='.length);
+      const value = arg.slice('--artifact-name='.length);
+      if (!value) throw new Error('--artifact-name requires a value');
+      options.artifactName = value;
       continue;
     }
     if (arg === '--evidence-file-name') {
@@ -74,7 +78,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg.startsWith('--evidence-file-name=')) {
-      options.evidenceFileName = arg.slice('--evidence-file-name='.length);
+      const value = arg.slice('--evidence-file-name='.length);
+      if (!value) throw new Error('--evidence-file-name requires a value');
+      options.evidenceFileName = value;
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);

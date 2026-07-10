@@ -3915,6 +3915,25 @@ test('production launch evidence upload helper rejects unsafe artifact and file 
   }
 });
 
+test('production launch evidence upload helper rejects empty inline options as usage errors', () => {
+  for (const args of [
+    ['--evidence-file='],
+    ['--artifact-name='],
+    ['--evidence-file-name='],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      ['scripts/prepare-production-launch-evidence-upload.mjs', ...args],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+
+    assert.equal(result.status, 2, `${args.join(' ')} should be rejected as usage`);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /Usage:/);
+    assert.match(result.stderr, /requires a value/);
+  }
+});
+
 test('CI builds API and web production Docker images', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
