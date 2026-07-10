@@ -1962,6 +1962,15 @@ test('marketing features cards use shared status panel styling', () => {
   assert.doesNotMatch(features, /border border-gray-200 shadow-sm bg-white dark:border-gray-800 dark:bg-gray-950/);
 });
 
+test('marketing pricing cards use shared status panel styling', () => {
+  const pricing = app('(marketing)/pricing/page.tsx');
+
+  assert.match(pricing, /statusPanelClassName/);
+  assert.match(pricing, /statusPanelClassName\(\s*plan\.highlight \? 'brand' : 'neutral'/);
+  assert.doesNotMatch(pricing, /border-2 border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900/);
+  assert.doesNotMatch(pricing, /border-2 border-teal-primary bg-white shadow-lg dark:border-teal-bright dark:bg-gray-900/);
+});
+
 test('blog article content avoids decorative dot bullets and oversized cards', () => {
   const articles = [
     'blog/annual-reporting-guide-irish-charities.tsx',

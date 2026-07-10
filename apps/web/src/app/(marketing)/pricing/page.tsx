@@ -2,6 +2,7 @@ import { Button, Card, CardBody, CardHeader, Link } from '@/components/heroui-cl
 import type { Metadata } from 'next';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
+import { statusPanelClassName } from '@/components/ui/status';
 
 export const metadata: Metadata = {
   title: 'Pricing - CharityPilot',
@@ -104,11 +105,14 @@ export default function PricingPage() {
             {plans.map((plan) => (
               <Card
                 key={plan.name}
-                className={`relative overflow-visible ${
-                  plan.highlight
-                    ? 'border-2 border-teal-primary bg-white shadow-lg dark:border-teal-bright dark:bg-gray-900'
-                    : 'border-2 border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'
-                }`}
+                className={statusPanelClassName(
+                  plan.highlight ? 'brand' : 'neutral',
+                  `relative overflow-visible border-2 ${
+                    plan.highlight
+                      ? 'border-teal-primary shadow-lg dark:border-teal-bright'
+                      : 'shadow-sm'
+                  }`,
+                )}
               >
                 {plan.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-accent text-gray-950 text-xs font-bold px-4 py-1 rounded-lg">
