@@ -53,8 +53,8 @@ an external penetration test, remediation or formal human risk acceptance, and
 all five named final signoffs.
 
 Passing local tests is not launch completion. A `1000 / 1000` claim is prohibited
-until production values are `28 / 28`, evidence checks are `87 / 87`, strict
-gates are `120 / 120`, final signoffs are `5 / 5`, and all evidence is genuine
+until production values are `29 / 29`, evidence checks are `87 / 87`, strict
+gates are `121 / 121`, final signoffs are `5 / 5`, and all evidence is genuine
 and bound to the promoted release.
 
 ## Live Baseline Commands

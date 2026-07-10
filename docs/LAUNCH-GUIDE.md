@@ -28,10 +28,10 @@ be rerun against the final production configuration:
 a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`;
 on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
-configured handoff still had 19 production values needing real data.
-On the latest checked workstation, production values are `9 / 28` complete,
+configured handoff still had 20 production values needing real data.
+On the latest checked workstation, production values are `9 / 29` complete,
 machine-readable launch evidence is `9 / 87` complete, final signoffs are
-`0 / 5`, the strict counted launch gates are `18 / 120` complete (`15%`),
+`0 / 5`, the strict counted launch gates are `18 / 121` complete (`14.9%`),
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.

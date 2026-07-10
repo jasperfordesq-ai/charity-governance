@@ -88,14 +88,14 @@ Local personal-use safety before heavy work:
 - Do not run the default full E2E suite against a personal database you care about; it can reset tenant/app tables.
 - This local safety gate does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
 
-Known current state from `npm run launch:status -- --json` on 2026-07-09:
+Known current state from `npm run launch:status -- --json` on 2026-07-10:
 
 - Phase: `ENV_INCOMPLETE`
-- `.env.production` exists but still has 19 values needing real production data.
-- Production values complete: `9 / 28`.
+- `.env.production` exists but still has 20 values needing real production data.
+- Production values complete: `9 / 29`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
 - Machine-readable launch evidence completion: `9 / 87`.
-- Strict counted launch gates: `18 / 120` complete (`15%`), counting only production values, launch evidence checks, and final signoff roles.
+- Strict counted launch gates: `18 / 121` complete (`14.9%`), counting only production values, launch evidence checks, and final signoff roles.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
@@ -646,14 +646,14 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 Strict launch evidence metric:
 
 - `78 / 87` machine-readable launch checks remain.
-- Strict counted launch gates are `18 / 120` complete, so `102 / 120`
+- Strict counted launch gates are `18 / 121` complete, so `103 / 121`
   counted gates remain. This is an operator progress metric only, not a legal,
   security, operations, or business readiness certification.
 - Strict launch evidence is still mostly incomplete because the remaining checks
   include the real production environment, deploy, rollback, provider,
   backup/restore, deployed QA, legal, pentest, and final signoff gates.
 - Final signoffs remain `0 / 5`.
-- Production values remain `9 / 28` complete, with 19 real provider/hosting/image-promotion values still missing.
+- Production values remain `9 / 29` complete, with 20 real provider/hosting/image-promotion values still missing.
 
 Whole-goal estimate:
 
