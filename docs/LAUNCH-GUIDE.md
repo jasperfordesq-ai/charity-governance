@@ -10,8 +10,10 @@
 > ledger state as machine-readable JSON without exposing secret values.
 > For one-person local use on this computer, run `npm run personal:ready`.
 > That is a non-destructive local confidence gate; it does not replace deployed
-> production evidence, and the default full E2E suite must not be run against a
-> personal database you care about because it can reset tenant/app tables.
+> production evidence. Run destructive browser tests only through
+> `npm run test:e2e`: its managed runner provisions and proves a separate
+> disposable database and refuses personal targets. Never bypass it with direct
+> Playwright or weakened identity guards.
 
 ---
 
@@ -65,7 +67,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 399/399 on 2026-07-10; rerun for the final release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 512/512 on 2026-07-10; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |

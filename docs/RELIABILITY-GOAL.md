@@ -129,7 +129,9 @@ ambiguous that needs your decision. Do not merge or push.
 
 ## How to run it
 
-1. Make sure the local stack is up: `docker compose -f compose.yml -f compose.local.yml up`.
+1. Make sure Docker is available. Do not start the persistent development stack
+   for browser tests; `npm run test:e2e` provisions and tears down its own isolated
+   disposable stack.
 2. Start a fresh autonomous session and paste the `GOAL` block above as the prompt
    (or schedule it as a background run).
 3. Review the result on the `reliability/provable-trust` branch — start with

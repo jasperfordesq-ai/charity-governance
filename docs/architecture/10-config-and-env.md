@@ -123,6 +123,76 @@ The dev template (`.env.example`) is deliberately self-contained:
 
 Because `validateProductionEnv` no-ops unless `NODE_ENV=production` (`apps/api/src/utils/env.ts:409`), none of these dev defaults block local startup; they only ever fail the build when someone tries to run them as production.
 
+### Isolated destructive E2E configuration
+
+Destructive Playwright is deliberately separate from both development and
+production configuration. `npm run test:e2e` delegates to
+`scripts/run-isolated-e2e.mjs`, which generates a fresh UUID and bootstrap,
+runner, JWT, and readiness credentials; copies only an explicit source
+allow-list into the build context; rejects Docker/Buildx endpoint overrides;
+proves and pins a local socket and integrated builder; and renders an exact
+private snapshot of `compose.e2e.yml` before building or starting anything. The
+source is read once; config, build, startup, logs, and cleanup cannot re-read a
+mutable repository path. That
+pre-start model pins the migration/seed DSN to the isolated `db` service and
+rejects host routing, secondary env/config files, mounts, secrets, unapproved
+network aliases, alternate commands, extra build inputs, and pull policies. It
+requires one unique `*.charitypilot-e2e.invalid` alias for each internal service
+and absolute trailing-dot gateway routes, plus exact healthcheck, tmpfs, and
+stop-grace contracts. Runtime database/document writes use tmpfs; the web
+service serves a baked optimized build from its read-only image with only
+`/tmp` writable. Compose declares no persistent volume or host mount. Database,
+API, and web have no published ports and attach only to the internal bridge.
+The sole publisher is a dedicated non-root,
+read-only TCP gateway with no environment, secret, mount, dynamic destination,
+or package dependency; only that gateway also joins the project-scoped,
+non-attachable edge bridge. API alone builds the shared app image and web reuses
+that exact tag, preventing concurrent same-tag image exports. Before Playwright
+can reset the database, runtime inspection binds the three random image tags to
+immutable IDs and proves exactly four healthy project-labelled containers with
+the expected images, networks, loopback publications, mounts/tmpfs, users, and
+security controls. `npm run test:e2e` also runs the pure isolation contract as a
+pre-Docker lifecycle gate.
+
+Local mode fixes the web, API, and PostgreSQL endpoints to
+`127.0.0.1:3303`, `127.0.0.1:3302`, and `127.0.0.1:55434` respectively. It
+accepts no ambient database URL, instance ID, reset confirmation, generated
+credential, Docker context, or remote builder. Direct database identity, the
+protected UUID marker/restricted role, exact table inventory, and a keyed API
+binding canary must all pass before reset. The locked reset cannot cascade,
+follow inheritance descendants, restart sequences, fire a user `ON TRUNCATE`
+trigger, or publish a logical truncate. Final cleanup is attempted in all normal
+pass/fail/timeout paths, every daemon operation stays pinned to the proven
+endpoint, and exact-project residue makes the gate red while preserving the
+private recovery inputs.
+
+The exceptional `remote-disposable` mode is manual-only. It additionally
+requires the long destructive override, `sslmode=verify-full`, an exact
+connected-server IP, high-entropy database/JWT/readiness credentials, a narrow
+`E2E_AUTH_COOKIE_DOMAIN` covering only the QA web/API origins, the protected
+database comment and UUID marker, a non-owning `NOINHERIT` runner with no role
+memberships, and a keyed API-to-database binding proof. A single physical
+connection holds a suite-wide advisory lease; remote destructive authority is
+granted only after the initial API canary. Each worker database seam proves the
+lease is active, and the reset primitive proves its own physical session owns
+the lease before opening a transaction. After the Playwright process group is
+proven absent, an outer-runner janitor opens a fresh connection, re-proves
+identity, reacquires the lease, rechecks API binding, resets, verifies binding
+again, releases, and disconnects. An unproven process tree skips the janitor and
+fails red with manual-recovery guidance. The endpoint must be direct or
+session-affine; transaction/statement poolers are unsupported because they do
+not preserve PostgreSQL session advisory-lock ownership. Direct remote
+`resetDb()` is rejected.
+Native Windows remote-destructive execution is rejected until a Job
+Object-backed process-tree lifetime primitive exists; operators must use Linux
+or WSL. This restriction does not affect native-Windows local-disposable E2E or
+non-destructive deployed QA.
+The local bootstrap owner is made `NOLOGIN`; a remote provider's distinct owner
+need not share that local implementation detail. CI, deployed browser QA, and
+`release:ready` cannot select remote mode. The retired boolean reset flag is
+rejected and grants no authority. See [`e2e/README.md`](../../e2e/README.md) for
+the complete operator contract.
+
 ## The two-gate model
 
 CharityPilot separates "is the code correct and shippable?" from "is the business ready to launch?" into two distinct gates. **All of this repository's automated work lives inside Gate 1.** Gate 2 is external — real money, real domains, real legal sign-off — and is documented (not duplicated) in the launch docs.

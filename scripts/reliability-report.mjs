@@ -144,7 +144,8 @@ function parseResults(out) {
 }
 
 // Statically collect Playwright test titles from the e2e spec files. The E2E suite is
-// executed by `npm run test:e2e` / the CI E2E gate (it needs the local Docker stack);
+// executed by `npm run test:e2e` / the CI E2E gate (the managed runner provisions
+// its own isolated disposable Docker stack);
 // the ledger links each e2e guarantee to a title that must exist in a spec file.
 function readE2eTitles() {
   const titles = new Set();
@@ -290,7 +291,7 @@ function buildMarkdown(guars, res) {
   md += '> The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the\n';
   md += '> extractable logic (auth/session, validation parity, plan/role decisions, redirect & download\n';
   md += '> allow-listing, error redaction); Playwright E2E (<sup>e2e</sup>) proves rendered behaviour and\n';
-  md += '> accessibility against the local Docker stack.\n\n';
+  md += '> accessibility against the managed runner-owned disposable Docker stack.\n\n';
   md = renderMatrix(md, webRows, WEB_GROUP_ORDER);
 
   // Fixed-while-proving section, driven by an optional sidecar file.

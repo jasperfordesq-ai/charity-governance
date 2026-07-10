@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 50 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 51 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 20 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 24 web unit test files, 50 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 24 web unit test files, 51 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -124,9 +124,12 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The compliance overview workflow API loading, approval-readiness fetch, year/filter state, and evidence-prompt derivation are split into a route-local hook behind a wiring regression test.
 - The billing plan gates, Stripe checkout cards, and billing notes are split out of the oversized billing route behind a wiring regression test.
 - The board review-ready summary panel is split out of the oversized board route behind a wiring regression test.
-- Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits that hang on dev-only noise.
-- Local e2e route warming now logs progress and can be skipped or time-boxed with E2E_SKIP_ROUTE_WARMING, E2E_ROUTE_WARM_TIMEOUT_MS, and E2E_ROUTE_WARM_BUDGET_MS for constrained Docker hosts.
-- Local destructive E2E resets now require E2E_ALLOW_LOCAL_DB_RESET=true, while CI and release:ready opt in explicitly for disposable test databases.
+- Responsive browser-smoke coverage now enumerates every shipped page route across desktop/mobile and light/dark themes, with a guard against reverting to network-idle waits.
+- The local e2e public-route readiness sweep logs progress and can be skipped or time-boxed with E2E_SKIP_ROUTE_WARMING, E2E_ROUTE_WARM_TIMEOUT_MS, and E2E_ROUTE_WARM_BUDGET_MS for focused diagnostics.
+- Local destructive E2E now runs only through a managed standalone stack with a positive allow-list build context, pinned local Docker daemon and integrated builder, exact pre-start Compose/DSN validation, generated UUID-bound disposable database, protected marker, restricted role, keyed API binding proof, internal-only database/API/web services exposed solely through a secretless fixed-route loopback TCP gateway, bounded tmpfs data storage, a baked read-only production web runtime, and finally-enforced exact-project cleanup; cleanup residue fails the gate and the retired boolean reset flag grants no authority.
+- Exceptional remote-disposable database seams now require an active suite lease and same-session advisory-lease ownership before reset; after proven child-group absence, a fresh-connection outer janitor re-proves database identity, boundedly reacquires that lease, verifies API binding before and after the centralized reset, releases, and disconnects. Native-Windows remote-destructive execution is refused until Job Object-backed tree-lifetime proof exists; Linux and WSL process groups remain supported.
+- One bounded parent lifecycle covers local, deployed, and remote modes and rechecks cancellation immediately before spawn. POSIX completion requires process-group absence plus leader close; abnormal Windows termination requires checked bounded taskkill /T /F plus leader close. If termination remains unproven, the runner fails red, skips the remote janitor or local Docker cleanup, and preserves recovery inputs.
+- GET /auth/me now combines a 60-per-minute credential bucket with an independent 1,000-per-minute coarse IP ceiling. A shared case-insensitive, tab-tolerant Bearer parser governs authentication, rate limiting, and origin checks, and malformed Authorization never falls back to cookies; logout remains origin-sensitive. The proxy accepts only exact 200 for /me and refresh, requires exactly two strict nonempty scoped rotation cookies, forwards exactly two validated deletion cookies only on definitive refresh 401, and maps throttles, transient failures, and malformed responses to no-store 503.
 - The production readiness TODO now requires final-release-ref command transcripts, commit SHA, workflow run, and digest manifest evidence instead of preserving stale local selected-gate commit claims.
 - Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.
 - Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.
@@ -221,15 +224,15 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The release readiness command now emits ASCII-safe operator output for cleaner Windows terminals and launch evidence transcripts.
 - Public attribution surfaces now identify Jasper Ford as CharityPilot IP holder, declare AGPL-3.0-or-later licensing/no-warranty posture, and link to the canonical GitHub source repository across marketing, auth, dashboard, sitemap, NOTICE, and package metadata.
 - The release readiness command now distinguishes skipped gates from a full release-ready result in its final summary.
-- The release readiness command now times out local stack reachability probes so a half-started web/API stack fails the E2E gate cleanly instead of hanging operator evidence collection.
-- The release readiness command now scopes failed Playwright E2E cleanup to this repository before stopping related Node processes, avoiding unrelated npm test processes on shared Windows hosts.
+- The managed isolated E2E runner now owns bounded stack startup and reachability probes, so a half-started disposable web/API stack fails the browser gate cleanly instead of hanging operator evidence collection.
+- The release readiness command delegates destructive Playwright to the managed runner and leaves unrelated Node/npm processes untouched; the runner owns the common bounded lifecycle and fail-closed cleanup policy.
 - The release readiness command now resolves npm and npx gates through explicit Node CLI entrypoints on Windows instead of shell execution, keeping launch evidence transcripts free of shell-argument deprecation warnings.
 - The production readiness TODO now reflects the current 19-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/87 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.
 - The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.
-- The personal local readiness gate now gives operators a non-destructive local confidence command for one-person use without Stripe, payments, or production providers, while warning that the default full E2E suite can reset tenant/app tables.
+- The personal local readiness gate now gives operators a non-destructive local confidence command for one-person use without Stripe, payments, or production providers, while directing all destructive browser tests through the managed isolated runner that refuses personal database targets.
 - Local-driver document downloads now require the requested storage path to belong to a live document row for the caller organisation before any file read occurs.
 - The reliability report and generated reliability ledger now use ASCII-safe status text for cleaner release and launch evidence transcripts.
 - The production environment generator now uses ASCII-safe operator hints for cleaner setup transcripts.
@@ -279,21 +282,22 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Production launch evidence deploy-smoke hints now match the strict validator by naming the deploy command, standalone smoke command, success marker, and canonical production origins.
 - Platform audit generation now falls back to reading .git metadata directly when shelling out to git is unavailable.
 - The plain-English launch guide and platform audit now describe launch status as local non-committed state, so fresh clones and partially configured production workstations do not contradict each other.
-- Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and longer owner setup headroom to survive local Next.js cold compiles.
-- Responsive browser-smoke global setup now warms every public and auth route in the smoke suite before timed browser assertions.
-- Responsive browser-smoke navigation now retries local Next.js dev-server restart responses after waiting for the web origin, without masking deployed QA failures.
+- Accessibility browser QA now uses commit-stage navigation, parsed-document waits, direct light/dark theme application, and explicit owner setup headroom.
+- Responsive browser-smoke global setup now checks every public and auth route in the smoke suite before timed browser assertions.
+- Responsive browser-smoke navigation now retries only bounded local transport-loss failures after probing the web origin, without masking timeouts or deployed QA failures.
 - Responsive browser-smoke dashboard coverage now runs one route per test and seeds the shared local owner directly, while auth journey specs still exercise registration UI.
-- Local Docker web QA now gives Next dev a 6144 MiB default configurable heap ceiling and ignores Playwright report/test-result artifacts so route smoke output does not trigger repeated recompiles.
+- Local Docker web QA now builds an optimized Next.js artifact once and serves it from the read-only isolated image, so route compilation cannot stall an individual browser test.
 - Local Playwright screenshots, traces, videos, and HTML reports now default outside the repository, while CI writes them to an explicit uploaded artifact directory.
 - Local Playwright QA now creates external artifact directories before reporters run, keeping early setup failures readable.
 - Browser auth helpers now pre-seed the cookie-consent preference before registration, login, and invite acceptance so setup submissions are not competing with the consent dialog.
 - Compliance record autosave now recovers from concurrent create races on the organisation/standard/year key with a scoped update instead of leaking a 500.
-- Auth journey browser helpers now retry only local dev-server blank form loads after a Next.js restart while keeping deployed QA failures strict.
+- Auth journey browser helpers require controlled input state and the expected API response before accepting a form submission while keeping deployed QA failures strict.
 - Irish compliance matrix source metadata was refreshed against official Charities Regulator, Irish Statute Book, and Revised Acts sources on 2026-07-09.
 
 ## Local Verification Evidence
 
 - Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This may be stale for the current checkout; rerun the selected gate on the final release ref and verify `npm run launch:status -- --json` reports the intended `repositoryState.headSha` before treating it as current release evidence.
+- Current P0-05 local working-tree evidence on 2026-07-10: `npm run test:e2e:contract` passed 113/113 checks, the managed disposable `npm run test:e2e` run passed 96/96 Playwright journeys in 9.6 minutes (25.0 minutes including fresh build and teardown), API/web/shared tests passed 488/295/23, and production/local-Docker tooling passed 512/44. This local run, static reliability-title linkage, and direct-`master` workflow wiring are not SHA-bound CI, release, or deployed evidence; P0-09 remains open until those independent gates run against the published commit.
 - `npm run test:production-check` passed locally on 2026-07-09 with 352/352 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, deployed browser QA environment preflight, launch evidence work queue JSON, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
@@ -368,7 +372,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 211 | public/partial by design | 6 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 263 | public/partial by design | 6 | preserve current guard and tenant boundary |
 | `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 3 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
@@ -377,7 +381,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `documents` | `apps/api/src/routes/documents/index.ts` | 316 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `health` | `apps/api/src/routes/health/index.ts` | 82 | public/partial by design | 2 | preserve current guard and tenant boundary |
+| `health` | `apps/api/src/routes/health/index.ts` | 206 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `team` | `apps/api/src/routes/team/index.ts` | 113 | auth, subscription | 2 | preserve current guard and tenant boundary |
 
@@ -422,7 +426,7 @@ Local-state note: This generated section reflects the local non-committed `.env.
   - PostgreSQL backup and restore verification
   - local document storage backup copy
   - core personal-use browser smoke with billing safely disabled when Stripe is absent
-- Warning: Do not run the default full E2E suite against a personal database you care about; it can reset tenant/app tables.
+- Warning: Run destructive browser tests only through npm run test:e2e. The managed runner provisions and proves a separate disposable database and refuses personal targets; never bypass it with direct Playwright or weakened identity guards.
 - Launch evidence limit: This protects local personal use only. It does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
 
 ### Deployed Browser QA Commands

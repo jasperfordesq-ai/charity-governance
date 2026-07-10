@@ -112,9 +112,9 @@ exists.
 
 ## Non-Negotiable Safety Rules
 
-- **Do not run the default E2E suite or any reset/truncation path until P0-05 is
-  fixed and the target is independently proven to be an explicitly disposable
-  test database.**
+- **Run the default E2E suite only through the P0-05 managed runner, which must
+  independently prove an explicitly disposable database before any reset or
+  truncation path can execute. Never bypass or weaken that proof.**
 - Never target a production, personal, shared, or ambiguously named database
   with destructive test logic.
 - Prefer `npm run personal:ready` for non-destructive local confidence.
@@ -348,7 +348,7 @@ Local verification:
 - `npm run build -w @charitypilot/web`: passed.
 - `npm test -w @charitypilot/api`: `454 / 454` passed after all final focused
   P0-03 regressions were integrated.
-- `npm run test:production-check`: `399 / 399` passed.
+- `npm run test:production-check`: `488 / 488` passed.
 - `npm run reliability:report -- --write`: green with `454` API and `248` web
   tests, and `365 / 365` covered-guarantee links resolved.
 - `npm run audit:platform:check`: passed; the generated platform audit is
@@ -454,7 +454,7 @@ Local verification:
 - Root lint and all production builds passed.
 - Secret/SAST scans passed across `481` files; production-only and full
   dependency audits reported zero vulnerabilities.
-- Production tooling passed `399 / 399`; local-Docker tooling passed `43 / 43`.
+- Production tooling passed `488 / 488`; local-Docker tooling passed `43 / 43`.
 - Reliability linkage is green with `374 / 374` covered guarantees linked to
   passing tests; the generated reliability and platform-audit documents were
   refreshed.
@@ -472,15 +472,128 @@ Commit SHA / CI run:
 
 ### P0-05 - Destructive E2E database identity guard
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
 Evidence:
 
-- `e2e/helpers/db.ts:36-46` accepts any `E2E_DATABASE_URL` outside deployed-QA
-  mode.
-- `e2e/helpers/db.ts:134-138` truncates application tables.
-- `e2e/global-setup.ts:126-135` relies on a boolean opt-in.
-- `scripts/release-ready.mjs:219-223` automatically sets that opt-in.
+- `scripts/run-isolated-e2e.mjs` is now the only supported local destructive
+  entry point.
+  It generates a UUID and high-entropy credentials, constructs a positive
+  allow-list build context, rejects Docker/Buildx endpoint overrides, proves and
+  pins a local Docker socket plus the integrated builder, reads and validates
+  the Compose source once, writes the exact validated UTF-8 text to a private
+  `0600` snapshot, uses only that snapshot for config/build/up/logs/down with an
+  explicit repository project directory, and owns exact-project cleanup.
+- `compose.e2e.yml` uses dedicated loopback ports and runner-scoped images.
+  PostgreSQL, API, and web have zero published ports and remain solely on the
+  internal bridge. A dedicated pinned Node gateway target contains only an
+  audited fixed-route TCP proxy, receives no environment/secret/mount, and is
+  the only service on both the internal and project-scoped non-attachable edge
+  bridges and the only loopback publisher. Read-only application/gateway roots,
+  tmpfs for PostgreSQL, documents, and `/tmp`, and the baked production web
+  build require no host mount or persistent volume. API builds the shared app
+  image once; web reuses it without a second same-tag build/export. Database,
+  API, and web each receive
+  one exact unique alias under `charitypilot-e2e.invalid`; the gateway routes
+  only to their absolute trailing-dot names so failed internal resolution cannot
+  fall through a DNS search path. Its `/proc/net/tcp` healthcheck proves all
+  three listeners without repeatedly connecting to upstream services.
+- `e2e/helpers/database-safety.cjs` requires the exact local host, port,
+  database, user, schema, application name, protected database comment, UUID
+  marker, restricted connected role, exact public-table inventory, and final
+  same-session identity proof. The reset transaction locks every listed table,
+  rejects `ON TRUNCATE` triggers and truncate-publishing logical publications,
+  and uses per-relation `ONLY`, `CONTINUE IDENTITY`, and `RESTRICT` without
+  `CASCADE`.
+- `apps/api/src/routes/health/index.ts` exposes a non-production, keyed binding
+  canary that proves the API is connected to the same immutable UUID marker and
+  restricted role. The rendered Compose validator pins the API migration/seed
+  DSN to the isolated `db` service before any container can start.
+- `e2e/global-setup.ts` requires direct identity and keyed API binding before a
+  local reset. Exceptional manual remote mode additionally holds a suite-wide
+  advisory lease on a required direct/session-affine endpoint. Every remote
+  worker database seam proves that exact lease is active; the reset primitive
+  proves its own physical session owns it before `BEGIN`. Transaction or
+  statement poolers are unsupported, and direct remote `resetDb()` is rejected.
+- The parent runner installs one bounded lifecycle before local, deployed, or
+  remote dispatch and rechecks abort authority at the final Playwright spawn
+  boundary. POSIX completion requires both group absence and leader close;
+  checked Windows taskkill is used for abnormal termination. Native-Windows
+  remote-destructive mode is rejected until a Job Object-backed lifetime proof
+  exists, while local-disposable and non-destructive deployed QA remain
+  supported.
+- After a remote child group is proven absent, a fresh-connection outer janitor
+  re-proves database identity, reacquires the suite lease, verifies API binding,
+  resets from the centralized frozen table inventory, verifies again, releases,
+  and disconnects. Unproven child termination skips the janitor (or local Docker
+  cleanup), fails red, and preserves recovery inputs instead of racing a live
+  descendant.
+- The retired boolean flag is rejected, `release:ready` delegates to the managed
+  runner with a bounded cleanup margin, and CI supplies no reusable database
+  credential or reset authority.
+- `scripts/isolated-e2e-runtime-attestation.mjs` binds the three random image
+  tags to distinct immutable post-build IDs, then, after `up --wait` and before
+  endpoint polling or Playwright reset, proves exactly one healthy labelled
+  container for each service. It fails closed on image/label/replica drift,
+  wrong or extra networks and aliases, host publications, bind/volume coupling,
+  weakened tmpfs, writable/privileged/root/capability/NNP drift, or secretful
+  gateway environment. `pretest:e2e` runs the complete pure isolation contract
+  before a direct `npm run test:e2e` can call Docker.
+- The first complete managed run exposed a real production-relevant auth
+  bottleneck: every server-side Next session check shared the web service's
+  proxy-IP rate bucket. `GET /auth/me` now layers a 60/minute credential bucket
+  under an independent 1,000/minute coarse IP ceiling. One case-insensitive,
+  authoritative Bearer parser is shared by authentication, limiting, and origin
+  enforcement; logout remains origin-sensitive because it consumes refresh
+  credentials. The web proxy accepts only exact `200` auth responses, treats
+  only explicit `401` as permission to refresh or redirect, requires exactly
+  two strictly parsed nonempty rotation cookies, and forwards only two validated
+  deletion cookies after a definitive refresh `401`. Every throttle, upstream
+  error, redirect, malformed cookie, network failure, and bounded timeout fails
+  closed with a no-store `503` and sanitized `Retry-After`.
+
+Current local verification:
+
+- `npm run test:e2e:contract` passed `113 / 113`, including the runner, database
+  safety, gateway, Compose-snapshot race, DNS-alias, and hostile runtime-inspect
+  contracts.
+- `npx tsc -p e2e/tsconfig.json --noEmit` passed.
+- `node --check scripts/run-isolated-e2e.mjs` and
+  `node --check e2e/helpers/database-safety.cjs` passed.
+- `node --import tsx --test apps/api/src/tests/e2e-database-identity.test.ts`
+  passed `5 / 5`.
+- `npm run test:e2e:isolated:validate` passed and explicitly started no
+  containers.
+- `node --test scripts/check-local-docker.test.mjs` passed `44 / 44`, and
+  `node --test scripts/check-production.test.mjs` passed `159 / 159`.
+- A focused managed live regression passed `4 / 4`, covering the previously
+  failing billing, compliance approval, pending-navigation, and responsive
+  principle-detail journeys.
+- The complete managed `npm run test:e2e` gate passed all `113 / 113` isolation
+  contracts followed by `96 / 96` Playwright tests in `9.6m` against the real
+  UUID-marked disposable PostgreSQL instance and baked production web runtime;
+  the full fresh-build, test, teardown, and residue-verified command took
+  approximately `25.0m`.
+  It covered accessibility, auth/session expiry, tenant isolation, billing,
+  compliance, documents, input validation, and every launch-critical route in
+  desktop/mobile and light/dark Chromium states.
+- Both managed live runs returned through exact-project teardown. Follow-up
+  checks found no E2E containers, images, networks, volumes, build context, or
+  private Compose state. The personal web/API/database container IDs remained
+  exactly `6a238023d3b9`, `2be515b0ae70`, and `8462752f63f2`.
+- Full repository verification passed API `488 / 488`, web `295 / 295`, shared
+  `23 / 23`, production tooling `512 / 512`, local-Docker tooling `44 / 44`,
+  root lint, all workspace production builds, secret/SAST scans across `497`
+  files, and production-only plus full dependency audits with zero reported
+  vulnerabilities.
+- `npm run reliability:report -- --write` is green with `374 / 374` covered
+  guarantees linked to passing tests; `npm run audit:platform:check` passes and
+  the generated platform audit is current.
+
+Pending verification:
+
+- Push the implementation and record a green CI/E2E workflow run. Do not add a
+  commit SHA or workflow URL until those proofs exist.
 
 Required result:
 
@@ -498,7 +611,9 @@ Acceptance:
   database names, default databases, malformed URLs, mismatched sentinels, and
   missing opt-ins.
 - Positive tests cover only a known disposable target.
-- The safely isolated E2E suite is run only after these guards pass.
+- The safely isolated E2E suite is run only after these guards pass. The local
+  live browser/database proof is complete; pushed SHA-bound CI/E2E proof remains
+  pending at the status above.
 
 ### P0-06 - Incorrect derived deadline dates and recurrence state
 
@@ -610,8 +725,9 @@ Status: `CONFIRMED`
 
 Evidence:
 
-- `.github/workflows/e2e.yml:6-15` runs on pull requests or manually, not on the
-  documented direct-to-`master` workflow.
+- The audited baseline ran E2E only on pull requests or manually. The current
+  P0-05 working tree adds direct `master` execution, but it is not yet committed,
+  pushed, or proven by a SHA-bound workflow run.
 - Live GitHub audit found no `master` protection, no production-environment
   reviewers/rules or deployment branch policy, and no recorded E2E workflow
   runs.
@@ -621,9 +737,10 @@ Evidence:
 
 Required result:
 
-- First make E2E database execution safe under P0-05.
-- Then run E2E on direct `master` changes and release promotion, or introduce a
-  repository workflow that provides equivalent enforced evidence.
+- P0-05 now provides a locally verified safe disposable E2E database path;
+  commit it and prove the direct-`master` workflow against the pushed SHA.
+- Run E2E on release promotion, or introduce a repository workflow that
+  provides equivalent enforced evidence.
 - Distinguish static title linkage from an executed result bound to a SHA.
 - Prepare and validate branch/status-check and production-environment approval
   rules.
@@ -973,17 +1090,19 @@ The 2026-07-10 audit passed:
 - generated platform-audit currency check;
 - main CI for the baseline SHA.
 
-Important limitations:
+Important baseline limitations (since remediated where stated below):
 
 - Reliability linkage did not prove an executed E2E result.
-- The default Playwright suite was deliberately skipped because P0-05 was not
-  yet fixed.
+- The baseline default Playwright suite was deliberately skipped because P0-05
+  was not yet fixed. P0-05 has since passed its managed disposable-database
+  `113 / 113` contract gate and `96 / 96` live Playwright gate locally; pushed
+  SHA-bound CI/E2E evidence remains pending.
 - API health returned HTTP 200 during the audit.
 - The listening local web service returned no bytes during the live HTTP check,
   so rendered browser QA was not completed.
 
-After P0-05 is fixed, add safe disposable-database browser execution to the
-required gate set.
+Safe disposable-database browser execution is now part of the required gate set
+through `npm run test:e2e` only.
 
 ## Final Repo-Side Exit Gate
 

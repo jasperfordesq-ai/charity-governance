@@ -1,8 +1,21 @@
-import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
-import { Client } from 'pg';
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
+import { Client } from "pg";
 
-import { IS_DEPLOYED_QA } from '../env';
+import { IS_DEPLOYED_QA } from "../env";
+import {
+  type DisposableDatabaseConfig,
+  DatabaseSafetyError,
+  DISPOSABLE_DATABASE_RESET_TABLES,
+  acquireRemoteSuiteAdvisoryLease,
+  assertDirectResetModeIsLocal,
+  invokeWithRemoteSuiteLeaseAuthority,
+  loadDisposableDatabaseConfig,
+  queryAndAssertDatabaseIdentity,
+  resetDisposableDatabase,
+  releaseRemoteSuiteAdvisoryLease,
+  safeDatabaseOperationError,
+} from "./database-safety.cjs";
 
 type E2EStorageState = {
   cookies: Array<{
@@ -13,7 +26,7 @@ type E2EStorageState = {
     expires: number;
     httpOnly: boolean;
     secure: boolean;
-    sameSite: 'Lax' | 'Strict' | 'None';
+    sameSite: "Lax" | "Strict" | "None";
   }>;
   origins: Array<{
     origin: string;
@@ -24,25 +37,22 @@ type E2EStorageState = {
 /**
  * Direct Postgres access for the E2E harness.
  *
- * The local Docker stack publishes Postgres on host port 5434 (compose.yml),
- * with the dev credentials from compose.local.yml. We use this connection for
- * two things only:
+ * The destructive suite is permitted to use direct database access only after
+ * the pure configuration guard and a connected, UUID-bound identity query have
+ * proved an isolated disposable target. We use this connection for two things:
  *   1. Resetting the database to a clean state at the start of a run.
  *   2. Reading/injecting one-time tokens and flags that, in production, would
  *      be delivered by email — locally email delivery is a no-op and the
  *      verify/invite tokens are stored as sha256 hashes, so the plaintext is
  *      otherwise unrecoverable.
  */
-export const E2E_DATABASE_URL =
-  process.env.E2E_DATABASE_URL ??
-  'postgresql://charitypilot:charitypilot_dev@localhost:5434/charitypilot';
-
-function assertLocalDatabaseSeamAllowed(): void {
+function assertDirectDatabaseSeamAllowed(): DisposableDatabaseConfig {
   if (IS_DEPLOYED_QA) {
     throw new Error(
-      'E2E_DEPLOYED_QA=true forbids direct database access. Use the approved deployed QA credentials instead of local DB reset/token seams.',
+      "E2E_DEPLOYED_QA=true forbids direct database access. Use the approved deployed QA credentials instead of local DB reset/token seams.",
     );
   }
+  return loadDisposableDatabaseConfig(process.env);
 }
 
 /**
@@ -51,97 +61,242 @@ function assertLocalDatabaseSeamAllowed(): void {
  * compliance journeys have standards to work against without re-seeding.
  * (Confirmed against apps/api/prisma/seed.ts + schema.prisma — see e2e/README.md.)
  */
-const APP_TABLES = [
-  'Organisation',
-  'User',
-  'AuthSession',
-  'ComplianceRecord',
-  'ComplianceSignoff',
-  'ComplianceApprovalSnapshot',
-  'ComplianceAuditEvent',
-  'BoardMember',
-  'Document',
-  'DocumentStandardLink',
-  'DocumentStorageDeletion',
-  'ConflictRecord',
-  'RiskRecord',
-  'ComplaintRecord',
-  'FundraisingRecord',
-  'AnnualReportReadiness',
-  'FinancialControlReview',
-  'Deadline',
-  'TeamInvite',
-  'DeadlineReminderLog',
-  'Subscription',
-  'StripeWebhookEvent',
-];
+const DATABASE_CONNECTION_TIMEOUT_MS = 10_000;
+const DATABASE_QUERY_TIMEOUT_MS = 30_000;
 
-export async function withDb<T>(fn: (client: Client) => Promise<T>): Promise<T> {
-  assertLocalDatabaseSeamAllowed();
-  const client = new Client({ connectionString: E2E_DATABASE_URL });
-  await client.connect();
+function createDatabaseClient(
+  config: DisposableDatabaseConfig,
+  options: { keepAlive?: boolean; keepAliveInitialDelayMillis?: number } = {},
+): Client {
+  return new Client({
+    connectionString: config.databaseUrl,
+    connectionTimeoutMillis: DATABASE_CONNECTION_TIMEOUT_MS,
+    query_timeout: DATABASE_QUERY_TIMEOUT_MS,
+    statement_timeout: DATABASE_QUERY_TIMEOUT_MS,
+    ...options,
+  });
+}
+
+export async function withDb<T>(
+  fn: (client: Client) => Promise<T>,
+): Promise<T> {
+  const config = assertDirectDatabaseSeamAllowed();
+  const client = createDatabaseClient(config);
   try {
-    return await fn(client);
-  } finally {
-    await client.end();
+    await client.connect();
+  } catch (error) {
+    throw safeDatabaseOperationError("Disposable database connection", error);
   }
+  try {
+    await queryAndAssertDatabaseIdentity(client, config);
+    // Remote worker connections cannot own global setup's session-affine
+    // lease, but they must prove that exact lease is active on this target
+    // database before any arbitrary helper callback can read or mutate it.
+    return await invokeWithRemoteSuiteLeaseAuthority(client, config, fn);
+  } catch (error) {
+    if (error instanceof DatabaseSafetyError) throw error;
+    if (
+      error &&
+      typeof error === "object" &&
+      typeof (error as { code?: unknown }).code === "string"
+    ) {
+      throw safeDatabaseOperationError(
+        "Disposable database helper query",
+        error,
+      );
+    }
+    throw error;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
+/** Fail-fast configuration preflight for the destructive E2E runner. */
+export function assertDisposableDatabaseConfiguration(): DisposableDatabaseConfig {
+  return assertDirectDatabaseSeamAllowed();
+}
+
+/** Non-destructively connect and prove the reset target identity. */
+export async function verifyDisposableDatabaseIdentity(): Promise<void> {
+  await withDb(async () => undefined);
+}
+
+export type RemoteDisposableSuiteLease = Readonly<{
+  reset: () => Promise<void>;
+  release: () => Promise<void>;
+  resetAndRelease: () => Promise<void>;
+}>;
+
+/**
+ * Hold a session-level lease for an entire exceptional remote-destructive
+ * Playwright run. The returned handle retains one physical PostgreSQL client;
+ * callers must use resetAndRelease() from global teardown on both pass/fail.
+ */
+export async function acquireRemoteDisposableSuiteLease(): Promise<RemoteDisposableSuiteLease> {
+  const config = assertDirectDatabaseSeamAllowed();
+  if (!config.isRemote) {
+    throw new DatabaseSafetyError(
+      "A suite-wide database lease is only valid for remote-disposable mode.",
+    );
+  }
+
+  const client = createDatabaseClient(config, {
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+  });
+  try {
+    await client.connect();
+    await queryAndAssertDatabaseIdentity(client, config);
+    await acquireRemoteSuiteAdvisoryLease(client, config);
+  } catch (error) {
+    await client.end().catch(() => undefined);
+    if (error instanceof DatabaseSafetyError) throw error;
+    throw safeDatabaseOperationError(
+      "Remote disposable suite lease connection",
+      error,
+    );
+  }
+
+  let released = false;
+  const assertActive = () => {
+    if (released) {
+      throw new DatabaseSafetyError(
+        "Remote disposable suite database lease has already been released.",
+      );
+    }
+  };
+  const reset = async () => {
+    assertActive();
+    await resetDisposableDatabase(
+      client,
+      config,
+      DISPOSABLE_DATABASE_RESET_TABLES,
+    );
+  };
+  const release = async () => {
+    if (released) return;
+    let releaseError: unknown;
+    try {
+      await releaseRemoteSuiteAdvisoryLease(client, config);
+    } catch (error) {
+      releaseError = error;
+    } finally {
+      released = true;
+      await client.end().catch(() => undefined);
+    }
+    if (releaseError) throw releaseError;
+  };
+  const resetAndRelease = async () => {
+    let resetError: unknown;
+    try {
+      await reset();
+    } catch (error) {
+      resetError = error;
+    }
+
+    let releaseError: unknown;
+    try {
+      await release();
+    } catch (error) {
+      releaseError = error;
+    }
+    if (resetError) throw resetError;
+    if (releaseError) throw releaseError;
+  };
+
+  return Object.freeze({ reset, release, resetAndRelease });
 }
 
 /** sha256 hex — mirrors hashOpaqueToken in apps/api/src/services/session-tokens.ts:38-40. */
 export function sha256Hex(value: string): string {
-  return crypto.createHash('sha256').update(value).digest('hex');
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 /** A random URL-safe opaque token, like the API's crypto.randomBytes(...).toString('base64url'). */
 export function randomToken(bytes = 32): string {
-  return crypto.randomBytes(bytes).toString('base64url');
+  return crypto.randomBytes(bytes).toString("base64url");
 }
 
 function testId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(8).toString('hex')}`;
+  return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(8).toString("hex")}`;
 }
 
 function base64UrlJson(value: unknown): string {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-function signLocalAccessToken(payload: {
-  userId: string;
-  organisationId: string;
-  role: 'OWNER' | 'ADMIN' | 'MEMBER';
-  sessionId: string;
-}): string {
+function signLocalAccessToken(
+  payload: {
+    userId: string;
+    organisationId: string;
+    role: "OWNER" | "ADMIN" | "MEMBER";
+    sessionId: string;
+  },
+  config: DisposableDatabaseConfig,
+): string {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const body = {
     ...payload,
     iat: nowSeconds,
     exp: nowSeconds + 15 * 60,
-    iss: 'charitypilot-api',
-    aud: 'charitypilot-web',
+    iss: "charitypilot-api",
+    aud: "charitypilot-web",
   };
-  const encodedHeader = base64UrlJson({ alg: 'HS256', typ: 'JWT' });
+  const encodedHeader = base64UrlJson({ alg: "HS256", typ: "JWT" });
   const encodedBody = base64UrlJson(body);
+  const jwtSecret = process.env.E2E_JWT_SECRET;
+  if (config.isRemote && !jwtSecret) {
+    throw new DatabaseSafetyError(
+      "remote-disposable direct authentication requires an explicit E2E_JWT_SECRET for the isolated QA stack.",
+    );
+  }
   const signature = crypto
-    .createHmac('sha256', process.env.E2E_JWT_SECRET ?? 'local-dev-jwt-secret-at-least-32-characters')
+    .createHmac(
+      "sha256",
+      jwtSecret ?? "local-dev-jwt-secret-at-least-32-characters",
+    )
     .update(`${encodedHeader}.${encodedBody}`)
-    .digest('base64url');
+    .digest("base64url");
   return `${encodedHeader}.${encodedBody}.${signature}`;
 }
 
 /**
  * Truncate all tenant/app tables, preserving seeded governance reference data.
- * CASCADE handles foreign-key dependents (org-scoped FKs default to Restrict);
- * RESTART IDENTITY resets sequences.
+ * The guarded reset uses per-table ONLY, CONTINUE IDENTITY, and RESTRICT after
+ * exact table, trigger, publication, role, and marker preflights.
  */
 export async function resetDb(): Promise<void> {
-  await withDb(async (client) => {
-    const list = APP_TABLES.map((t) => `"${t}"`).join(', ');
-    await client.query(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE;`);
-  });
+  const config = assertDirectDatabaseSeamAllowed();
+  assertDirectResetModeIsLocal(config);
+  const client = createDatabaseClient(config);
+  try {
+    await client.connect();
+  } catch (error) {
+    throw safeDatabaseOperationError("Disposable database connection", error);
+  }
+
+  try {
+    // Initial non-destructive proof gives callers a distinct preflight failure.
+    // resetDisposableDatabase repeats it under the transaction-scoped lock
+    // immediately before its schema-qualified TRUNCATE.
+    await queryAndAssertDatabaseIdentity(client, config);
+    await resetDisposableDatabase(
+      client,
+      config,
+      DISPOSABLE_DATABASE_RESET_TABLES,
+    );
+  } catch (error) {
+    if (error instanceof DatabaseSafetyError) throw error;
+    throw safeDatabaseOperationError("Disposable database reset", error);
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
 
 /** Look up the created user's id and organisation id by email. */
-export async function getUserAndOrg(email: string): Promise<{ userId: string; organisationId: string }> {
+export async function getUserAndOrg(
+  email: string,
+): Promise<{ userId: string; organisationId: string }> {
   return withDb(async (client) => {
     const res = await client.query(
       `SELECT "id", "organisationId" FROM "User" WHERE "email" = $1`,
@@ -149,7 +304,10 @@ export async function getUserAndOrg(email: string): Promise<{ userId: string; or
     );
     const row = res.rows[0];
     if (!row) throw new Error(`getUserAndOrg: no user for ${email}`);
-    return { userId: row.id as string, organisationId: row.organisationId as string };
+    return {
+      userId: row.id as string,
+      organisationId: row.organisationId as string,
+    };
   });
 }
 
@@ -166,56 +324,120 @@ export async function createVerifiedOwner(data: {
   trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
   return withDb(async (client) => {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
     try {
-      const organisationId = testId('org');
+      const organisationId = testId("org");
       const organisationResult = await client.query<{ id: string }>(
         `INSERT INTO "Organisation" ("id", "name", "updatedAt") VALUES ($1, $2, $3) RETURNING "id"`,
         [organisationId, data.organisationName, now],
       );
       if (organisationResult.rows[0]?.id !== organisationId) {
-        throw new Error('createVerifiedOwner: organisation insert returned no id');
+        throw new Error(
+          "createVerifiedOwner: organisation insert returned no id",
+        );
       }
 
-      const userId = testId('usr');
+      const userId = testId("usr");
       const userResult = await client.query<{ id: string }>(
         `INSERT INTO "User" ("id", "email", "name", "passwordHash", "role", "organisationId", "emailVerified", "updatedAt")
          VALUES ($1, $2, $3, $4, 'OWNER', $5, true, $6)
          RETURNING "id"`,
         [userId, normalizedEmail, data.name, passwordHash, organisationId, now],
       );
-      if (userResult.rows[0]?.id !== userId) throw new Error('createVerifiedOwner: user insert returned no id');
+      if (userResult.rows[0]?.id !== userId)
+        throw new Error("createVerifiedOwner: user insert returned no id");
 
-      const subscriptionId = testId('sub');
+      const subscriptionId = testId("sub");
       await client.query(
         `INSERT INTO "Subscription" ("id", "organisationId", "plan", "status", "trialEndsAt", "updatedAt")
          VALUES ($1, $2, 'ESSENTIALS', 'TRIALING', $3, $4)`,
         [subscriptionId, organisationId, trialEndsAt, now],
       );
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
       return { userId, organisationId };
     } catch (err) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw err;
     }
+  });
+}
+
+/**
+ * Create a verified MEMBER directly inside one already-proven disposable
+ * organisation. Authorization tests use this narrow seam so they exercise the
+ * MEMBER UI contract without coupling their result to the invitation journey.
+ */
+export async function createVerifiedMember(data: {
+  email: string;
+  name: string;
+  organisationId: string;
+}): Promise<{
+  userId: string;
+  organisationId: string;
+  role: "MEMBER";
+}> {
+  const normalizedEmail = data.email.trim().toLowerCase();
+  const passwordHash = await bcrypt.hash(randomToken(32), 12);
+  const userId = testId("usr");
+  const now = new Date();
+
+  return withDb(async (client) => {
+    const result = await client.query<{
+      id: string;
+      organisationId: string;
+      role: "MEMBER";
+    }>(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "role", "organisationId", "emailVerified", "updatedAt")
+       SELECT $1, $2, $3, $4, 'MEMBER', "id", true, $6
+         FROM "Organisation"
+        WHERE "id" = $5
+       RETURNING "id", "organisationId", "role"`,
+      [
+        userId,
+        normalizedEmail,
+        data.name,
+        passwordHash,
+        data.organisationId,
+        now,
+      ],
+    );
+    const row = result.rows[0];
+    if (
+      !row ||
+      row.id !== userId ||
+      row.organisationId !== data.organisationId ||
+      row.role !== "MEMBER"
+    ) {
+      throw new Error(
+        "createVerifiedMember: disposable organisation was absent or the inserted tenant/role did not match",
+      );
+    }
+    return {
+      userId: row.id,
+      organisationId: row.organisationId,
+      role: row.role,
+    };
   });
 }
 
 export async function createAuthenticatedStorageState(data: {
   userId: string;
   organisationId: string;
-  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+  role?: "OWNER" | "ADMIN" | "MEMBER";
 }): Promise<E2EStorageState> {
-  assertLocalDatabaseSeamAllowed();
-  const sessionId = testId('sess');
+  const config = assertDirectDatabaseSeamAllowed();
+  const sessionId = testId("sess");
   const refreshToken = randomToken(48);
-  const accessToken = signLocalAccessToken({
-    userId: data.userId,
-    organisationId: data.organisationId,
-    role: data.role ?? 'OWNER',
-    sessionId,
-  });
+  const accessToken = signLocalAccessToken(
+    {
+      userId: data.userId,
+      organisationId: data.organisationId,
+      role: data.role ?? "OWNER",
+      sessionId,
+    },
+    config,
+  );
   const now = new Date();
   const refreshExpiresAt = new Date(now);
   refreshExpiresAt.setDate(refreshExpiresAt.getDate() + 7);
@@ -231,35 +453,36 @@ export async function createAuthenticatedStorageState(data: {
   const accessExpiresAt = Math.floor((Date.now() + 15 * 60 * 1000) / 1000);
   const refreshCookieExpiresAt = Math.floor(refreshExpiresAt.getTime() / 1000);
 
-  const webOrigin = new URL(process.env.E2E_WEB_URL ?? 'http://localhost:3003').origin;
+  const webOrigin = new URL(config.webUrl).origin;
+  const cookieDomain = config.cookieDomain;
 
   return {
     cookies: [
       {
-        name: 'charitypilot_access',
+        name: "charitypilot_access",
         value: accessToken,
-        domain: 'localhost',
-        path: '/',
+        domain: cookieDomain,
+        path: "/",
         expires: accessExpiresAt,
         httpOnly: true,
-        secure: false,
-        sameSite: 'Lax',
+        secure: config.isRemote,
+        sameSite: "Lax",
       },
       {
-        name: 'charitypilot_refresh',
+        name: "charitypilot_refresh",
         value: refreshToken,
-        domain: 'localhost',
-        path: '/',
+        domain: cookieDomain,
+        path: "/",
         expires: refreshCookieExpiresAt,
         httpOnly: true,
-        secure: false,
-        sameSite: 'Lax',
+        secure: config.isRemote,
+        sameSite: "Lax",
       },
     ],
     origins: [
       {
         origin: webOrigin,
-        localStorage: [{ name: 'cookie-consent', value: 'declined' }],
+        localStorage: [{ name: "cookie-consent", value: "declined" }],
       },
     ],
   };
@@ -278,7 +501,10 @@ export async function markEmailVerified(email: string): Promise<void> {
     );
     return res.rowCount ?? 0;
   });
-  if (n !== 1) throw new Error(`markEmailVerified: expected 1 row for ${email}, updated ${n}`);
+  if (n !== 1)
+    throw new Error(
+      `markEmailVerified: expected 1 row for ${email}, updated ${n}`,
+    );
 }
 
 /**
@@ -300,7 +526,10 @@ export async function injectVerifyToken(email: string): Promise<string> {
     );
     return res.rowCount ?? 0;
   });
-  if (n !== 1) throw new Error(`injectVerifyToken: expected 1 row for ${email}, updated ${n}`);
+  if (n !== 1)
+    throw new Error(
+      `injectVerifyToken: expected 1 row for ${email}, updated ${n}`,
+    );
   return token;
 }
 
@@ -322,16 +551,20 @@ export async function injectResetToken(email: string): Promise<string> {
     );
     return res.rowCount ?? 0;
   });
-  if (n !== 1) throw new Error(`injectResetToken: expected 1 row for ${email}, updated ${n}`);
+  if (n !== 1)
+    throw new Error(
+      `injectResetToken: expected 1 row for ${email}, updated ${n}`,
+    );
   return token;
 }
 
 /** Read whether a user's email is verified (for assertions). */
 export async function isEmailVerified(email: string): Promise<boolean> {
   return withDb(async (client) => {
-    const res = await client.query(`SELECT "emailVerified" FROM "User" WHERE "email" = $1`, [
-      email.trim().toLowerCase(),
-    ]);
+    const res = await client.query(
+      `SELECT "emailVerified" FROM "User" WHERE "email" = $1`,
+      [email.trim().toLowerCase()],
+    );
     return Boolean(res.rows[0]?.emailVerified);
   });
 }
@@ -358,16 +591,25 @@ export async function setInviteToken(email: string): Promise<string> {
     );
     return res.rowCount ?? 0;
   });
-  if (n !== 1) throw new Error(`setInviteToken: expected 1 invite for ${email}, updated ${n}`);
+  if (n !== 1)
+    throw new Error(
+      `setInviteToken: expected 1 invite for ${email}, updated ${n}`,
+    );
   return token;
 }
 
 /** Resolve a governance principle's cuid by its stable `number` (1..6). */
 export async function getPrincipleIdByNumber(num: number): Promise<string> {
   return withDb(async (client) => {
-    const res = await client.query(`SELECT "id" FROM "GovernancePrinciple" WHERE "number" = $1`, [num]);
+    const res = await client.query(
+      `SELECT "id" FROM "GovernancePrinciple" WHERE "number" = $1`,
+      [num],
+    );
     const id = res.rows[0]?.id;
-    if (!id) throw new Error(`getPrincipleIdByNumber: no principle number ${num} (is reference data seeded?)`);
+    if (!id)
+      throw new Error(
+        `getPrincipleIdByNumber: no principle number ${num} (is reference data seeded?)`,
+      );
     return id as string;
   });
 }
@@ -394,7 +636,11 @@ export async function getComplianceRecord(
 export async function getSignoff(
   organisationId: string,
   reportingYear: number,
-): Promise<{ status: string; approvedByName: string | null; approvedAt: Date | null } | null> {
+): Promise<{
+  status: string;
+  approvedByName: string | null;
+  approvedAt: Date | null;
+} | null> {
   return withDb(async (client) => {
     const res = await client.query(
       `SELECT "status", "approvedByName", "approvedAt"
@@ -407,9 +653,16 @@ export async function getSignoff(
 }
 
 /** Count rows in a table (handy for asserting side effects). */
-export async function countRows(table: string, whereSql = '', params: unknown[] = []): Promise<number> {
+export async function countRows(
+  table: string,
+  whereSql = "",
+  params: unknown[] = [],
+): Promise<number> {
   return withDb(async (client) => {
-    const res = await client.query(`SELECT COUNT(*)::int AS n FROM "${table}" ${whereSql}`, params);
+    const res = await client.query(
+      `SELECT COUNT(*)::int AS n FROM "${table}" ${whereSql}`,
+      params,
+    );
     return res.rows[0]?.n ?? 0;
   });
 }

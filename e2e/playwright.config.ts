@@ -2,25 +2,39 @@ import { defineConfig, devices } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { loadDisposableDatabaseConfig } from './helpers/database-safety.cjs';
 
 /**
  * CharityPilot end-to-end tests.
  *
- * These drive a real Chromium browser against the LOCAL Docker stack:
- *   docker compose -f compose.yml -f compose.local.yml up
+ * Destructive runs drive an explicitly isolated disposable stack. Local mode
+ * uses the fixed 127.0.0.1:3302 / :3303 endpoints; the exceptional remote mode
+ * is accepted only by the database safety contract.
  *
  * They use NO external providers - document storage is the local filesystem
  * driver, Stripe/Resend are unconfigured (test mode / no-op), and one-time
  * tokens are read or injected via the database rather than a real mailbox.
  *
- * Determinism: the suite runs single-worker and resets the database between
- * tests (see fixtures.ts), preserving only the seeded governance reference
- * data. Override endpoints/DSN with E2E_WEB_URL / E2E_API_URL / E2E_DATABASE_URL.
+ * Determinism: the suite runs single-worker, resets before browser work and
+ * performs final cleanup after the suite, preserving only the seeded governance
+ * reference data. Tests use unique records; there are no endpoint or database
+ * fallbacks.
  */
-
-export const WEB_BASE_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
-export const API_BASE_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
 const isDeployedQa = process.env.E2E_DEPLOYED_QA === 'true';
+const disposableConfig = isDeployedQa
+  ? null
+  : loadDisposableDatabaseConfig(process.env);
+
+function requiredDeployedQaUrl(name: 'E2E_WEB_URL' | 'E2E_API_URL'): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required when E2E_DEPLOYED_QA=true.`);
+  return value;
+}
+
+export const WEB_BASE_URL =
+  disposableConfig?.webUrl ?? requiredDeployedQaUrl('E2E_WEB_URL');
+export const API_BASE_URL =
+  disposableConfig?.apiUrl ?? requiredDeployedQaUrl('E2E_API_URL');
 const ARTIFACT_ROOT = resolve(
   process.cwd(),
   process.env.E2E_ARTIFACT_DIR ?? join(tmpdir(), 'charitypilot-e2e-artifacts'),
@@ -31,9 +45,12 @@ mkdirSync(join(ARTIFACT_ROOT, 'html-report'), { recursive: true });
 
 export default defineConfig({
   testDir: './tests',
+  // Personal-stack readiness has its own non-destructive config and must never
+  // enter the managed disposable suite or bypass its origin fence.
+  testIgnore: /personal-local-readiness\.spec\.ts/,
   outputDir: join(ARTIFACT_ROOT, 'test-results'),
   globalSetup: require.resolve('./global-setup'),
-  // The suite shares one database and resets between tests, so it must not run
+  // The suite shares one database and one owner fixture, so it must not run
   // tests concurrently.
   fullyParallel: false,
   workers: 1,
@@ -42,17 +59,31 @@ export default defineConfig({
   timeout: 600_000,
   expect: { timeout: 15_000 },
   reporter: process.env.CI
-    ? [['list'], ['html', { open: 'never', outputFolder: join(ARTIFACT_ROOT, 'html-report') }], ['github']]
-    : [['list'], ['html', { open: 'never', outputFolder: join(ARTIFACT_ROOT, 'html-report') }]],
+    ? [
+        ['list'],
+        [
+          'html',
+          { open: 'never', outputFolder: join(ARTIFACT_ROOT, 'html-report') },
+        ],
+        ['github'],
+      ]
+    : [
+        ['list'],
+        [
+          'html',
+          { open: 'never', outputFolder: join(ARTIFACT_ROOT, 'html-report') },
+        ],
+      ],
   use: {
     baseURL: WEB_BASE_URL,
+    serviceWorkers: 'block',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 20_000,
-    // The local stack runs Next in DEV mode and compiles each route on first hit, which
-    // can exceed 100s for protected pages when the host is under container load. Give cold
-    // compiles generous headroom; warm hits are still fast (see global-setup warm-up).
+    // Local runs serve a baked production build. Keep explicit headroom for a
+    // constrained Docker host or approved remote QA network; the navigation helper
+    // reports a named timeout and never misclassifies it as a restart.
     navigationTimeout: 150_000,
   },
   projects: isDeployedQa

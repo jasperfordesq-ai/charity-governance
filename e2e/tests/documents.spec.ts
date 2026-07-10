@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { test, expect } from '../fixtures';
-import { API_BASE_URL, WEB_BASE_URL } from '../playwright.config';
 import { withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
@@ -10,13 +9,14 @@ import { gotoWithDevServerRetry } from '../helpers/navigation';
  * Local storage driver streams downloads via GET /documents/:id/download (which
  * returns a /documents/_local-download?path=... URL). The download control opens
  * that URL in a new tab (window.open), so we assert the download deterministically
- * with the page's authenticated request context rather than a browser download.
+ * with authenticated in-page fetches. Those requests remain inside the mandatory
+ * BrowserContext origin fence; APIRequestContext would bypass it.
  */
 const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 const SAMPLE_MARKER = 'CharityPilot E2E sample document';
 
 test.describe('Documents', () => {
-  test('upload a document then download it', async ({ ownerPage, owner }) => {
+  test('upload a document then download it', async ({ ownerPage, owner, browserOriginFence }) => {
     const docName = `E2E Upload ${Date.now()}`;
 
     await gotoWithDevServerRetry(ownerPage, '/documents');
@@ -46,16 +46,34 @@ test.describe('Documents', () => {
     });
     expect(docId, 'uploaded document should exist in the DB').toBeTruthy();
 
-    const linkResp = await ownerPage.request.get(
-      `${API_BASE_URL}/api/v1/documents/${docId}/download`,
-      { headers: { origin: WEB_BASE_URL } },
-    );
-    expect(linkResp.ok()).toBeTruthy();
-    const { url } = (await linkResp.json()) as { url: string };
+    const linkResp = await ownerPage.evaluate(async ({ apiOrigin, documentId }) => {
+      const response = await fetch(`${apiOrigin}/api/v1/documents/${documentId}/download`, {
+        credentials: 'include',
+      });
+      return {
+        ok: response.ok,
+        status: response.status,
+        responseUrl: response.url,
+        body: (await response.json()) as { url?: string },
+      };
+    }, { apiOrigin: browserOriginFence.apiOrigin, documentId: docId });
+    expect(linkResp.ok, `download link returned HTTP ${linkResp.status}`).toBeTruthy();
+    expect(new URL(linkResp.responseUrl).origin).toBe(browserOriginFence.apiOrigin);
+    const { url } = linkResp.body;
+    expect(url).toBeTruthy();
     expect(url).toContain('/documents/_local-download');
 
-    const fileResp = await ownerPage.request.get(url, { headers: { origin: WEB_BASE_URL } });
-    expect(fileResp.ok()).toBeTruthy();
-    expect(await fileResp.text()).toContain(SAMPLE_MARKER);
+    const fileResp = await ownerPage.evaluate(async ({ apiOrigin, downloadUrl }) => {
+      const response = await fetch(new URL(downloadUrl, apiOrigin), { credentials: 'include' });
+      return {
+        ok: response.ok,
+        status: response.status,
+        responseUrl: response.url,
+        body: await response.text(),
+      };
+    }, { apiOrigin: browserOriginFence.apiOrigin, downloadUrl: url! });
+    expect(fileResp.ok, `document download returned HTTP ${fileResp.status}`).toBeTruthy();
+    expect(new URL(fileResp.responseUrl).origin).toBe(browserOriginFence.apiOrigin);
+    expect(fileResp.body).toContain(SAMPLE_MARKER);
   });
 });

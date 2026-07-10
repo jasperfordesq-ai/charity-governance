@@ -37,7 +37,7 @@ test.describe('Deadlines & Team', () => {
     ).toBeVisible();
   });
 
-  test('invite a team member who then accepts and joins the workspace', async ({ ownerPage, owner, browser }) => {
+  test('invite a team member who then accepts and joins the workspace', async ({ ownerPage, owner, newFencedContext }) => {
     const inviteeEmail = uniqueEmail('invitee');
 
     // 1. OWNER sends an invite (HTTP 202, generic message; a pending row appears).
@@ -50,7 +50,7 @@ test.describe('Deadlines & Team', () => {
     //    known token on the invite row, then accept via the public page.
     const token = await setInviteToken(inviteeEmail);
 
-    const acceptContext = await browser.newContext();
+    const acceptContext = await newFencedContext();
     const acceptPage = await acceptContext.newPage();
     try {
       await acceptInviteViaUi(acceptPage, token, 'Invited Teammate', 'Password123');

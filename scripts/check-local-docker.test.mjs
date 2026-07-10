@@ -234,11 +234,15 @@ test('personal local readiness gate is non-production and non-destructive by def
   assert.match(readinessScript, /Unknown option: \$\{arg\}/);
   assert.match(readinessScript, /process\.exit\(2\)/);
   assert.match(readinessScript, /Generated web cache cleanup/);
+  assert.match(
+    readinessScript,
+    /Full E2E must run through the managed npm run test:e2e runner, which creates and destroys its own disposable database; never point E2E database variables at personal data\./,
+  );
   assert.match(readinessScript, /localWebContainerIsRunning/);
   assert.match(readinessScript, /charitypilot-web-local is already running/);
   assert.match(readinessScript, /apps', 'web'/);
   assert.match(readinessScript, /rmSync\(path, \{ recursive: true, force: true \}\)/);
-  assert.doesNotMatch(readinessScript, /npm run test:e2e/);
+  assert.doesNotMatch(readinessScript, /npmScript\('test:e2e'\)/);
   assert.doesNotMatch(readinessScript, /E2E_DEPLOYED_QA=true/);
 
   assert.match(personalConfig, /personal-local-readiness\\\.spec\\\.ts/);
@@ -253,7 +257,7 @@ test('personal local readiness gate is non-production and non-destructive by def
 
   assert.match(personalDocs, /not production launch approval/);
   assert.match(personalDocs, /does not require[\s\S]*Stripe/);
-  assert.match(personalDocs, /default E2E suite resets tenant\/app tables/);
+  assert.match(personalDocs, /managed\s+E2E runner starts a separate standalone stack/);
   assert.match(personalDocs, /npm run personal:ready -- --no-browser/);
   assert.match(readme, /npm run personal:ready/);
   assert.match(readme, /docs\/personal-local-use\.md/);
@@ -304,7 +308,7 @@ test('local Docker migrations reject unknown options before touching Docker', as
   assert.equal(commandCalls, 0);
 });
 
-test('dashboard accessibility scans allow protected route cold compiles to finish', () => {
+test('dashboard accessibility scans have explicit protected-route navigation headroom', () => {
   const accessibilitySpec = readRepoFile('e2e/tests/accessibility.spec.ts');
   const playwrightConfig = readRepoFile('e2e/playwright.config.ts');
 
@@ -325,7 +329,7 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
   assert.match(globalSetup, /const ROUTE_WARM_BUDGET_MS = positiveIntEnv\('E2E_ROUTE_WARM_BUDGET_MS',\s*240_000\)/);
   assert.match(globalSetup, /const SKIP_ROUTE_WARMING = process\.env\.E2E_SKIP_ROUTE_WARMING === 'true'/);
   assert.match(globalSetup, /function positiveIntEnv\(name: string,\s*fallback: number\): number/);
-  assert.match(globalSetup, /Route warming skipped because E2E_SKIP_ROUTE_WARMING=true/);
+  assert.match(globalSetup, /Public-route readiness sweep skipped because E2E_SKIP_ROUTE_WARMING=true/);
   assert.match(globalSetup, /async function fetchWithTimeout\(url: string,\s*timeoutMs: number\): Promise<Response>/);
   assert.match(globalSetup, /const remainingMs = Math\.max\(1,\s*deadline - Date\.now\(\)\)/);
   assert.match(globalSetup, /await fetchWithTimeout\(url,\s*remainingMs\)/);
@@ -337,7 +341,7 @@ test('e2e stack readiness fetches have bounded request lifetimes', () => {
   assert.doesNotMatch(globalSetup, /await fetch\(url,\s*\{\s*redirect:\s*'manual'\s*\}\)/);
 });
 
-test('e2e route warm-up precompiles public and auth smoke routes', () => {
+test('e2e public-route readiness sweep covers public and auth smoke routes', () => {
   const globalSetup = readRepoFile('e2e/global-setup.ts');
   const requiredWarmRoutes = [
     '/',
@@ -389,10 +393,11 @@ test('accessibility scans navigate to rendered pages without waiting on dev-only
   assert.doesNotMatch(accessibilitySpec, /waitUntil:\s*'domcontentloaded'/);
 });
 
-test('responsive smoke retries only local Next dev-server restart navigations', () => {
+test('responsive smoke retries only bounded local web transport failures', () => {
   const navigationHelper = readRepoFile('e2e/helpers/navigation.ts');
   const responsiveSpec = readRepoFile('e2e/tests/responsive-smoke.spec.ts');
   const fixtures = readRepoFile('e2e/fixtures.ts');
+  const authSessionSpec = readRepoFile('e2e/tests/auth-session.spec.ts');
 
   assert.match(responsiveSpec, /resolveFirstComplianceDetailPath/);
   assert.doesNotMatch(responsiveSpec, /helpers\/db/);
@@ -403,14 +408,24 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   assert.match(responsiveSpec, /\},\s*FONT_SETTLE_TIMEOUT_MS\)/);
   assert.match(responsiveSpec, /localStorage\.setItem\('cookie-consent', 'declined'\)/);
   assert.match(responsiveSpec, /await suppressCookieConsent\(page\)/);
-  assert.match(navigationHelper, /DEV_SERVER_RESTART_ERROR_PATTERNS = \[/);
+  assert.match(navigationHelper, /LOCAL_WEB_TRANSPORT_ERROR_PATTERNS = \[/);
   assert.match(navigationHelper, /net::ERR_EMPTY_RESPONSE/);
   assert.match(navigationHelper, /net::ERR_CONNECTION_RESET/);
   assert.match(navigationHelper, /net::ERR_CONNECTION_REFUSED/);
   assert.match(navigationHelper, /net::ERR_SOCKET_NOT_CONNECTED/);
-  assert.match(navigationHelper, /net::ERR_ABORTED; maybe frame was detached/);
-  assert.match(navigationHelper, /page\.goto: Timeout/);
-  assert.match(navigationHelper, /if \(IS_DEPLOYED_QA \|\| !isDevServerRestartNavigationError\(err\) \|\| attempt === 2\)/);
+  const restartPatterns = navigationHelper.match(
+    /const LOCAL_WEB_TRANSPORT_ERROR_PATTERNS = \[([\s\S]*?)\];/,
+  )?.[1] ?? '';
+  assert.doesNotMatch(restartPatterns, /ERR_ABORTED|page\.goto: Timeout/);
+  assert.match(navigationHelper, /const LOCAL_WEB_RECOVERY_WAIT_MS = 20_000/);
+  assert.match(navigationHelper, /const MAX_NAVIGATION_ATTEMPTS = 2/);
+  assert.doesNotMatch(navigationHelper, /480_000/);
+  assert.match(navigationHelper, /fetchWebRoot\(\s*Math\.min\(LOCAL_WEB_FETCH_MS,\s*remainingBeforeFetchMs\)/);
+  assert.match(navigationHelper, /setTimeout\(resolve,\s*Math\.min\(LOCAL_WEB_POLL_MS,\s*remainingBeforeSleepMs\)\)/);
+  assert.match(navigationHelper, /E2E_LOCAL_WEB_RECOVERY_TIMEOUT:[\s\S]*Last observed state:/);
+  assert.match(navigationHelper, /attempt < MAX_NAVIGATION_ATTEMPTS/);
+  assert.match(navigationHelper, /attempt === MAX_NAVIGATION_ATTEMPTS - 1/);
+  assert.match(navigationHelper, /E2E_NAVIGATION_TIMEOUT:/);
   assert.match(navigationHelper, /await waitForLocalWebServer\(\)/);
   assert.match(navigationHelper, /const response = await page\.goto\(url,\s*gotoOptions\)/);
   assert.match(navigationHelper, /status && status >= 500/);
@@ -430,15 +445,47 @@ test('responsive smoke retries only local Next dev-server restart navigations', 
   assert.doesNotMatch(responsiveSpec, /document\.fonts\.ready\.then\(\(\) => undefined\)\)/);
   assert.doesNotMatch(responsiveSpec, /(?:page|ownerPage)\.goto\(.*waitUntil:\s*'commit'/);
   assert.doesNotMatch(fixtures, /await page\.goto\('\/(?:register|login)'/);
+  assert.doesNotMatch(authSessionSpec, /\.catch\(/);
+  assert.match(authSessionSpec, /await authenticatedPage\.close\(\);[\s\S]*await context\.clearCookies\(\);[\s\S]*const expiredPage = await context\.newPage\(\)/);
+  assert.match(authSessionSpec, /toHaveURL\(\/\\\/dashboard/);
+  assert.match(authSessionSpec, /gotoWithDevServerRetry\(expiredPage,\s*'\/organisation'/);
 });
 
-test('web dev server ignores Playwright artifacts during local browser QA', () => {
+test('authorization UI provisions a bounded exact-tenant MEMBER without replaying invitations', () => {
+  const authzSpec = readRepoFile('e2e/tests/authz.spec.ts');
+  const db = readRepoFile('e2e/helpers/db.ts');
+
+  assert.match(db, /const DATABASE_CONNECTION_TIMEOUT_MS = 10_000/);
+  assert.match(db, /const DATABASE_QUERY_TIMEOUT_MS = 30_000/);
+  assert.match(db, /connectionTimeoutMillis:\s*DATABASE_CONNECTION_TIMEOUT_MS/);
+  assert.match(db, /query_timeout:\s*DATABASE_QUERY_TIMEOUT_MS/);
+  assert.match(db, /statement_timeout:\s*DATABASE_QUERY_TIMEOUT_MS/);
+  assert.match(db, /export async function createVerifiedMember/);
+  assert.match(
+    db,
+    /SELECT \$1, \$2, \$3, \$4, ["']MEMBER["'], "id", true, \$6/,
+  );
+  assert.match(db, /FROM "Organisation"[\s\S]*WHERE "id" = \$5/);
+  assert.match(db, /row\.organisationId !== data\.organisationId/);
+  assert.match(db, /row\.role !== ["']MEMBER["']/);
+
+  assert.match(authzSpec, /test\.step\([\s\S]*provision a verified MEMBER session/);
+  assert.match(authzSpec, /test\.step\([\s\S]*open the Team page as the provisioned MEMBER/);
+  assert.match(authzSpec, /test\.step\([\s\S]*verify MEMBER admin controls are disabled or absent/);
+  assert.match(authzSpec, /createVerifiedMember\([\s\S]*organisationId:\s*owner\.organisationId/);
+  assert.match(authzSpec, /createAuthenticatedStorageState\([\s\S]*role:\s*member\.role/);
+  assert.doesNotMatch(authzSpec, /sendInviteViaUi|setInviteToken|acceptInviteViaUi/);
+});
+
+test('Playwright artifacts remain outside runner source and ignored by personal dev watching', () => {
   const nextConfig = readRepoFile('apps/web/next.config.ts');
   const playwrightConfig = readRepoFile('e2e/playwright.config.ts');
   const e2eReadme = readRepoFile('e2e/README.md');
   const e2eWorkflow = readRepoFile('.github/workflows/e2e.yml');
 
   assert.match(nextConfig, /webpack\(config,\s*\{\s*dev\s*\}\)/);
+  assert.match(nextConfig, /allowedDevOrigins:\s*\['127\.0\.0\.1'\]/);
+  assert.doesNotMatch(nextConfig, /allowedDevOrigins:\s*\[[^\]]*\*/);
   assert.match(nextConfig, /if \(dev\)/);
   assert.match(nextConfig, /\*\*\/e2e\/test-results\/\*\*/);
   assert.match(nextConfig, /\*\*\/e2e\/playwright-report\/\*\*/);
@@ -456,12 +503,12 @@ test('web dev server ignores Playwright artifacts during local browser QA', () =
   assert.match(playwrightConfig, /outputFolder:\s*join\(ARTIFACT_ROOT, 'html-report'\)/);
   assert.match(playwrightConfig, /mkdirSync\(join\(ARTIFACT_ROOT, 'test-results'\), \{ recursive: true \}\)/);
   assert.match(playwrightConfig, /mkdirSync\(join\(ARTIFACT_ROOT, 'html-report'\), \{ recursive: true \}\)/);
-  assert.match(e2eReadme, /written outside the repository so Next\.js dev does not watch the artifacts/);
+  assert.match(e2eReadme, /written outside the repository so failure artifacts cannot dirty or enter the[\s\S]*runner's source allow-list/);
   assert.match(e2eWorkflow, /E2E_ARTIFACT_DIR:\s*playwright-artifacts/);
   assert.match(e2eWorkflow, /path:\s*e2e\/playwright-artifacts\/html-report\//);
 });
 
-test('e2e authenticated owner setup has cold compile headroom', () => {
+test('e2e authenticated owner setup has explicit navigation headroom', () => {
   const fixtures = readRepoFile('e2e/fixtures.ts');
 
   assert.match(fixtures, /await gotoWithDevServerRetry\(page,\s*'\/login',\s*\{\s*waitUntil:\s*'domcontentloaded'\s*\}\)/);
@@ -503,7 +550,10 @@ test('local owner pages receive a fresh local auth session for long full-suite r
   assert.match(db, /local-dev-jwt-secret-at-least-32-characters/);
   assert.match(db, /charitypilot_access/);
   assert.match(db, /charitypilot_refresh/);
-  assert.match(db, /localStorage:\s*\[\{\s*name:\s*'cookie-consent',\s*value:\s*'declined'\s*\}\]/);
+  assert.match(
+    db,
+    /localStorage:\s*\[\{\s*name:\s*["']cookie-consent["'],\s*value:\s*["']declined["']\s*\}\]/,
+  );
   assert.match(fixtures, /createAuthenticatedStorageState/);
   assert.match(fixtures, /IS_DEPLOYED_QA\s*\?\s*owner\.storageState\s*:\s*await createAuthenticatedStorageState/);
 });
@@ -511,16 +561,22 @@ test('local owner pages receive a fresh local auth session for long full-suite r
 test('local direct owner setup mirrors registration without using deployed QA seams', () => {
   const db = readRepoFile('e2e/helpers/db.ts');
 
-  assert.match(db, /import bcrypt from 'bcryptjs'/);
+  assert.match(db, /import bcrypt from ["']bcryptjs["']/);
   assert.match(db, /export async function createVerifiedOwner/);
-  assert.match(db, /assertLocalDatabaseSeamAllowed\(\);/);
+  assert.match(db, /assertDirectDatabaseSeamAllowed\(\);/);
   assert.match(db, /bcrypt\.hash\(data\.password,\s*12\)/);
   assert.match(db, /INSERT INTO "Organisation" \("id", "name", "updatedAt"\)/);
   assert.match(db, /INSERT INTO "User" \("id", "email", "name", "passwordHash", "role", "organisationId", "emailVerified", "updatedAt"\)/);
-  assert.match(db, /VALUES \(\$1, \$2, \$3, \$4, 'OWNER', \$5, true, \$6\)/);
+  assert.match(
+    db,
+    /VALUES \(\$1, \$2, \$3, \$4, ["']OWNER["'], \$5, true, \$6\)/,
+  );
   assert.match(db, /INSERT INTO "Subscription" \("id", "organisationId", "plan", "status", "trialEndsAt", "updatedAt"\)/);
-  assert.match(db, /VALUES \(\$1, \$2, 'ESSENTIALS', 'TRIALING', \$3, \$4\)/);
-  assert.match(db, /await client\.query\('ROLLBACK'\)/);
+  assert.match(
+    db,
+    /VALUES \(\$1, \$2, ["']ESSENTIALS["'], ["']TRIALING["'], \$3, \$4\)/,
+  );
+  assert.match(db, /await client\.query\(["']ROLLBACK["']\)/);
 });
 
 test('auth journey helpers still exercise registration UI directly', () => {
@@ -556,12 +612,12 @@ test('deployed browser QA mode does not reset or mutate databases through local 
   assert.match(env, /deployedQaOwnerCredentials/);
   assert.match(env, /requires E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD/);
 
-  assert.match(db, /assertLocalDatabaseSeamAllowed/);
+  assert.match(db, /assertDirectDatabaseSeamAllowed/);
   assert.match(db, /E2E_DEPLOYED_QA=true forbids direct database access/);
-  assert.match(db, /assertLocalDatabaseSeamAllowed\(\);\s*const client = new Client/);
+  assert.match(db, /const config = assertDirectDatabaseSeamAllowed\(\);\s*const client = createDatabaseClient\(config\)/);
 
   assert.match(globalSetup, /IS_DEPLOYED_QA/);
-  assert.match(globalSetup, /if \(IS_DEPLOYED_QA\) \{[\s\S]*database reset and route warming skipped/);
+  assert.match(globalSetup, /if \(IS_DEPLOYED_QA\) \{[\s\S]*database reset and local readiness sweep skipped/);
   assert.match(globalSetup, /await resetDb\(\);/);
   assert.match(globalSetup, /await warmRoutes\(\);/);
 
@@ -580,8 +636,12 @@ test('deployed browser QA mode does not reset or mutate databases through local 
   assert.match(browserQa, /approved non-sensitive test workspace/);
 });
 
-test('local destructive e2e database reset requires an explicit operator opt-in', () => {
+test('local destructive e2e uses only the managed UUID-bound disposable runner', () => {
   const globalSetup = readRepoFile('e2e/global-setup.ts');
+  const databaseSafety = readRepoFile('e2e/helpers/database-safety.cjs');
+  const databaseHelpers = readRepoFile('e2e/helpers/db.ts');
+  const isolatedRunner = readRepoFile('scripts/run-isolated-e2e.mjs');
+  const isolatedCompose = readRepoFile('compose.e2e.yml');
   const e2eWorkflow = readRepoFile('.github/workflows/e2e.yml');
   const e2eReadme = readRepoFile('e2e/README.md');
   const personalDocs = readRepoFile('docs/personal-local-use.md');
@@ -589,23 +649,46 @@ test('local destructive e2e database reset requires an explicit operator opt-in'
   const browserQa = readRepoFile('docs/production-browser-qa.md');
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');
 
-  assert.match(globalSetup, /E2E_ALLOW_LOCAL_DB_RESET/);
-  assert.match(globalSetup, /const ALLOW_LOCAL_DB_RESET = process\.env\.E2E_ALLOW_LOCAL_DB_RESET === 'true'/);
-  assert.match(globalSetup, /if \(!ALLOW_LOCAL_DB_RESET\) \{[\s\S]*refusing to reset the local database/i);
-  assert.match(globalSetup, /E2E_ALLOW_LOCAL_DB_RESET=true/);
+  assert.match(databaseSafety, /E2E_ALLOW_LOCAL_DB_RESET is retired and must be removed/);
+  assert.match(globalSetup, /await verifyDisposableDatabaseIdentity\(\)/);
+  assert.match(globalSetup, /await verifyApiDatabaseBinding\(\)/);
   assert.match(globalSetup, /await resetDb\(\);/);
-  assert.match(globalSetup, /if \(!ALLOW_LOCAL_DB_RESET\) \{[\s\S]*await resetDb\(\);/);
-
-  assert.match(e2eWorkflow, /E2E_ALLOW_LOCAL_DB_RESET:\s*'true'/);
-  assert.match(e2eReadme, /E2E_ALLOW_LOCAL_DB_RESET=true/);
-  assert.match(e2eReadme, /refuses to reset the local database/i);
-  assert.match(personalDocs, /E2E_ALLOW_LOCAL_DB_RESET=true/);
-  assert.match(personalDocs, /only after backing up/i);
-  assert.match(rootReadme, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm run test:e2e/);
-  assert.match(browserQa, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm run test:e2e:responsive/);
-  assert.match(browserQa, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm run test:e2e -- tests\/accessibility\.spec\.ts/);
-  assert.match(handoff, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm test -- tests\/responsive-smoke\.spec\.ts/);
-  assert.match(handoff, /E2E_ALLOW_LOCAL_DB_RESET=true[\s\S]*npm test -- tests\/compliance\.spec\.ts/);
+  assert.match(globalSetup, /remoteDestructiveAuthorized/);
+  assert.match(globalSetup, /await remoteLease\.release\(\)/);
+  assert.match(databaseHelpers, /assertDirectResetModeIsLocal\(config\)/);
+  assert.match(databaseSafety, /CONTINUE IDENTITY RESTRICT/);
+  assert.match(databaseSafety, /UNSAFE_TRUNCATE_TRIGGER_SQL/);
+  assert.match(databaseSafety, /TRUNCATE_PUBLICATION_SQL/);
+  assert.doesNotMatch(databaseSafety, /CASCADE|RESTART IDENTITY/);
+  assert.match(isolatedRunner, /createIsolatedBuildContext/);
+  assert.match(isolatedRunner, /expectedLocalServiceEnvironments/);
+  assert.match(isolatedRunner, /verifyLocalDockerContext/);
+  assert.match(isolatedRunner, /verifyIntegratedLocalBuilder/);
+  assert.match(
+    isolatedRunner,
+    /["']config["'],\s*["']--no-env-resolution["']/,
+  );
+  assert.match(
+    isolatedRunner,
+    /["']up["'],\s*["']--no-build["'],\s*["']--pull["'],\s*["']never["']/,
+  );
+  assert.match(isolatedCompose, /E2E_BUILD_CONTEXT/);
+  assert.match(isolatedCompose, /internal: true/);
+  assert.match(isolatedCompose, /E2E_GATEWAY_IMAGE/);
+  assert.match(isolatedCompose, /internal: false/);
+  assert.match(isolatedCompose, /attachable: false/);
+  assert.match(isolatedCompose, /target: gateway/);
+  assert.doesNotMatch(isolatedCompose, /^volumes:/m);
+  assert.match(e2eWorkflow, /npm run test:e2e:isolated:validate/);
+  assert.match(e2eWorkflow, /npm run test:e2e/);
+  assert.match(e2eReadme, /managed runner/i);
+  assert.match(personalDocs, /managed\s+E2E runner/i);
+  assert.match(rootReadme, /npm run test:e2e/);
+  assert.match(browserQa, /managed isolated runner/);
+  assert.match(handoff, /direct reset invocation is retired/);
+  for (const source of [globalSetup, e2eWorkflow, e2eReadme, personalDocs, rootReadme, browserQa, handoff]) {
+    assert.doesNotMatch(source, /E2E_ALLOW_LOCAL_DB_RESET/);
+  }
 });
 
 test('platform audit ledger records deployed browser QA hardening', () => {
@@ -614,10 +697,10 @@ test('platform audit ledger records deployed browser QA hardening', () => {
 
   assert.match(auditGenerator, /Deployed browser QA mode now uses existing non-sensitive test credentials/);
   assert.match(auditGenerator, /direct database reset or token-injection seams/);
-  assert.match(auditGenerator, /Local destructive E2E resets now require E2E_ALLOW_LOCAL_DB_RESET=true/);
+  assert.match(auditGenerator, /Local destructive E2E now runs only through a managed standalone stack/);
   assert.match(auditLedger, /Deployed browser QA mode now uses existing non-sensitive test credentials/);
   assert.match(auditLedger, /direct database reset or token-injection seams/);
-  assert.match(auditLedger, /Local destructive E2E resets now require E2E_ALLOW_LOCAL_DB_RESET=true/);
+  assert.match(auditLedger, /Local destructive E2E now runs only through a managed standalone stack/);
 });
 
 test('platform audit ledger records local browser evidence without closing deployed gates', () => {
@@ -685,7 +768,7 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.match(auditGenerator, /Local Personal Data Safety/);
   assert.match(auditLedger, /Local Personal Data Safety/);
   assert.match(auditLedger, /npm run personal:ready/);
-  assert.match(auditLedger, /default full E2E suite can reset tenant\/app tables/);
+  assert.match(auditLedger, /managed runner provisions and proves a separate disposable database and refuses personal targets/);
   assert.match(auditLedger, /does not replace production provider/);
   assert.doesNotMatch(auditLedger, /remains an open local QA blocker/);
   assert.match(auditLedger, /deployed HTTPS QA/);
@@ -893,22 +976,22 @@ test('product revamp page inventory is not stale pre-revamp guidance', () => {
 test('responsive route smoke is runnable as a focused launch QA command', () => {
   const rootPackage = packageJson();
   const responsiveSpecPath = join(repoRoot, 'e2e', 'tests', 'responsive-smoke.spec.ts');
-  assert.equal(rootPackage.scripts['test:e2e:responsive'], 'cd e2e && npm test -- tests/responsive-smoke.spec.ts');
+  assert.equal(rootPackage.scripts['test:e2e:responsive'], 'node scripts/run-isolated-e2e.mjs -- tests/responsive-smoke.spec.ts');
   assert.equal(
     rootPackage.scripts['test:e2e:responsive:public:desktop'],
-    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical public/auth route .* renders in desktop light and dark"',
+    'node scripts/run-isolated-e2e.mjs -- tests/responsive-smoke.spec.ts --grep "launch-critical public/auth route .* renders in desktop light and dark"',
   );
   assert.equal(
     rootPackage.scripts['test:e2e:responsive:public:mobile'],
-    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical public/auth route .* renders in mobile light and dark"',
+    'node scripts/run-isolated-e2e.mjs -- tests/responsive-smoke.spec.ts --grep "launch-critical public/auth route .* renders in mobile light and dark"',
   );
   assert.equal(
     rootPackage.scripts['test:e2e:responsive:dashboard:desktop'],
-    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route .* renders in desktop light and dark"',
+    'node scripts/run-isolated-e2e.mjs -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route .* renders in desktop light and dark"',
   );
   assert.equal(
     rootPackage.scripts['test:e2e:responsive:dashboard:mobile'],
-    'cd e2e && npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route .* renders in mobile light and dark"',
+    'node scripts/run-isolated-e2e.mjs -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route .* renders in mobile light and dark"',
   );
   assert.equal(existsSync(responsiveSpecPath), true, 'responsive-smoke.spec.ts must exist');
 
@@ -1011,7 +1094,7 @@ test('responsive route smoke covers every shipped page route', () => {
       '/billing',
       '/export',
     ].includes(route)) {
-      assert.match(globalSetup, routePattern, `local route warming must cover public route ${route}`);
+      assert.match(globalSetup, routePattern, `local public-route readiness must cover ${route}`);
     }
   }
 });
@@ -1145,7 +1228,9 @@ test('compliance browser QA covers pending navigation confirmation', () => {
   const browserQa = readRepoFile('docs/production-browser-qa.md');
 
   assert.match(complianceSpec, /pending standard edits ask for confirmation before in-app navigation/);
-  assert.match(complianceSpec, /Compliance edits are still saving/);
+  assert.match(complianceSpec, /Compliance edits are not fully saved/);
+  assert.match(complianceSpec, /await expect\(saveSignoff\)\.toBeDisabled\(\)/);
+  assert.match(complianceSpec, /Ready for board review[\s\S]*await expect\(saveSignoff\)\.toBeEnabled\(\)/);
   assert.match(complianceSpec, /Keep editing/);
   assert.match(complianceSpec, /Save now and leave/);
   assert.match(complianceSpec, /getComplianceRecord\(owner\.organisationId,\s*'1\.1',\s*YEAR\)/);

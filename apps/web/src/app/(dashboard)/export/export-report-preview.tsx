@@ -20,7 +20,7 @@ type ExportReportPreviewProps = {
 const scoreColour = (pct: number) => {
   if (pct >= 80) return 'text-green-600 dark:text-green-400';
   if (pct >= 50) return 'text-amber-700 dark:text-amber-400';
-  return 'text-red-600 dark:text-red-400';
+  return 'text-red-700 dark:text-red-300';
 };
 
 const scoreLabel = (pct: number) => {
@@ -104,7 +104,7 @@ export function ExportReportPreview({
                   <span className={`text-xs font-semibold ${scoreColour(summary.percentComplete)}`}>
                     {scoreLabel(summary.percentComplete)}
                   </span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400">
+                  <span className="block text-xs text-gray-600 dark:text-gray-300">
                     {summary.compliant} recorded compliant / {summary.totalApplicable} applicable standards
                   </span>
                 </div>

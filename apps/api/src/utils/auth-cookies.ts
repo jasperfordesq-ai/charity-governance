@@ -1,8 +1,12 @@
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import { refreshTokenMaxAgeSeconds } from '../services/session-tokens.js';
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth-cookie-names.js';
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { refreshTokenMaxAgeSeconds } from "../services/session-tokens.js";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+} from "./auth-cookie-names.js";
 
 export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE };
+export { getAccessTokenFromRequest } from "./auth-request-credential.js";
 
 type AuthTokens = {
   accessToken: string;
@@ -10,20 +14,28 @@ type AuthTokens = {
 };
 
 function commonCookieOptions(maxAge: number) {
-  const secure = process.env.NODE_ENV === 'production';
+  const secure = process.env.NODE_ENV === "production";
   return {
-    path: '/',
+    path: "/",
     httpOnly: true,
     secure,
-    sameSite: 'lax' as const,
+    sameSite: "lax" as const,
     maxAge,
     domain: process.env.AUTH_COOKIE_DOMAIN || undefined,
   };
 }
 
 export function setAuthCookies(reply: FastifyReply, tokens: AuthTokens): void {
-  reply.setCookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, commonCookieOptions(15 * 60));
-  reply.setCookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, commonCookieOptions(refreshTokenMaxAgeSeconds()));
+  reply.setCookie(
+    ACCESS_TOKEN_COOKIE,
+    tokens.accessToken,
+    commonCookieOptions(15 * 60),
+  );
+  reply.setCookie(
+    REFRESH_TOKEN_COOKIE,
+    tokens.refreshToken,
+    commonCookieOptions(refreshTokenMaxAgeSeconds()),
+  );
 }
 
 export function clearAuthCookies(reply: FastifyReply): void {
@@ -32,10 +44,8 @@ export function clearAuthCookies(reply: FastifyReply): void {
   reply.clearCookie(REFRESH_TOKEN_COOKIE, options);
 }
 
-export function getAccessTokenFromRequest(request: FastifyRequest): string | undefined {
-  return request.cookies?.[ACCESS_TOKEN_COOKIE];
-}
-
-export function getRefreshTokenFromRequest(request: FastifyRequest): string | undefined {
+export function getRefreshTokenFromRequest(
+  request: FastifyRequest,
+): string | undefined {
   return request.cookies?.[REFRESH_TOKEN_COOKIE];
 }

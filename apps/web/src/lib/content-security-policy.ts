@@ -1,10 +1,59 @@
 type CreateContentSecurityPolicyOptions = {
   nonce: string;
   isDevelopment: boolean;
+  isIsolatedE2e?: boolean;
   apiUrl?: string;
+  webUrl?: string;
 };
 
 const DEFAULT_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
+const DEFAULT_DEVELOPMENT_API_ORIGIN = 'http://localhost:3002';
+const DEFAULT_DEVELOPMENT_WEB_ORIGIN = 'http://localhost:3003';
+const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
+const DEVELOPMENT_API_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+function developmentApiConnectSource(apiUrl?: string): string | undefined {
+  const configuredUrl = apiUrl?.trim();
+  if (!configuredUrl) return DEFAULT_DEVELOPMENT_API_ORIGIN;
+
+  try {
+    const url = new URL(configuredUrl);
+    const normalizedConfiguredUrl = configuredUrl.replace(/\/+$/, '');
+    if (
+      url.protocol === 'http:' &&
+      url.origin === normalizedConfiguredUrl &&
+      DEVELOPMENT_API_HOSTS.has(url.hostname)
+    ) {
+      return url.origin;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function developmentWebConnectSources(webUrl?: string): string[] {
+  const configuredUrl = webUrl?.trim() || DEFAULT_DEVELOPMENT_WEB_ORIGIN;
+
+  try {
+    const url = new URL(configuredUrl);
+    const normalizedConfiguredUrl = configuredUrl.replace(/\/+$/, '');
+    if (
+      url.protocol === 'http:' &&
+      url.origin === normalizedConfiguredUrl &&
+      DEVELOPMENT_API_HOSTS.has(url.hostname)
+    ) {
+      const websocketUrl = new URL(url.origin);
+      websocketUrl.protocol = 'ws:';
+      return [url.origin, websocketUrl.origin];
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
+}
 
 function productionApiConnectSource(apiUrl?: string): string {
   const configuredUrl = apiUrl?.trim();
@@ -27,14 +76,36 @@ function productionApiConnectSource(apiUrl?: string): string {
   return DEFAULT_PRODUCTION_API_ORIGIN;
 }
 
+function isolatedE2eApiConnectSource(apiUrl?: string): string | undefined {
+  const configuredUrl = apiUrl?.trim();
+  if (!configuredUrl) return undefined;
+
+  const normalizedConfiguredUrl = configuredUrl.replace(/\/+$/, '');
+  return normalizedConfiguredUrl === ISOLATED_E2E_BROWSER_API_ORIGIN
+    ? ISOLATED_E2E_BROWSER_API_ORIGIN
+    : undefined;
+}
+
 export function createContentSecurityPolicy({
   nonce,
   isDevelopment,
+  isIsolatedE2e = false,
   apiUrl,
+  webUrl,
 }: CreateContentSecurityPolicyOptions): string {
-  const connectSrc = isDevelopment
-    ? "'self' http://localhost:3002 http://localhost:3003 ws://localhost:3003"
-    : `'self' ${productionApiConnectSource(apiUrl)}`;
+  const connectSrc = (
+    isDevelopment
+      ? [
+          "'self'",
+          developmentApiConnectSource(apiUrl),
+          ...developmentWebConnectSources(webUrl),
+        ]
+      : isIsolatedE2e
+        ? ["'self'", isolatedE2eApiConnectSource(apiUrl)]
+        : ["'self'", productionApiConnectSource(apiUrl)]
+  )
+    .filter((source): source is string => Boolean(source))
+    .join(' ');
 
   const scriptSrc = [`'self'`, `'nonce-${nonce}'`, "'strict-dynamic'"];
   if (isDevelopment) {
@@ -52,6 +123,6 @@ export function createContentSecurityPolicy({
     "img-src 'self' data: blob:",
     `connect-src ${connectSrc}`,
     "form-action 'self'",
-    ...(isDevelopment ? [] : ['upgrade-insecure-requests']),
+    ...(isDevelopment || isIsolatedE2e ? [] : ['upgrade-insecure-requests']),
   ].join('; ');
 }

@@ -2,9 +2,10 @@
   "name": "charitypilot-e2e",
   "version": "0.1.0",
   "private": true,
-  "description": "End-to-end Playwright tests for CharityPilot, driven against the local Docker stack. Intentionally NOT a root workspace, so Playwright never enters the API/web production installs or images.",
+  "description": "End-to-end Playwright tests for CharityPilot, driven through a runner-owned isolated disposable stack. Intentionally NOT a root workspace, so Playwright never enters the API/web production installs or images.",
   "scripts": {
     "test": "playwright test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:deployed:responsive:cross-browser": "playwright test tests/responsive-smoke.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop",
     "test:deployed:accessibility:cross-browser": "playwright test tests/accessibility.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop",
     "test:headed": "playwright test --headed",
@@ -18,6 +19,8 @@
     "@playwright/test": "^1.61.0",
     "@types/node": "^22.15.0",
     "@types/pg": "^8.11.10",
-    "pg": "^8.13.1"
+    "bcryptjs": "^3.0.3",
+    "pg": "^8.13.1",
+    "typescript": "^5.9.3"
   }
 }

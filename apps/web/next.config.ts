@@ -13,6 +13,7 @@ function resolveNextDistDir(): string {
 
 const nextConfig: NextConfig = {
   agentRules: false,
+  allowedDevOrigins: ['127.0.0.1'],
   distDir: resolveNextDistDir(),
   experimental: {
     cpus: 1,

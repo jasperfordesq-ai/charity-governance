@@ -83,14 +83,20 @@ function escapeRegExp(value) {
 }
 
 function composeServiceBlock(compose, serviceName) {
-  const match = compose.match(new RegExp(`\\n  ${serviceName}:\\n[\\s\\S]*?(?=\\n  [A-Za-z0-9_-]+:\\n|\\nnetworks:\\n|$)`));
+  const match = compose.match(
+    new RegExp(`\\n  ${serviceName}:\\n[\\s\\S]*?(?=\\n  [A-Za-z0-9_-]+:\\n|\\nnetworks:\\n|$)`),
+  );
   assert.ok(match, `compose service ${serviceName} must exist`);
   return match[0];
 }
 
 function assertComposeServiceHasReadOnlyRootfs(service, serviceName) {
   assert.match(service, /\n\s+read_only:\s+true\b/, `${serviceName} must run with a read-only root filesystem`);
-  assert.match(service, /\n\s+tmpfs:\s*\n\s+- \/tmp\b/, `${serviceName} must keep writable temp space isolated to tmpfs`);
+  assert.match(
+    service,
+    /\n\s+tmpfs:\s*\n\s+- \/tmp\b/,
+    `${serviceName} must keep writable temp space isolated to tmpfs`,
+  );
 }
 
 function dockerRunForCommand(step, command) {
@@ -172,11 +178,13 @@ function assertWorkflowChecksForbiddenMigrationRunnerPackages(workflow) {
 }
 
 function workspacePackageDirs() {
-  return ['apps', 'packages'].flatMap((workspaceRoot) => readdirSync(join(repoRoot, workspaceRoot), {
-    withFileTypes: true,
-  })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(workspaceRoot, entry.name)));
+  return ['apps', 'packages'].flatMap((workspaceRoot) =>
+    readdirSync(join(repoRoot, workspaceRoot), {
+      withFileTypes: true,
+    })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(workspaceRoot, entry.name)),
+  );
 }
 
 function workspaceHasSourceTests(workspaceDir) {
@@ -217,16 +225,21 @@ function runPreflight(args, envOverrides = {}) {
   const defaultRuntimeEnv = {
     ...(Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL')
       ? {}
-      : { CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL }),
+      : {
+          CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL,
+        }),
     ...(Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL')
       ? {}
       : {
-        CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL:
-          validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL,
-      }),
+          CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL,
+        }),
   };
 
-  return runProductionPreflightFromArgs(args, { ...cleanEnv(), ...defaultRuntimeEnv, ...envOverrides });
+  return runProductionPreflightFromArgs(args, {
+    ...cleanEnv(),
+    ...defaultRuntimeEnv,
+    ...envOverrides,
+  });
 }
 
 function completeProductionEnv(overrides = {}) {
@@ -258,7 +271,9 @@ function completeProductionEnv(overrides = {}) {
     ...overrides,
   };
 
-  return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
+  return `${Object.entries(values)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')}\n`;
 }
 
 test('production preflight rejects unknown options before reading configuration', () => {
@@ -375,7 +390,10 @@ test('fails when production Supabase URLs still contain project-ref placeholder 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /SUPABASE_URL is missing or still contains a placeholder value/);
     assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
-    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -488,9 +506,18 @@ test('fails when production web or API origins drift from canonical hostnames', 
     });
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
-    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
-    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+    assert.match(
+      result.stderr,
+      /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/,
+    );
+    assert.match(
+      result.stderr,
+      /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+    );
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -641,10 +668,7 @@ test('fails when the compose runtime web API URL is not origin-only', () => {
     });
 
     assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must be an origin-only URL for production/,
-    );
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must be an origin-only URL for production/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -683,10 +707,7 @@ test('fails when the compose runtime web Supabase URL drifts from the production
     });
 
     assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL must match NEXT_PUBLIC_SUPABASE_URL/,
-    );
+    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL must match NEXT_PUBLIC_SUPABASE_URL/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -696,9 +717,12 @@ test('fails when the public Supabase URL drifts from the API Supabase URL', () =
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-public-supabase-drift-'));
   const envPath = join(tempDir, 'production.env');
 
-  writeFileSync(envPath, completeProductionEnv({
-    NEXT_PUBLIC_SUPABASE_URL: 'https://different-project.supabase.co',
-  }));
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://different-project.supabase.co',
+    }),
+  );
 
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
@@ -706,10 +730,7 @@ test('fails when the public Supabase URL drifts from the API Supabase URL', () =
     });
 
     assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /NEXT_PUBLIC_SUPABASE_URL must match SUPABASE_URL/,
-    );
+    assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL must match SUPABASE_URL/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -919,9 +940,12 @@ test('fails when the production error alert webhook uses a reserved documentatio
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-alert-webhook-reserved-'));
   const envPath = join(tempDir, 'production.env');
 
-  writeFileSync(envPath, completeProductionEnv({
-    ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
-  }));
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      ERROR_ALERT_WEBHOOK_URL: 'https://alerts.example/hooks/charitypilot',
+    }),
+  );
 
   try {
     const result = runPreflight([`--production-env-file=${envPath}`]);
@@ -1190,10 +1214,13 @@ test('fails when production secret keys are low entropy or sample values', () =>
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-low-entropy-secrets-'));
   const envPath = join(tempDir, 'production.env');
 
-  writeFileSync(envPath, completeProductionEnv({
-    JWT_SECRET: 'a'.repeat(40),
-    READINESS_API_KEY: 'configured-readiness-key-32-chars',
-  }));
+  writeFileSync(
+    envPath,
+    completeProductionEnv({
+      JWT_SECRET: 'a'.repeat(40),
+      READINESS_API_KEY: 'configured-readiness-key-32-chars',
+    }),
+  );
 
   try {
     const result = runPreflight([`--production-env-file=${envPath}`]);
@@ -1281,7 +1308,10 @@ test('fails when production values are local, malformed, or test-mode', () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /PORT must be an integer from 1 to 65535/);
     assert.match(result.stderr, /DATABASE_URL must not point at localhost for production/);
-    assert.match(result.stderr, /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/);
+    assert.match(
+      result.stderr,
+      /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/,
+    );
     assert.match(result.stderr, /FRONTEND_URL must not point at localhost for production/);
     assert.match(result.stderr, /NEXT_PUBLIC_API_URL must not point at localhost for production/);
     assert.match(result.stderr, /STRIPE_SECRET_KEY must use a live Stripe secret key/);
@@ -1353,7 +1383,10 @@ test('fails when production frontend origins include non-canonical additional or
     });
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
+    assert.match(
+      result.stderr,
+      /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1466,7 +1499,10 @@ test('fails when production database URL omits TLS mode', () => {
     const result = runPreflight([`--production-env-file=${envPath}`]);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/);
+    assert.match(
+      result.stderr,
+      /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1599,9 +1635,18 @@ test('fails when production tries to collapse web and API onto the apex same-hos
     });
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/);
-    assert.match(result.stderr, /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
-    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+    assert.match(
+      result.stderr,
+      /FRONTEND_URL must use the canonical production web origin https:\/\/app\.charitypilot\.ie/,
+    );
+    assert.match(
+      result.stderr,
+      /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+    );
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1678,7 +1723,10 @@ test('workspaces with source tests expose a test script for the root test gate',
 });
 
 test('package test scripts stay compatible with the Node 22 production runtime', () => {
-  const packageJsonPaths = ['package.json', ...workspacePackageDirs().map((workspaceDir) => join(workspaceDir, 'package.json'))];
+  const packageJsonPaths = [
+    'package.json',
+    ...workspacePackageDirs().map((workspaceDir) => join(workspaceDir, 'package.json')),
+  ];
   const incompatibleScripts = [];
 
   for (const packageJsonPath of packageJsonPaths) {
@@ -1723,23 +1771,30 @@ test('release readiness command distinguishes skipped gates from full readiness'
   assert.doesNotMatch(releaseReady, /failed\.length === 0 \? 'GREEN - platform is release-ready'/);
 });
 
-test('release readiness stack reachability probes time out instead of hanging', () => {
+test('release readiness delegates stack ownership to the isolated E2E runner', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
 
-  assert.match(releaseReady, /STACK_REACHABILITY_TOTAL_TIMEOUT_MS = 90000/);
-  assert.match(releaseReady, /STACK_REACHABILITY_REQUEST_TIMEOUT_MS = 10000/);
-  assert.match(releaseReady, /STACK_REACHABILITY_POLL_MS = 2000/);
-  assert.match(releaseReady, /AbortSignal\.timeout\(STACK_REACHABILITY_REQUEST_TIMEOUT_MS\)/);
-  assert.match(releaseReady, /while \(Date\.now\(\) < deadline\)/);
-  assert.match(releaseReady, /await new Promise\(\(resolve\) => setTimeout\(resolve, STACK_REACHABILITY_POLL_MS\)\)/);
-  assert.match(releaseReady, /Stack not reachable at \$\{WEB_URL\} \/ \$\{API_URL\}/);
+  assert.match(releaseReady, /managedLocalE2eEnvironment\(timeoutMs\)/);
+  assert.match(releaseReady, /env\.E2E_EXECUTION_MODE = 'local-disposable'/);
+  assert.match(releaseReady, /env\.E2E_MANAGED_LOCAL_RUNNER = 'true'/);
+  assert.match(releaseReady, /env\.E2E_RELEASE_READY = 'true'/);
+  assert.match(releaseReady, /'E2E_GATEWAY_IMAGE'/);
+  assert.match(releaseReady, /replaceEnv:\s*true/);
+  assert.doesNotMatch(releaseReady, /compose\.yml -f compose\.local\.yml/);
+  assert.doesNotMatch(releaseReady, /Stack not reachable/);
 });
 
 test('release readiness child gates have finite process timeouts', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
 
-  assert.match(releaseReady, /RELEASE_READY_GATE_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_GATE_TIMEOUT_MS', 900000\)/);
-  assert.match(releaseReady, /RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_E2E_TIMEOUT_MS', 1500000\)/);
+  assert.match(
+    releaseReady,
+    /RELEASE_READY_GATE_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_GATE_TIMEOUT_MS', 900000\)/,
+  );
+  assert.match(
+    releaseReady,
+    /RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv\('RELEASE_READY_E2E_TIMEOUT_MS', 2400000\)/,
+  );
   assert.match(releaseReady, /timeout: opts\.timeoutMs \?\? RELEASE_READY_GATE_TIMEOUT_MS/);
   assert.match(releaseReady, /res\.error\?\.code === 'ETIMEDOUT'/);
   assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);
@@ -1749,24 +1804,40 @@ test('release readiness child gates have finite process timeouts', () => {
   assert.doesNotMatch(releaseReady, /shell:\s*true/);
   assert.match(releaseReady, /taskkill', \['\/PID', String\(pid\), '\/T', '\/F'\]/);
   assert.match(releaseReady, /Gate timed out after \$\{\(timeoutMs \/ 1000\)\.toFixed\(0\)\}s/);
-  assert.match(releaseReady, /timeoutMs:\s*RELEASE_READY_E2E_TIMEOUT_MS/);
+  assert.match(releaseReady, /timeoutMs:\s*RELEASE_READY_E2E_TIMEOUT_MS \+ 1200000/);
+  assert.match(releaseReady, /managedLocalE2eEnvironment\(RELEASE_READY_E2E_TIMEOUT_MS\)/);
 });
 
-test('release readiness child gates clean up process trees after failed child exits', () => {
+test('release readiness cleanup is scoped to the spawned child tree on timeout', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
+  const isolatedRunner = readRepoFile('scripts/run-isolated-e2e.mjs');
 
-  assert.match(releaseReady, /cleanupProcessTreeOnFailure:\s*true/);
-  assert.match(releaseReady, /cleanupRepoPlaywrightProcessesOnFailure:\s*true/);
-  assert.match(releaseReady, /env:\s*\{[\s\S]*E2E_ALLOW_LOCAL_DB_RESET:\s*'true'[\s\S]*\}/);
-  assert.match(releaseReady, /if \(!ok && opts\.cleanupProcessTreeOnFailure && !timedOut\)/);
-  assert.match(releaseReady, /if \(!ok && opts\.cleanupRepoPlaywrightProcessesOnFailure\)/);
+  assert.match(releaseReady, /delete env\[key\]/);
+  assert.match(releaseReady, /'E2E_REMOTE_DATABASE_RESET_OVERRIDE'/);
+  assert.doesNotMatch(releaseReady, /E2E_ALLOW_LOCAL_DB_RESET:\s*'true'/);
   assert.match(releaseReady, /cleanupProcessTree\(res\.pid\)/);
-  assert.match(releaseReady, /cleanupRepoPlaywrightProcesses\(\)/);
-  assert.doesNotMatch(releaseReady, /npm-cli\.js\*run\*test:e2e/);
-  assert.match(releaseReady, /\$repoMatchedProcessIds = @\(\)/);
-  assert.match(releaseReady, /ParentProcessId/);
-  assert.match(releaseReady, /New-Object System\.Collections\.Queue/);
-  assert.match(releaseReady, /'test:e2e', '@playwright\\\\test', 'playwright\\\\lib\\\\worker\\\\workerProcessEntry'/);
+  assert.doesNotMatch(releaseReady, /cleanupRepoPlaywrightProcesses/);
+  assert.doesNotMatch(releaseReady, /Get-CimInstance Win32_Process|Stop-Process/);
+  assert.doesNotMatch(releaseReady, /ParentProcessId|repoMatchedProcessIds/);
+  assert.match(isolatedRunner, /function checkedWindowsTaskkill/);
+  assert.match(isolatedRunner, /function isExactPosixChildGroupAbsent/);
+  assert.match(isolatedRunner, /function stopAndWaitForExactChildTree/);
+  assert.match(
+    isolatedRunner,
+    /remote-disposable E2E is forbidden on native Windows until the runner has a Job Object-backed exact process-tree lifetime primitive/,
+  );
+  const remoteWindowsGuard =
+    isolatedRunner.match(
+      /if \(env\.E2E_EXECUTION_MODE === ["']remote-disposable["']\)[\s\S]*?return await runRemoteDisposable/,
+    )?.[0] ?? '';
+  assert.match(remoteWindowsGuard, /if \(process\.platform === ["']win32["']\)/);
+  assert.doesNotMatch(remoteWindowsGuard, /options\.platform/);
+  assert.match(isolatedRunner, /remoteAuthorized && exactTreeAbsenceProven/);
+  assert.doesNotMatch(isolatedRunner, /scheduleExactTreeKillEscalation/);
+  assert.match(isolatedRunner, /daemonComposeInvocation/);
+  assert.match(isolatedRunner, /cleanupStarted/);
+  assert.match(isolatedRunner, /process\.on\(["']SIGINT["']/);
+  assert.match(isolatedRunner, /process\.on\(["']SIGTERM["']/);
 });
 
 test('reliability report emits ASCII-safe operator output', () => {
@@ -1799,8 +1870,14 @@ test('production todo reflects current launch blockers without overclaiming loca
 
   assert.match(productionTodo, /Current local status checked 2026-07-09/);
   assert.match(productionTodo, /9 of 28 production values are complete/);
-  assert.match(productionTodo, /9 of 28 production values are complete[\s\S]*19[\s\S]*production values still require real data/);
-  assert.match(productionTodo, /launch evidence ledger is now 9 of 87 checks\s+>\s+complete from local\/CI release-gate evidence/s);
+  assert.match(
+    productionTodo,
+    /9 of 28 production values are complete[\s\S]*19[\s\S]*production values still require real data/,
+  );
+  assert.match(
+    productionTodo,
+    /launch evidence ledger is now 9 of 87 checks\s+>\s+complete from local\/CI release-gate evidence/s,
+  );
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
   assert.match(productionTodo, /Local browser QA has current 2026-07-09 evidence/);
@@ -1810,7 +1887,10 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /dashboard mobile 12\/12/);
   assert.match(productionTodo, /full local accessibility suite passed 26\/26 checks on 2026-07-09/i);
   assert.match(productionTodo, /including `\/about` and both light and dark themes/i);
-  assert.doesNotMatch(productionTodo, /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i);
+  assert.doesNotMatch(
+    productionTodo,
+    /prior full local accessibility suite passed 25\/25 checks before `\/about` was added/i,
+  );
   assert.doesNotMatch(productionTodo, /full accessibility suite must be rerun for the final release transcript/i);
   assert.match(productionTodo, /deployed production QA still remains open/i);
   assert.match(productionTodo, /browserQa\.checks\.browser-qa-completed/);
@@ -1881,13 +1961,19 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /399\s*\/\s*399`? checks/);
+  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}512\s*\/\s*512`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
-  assert.match(handoff, /Older `396 \/ 396`, `352 \/ 352`, `338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical counts/);
-  assert.match(handoff, /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/);
+  assert.match(
+    handoff,
+    /Older `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
+  );
+  assert.match(
+    handoff,
+    /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/,
+  );
   assert.match(handoff, /still fails with six[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,240}`ERROR_ALERT_WEBHOOK_URL`/);
   assert.doesNotMatch(handoff, /GitHub `production` environment secrets list is currently empty/);
   assert.match(handoff, /Re-run launch status/);
@@ -1943,10 +2029,7 @@ test('production secret env files are ignored by git without hiding the template
     assert.ok(gitignoreLines.includes(pattern), `${pattern} must be ignored`);
   }
 
-  assert.ok(
-    gitignoreLines.includes('!.env.production.example'),
-    '.env.production.example must remain visible',
-  );
+  assert.ok(gitignoreLines.includes('!.env.production.example'), '.env.production.example must remain visible');
   assert.ok(
     gitignoreLines.includes('production-launch-evidence*.json'),
     'machine-readable production launch evidence must stay outside git',
@@ -1960,14 +2043,29 @@ test('production env template documents the compose runtime web public origins',
   assert.match(template, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
-  assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
+  assert.match(
+    template,
+    /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/,
+  );
   assert.match(template, /must match `NEXT_PUBLIC_API_URL`/);
   assert.match(template, /must match `NEXT_PUBLIC_SUPABASE_URL`/);
-  assert.match(template, /CHARITYPILOT_API_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:REPLACE_ME_API_IMAGE_DIGEST/);
-  assert.match(template, /CHARITYPILOT_WEB_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:REPLACE_ME_WEB_IMAGE_DIGEST/);
-  assert.match(template, /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/);
+  assert.match(
+    template,
+    /CHARITYPILOT_API_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:REPLACE_ME_API_IMAGE_DIGEST/,
+  );
+  assert.match(
+    template,
+    /CHARITYPILOT_WEB_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:REPLACE_ME_WEB_IMAGE_DIGEST/,
+  );
+  assert.match(
+    template,
+    /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/,
+  );
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
-  assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
+  assert.match(
+    template,
+    /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/,
+  );
   assert.match(template, /Docker Compose/);
   assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
   assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
@@ -2024,14 +2122,20 @@ test('API Docker image documents the production runtime port and non-root user',
 
   assertDockerfileUsesDigestPinnedNodeBase(dockerfile, 'apps/api/Dockerfile');
   assert.match(dockerfile, /FROM deps AS build[\s\S]*ARG\s+DATABASE_URL=/);
-  assert.match(dockerfile, /FROM deps AS build[\s\S]*ENV\s+DATABASE_URL=\$DATABASE_URL[\s\S]*RUN\s+npm run db:generate -w @charitypilot\/api/);
+  assert.match(
+    dockerfile,
+    /FROM deps AS build[\s\S]*ENV\s+DATABASE_URL=\$DATABASE_URL[\s\S]*RUN\s+npm run db:generate -w @charitypilot\/api/,
+  );
   assert.match(dockerfile, /FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS runtime-deps/);
   assert.match(
     dockerfile,
     /npm ci --omit=dev --omit=peer --workspace @charitypilot\/api --workspace @charitypilot\/shared --include-workspace-root=false/,
   );
   assert.match(dockerfile, /rm -rf[\s\S]*node_modules\/prisma[\s\S]*node_modules\/typescript/);
-  assert.match(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules\/\.prisma \.\/node_modules\/\.prisma/);
+  assert.match(
+    dockerfile,
+    /COPY --chown=node:node --from=build \/app\/node_modules\/\.prisma \.\/node_modules\/\.prisma/,
+  );
   assert.match(dockerfile, /ENV\s+NODE_ENV=production/);
   assert.match(dockerfile, /ENV\s+PORT=3002/);
   assert.match(dockerfile, /EXPOSE\s+3002/);
@@ -2051,11 +2155,23 @@ test('API Docker runtime ships only compiled app artifacts', () => {
   const dockerfile = readRepoFile('apps/api/Dockerfile');
   const runnerStage = dockerfileStage(dockerfile, 'runner');
 
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/api\/package\.json \.\/apps\/api\/package\.json/);
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/apps\/api\/package\.json \.\/apps\/api\/package\.json/,
+  );
   assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/api\/dist \.\/apps\/api\/dist/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/package\.json \.\/packages\/shared\/package\.json/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/dist \.\/packages\/shared\/dist/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/node_modules\/\.prisma \.\/node_modules\/\.prisma/);
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/packages\/shared\/package\.json \.\/packages\/shared\/package\.json/,
+  );
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/packages\/shared\/dist \.\/packages\/shared\/dist/,
+  );
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/node_modules\/\.prisma \.\/node_modules\/\.prisma/,
+  );
   assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/api \.\/apps\/api/);
   assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared \.\/packages\/shared/);
   assert.doesNotMatch(runnerStage, /apps\/api\/src/);
@@ -2103,17 +2219,14 @@ test('API Prisma configuration avoids deprecated package.json config', () => {
 test('migration runner package lock supports the production Docker npm ci command', () => {
   const npmArgs = ['ci', '--omit=dev', '--omit=peer', '--no-audit', '--no-fund', '--dry-run'];
   const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';
-  const npmCommandArgs = process.platform === 'win32'
-    ? [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), ...npmArgs]
-    : npmArgs;
-  const result = spawnSync(
-    npmCommand,
-    npmCommandArgs,
-    {
-      cwd: join(repoRoot, 'apps/api/prisma/migration-runner'),
-      encoding: 'utf8',
-    },
-  );
+  const npmCommandArgs =
+    process.platform === 'win32'
+      ? [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), ...npmArgs]
+      : npmArgs;
+  const result = spawnSync(npmCommand, npmCommandArgs, {
+    cwd: join(repoRoot, 'apps/api/prisma/migration-runner'),
+    encoding: 'utf8',
+  });
 
   assert.equal(
     result.status,
@@ -2134,16 +2247,31 @@ test('API Dockerfile includes a dedicated Prisma migration runner target', () =>
 
   assert.match(migrationDepsStage, /^FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS migration-deps/);
   assert.match(migrationDepsStage, /COPY apps\/api\/prisma\/migration-runner\/package\.json \.\/package\.json/);
-  assert.match(migrationDepsStage, /COPY apps\/api\/prisma\/migration-runner\/package-lock\.json \.\/package-lock\.json/);
+  assert.match(
+    migrationDepsStage,
+    /COPY apps\/api\/prisma\/migration-runner\/package-lock\.json \.\/package-lock\.json/,
+  );
   assert.match(migrationDepsStage, /RUN npm ci --omit=dev --omit=peer --no-audit --no-fund/);
   assert.doesNotMatch(migrationDepsStage, /npm install/);
   assert.doesNotMatch(migrationDepsStage, /npm init/);
 
   assert.match(migrationRunnerStage, /^FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS migration-runner/);
-  assert.match(migrationRunnerStage, /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/node_modules \.\/node_modules/);
-  assert.match(migrationRunnerStage, /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/package\.json \.\/package\.json/);
-  assert.match(migrationRunnerStage, /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/package-lock\.json \.\/package-lock\.json/);
-  assert.match(migrationRunnerStage, /COPY --chown=node:node apps\/api\/prisma\/schema\.prisma \.\/prisma\/schema\.prisma/);
+  assert.match(
+    migrationRunnerStage,
+    /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/node_modules \.\/node_modules/,
+  );
+  assert.match(
+    migrationRunnerStage,
+    /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/package\.json \.\/package\.json/,
+  );
+  assert.match(
+    migrationRunnerStage,
+    /COPY --chown=node:node --from=migration-deps \/app\/apps\/api\/package-lock\.json \.\/package-lock\.json/,
+  );
+  assert.match(
+    migrationRunnerStage,
+    /COPY --chown=node:node apps\/api\/prisma\/schema\.prisma \.\/prisma\/schema\.prisma/,
+  );
   assert.match(migrationRunnerStage, /COPY --chown=node:node apps\/api\/prisma\/migrations \.\/prisma\/migrations/);
   assert.match(migrationRunnerStage, /WORKDIR \/app\/apps\/api/);
   assert.match(migrationRunnerStage, /USER node/);
@@ -2206,8 +2334,14 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(web, /image:\s+\$\{CHARITYPILOT_WEB_IMAGE:\?Set CHARITYPILOT_WEB_IMAGE\}/);
   assert.doesNotMatch(web, /env_file:/);
   assert.match(web, /NODE_ENV:\s+production/);
-  assert.match(web, /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/);
-  assert.match(web, /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL\}/);
+  assert.match(
+    web,
+    /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/,
+  );
+  assert.match(
+    web,
+    /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL\}/,
+  );
   assert.match(web, /depends_on:[\s\S]*api:[\s\S]*condition:\s+service_healthy/);
   assert.match(web, /fetch\('http:\/\/127\.0\.0\.1:3003\/'\)/);
   assert.match(web, /ports:[\s\S]*127\.0\.0\.1:\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003/);
@@ -2254,11 +2388,20 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(productionScheduler, /RESEND_API_KEY:\s+\$\{RESEND_API_KEY:\?Set RESEND_API_KEY\}/);
   assert.match(productionScheduler, /EMAIL_FROM:\s+\$\{EMAIL_FROM:\?Set EMAIL_FROM\}/);
   assert.match(productionScheduler, /SUPABASE_URL:\s+\$\{SUPABASE_URL:\?Set SUPABASE_URL\}/);
-  assert.match(productionScheduler, /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/);
-  assert.match(productionScheduler, /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/);
+  assert.match(
+    productionScheduler,
+    /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/,
+  );
+  assert.match(
+    productionScheduler,
+    /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/,
+  );
   assert.match(productionScheduler, /DOCUMENT_STORAGE_CLEANUP_LIMIT:\s+\$\{DOCUMENT_STORAGE_CLEANUP_LIMIT:-25\}/);
   assert.match(productionScheduler, /DEADLINE_REMINDERS_INTERVAL_MS:\s+\$\{DEADLINE_REMINDERS_INTERVAL_MS:-86400000\}/);
-  assert.match(productionScheduler, /DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:\s+\$\{DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:-3600000\}/);
+  assert.match(
+    productionScheduler,
+    /DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:\s+\$\{DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:-3600000\}/,
+  );
   assert.doesNotMatch(productionScheduler, /ports:/);
   assert.doesNotMatch(productionScheduler, /healthcheck:/);
   for (const secret of [
@@ -2268,9 +2411,16 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'STRIPE_WEBHOOK_SECRET',
     'NEXT_PUBLIC_API_URL',
   ]) {
-    assert.doesNotMatch(productionScheduler, new RegExp(`\\b${secret}:`), `production-scheduler must not receive ${secret}`);
+    assert.doesNotMatch(
+      productionScheduler,
+      new RegExp(`\\b${secret}:`),
+      `production-scheduler must not receive ${secret}`,
+    );
   }
-  assert.match(productionScheduler, /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/);
+  assert.match(
+    productionScheduler,
+    /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/,
+  );
 
   for (const service of [migrate, api, web, productionScheduler, deadlineReminders, documentStorageCleanup]) {
     assert.match(service, /security_opt:[\s\S]*no-new-privileges:true/);
@@ -2304,7 +2454,10 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(deadlineReminders, /FRONTEND_URL:\s+\$\{FRONTEND_URL:\?Set FRONTEND_URL\}/);
   assert.match(deadlineReminders, /RESEND_API_KEY:\s+\$\{RESEND_API_KEY:\?Set RESEND_API_KEY\}/);
   assert.match(deadlineReminders, /EMAIL_FROM:\s+\$\{EMAIL_FROM:\?Set EMAIL_FROM\}/);
-  assert.match(deadlineReminders, /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/);
+  assert.match(
+    deadlineReminders,
+    /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/,
+  );
   for (const secret of [
     'JWT_SECRET',
     'READINESS_API_KEY',
@@ -2315,16 +2468,29 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'SUPABASE_STORAGE_BUCKET',
     'NEXT_PUBLIC_API_URL',
   ]) {
-    assert.doesNotMatch(deadlineReminders, new RegExp(`\\b${secret}:`), `deadline-reminders must not receive ${secret}`);
+    assert.doesNotMatch(
+      deadlineReminders,
+      new RegExp(`\\b${secret}:`),
+      `deadline-reminders must not receive ${secret}`,
+    );
   }
 
   assert.match(documentStorageCleanup, /command:\s+\["node",\s*"dist\/jobs\/cleanup-document-storage\.js"\]/);
   assert.match(documentStorageCleanup, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
   assert.match(documentStorageCleanup, /SUPABASE_URL:\s+\$\{SUPABASE_URL:\?Set SUPABASE_URL\}/);
-  assert.match(documentStorageCleanup, /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/);
-  assert.match(documentStorageCleanup, /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/);
+  assert.match(
+    documentStorageCleanup,
+    /SUPABASE_SERVICE_ROLE_KEY:\s+\$\{SUPABASE_SERVICE_ROLE_KEY:\?Set SUPABASE_SERVICE_ROLE_KEY\}/,
+  );
+  assert.match(
+    documentStorageCleanup,
+    /SUPABASE_STORAGE_BUCKET:\s+\$\{SUPABASE_STORAGE_BUCKET:\?Set SUPABASE_STORAGE_BUCKET\}/,
+  );
   assert.match(documentStorageCleanup, /DOCUMENT_STORAGE_CLEANUP_LIMIT:\s+\$\{DOCUMENT_STORAGE_CLEANUP_LIMIT:-25\}/);
-  assert.match(documentStorageCleanup, /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/);
+  assert.match(
+    documentStorageCleanup,
+    /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/,
+  );
   for (const secret of [
     'JWT_SECRET',
     'READINESS_API_KEY',
@@ -2335,7 +2501,11 @@ test('production Docker compose runs migrations before API and keeps web away fr
     'FRONTEND_URL',
     'NEXT_PUBLIC_API_URL',
   ]) {
-    assert.doesNotMatch(documentStorageCleanup, new RegExp(`\\b${secret}:`), `document-storage-cleanup must not receive ${secret}`);
+    assert.doesNotMatch(
+      documentStorageCleanup,
+      new RegExp(`\\b${secret}:`),
+      `document-storage-cleanup must not receive ${secret}`,
+    );
   }
 });
 
@@ -2350,7 +2520,10 @@ test('production Docker compose renders with published image variables and loopb
   assert.match(web, /image:\s+\$\{CHARITYPILOT_WEB_IMAGE:\?Set CHARITYPILOT_WEB_IMAGE\}/);
   assert.match(api, /ports:[\s\S]*"127\.0\.0\.1:\$\{CHARITYPILOT_API_PORT:-3002\}:3002"/);
   assert.match(web, /ports:[\s\S]*"127\.0\.0\.1:\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003"/);
-  assert.match(web, /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/);
+  assert.match(
+    web,
+    /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/,
+  );
 });
 
 test('API server enables trusted proxy handling for production rate limits', () => {
@@ -2426,7 +2599,10 @@ test('backend architecture docs describe hardened storage keys and attempt-bound
   const billingDoc = readRepoFile('docs/architecture/05-billing.md');
 
   assert.match(storageDoc, /<organisationId>\/<epoch-ms>-<uuid>-<sanitised-filename>/);
-  assert.match(storageDoc, /same-millisecond uploads with the same original filename still produce distinct object keys/);
+  assert.match(
+    storageDoc,
+    /same-millisecond uploads with the same original filename still produce distinct object keys/,
+  );
   assert.doesNotMatch(storageDoc, /<organisationId>\/<epoch-ms>-<sanitised-filename>/);
 
   assert.match(billingDoc, /Checkout and portal creation reconcile billing ownership/);
@@ -2573,7 +2749,10 @@ test('production browser QA checklist points browser evidence at the dedicated l
   assert.doesNotMatch(browserQa, /<secret-store-reference>/);
   assert.match(browserQa, /E2E_SKIP_ROUTE_WARMING=true/);
   assert.match(browserQa, /E2E_ROUTE_WARM_TIMEOUT_MS/);
-  assert.match(readRepoFile('e2e/global-setup.ts'), /Route warming skipped because E2E_SKIP_ROUTE_WARMING=true/);
+  assert.match(
+    readRepoFile('e2e/global-setup.ts'),
+    /Public-route readiness sweep skipped because E2E_SKIP_ROUTE_WARMING=true/,
+  );
   assert.match(launchChecklist, /all four focused responsive route chunk transcripts/);
   assert.match(launchChecklist, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchChecklist, /browserQa\.checks\.ios-safari-device-coverage/);
@@ -2602,7 +2781,8 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /20 production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 29` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 399\/399/);
+  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 512\/512/);
+  assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 488\/488/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 350\/350/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 349\/349/);
@@ -2657,8 +2837,14 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 87` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
-  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
-  assert.match(launchGuide, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
+  assert.match(
+    launchGuide,
+    /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/,
+  );
+  assert.match(
+    launchGuide,
+    /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/,
+  );
   assert.doesNotMatch(launchGuide, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
   assert.match(launchGuide, /Current known GitHub environment blocker/);
@@ -2686,7 +2872,10 @@ test('frontend architecture docs describe current public theme support', () => {
   assert.doesNotMatch(frontendArchitecture, /colorScheme: 'light'/);
   assert.match(frontendArchitecture, /\(auth\)[^\n]*dark-capable/);
   assert.match(frontendArchitecture, /\(marketing\)[^\n]*dark-capable/);
-  assert.match(frontendArchitecture, /pre-paint inline script applies the user's light\/dark preference across public and protected route groups/);
+  assert.match(
+    frontendArchitecture,
+    /pre-paint inline script applies the user's light\/dark preference across public and protected route groups/,
+  );
 });
 
 test('marketing blog search uses the shared empty-state primitive', () => {
@@ -2727,7 +2916,10 @@ test('governance registers page uses the shared save-status primitive', () => {
   const page = readRepoFile('apps/web/src/app/(dashboard)/registers/page.tsx');
 
   assert.match(workflow, /registerSaveStatus/);
-  assert.match(page, /import \{ ErrorState, LoadingState, LockedFeatureState, SaveStatusIndicator \} from '@\/components\/ui\/states'/);
+  assert.match(
+    page,
+    /import \{ ErrorState, LoadingState, LockedFeatureState, SaveStatusIndicator \} from '@\/components\/ui\/states'/,
+  );
   assert.match(page, /registerSaveStatus,/);
   assert.match(page, /<SaveStatusIndicator\s+status=\{registerSaveStatus\}/);
   assert.doesNotMatch(page, /registerSavingLabel/);
@@ -2795,13 +2987,19 @@ test('team permission-denied states use the shared permission hint primitive', (
   const invitesPanel = readRepoFile('apps/web/src/app/(dashboard)/team/team-invites-panel.tsx');
 
   assert.match(statePrimitives, /export function PermissionHint/);
-  assert.match(membersPanel, /import \{ EmptyState, ErrorState, LoadingState, PermissionHint \} from '@\/components\/ui\/states'/);
+  assert.match(
+    membersPanel,
+    /import \{ EmptyState, ErrorState, LoadingState, PermissionHint \} from '@\/components\/ui\/states'/,
+  );
   assert.match(membersPanel, /<PermissionHint>\s*\{roleDisabledReason\}\s*<\/PermissionHint>/);
   assert.doesNotMatch(membersPanel, /max-w-xs rounded-lg border border-gray-200 bg-gray-50/);
 
   assert.match(invitesPanel, /import \{ EmptyState, PermissionHint \} from '@\/components\/ui\/states'/);
   assert.match(invitesPanel, /<PermissionHint>\s*\{permissionDisabledReason\}\s*<\/PermissionHint>/);
-  assert.doesNotMatch(invitesPanel, /<p className="text-xs text-gray-500 dark:text-gray-400">\{permissionDisabledReason\}<\/p>/);
+  assert.doesNotMatch(
+    invitesPanel,
+    /<p className="text-xs text-gray-500 dark:text-gray-400">\{permissionDisabledReason\}<\/p>/,
+  );
 });
 
 test('backend product audit records current launch and dependency posture', () => {
@@ -2900,17 +3098,35 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'check-production-github-secrets.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'smoke-production-deploy.mjs')));
   assert.equal(packageJson.scripts['check:production:database'], 'node scripts/check-production-database.mjs');
-  assert.equal(packageJson.scripts['check:production:observability'], 'node scripts/check-production-observability.mjs');
+  assert.equal(
+    packageJson.scripts['check:production:observability'],
+    'node scripts/check-production-observability.mjs',
+  );
   assert.equal(packageJson.scripts['check:production:hosting'], 'node scripts/check-production-hosting.mjs');
   assert.equal(packageJson.scripts['check:production:providers'], 'node scripts/check-production-providers.mjs');
   assert.equal(packageJson.scripts['check:production:supabase'], 'node scripts/check-production-supabase.mjs');
-  assert.equal(packageJson.scripts['check:production:github-secrets'], 'node scripts/check-production-github-secrets.mjs');
+  assert.equal(
+    packageJson.scripts['check:production:github-secrets'],
+    'node scripts/check-production-github-secrets.mjs',
+  );
   assert.equal(packageJson.scripts['check:production:evidence'], 'node scripts/production-launch-evidence.mjs');
-  assert.equal(packageJson.scripts['check:production:evidence:init'], 'node scripts/init-production-launch-evidence.mjs');
-  assert.equal(packageJson.scripts['check:production:evidence:status'], 'node scripts/production-launch-evidence-status.mjs');
+  assert.equal(
+    packageJson.scripts['check:production:evidence:init'],
+    'node scripts/init-production-launch-evidence.mjs',
+  );
+  assert.equal(
+    packageJson.scripts['check:production:evidence:status'],
+    'node scripts/production-launch-evidence-status.mjs',
+  );
   assert.equal(packageJson.scripts['check:production:release-run'], 'node scripts/production-release-run-evidence.mjs');
-  assert.equal(packageJson.scripts['prepare:production:evidence-upload'], 'node scripts/prepare-production-launch-evidence-upload.mjs');
-  assert.equal(packageJson.scripts['check:production:evidence:template'], 'node scripts/generate-production-launch-evidence-template.mjs');
+  assert.equal(
+    packageJson.scripts['prepare:production:evidence-upload'],
+    'node scripts/prepare-production-launch-evidence-upload.mjs',
+  );
+  assert.equal(
+    packageJson.scripts['check:production:evidence:template'],
+    'node scripts/generate-production-launch-evidence-template.mjs',
+  );
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.equal(packageJson.scripts['deploy:production'], 'node scripts/production-compose-deploy.mjs');
   assert.equal(packageJson.scripts['deploy:rollback'], 'node scripts/production-compose-rollback.mjs');
@@ -2929,7 +3145,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-database\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-deployed-browser-qa-env\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/smoke-production-deploy\.test\.mjs/);
-  assert.equal(packageJson.scripts['check:production:browser-qa-env'], 'node scripts/check-deployed-browser-qa-env.mjs');
+  assert.equal(
+    packageJson.scripts['check:production:browser-qa-env'],
+    'node scripts/check-deployed-browser-qa-env.mjs',
+  );
   assert.match(readRepoFile('scripts/production-deploy-preflight.mjs'), /runProductionPreflight/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /runProductionDeployPreflightFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
@@ -2972,9 +3191,18 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
 
   assert.match(runbook, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run deploy:production -- --production-env-file=\.env\.production/);
-  assert.match(runbook, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
-  assert.match(runbook, /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/);
-  assert.match(runbook, /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/);
+  assert.match(
+    runbook,
+    /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/,
+  );
+  assert.match(
+    runbook,
+    /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/,
+  );
+  assert.match(
+    runbook,
+    /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/,
+  );
   assert.match(runbook, /npm run check:production:github-env -- --environment=production --json/);
   assert.match(runbook, /npm run check:production:github-secrets -- --environment=production/);
   assert.match(runbook, /npm run check:production:github-secrets -- --environment=production --json/);
@@ -2987,24 +3215,51 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.doesNotMatch(runbook, /<secret-store-reference>/);
   assert.match(runbook, /gh workflow run release-images\.yml --ref master/);
   assert.match(runbook, /gh run watch RELEASE_RUN_ID --exit-status/);
-  assert.match(runbook, /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/);
+  assert.match(
+    runbook,
+    /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/,
+  );
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
-  assert.match(runbook, /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/);
-  assert.match(runbook, /representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows/);
+  assert.match(
+    runbook,
+    /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/,
+  );
+  assert.match(
+    runbook,
+    /representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows/,
+  );
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:evidence:init/);
   assert.match(runbook, /npm run check:production:evidence:init -- --json/);
   assert.match(runbook, /npm run check:production:browser-qa-env/);
   assert.match(runbook, /--evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(runbook, /npm run check:production:evidence:status -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(runbook, /npm run check:production:release-run -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(runbook, /npm run check:production:release-run -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(runbook, /machine-readable workflow identity, release binding, artifact name, pass\/fail, and issue details/);
+  assert.match(
+    runbook,
+    /npm run check:production:evidence:status -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    runbook,
+    /npm run check:production:release-run -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    runbook,
+    /npm run check:production:release-run -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    runbook,
+    /machine-readable workflow identity, release binding, artifact name, pass\/fail, and issue details/,
+  );
   assert.match(runbook, /GitHub API/);
-  assert.match(runbook, /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(runbook, /npm run check:production:evidence -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
+  assert.match(
+    runbook,
+    /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    runbook,
+    /npm run check:production:evidence -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
   assert.match(runbook, /requires a `release` block binding the evidence to the promoted commit SHA/);
   assert.match(runbook, /\.github\/workflows\/release-images\.yml/);
   assert.match(runbook, /refs\/heads\/master/);
@@ -3018,7 +3273,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(runbook, /node dist\/jobs\/cleanup-document-storage\.js/);
   assert.match(runbook, /failure-alert evidence/);
-  assert.match(runbook, /docker compose --env-file \.env\.production -f compose\.production\.yml -f compose\.production-tls\.yml up --wait --wait-timeout 180 -d/);
+  assert.match(
+    runbook,
+    /docker compose --env-file \.env\.production -f compose\.production\.yml -f compose\.production-tls\.yml up --wait --wait-timeout 180 -d/,
+  );
   assert.match(runbook, /--no-tls-proxy/);
   assert.match(runbook, /post-deploy public HTTPS smoke/);
   assert.match(runbook, /Rollback reuses the production deploy path/);
@@ -3028,19 +3286,31 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL/);
   assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/<project-ref>\.supabase\.co/);
-  assert.doesNotMatch(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co/);
+  assert.doesNotMatch(
+    runbook,
+    /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co/,
+  );
   assert.match(runbook, /cosign verify/);
   assert.match(runbook, /Do not deploy mutable image tags/);
 
   assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:production -- --production-env-file=\.env\.production/);
-  assert.match(launchChecklist, /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/);
-  assert.match(launchChecklist, /rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence/);
+  assert.match(
+    launchChecklist,
+    /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/,
+  );
+  assert.match(
+    launchChecklist,
+    /rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence/,
+  );
   assert.doesNotMatch(launchChecklist, /dry-run evidence capture/);
   assert.match(launchChecklist, /web image build origins match the promoted production public origins/);
   assert.match(launchChecklist, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run check:production:observability -- --production-env-file=\.env\.production/);
-  assert.match(launchChecklist, /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/);
+  assert.match(
+    launchChecklist,
+    /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/,
+  );
   assert.match(launchChecklist, /Operational sentinel restore test location/);
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /supabaseStorage\.checks\.supabase-backups-enabled/);
@@ -3050,13 +3320,31 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:evidence:init -- --json/);
   assert.match(launchChecklist, /npm run check:production:browser-qa-env/);
   assert.match(launchChecklist, /\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(launchChecklist, /npm run check:production:release-run -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(launchChecklist, /npm run check:production:release-run -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(launchChecklist, /machine-readable release workflow identity, artifact, release binding, and issue details/);
+  assert.match(
+    launchChecklist,
+    /npm run check:production:release-run -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    launchChecklist,
+    /npm run check:production:release-run -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    launchChecklist,
+    /machine-readable release workflow identity, artifact, release binding, and issue details/,
+  );
   assert.match(launchChecklist, /GitHub API release-run verification output/);
-  assert.match(launchChecklist, /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(launchChecklist, /npm run check:production:evidence -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/);
-  assert.match(launchChecklist, /machine-readable strict validation status, issue list, completion counts, and next incomplete evidence hints/);
+  assert.match(
+    launchChecklist,
+    /npm run check:production:evidence -- --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    launchChecklist,
+    /npm run check:production:evidence -- --json --evidence-file=\.charitypilot-launch-evidence\/production-launch-evidence\.json/,
+  );
+  assert.match(
+    launchChecklist,
+    /machine-readable strict validation status, issue list, completion counts, and next incomplete evidence hints/,
+  );
   assert.match(launchChecklist, /Release workflow run URL/);
   assert.match(launchChecklist, /Release workflow file/);
   assert.match(launchChecklist, /\.github\/workflows\/release-images\.yml/);
@@ -3069,7 +3357,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /node dist\/jobs\/production-scheduler\.js/);
   assert.match(launchChecklist, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(launchChecklist, /node dist\/jobs\/cleanup-document-storage\.js/);
-  assert.match(launchChecklist, /Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`/);
+  assert.match(
+    launchChecklist,
+    /Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`/,
+  );
   assert.match(launchChecklist, /post-deploy public HTTPS smoke/);
   assert.match(launchChecklist, /rollback rehearsal/);
   assert.match(launchChecklist, /digest-pinned/);
@@ -3099,7 +3390,10 @@ test('web Docker build requires production HTTPS public origins before Next buil
   );
   assert.doesNotMatch(dockerfile, /FROM build AS runtime-deps/);
   assert.doesNotMatch(dockerfile, /npm prune --omit=dev --omit=peer --workspaces/);
-  assert.match(dockerfile, /rm -rf[\s\S]*node_modules\/typescript[\s\S]*node_modules\/eslint[\s\S]*node_modules\/turbo/);
+  assert.match(
+    dockerfile,
+    /rm -rf[\s\S]*node_modules\/typescript[\s\S]*node_modules\/eslint[\s\S]*node_modules\/turbo/,
+  );
   assert.match(dockerfile, /COPY --chown=node:node --from=runtime-deps \/app\/node_modules \.\/node_modules/);
   assert.doesNotMatch(dockerfile, /COPY --chown=node:node --from=build \/app\/node_modules \.\/node_modules/);
   assert.match(dockerfile, /USER\s+node/);
@@ -3109,13 +3403,31 @@ test('web Docker runtime ships only compiled app artifacts', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
   const runnerStage = dockerfileStage(dockerfile, 'runner');
 
-  assert.match(dockerfile, /rm -rf apps\/web\/\.next\/cache[\s\S]*apps\/web\/\.next\/export[\s\S]*apps\/web\/\.next\/export-detail\.json[\s\S]*apps\/web\/\.next\/server\/proxy\.js[\s\S]*apps\/web\/\.next\/server\/proxy\.js\.nft\.json/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/package\.json \.\/apps\/web\/package\.json/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/server\.mjs \.\/apps\/web\/server\.mjs/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/next\.config\.ts \.\/apps\/web\/next\.config\.ts/);
+  assert.match(
+    dockerfile,
+    /rm -rf apps\/web\/\.next\/cache[\s\S]*apps\/web\/\.next\/export[\s\S]*apps\/web\/\.next\/export-detail\.json[\s\S]*apps\/web\/\.next\/server\/proxy\.js[\s\S]*apps\/web\/\.next\/server\/proxy\.js\.nft\.json/,
+  );
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/apps\/web\/package\.json \.\/apps\/web\/package\.json/,
+  );
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/apps\/web\/server\.mjs \.\/apps\/web\/server\.mjs/,
+  );
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/apps\/web\/next\.config\.ts \.\/apps\/web\/next\.config\.ts/,
+  );
   assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web\/\.next \.\/apps\/web\/\.next/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/package\.json \.\/packages\/shared\/package\.json/);
-  assert.match(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared\/dist \.\/packages\/shared\/dist/);
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/packages\/shared\/package\.json \.\/packages\/shared\/package\.json/,
+  );
+  assert.match(
+    runnerStage,
+    /COPY --chown=node:node --from=build \/app\/packages\/shared\/dist \.\/packages\/shared\/dist/,
+  );
   assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/apps\/web \.\/apps\/web/);
   assert.doesNotMatch(runnerStage, /COPY --chown=node:node --from=build \/app\/packages\/shared \.\/packages\/shared/);
 });
@@ -3208,7 +3520,7 @@ test('web production CSP uses per-request script nonces without unsafe inline ex
   assert.doesNotMatch(csp, /scriptSrc\.push\("'unsafe-inline'"\)/);
   assert.doesNotMatch(csp, /script-src[^`]*'unsafe-inline'/);
   assert.ok(
-    csp.indexOf("scriptSrc.push(\"'unsafe-eval'\")") > csp.indexOf('if (isDevelopment)'),
+    csp.indexOf('scriptSrc.push("\'unsafe-eval\'")') > csp.indexOf('if (isDevelopment)'),
     'unsafe-eval must only be added in development',
   );
 });
@@ -3221,7 +3533,7 @@ test('web executable inline scripts are nonce-bound for strict production CSP', 
   assert.match(layout, /nonce=\{nonce\}/);
   assert.match(layout, /headers\(\)/);
   assert.match(jsonLd, /nonce=\{nonce\}/);
-  assert.match(proxy, /requestHeaders\.set\('x-nonce', nonce\)/);
+  assert.match(proxy, /requestHeaders\.set\(["']x-nonce["'], nonce\)/);
   assert.match(proxy, /Content-Security-Policy/);
 });
 
@@ -3229,10 +3541,7 @@ test('web nonce-bearing scripts suppress hydration comparison for browser-masked
   const layout = readRepoFile('apps/web/src/app/layout.tsx');
   const jsonLd = readRepoFile('apps/web/src/components/json-ld.tsx');
 
-  assert.match(
-    layout,
-    /<script\s+nonce=\{nonce\}\s+suppressHydrationWarning\s+dangerouslySetInnerHTML=/,
-  );
+  assert.match(layout, /<script\s+nonce=\{nonce\}\s+suppressHydrationWarning\s+dangerouslySetInnerHTML=/);
 
   const nonceJsonLdScripts = jsonLd.match(/<script[\s\S]*?nonce=\{nonce\}[\s\S]*?dangerouslySetInnerHTML=/g) ?? [];
   assert.equal(nonceJsonLdScripts.length, 3);
@@ -3271,7 +3580,10 @@ test('web email verification flow supports generic registration and unverified s
     'auth bootstrap must allow refresh-cookie-only sessions to refresh before reporting logged out',
   );
   assert.match(loginPage, /import \{ safeNextPath \} from '@\/lib\/safe-next-path'/);
-  assert.match(safeNextPath, /export function safeNextPath\(nextPath: string \| null, origin = currentOrigin\(\)\): string/);
+  assert.match(
+    safeNextPath,
+    /export function safeNextPath\(nextPath: string \| null, origin = currentOrigin\(\)\): string/,
+  );
   assert.match(safeNextPath, /new URL\(nextPath, baseOrigin\)/);
   assert.match(safeNextPath, /destination\.origin !== baseOrigin/);
   assert.match(safeNextPath, /isProtectedAppPath\(path\)/);
@@ -3392,12 +3704,18 @@ test('refresh and logout auth endpoints have route-specific throttles', () => {
   const identifierRateLimit = readRepoFile('apps/api/src/utils/identifier-rate-limit.ts');
 
   assert.match(authRoutes, /refreshTokenRateLimit/);
-  assert.match(authRoutes, /app\.post\(\s*'\/refresh',\s*\{\s*config:\s*\{\s*rateLimit:\s*refreshTokenRateLimit\(5\)\s*\}\s*\}/);
-  assert.match(authRoutes, /app\.post\(\s*'\/logout',\s*\{\s*config:\s*\{\s*rateLimit:\s*refreshTokenRateLimit\(10\)\s*\}\s*\}/);
+  assert.match(
+    authRoutes,
+    /app\.post\(\s*["']\/refresh["'],\s*\{\s*config:\s*\{\s*rateLimit:\s*refreshTokenRateLimit\(5\)\s*\}\s*\}/,
+  );
+  assert.match(
+    authRoutes,
+    /app\.post\(\s*["']\/logout["'],\s*\{\s*config:\s*\{\s*rateLimit:\s*refreshTokenRateLimit\(10\)\s*\}\s*\}/,
+  );
   assert.match(identifierRateLimit, /REFRESH_TOKEN_COOKIE/);
   assert.match(identifierRateLimit, /body\.refreshToken/);
   assert.match(identifierRateLimit, /export function refreshTokenRateLimit\(max = 5\)/);
-  assert.match(identifierRateLimit, /hook:\s*'preHandler'/);
+  assert.match(identifierRateLimit, /hook:\s*["']preHandler["']/);
 });
 
 test('API access tokens pin their JWT algorithm', () => {
@@ -3444,12 +3762,14 @@ test('production migrations install governance code reference data', () => {
     .filter((entry) => entry.isDirectory())
     .map((entry) => readFileSync(join(migrationsDir, entry.name, 'migration.sql'), 'utf8'));
 
-  const migration = migrations.find((content) =>
-    content.includes('Seed governance code reference data') &&
-    content.includes('"GovernancePrinciple"') &&
-    content.includes('"GovernanceStandard"') &&
-    content.includes('ON CONFLICT ("number")') &&
-    content.includes('ON CONFLICT ("code")'));
+  const migration = migrations.find(
+    (content) =>
+      content.includes('Seed governance code reference data') &&
+      content.includes('"GovernancePrinciple"') &&
+      content.includes('"GovernanceStandard"') &&
+      content.includes('ON CONFLICT ("number")') &&
+      content.includes('ON CONFLICT ("code")'),
+  );
 
   assert.ok(migration, 'production migrations must seed governance reference data');
   assert.equal((migration.match(/\('governance-principle-/g) ?? []).length, 6);
@@ -3473,48 +3793,91 @@ test('production migrations install governance code reference data', () => {
 
 test('web proxy preserves protected-route redirect and no-cache behavior', () => {
   const proxy = readRepoFile('apps/web/src/proxy.ts');
-  const redirectToLogin = proxy.match(/function redirectToLogin\(request: NextRequest, csp: string\): NextResponse \{[\s\S]*?\n}/)?.[0] ?? '';
-  const protectedBranch = proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?return addSetCookieHeaders/)?.[0] ?? '';
-  const publicBranch = proxy.match(/if \(!isProtectedAppPath\(pathname\)\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+  const redirectStart = proxy.indexOf('function redirectToLogin(');
+  const redirectEnd = proxy.indexOf('\nfunction authenticationUnavailable(', redirectStart);
+  const redirectToLogin =
+    redirectStart >= 0 && redirectEnd > redirectStart ? proxy.slice(redirectStart, redirectEnd) : '';
+  const publicStart = proxy.indexOf('if (!isProtectedAppPath(pathname))');
+  const protectedStart = proxy.indexOf('if (!hasAuthSessionCookie(request))', publicStart);
+  const publicBranch = publicStart >= 0 && protectedStart > publicStart ? proxy.slice(publicStart, protectedStart) : '';
+  const protectedBranch = protectedStart >= 0 ? proxy.slice(protectedStart) : '';
 
   assert.ok(redirectToLogin, 'proxy must keep a dedicated login redirect helper');
-  assert.match(redirectToLogin, /loginUrl\.pathname = '\/login'/);
-  assert.match(redirectToLogin, /loginUrl\.search = ''/);
-  assert.match(redirectToLogin, /loginUrl\.searchParams\.set\('next', `\$\{pathname\}\$\{search\}`\)/);
+  assert.match(redirectToLogin, /loginUrl\.pathname = ["']\/login["']/);
+  assert.match(redirectToLogin, /loginUrl\.search = ["']["']/);
+  assert.match(redirectToLogin, /loginUrl\.searchParams\.set\(["']next["'], `\$\{pathname\}\$\{search\}`\)/);
   assert.match(redirectToLogin, /NextResponse\.redirect\(loginUrl\)/);
   assert.match(redirectToLogin, /addProtectedNoCacheHeaders\(response\)/);
-  assert.match(proxy, /const PROTECTED_RESPONSE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate'/);
-  assert.match(proxy, /response\.headers\.set\('Cache-Control', PROTECTED_RESPONSE_CACHE_CONTROL\)/);
-  assert.match(proxy, /response\.headers\.set\('Pragma', 'no-cache'\)/);
+  assert.match(proxy, /const PROTECTED_RESPONSE_CACHE_CONTROL = ["']no-store, no-cache, must-revalidate["']/);
+  assert.match(proxy, /response\.headers\.set\(["']Cache-Control["'], PROTECTED_RESPONSE_CACHE_CONTROL\)/);
+  assert.match(proxy, /response\.headers\.set\(["']Pragma["'], ["']no-cache["']\)/);
 
   assert.ok(protectedBranch, 'protected branch must exist');
   assert.match(protectedBranch, /return redirectToLogin\(request, csp\)/);
   assert.match(protectedBranch, /await validateProtectedAuthSession\(request\)/);
-  assert.match(protectedBranch, /addProtectedNoCacheHeaders\(NextResponse\.next/);
+  assert.match(protectedBranch, /addProtectedNoCacheHeaders\(\s*NextResponse\.next/);
 
   assert.ok(publicBranch, 'public branch must exist');
   assert.match(publicBranch, /NextResponse\.next/);
   assert.doesNotMatch(publicBranch, /addProtectedNoCacheHeaders/);
-  assert.match(publicBranch, /isSensitiveAuthPath\(pathname\) \? addSensitiveAuthHeaders\(responseWithCsp\) : responseWithCsp/);
+  assert.match(
+    publicBranch,
+    /isSensitiveAuthPath\(pathname\)\s*\?\s*addSensitiveAuthHeaders\(responseWithCsp\)\s*:\s*responseWithCsp/,
+  );
 });
 
 test('web proxy validates protected sessions with API auth authority before rendering', () => {
   const proxy = readRepoFile('apps/web/src/proxy.ts');
-  const protectedBranch = proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?const requestHeaders = createCspRequestHeaders/)?.[0] ?? '';
+  const protectedBranch =
+    proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?const requestHeaders = createCspRequestHeaders/)?.[0] ??
+    '';
 
   assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
-  assert.match(proxy, /import \{ getServerApiBaseUrl \} from '\.\/lib\/api-config'/);
+  assert.match(proxy, /import \{ getServerApiBaseUrl \} from ["']\.\/lib\/api-config["']/);
   assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(\)\)/);
   assert.doesNotMatch(proxy, /process\.env\.NEXT_PUBLIC_API_URL\?\.trim\(\)\s*\|\|/);
-  assert.match(proxy, /async function validateProtectedAuthSession\(request: NextRequest\): Promise<\{/);
-  assert.match(proxy, /authenticated:\s*boolean/);
-  assert.match(proxy, /setCookieHeaders:\s*string\[\]/);
-  assert.match(proxy, /createApiAuthUrl\('\/api\/v1\/auth\/me'\)/);
-  assert.match(proxy, /createApiAuthUrl\('\/api\/v1\/auth\/refresh'\)/);
+  assert.match(proxy, /type ProtectedAuthSession\s*=/);
+  assert.match(proxy, /state:\s*["']authenticated["'];\s*setCookieHeaders:\s*string\[\]/);
+  assert.match(proxy, /state:\s*["']unauthenticated["'];\s*setCookieHeaders:\s*string\[\]/);
+  assert.match(proxy, /state:\s*["']unavailable["'];\s*setCookieHeaders:\s*\[\];\s*retryAfter:\s*string/);
+  assert.match(proxy, /async function validateProtectedAuthSession\(/);
+  assert.match(proxy, /\): Promise<ProtectedAuthSession> \{/);
+  assert.match(proxy, /createApiAuthUrl\(["']\/api\/v1\/auth\/me["']\)/);
+  assert.match(proxy, /createApiAuthUrl\(["']\/api\/v1\/auth\/refresh["']\)/);
   assert.match(proxy, /fetch\(authUrl/);
   assert.match(proxy, /fetch\(refreshUrl/);
-  assert.match(proxy, /cache:\s*'no-store'/);
-  assert.match(proxy, /redirect:\s*'manual'/);
+  assert.match(proxy, /cache:\s*["']no-store["']/);
+  assert.match(proxy, /redirect:\s*["']manual["']/);
+  assert.equal(
+    (proxy.match(/signal:\s*AbortSignal\.timeout\(AUTH_VALIDATION_TIMEOUT_MS\)/g) ?? []).length,
+    2,
+    'both auth authority requests must have a bounded timeout',
+  );
+  assert.match(proxy, /if \(response\.status !== 401\) return unavailableAuthSession\(response\)/);
+  assert.equal(
+    (proxy.match(/response\.status === 200/g) ?? []).length,
+    2,
+    'both auth authority responses must require exact HTTP 200',
+  );
+  assert.doesNotMatch(proxy, /response\.ok/);
+  assert.match(proxy, /validatedAuthCookieHeaders\(\s*response\.headers,\s*["']rotation["']/);
+  assert.match(
+    proxy,
+    /response\.status === 401[\s\S]*?validatedAuthCookieHeaders\(\s*response\.headers,\s*["']deletion["']/,
+  );
+  assert.match(proxy, /getSetCookie\.call\(headers\)\.map/);
+  assert.doesNotMatch(proxy, /getSetCookie\.call\(headers\)\.flatMap/);
+  assert.match(proxy, /COOKIE_HEADER_CONTROL_PATTERN/);
+  assert.match(proxy, /selectedCookies\.some\(\(cookies\) => cookies\.length !== 1\)/);
+  assert.match(proxy, /status:\s*503/);
+  assert.match(
+    protectedBranch,
+    /authSession\.state === ["']unavailable["'][\s\S]*?authenticationUnavailable\(csp, authSession\.retryAfter\)/,
+  );
+  assert.match(
+    protectedBranch,
+    /authSession\.state === ["']unauthenticated["'][\s\S]*?redirectToLogin\(request, csp, authSession\.setCookieHeaders\)/,
+  );
   assert.match(proxy, /protectedAuthCookieHeader\(request\)/);
   assert.match(proxy, /Cookie:\s*cookieHeader/);
   assert.match(proxy, /addSetCookieHeaders\(response,\s*authSession\.setCookieHeaders\)/);
@@ -3615,9 +3978,9 @@ test('web proxy transitions legacy query auth tokens to URL fragments before ren
   const proxy = readRepoFile('apps/web/src/proxy.ts');
 
   assert.match(proxy, /function redirectSensitiveQueryToken/);
-  assert.match(proxy, /request\.nextUrl\.searchParams\.get\('token'\)/);
-  assert.match(proxy, /redirectUrl\.searchParams\.delete\('token'\)/);
-  assert.match(proxy, /fragmentParams\.set\('token', token\)/);
+  assert.match(proxy, /request\.nextUrl\.searchParams\.get\(["']token["']\)/);
+  assert.match(proxy, /redirectUrl\.searchParams\.delete\(["']token["']\)/);
+  assert.match(proxy, /fragmentParams\.set\(["']token["'], token\)/);
   assert.match(proxy, /redirectUrl\.hash = fragmentParams\.toString\(\)/);
   assert.match(proxy, /NextResponse\.redirect\(redirectUrl\)/);
   assert.match(proxy, /redirectSensitiveQueryToken\(request, csp\)/);
@@ -3652,7 +4015,10 @@ test('registers page handles Complete-plan denial as an upgrade state', () => {
   assert.match(registersPage, /setPlanUnavailable\(true\)/);
   assert.match(registersPage, /Complete plan/);
   assert.match(registersPage, /href="\/billing"/);
-  assert.doesNotMatch(registersPage, /toast\('Failed to load governance registers', 'error'\);[\s\S]*PLAN_FEATURE_UNAVAILABLE/);
+  assert.doesNotMatch(
+    registersPage,
+    /toast\('Failed to load governance registers', 'error'\);[\s\S]*PLAN_FEATURE_UNAVAILABLE/,
+  );
 });
 
 test('web document upload picker does not advertise legacy Office formats', () => {
@@ -3832,7 +4198,11 @@ test('GitHub Actions workflow actions are pinned to immutable commits', () => {
 
     for (const [, action, ref] of actionRefs) {
       assert.match(ref, /^[a-f0-9]{40}$/, `${workflowPath} action ${action} must be pinned to a full commit SHA`);
-      assert.doesNotMatch(ref, /^(main|master|v[0-9].*)$/, `${workflowPath} action ${action} must not use a mutable ref`);
+      assert.doesNotMatch(
+        ref,
+        /^(main|master|v[0-9].*)$/,
+        `${workflowPath} action ${action} must not use a mutable ref`,
+      );
     }
   }
 });
@@ -3866,13 +4236,25 @@ test('manual production launch evidence workflow validates final signoff evidenc
   assert.match(workflow, /test -f "launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /set \+e/);
-  assert.match(workflow, /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}" 2>&1/);
+  assert.match(
+    workflow,
+    /npm run check:production:release-run -- --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}" 2>&1/,
+  );
   assert.match(workflow, /release_run_text_status=\$\{PIPESTATUS\[0\]\}/);
-  assert.match(workflow, /npm run check:production:release-run -- --json --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/);
+  assert.match(
+    workflow,
+    /npm run check:production:release-run -- --json --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/,
+  );
   assert.match(workflow, /release_run_json_status=\$\?/);
-  assert.match(workflow, /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}" 2>&1/);
+  assert.match(
+    workflow,
+    /npm run check:production:evidence -- --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}" 2>&1/,
+  );
   assert.match(workflow, /evidence_text_status=\$\{PIPESTATUS\[0\]\}/);
-  assert.match(workflow, /npm run check:production:evidence -- --json --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/);
+  assert.match(
+    workflow,
+    /npm run check:production:evidence -- --json --evidence-file="launch-evidence\/\$\{EVIDENCE_FILE_NAME\}"/,
+  );
   assert.match(workflow, /evidence_json_status=\$\?/);
   assert.match(workflow, /tee production-launch-evidence-validation\.log/);
   assert.match(workflow, /> production-release-run-evidence\.json/);
@@ -3882,7 +4264,10 @@ test('manual production launch evidence workflow validates final signoff evidenc
   assert.match(workflow, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);
   assert.match(workflow, /if:\s+always\(\)/);
   assert.match(workflow, /name:\s+production-launch-evidence-validation/);
-  assert.match(workflow, /path:\s+\|[\s\S]*production-launch-evidence-validation\.log[\s\S]*production-release-run-evidence\.json[\s\S]*production-launch-evidence-validation\.json/);
+  assert.match(
+    workflow,
+    /path:\s+\|[\s\S]*production-launch-evidence-validation\.log[\s\S]*production-release-run-evidence\.json[\s\S]*production-launch-evidence-validation\.json/,
+  );
   assert.match(workflow, /if-no-files-found:\s+error/);
   assert.match(workflow, /retention-days:\s+90/);
   assert.match(runbook, /\.github\/workflows\/production-launch-evidence\.yml/);
@@ -3913,10 +4298,14 @@ test('protected production launch evidence upload workflow creates the validator
   writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
 
   try {
-    const result = spawnSync(process.execPath, ['scripts/prepare-production-launch-evidence-upload.mjs', '--json', '--evidence-file', evidencePath], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
+    const result = spawnSync(
+      process.execPath,
+      ['scripts/prepare-production-launch-evidence-upload.mjs', '--json', '--evidence-file', evidencePath],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      },
+    );
 
     assert.equal(result.status, 0, result.stderr);
     const inputs = JSON.parse(result.stdout);
@@ -3924,12 +4313,18 @@ test('protected production launch evidence upload workflow creates the validator
     assert.equal(inputs.artifact_name, 'production-launch-evidence');
     assert.equal(inputs.evidence_file_name, 'production-launch-evidence.json');
     assert.equal(inputs.evidence_sha256, createHash('sha256').update(original).digest('hex'));
-    assert.deepEqual(JSON.parse(gunzipSync(Buffer.from(inputs.evidence_json_gzip_base64, 'base64')).toString('utf8')), evidence);
+    assert.deepEqual(
+      JSON.parse(gunzipSync(Buffer.from(inputs.evidence_json_gzip_base64, 'base64')).toString('utf8')),
+      evidence,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 
-  assert.equal(packageJson.scripts['prepare:production:evidence-upload'], 'node scripts/prepare-production-launch-evidence-upload.mjs');
+  assert.equal(
+    packageJson.scripts['prepare:production:evidence-upload'],
+    'node scripts/prepare-production-launch-evidence-upload.mjs',
+  );
   assert.match(helper, /gzipSync/);
   assert.match(helper, /createHash\('sha256'\)/);
   assert.match(helper, /validateWorkflowInputNames/);
@@ -3962,7 +4357,10 @@ test('protected production launch evidence upload workflow creates the validator
   assert.match(workflow, /path:\s+launch-evidence\/\$\{\{\s*inputs\.evidence_file_name\s*\}\}/);
   assert.match(workflow, /retention-days:\s+90/);
   assert.match(runbook, /upload-production-launch-evidence\.yml/);
-  assert.match(runbook, /prepare:production:evidence-upload -- --json \| gh workflow run upload-production-launch-evidence\.yml --ref master --json/);
+  assert.match(
+    runbook,
+    /prepare:production:evidence-upload -- --json \| gh workflow run upload-production-launch-evidence\.yml --ref master --json/,
+  );
   assert.match(runbook, /verifies the SHA-256/);
   assert.match(runbook, /without committing it to git/);
   assert.match(launchChecklist, /upload-production-launch-evidence\.yml/);
@@ -3995,7 +4393,13 @@ test('production launch evidence upload helper rejects unsafe artifact and file 
       assert.match(result.stderr, /--artifact-name must match/);
     }
 
-    for (const evidenceFileName of ['../production-launch-evidence.json', 'x.json;echo bad', 'x', 'x.txt', 'bad name.json']) {
+    for (const evidenceFileName of [
+      '../production-launch-evidence.json',
+      'x.json;echo bad',
+      'x',
+      'x.txt',
+      'bad name.json',
+    ]) {
       const result = spawnSync(
         process.execPath,
         [
@@ -4019,16 +4423,11 @@ test('production launch evidence upload helper rejects unsafe artifact and file 
 });
 
 test('production launch evidence upload helper rejects empty inline options as usage errors', () => {
-  for (const args of [
-    ['--evidence-file='],
-    ['--artifact-name='],
-    ['--evidence-file-name='],
-  ]) {
-    const result = spawnSync(
-      process.execPath,
-      ['scripts/prepare-production-launch-evidence-upload.mjs', ...args],
-      { cwd: repoRoot, encoding: 'utf8' },
-    );
+  for (const args of [['--evidence-file='], ['--artifact-name='], ['--evidence-file-name=']]) {
+    const result = spawnSync(process.execPath, ['scripts/prepare-production-launch-evidence-upload.mjs', ...args], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
 
     assert.equal(result.status, 2, `${args.join(' ')} should be rejected as usage`);
     assert.equal(result.stdout, '');
@@ -4040,9 +4439,15 @@ test('production launch evidence upload helper rejects empty inline options as u
 test('CI builds API and web production Docker images', () => {
   const workflow = readRepoFile('.github/workflows/ci.yml');
 
-  assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
+  assert.match(
+    workflow,
+    /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./,
+  );
   assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+https:\/\/ci-project\.supabase\.co/);
-  assert.match(workflow, /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*-t charitypilot-web-ci \./);
+  assert.match(
+    workflow,
+    /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*-t charitypilot-web-ci \./,
+  );
 });
 
 test('CI smoke-runs API and web Docker images after building them', () => {
@@ -4054,16 +4459,28 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(workflow, /-e RESEND_API_KEY=re_ci_smoke_key/);
   assert.match(workflow, /docker ps --filter name=charitypilot-api-smoke --filter status=running --quiet/);
   assert.match(workflow, /api_headers="\$\(mktemp\)"/);
-  assert.match(workflow, /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(
+    workflow,
+    /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/,
+  );
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
-  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
-  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{api_headers\}"/);
+  assert.match(
+    workflow,
+    /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{api_headers\}"/,
+  );
   assert.match(workflow, /grep -qi "\^cache-control: no-store" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
-  assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
+  assert.match(
+    workflow,
+    /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/,
+  );
   assert.match(workflow, /docker rm -f charitypilot-api-smoke/);
   assert.match(workflow, /name:\s+Verify API Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-api-ci[\s\S]*@prisma\/client/);
@@ -4071,22 +4488,40 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assertWorkflowUsesPackagePathAbsenceChecks(
     workflowStepBetween(workflow, 'Verify API Docker runtime dependencies', 'Smoke API Docker image'),
   );
-  assert.match(workflow, /const forbiddenPaths = \['src', 'prisma', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo'\]/);
+  assert.match(
+    workflow,
+    /const forbiddenPaths = \['src', 'prisma', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo'\]/,
+  );
   assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
 
   assert.match(workflow, /name:\s+Smoke web Docker image/);
   assert.match(workflow, /docker run -d --name charitypilot-web-smoke[\s\S]*charitypilot-web-ci/);
-  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/);
-  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*charitypilot-web-ci/);
+  assert.match(
+    workflow,
+    /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/,
+  );
+  assert.match(
+    workflow,
+    /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*charitypilot-web-ci/,
+  );
   assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https:\/\/api\.charitypilot\.ie" "\$\{web_headers\}"/);
+  assert.match(
+    workflow,
+    /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' https:\/\/api\.charitypilot\.ie" "\$\{web_headers\}"/,
+  );
   assert.match(workflow, /docker rm -f charitypilot-web-smoke/);
   assert.match(workflow, /name:\s+Verify web Docker runtime dependencies/);
   assert.match(workflow, /docker run --rm --entrypoint node charitypilot-web-ci[\s\S]*require\.resolve\('next'\)/);
@@ -4094,7 +4529,10 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assertWorkflowUsesPackagePathAbsenceChecks(
     workflowStepBetween(workflow, 'Verify web Docker runtime dependencies', 'Smoke web Docker image'),
   );
-  assert.match(workflow, /const forbiddenPaths = \['src', '\.test-dist', '\.next\/cache', '\.next\/export', '\.next\/export-detail\.json', '\.next\/server\/proxy\.js', '\.next\/server\/proxy\.js\.nft\.json', 'next-codex-build', 'tsconfig\.test\.json', 'tsconfig\.tsbuildinfo', 'next-env\.d\.ts'\]/);
+  assert.match(
+    workflow,
+    /const forbiddenPaths = \['src', '\.test-dist', '\.next\/cache', '\.next\/export', '\.next\/export-detail\.json', '\.next\/server\/proxy\.js', '\.next\/server\/proxy\.js\.nft\.json', 'next-codex-build', 'tsconfig\.test\.json', 'tsconfig\.tsbuildinfo', 'next-env\.d\.ts'\]/,
+  );
   assert.match(workflow, /entry\.startsWith\('\.next-build'\)/);
   assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
 
@@ -4120,10 +4558,7 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   const workflow = readRepoFile('.github/workflows/ci.yml');
   const smokeStepEnd = workflow.indexOf('name: Smoke API Docker scheduled jobs');
   assert.notEqual(smokeStepEnd, -1, 'scheduled job smoke step must follow API smoke step');
-  const smokeStep = workflow.slice(
-    workflow.indexOf('name: Smoke API Docker image'),
-    smokeStepEnd,
-  );
+  const smokeStep = workflow.slice(workflow.indexOf('name: Smoke API Docker image'), smokeStepEnd);
 
   assert.match(smokeStep, /-e NODE_ENV=production/);
   assert.match(smokeStep, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
@@ -4131,7 +4566,10 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   assert.match(smokeStep, /-e GITHUB_ACTIONS=true/);
   assert.match(smokeStep, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(smokeStep, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
-  assert.match(smokeStep, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_ci/);
+  assert.match(
+    smokeStep,
+    /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_ci/,
+  );
   assert.match(smokeStep, /readiness_unauthorized_status/);
   assert.match(smokeStep, /test "\$\{readiness_unauthorized_status\}" = "401"/);
   assert.match(smokeStep, /x-charitypilot-readiness-key: ci-readiness-key-with-enough-entropy/);
@@ -4142,7 +4580,10 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
   assert.match(smokeStep, /disallowed_cors_headers="\$\(mktemp\)"/);
   assert.match(smokeStep, /-H "origin: https:\/\/not-charitypilot\.example"/);
-  assert.match(smokeStep, /grep -qi "\^access-control-allow-origin: https:\/\/not-charitypilot\.example" "\$\{disallowed_cors_headers\}"/);
+  assert.match(
+    smokeStep,
+    /grep -qi "\^access-control-allow-origin: https:\/\/not-charitypilot\.example" "\$\{disallowed_cors_headers\}"/,
+  );
   assert.match(smokeStep, /API Docker smoke must not allow an unapproved browser Origin/);
   assert.match(smokeStep, /register_email="api-smoke-\$\{GITHUB_SHA:-local\}@example\.com"/);
   assert.match(smokeStep, /register_payload="\$\(mktemp\)"/);
@@ -4165,8 +4606,14 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
     workflow.indexOf('name: Smoke API Docker scheduled jobs'),
     workflow.indexOf('name: Build web Docker image'),
   );
-  const deadlineRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js');
-  const cleanupRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js');
+  const deadlineRun = dockerRunForCommand(
+    jobSmokeStep,
+    'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js',
+  );
+  const cleanupRun = dockerRunForCommand(
+    jobSmokeStep,
+    'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js',
+  );
   const schedulerRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/production-scheduler.js');
 
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
@@ -4180,7 +4627,10 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
     assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
     assert.match(run, /-e CI=true/);
     assert.match(run, /-e GITHUB_ACTIONS=true/);
-    assert.match(run, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/);
+    assert.match(
+      run,
+      /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/,
+    );
   }
   assert.match(deadlineRun, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(deadlineRun, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
@@ -4211,7 +4661,10 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
   assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
-  assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
+  assert.match(
+    jobSmokeStep,
+    /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/,
+  );
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
   assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
   assert.ok(
@@ -4235,15 +4688,20 @@ test('CI validates API production env inside the built Docker image', () => {
   assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-ci[\s\S]*validateProductionEnv/);
   assert.match(workflow, /-e NODE_ENV=production/);
   assert.match(workflow, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
-  assert.match(workflow, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
+  assert.match(
+    workflow,
+    /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/,
+  );
   assert.match(workflow, /-e STRIPE_SECRET_KEY=sk_live_ci_configured_secret/);
   assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.ok(
-    workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Validate API Docker production configuration'),
+    workflow.indexOf('name: Build API Docker image') <
+      workflow.indexOf('name: Validate API Docker production configuration'),
     'API image must be built before validating production configuration inside it',
   );
   assert.ok(
-    workflow.indexOf('name: Validate API Docker production configuration') < workflow.indexOf('name: Smoke API Docker image'),
+    workflow.indexOf('name: Validate API Docker production configuration') <
+      workflow.indexOf('name: Smoke API Docker image'),
     'production configuration must be validated before the API smoke run',
   );
 });
@@ -4275,11 +4733,17 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /production variable must not contain placeholder text/);
   assert.match(workflow, /project_ref/);
   assert.match(workflow, /your-/);
-  assert.match(workflow, /NEXT_PUBLIC_API_URL must be the canonical production API origin https:\/\/api\.charitypilot\.ie/);
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_API_URL must be the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+  );
   assert.match(workflow, /Manual image releases must run from master/);
   assert.match(workflow, /Docker tag must match \[a-z0-9_\]\[a-z0-9_.-\]\{0,127\}/);
   assert.match(workflow, /docker login "\$\{REGISTRY\}"/);
-  assert.match(workflow, /docker build -f apps\/api\/Dockerfile --target migration-runner[\s\S]*-t charitypilot-api-migrations-ci \./);
+  assert.match(
+    workflow,
+    /docker build -f apps\/api\/Dockerfile --target migration-runner[\s\S]*-t charitypilot-api-migrations-ci \./,
+  );
   assert.match(workflow, /name:\s+Verify migration runner Docker runtime dependencies/);
   const migrationDependencyStep = workflow.slice(
     workflow.indexOf('name: Verify migration runner Docker runtime dependencies'),
@@ -4294,45 +4758,93 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.doesNotMatch(migrationDependencyStep, /require\.resolve\(pkg\)/);
   assertWorkflowChecksForbiddenMigrationRunnerPackages(workflow);
   assert.match(workflow, /name:\s+Audit migration runner Docker runtime dependencies/);
-  assert.match(workflow, /docker run --rm --entrypoint npm charitypilot-api-migrations-ci audit --omit=dev --audit-level=moderate/);
+  assert.match(
+    workflow,
+    /docker run --rm --entrypoint npm charitypilot-api-migrations-ci audit --omit=dev --audit-level=moderate/,
+  );
   assert.match(workflow, /const requiredPaths = \['prisma\/schema\.prisma', 'prisma\/migrations'\]/);
-  assert.match(workflow, /const forbiddenPaths = \['src', 'dist', 'prisma\/seed\.ts', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo', '\.\.\/\.\.\/apps\/web', '\.\.\/\.\.\/packages\/shared'\]/);
-  assert.match(workflow, /docker run --rm[\s\S]*charitypilot-api-migrations-ci[\s\S]*migrate status --schema prisma\/schema\.prisma/);
-  assert.match(workflow, /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./);
+  assert.match(
+    workflow,
+    /const forbiddenPaths = \['src', 'dist', 'prisma\/seed\.ts', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo', '\.\.\/\.\.\/apps\/web', '\.\.\/\.\.\/packages\/shared'\]/,
+  );
+  assert.match(
+    workflow,
+    /docker run --rm[\s\S]*charitypilot-api-migrations-ci[\s\S]*migrate status --schema prisma\/schema\.prisma/,
+  );
+  assert.match(
+    workflow,
+    /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./,
+  );
   assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assertWorkflowChecksForbiddenApiRuntimePackages(workflow);
   assertWorkflowUsesPackagePathAbsenceChecks(
     workflowStepBetween(workflow, 'Verify API Docker runtime dependencies', 'Smoke API Docker image'),
   );
-  assert.match(workflow, /const forbiddenPaths = \['src', 'prisma', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo'\]/);
+  assert.match(
+    workflow,
+    /const forbiddenPaths = \['src', 'prisma', '\.env', 'tsconfig\.json', 'tsconfig\.tsbuildinfo'\]/,
+  );
   assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
   assert.match(workflow, /api_headers="\$\(mktemp\)"/);
-  assert.match(workflow, /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/);
+  assert.match(
+    workflow,
+    /curl --fail --silent --dump-header "\$\{api_headers\}" http:\/\/127\.0\.0\.1:3002\/api\/v1\/health/,
+  );
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{api_headers\}"/);
-  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/);
-  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{api_headers\}"/);
+  assert.match(
+    workflow,
+    /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{api_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{api_headers\}"/,
+  );
   assert.match(workflow, /grep -qi "\^cache-control: no-store" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^pragma: no-cache" "\$\{api_headers\}"/);
   assert.match(workflow, /grep -qi "\^expires: 0" "\$\{api_headers\}"/);
-  assert.match(workflow, /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/);
-  assert.match(workflow, /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*-t charitypilot-web-ci \./);
+  assert.match(
+    workflow,
+    /grep -qi "\^content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'" "\$\{api_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*-t charitypilot-web-ci \./,
+  );
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
-  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*charitypilot-web-ci/);
-  assert.match(workflow, /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*charitypilot-web-ci/);
+  assert.match(
+    workflow,
+    /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*charitypilot-web-ci/,
+  );
+  assert.match(
+    workflow,
+    /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*charitypilot-web-ci/,
+  );
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^x-frame-options: DENY" "\$\{web_headers\}"/);
   assert.match(workflow, /grep -qi "\^referrer-policy: strict-origin-when-cross-origin" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/);
-  assert.match(workflow, /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' \$\{NEXT_PUBLIC_API_URL\}" "\$\{web_headers\}"/);
+  assert.match(
+    workflow,
+    /grep -qi "\^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)" "\$\{web_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /grep -qi "\^strict-transport-security: max-age=63072000; includeSubDomains; preload" "\$\{web_headers\}"/,
+  );
+  assert.match(
+    workflow,
+    /grep -qi "\^content-security-policy: .*frame-ancestors 'none'.*connect-src 'self' \$\{NEXT_PUBLIC_API_URL\}" "\$\{web_headers\}"/,
+  );
   assertWorkflowChecksForbiddenWebRuntimePackages(workflow);
   assertWorkflowUsesPackagePathAbsenceChecks(
     workflowStepBetween(workflow, 'Verify web Docker runtime dependencies', 'Smoke web Docker image'),
   );
-  assert.match(workflow, /const forbiddenPaths = \['src', '\.test-dist', '\.next\/cache', '\.next\/export', '\.next\/export-detail\.json', '\.next\/server\/proxy\.js', '\.next\/server\/proxy\.js\.nft\.json', 'next-codex-build', 'tsconfig\.test\.json', 'tsconfig\.tsbuildinfo', 'next-env\.d\.ts'\]/);
+  assert.match(
+    workflow,
+    /const forbiddenPaths = \['src', '\.test-dist', '\.next\/cache', '\.next\/export', '\.next\/export-detail\.json', '\.next\/server\/proxy\.js', '\.next\/server\/proxy\.js\.nft\.json', 'next-codex-build', 'tsconfig\.test\.json', 'tsconfig\.tsbuildinfo', 'next-env\.d\.ts'\]/,
+  );
   assert.match(workflow, /entry\.startsWith\('\.next-build'\)/);
   assert.match(workflow, /\.\.\/\.\.\/packages\/shared\/src/);
   assert.match(workflow, /docker tag charitypilot-api-ci "\$\{api_image\}"/);
@@ -4404,7 +4916,8 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
     'published image digests must be resolved before signing',
   );
   assert.ok(
-    workflow.indexOf('name: Sign published image digests') < workflow.indexOf('name: Verify published image signatures'),
+    workflow.indexOf('name: Sign published image digests') <
+      workflow.indexOf('name: Verify published image signatures'),
     'published signatures must be verified before the release job completes',
   );
 });
@@ -4442,10 +4955,7 @@ test('release workflow archives a deployable image digest manifest', () => {
     workflow.indexOf('name: Verify published image signatures') < manifestStepStart,
     'manifest must be generated only after signatures are verified',
   );
-  assert.ok(
-    manifestStepStart < uploadStepStart,
-    'manifest must be generated before upload',
-  );
+  assert.ok(manifestStepStart < uploadStepStart, 'manifest must be generated before upload');
   assert.match(runbook, /release-image-digests artifact/);
   assert.match(runbook, /release-image-digests\.env/);
   assert.match(checklist, /Release image digest manifest artifact/);
@@ -4466,7 +4976,10 @@ test('release workflow rehearses deploy preflight against generated digest manif
   assert.match(rehearsalStep, /\.env\.production\.ci/);
   assert.match(rehearsalStep, /cat > \.env\.production\.ci <<EOF/);
   assert.match(rehearsalStep, /NODE_ENV=production/);
-  assert.match(rehearsalStep, /DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/);
+  assert.match(
+    rehearsalStep,
+    /DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/,
+  );
   assert.match(rehearsalStep, /NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
   assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
   assert.match(rehearsalStep, /NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
@@ -4546,10 +5059,7 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
   const workflow = readRepoFile('.github/workflows/release-images.yml');
   const smokeStepEnd = workflow.indexOf('name: Smoke API Docker scheduled jobs');
   assert.notEqual(smokeStepEnd, -1, 'scheduled job smoke step must follow API smoke step');
-  const smokeStep = workflow.slice(
-    workflow.indexOf('name: Smoke API Docker image'),
-    smokeStepEnd,
-  );
+  const smokeStep = workflow.slice(workflow.indexOf('name: Smoke API Docker image'), smokeStepEnd);
 
   assert.match(smokeStep, /-e NODE_ENV=production/);
   assert.match(smokeStep, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
@@ -4567,7 +5077,10 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
   assert.match(smokeStep, /body\.checks\.storageBucketReachable !== false/);
   assert.match(smokeStep, /disallowed_cors_headers="\$\(mktemp\)"/);
   assert.match(smokeStep, /-H "origin: https:\/\/not-charitypilot\.example"/);
-  assert.match(smokeStep, /grep -qi "\^access-control-allow-origin: https:\/\/not-charitypilot\.example" "\$\{disallowed_cors_headers\}"/);
+  assert.match(
+    smokeStep,
+    /grep -qi "\^access-control-allow-origin: https:\/\/not-charitypilot\.example" "\$\{disallowed_cors_headers\}"/,
+  );
   assert.match(smokeStep, /API Docker smoke must not allow an unapproved browser Origin/);
   assert.match(smokeStep, /register_email="api-smoke-\$\{GITHUB_SHA:-local\}@example\.com"/);
   assert.match(smokeStep, /register_payload="\$\(mktemp\)"/);
@@ -4594,8 +5107,14 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
     workflow.indexOf('name: Smoke API Docker scheduled jobs'),
     workflow.indexOf('name: Build web Docker image'),
   );
-  const deadlineRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js');
-  const cleanupRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js');
+  const deadlineRun = dockerRunForCommand(
+    jobSmokeStep,
+    'charitypilot-api-ci node dist/jobs/send-deadline-reminders.js',
+  );
+  const cleanupRun = dockerRunForCommand(
+    jobSmokeStep,
+    'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js',
+  );
   const schedulerRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/production-scheduler.js');
 
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
@@ -4607,7 +5126,10 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
     assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
     assert.match(run, /-e CI=true/);
     assert.match(run, /-e GITHUB_ACTIONS=true/);
-    assert.match(run, /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/);
+    assert.match(
+      run,
+      /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/,
+    );
   }
   assert.match(deadlineRun, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(deadlineRun, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
@@ -4638,7 +5160,10 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(schedulerRun, /-e DOCUMENT_STORAGE_CLEANUP_LIMIT=1/);
   assert.match(schedulerRun, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
-  assert.match(jobSmokeStep, /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/);
+  assert.match(
+    jobSmokeStep,
+    /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/,
+  );
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
   assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
   assert.ok(

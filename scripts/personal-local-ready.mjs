@@ -163,7 +163,7 @@ try {
   console.log('Scope: local personal use on this computer, no Stripe, no production launch evidence.');
   console.log('This command is non-destructive except for a temporary smoke-test document upload that is deleted.');
   console.log('It may remove ignored Next.js build/cache outputs under apps/web; source and charity data are not touched.');
-  console.log('Do not use the default full E2E suite against a personal database you care about; it resets tenant/app tables.');
+  console.log('Full E2E must run through the managed npm run test:e2e runner, which creates and destroys its own disposable database; never point E2E database variables at personal data.');
 
   cleanupGeneratedWebCaches();
   npmScript('test:local-docker:smoke');

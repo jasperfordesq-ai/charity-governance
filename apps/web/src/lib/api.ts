@@ -16,7 +16,15 @@ declare module 'axios' {
   }
 }
 
-const API_URL = getApiBaseUrl();
+// Next.js only substitutes NEXT_PUBLIC_* values into browser bundles when the
+// property access is statically visible. Passing the ambient process.env object
+// through getApiBaseUrl's default parameter makes the client silently fall back
+// to the personal-development API even when an isolated URL was configured.
+const API_URL = getApiBaseUrl({
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE,
+});
 
 function redirectToLoginOnProtectedRoute() {
   if (typeof window === 'undefined' || !isProtectedAppPath(window.location.pathname)) {

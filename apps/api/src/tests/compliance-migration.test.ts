@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const migration = readFileSync(
@@ -9,10 +10,10 @@ const migration = readFileSync(
   ),
   'utf8',
 );
-const e2eDatabaseHelper = readFileSync(
-  new URL('../../../../e2e/helpers/db.ts', import.meta.url),
-  'utf8',
-);
+const require = createRequire(import.meta.url);
+const { DISPOSABLE_DATABASE_RESET_TABLES } = require(
+  '../../../../e2e/helpers/database-safety.cjs',
+) as { DISPOSABLE_DATABASE_RESET_TABLES: readonly string[] };
 const fullSignoffAuditKeys = [
   'id',
   'organisationId',
@@ -101,6 +102,6 @@ test('current approval snapshot pointers are database-bound to signoff scope and
 });
 
 test('disposable E2E reset inventory explicitly includes compliance snapshots and audit events', () => {
-  assert.match(e2eDatabaseHelper, /'ComplianceApprovalSnapshot'/);
-  assert.match(e2eDatabaseHelper, /'ComplianceAuditEvent'/);
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes('ComplianceApprovalSnapshot'));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes('ComplianceAuditEvent'));
 });

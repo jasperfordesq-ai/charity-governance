@@ -133,11 +133,25 @@ The API runs on <http://localhost:3002> and the web app on
 - **Production-tooling tests** validate the launch scripts: `npm run test:production-check`.
 - **Local Docker smoke** boots the real containerised stack and exercises auth,
   document upload/download, and the web shell: `npm run test:local-docker:smoke`.
-- **End-to-end (Playwright)** drives a real browser against the local Docker stack —
+- **End-to-end (Playwright)** drives a real browser against a runner-owned,
+  standalone Docker stack —
   register/verify/login, a compliance sign-off, document upload/download, deadlines,
   team invite/accept, and billing tier gating. One-time `npm run test:e2e:install`,
-  then `E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e` (stack must be up, and
-  the local database must be disposable or backed up). See
+  then `npm run test:e2e`. The managed runner creates a standalone UUID-bound
+  database behind dedicated loopback ports, validates the exact migration DSN
+  and an immutable private snapshot of the isolated Compose model before
+  startup, stores database/document data in exact bounded tmpfs mounts, and
+  serves a baked production web build from the read-only runner image.
+  Database, API, and web containers remain solely on an internal bridge with
+  unique reserved `.invalid` aliases; a minimal secretless TCP gateway uses
+  only those absolute names, is the only dual-homed service, and is the only
+  loopback-port publisher. Before any browser reset, the runner attests the
+  freshly built image IDs and the exact live container labels, images,
+  networks, publications, mounts, and security settings. The runner tears down and verifies its exact
+  project-scoped resources through the pinned local daemon. A teardown failure
+  makes the run red and preserves
+  the private recovery inputs; it never falls back to, layers over, or resets
+  the personal local database. See
   [`e2e/README.md`](e2e/README.md).
 
 ---

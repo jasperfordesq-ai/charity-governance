@@ -42,7 +42,7 @@ const LOCAL_PERSONAL_READINESS = Object.freeze({
     'core personal-use browser smoke with billing safely disabled when Stripe is absent',
   ]),
   warning:
-    'Do not run the default full E2E suite against a personal database you care about; it can reset tenant/app tables.',
+    'Run destructive browser tests only through npm run test:e2e. The managed runner provisions and proves a separate disposable database and refuses personal targets; never bypass it with direct Playwright or weakened identity guards.',
   notLaunchEvidence:
     'This protects local personal use only. It does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.',
 });

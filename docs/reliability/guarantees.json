@@ -3656,11 +3656,11 @@
     "surface": "web",
     "group": "web-platform",
     "concern": "auth-session",
-    "guarantee": "Development CSP keeps the local API and websocket connect sources so local dev still works.",
+    "guarantee": "Development CSP selects the exact configured loopback API and websocket origins without retaining personal defaults.",
     "status": "covered",
     "testType": "unit",
     "testFile": "apps/web/src/lib/content-security-policy.test.ts",
-    "testTitle": "development CSP keeps local API and websocket connect sources",
+    "testTitle": "development CSP selects the configured isolated API origin without retaining the personal API",
     "gapDescription": "",
     "proposedTitle": ""
   },

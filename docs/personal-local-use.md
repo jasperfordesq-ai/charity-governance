@@ -30,17 +30,28 @@ The browser pass is intentionally a local personal-use smoke, not a full route
 inventory. Use the responsive and accessibility suites when you need exhaustive
 page/theme coverage.
 
-The command intentionally does not run the default full Playwright suite. The
-default E2E suite resets tenant/app tables and is only safe before you enter
-real personal records. For destructive pre-use QA, start the local stack and run:
+The command intentionally does not run the full Playwright suite. The managed
+E2E runner starts a separate standalone stack with a fresh UUID-bound database,
+dedicated loopback ports, tmpfs database/document storage, and a baked
+production web build served from the read-only runner image, with no host mount
+or persistent volume. Database, API, and web remain internal-only;
+each has a unique reserved `.invalid` alias, and one minimal secretless TCP
+gateway uses only those absolute internal names while publishing the three
+loopback ports from a separate project-scoped edge bridge. Before startup the
+runner validates one private immutable Compose snapshot, the exact topology,
+health/tmpfs bounds, and migration DSN, and pins all Docker work to a proven
+local daemon. After startup and before any browser reset it attests the exact
+fresh image IDs and live container isolation. For broader browser QA, run:
 
 ```bash
-E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e
+npm run test:e2e
 ```
 
-Use `E2E_ALLOW_LOCAL_DB_RESET=true` only after backing up records you care about
-or when the local database is disposable. Without that flag, the E2E harness
-refuses to reset the local database.
+The old boolean reset flag is retired and never authorises reset. Do not
+hand-craft a test DSN or point direct Playwright at ports `3002`, `3003`, or
+`5434`; the managed runner rejects ambient/personal targets and keeps personal
+records isolated from browser-test data. A cleanup or residue failure makes the
+E2E run red and retains recovery inputs instead of silently declaring success.
 
 ## Daily Personal-Use Routine
 

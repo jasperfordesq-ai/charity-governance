@@ -1,5 +1,17 @@
-import { test as base, expect, type Page, type Locator, type BrowserContext } from '@playwright/test';
+import {
+  test as base,
+  expect,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import { deployedQaOwnerCredentials, IS_DEPLOYED_QA } from './env';
+import {
+  createBrowserOriginFence,
+  type BrowserOriginFence,
+} from './helpers/browser-origin-fence';
 import { createAuthenticatedStorageState, createVerifiedOwner } from './helpers/db';
 import { gotoWithDevServerRetry } from './helpers/navigation';
 
@@ -255,24 +267,75 @@ export async function acceptInviteViaUi(
 interface Fixtures {
   /** A page already authenticated as the shared worker OWNER. */
   ownerPage: Page;
+  /** Creates a context that cannot contact any non-audited origin. */
+  newFencedContext: (options?: BrowserContextOptions) => Promise<BrowserContext>;
+  _browserOriginCheck: void;
 }
 
 interface WorkerFixtures {
+  browserOriginFence: BrowserOriginFence;
   /** The shared verified OWNER, created once per worker (keeps us under the 5/min auth rate limit). */
   owner: OwnerInfo;
 }
 
-export const test = base.extend<Fixtures, WorkerFixtures>({
-  owner: [
-    async ({ browser }, use) => {
-      if (IS_DEPLOYED_QA) {
-        const context = await browser.newContext();
-        const page = await context.newPage();
-        const existingOwner = deployedQaOwnerCredentials();
-        await loginViaUi(page, existingOwner.email, existingOwner.password);
+async function openFencedContext(
+  browser: Browser,
+  browserOriginFence: BrowserOriginFence,
+  options: BrowserContextOptions = {},
+): Promise<BrowserContext> {
+  const context = await browser.newContext({
+    ...options,
+    baseURL: browserOriginFence.webOrigin,
+    serviceWorkers: 'block',
+  });
+  try {
+    await browserOriginFence.install(context);
+    return context;
+  } catch (error) {
+    await context.close().catch(() => undefined);
+    throw error;
+  }
+}
 
-        const storageState = await context.storageState();
-        await context.close();
+export const test = base.extend<Fixtures, WorkerFixtures>({
+  browserOriginFence: [
+    async ({}, use) => {
+      const fence = createBrowserOriginFence();
+      await use(fence);
+      fence.assertNoViolations();
+    },
+    { scope: 'worker' },
+  ],
+
+  _browserOriginCheck: [
+    async ({ browserOriginFence }, use) => {
+      const checkpoint = browserOriginFence.checkpoint();
+      await use();
+      browserOriginFence.assertNoViolationsSince(checkpoint);
+    },
+    { auto: true },
+  ],
+
+  context: async ({ context, browserOriginFence }, use) => {
+    await browserOriginFence.install(context);
+    await use(context);
+  },
+
+  owner: [
+    async ({ browser, browserOriginFence }, use) => {
+      if (IS_DEPLOYED_QA) {
+        const checkpoint = browserOriginFence.checkpoint();
+        const context = await openFencedContext(browser, browserOriginFence);
+        let storageState: Awaited<ReturnType<BrowserContext['storageState']>>;
+        const existingOwner = deployedQaOwnerCredentials();
+        try {
+          const page = await context.newPage();
+          await loginViaUi(page, existingOwner.email, existingOwner.password);
+          storageState = await context.storageState();
+        } finally {
+          await context.close();
+        }
+        browserOriginFence.assertNoViolationsSince(checkpoint);
 
         await use({
           email: existingOwner.email,
@@ -310,7 +373,19 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     { scope: 'worker', timeout: AUTHENTICATED_OWNER_SETUP_TIMEOUT_MS },
   ],
 
-  ownerPage: async ({ browser, owner }, use) => {
+  newFencedContext: async ({ browser, browserOriginFence }, use) => {
+    const contexts = new Set<BrowserContext>();
+    await use(async (options = {}) => {
+      const context = await openFencedContext(browser, browserOriginFence, options);
+      contexts.add(context);
+      return context;
+    });
+    for (const context of contexts) {
+      await context.close().catch(() => undefined);
+    }
+  },
+
+  ownerPage: async ({ newFencedContext, owner }, use) => {
     const storageState = IS_DEPLOYED_QA
       ? owner.storageState
       : await createAuthenticatedStorageState({
@@ -318,7 +393,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
           organisationId: owner.organisationId,
           role: 'OWNER',
         });
-    const context = await browser.newContext({ storageState });
+    const context = await newFencedContext({ storageState });
     const page = await context.newPage();
     await use(page);
     await context.close();

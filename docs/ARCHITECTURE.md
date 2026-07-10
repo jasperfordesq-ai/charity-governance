@@ -96,8 +96,11 @@ path — is in [System Overview](architecture/01-system-overview.md)._
 - **Unit tests** (Node's built-in `node:test`, compiled first): `npx turbo test`.
 - **Local Docker smoke** (boots the real stack and exercises auth + document
   upload/download): `npm run test:local-docker:smoke`.
-- **End-to-end browser tests** (Playwright against the local Docker stack):
-  see [`e2e/README.md`](../e2e/README.md) and `npm run test:e2e`.
+- **End-to-end browser tests** (Playwright against a runner-owned standalone
+  stack whose internal-only app/database services are exposed through one
+  minimal secretless loopback TCP gateway, never the persistent development
+  database): see
+  [`e2e/README.md`](../e2e/README.md) and `npm run test:e2e`.
 
 ## The two-gate model
 

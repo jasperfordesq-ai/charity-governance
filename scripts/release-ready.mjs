@@ -5,12 +5,9 @@
 // summary with counts. Exits non-zero if any gate fails, so CI and humans can trust a
 // single green/red signal.
 //
-//   npm run release:ready              # every gate incl. Playwright E2E (needs the stack up)
-//   npm run release:ready -- --no-e2e  # skip the E2E gate (e.g. stack not running)
+//   npm run release:ready              # every gate incl. isolated Playwright E2E
+//   npm run release:ready -- --no-e2e  # skip the isolated E2E gate
 //   npm run release:ready -- --no-build
-//
-// E2E needs the local Docker stack:
-//   docker compose -f compose.yml -f compose.local.yml up
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -28,13 +25,8 @@ for (const arg of args) {
 const noE2e = args.includes('--no-e2e');
 const noBuild = args.includes('--no-build');
 
-const WEB_URL = process.env.E2E_WEB_URL ?? 'http://localhost:3003';
-const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
-const STACK_REACHABILITY_TOTAL_TIMEOUT_MS = 90000;
-const STACK_REACHABILITY_REQUEST_TIMEOUT_MS = 10000;
-const STACK_REACHABILITY_POLL_MS = 2000;
 const RELEASE_READY_GATE_TIMEOUT_MS = positiveIntEnv('RELEASE_READY_GATE_TIMEOUT_MS', 900000);
-const RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv('RELEASE_READY_E2E_TIMEOUT_MS', 1500000);
+const RELEASE_READY_E2E_TIMEOUT_MS = positiveIntEnv('RELEASE_READY_E2E_TIMEOUT_MS', 2400000);
 
 function positiveIntEnv(name, fallback) {
   const raw = process.env[name];
@@ -44,66 +36,15 @@ function positiveIntEnv(name, fallback) {
 }
 
 function cleanupProcessTree(pid) {
-  if (process.platform !== 'win32' || !pid) {
-    return;
-  }
+  if (!pid) return;
   try {
-    spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
-  } catch {
-    // Best-effort cleanup only; the gate remains failed either way.
-  }
-}
-
-function cleanupRepoPlaywrightProcesses() {
-  if (process.platform !== 'win32') {
-    return;
-  }
-
-  const escapedRoot = ROOT.replaceAll("'", "''");
-  const command = [
-    `$repoRoot = '${escapedRoot}'`,
-    "$patterns = @('test:e2e', '@playwright\\test', 'playwright\\lib\\worker\\workerProcessEntry')",
-    '$processes = @(Get-CimInstance Win32_Process -Filter "name = \'node.exe\'")',
-    '$byId = @{}',
-    'foreach ($process in $processes) { $byId[[int]$process.ProcessId] = $process }',
-    '$ids = @{}',
-    '$repoMatchedProcessIds = @()',
-    'foreach ($process in $processes) {',
-    '  $commandLine = [string]$process.CommandLine',
-    '  if (-not $commandLine -or $commandLine -notlike "*$repoRoot*") { continue }',
-    '  foreach ($pattern in $patterns) {',
-    '    if ($commandLine -like "*$pattern*") {',
-    '      $repoMatchedProcessIds += [int]$process.ProcessId',
-    '      break',
-    '    }',
-    '  }',
-    '}',
-    'foreach ($processId in $repoMatchedProcessIds) {',
-    '  $currentId = [int]$processId',
-    '  while ($byId.ContainsKey($currentId) -and -not $ids.ContainsKey($currentId)) {',
-    '    $ids[$currentId] = $true',
-    '    $currentId = [int]$byId[$currentId].ParentProcessId',
-    '  }',
-    '}',
-    '$queue = New-Object System.Collections.Queue',
-    'foreach ($processId in @($ids.Keys)) { [void]$queue.Enqueue([int]$processId) }',
-    'while ($queue.Count -gt 0) {',
-    '  $parentId = [int]$queue.Dequeue()',
-    '  foreach ($child in $processes | Where-Object { [int]$_.ParentProcessId -eq $parentId }) {',
-    '    $childId = [int]$child.ProcessId',
-    '    if (-not $ids.ContainsKey($childId)) {',
-    '      $ids[$childId] = $true',
-    '      [void]$queue.Enqueue($childId)',
-    '    }',
-    '  }',
-    '}',
-    'foreach ($processId in @($ids.Keys)) { Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue }',
-  ].join('; ');
-
-  try {
-    spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
-      stdio: 'ignore',
-    });
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      // Each POSIX gate is its own process group. If the outer timeout expires
+      // after the E2E runner's cleanup margin, kill only that exact gate tree.
+      process.kill(-pid, 'SIGKILL');
+    }
   } catch {
     // Best-effort cleanup only; the gate remains failed either way.
   }
@@ -137,8 +78,9 @@ function run(name, cmd, cmdArgs, opts = {}) {
   const res = spawnSync(resolved.cmd, resolved.cmdArgs, {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env, ...(opts.env ?? {}) },
+    env: opts.replaceEnv ? opts.env : { ...process.env, ...(opts.env ?? {}) },
     timeout: opts.timeoutMs ?? RELEASE_READY_GATE_TIMEOUT_MS,
+    detached: process.platform !== 'win32',
   });
   const ms = Date.now() - started;
   const timedOut = res.error?.code === 'ETIMEDOUT';
@@ -147,36 +89,41 @@ function run(name, cmd, cmdArgs, opts = {}) {
     process.stdout.write(`Gate timed out after ${(timeoutMs / 1000).toFixed(0)}s.\n`);
   }
   const ok = res.status === 0;
-  if (!ok && opts.cleanupProcessTreeOnFailure && !timedOut) {
-    cleanupProcessTree(res.pid);
-  }
-  if (!ok && opts.cleanupRepoPlaywrightProcessesOnFailure) {
-    cleanupRepoPlaywrightProcesses();
-  }
   return { name, ok, ms, skipped: false };
 }
 
-async function probeReachable(url) {
-  try {
-    const res = await fetch(url, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(STACK_REACHABILITY_REQUEST_TIMEOUT_MS),
-    });
-    return res.status < 500;
-  } catch {
-    return false;
+function managedLocalE2eEnvironment(timeoutMs) {
+  const env = { ...process.env };
+  for (const key of [
+    'E2E_ALLOW_LOCAL_DB_RESET',
+    'E2E_DEPLOYED_QA',
+    'E2E_DATABASE_URL',
+    'E2E_DATABASE_INSTANCE_ID',
+    'E2E_DESTRUCTIVE_RESET_CONFIRMATION',
+    'E2E_REMOTE_DATABASE_RESET_OVERRIDE',
+    'E2E_REMOTE_DATABASE_HOST',
+    'E2E_DATABASE_SERVER_ADDRESS',
+    'E2E_BOOTSTRAP_PASSWORD',
+    'E2E_DATABASE_RUNNER_PASSWORD',
+    'E2E_JWT_SECRET',
+    'E2E_READINESS_API_KEY',
+    'E2E_AUTH_COOKIE_DOMAIN',
+    'E2E_DATABASE_EXPECTED_COMMENT',
+    'E2E_DATABASE_EXPECTED_SCHEMA',
+    'E2E_APP_IMAGE',
+    'E2E_DATABASE_IMAGE',
+    'E2E_GATEWAY_IMAGE',
+    'E2E_BUILD_CONTEXT',
+    'E2E_API_URL',
+    'E2E_WEB_URL',
+  ]) {
+    delete env[key];
   }
-}
-
-async function waitUntilReachable(url) {
-  const deadline = Date.now() + STACK_REACHABILITY_TOTAL_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (await probeReachable(url)) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, STACK_REACHABILITY_POLL_MS));
-  }
-  return false;
+  env.E2E_EXECUTION_MODE = 'local-disposable';
+  env.E2E_MANAGED_LOCAL_RUNNER = 'true';
+  env.E2E_RELEASE_READY = 'true';
+  env.E2E_RUNNER_TIMEOUT_MS = String(timeoutMs);
+  return env;
 }
 
 const results = [];
@@ -198,31 +145,17 @@ results.push(run('Dependency audit', 'npm', ['audit', '--omit=dev', '--audit-lev
 // 6. Unified reliability ledger (api + web) - verifies every covered guarantee links to a passing test
 results.push(run('Reliability ledger (api + web)', 'npm', ['run', 'reliability:report']));
 
-// 7. Playwright E2E against the local Docker stack
+// 7. Playwright E2E against a fresh runner-owned disposable stack. The runner
+// generates the database identity and credentials; release:ready cannot forward
+// ambient reset authority or select remote-destructive mode.
 if (noE2e) {
   results.push({ name: 'End-to-end (Playwright)', ok: true, ms: 0, skipped: true });
 } else {
-  const [apiUp, webUp] = await Promise.all([
-    waitUntilReachable(`${API_URL}/api/v1/health`),
-    waitUntilReachable(`${WEB_URL}/`),
-  ]);
-  const up = apiUp && webUp;
-  if (!up) {
-    process.stdout.write(
-      `\n-- End-to-end (Playwright) --\n` +
-      `Stack not reachable at ${WEB_URL} / ${API_URL}.\n` +
-      `Start it with:  docker compose -f compose.yml -f compose.local.yml up\n` +
-      `(or re-run with --no-e2e to skip this gate)\n`,
-    );
-    results.push({ name: 'End-to-end (Playwright)', ok: false, ms: 0, skipped: false });
-  } else {
-    results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], {
-      timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS,
-      env: { E2E_ALLOW_LOCAL_DB_RESET: 'true' },
-      cleanupProcessTreeOnFailure: true,
-      cleanupRepoPlaywrightProcessesOnFailure: true,
-    }));
-  }
+  results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], {
+    timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS + 1200000,
+    env: managedLocalE2eEnvironment(RELEASE_READY_E2E_TIMEOUT_MS),
+    replaceEnv: true,
+  }));
 }
 
 // ---- summary ----

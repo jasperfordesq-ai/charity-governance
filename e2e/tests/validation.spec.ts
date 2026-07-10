@@ -1,6 +1,38 @@
 import { test, expect, uniqueEmail, reliableFill } from '../fixtures';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
+test.describe('Isolated browser/API binding', () => {
+  test('authenticated hydration uses the exact fenced API and disposable owner', async ({
+    ownerPage,
+    owner,
+    browserOriginFence,
+  }) => {
+    const authUrl = `${browserOriginFence.apiOrigin}/api/v1/auth/me`;
+    const authResponse = ownerPage.waitForResponse(
+      (response) => response.url() === authUrl && response.request().method() === 'GET',
+      { timeout: 120_000 },
+    );
+
+    await gotoWithDevServerRetry(ownerPage, '/dashboard');
+    const response = await authResponse;
+    expect(response.status()).toBe(200);
+    expect(response.request().headers().origin).toBe(browserOriginFence.webOrigin);
+    expect(response.headers()['access-control-allow-origin']).toBe(browserOriginFence.webOrigin);
+
+    const user = (await response.json()) as {
+      id?: string;
+      email?: string;
+      organisationId?: string;
+    };
+    expect(user.id).toBe(owner.userId);
+    expect(user.email).toBe(owner.email);
+    expect(user.organisationId).toBe(owner.organisationId);
+    await expect(ownerPage.getByRole('heading', { name: /Welcome back/ })).toBeVisible({
+      timeout: 120_000,
+    });
+  });
+});
+
 /**
  * Concern: input-validation parity. The register form now validates with the SAME shared
  * Zod schema the server uses. A long-but-weak password (8 lowercase letters) passes a

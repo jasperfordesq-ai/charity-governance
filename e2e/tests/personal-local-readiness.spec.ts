@@ -1,7 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { PERSONAL_LOCAL_API_BASE_URL } from '../personal-local.config';
-import { loginViaUi } from '../fixtures';
-import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 const LOCAL_ADMIN_EMAIL = process.env.CHARITYPILOT_LOCAL_ADMIN_EMAIL ?? 'admin@charitypilot.local';
 const LOCAL_ADMIN_PASSWORD = process.env.CHARITYPILOT_LOCAL_ADMIN_PASSWORD ?? 'LocalAdmin123!';
@@ -12,6 +10,61 @@ const ROUTES = [
   { path: '/billing', heading: /Billing & Subscription/ },
   { path: '/export', heading: /Export/ },
 ] as const;
+
+async function reliablePersonalFill(locator: Locator, value: string): Promise<void> {
+  await expect(async () => {
+    await locator.fill('');
+    await locator.fill(value);
+    await expect(locator).toHaveValue(value, { timeout: 1_500 });
+  }).toPass({ timeout: 15_000 });
+}
+
+async function gotoPersonalRoute(
+  page: Page,
+  path: string,
+  options: Parameters<Page['goto']>[1] = {},
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await page.goto(path, { waitUntil: 'domcontentloaded', ...options });
+      if (response && response.status() >= 500) {
+        throw new Error(`Personal local route returned HTTP ${response.status()}.`);
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await page.waitForTimeout(2_000);
+    }
+  }
+  throw lastError;
+}
+
+async function loginToPersonalStack(page: Page): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem('cookie-consent', 'declined'));
+  await gotoPersonalRoute(page, '/login');
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible({ timeout: 60_000 });
+    await reliablePersonalFill(page.getByLabel('Email address'), LOCAL_ADMIN_EMAIL);
+    await reliablePersonalFill(page.getByLabel('Password', { exact: true }), LOCAL_ADMIN_PASSWORD);
+    const loginResponse = page
+      .waitForResponse(
+        (response) => /\/api\/v1\/auth\/login/.test(response.url()) && response.request().method() === 'POST',
+        { timeout: 10_000 },
+      )
+      .catch(() => null);
+    await page.getByRole('button', { name: 'Sign in' }).click({ noWaitAfter: true });
+    const response = await loginResponse;
+    if (response?.ok()) {
+      await page.waitForURL(/\/dashboard/, { timeout: 120_000 });
+      return;
+    }
+    await gotoPersonalRoute(page, '/login');
+  }
+
+  throw new Error('Personal local login never produced a successful API response.');
+}
 
 async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await page.evaluate((nextTheme) => {
@@ -43,10 +96,10 @@ test.describe('Personal local readiness', () => {
     const health = await page.request.get(`${PERSONAL_LOCAL_API_BASE_URL}/api/v1/health`);
     expect(health.ok()).toBe(true);
 
-    await loginViaUi(page, LOCAL_ADMIN_EMAIL, LOCAL_ADMIN_PASSWORD);
+    await loginToPersonalStack(page);
 
     for (const route of ROUTES) {
-      await gotoWithDevServerRetry(page, route.path, { waitUntil: 'commit', timeout: 180_000 });
+      await gotoPersonalRoute(page, route.path, { waitUntil: 'commit', timeout: 180_000 });
       await expect(page.getByRole('heading', { name: route.heading })).toBeVisible({ timeout: 120_000 });
       await applyTheme(page, 'light');
       await expectRenderable(page, `${route.path} light`);
@@ -54,7 +107,7 @@ test.describe('Personal local readiness', () => {
       await expectRenderable(page, `${route.path} dark`);
     }
 
-    await gotoWithDevServerRetry(page, '/billing', { waitUntil: 'commit', timeout: 180_000 });
+    await gotoPersonalRoute(page, '/billing', { waitUntil: 'commit', timeout: 180_000 });
     await expect(page.getByRole('heading', { name: 'Billing setup is temporarily unavailable' })).toBeVisible({
       timeout: 60_000,
     });

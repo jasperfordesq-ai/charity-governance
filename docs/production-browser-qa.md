@@ -8,8 +8,8 @@ Do not use real charity records for launch QA. Use an approved non-sensitive tes
 
 These local checks do not replace deployed production QA, but they should be green before booking a production browser run:
 
-- [ ] `E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive` completed against the local Docker stack, or all four focused route chunks below completed with the same reset opt-in and their transcripts were kept together as one local responsive evidence set.
-- [ ] `E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e -- tests/accessibility.spec.ts` completed against the local Docker stack.
+- [ ] `npm run test:e2e:responsive` completed through the managed isolated runner, or all four focused route chunks below completed through that runner and their transcripts were kept together as one local responsive evidence set.
+- [ ] `npm run test:e2e -- tests/accessibility.spec.ts` completed through the managed isolated runner.
 - [ ] Deployed browser QA credentials exist for an approved non-sensitive test workspace with owner/admin access.
 - [ ] `npm run check:production:browser-qa-env` passes in the same shell that will run deployed Playwright checks. Use `npm run check:production:browser-qa-env -- --json` for a redacted machine-readable preflight transcript, and record the command plus `Deployed browser QA environment preflight passed` in `browserQa.checks.browser-qa-completed`.
 - [ ] Deployed responsive smoke completed with `E2E_DEPLOYED_QA=true`, `E2E_WEB_URL`, `E2E_API_URL`, `E2E_OWNER_EMAIL`, and `E2E_OWNER_PASSWORD` supplied from the secret store, either as one full run or as all four focused route chunks below.
@@ -17,12 +17,15 @@ These local checks do not replace deployed production QA, but they should be gre
 - [ ] Cross-browser deployed responsive and accessibility smoke completed where runner support exists for Chromium desktop, Chromium mobile, Firefox, and WebKit, with evidence recorded in `browserQa.checks.cross-browser-coverage`.
 - [ ] Real-device or cloud-device iOS Safari evidence completed and recorded in `browserQa.checks.ios-safari-device-coverage`.
 
-Local browser preflight resets tenant/app tables. Use a disposable local database
-or back it up first, then opt in explicitly:
+Local browser preflight resets only the runner-created UUID-bound disposable
+database after direct identity and keyed API-binding proof. Its exact migration
+DSN and standalone Compose model are checked before startup, and it never layers
+over the personal development stack. Cleanup residue is a failed preflight, not
+a green browser result:
 
 ```bash
-E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e:responsive
-E2E_ALLOW_LOCAL_DB_RESET=true npm run test:e2e -- tests/accessibility.spec.ts
+npm run test:e2e:responsive
+npm run test:e2e -- tests/accessibility.spec.ts
 ```
 
 In the examples below, replace the `SECRET_STORE_*` labels with values loaded
@@ -99,11 +102,11 @@ E2E_OWNER_PASSWORD=SECRET_STORE_E2E_OWNER_PASSWORD \
 npm run test:e2e:responsive:dashboard:mobile
 ```
 
-On constrained local Docker hosts, Next dev-mode route compilation can make the
-best-effort warm-up slower than the focused route evidence you are trying to
-collect. For local-only troubleshooting, set `E2E_SKIP_ROUTE_WARMING=true` or
-lower `E2E_ROUTE_WARM_TIMEOUT_MS` / `E2E_ROUTE_WARM_BUDGET_MS` before running a
-focused chunk. Do not use that as a substitute for deployed production QA; the
+The managed local stack serves a precompiled production web build. Its
+best-effort public-route readiness sweep can still be shortened for a focused
+diagnostic run with `E2E_SKIP_ROUTE_WARMING=true` or lower
+`E2E_ROUTE_WARM_TIMEOUT_MS` / `E2E_ROUTE_WARM_BUDGET_MS`. Do not use that as a
+substitute for the normal full local suite or for deployed production QA; the
 launch ledger still requires deployed HTTPS evidence.
 
 If the responsive or accessibility suite reports an HTTP 500, a Next.js/runtime

@@ -19,7 +19,7 @@ Generated: 2026-07-10 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 101 | 0 | 0 | 7 | 108 |
 | **Total** | **374** | **0** | **0** | **21** | **395** |
 
-**API suite:** 477 passing, 0 failing. **Web suite:** 272 passing, 0 failing. **E2E:** 22 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 488 passing, 0 failing. **Web suite:** 295 passing, 0 failing. **E2E:** 23 Playwright titles linked (executed by the CI E2E gate).
 
 **Linkage:** 374/374 covered guarantees verified against a passing/linked test.
 
@@ -459,7 +459,7 @@ _9 guarantees - covered 9_
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
 > allow-listing, error redaction); Playwright E2E (<sup>e2e</sup>) proves rendered behaviour and
-> accessibility against the local Docker stack.
+> accessibility against the managed runner-owned disposable Docker stack.
 
 ### platform - proxy / CSP / API client / session refresh
 
@@ -476,7 +476,7 @@ _49 guarantees - covered 49_
 | Auth & session integrity | An unauthenticated request to a protected app route is redirected to /login?next=<path> at the edge (proxy), before any protected page renders. | covered | `an unauthenticated visit to a protected route redirects to login with a next param` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
 | Auth & session integrity | Production CSP connect-src trusts only the canonical production API origin. | covered | `production CSP uses only the canonical API connect source`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | Production CSP falls back to the default API origin instead of trusting a non-canonical connect source. | covered | `production CSP falls back instead of trusting non-canonical API connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
-| Auth & session integrity | Development CSP keeps the local API and websocket connect sources so local dev still works. | covered | `development CSP keeps local API and websocket connect sources`<br/><sub>lib/content-security-policy.test.ts</sub> |
+| Auth & session integrity | Development CSP selects the exact configured loopback API and websocket origins without retaining personal defaults. | covered | `development CSP selects the configured isolated API origin without retaining the personal API`<br/><sub>lib/content-security-policy.test.ts</sub> |
 | Auth & session integrity | In production the API base URL must be explicitly set, https, origin-only, and the canonical https://api.charitypilot.ie origin — otherwise it is rejected. | covered | `requires an explicit API URL in production`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | A non-production (http) API URL is rejected in production. | covered | `rejects non-production API URLs in production`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | A request that still 401s after a refresh is rejected and not retried again — no infinite refresh/retry loop. | covered | `a request that still 401s after a refresh is rejected (no infinite retry loop)`<br/><sub>lib/api.test.ts</sub> |

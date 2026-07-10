@@ -130,7 +130,8 @@ every interactive control with visible focus on the primary journeys.
 
 Phase 5 — Make the ledger SELF-ENFORCING in CI. Wire ALL gates into
 .github/workflows/ci.yml: lint, build, turbo test, npm audit --omit=dev, the unified
-reliability:report (api + web), the Playwright E2E suite against the local Docker stack,
+reliability:report (api + web), the Playwright E2E suite through its runner-owned
+isolated Docker stack,
 and the security scan. Add one `npm run release:ready` that runs every gate and prints a
 single PASS/FAIL with counts. Link every new ledger row to its proving test and
 regenerate docs/RELIABILITY.md. DoD: a single command proves the whole platform green,

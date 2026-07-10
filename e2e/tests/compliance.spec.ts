@@ -61,14 +61,18 @@ test.describe('Compliance', () => {
     await ownerPage.getByLabel('Minute reference').fill(`Board minutes 20 May ${YEAR}, item 6`);
     await ownerPage.getByRole('textbox', { name: 'Approved by', exact: true }).fill('Jane Chairperson');
 
-    await ownerPage.getByRole('button', { name: 'Save sign-off' }).click();
-    await expect(ownerPage.getByText(/Resolve Compliance Record readiness blockers before board approval/)).toBeVisible();
+    const saveSignoff = ownerPage.getByRole('button', { name: 'Save sign-off' });
+    await expect(
+      ownerPage.getByRole('heading', { name: 'Readiness blockers prevent board approval', exact: true }),
+    ).toBeVisible();
+    await expect(saveSignoff).toBeDisabled();
 
     await chooseApprovalStatus(ownerPage, 'Ready for board review');
+    await expect(saveSignoff).toBeEnabled();
     const signoffPut = ownerPage.waitForResponse(
       (r) => /\/compliance\/signoff/.test(r.url()) && r.request().method() === 'PUT',
     );
-    await ownerPage.getByRole('button', { name: 'Save sign-off' }).click();
+    await saveSignoff.click();
     const signoffResp = await signoffPut;
     expect(signoffResp.status()).toBe(200);
 
@@ -90,7 +94,7 @@ test.describe('Compliance', () => {
       .fill(`Pending navigation guard exercised at ${Date.now()}.`);
     await ownerPage.getByRole('link', { name: 'Documents' }).click();
 
-    const dialog = ownerPage.getByRole('dialog', { name: 'Compliance edits are still saving' });
+    const dialog = ownerPage.getByRole('dialog', { name: 'Compliance edits are not fully saved' });
     await expect(dialog).toBeVisible({ timeout: 60_000 });
     await expect(ownerPage).toHaveURL(new RegExp(`/compliance/${principleId}`));
 

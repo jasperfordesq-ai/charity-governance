@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getApiBaseUrl } from './api-config';
+import { getApiBaseUrl, getServerApiBaseUrl } from './api-config';
 
 test('uses explicit API URL after trimming a trailing slash', () => {
   assert.equal(
@@ -50,6 +50,88 @@ test('rejects API URLs with paths in production', () => {
   );
 });
 
+test('isolated production E2E accepts only its exact browser and internal API origins', () => {
+  const env = {
+    NODE_ENV: 'production',
+    NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: 'local-disposable',
+    NEXT_PUBLIC_API_URL: 'http://127.0.0.1:3302/',
+    CHARITYPILOT_INTERNAL_API_URL: 'http://api:3302/',
+  };
+
+  assert.equal(getApiBaseUrl(env), 'http://127.0.0.1:3302');
+  assert.equal(getServerApiBaseUrl(env), 'http://api:3302');
+});
+
+test('isolated production E2E rejects every browser API origin except its exact loopback binding', () => {
+  for (const NEXT_PUBLIC_API_URL of [
+    'http://localhost:3302',
+    'http://127.0.0.1:3002',
+    'http://127.0.0.1:3302/api/v1',
+    'http://127.0.0.1:3302?target=personal',
+    'http://127.0.0.1:3302#fragment',
+    'http://user@127.0.0.1:3302',
+    'http://api:3302',
+    'https://api.charitypilot.ie',
+  ]) {
+    assert.throws(
+      () => getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: 'local-disposable',
+        NEXT_PUBLIC_API_URL,
+      }),
+      /must use the exact isolated E2E browser origin http:\/\/127\.0\.0\.1:3302/,
+      NEXT_PUBLIC_API_URL,
+    );
+  }
+});
+
+test('isolated production E2E requires its exact internal service origin', () => {
+  const baseEnv = {
+    NODE_ENV: 'production',
+    NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: 'local-disposable',
+    NEXT_PUBLIC_API_URL: 'http://127.0.0.1:3302',
+  };
+
+  assert.throws(
+    () => getServerApiBaseUrl(baseEnv),
+    /CHARITYPILOT_INTERNAL_API_URL must be set for isolated production E2E/,
+  );
+
+  for (const CHARITYPILOT_INTERNAL_API_URL of [
+    'http://localhost:3302',
+    'http://api:3002',
+    'http://api:3302/api/v1',
+    'https://api.charitypilot.ie',
+  ]) {
+    assert.throws(
+      () => getServerApiBaseUrl({ ...baseEnv, CHARITYPILOT_INTERNAL_API_URL }),
+      /must use the exact isolated E2E internal origin http:\/\/api:3302/,
+      CHARITYPILOT_INTERNAL_API_URL,
+    );
+  }
+});
+
+test('a lookalike isolated marker cannot bypass canonical production validation', () => {
+  assert.throws(
+    () => getApiBaseUrl({
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: 'local-disposable-lookalike',
+      NEXT_PUBLIC_API_URL: 'http://127.0.0.1:3302',
+    }),
+    /NEXT_PUBLIC_API_URL must use https:\/\/ in production/,
+  );
+});
+
 test('keeps the local Docker API fallback for local development only', () => {
   assert.equal(getApiBaseUrl({ NODE_ENV: 'development' }), 'http://localhost:3002');
+});
+
+test('normalizes an explicit isolated loopback API URL in development', () => {
+  assert.equal(
+    getApiBaseUrl({
+      NODE_ENV: 'development',
+      NEXT_PUBLIC_API_URL: 'http://127.0.0.1:3302/',
+    }),
+    'http://127.0.0.1:3302',
+  );
 });

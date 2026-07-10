@@ -1,8 +1,8 @@
-import type { FastifyRequest, FastifyReply } from 'fastify';
-import { verifyAccessToken, type TokenPayload } from '../utils/jwt.js';
-import { getAccessTokenFromRequest } from '../utils/auth-cookies.js';
+import type { FastifyRequest, FastifyReply } from "fastify";
+import { verifyAccessToken, type TokenPayload } from "../utils/jwt.js";
+import { getAccessTokenFromRequest } from "../utils/auth-request-credential.js";
 
-declare module 'fastify' {
+declare module "fastify" {
   interface FastifyRequest {
     user: TokenPayload;
   }
@@ -13,12 +13,15 @@ async function authenticateRequest(
   reply: FastifyReply,
   options: { allowUnverified: boolean },
 ): Promise<void> {
-  const authHeader = request.headers.authorization;
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-  const token = bearerToken ?? getAccessTokenFromRequest(request);
+  const token = getAccessTokenFromRequest(request);
 
   if (!token) {
-    reply.status(401).send({ error: 'Missing or invalid authentication token', code: 'UNAUTHORIZED' });
+    reply
+      .status(401)
+      .send({
+        error: "Missing or invalid authentication token",
+        code: "UNAUTHORIZED",
+      });
     return;
   }
 
@@ -26,7 +29,9 @@ async function authenticateRequest(
   try {
     payload = verifyAccessToken(token);
   } catch {
-    reply.status(401).send({ error: 'Invalid or expired token', code: 'UNAUTHORIZED' });
+    reply
+      .status(401)
+      .send({ error: "Invalid or expired token", code: "UNAUTHORIZED" });
     return;
   }
 
@@ -52,14 +57,16 @@ async function authenticateRequest(
   ]);
 
   if (!session || !user) {
-    reply.status(401).send({ error: 'Invalid or expired token', code: 'UNAUTHORIZED' });
+    reply
+      .status(401)
+      .send({ error: "Invalid or expired token", code: "UNAUTHORIZED" });
     return;
   }
 
   if (!user.emailVerified && !options.allowUnverified) {
     reply.status(403).send({
-      error: 'Please verify your email before continuing',
-      code: 'EMAIL_NOT_VERIFIED',
+      error: "Please verify your email before continuing",
+      code: "EMAIL_NOT_VERIFIED",
     });
     return;
   }
@@ -72,10 +79,16 @@ async function authenticateRequest(
   };
 }
 
-export async function authGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+export async function authGuard(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
   await authenticateRequest(request, reply, { allowUnverified: false });
 }
 
-export async function authIdentityGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+export async function authIdentityGuard(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
   await authenticateRequest(request, reply, { allowUnverified: true });
 }

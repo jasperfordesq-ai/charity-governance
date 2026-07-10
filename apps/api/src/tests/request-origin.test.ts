@@ -1,47 +1,65 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import cookie from '@fastify/cookie';
-import Fastify from 'fastify';
-import { registerBrowserOriginProtection } from '../plugins/browser-origin-protection.js';
-import { ACCESS_TOKEN_COOKIE } from '../utils/auth-cookie-names.js';
-import { validateUnsafeRequestOrigin } from '../utils/request-origin.js';
+import assert from "node:assert/strict";
+import test from "node:test";
+import cookie from "@fastify/cookie";
+import Fastify from "fastify";
+import { registerBrowserOriginProtection } from "../plugins/browser-origin-protection.js";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+} from "../utils/auth-cookie-names.js";
+import { validateUnsafeRequestOrigin } from "../utils/request-origin.js";
 
-process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'request-origin-test-jwt-secret';
-process.env.RESEND_API_KEY = process.env.RESEND_API_KEY ?? 're_request_origin_test_key';
-process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? 'noreply@example.org';
+process.env.JWT_SECRET =
+  process.env.JWT_SECRET ?? "request-origin-test-jwt-secret";
+process.env.RESEND_API_KEY =
+  process.env.RESEND_API_KEY ?? "re_request_origin_test_key";
+process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? "noreply@example.org";
 
-const allowedOrigins = new Set(['https://app.charitypilot.ie']);
+const allowedOrigins = new Set(["https://app.charitypilot.ie"]);
 
 async function buildOriginProtectedApp() {
   const app = Fastify({ logger: false });
   await registerBrowserOriginProtection(app, allowedOrigins);
 
-  app.get('/ok', async () => ({ ok: true }));
-  app.post('/ok', async () => ({ ok: true }));
+  app.get("/ok", async () => ({ ok: true }));
+  app.post("/ok", async () => ({ ok: true }));
 
   return app;
 }
 
 function request(
   method: string,
-  options: { url?: string; origin?: string; authorization?: string; accessCookie?: string } = {},
+  options: {
+    url?: string;
+    origin?: string;
+    authorization?: string;
+    accessCookie?: string;
+    refreshCookie?: string;
+  } = {},
 ) {
   return {
     method,
-    url: options.url ?? '/ok',
+    url: options.url ?? "/ok",
     headers: {
       ...(options.origin ? { origin: options.origin } : {}),
-      ...(options.authorization ? { authorization: options.authorization } : {}),
+      ...(options.authorization
+        ? { authorization: options.authorization }
+        : {}),
     },
     cookies: {
-      ...(options.accessCookie ? { [ACCESS_TOKEN_COOKIE]: options.accessCookie } : {}),
+      ...(options.accessCookie
+        ? { [ACCESS_TOKEN_COOKIE]: options.accessCookie }
+        : {}),
+      ...(options.refreshCookie
+        ? { [REFRESH_TOKEN_COOKIE]: options.refreshCookie }
+        : {}),
     },
   };
 }
 
-test('unsafe cookie-authenticated requests require an Origin header', () => {
+test("unsafe cookie-authenticated requests require an Origin header", () => {
   const result = validateUnsafeRequestOrigin(
-    request('POST', { accessCookie: 'access-token' }),
+    request("POST", { accessCookie: "access-token" }),
     allowedOrigins,
   );
 
@@ -49,87 +67,159 @@ test('unsafe cookie-authenticated requests require an Origin header', () => {
     ok: false,
     statusCode: 403,
     payload: {
-      error: 'Missing request origin',
-      code: 'MISSING_ORIGIN',
+      error: "Missing request origin",
+      code: "MISSING_ORIGIN",
     },
   });
 });
 
-test('unsafe bearer-authenticated requests may omit Origin headers for non-browser clients', () => {
-  const result = validateUnsafeRequestOrigin(
-    request('POST', { authorization: 'Bearer api-token', accessCookie: 'ignored-cookie' }),
-    allowedOrigins,
-  );
+test("unsafe bearer-authenticated requests may omit Origin headers for non-browser clients", () => {
+  for (const authorization of [
+    "Bearer api-token",
+    "bearer api-token",
+    "BEARER\tapi-token",
+  ]) {
+    const result = validateUnsafeRequestOrigin(
+      request("POST", { authorization, accessCookie: "ignored-cookie" }),
+      allowedOrigins,
+    );
 
-  assert.deepEqual(result, { ok: true });
+    assert.deepEqual(result, { ok: true }, authorization);
+  }
 });
 
-test('public auth-cookie-setting requests require an Origin header', () => {
-  for (const url of [
-    '/auth/login',
-    '/api/v1/auth/login',
-    '/api/v2/auth/refresh',
-    '/api/v1/team/accept-invite',
+test("malformed authorization cannot suppress Origin checks for a cookie-authenticated request", () => {
+  for (const authorization of [
+    "Basic attacker",
+    "Bearer token with-spaces",
+    "Bearer",
   ]) {
-    const result = validateUnsafeRequestOrigin(request('POST', { url }), allowedOrigins);
+    const result = validateUnsafeRequestOrigin(
+      request("POST", { authorization, accessCookie: "access-token" }),
+      allowedOrigins,
+    );
+
+    assert.equal(result.ok, false, authorization);
+    if (!result.ok) assert.equal(result.payload.code, "MISSING_ORIGIN");
+  }
+});
+
+test("public auth-cookie-setting requests require an Origin header", () => {
+  for (const url of [
+    "/auth/login",
+    "/api/v1/auth/login",
+    "/api/v2/auth/refresh",
+    "/api/v1/auth/logout",
+    "/api/v1/team/accept-invite",
+  ]) {
+    const result = validateUnsafeRequestOrigin(
+      request("POST", { url }),
+      allowedOrigins,
+    );
 
     assert.deepEqual(result, {
       ok: false,
       statusCode: 403,
       payload: {
-        error: 'Missing request origin',
-        code: 'MISSING_ORIGIN',
+        error: "Missing request origin",
+        code: "MISSING_ORIGIN",
       },
     });
   }
 });
 
-test('browser origin protection enforces real public cookie-setting routes at production prefixes', async () => {
+test("browser origin protection enforces real cookie-sensitive routes at production prefixes", async () => {
   const [{ authRoutes }, { teamRoutes }] = await Promise.all([
-    import('../routes/auth/index.js'),
-    import('../routes/team/index.js'),
+    import("../routes/auth/index.js"),
+    import("../routes/team/index.js"),
   ]);
   const app = Fastify({ logger: false });
-  app.decorate('prisma', {
+  app.decorate("prisma", {
     user: {
       findUnique: async () => null,
     },
     teamInvite: {
       findUnique: async () => null,
     },
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
   } as never);
   await registerBrowserOriginProtection(app, allowedOrigins);
   await app.register(cookie);
 
-  await app.register(authRoutes, { prefix: '/api/v1/auth' });
-  await app.register(teamRoutes, { prefix: '/api/v1/team' });
+  await app.register(authRoutes, { prefix: "/api/v1/auth" });
+  await app.register(teamRoutes, { prefix: "/api/v1/team" });
 
   try {
-    for (const route of [
+    const routes: Array<{
+      url: string;
+      payload: Record<string, string>;
+      approvedStatusCode: number;
+      authorization?: string;
+      cookie?: string;
+    }> = [
       {
-        url: '/api/v1/auth/login',
-        payload: { email: 'missing@example.org', password: 'NewPassword1' },
+        url: "/api/v1/auth/login",
+        payload: { email: "missing@example.org", password: "NewPassword1" },
         approvedStatusCode: 401,
       },
       {
-        url: '/api/v1/auth/refresh',
+        url: "/api/v1/auth/refresh",
         payload: {},
         approvedStatusCode: 401,
       },
       {
-        url: '/api/v1/team/accept-invite',
-        payload: { token: 'invalid-invite-token', name: 'Invitee', password: 'NewPassword1' },
+        url: "/api/v1/auth/refresh",
+        payload: { refreshToken: "body-refresh-token" },
+        authorization: "bearer unrelated-access-token",
+        approvedStatusCode: 401,
+      },
+      {
+        url: "/api/v1/auth/logout",
+        payload: { refreshToken: "body-refresh-token" },
+        authorization: "BEARER\tunrelated-access-token",
+        approvedStatusCode: 200,
+      },
+      {
+        url: "/api/v1/auth/logout",
+        payload: {},
+        authorization: "Bearer unrelated-access-token",
+        cookie: `${REFRESH_TOKEN_COOKIE}=cookie-refresh-token`,
+        approvedStatusCode: 200,
+      },
+      {
+        url: "/api/v1/team/accept-invite",
+        payload: {
+          token: "invalid-invite-token",
+          name: "Invitee",
+          password: "NewPassword1",
+        },
         approvedStatusCode: 400,
       },
-    ]) {
-      const missingOrigin = await app.inject({ method: 'POST', url: route.url, payload: route.payload });
-      assert.equal(missingOrigin.statusCode, 403, `${route.url} must reject missing Origin`);
-      assert.equal(missingOrigin.json().code, 'MISSING_ORIGIN');
+    ];
+
+    for (const route of routes) {
+      const requestHeaders = {
+        ...(route.authorization ? { authorization: route.authorization } : {}),
+        ...(route.cookie ? { cookie: route.cookie } : {}),
+      };
+      const missingOrigin = await app.inject({
+        method: "POST",
+        url: route.url,
+        headers: requestHeaders,
+        payload: route.payload,
+      });
+      assert.equal(
+        missingOrigin.statusCode,
+        403,
+        `${route.url} must reject missing Origin`,
+      );
+      assert.equal(missingOrigin.json().code, "MISSING_ORIGIN");
 
       const approvedOrigin = await app.inject({
-        method: 'POST',
+        method: "POST",
         url: route.url,
-        headers: { origin: 'https://app.charitypilot.ie' },
+        headers: { ...requestHeaders, origin: "https://app.charitypilot.ie" },
         payload: route.payload,
       });
       assert.equal(
@@ -143,9 +233,12 @@ test('browser origin protection enforces real public cookie-setting routes at pr
   }
 });
 
-test('unsafe requests reject unapproved origins', () => {
+test("unsafe requests reject unapproved origins", () => {
   const result = validateUnsafeRequestOrigin(
-    request('DELETE', { origin: 'https://evil.example', accessCookie: 'access-token' }),
+    request("DELETE", {
+      origin: "https://evil.example",
+      accessCookie: "access-token",
+    }),
     allowedOrigins,
   );
 
@@ -153,49 +246,55 @@ test('unsafe requests reject unapproved origins', () => {
     ok: false,
     statusCode: 403,
     payload: {
-      error: 'Invalid request origin',
-      code: 'INVALID_ORIGIN',
+      error: "Invalid request origin",
+      code: "INVALID_ORIGIN",
     },
   });
 });
 
-test('safe methods and approved browser origins pass origin validation', () => {
-  assert.deepEqual(validateUnsafeRequestOrigin(request('GET'), allowedOrigins), { ok: true });
+test("safe methods and approved browser origins pass origin validation", () => {
+  assert.deepEqual(
+    validateUnsafeRequestOrigin(request("GET"), allowedOrigins),
+    { ok: true },
+  );
   assert.deepEqual(
     validateUnsafeRequestOrigin(
-      request('PATCH', { origin: 'https://app.charitypilot.ie', accessCookie: 'access-token' }),
+      request("PATCH", {
+        origin: "https://app.charitypilot.ie",
+        accessCookie: "access-token",
+      }),
       allowedOrigins,
     ),
     { ok: true },
   );
 });
 
-test('disallowed CORS origins do not become server errors before the origin guard', async () => {
+test("disallowed CORS origins do not become server errors before the origin guard", async () => {
   const app = await buildOriginProtectedApp();
 
   try {
     const getResponse = await app.inject({
-      method: 'GET',
-      url: '/ok',
-      headers: { origin: 'https://evil.example' },
+      method: "GET",
+      url: "/ok",
+      headers: { origin: "https://evil.example" },
     });
     assert.equal(getResponse.statusCode, 200);
-    assert.equal(getResponse.headers['access-control-allow-origin'], undefined);
+    assert.equal(getResponse.headers["access-control-allow-origin"], undefined);
 
     const postResponse = await app.inject({
-      method: 'POST',
-      url: '/ok',
-      headers: { origin: 'https://evil.example' },
+      method: "POST",
+      url: "/ok",
+      headers: { origin: "https://evil.example" },
     });
     assert.equal(postResponse.statusCode, 403);
-    assert.equal(postResponse.json().code, 'INVALID_ORIGIN');
+    assert.equal(postResponse.json().code, "INVALID_ORIGIN");
 
     const optionsResponse = await app.inject({
-      method: 'OPTIONS',
-      url: '/ok',
+      method: "OPTIONS",
+      url: "/ok",
       headers: {
-        origin: 'https://evil.example',
-        'access-control-request-method': 'POST',
+        origin: "https://evil.example",
+        "access-control-request-method": "POST",
       },
     });
     assert.notEqual(optionsResponse.statusCode, 500);

@@ -26,6 +26,23 @@ The three runtime processes are the web app, the API, and PostgreSQL. Default po
 | Next.js web | `3003` | `next dev --webpack --port 3003` (`apps/web/package.json:6`); `PORT: 3003` in compose (`compose.local.yml:105`, `compose.production.yml:69`) |
 | PostgreSQL | `5434` (host) → `5432` (container) | `127.0.0.1:5434:5432` (`compose.yml:23-24`); README (`README.md:26`) |
 
+Those ports are the persistent development defaults only. Destructive
+Playwright does not reuse them: `scripts/run-isolated-e2e.mjs` owns standalone
+`compose.e2e.yml`, with fixed loopback ports `3302`, `3303`, and `55434`, a
+positive allow-list image context, a UUID-bound PostgreSQL marker, an internal
+bridge, tmpfs database/document storage, and a baked production web build in a
+read-only image, with no host mount or persistent volume. Database, API, and
+web remain only on that internal bridge;
+a dedicated secretless, read-only TCP gateway resolves only their unique
+reserved `.invalid.` aliases and alone joins a second
+project-scoped non-attachable edge bridge and publishes the three loopback
+ports. The runner validates one private Compose snapshot, the exact API
+migration DSN, health/tmpfs bounds, and gateway topology before startup; then
+attests the freshly built image IDs and exact live container isolation before
+Playwright. It pins every build/runtime/cleanup call to a proven local Docker
+endpoint and treats any exact-project cleanup residue as failure. The reset guard rejects
+the development database and every implicit database URL.
+
 The API binds to `0.0.0.0` by default (`apps/api/src/server.ts:88`) and logs `CharityPilot API running on http://${host}:${port}` once listening (`apps/api/src/server.ts:91-92`). It installs `SIGINT`/`SIGTERM` handlers for a guarded graceful shutdown via `app.close()` (`apps/api/src/server.ts:102-120`).
 
 ### API process startup

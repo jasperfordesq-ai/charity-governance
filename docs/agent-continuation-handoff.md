@@ -52,7 +52,7 @@ The detailed issue contract remains in
   Focused API billing/idempotency verification is `50 / 50`; provider-checker
   verification is `13 / 13`; shared is `19 / 19`; web is `248 / 248`; web lint
   and production build pass; and the final full API suite is `454 / 454` after
-  all P0-03 tests were integrated. Production tooling is `399 / 399`, the
+  all P0-03 tests were integrated. Production tooling is `488 / 488`, the
   reliability report is green with `365 / 365` covered links, and the platform
   audit is current.
 - **P0-04 compliance concurrency and immutable board approval -
@@ -72,13 +72,37 @@ The detailed issue contract remains in
   newer drafts across old responses and failures, provides safe conflict
   reconciliation, guards dirty navigation, sequences principle loads, and
   never presents stale approval as current. Local evidence is API `477 / 477`,
-  web `272 / 272`, shared `23 / 23`, production tooling `399 / 399`, local-Docker
+  web `272 / 272`, shared `23 / 23`, production tooling `488 / 488`, local-Docker
   tooling `43 / 43`, reliability `374 / 374`, lint, production builds, Prisma
   generation/validation, security scans, zero-vulnerability dependency audits,
   refreshed generated audits, and a clean 14-migration deployment plus
   rollback-only trigger/constraint probes on a dedicated throwaway
-  `charitypilot_ci` PostgreSQL container. Destructive Playwright was deliberately
-  not run: P0-05 must first supply a genuinely isolated disposable database.
+  `charitypilot_ci` PostgreSQL container.
+- **P0-05 destructive E2E isolation - `LOCALLY_VERIFIED`.** The repository now
+  supplies a managed, UUID-bound disposable E2E stack and fail-closed database
+  identity/reset contract. Database, API, and web stay internal-only while a dedicated
+  secretless, read-only fixed-route TCP gateway alone publishes the runner's
+  loopback ports; its absolute `.invalid.` routes map only to unique internal
+  aliases. API builds the shared app image once and web reuses it. The runner
+  executes one private validated Compose snapshot and attests immutable built
+  image IDs plus exact live container isolation before Playwright. The complete
+  gate passed `113 / 113` isolation contracts and `96 / 96` live Playwright
+  tests in `9.6m` (`25.0m` for the full fresh-build/test/verified-teardown
+  command) against the real disposable PostgreSQL instance and baked production
+  web runtime. Exact-project teardown left no Docker/private-state residue and
+  preserved the personal web/API/database container IDs. Remote worker seams
+  now prove suite-lease presence, reset proves same-session ownership, and the
+  outer janitor runs only after exact POSIX group absence; native-Windows remote
+  destructive mode is explicitly rejected. The run also exposed and repaired a
+  production-relevant shared-proxy-IP `/auth/me` throttle: credential limiting
+  is layered with a coarse IP ceiling, authentication/limiting/origin checks use
+  one Bearer parser, and the bounded web proxy accepts exact `200`, refreshes or
+  redirects only on explicit `401`, and strictly validates both rotation or
+  deletion cookies. Wider evidence is API `488 / 488`, web `295 / 295`, shared
+  `23 / 23`, production tooling `512 / 512`, local-Docker tooling `44 / 44`,
+  reliability `374 / 374`, root lint/build, security scans across `497` files, and zero
+  dependency vulnerabilities. Commit/push and SHA-bound CI/E2E proof remain
+  pending; do not invent their SHA or workflow URLs.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -112,7 +136,10 @@ Local personal-use safety before heavy work:
 
 - `npm run personal:ready` is the non-destructive local confidence gate for one-person use on this computer without Stripe, payments, public hosting, or production providers.
 - It checks local Docker boot/login/document storage, PostgreSQL backup and restore verification, local document-storage backup, and a personal browser smoke with billing safely disabled when Stripe is absent.
-- Do not run the default full E2E suite against a personal database you care about; it can reset tenant/app tables.
+- `npm run test:e2e` owns a separate disposable stack and refuses ambient or
+  personal database targets. Do not bypass that runner with direct Playwright or
+  weaken its identity checks; the suite intentionally resets only its proven
+  disposable tenant/app tables.
 - This local safety gate does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
 
 Known current state from `npm run launch:status -- --json` on 2026-07-10:
@@ -136,10 +163,10 @@ Known current state from `npm run launch:status -- --json` on 2026-07-10:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `399 / 399` checks on
-  2026-07-10. Older `396 / 396`, `352 / 352`, `338 / 338`, and `339 / 339` entries in the
-  verification chronology below are historical counts from earlier commits,
-  not the current gate size.
+  `npm run test:production-check` passed with `512 / 512` checks on
+  2026-07-10. Older `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
+  `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
+  counts from earlier commits, not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
   `npm run launch:status -- --json` and its `repositoryState.headSha` as the
   live source of truth for the current checkout before collecting evidence.
@@ -350,9 +377,12 @@ Correct posture:
 - Production launch evidence initializes outside the repo root in `.charitypilot-launch-evidence/`.
 - Launch evidence status has read-only progress output and strict final validation.
 - The platform audit generator records launch evidence state and falls back to direct `.git` metadata reads if shelling out to git is unavailable.
-- Failed release E2E cleanup is repo-scoped on Windows before stopping related
-  Node processes, so a CharityPilot timeout does not match unrelated
-  `npm run test:e2e` processes on a shared workstation.
+- Release E2E timeout handling is limited to the exact spawned child process
+  tree, escalates a stuck POSIX child after a bounded grace period, and keeps
+  signal handlers active while the runner tears down and verifies its exact
+  pinned-daemon Compose project. It never scans for or stops unrelated Node/npm
+  processes on a shared workstation; failed cleanup makes the gate red and
+  retains the private recovery inputs.
 - Release readiness child gates resolve `npm` and `npx` through explicit Node
   CLI entrypoints on Windows instead of shell execution, keeping launch
   evidence transcripts free of shell-argument deprecation warnings.
@@ -405,6 +435,24 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- `npm run test:e2e`
+  - Passed on 2026-07-10 through the P0-05 managed runner with `113 / 113`
+    isolation contracts and `96 / 96` live Playwright tests in `9.6m`; the full
+    fresh-build/test/verified-teardown command took approximately `25.0m`
+    against the UUID-marked disposable PostgreSQL instance. Exact teardown left
+    no runner Docker/private-state residue or personal-stack drift.
+- `npm test`
+  - Passed on 2026-07-10 with API `488 / 488`, web `295 / 295`, shared
+    `23 / 23`, production tooling `512 / 512`, and local-Docker tooling
+    `44 / 44`.
+- `npm run reliability:report -- --write`
+  - Passed on 2026-07-10 with `374 / 374` covered guarantees linked to passing
+    test titles. This is static linkage, not SHA-bound browser execution;
+    P0-09 remains open until the pushed E2E workflow and release path supply
+    executed evidence.
+- `npm run build`, `npm run security:scan`, and both dependency audits
+  - Passed on 2026-07-10; all workspaces built, `497` files passed secret/SAST
+    scans, and both audits reported zero vulnerabilities.
 - `node --test apps/api/dist/tests/billing-subscription-integrity.test.js apps/api/dist/tests/billing-reliability.test.js apps/api/dist/tests/billing-reminders-hardening.test.js apps/api/dist/tests/idempotency-reliability.test.js`
   - Passed on 2026-07-10 with `50 / 50` focused P0-03 billing tests.
 - `node --test scripts/check-production-providers.test.mjs`
@@ -421,7 +469,7 @@ Recently successful checks in this workstream:
   - Passed on 2026-07-10 with `454 / 454` tests after all final P0-03 focused
     regressions were integrated.
 - `npm run test:production-check`
-  - Passed on 2026-07-10 with `399 / 399` production-tooling tests.
+  - Passed on 2026-07-10 with `488 / 488` production-tooling tests.
 - `npm run reliability:report -- --write`
   - Passed on 2026-07-10 with API `454 / 454`, web `248 / 248`, and `365 / 365`
     covered-guarantee links resolved.
@@ -436,15 +484,16 @@ Recently successful checks in this workstream:
   - Passed on 2026-07-10 for P0-01 commit
     `97f64b0285eb2d19489c062cda52134fda8f9a53`.
 
-- `cd e2e; E2E_ALLOW_LOCAL_DB_RESET=true E2E_SKIP_ROUTE_WARMING=true npm test -- tests/responsive-smoke.spec.ts --grep "launch-critical dashboard route /compliance/\$\{principleId\} renders in desktop light and dark"`
-  - Passed on 2026-07-09 after the compliance-detail resolver was hardened to
-    report page-level failures and still tolerate slow local Next dev compiles.
+- Historical direct responsive Playwright proof passed on 2026-07-09 after the
+  compliance-detail resolver was hardened. Its old boolean reset command is
+  intentionally omitted and retired; repeat only through `npm run test:e2e` or
+  the managed focused responsive scripts.
 - `node --test scripts/check-local-docker.test.mjs`
   - Passed on 2026-07-09 with 38/38 local Docker and browser-QA wiring checks.
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 352/352 production-tooling checks during the
     latest handoff refresh.
-  - Historical count; the current local production-tooling gate is 399/399.
+  - Historical count; the current local production-tooling gate is 512/512.
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
 - `node scripts/platform-completion-audit.mjs --json`
@@ -484,9 +533,9 @@ Recently successful checks in this workstream:
 - `npm run test -w @charitypilot/web`
   - Passed on 2026-07-09 with 232 web tests after compliance navigation
     confirmation copy/timer-guard hardening.
-- `cd e2e; E2E_ALLOW_LOCAL_DB_RESET=true npm test -- tests/compliance.spec.ts`
-  - Passed on 2026-07-09 with both compliance browser journeys passing after
-    the same navigation-confirmation hardening.
+- Historical direct compliance Playwright proof passed on 2026-07-09 with both
+  journeys green. Its direct reset invocation is retired; repeat with
+  `npm run test:e2e -- tests/compliance.spec.ts` through the isolated runner.
 - `npm run lint -w @charitypilot/web`
   - Passed on 2026-07-09 after the same changes.
 - `npm run build -w @charitypilot/web`
@@ -496,7 +545,7 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
-    Historical count; the current local production-tooling gate is 399/399.
+    Historical count; the current local production-tooling gate is 512/512.
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -509,14 +558,14 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
-  - Historical count; the current local production-tooling gate is 399/399.
+  - Historical count; the current local production-tooling gate is 512/512.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
   - Passed again with 338/338 production-tooling checks after launch-evidence, release-ready, continuation-doc, and GitHub secret-store checker hardening.
-  - Historical count; the current local production-tooling gate is 399/399.
+  - Historical count; the current local production-tooling gate is 512/512.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests

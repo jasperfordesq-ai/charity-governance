@@ -1,5 +1,9 @@
-import type { FastifyRequest } from 'fastify';
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth-cookie-names.js';
+import type { FastifyRequest } from "fastify";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+} from "./auth-cookie-names.js";
+import { parseBearerAuthorizationHeader } from "./auth-request-credential.js";
 
 type OriginValidationResult =
   | { ok: true }
@@ -8,15 +12,16 @@ type OriginValidationResult =
       statusCode: 403;
       payload: {
         error: string;
-        code: 'INVALID_ORIGIN' | 'MISSING_ORIGIN';
+        code: "INVALID_ORIGIN" | "MISSING_ORIGIN";
       };
     };
 
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const AUTH_COOKIE_SETTING_PATH_SUFFIXES = [
-  '/auth/login',
-  '/auth/refresh',
-  '/team/accept-invite',
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const AUTH_COOKIE_SENSITIVE_PATH_SUFFIXES = [
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
+  "/team/accept-invite",
 ] as const;
 
 function headerValue(value: string | string[] | undefined): string | undefined {
@@ -28,34 +33,44 @@ export function normaliseOrigin(origin: string): string {
   try {
     return new URL(origin).origin;
   } catch {
-    return origin.replace(/\/+$/, '');
+    return origin.replace(/\/+$/, "");
   }
 }
 
-function hasBearerAuthorization(request: Pick<FastifyRequest, 'headers'>): boolean {
-  const authorization = headerValue(request.headers.authorization);
-  return authorization?.startsWith('Bearer ') === true;
+function hasBearerAuthorization(
+  request: Pick<FastifyRequest, "headers">,
+): boolean {
+  return (
+    parseBearerAuthorizationHeader(request.headers.authorization) !== undefined
+  );
 }
 
-function hasAuthCookie(request: Pick<FastifyRequest, 'cookies'>): boolean {
-  return Boolean(request.cookies?.[ACCESS_TOKEN_COOKIE] || request.cookies?.[REFRESH_TOKEN_COOKIE]);
+function hasAuthCookie(request: Pick<FastifyRequest, "cookies">): boolean {
+  return Boolean(
+    request.cookies?.[ACCESS_TOKEN_COOKIE] ||
+    request.cookies?.[REFRESH_TOKEN_COOKIE],
+  );
 }
 
-function requestPath(request: Pick<FastifyRequest, 'url'>): string {
+function requestPath(request: Pick<FastifyRequest, "url">): string {
   try {
-    return new URL(request.url, 'http://charitypilot.local').pathname;
+    return new URL(request.url, "http://charitypilot.local").pathname;
   } catch {
-    return request.url.split('?')[0] ?? request.url;
+    return request.url.split("?")[0] ?? request.url;
   }
 }
 
-function isAuthCookieSettingPath(request: Pick<FastifyRequest, 'url'>): boolean {
-  const path = requestPath(request).replace(/\/+$/, '');
-  return AUTH_COOKIE_SETTING_PATH_SUFFIXES.some((suffix) => path.endsWith(suffix));
+function isAuthCookieSensitivePath(
+  request: Pick<FastifyRequest, "url">,
+): boolean {
+  const path = requestPath(request).replace(/\/+$/, "");
+  return AUTH_COOKIE_SENSITIVE_PATH_SUFFIXES.some((suffix) =>
+    path.endsWith(suffix),
+  );
 }
 
 export function validateUnsafeRequestOrigin(
-  request: Pick<FastifyRequest, 'method' | 'url' | 'headers' | 'cookies'>,
+  request: Pick<FastifyRequest, "method" | "url" | "headers" | "cookies">,
   allowedOrigins: ReadonlySet<string>,
 ): OriginValidationResult {
   if (SAFE_METHODS.has(request.method)) {
@@ -72,19 +87,22 @@ export function validateUnsafeRequestOrigin(
       ok: false,
       statusCode: 403,
       payload: {
-        error: 'Invalid request origin',
-        code: 'INVALID_ORIGIN',
+        error: "Invalid request origin",
+        code: "INVALID_ORIGIN",
       },
     };
   }
 
-  if (isAuthCookieSettingPath(request) || (hasAuthCookie(request) && !hasBearerAuthorization(request))) {
+  if (
+    isAuthCookieSensitivePath(request) ||
+    (hasAuthCookie(request) && !hasBearerAuthorization(request))
+  ) {
     return {
       ok: false,
       statusCode: 403,
       payload: {
-        error: 'Missing request origin',
-        code: 'MISSING_ORIGIN',
+        error: "Missing request origin",
+        code: "MISSING_ORIGIN",
       },
     };
   }

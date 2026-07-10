@@ -132,8 +132,9 @@ function assertLocalPersonalReadiness(readiness) {
   assert.ok(readiness.proves.includes('PostgreSQL backup and restore verification'));
   assert.ok(readiness.proves.includes('local document storage backup copy'));
   assert.ok(readiness.proves.some((item) => /billing safely disabled/.test(item)));
-  assert.match(readiness.warning, /Do not run the default full E2E suite/);
-  assert.match(readiness.warning, /reset tenant\/app tables/);
+  assert.match(readiness.warning, /Run destructive browser tests only through npm run test:e2e/);
+  assert.match(readiness.warning, /provisions and proves a separate disposable database/);
+  assert.match(readiness.warning, /refuses personal targets/);
   assert.match(readiness.notLaunchEvidence, /does not replace production provider/);
   assert.match(readiness.notLaunchEvidence, /final signoff evidence/);
 }
@@ -783,7 +784,7 @@ test('launch status exposes repository state so release evidence is tied to a cl
   assert.match(text, /Repository state:/);
   assert.match(text, /Local personal data safety:/);
   assert.match(text, /npm run personal:ready/);
-  assert.match(text, /Do not run the default full E2E suite/);
+  assert.match(text, /Run destructive browser tests only through npm run test:e2e/);
   assert.match(text, /GitHub production environment JSON:  npm run check:production:github-env -- --environment=production --json/);
   assert.match(
     text,
