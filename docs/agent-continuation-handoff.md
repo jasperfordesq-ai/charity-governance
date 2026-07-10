@@ -78,7 +78,7 @@ The detailed issue contract remains in
   refreshed generated audits, and a clean 14-migration deployment plus
   rollback-only trigger/constraint probes on a dedicated throwaway
   `charitypilot_ci` PostgreSQL container.
-- **P0-05 destructive E2E isolation - `LOCALLY_VERIFIED`.** The repository now
+- **P0-05 destructive E2E isolation - `CI_VERIFIED`.** The repository now
   supplies a managed, UUID-bound disposable E2E stack and fail-closed database
   identity/reset contract. Database, API, and web stay internal-only while a dedicated
   secretless, read-only fixed-route TCP gateway alone publishes the runner's
@@ -101,8 +101,11 @@ The detailed issue contract remains in
   deletion cookies. Wider evidence is API `488 / 488`, web `295 / 295`, shared
   `23 / 23`, production tooling `512 / 512`, local-Docker tooling `44 / 44`,
   reliability `374 / 374`, root lint/build, security scans across `497` files, and zero
-  dependency vulnerabilities. Commit/push and SHA-bound CI/E2E proof remain
-  pending; do not invent their SHA or workflow URLs.
+  dependency vulnerabilities. The complete slice is published as commit
+  `e9f63038a5e8fe0c0680dcc015566dff2525a56b`; CI run `29116192805` and E2E run
+  `29116192729` both completed successfully for that exact SHA, with the latter
+  passing `96 / 96` Playwright tests in `3.2m`. Release-promotion and deployed
+  browser proof remain separate P0-09/launch gates.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -447,9 +450,9 @@ Recently successful checks in this workstream:
     `44 / 44`.
 - `npm run reliability:report -- --write`
   - Passed on 2026-07-10 with `374 / 374` covered guarantees linked to passing
-    test titles. This is static linkage, not SHA-bound browser execution;
-    P0-09 remains open until the pushed E2E workflow and release path supply
-    executed evidence.
+    test titles. Static linkage alone is not browser execution; separate E2E run
+    `29116192729` supplies exact-SHA execution for P0-05. P0-09 remains open for
+    release-promotion, deployed-browser, and live repository-protection proof.
 - `npm run build`, `npm run security:scan`, and both dependency audits
   - Passed on 2026-07-10; all workspaces built, `497` files passed secret/SAST
     scans, and both audits reported zero vulnerabilities.

@@ -472,7 +472,7 @@ Commit SHA / CI run:
 
 ### P0-05 - Destructive E2E database identity guard
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Evidence:
 
@@ -589,6 +589,24 @@ Current local verification:
 - `npm run reliability:report -- --write` is green with `374 / 374` covered
   guarantees linked to passing tests; `npm run audit:platform:check` passes and
   the generated platform audit is current.
+
+Published SHA-bound verification:
+
+- Commit `e9f63038a5e8fe0c0680dcc015566dff2525a56b` contains the complete P0-05
+  implementation and documentation slice.
+- GitHub CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29116192805`
+  completed successfully for that exact SHA, including the isolation contract,
+  E2E type-check and Compose validation, security scan, migrations,
+  backup/restore, lint, repository tests, reliability linkage, local-Docker
+  smoke, production builds/images/smokes, and dependency audit.
+- GitHub E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29116192729`
+  completed successfully for the same SHA. It re-ran the managed runner
+  contract and standalone Compose validation before the isolated browser gate,
+  which passed `96 / 96` Playwright tests in `3.2m` and uploaded the report.
+- This is repository CI/E2E evidence, not release-promotion or deployed-browser
+  evidence. Those independent requirements remain tracked under P0-09.
 
 Pending verification:
 
@@ -725,20 +743,23 @@ Status: `CONFIRMED`
 
 Evidence:
 
-- The audited baseline ran E2E only on pull requests or manually. The current
-  P0-05 working tree adds direct `master` execution, but it is not yet committed,
-  pushed, or proven by a SHA-bound workflow run.
-- Live GitHub audit found no `master` protection, no production-environment
-  reviewers/rules or deployment branch policy, and no recorded E2E workflow
-  runs.
+- The audited baseline ran E2E only on pull requests or manually. P0-05 commit
+  `e9f63038a5e8fe0c0680dcc015566dff2525a56b` now runs E2E on direct `master`
+  pushes; GitHub E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29116192729`
+  executed successfully for that exact SHA with `96 / 96` Playwright tests.
+- A fresh 2026-07-10 GitHub audit still found no `master` branch protection or
+  repository ruleset. The `Production` environment exists but allows admin
+  bypass, has no protection rules/reviewers, and has no deployment branch
+  policy.
 - `scripts/reliability-report.mjs` treats linked E2E titles as covered even when
   no browser run executed for the SHA.
 - Release-image promotion does not run Playwright.
 
 Required result:
 
-- P0-05 now provides a locally verified safe disposable E2E database path;
-  commit it and prove the direct-`master` workflow against the pushed SHA.
+- Preserve the now-proven direct-`master` managed E2E gate and its exact-SHA
+  evidence; local results or static title linkage must never substitute for it.
 - Run E2E on release promotion, or introduce a repository workflow that
   provides equivalent enforced evidence.
 - Distinguish static title linkage from an executed result bound to a SHA.
@@ -1095,8 +1116,9 @@ Important baseline limitations (since remediated where stated below):
 - Reliability linkage did not prove an executed E2E result.
 - The baseline default Playwright suite was deliberately skipped because P0-05
   was not yet fixed. P0-05 has since passed its managed disposable-database
-  `113 / 113` contract gate and `96 / 96` live Playwright gate locally; pushed
-  SHA-bound CI/E2E evidence remains pending.
+  `113 / 113` contract gate and `96 / 96` live Playwright gate locally, then
+  passed both CI run `29116192805` and E2E run `29116192729` for exact commit
+  `e9f63038a5e8fe0c0680dcc015566dff2525a56b`.
 - API health returned HTTP 200 during the audit.
 - The listening local web service returned no bytes during the live HTTP check,
   so rendered browser QA was not completed.
