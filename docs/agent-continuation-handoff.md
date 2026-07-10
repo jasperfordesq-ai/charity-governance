@@ -1,8 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
-Last updated: 2026-07-09
+Last updated: 2026-07-10
 
 This document exists so a new Codex, Claude, or other coding agent can continue the same CharityPilot production-completion goal without relying on chat memory or a pasted prompt.
+
+## Active Full-Platform Remediation Audit
+
+Before selecting production-completion work, read:
+
+- `docs/platform-remediation-audit-2026-07-10.md`
+
+That document is the authoritative human-maintained remediation ledger for the
+2026-07-10 full-platform audit. It records the 669/1000 baseline, every confirmed
+repository issue, the strict launch-evidence split, safety constraints, external
+blockers, acceptance criteria, and the continuous inspect/fix/verify/commit/push
+loop. Do not narrow the goal to the generated platform audit or stop because
+local gates are green.
 
 ## Project
 
@@ -41,13 +54,18 @@ Known current state from `npm run launch:status -- --json` on 2026-07-09:
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
+- Full-platform audit baseline captured on 2026-07-10 at
+  `8809bac3a897afe6078df82142097c3fcc924e8f`; the remediation score was
+  `669 / 1000`, while the strict launch-gate score remained `18 / 120`.
+- GitHub CI for that audit baseline passed:
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29068890047`.
 - Latest verified release-gate hardening commit captured by this handoff:
   `cb78eb85bb0127150ad448037b5d03b8060869bf`.
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `352 / 352` checks on
-  2026-07-09. Older `338 / 338` and `339 / 339` entries in the
+  `npm run test:production-check` passed with `396 / 396` checks on
+  2026-07-10. Older `352 / 352`, `338 / 338`, and `339 / 339` entries in the
   verification chronology below are historical counts from earlier commits,
   not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
@@ -317,6 +335,7 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 352/352 production-tooling checks during the
     latest handoff refresh.
+  - Historical count; the current local production-tooling gate is 396/396.
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
 - `node scripts/platform-completion-audit.mjs --json`
@@ -368,7 +387,7 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
-    Historical count; the current local production-tooling gate is 352/352.
+    Historical count; the current local production-tooling gate is 396/396.
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -381,14 +400,14 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
-  - Historical count; the current local production-tooling gate is 352/352.
+  - Historical count; the current local production-tooling gate is 396/396.
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
   - Passed again with 338/338 production-tooling checks after launch-evidence, release-ready, continuation-doc, and GitHub secret-store checker hardening.
-  - Historical count; the current local production-tooling gate is 352/352.
+  - Historical count; the current local production-tooling gate is 396/396.
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests
