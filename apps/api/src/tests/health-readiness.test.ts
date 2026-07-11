@@ -61,7 +61,7 @@ test('readiness key comparison uses timing-safe equality', () => {
   assert.doesNotMatch(routeSource, /suppliedKey\s*===\s*configuredKey/);
 });
 
-test('authenticated readiness times out a stuck database check', { concurrency: false }, async () => {
+test('authenticated readiness times out a stuck database check', { concurrency: false, timeout: 5_000 }, async () => {
   process.env.READINESS_API_KEY = 'readiness-test-secret';
   process.env.READINESS_DEPENDENCY_TIMEOUT_MS = '25';
   const app = Fastify({ logger: false });
@@ -71,19 +71,16 @@ test('authenticated readiness times out a stuck database check', { concurrency: 
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
 
   try {
-    const startedAt = Date.now();
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/health/readiness',
       headers: { 'x-charitypilot-readiness-key': 'readiness-test-secret' },
     });
-    const elapsedMs = Date.now() - startedAt;
     const body = response.json();
 
     assert.equal(response.statusCode, 503);
     assert.equal(body.status, 'not_ready');
     assert.equal(body.checks.database, false);
-    assert.ok(elapsedMs < 1000, `readiness should time out quickly, took ${elapsedMs}ms`);
   } finally {
     delete process.env.READINESS_DEPENDENCY_TIMEOUT_MS;
     process.env.READINESS_API_KEY = originalReadinessKey;

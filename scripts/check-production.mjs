@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
+import { isAbsolute, normalize, sep } from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { domainToASCII, pathToFileURL } from 'node:url';
 import {
   APPROVED_PUBLIC_HOST_ROOT,
   canonicalOriginIssue,
@@ -33,6 +34,7 @@ const REQUIRED = [
   'TRUSTED_PROXY_ADDRESSES',
   'READINESS_API_KEY',
   'DATABASE_URL',
+  'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
   'JWT_SECRET',
   'FRONTEND_URL',
   'STRIPE_SECRET_KEY',
@@ -55,10 +57,15 @@ const REQUIRED = [
 const ENV_FILE_FLAG = '--production-env-file=';
 const USAGE_TEXT = 'Usage: node scripts/check-production.mjs [--production-env-file=<path>]';
 const COMPOSE_RUNTIME_WEB_API_URL = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL';
-const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
+const ALLOWED_LIBPQ_QUERY_OPTIONS = new Set([
+  'application_name', 'channel_binding', 'connect_timeout',
+  'keepalives', 'keepalives_count', 'keepalives_idle', 'keepalives_interval',
+  'sslmode', 'sslrootcert', 'target_session_attrs', 'tcp_user_timeout',
+]);
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
+const RECOVERY_DATABASE_RESERVED_SUFFIXES = ['.alt', '.arpa', '.onion', '.private', '.localdomain'];
 
 export function parseProductionEnvContent(content) {
   return Object.fromEntries(
@@ -142,6 +149,37 @@ function isPublicHost(hostname) {
   if (isIP(normalizedHostname)) return false;
 
   return isDnsHostname(normalizedHostname);
+}
+
+function canonicalAsciiDnsHostname(hostname) {
+  const normalizedHostname = normaliseHostname(hostname);
+  const asciiHostname = domainToASCII(normalizedHostname);
+  return asciiHostname && asciiHostname === normalizedHostname ? asciiHostname : null;
+}
+
+function isSyntacticallyPublicCanonicalDnsHostname(hostname) {
+  const asciiHostname = canonicalAsciiDnsHostname(hostname);
+  if (!asciiHostname) return false;
+  const topLevelLabel = asciiHostname.split('.').at(-1) ?? '';
+  return (
+    isDnsHostname(asciiHostname) &&
+    isPublicHost(asciiHostname) &&
+    /[a-z]/.test(topLevelLabel) &&
+    !RECOVERY_DATABASE_RESERVED_SUFFIXES.some((suffix) => asciiHostname.endsWith(suffix))
+  );
+}
+
+function isSafeRecoveryCaCertificatePath(value) {
+  const normalizedCertificatePath = normalize(value);
+  return (
+    value !== 'system' &&
+    value.length <= 1024 &&
+    isAbsolute(value) &&
+    normalizedCertificatePath === value &&
+    !value.split(/[\\/]/).includes('..') &&
+    /\.(?:crt|pem)$/i.test(value) &&
+    (sep !== '\\' || /^[A-Za-z]:\\/.test(value))
+  );
 }
 
 function isApprovedPublicHostname(hostname) {
@@ -333,12 +371,129 @@ function requireDatabaseUrl(env, key, issues) {
     if (isReservedDocumentationHostname(url.hostname)) {
       issues.push(`${key} must not use a reserved documentation hostname`);
     }
-    const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
-    if (!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) {
-      issues.push(`${key} must require TLS with sslmode=require, verify-ca, or verify-full for production`);
+    if (
+      url.hostname.includes(',') ||
+      url.hostname !== normaliseHostname(url.hostname) ||
+      !isSyntacticallyPublicCanonicalDnsHostname(url.hostname)
+    ) {
+      issues.push(`${key} hostname must be a syntactically public canonical ASCII DNS name`);
+    }
+    let databaseName = '';
+    try {
+      databaseName = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    } catch {
+      // The authority-completeness issue below covers malformed path encoding.
+    }
+    if (!url.username || !databaseName || databaseName.includes('/')) {
+      issues.push(`${key} must include a username and exactly one non-root database path segment`);
+    }
+    if (url.hash) {
+      issues.push(`${key} must not contain a URL fragment`);
+    }
+    const seenOptions = new Set();
+    for (const [rawName, optionValue] of url.searchParams) {
+      const name = rawName.toLowerCase();
+      if (rawName !== name || seenOptions.has(name)) {
+        issues.push(`${key} must not repeat or ambiguously case connection option ${name}`);
+      }
+      seenOptions.add(name);
+      if (!ALLOWED_LIBPQ_QUERY_OPTIONS.has(name)) {
+        issues.push(`${key} contains unsupported or routing-sensitive connection option ${name}`);
+      }
+      if (name === 'channel_binding' && optionValue !== 'require') {
+        issues.push(`${key} connection option channel_binding must equal require`);
+      }
+      if (name === 'sslrootcert' && !isSafeRecoveryCaCertificatePath(optionValue)) {
+        issues.push(`${key} connection option sslrootcert must be a safe absolute .crt or .pem CA certificate path, never system`);
+      }
+      if (name === 'target_session_attrs' && optionValue !== 'read-write') {
+        issues.push(`${key} connection option target_session_attrs must equal read-write`);
+      }
+      if (name === 'keepalives' && optionValue !== '0' && optionValue !== '1') {
+        issues.push(`${key} connection option keepalives must equal 0 or 1`);
+      }
+      if (
+        ['connect_timeout', 'keepalives_count', 'keepalives_idle', 'keepalives_interval', 'tcp_user_timeout'].includes(name) &&
+        !/^(?:0|[1-9][0-9]{0,5})$/.test(optionValue)
+      ) {
+        issues.push(`${key} connection option ${name} must be a canonical integer from 0 to 999999`);
+      }
+      if (name === 'application_name' && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(optionValue)) {
+        issues.push(`${key} connection option application_name must be a canonical 1 to 64 character identifier`);
+      }
+    }
+    if (url.searchParams.get('sslmode') !== 'verify-full') {
+      issues.push(`${key} must use exact lowercase sslmode=verify-full for production`);
+    }
+    if (url.searchParams.get('target_session_attrs') !== 'read-write') {
+      issues.push(`${key} must explicitly set target_session_attrs=read-write for production`);
     }
   } catch {
     issues.push(`${key} must be a valid PostgreSQL connection URL`);
+  }
+}
+
+function requireDocumentStorageRecoveryDatabaseHostAllowlist(env, issues) {
+  const key = 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST';
+  const value = envValue(env, key);
+  if (!isConfigured(value)) return;
+
+  const entries = value.split(',').map((entry) => entry.trim());
+  if (entries.length === 0 || entries.some((entry) => !entry)) {
+    issues.push(`${key} must contain one or more nonempty comma-separated hostnames`);
+    return;
+  }
+
+  const normalizedEntries = entries.map((entry) => normaliseHostname(entry));
+  let hasNoncanonicalEntry = false;
+  let hasUnsafeEntry = false;
+  for (const [index, entry] of entries.entries()) {
+    const normalized = normalizedEntries[index];
+    const asciiHostname = domainToASCII(normalized);
+    if (entry !== entry.toLowerCase() || entry !== normalized || asciiHostname !== normalized) {
+      hasNoncanonicalEntry = true;
+    }
+    if (
+      entry.includes('*') ||
+      isIP(normalized) !== 0 ||
+      !isSyntacticallyPublicCanonicalDnsHostname(normalized)
+    ) {
+      hasUnsafeEntry = true;
+    }
+  }
+  if (hasNoncanonicalEntry) {
+    issues.push(`${key} entries must be canonical lowercase hostnames without a trailing dot`);
+  }
+  if (hasUnsafeEntry) {
+    issues.push(`${key} entries must be public DNS hostnames in canonical ASCII form with valid IDNA, never wildcard, IP, local, private, or reserved names`);
+  }
+
+  if (new Set(normalizedEntries).size !== normalizedEntries.length) {
+    issues.push(`${key} must not contain duplicate or trailing-dot-equivalent hostnames`);
+  }
+
+  try {
+    const databaseHostname = normaliseHostname(new URL(envValue(env, 'DATABASE_URL')).hostname);
+    if (databaseHostname && !normalizedEntries.includes(databaseHostname)) {
+      issues.push(`${key} must include the exact DATABASE_URL hostname`);
+    }
+  } catch {
+    // DATABASE_URL validity is reported by requireDatabaseUrl.
+  }
+}
+
+function requireOptionalCanonicalIntegerRange(env, key, minimum, maximum, issues) {
+  const value = envValue(env, key);
+  if (!value) return;
+
+  if (!/^(?:0|[1-9]\d*)$/.test(value)) {
+    issues.push(`${key} must be a canonical integer from ${minimum} to ${maximum}`);
+    return;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    issues.push(`${key} must be a canonical integer from ${minimum} to ${maximum}`);
   }
 }
 
@@ -531,6 +686,8 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   requireTrustedProxyAddresses(env, issues);
   requireIntegerPort(env, 'PORT', issues);
   requireDatabaseUrl(env, 'DATABASE_URL', issues);
+  requireDocumentStorageRecoveryDatabaseHostAllowlist(env, issues);
+  requireOptionalCanonicalIntegerRange(env, 'STORAGE_DELETE_TIMEOUT_MS', 100, 8000, issues);
   requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requirePrefix(env, 'STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
   for (const key of [

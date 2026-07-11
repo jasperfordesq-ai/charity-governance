@@ -34,7 +34,8 @@ npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml config --quiet
 npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
 npm run check:production:hosting -- --production-env-file=.env.production
-npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
+npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA
+npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json
 npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:observability -- --production-env-file=.env.production
@@ -179,11 +180,77 @@ npm run db:migrate:deploy -w @charitypilot/api
 
 Do not run that standalone command against production for P0-06. Production migration is owned by `npm run deploy:production`, which proves the old runtime is down and the pre-migration backup is restore-verifiable first. A managed platform replacement must implement and evidence the same quiesce, backup, isolated-migration, roll-forward, and restore-before-old-image contract.
 
-Use managed PostgreSQL backups with point-in-time recovery enabled. Confirm backup restore quarterly and record the evidence in `docs/production-launch-checklist.md`.
+Use managed PostgreSQL backups with point-in-time recovery enabled. Record the backup owner, schedule, retention, PostgreSQL RPO, and PostgreSQL RTO; confirm backup restore quarterly and record the evidence in `docs/production-launch-checklist.md`.
 
-Run `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel` before launch from a trusted shell with Docker available, after seeding the restore sentinel through the approved operational process. The checker takes a temporary custom-format dump from the production `DATABASE_URL`, restores it into a disposable local PostgreSQL container, verifies the critical application tables, governance reference data, and representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows, then removes the temporary dump by default. Do not store retained dumps in evidence systems.
+Never seed restore-sentinel application rows into production. `seed-restore-sentinel` is a disposable local/CI fixture only: it creates application records and is not production recovery evidence, and no remote override is supported. Production recovery proof is a two-step, non-mutating flow. First run the `--capture-source-identity --json` command above from a trusted shell and preserve its redacted output as an immutable external artifact. Then choose one recovery-set identifier and run the proof command with that independently captured SHA-256, an explicit encrypted output directory, `--keep-backup`, and `--json`. The proof holds one `REPEATABLE READ READ ONLY` source snapshot across canonical all-table capture and `pg_dump`, restores only into an internally constructed network-isolated ephemeral target, binds the dump and proof-report digests, and requires exact source/restored covered-schema, table-membership, row-count, and SHA-256 fingerprint equality. It accepts only the repository-approved `postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c` tools image and binds that identity into the report. Source workload and the custom-format dump are hard bounded, including a 64 GiB dump file-size ceiling and output-filesystem capacity preflight. Do not copy the expected source identity from the proof under test, do not store row values in evidence systems, and do not treat a marker without the bound JSON/report as evidence.
 
-For Supabase storage and project recovery, record restore evidence only from an isolated non-production restore target. The launch evidence for `supabaseStorage.checks.supabase-restore-tested` must name the owner, restore date, recovery notes, isolated restore target, non-production restore target, and confirmation that the live production Supabase project was not overwritten or mutated by the rehearsal.
+Replace `PROMOTED_RELEASE_COMMIT_SHA` in both commands above with the promoted lowercase full 40-character commit SHA. The checker binds its helper implementation to that release. For the second command, use the first command's `sourceDatabaseIdentitySha256` field as `--expected-source-database-identity-sha256`; do not substitute the SHA-256 of the JSON artifact itself.
+
+The certified schema scope is deliberately narrow and machine-readable. It covers only the `public` schema; ordinary and partitioned table rows plus materialized-view rows; and public relations, columns, constraints, indexes, triggers, row-security policies, routines/bodies, types/domains/enums/ranges, sequence definitions and `OWNED BY` relations, extended statistics, and user rules. Non-public schemas, extension installation/membership metadata, comments/security labels, and database-level roles, tablespaces, settings, foreign-data wrappers/servers, publications, subscriptions, and event triggers are excluded and must not be claimed as certified. Supported extension-owned objects in `public` remain fingerprinted by definition. PostgreSQL large objects are excluded and the proof fails unless both source and restore contain zero. The report and launch evidence preserve this complete scope object rather than collapsing it into a generic `schema matched` claim.
+
+The database result is consistency evidence, not provider provenance. Its exact limitation is: `This proof verifies a read-only source snapshot against one isolated restore. PostgreSQL ownership and ACL privileges are intentionally excluded by --no-owner and --no-privileges, sequence runtime state is excluded, and provider retention, immutable external custody, document-object recovery, and operator approval remain separate evidence.` The proof fails unless the public schema has zero sequences, identity columns, and `nextval` defaults; it therefore never implies that non-MVCC sequence values were captured. Preserve separate provider/operator evidence for roles, ownership, grants/default privileges, provider backup retention, and immutable custody. A launch proof must have been captured no more than 24 hours before final approval; an older but internally valid report is stale and cannot pass the launch evidence validator. Crashed labelled helper/restore containers are eligible for strict reaping only after the hard proof timeout plus grace period; active or bounded-age runs are never scavenged. Keep the source-identity capture, retained dump, proof report, provider backup policy, recovery operator/date/notes, and report SHA-256 outside git. The database proof does not cover Supabase object bytes; complete the joint document-recovery gate below with the same recovery-set identifier and database dump SHA-256. The database and document identity digests intentionally use different domains and must not be equated.
+
+Supabase database backup/PITR does not back up Storage object bytes. Configure an independent encrypted, versioned document-object backup with an owned schedule, retention, RPO/RTO, monitoring/alerting, and secure deletion behavior; see `docs/supabase-production-setup.md`. Restore PostgreSQL metadata and document objects together into isolated non-production targets, bind them to one recovery-set identifier, and reconcile the independently captured source and restored metadata/object inventories by identity, key, size, and SHA-256. The launch evidence for `supabaseStorage.checks.supabase-restore-tested` must include the redacted verifier output, manifest and reconciliation digests, owner/date/notes, isolated targets, zero missing/unexpected/mismatch counts, and confirmation that neither production system was overwritten or mutated.
+
+The v1 verifier deliberately rejects a vacuous zero-document exercise. Before the source capture, create and retain at least one approved non-sensitive QA document/object through the deployed application. Never introduce real charity data merely to make the proof pass. Keep that QA object present through the source backup, isolated database/object restore, complete inventory capture, and reconciliation. After the evidence artifacts have been finalized, remove it only through CharityPilot's normal authenticated document deletion flow and allow the audited deletion lifecycle to reach `PROCESSED`; never delete the database row or provider object out of band merely to tidy the rehearsal.
+
+Build the versioned recovery manifest only from provider/operator exports. The repository helper is offline: it has no production client, never downloads objects, never changes either target, rejects secret-looking input, refuses output overwrite, and writes the final manifest atomically with owner-only permissions. Start its deliberately invalid build-input template in ignored or approved encrypted external storage:
+
+```bash
+npm run prepare:production:document-recovery-manifest -- template \
+  --output-file=.charitypilot-launch-evidence/document-recovery-build-input.json \
+  --json
+```
+
+Use provider-approved, read-only tooling outside this repository to export four JSON inventories for the same exercise and recovery-set identifiers. Capture each database inventory in one transaction so its `Document`, `DocumentStorageDeletion`, and `DocumentStorageDeletionRecovery` tables share the envelope's decimal `captureTransactionId`. The source metadata export must be taken from the immutable source database capture; the restored metadata export must be taken from the isolated restored database. `inventoryScope` must be `complete-document-and-storage-deletion-tables`; the three declared row counts must exactly match `rows`, `documentStorageDeletions`, and `documentStorageDeletionRecoveries`. A document row contains only `id`, `organisationId`, `fileUrl`, `fileSize`, and `mimeType`; deletion and recovery rows must contain the exact lifecycle/audit columns required by the committed release's `scripts/generate-document-recovery-manifest.mjs`. The generator rejects missing, extra, filtered, cross-tenant, chronologically impossible, or inconsistent rows.
+
+Independently enumerate and download the source backup objects and isolated restored objects, stream each object through SHA-256 without logging its bytes, and produce object rows containing only `fileUrl`, `bytes`, and lowercase `sha256`. Object envelopes use `inventoryScope: "complete-whole-bucket"` and exact `bucketObjectCount`/`bucketTotalBytes` totals. Never put credentials, service-role keys, signed URLs, object bytes, or database connection strings in these files. A minimal metadata envelope shape is:
+
+```json
+{
+  "kind": "charitypilot-document-metadata-inventory-export",
+  "schemaVersion": 1,
+  "captureRole": "source",
+  "exerciseId": "EXERCISE_ID",
+  "recoverySetId": "RECOVERY_SET_ID",
+  "capturedAt": "2026-07-11T10:00:00.000Z",
+  "inventoryScope": "complete-document-and-storage-deletion-tables",
+  "documentRowCount": 1,
+  "storageDeletionRowCount": 0,
+  "recoveryEventRowCount": 0,
+  "captureTransactionId": "123456",
+  "rows": [
+    {
+      "id": "DOCUMENT_ID",
+      "organisationId": "ORGANISATION_ID",
+      "fileUrl": "ORGANISATION_ID/OBJECT_KEY",
+      "fileSize": 1,
+      "mimeType": "text/plain"
+    }
+  ],
+  "documentStorageDeletions": [],
+  "documentStorageDeletionRecoveries": []
+}
+```
+
+Use `kind: "charitypilot-document-object-inventory-export"` for object inventories and `captureRole: "restored"` for isolated-restore envelopes. Complete every build-input field from immutable provider/operator evidence. In particular, database and object backup references must contain their exact artifact SHA-256 path segment, and `reconciliation.reportReferenceTemplate` must contain `{reconciliationReportSha256}` exactly once. Then generate the single privacy-preserving manifest; raw document, deletion, recovery-event, organisation, object-path, and MIME-type values are converted to canonical v1 digests and are not written to it:
+
+```bash
+npm run prepare:production:document-recovery-manifest -- build \
+  --config-file=.charitypilot-launch-evidence/document-recovery-build-input.json \
+  --source-metadata-file=/secure/recovery/source-metadata.json \
+  --restored-metadata-file=/secure/recovery/restored-metadata.json \
+  --source-object-inventory-file=/secure/recovery/source-objects.json \
+  --restored-object-inventory-file=/secure/recovery/restored-objects.json \
+  --output-file=.charitypilot-launch-evidence/document-recovery-manifest.json \
+  --json
+```
+
+Retain the redacted generation result and all original source captures immutably outside git before verification. The output conforms to `scripts/charitypilot-document-recovery-manifest-v1.schema.json`, while `scripts/verify-document-recovery.mjs` remains authoritative for cross-field chronology, source bindings, digests, reconciliation, secret screening, and the 16 MiB serialized bound. The current certification ceiling is 5,000 documents, 10 MiB per object, and a 16 MiB manifest. If a complete production capture exceeds 5,000 documents or cannot fit within 16 MiB, stop: that is an external scale/certification blocker requiring a reviewed paginated or streaming v2 contract, not permission to sample or truncate.
+
+Do not reuse the database restore checker's source-identity digest as `source.databaseIdentitySha256`. The database checker binds endpoint and server metadata under its own domain; this document manifest hashes `provider|projectRef|databaseName|schemaName` under `charitypilot:database-identity:v1`. Cross-bind the two exercises with the same `recoverySetId` and `databaseDumpSha256`, not identity-digest equality.
+
+Run `npm run check:production:document-recovery` only with the complete 30-flag argument set printed by `--help` or exposed as `productionLaunchCommands.documentRecovery` by `npm run launch:status -- --json`. The recovery manifest belongs in the ignored `.charitypilot-launch-evidence/` directory or approved encrypted external storage. Every `--expected-*` digest, document/deletion/recovery-event count, capture timestamp, database capture transaction ID, proof-age bound, exercise ID, and recovery-set ID must come from the immutable independent source database/object-backup capture, not from the manifest being checked. Capture `--json` output outside git and bind its manifest, source, inventory, recovery-event, reconciliation, count, chronology, and objective fields into the launch evidence ledger. Record `isolationAttestationRecorded`, both production-not-overwritten attestation fields, and `restoreCredentialsScopedToTargetAttestationRecorded` as attestations only. The verifier checks their presence and internal consistency; it does not authenticate the operator claims or external source provenance, and `sourceProvenanceExternallyVerified` must remain `false`. A success result means `Document recovery reconciliation consistency passed against independently supplied bindings.` Retain the immutable capture report and provider/operator evidence for provenance and for the truth of those attestations.
 
 ## Jobs
 
@@ -198,6 +265,14 @@ node dist/jobs/cleanup-document-storage.js
 The scheduled job runtime must receive the same production secret source that passed preflight. For Docker Compose, `production-scheduler` must be running after deploy, and the profile jobs must have successful test-run evidence. A platform scheduler that replaces Compose must implement the same technical quiescence contract: stop new invocations, await/cancel in-flight runs, prove no provider I/O remains active, and run the P0-06 cutover preparation/reconciliation gate before starting the promoted scheduler. Merely disabling a cron expression is insufficient.
 
 Record scheduler ownership, command coverage for all three job entrypoints, log capture, and failure-alert evidence in `docs/production-launch-checklist.md`.
+
+### Document-deletion dead letters
+
+Document-object deletion is a durable bounded lifecycle, not an infinite hourly retry. The cleanup job makes at most five attempts with deterministic exponential backoff; permanently invalid tenant paths dead-letter on the first attempt. Monitor both `DOCUMENT_STORAGE_CLEANUP_FAILED` (job failure) and `DOCUMENT_STORAGE_DELETION_DEAD_LETTERED` (one or more deletion records require review). A successfully delivered dead-letter alert is acknowledged against its exact claim token so the same row is not alerted on every scheduler run; a failed alert delivery releases the claim for retry.
+
+Do not repair a dead letter with ad-hoc SQL or a direct provider-object mutation. Active entitled tenant owners/admins may only `REQUEUE_UNCHANGED` through the authenticated API, and a permanently rejected path cannot use that disposition. Corrected-path recovery and externally evidenced completion are reserved for the one-shot named platform-operator CLI. Follow the dry-run/review/execute procedure in `docs/architecture/06-document-storage.md`: use the exact production env file, confirm the allowlisted database authority, review attempts/terminal reason and the returned authority/path digests, and copy the target-bound execution confirmation exactly. `COMPLETE_EXTERNALLY_REMEDIATED` records externally proven deletion; it does not claim the provider delete happened inside CharityPilot.
+
+Before launch, prove the migration is deployed, both alert codes reach the incident system, and the documented recovery procedure works against an isolated non-production rehearsal. Do not manufacture a production dead letter merely to create evidence. Retain the named operator, reason, dry-run/execute redacted outputs, external provider evidence where applicable, and append-only `DocumentStorageDeletionRecovery` event reference outside git.
 
 ## Storage
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import { isIP } from 'node:net';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { domainToASCII, fileURLToPath, pathToFileURL } from 'node:url';
 import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,34 @@ const PLACEHOLDER_PATTERN = /(?:replace_me|real_|todo|tbd|pending|placeholder|ch
 const USAGE_TEXT =
   'Usage: node scripts/check-production-github-env.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance] [--json]';
 
+function recoveryDatabaseHostAllowlistIssue(value) {
+  const entries = value.split(',').map((entry) => entry.trim());
+  if (entries.length === 0 || entries.some((entry) => !entry)) {
+    return 'GitHub production variable DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST must contain nonempty comma-separated hostnames';
+  }
+  if (new Set(entries).size !== entries.length) {
+    return 'GitHub production variable DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST must not contain duplicate hostnames';
+  }
+  for (const entry of entries) {
+    const ascii = domainToASCII(entry);
+    const labels = entry.split('.');
+    const reserved = [
+      '.alt', '.arpa', '.example', '.internal', '.invalid', '.local', '.localhost',
+      '.localdomain', '.onion', '.private', '.test',
+    ].some((suffix) => entry.endsWith(suffix));
+    if (
+      !ascii || ascii !== entry || entry !== entry.toLowerCase() || entry.endsWith('.') ||
+      entry.includes('*') || isIP(entry) !== 0 || entry.length > 253 || labels.length < 2 ||
+      labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)) ||
+      !/[a-z]/u.test(labels.at(-1) ?? '') || reserved ||
+      ['example.com', 'example.net', 'example.org', 'localhost', 'host.docker.internal'].includes(entry)
+    ) {
+      return 'GitHub production variable DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST must contain canonical public DNS hostnames';
+    }
+  }
+  return null;
+}
+
 export const REQUIRED_GITHUB_PRODUCTION_VARIABLES = Object.freeze([
   {
     name: 'NEXT_PUBLIC_API_URL',
@@ -23,6 +52,10 @@ export const REQUIRED_GITHUB_PRODUCTION_VARIABLES = Object.freeze([
       }
       return null;
     },
+  },
+  {
+    name: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
+    validate: recoveryDatabaseHostAllowlistIssue,
   },
 ]);
 
@@ -161,6 +194,7 @@ function remediationCommands(environment, repository) {
   return [
     'Safe remediation commands:',
     `- gh variable set NEXT_PUBLIC_API_URL --env ${environment} --repo ${repository} --body "${CANONICAL_API_ORIGIN}"`,
+    `- gh variable set DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST --env ${environment} --repo ${repository} --body "<managed-postgres-hostname>"`,
   ];
 }
 

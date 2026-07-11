@@ -195,15 +195,68 @@ jobs:
           node scripts/postgres-backup.mjs seed-restore-sentinel \
             --database-url="${DATABASE_URL}" \
             --docker-network=host
-          node scripts/postgres-backup.mjs backup \
-            --database-url="${DATABASE_URL}" \
+          source_identity_json="$(node scripts/postgres-backup.mjs source-identity \
             --docker-network=host \
+            --json)"
+          source_identity_sha="$(SOURCE_IDENTITY_JSON="${source_identity_json}" node -e '
+            const value = JSON.parse(process.env.SOURCE_IDENTITY_JSON);
+            const helper = value.helperImplementation ?? {};
+            if (
+              value.format !== "charitypilot-postgres-source-identity/v2" ||
+              value.ok !== true ||
+              value.sourceReadOnlyVerified !== true ||
+              !/^[a-f0-9]{64}$/.test(value.sourceDatabaseIdentitySha256 ?? "") ||
+              helper.format !== "charitypilot-postgres-proof-helper/v1" ||
+              helper.repositoryUrl !== "https://github.com/jasperfordesq-ai/charity-governance" ||
+              helper.commitSha !== process.env.GITHUB_SHA ||
+              helper.sourcePath !== "scripts/postgres-backup.mjs" ||
+              !/^[a-f0-9]{64}$/.test(helper.sourceSha256 ?? "") ||
+              helper.sourceSha256 !== helper.commitSourceSha256 ||
+              helper.sourceMatchesCommit !== true ||
+              helper.canonicalRepositoryMatched !== true
+            ) process.exit(1);
+            process.stdout.write(value.sourceDatabaseIdentitySha256);
+          ')"
+          node scripts/postgres-backup.mjs prove-restore \
+            --docker-network=host \
+            --recovery-set-id="release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --expected-source-database-identity-sha256="${source_identity_sha}" \
             --output-dir="${backup_dir}" \
-            --output-file=ci-postgres.dump \
-            --overwrite
-          node scripts/postgres-backup.mjs verify-restore \
-            --dump-file="${backup_dir}/ci-postgres.dump" \
-            --expect-operational-sentinel
+            --output-file=release-postgres-restore-proof.dump \
+            --report-file=release-postgres-restore-proof.json
+          PROOF_REPORT="${backup_dir}/release-postgres-restore-proof.json" SOURCE_IDENTITY_SHA="${source_identity_sha}" node -e '
+            const fs = require("node:fs");
+            const value = JSON.parse(fs.readFileSync(process.env.PROOF_REPORT, "utf8"));
+            const helper = value.helperImplementation ?? {};
+            const comparison = value.comparison ?? {};
+            const sourceDatabaseEnvironment = value.source?.databaseEnvironment ?? {};
+            const restoredDatabaseEnvironment = value.restored?.databaseEnvironment ?? {};
+            if (
+              value.format !== "charitypilot-postgres-restore-proof/v2" ||
+              value.ok !== true ||
+              value.sourceReadOnlyVerified !== true ||
+              value.sourceIdentityBindingMatched !== true ||
+              value.sourceDatabaseIdentitySha256 !== process.env.SOURCE_IDENTITY_SHA ||
+              value.expectedSourceDatabaseIdentitySha256 !== process.env.SOURCE_IDENTITY_SHA ||
+              helper.commitSha !== process.env.GITHUB_SHA ||
+              helper.sourceSha256 !== helper.commitSourceSha256 ||
+              helper.sourceMatchesCommit !== true ||
+              helper.canonicalRepositoryMatched !== true ||
+              value.dump?.unchangedDuringProof !== true ||
+              value.dump?.capacityPreflight?.verified !== true ||
+              value.restoreTarget?.cleanupVerified !== true ||
+              value.restoreTarget?.databaseEnvironmentPreserved !== true ||
+              value.restoreTarget?.initializedFromSourceDatabaseEnvironment !== true ||
+              sourceDatabaseEnvironment.localeProvider !== "libc" ||
+              JSON.stringify(sourceDatabaseEnvironment) !== JSON.stringify(restoredDatabaseEnvironment) ||
+              JSON.stringify(sourceDatabaseEnvironment) !== JSON.stringify(value.restoreTarget?.databaseEnvironment) ||
+              comparison.databaseEnvironmentMatched !== true ||
+              comparison.schemaMatched !== true ||
+              comparison.rowCountsMatched !== true ||
+              comparison.rowFingerprintsMatched !== true ||
+              comparison.mismatchCount !== 0
+            ) process.exit(1);
+          '
 
       - name: Build API Docker image
         run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
@@ -215,7 +268,7 @@ jobs:
             -e PORT=3002 \
             -e TRUSTED_PROXY_ADDRESSES=10.0.0.10 \
             -e READINESS_API_KEY=ci-readiness-key-with-enough-entropy \
-            -e DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=require \
+            -e "DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write" \
             -e JWT_SECRET=ci-production-jwt-secret-with-enough-entropy \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
@@ -397,7 +450,7 @@ jobs:
             -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/cleanup-document-storage.js | tee "${cleanup_output}"
-          grep -F "Document storage cleanup completed. Processed: 0. Failed: 0." "${cleanup_output}"
+          grep -F "Document storage cleanup completed. Processed: 0. Retry scheduled: 0. Newly dead-lettered: 0." "${cleanup_output}"
 
           scheduler_output="$(mktemp)"
           docker run --rm --network host \
@@ -574,7 +627,8 @@ jobs:
           PORT=3002
           TRUSTED_PROXY_ADDRESSES=10.0.0.10
           READINESS_API_KEY=ci-readiness-key-with-enough-entropy
-          DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=require
+          DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write
+          DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=db.charitypilot.ie
           JWT_SECRET=ci-production-jwt-secret-with-enough-entropy
           FRONTEND_URL=https://app.charitypilot.ie
           AUTH_COOKIE_DOMAIN=.charitypilot.ie
@@ -587,7 +641,7 @@ jobs:
           STRIPE_BILLING_PORTAL_CONFIGURATION_ID=bpc_ci_portal
           RESEND_API_KEY=re_ci_configured_secret
           EMAIL_FROM=noreply@charitypilot.ie
-          SUPABASE_URL=https://ci-project.supabase.co
+          SUPABASE_URL=https://xjvdkmqbtczrnlqpswfa.supabase.co
           SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key
           SUPABASE_STORAGE_BUCKET=documents
           ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot

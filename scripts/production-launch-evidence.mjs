@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  closeSync,
+  constants as fsConstants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { evidenceHints as defaultEvidenceHints } from './generate-production-launch-evidence-template.mjs';
@@ -76,7 +84,7 @@ export const REQUIRED_LAUNCH_AREAS = [
   },
   {
     id: 'supabaseStorage',
-    label: 'Supabase Storage',
+    label: 'Document Object Storage (Supabase)',
     checks: [
       ['separate-production-project', 'production Supabase project is separate'],
       ['documents-bucket-exists', 'documents bucket exists or configured bucket is approved'],
@@ -85,8 +93,8 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['readiness-storage-configured', 'readiness reports storageConfigured true'],
       ['readiness-storage-reachable', 'readiness reports storageBucketReachable true'],
       ['document-upload-download', 'document upload and authenticated API byte download verified through deployed app'],
-      ['supabase-backups-enabled', 'Supabase backup policy or PITR enabled'],
-      ['supabase-restore-tested', 'Supabase restore test evidence exists and has an owner'],
+      ['supabase-backups-enabled', 'encrypted and versioned document-object-byte backup is separate from PostgreSQL and has owned recovery objectives'],
+      ['supabase-restore-tested', 'isolated joint PostgreSQL-metadata and document-object restore is checksum reconciled'],
     ],
   },
   {
@@ -173,9 +181,196 @@ const allowedEvidenceTypes = new Set([
   'url',
 ]);
 
-const placeholderOrLocalPattern = /\b(todo|tbd|pending(?!-navigation confirmation)|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|project_ref|change-me|your_|your-|file:\/\//i;
+const sha256DigestPattern = /^[a-f0-9]{64}$/;
+const jointRecoveryManifestFormat = 'charitypilot-document-recovery-manifest-v1';
+const jointRecoveryTargetType = 'isolated-non-production';
+const jointRecoveryVerifierBaseCommand =
+  'npm run check:production:document-recovery -- --manifest-file=.charitypilot-launch-evidence/document-recovery-manifest.json';
+const jointRecoveryVerifierCommandPrefix = 'npm run check:production:document-recovery --';
+const jointRecoveryConsistencySuccessText =
+  'Document recovery reconciliation consistency passed against independently supplied bindings.';
+const jointRecoveryProvenanceLimitation =
+  'Caller-supplied binding equality proves offline consistency only; it does not authenticate the source exports, source-capture report, provider, or operator provenance.';
+const recoverySetIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
+const postgresTransactionIdPattern = /^[1-9]\d{0,18}$/;
+const maximumPostgresTransactionId = 9_223_372_036_854_775_807n;
+const maximumDocumentProofAgeMinutes = 24 * 60;
+const jointRecoveryDigestFields = [
+  'recoveryManifestSha256',
+  'sourceBindingSha256',
+  'sourceCaptureReportSha256',
+  'sourceDatabaseIdentitySha256',
+  'sourceObjectStoreIdentitySha256',
+  'databaseDumpSha256',
+  'objectBackupManifestSha256',
+  'sourceMetadataInventorySha256',
+  'restoredMetadataInventorySha256',
+  'sourceObjectInventorySha256',
+  'restoredObjectInventorySha256',
+  'sourceStorageDeletionInventorySha256',
+  'restoredStorageDeletionInventorySha256',
+  'sourceRecoveryEventInventorySha256',
+  'restoredRecoveryEventInventorySha256',
+  'reconciliationReportSha256',
+];
+const jointRecoveryCountFields = [
+  'metadataRowCount',
+  'expectedObjectCount',
+  'restoredObjectCount',
+  'matchedObjectCount',
+  'missingObjectCount',
+  'unexpectedObjectCount',
+  'orphanExpectedObjectCount',
+  'orphanRestoredObjectCount',
+  'checksumMismatchCount',
+  'expectedBytes',
+  'restoredBytes',
+  'storageDeletionCount',
+  'pendingStorageDeletionCount',
+  'deadLetterStorageDeletionCount',
+  'processedStorageDeletionCount',
+  'restoredStorageDeletionCount',
+  'restoredPendingStorageDeletionCount',
+  'restoredDeadLetterStorageDeletionCount',
+  'restoredProcessedStorageDeletionCount',
+  'recoveryEventCount',
+  'restoredRecoveryEventCount',
+  'processedDeletionObjectResidueCount',
+];
+const jointRecoveryTimestampFields = [
+  'sourceMetadataCapturedAt',
+  'restoredMetadataCapturedAt',
+  'sourceObjectInventoryCapturedAt',
+  'restoredObjectInventoryCapturedAt',
+  'documentProofOldestCapturedAt',
+  'documentProofFreshThroughAt',
+  'reconciledAt',
+];
+const jointRecoveryVerifierPayloadFields = [
+  'manifestFormat',
+  'checksumAlgorithm',
+  ...jointRecoveryDigestFields,
+  'exerciseId',
+  'recoverySetId',
+  ...jointRecoveryCountFields,
+  'sourceMetadataCapturedAt',
+  'restoredMetadataCapturedAt',
+  'sourceObjectInventoryCapturedAt',
+  'restoredObjectInventoryCapturedAt',
+  'sourceMetadataCaptureTransactionId',
+  'restoredMetadataCaptureTransactionId',
+  'documentProofOldestCapturedAt',
+  'documentProofAgeMinutes',
+  'maximumDocumentProofAgeMinutes',
+  'documentProofFreshThroughAt',
+  'documentProofFresh',
+  'restoreTargetType',
+  'isolationAttestationRecorded',
+  'productionDatabaseNotOverwrittenAttestationRecorded',
+  'productionObjectStoreNotOverwrittenAttestationRecorded',
+  'restoreCredentialsScopedToTargetAttestationRecorded',
+  'objectives',
+  'reconciledAt',
+  'ownerRecorded',
+  'recoveryOperatorRecorded',
+  'notesRecorded',
+  'externalEvidenceReferencesRecorded',
+  'independentBindingArgumentsMatched',
+  'sourceProvenanceExternallyVerified',
+  'provenanceLimitation',
+  'secretValuesPrinted',
+];
+const databaseIdentityCaptureCommand =
+  'npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json';
+const databaseRestoreProofBaseCommand =
+  'npm run check:production:database -- --production-env-file=.env.production';
+const databaseCheckerCommandPrefix = 'npm run check:production:database --';
+const databaseRestoreProofFormat = 'snapshot-bound-read-only-source-restored-sha256-reconciliation';
+const databaseSourceIdentityEvidenceFormat = 'charitypilot-postgres-source-identity/v2';
+const databaseRestoreReportFormat = 'charitypilot-postgres-restore-proof/v2';
+const databaseHelperImplementationFormat = 'charitypilot-postgres-proof-helper/v1';
+const databaseHelperRepositoryUrl = 'https://github.com/jasperfordesq-ai/charity-governance';
+const databaseHelperSourcePath = 'scripts/postgres-backup.mjs';
+const approvedDatabaseToolsImageReference =
+  'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
+const approvedDatabaseToolsImageDigestSha256 =
+  '5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
+const databaseSourceIdentityProvenanceLimitation =
+  'The identity digest proves consistency with the supplied source endpoint and read-only server metadata; independent immutable capture and operator control remain external evidence.';
+const databaseRestoreProofProvenanceLimitation =
+  'This proof verifies a read-only source snapshot against one isolated restore. PostgreSQL ownership and ACL privileges are intentionally excluded by --no-owner and --no-privileges, sequence runtime state is excluded, and provider retention, immutable external custody, document-object recovery, and operator approval remain separate evidence.';
+const databaseSequenceStateExclusionReason =
+  'PostgreSQL sequence values are non-MVCC and cannot be bound to the exported snapshot; this proof therefore fails unless the public schema has zero sequences, identity columns, and nextval defaults.';
+const databaseOwnershipExclusionReason =
+  'The custom-format dump is captured and restored with --no-owner, so PostgreSQL object ownership is outside this proof.';
+const databaseAclPrivilegesExclusionReason =
+  'The custom-format dump is captured and restored with --no-privileges, so PostgreSQL ACL grants and default privileges are outside this proof.';
+const databaseRestoreWorkloadSafety = Object.freeze({
+  tempFileLimitBytes: '1073741824',
+  maxPublicTables: 5000,
+  maxRowsPerTable: 25000000,
+  maxTotalRows: 100000000,
+  maxFingerprintReportBytes: 16777216,
+  maxDumpBytes: '68719476736',
+  statementTimeoutMs: 1800000,
+  lockTimeoutMs: 30000,
+  idleTransactionTimeoutMs: 2640000,
+});
+const databaseSchemaCertificationScope = Object.freeze({
+  certifiedSchemas: ['public'],
+  certifiedDataClasses: ['ordinary-table-rows', 'partitioned-table-own-rows', 'materialized-view-rows'],
+  certifiedObjectClasses: [
+    'relations', 'columns', 'constraints', 'indexes', 'triggers', 'row-security-policies',
+    'routines-and-bodies', 'types-domains-enums-and-ranges',
+    'sequence-definitions-and-owned-by-relations', 'extended-statistics', 'user-rules',
+  ],
+  publicSchemaOnly: true,
+  nonPublicSchemasIncluded: false,
+  largeObjectsIncluded: false,
+  largeObjectCount: 0,
+  extensionMembershipIncluded: false,
+  commentsIncluded: false,
+  securityLabelsIncluded: false,
+  databaseLevelObjectsIncluded: false,
+  exclusions: [
+    { scope: 'non-public-schemas', reason: 'Only objects in the public schema are fingerprinted and compared.' },
+    { scope: 'large-objects', reason: 'PostgreSQL large objects are excluded and proof fails unless the source and restore contain zero large objects.' },
+    { scope: 'extension-membership', reason: 'Extension installation and membership metadata are excluded; supported extension-owned objects in public are fingerprinted by object definition.' },
+    { scope: 'comments-and-security-labels', reason: 'Comments and security labels are not recovery-critical application integrity data and are excluded.' },
+    { scope: 'database-level-objects', reason: 'Roles, tablespaces, database settings, foreign-data wrappers and servers, publications, subscriptions, and event triggers are excluded.' },
+  ],
+});
+const databaseRestoreProofMaximumAgeMs = 24 * 60 * 60 * 1000;
+const databaseCapacityPreflightMethod = 'pg-database-size-factor-margin/v1';
+const databaseCapacitySafetyFactor = 2;
+const databaseCapacitySafetyMarginBytes = '1073741824';
+const databaseRestoreDigestFields = [
+  'expectedSourceDatabaseIdentitySha256',
+  'sourceDatabaseIdentitySha256',
+  'databaseDumpSha256',
+  'dumpDescriptorSha256',
+  'dumpSourceBindingSha256',
+  'proofReportSha256',
+  'sourceDatabaseFingerprintSha256',
+  'restoredDatabaseFingerprintSha256',
+  'publicSchemaSha256',
+  'tableMembershipSha256',
+  'snapshotIdSha256',
+  'isolatedRestoreDatabaseIdentitySha256',
+];
+const databaseRestoreEnvironmentFields = [
+  'sourceDatabaseEnvironment',
+  'restoredDatabaseEnvironment',
+  'restoreTargetDatabaseEnvironment',
+  'restoreInitializedFromSourceDatabaseEnvironment',
+  'databaseEnvironmentPreserved',
+  'databaseEnvironmentMatched',
+];
+
+const placeholderOrLocalPattern = /\b(todo|tbd|pending(?!-navigation confirmation|-storage-deletion-count)|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|project_ref|change-me|your_|your-|file:\/\//i;
 const sampleSupabaseProjectRefPattern = /https:\/\/(?:configured-project|example|ci-project|test-project|demo-project|sample-project)\.supabase\.co\b/i;
-const rawSecretPattern = /\b(sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|re_[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}|postgres(?:ql)?:\/\/[^@\s]+@|DATABASE_URL=|JWT_SECRET=|SUPABASE_SERVICE_ROLE_KEY=|STRIPE_SECRET_KEY=|STRIPE_WEBHOOK_SECRET=|STRIPE_BILLING_PORTAL_CONFIGURATION_ID=|RESEND_API_KEY=)\b/;
+const directRawSecretPattern = /(?:sk_live_[A-Za-z0-9_=-]{8,}|whsec_[A-Za-z0-9_=-]{8,}|re_[A-Za-z0-9_=-]{8,}|gh[pousr]_[A-Za-z0-9_=-]{8,}|github_pat_[A-Za-z0-9_=-]{8,}|eyJ[A-Za-z0-9_-]{20,}|(?:postgres(?:ql)?|https?):\/\/[^\s/@:]+:[^\s/@]+@|Bearer\s+[A-Za-z0-9._~+/=-]{8,}|Basic\s+[A-Za-z0-9+/]{8,}={0,2}|-----BEGIN(?: RSA| EC| OPENSSH)? PRIVATE KEY-----)/i;
+const sensitiveAssignmentPattern = /\b(?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|GITHUB_TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|PASSWORD|TOKEN|KEY|APIKEY|API_KEY|PRIVATE_KEY|CLIENT_SECRET|AWS[_-]?SECRET[_-]?ACCESS[_-]?KEY|SERVICE[_-]?ROLE[_-]?KEY)\s*[:=]\s*["']?([^\s"',;}]+)/i;
 const approvedEvidenceReferenceHosts = ['charitypilot.ie', 'github.com'];
 const sensitiveEvidenceReferenceQueryKeys = new Set([
   'access_token',
@@ -198,6 +393,10 @@ const imageRepositories = {
 };
 const releaseWorkflowFile = '.github/workflows/release-images.yml';
 const defaultEvidenceFile = '.charitypilot-launch-evidence/production-launch-evidence.json';
+const maximumLaunchEvidenceFileBytes = 8 * 1024 * 1024;
+const maximumLaunchEvidenceJsonDepth = 64;
+const maximumLaunchEvidenceNodeCount = 100_000;
+const maximumLaunchEvidenceStringBytes = maximumLaunchEvidenceFileBytes;
 export const FINAL_SIGNOFF_ROLES = [
   ['engineering', 'Engineering owner'],
   ['operations', 'Operations owner'],
@@ -284,29 +483,282 @@ function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
 }
 
-function decodeJsonFile(path) {
-  const bytes = readFileSync(path);
+export class LaunchEvidenceInputError extends Error {}
 
+function stableFileIdentity(status) {
+  return {
+    dev: String(status.dev),
+    ino: String(status.ino),
+    size: String(status.size),
+    mode: String(status.mode),
+    mtimeNs: String(status.mtimeNs ?? BigInt(Math.trunc(Number(status.mtimeMs) * 1_000_000))),
+    ctimeNs: String(status.ctimeNs ?? BigInt(Math.trunc(Number(status.ctimeMs) * 1_000_000))),
+  };
+}
+
+function stableFileIdentitiesMatch(left, right) {
+  return Object.keys(left).every((key) => left[key] === right[key]);
+}
+
+function decodeLaunchEvidenceBytes(bytes) {
+  let encoding = 'utf-8';
+  let content = bytes;
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return bytes.subarray(2).toString('utf16le');
+    encoding = 'utf-16le';
+    content = bytes.subarray(2);
+  } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    encoding = 'utf-16be';
+    content = bytes.subarray(2);
+  } else if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    content = bytes.subarray(3);
   }
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    const swapped = Buffer.alloc(bytes.length - 2);
-    for (let index = 2; index + 1 < bytes.length; index += 2) {
-      swapped[index - 2] = bytes[index + 1];
-      swapped[index - 1] = bytes[index];
-    }
-    return swapped.toString('utf16le');
+  if (encoding.startsWith('utf-16') && content.length % 2 !== 0) {
+    throw new LaunchEvidenceInputError('evidence file contains invalid Unicode encoding');
   }
-  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return bytes.subarray(3).toString('utf8');
+  try {
+    return new TextDecoder(encoding, { fatal: true }).decode(content);
+  } catch {
+    throw new LaunchEvidenceInputError('evidence file contains invalid Unicode encoding');
   }
+}
 
-  return bytes.toString('utf8');
+function assertSafeJsonTextStructure(text) {
+  const stack = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '"') {
+      const start = index;
+      let closed = false;
+      for (index += 1; index < text.length; index += 1) {
+        if (text[index] === '\\') {
+          index += 1;
+          continue;
+        }
+        if (text[index] === '"') {
+          closed = true;
+          break;
+        }
+      }
+      if (!closed) throw new LaunchEvidenceInputError('evidence file is not valid JSON');
+      const token = text.slice(start, index + 1);
+      let decoded;
+      try {
+        decoded = JSON.parse(token);
+      } catch {
+        throw new LaunchEvidenceInputError('evidence file is not valid JSON');
+      }
+      let lookahead = index + 1;
+      while (/\s/.test(text[lookahead] ?? '')) lookahead += 1;
+      const frame = stack.at(-1);
+      if (text[lookahead] === ':' && frame?.type === 'object') {
+        if (frame.keys.has(decoded)) {
+          throw new LaunchEvidenceInputError('evidence file contains duplicate JSON object keys');
+        }
+        frame.keys.add(decoded);
+      }
+      continue;
+    }
+    if (character === '{' || character === '[') {
+      if (stack.length >= maximumLaunchEvidenceJsonDepth) {
+        throw new LaunchEvidenceInputError('evidence file exceeds the maximum JSON nesting depth');
+      }
+      stack.push(character === '{' ? { type: 'object', keys: new Set() } : { type: 'array' });
+      continue;
+    }
+    if (character === '}' || character === ']') {
+      const frame = stack.pop();
+      if (!frame || (character === '}' && frame.type !== 'object') || (character === ']' && frame.type !== 'array')) {
+        throw new LaunchEvidenceInputError('evidence file is not valid JSON');
+      }
+    }
+  }
+  if (stack.length !== 0) throw new LaunchEvidenceInputError('evidence file is not valid JSON');
+}
+
+export function readStableLaunchEvidenceFile(
+  path,
+  {
+    lstat = lstatSync,
+    open = openSync,
+    fstat = fstatSync,
+    read = readSync,
+    close = closeSync,
+  } = {},
+) {
+  const before = lstat(path, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink()) {
+    throw new LaunchEvidenceInputError('evidence file must be a regular non-symbolic-link file');
+  }
+  if (before.size > BigInt(maximumLaunchEvidenceFileBytes)) {
+    throw new LaunchEvidenceInputError('evidence file exceeds the bounded input safety limit');
+  }
+  const beforeIdentity = stableFileIdentity(before);
+  const descriptor = open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  try {
+    const opened = fstat(descriptor, { bigint: true });
+    const openedIdentity = stableFileIdentity(opened);
+    if (!opened.isFile() || !stableFileIdentitiesMatch(beforeIdentity, openedIdentity)) {
+      throw new LaunchEvidenceInputError('evidence file changed while its stable descriptor was opened');
+    }
+    const size = Number(opened.size);
+    if (!Number.isSafeInteger(size) || size > maximumLaunchEvidenceFileBytes) {
+      throw new LaunchEvidenceInputError('evidence file exceeds the bounded input safety limit');
+    }
+    const bytes = Buffer.alloc(size);
+    let offset = 0;
+    while (offset < size) {
+      const bytesRead = read(descriptor, bytes, offset, size - offset, offset);
+      if (bytesRead <= 0) {
+        throw new LaunchEvidenceInputError('evidence file changed while it was being read');
+      }
+      offset += bytesRead;
+    }
+    const afterDescriptor = fstat(descriptor, { bigint: true });
+    const afterPath = lstat(path, { bigint: true });
+    if (!afterPath.isFile() || afterPath.isSymbolicLink() ||
+      !stableFileIdentitiesMatch(openedIdentity, stableFileIdentity(afterDescriptor)) ||
+      !stableFileIdentitiesMatch(openedIdentity, stableFileIdentity(afterPath))) {
+      throw new LaunchEvidenceInputError('evidence file changed while it was being read');
+    }
+    const text = decodeLaunchEvidenceBytes(bytes);
+    assertSafeJsonTextStructure(text);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new LaunchEvidenceInputError('evidence file is not valid JSON');
+    }
+  } finally {
+    close(descriptor);
+  }
 }
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isExplicitlyRedactedSecret(value) {
+  return /^(?:\[redacted\]|<redacted>|redacted|not[-_ ]read)$/i.test(value);
+}
+
+function containsRawSecretText(value) {
+  if (typeof value !== 'string') return false;
+  if (directRawSecretPattern.test(value)) return true;
+  const assignment = sensitiveAssignmentPattern.exec(value);
+  return Boolean(assignment && !isExplicitlyRedactedSecret(assignment[1]));
+}
+
+function isSensitiveLedgerKey(key) {
+  const words = String(key)
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (words.length === 0) return false;
+  const last = words.at(-1);
+  if (['password', 'passwd', 'token', 'secret'].includes(last)) return true;
+  if (words.length >= 2 && ['api', 'private'].includes(words.at(-2)) && last === 'key') return true;
+  if (
+    last === 'key' &&
+    (words.includes('secret') || words.includes('access') || (words.includes('service') && words.includes('role')))
+  ) return true;
+  return [
+    'databaseurl', 'jwtsecret', 'readinessapikey', 'stripesecretkey',
+    'stripewebhooksecret', 'resendapikey', 'supabaseservicerolekey',
+    'erroralertwebhookurl', 'githubtoken',
+  ].includes(words.join(''));
+}
+
+function safeLedgerPath(path, key) {
+  if (containsRawSecretText(key) || String(key).length > 128) return `${path}.[unsafe-key]`;
+  return path ? `${path}.${key}` : String(key);
+}
+
+function validateWholeLedgerSafety(evidence, issues) {
+  const stack = [{ value: evidence, path: '', depth: 1 }];
+  const seen = new WeakSet();
+  let nodeCount = 0;
+  let stringBytes = 0;
+  let structurallySafe = true;
+  const inspectString = (value, path, { sensitiveKey = false } = {}) => {
+    stringBytes += Buffer.byteLength(value, 'utf8');
+    if (stringBytes > maximumLaunchEvidenceStringBytes) {
+      issues.push('evidence ledger exceeds the aggregate string safety limit');
+      structurallySafe = false;
+      return;
+    }
+    if (containsRawSecretText(value) || (sensitiveKey && !isExplicitlyRedactedSecret(value))) {
+      issues.push(`${path || 'evidence'} must not contain raw secret-looking values`);
+    }
+  };
+
+  while (stack.length > 0 && structurallySafe) {
+    const entry = stack.pop();
+    nodeCount += 1;
+    if (nodeCount > maximumLaunchEvidenceNodeCount) {
+      issues.push('evidence ledger exceeds the JSON node safety limit');
+      structurallySafe = false;
+      break;
+    }
+    if (entry.depth > maximumLaunchEvidenceJsonDepth) {
+      issues.push('evidence ledger exceeds the maximum JSON nesting depth');
+      structurallySafe = false;
+      break;
+    }
+    const value = entry.value;
+    if (typeof value === 'string') {
+      inspectString(value, entry.path);
+      continue;
+    }
+    if (value === null || typeof value === 'boolean') continue;
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        issues.push(`${entry.path || 'evidence'} must contain only JSON-compatible finite numbers`);
+        structurallySafe = false;
+      }
+      continue;
+    }
+    if (typeof value !== 'object') {
+      issues.push(`${entry.path || 'evidence'} must contain only JSON-compatible values`);
+      structurallySafe = false;
+      continue;
+    }
+    if (seen.has(value)) {
+      issues.push(`${entry.path || 'evidence'} must be an acyclic JSON tree`);
+      structurallySafe = false;
+      continue;
+    }
+    seen.add(value);
+    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+      issues.push(`${entry.path || 'evidence'} must contain only plain JSON objects`);
+      structurallySafe = false;
+      continue;
+    }
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Object.keys(value);
+    if (Array.isArray(value) && (keys.length !== value.length || keys.some((key, index) => key !== String(index)))) {
+      issues.push(`${entry.path || 'evidence'} must not contain sparse or extended arrays`);
+      structurallySafe = false;
+      continue;
+    }
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      const key = keys[index];
+      const childPath = Array.isArray(value) ? `${entry.path}[${key}]` : safeLedgerPath(entry.path, key);
+      inspectString(key, `${childPath} key`);
+      const descriptor = descriptors[key];
+      if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
+        issues.push(`${childPath} must be a data property`);
+        structurallySafe = false;
+        break;
+      }
+      const child = descriptor.value;
+      if (typeof child === 'string') {
+        inspectString(child, childPath, { sensitiveKey: !Array.isArray(value) && isSensitiveLedgerKey(key) });
+      } else {
+        stack.push({ value: child, path: childPath, depth: entry.depth + 1 });
+      }
+    }
+  }
+  return structurallySafe;
 }
 
 function isIsoDate(value) {
@@ -331,7 +783,7 @@ function validateExternalText(value, path, issues) {
   if (sampleSupabaseProjectRefPattern.test(trimmed)) {
     issues.push(`${path} must not use a sample Supabase project ref`);
   }
-  if (rawSecretPattern.test(trimmed)) {
+  if (containsRawSecretText(trimmed)) {
     issues.push(`${path} must not contain raw secret-looking values`);
   }
   if (/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('https://')) {
@@ -488,6 +940,1112 @@ function requireEvidenceText(text, needle, message, issues) {
   }
 }
 
+function validateSha256Digest(value, path, issues) {
+  if (typeof value !== 'string' || !sha256DigestPattern.test(value)) {
+    issues.push(`${path} must be a 64 character lowercase SHA-256 digest`);
+    return false;
+  }
+  return true;
+}
+
+function validateJointRecoveryObjective(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} is required`);
+    return;
+  }
+
+  const keys = [
+    'rpoObjectiveMinutes',
+    'achievedRpoMinutes',
+    'rtoObjectiveMinutes',
+    'achievedRtoMinutes',
+    'met',
+  ];
+  if (!hasExactObjectKeys(value, keys)) {
+    issues.push(`${path} must contain exactly the verifier objective fields`);
+  }
+
+  for (const field of ['rpoObjectiveMinutes', 'rtoObjectiveMinutes']) {
+    if (!Number.isSafeInteger(value[field]) || value[field] < 1) {
+      issues.push(`${path}.${field} must be a positive safe integer`);
+    }
+  }
+  for (const field of ['achievedRpoMinutes', 'achievedRtoMinutes']) {
+    if (!Number.isSafeInteger(value[field]) || value[field] < 0) {
+      issues.push(`${path}.${field} must be a non-negative safe integer`);
+    }
+  }
+  if (value.met !== true) {
+    issues.push(`${path}.met must be true`);
+  }
+}
+
+function requireJsonEvidenceBinding(text, field, value, checkPath, issues) {
+  const pattern = new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*${escapeRegExp(JSON.stringify(value))}`);
+  if (!pattern.test(text)) {
+    issues.push(`${checkPath}.evidence must bind verifier JSON field ${field}`);
+  }
+}
+
+function embeddedVerifierJson(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  try {
+    const embeddedText = text.slice(start, end + 1);
+    assertSafeJsonTextStructure(embeddedText);
+    const value = JSON.parse(embeddedText);
+    return isPlainObject(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasWhitespaceDelimitedToken(text, token) {
+  return new RegExp(`(?:^|\\s)${escapeRegExp(token)}(?=\\s|$)`).test(text);
+}
+
+function validateCanonicalCommandOptions(text, commandPrefix, optionKinds, checkPath, label, issues) {
+  const trimmed = typeof text === 'string' ? text.trimStart() : '';
+  if (!trimmed.startsWith(`${commandPrefix} `)) {
+    issues.push(`${checkPath}.evidence ${label} must begin with the exact checker command`);
+    return;
+  }
+
+  const tokens = trimmed.slice(commandPrefix.length).trimStart().split(/\s+/);
+  const optionTokens = [];
+  for (const token of tokens) {
+    if (!token.startsWith('--')) break;
+    optionTokens.push(token);
+  }
+
+  const counts = new Map();
+  for (const token of optionTokens) {
+    const equalsIndex = token.indexOf('=');
+    const flag = equalsIndex === -1 ? token : token.slice(0, equalsIndex);
+    const kind = optionKinds.get(flag);
+    if (!kind) {
+      issues.push(`${checkPath}.evidence ${label} contains unsupported option ${flag}`);
+      continue;
+    }
+    counts.set(flag, (counts.get(flag) ?? 0) + 1);
+    if (kind === 'value' && (equalsIndex === -1 || equalsIndex === token.length - 1)) {
+      issues.push(`${checkPath}.evidence ${label} must use one non-empty canonical ${flag}=value option`);
+    }
+    if (kind === 'boolean' && equalsIndex !== -1) {
+      issues.push(`${checkPath}.evidence ${label} must use ${flag} as a boolean option`);
+    }
+  }
+
+  for (const flag of optionKinds.keys()) {
+    if ((counts.get(flag) ?? 0) !== 1) {
+      issues.push(`${checkPath}.evidence ${label} must include ${flag} exactly once`);
+    }
+  }
+}
+
+function hasExactObjectKeys(value, keys) {
+  if (!isPlainObject(value)) return false;
+  const actualKeys = Object.keys(value).sort();
+  return actualKeys.length === keys.length && keys.slice().sort().every((key, index) => key === actualKeys[index]);
+}
+
+function isValidDatabaseEnvironment(value) {
+  if (!hasExactObjectKeys(value, ['encoding', 'collation', 'ctype', 'localeProvider', 'collationVersion'])) {
+    return false;
+  }
+  if (!/^[A-Z0-9_]{1,32}$/.test(value.encoding ?? '') || value.localeProvider !== 'libc') {
+    return false;
+  }
+  for (const locale of [value.collation, value.ctype]) {
+    if (typeof locale !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$/.test(locale)) {
+      return false;
+    }
+  }
+  return value.collationVersion === null || (
+    typeof value.collationVersion === 'string' &&
+    value.collationVersion.length > 0 &&
+    Buffer.byteLength(value.collationVersion, 'utf8') <= 256 &&
+    !/[\u0000-\u001f\u007f]/.test(value.collationVersion)
+  );
+}
+
+function validateDatabaseRestoreProof(actualCheck, checkPath, issues, finalApprovedAt, validationNow, release) {
+  const path = `${checkPath}.databaseRestoreProof`;
+  const proof = actualCheck.databaseRestoreProof;
+  const allEvidenceText = evidenceText(actualCheck.evidence);
+  if (/sentinel/i.test(allEvidenceText)) {
+    issues.push(`${checkPath}.evidence must not contain production sentinel instructions or claims`);
+  }
+  if (!isPlainObject(proof)) {
+    issues.push(`${path} is required`);
+    return;
+  }
+
+  if (proof.format !== databaseRestoreReportFormat) {
+    issues.push(`${path}.format must be ${databaseRestoreReportFormat}`);
+  }
+  if (proof.checksumAlgorithm !== 'sha256') {
+    issues.push(`${path}.checksumAlgorithm must be sha256`);
+  }
+  if (proof.expectedReleaseCommitSha !== release?.commitSha) {
+    issues.push(`${path}.expectedReleaseCommitSha must match release.commitSha`);
+  }
+  const helperImplementationKeys = [
+    'format', 'repositoryUrl', 'commitSha', 'sourcePath', 'sourceSha256',
+    'commitSourceSha256', 'sourceMatchesCommit', 'canonicalRepositoryMatched',
+  ];
+  if (!hasExactObjectKeys(proof.helperImplementation, helperImplementationKeys)) {
+    issues.push(`${path}.helperImplementation must contain exactly the approved helper source binding`);
+  } else {
+    if (proof.helperImplementation.format !== databaseHelperImplementationFormat) {
+      issues.push(`${path}.helperImplementation.format must be ${databaseHelperImplementationFormat}`);
+    }
+    if (proof.helperImplementation.repositoryUrl !== databaseHelperRepositoryUrl) {
+      issues.push(`${path}.helperImplementation.repositoryUrl must match the canonical repository`);
+    }
+    if (proof.helperImplementation.commitSha !== release?.commitSha ||
+      proof.helperImplementation.commitSha !== proof.expectedReleaseCommitSha) {
+      issues.push(`${path}.helperImplementation.commitSha must match release.commitSha and expectedReleaseCommitSha`);
+    }
+    if (proof.helperImplementation.sourcePath !== databaseHelperSourcePath) {
+      issues.push(`${path}.helperImplementation.sourcePath must be ${databaseHelperSourcePath}`);
+    }
+    validateSha256Digest(
+      proof.helperImplementation.sourceSha256,
+      `${path}.helperImplementation.sourceSha256`,
+      issues,
+    );
+    validateSha256Digest(
+      proof.helperImplementation.commitSourceSha256,
+      `${path}.helperImplementation.commitSourceSha256`,
+      issues,
+    );
+    if (proof.helperImplementation.sourceSha256 !== proof.helperImplementation.commitSourceSha256) {
+      issues.push(`${path}.helperImplementation source and committed-source SHA-256 digests must match`);
+    }
+    if (proof.helperImplementation.sourceMatchesCommit !== true) {
+      issues.push(`${path}.helperImplementation.sourceMatchesCommit must be true`);
+    }
+    if (proof.helperImplementation.canonicalRepositoryMatched !== true) {
+      issues.push(`${path}.helperImplementation.canonicalRepositoryMatched must be true`);
+    }
+  }
+  if (proof.toolsImageReference !== approvedDatabaseToolsImageReference) {
+    issues.push(`${path}.toolsImageReference must match the approved PostgreSQL tools image`);
+  }
+  if (proof.toolsImageDigestSha256 !== approvedDatabaseToolsImageDigestSha256) {
+    issues.push(`${path}.toolsImageDigestSha256 must match the approved PostgreSQL tools image digest`);
+  }
+  if (!isIsoDate(proof.capturedAt)) {
+    issues.push(`${path}.capturedAt must be an ISO timestamp`);
+  } else if (typeof finalApprovedAt === 'number' && Date.parse(proof.capturedAt) > finalApprovedAt) {
+    issues.push(`${path}.capturedAt must not be after finalSignoff.approvedAt`);
+  } else if (Date.parse(proof.capturedAt) > validationNow) {
+    issues.push(`${path}.capturedAt must not be after the validation time`);
+  } else if (validationNow - Date.parse(proof.capturedAt) > databaseRestoreProofMaximumAgeMs) {
+    issues.push(`${path}.capturedAt must be no more than 24 hours old at validation time`);
+  }
+  if (typeof proof.recoverySetId !== 'string' || !recoverySetIdPattern.test(proof.recoverySetId)) {
+    issues.push(`${path}.recoverySetId must be a bounded operational identifier`);
+  }
+  for (const field of databaseRestoreDigestFields) {
+    validateSha256Digest(proof[field], `${path}.${field}`, issues);
+  }
+  if (proof.expectedSourceDatabaseIdentitySha256 !== proof.sourceDatabaseIdentitySha256) {
+    issues.push(`${path}.expectedSourceDatabaseIdentitySha256 must match sourceDatabaseIdentitySha256`);
+  }
+  if (proof.sourceDatabaseFingerprintSha256 !== proof.restoredDatabaseFingerprintSha256) {
+    issues.push(`${path}.sourceDatabaseFingerprintSha256 must match restoredDatabaseFingerprintSha256`);
+  }
+  for (const field of [
+    'sourceDatabaseEnvironment',
+    'restoredDatabaseEnvironment',
+    'restoreTargetDatabaseEnvironment',
+  ]) {
+    if (!isValidDatabaseEnvironment(proof[field])) {
+      issues.push(`${path}.${field} must contain the exact supported PostgreSQL database environment`);
+    }
+  }
+  if (
+    isValidDatabaseEnvironment(proof.sourceDatabaseEnvironment) &&
+    (
+      JSON.stringify(proof.sourceDatabaseEnvironment) !== JSON.stringify(proof.restoredDatabaseEnvironment) ||
+      JSON.stringify(proof.sourceDatabaseEnvironment) !== JSON.stringify(proof.restoreTargetDatabaseEnvironment)
+    )
+  ) {
+    issues.push(`${path} source, restored, and restore-target database environments must match exactly`);
+  }
+  for (const field of [
+    'restoreInitializedFromSourceDatabaseEnvironment',
+    'databaseEnvironmentPreserved',
+    'databaseEnvironmentMatched',
+  ]) {
+    if (proof[field] !== true) {
+      issues.push(`${path}.${field} must be true`);
+    }
+  }
+  if (proof.isolatedRestoreDatabaseIdentitySha256 === proof.sourceDatabaseIdentitySha256) {
+    issues.push(`${path}.isolatedRestoreDatabaseIdentitySha256 must be distinct from the production source identity`);
+  }
+  if (
+    typeof proof.databaseDumpBytes !== 'string' ||
+    !/^[1-9]\d*$/.test(proof.databaseDumpBytes) ||
+    !Number.isSafeInteger(Number(proof.databaseDumpBytes))
+  ) {
+    issues.push(`${path}.databaseDumpBytes must be a positive integer string`);
+  } else if (BigInt(proof.databaseDumpBytes) > BigInt(databaseRestoreWorkloadSafety.maxDumpBytes)) {
+    issues.push(`${path}.databaseDumpBytes must not exceed workloadSafety.maxDumpBytes`);
+  }
+  const capacityPreflightKeys = [
+    'method', 'sourceDatabaseSizeBytes', 'safetyFactor', 'safetyMarginBytes',
+    'requiredAvailableBytes', 'maximumDumpBytes', 'verified',
+  ];
+  if (!hasExactObjectKeys(proof.capacityPreflight, capacityPreflightKeys)) {
+    issues.push(`${path}.capacityPreflight must contain exactly the source-size-aware capacity proof`);
+  } else {
+    const sourceSizeIsCanonical =
+      typeof proof.capacityPreflight.sourceDatabaseSizeBytes === 'string' &&
+      /^(?:0|[1-9]\d*)$/.test(proof.capacityPreflight.sourceDatabaseSizeBytes) &&
+      proof.capacityPreflight.sourceDatabaseSizeBytes.length <= 24;
+    const requiredBytesAreCanonical =
+      typeof proof.capacityPreflight.requiredAvailableBytes === 'string' &&
+      /^(?:0|[1-9]\d*)$/.test(proof.capacityPreflight.requiredAvailableBytes) &&
+      proof.capacityPreflight.requiredAvailableBytes.length <= 24;
+    if (proof.capacityPreflight.method !== databaseCapacityPreflightMethod) {
+      issues.push(`${path}.capacityPreflight.method must match the approved source-size-aware preflight`);
+    }
+    if (!sourceSizeIsCanonical) {
+      issues.push(`${path}.capacityPreflight.sourceDatabaseSizeBytes must be a canonical decimal integer`);
+    }
+    if (proof.capacityPreflight.safetyFactor !== databaseCapacitySafetyFactor) {
+      issues.push(`${path}.capacityPreflight.safetyFactor must be ${databaseCapacitySafetyFactor}`);
+    }
+    if (proof.capacityPreflight.safetyMarginBytes !== databaseCapacitySafetyMarginBytes) {
+      issues.push(`${path}.capacityPreflight.safetyMarginBytes must be ${databaseCapacitySafetyMarginBytes}`);
+    }
+    if (!requiredBytesAreCanonical) {
+      issues.push(`${path}.capacityPreflight.requiredAvailableBytes must be a canonical decimal integer`);
+    }
+    if (proof.capacityPreflight.maximumDumpBytes !== databaseRestoreWorkloadSafety.maxDumpBytes) {
+      issues.push(`${path}.capacityPreflight.maximumDumpBytes must match workloadSafety.maxDumpBytes`);
+    }
+    if (proof.capacityPreflight.verified !== true) {
+      issues.push(`${path}.capacityPreflight.verified must be true`);
+    }
+    if (sourceSizeIsCanonical && requiredBytesAreCanonical) {
+      const calculated = BigInt(proof.capacityPreflight.sourceDatabaseSizeBytes) *
+        BigInt(databaseCapacitySafetyFactor) + BigInt(databaseCapacitySafetyMarginBytes);
+      const maximum = BigInt(databaseRestoreWorkloadSafety.maxDumpBytes);
+      const expected = calculated > maximum ? maximum : calculated;
+      if (proof.capacityPreflight.requiredAvailableBytes !== expected.toString()) {
+        issues.push(`${path}.capacityPreflight.requiredAvailableBytes must match the locked factor-and-margin formula`);
+      }
+    }
+  }
+  if (!Number.isSafeInteger(proof.tablesCompared) || proof.tablesCompared < 1) {
+    issues.push(`${path}.tablesCompared must be a positive safe integer`);
+  }
+  if (proof.mismatchCount !== 0) {
+    issues.push(`${path}.mismatchCount must be 0`);
+  }
+  for (const field of [
+    'backupArtifactsRetained',
+    'snapshotBound',
+    'sourceReadOnlyVerified',
+    'sourceTlsServerAuthenticationVerified',
+    'sourceAndIsolatedRestoreFingerprintsMatch',
+    'sourceIdentityBindingMatched',
+    'sequenceDefinitionAndOwnershipBound',
+  ]) {
+    if (proof[field] !== true) {
+      issues.push(`${path}.${field} must be true`);
+    }
+  }
+  for (const field of ['productionWritten', 'secretValuesPrinted', 'sequenceStateIncluded', 'ownershipIncluded', 'aclPrivilegesIncluded']) {
+    if (proof[field] !== false) {
+      issues.push(`${path}.${field} must be false`);
+    }
+  }
+  if (proof.provenanceLimitation !== databaseRestoreProofProvenanceLimitation) {
+    issues.push(`${path}.provenanceLimitation must match the production database checker's limitation`);
+  }
+  for (const [field, expected] of [
+    ['publicSequenceCount', 0],
+    ['applicationIdentityColumnCount', 0],
+    ['applicationSequenceDefaultCount', 0],
+  ]) {
+    if (proof[field] !== expected) issues.push(`${path}.${field} must be ${expected}`);
+  }
+  if (proof.sequenceStateExclusionReason !== databaseSequenceStateExclusionReason) {
+    issues.push(`${path}.sequenceStateExclusionReason must match the production database checker's limitation`);
+  }
+  if (proof.ownershipExclusionReason !== databaseOwnershipExclusionReason) {
+    issues.push(`${path}.ownershipExclusionReason must match the production database checker's limitation`);
+  }
+  if (proof.aclPrivilegesExclusionReason !== databaseAclPrivilegesExclusionReason) {
+    issues.push(`${path}.aclPrivilegesExclusionReason must match the production database checker's limitation`);
+  }
+  const workloadSafetyKeys = Object.keys(databaseRestoreWorkloadSafety);
+  if (!hasExactObjectKeys(proof.workloadSafety, workloadSafetyKeys)) {
+    issues.push(`${path}.workloadSafety must contain exactly the production database checker's workload bounds`);
+  } else {
+    for (const [field, expected] of Object.entries(databaseRestoreWorkloadSafety)) {
+      if (proof.workloadSafety[field] !== expected) {
+        issues.push(`${path}.workloadSafety.${field} must match the production database checker`);
+      }
+    }
+  }
+  const schemaCoverageKeys = [
+    'publicObjectCount',
+    'unsupportedPublicObjectCount',
+    'publicSequenceCount',
+    'applicationIdentityColumnCount',
+    'applicationSequenceDefaultCount',
+    'largeObjectCount',
+  ];
+  if (!hasExactObjectKeys(proof.schemaCoverage, schemaCoverageKeys)) {
+    issues.push(`${path}.schemaCoverage must contain exactly the production database checker's coverage fields`);
+  } else {
+    if (!Number.isSafeInteger(proof.schemaCoverage.publicObjectCount) || proof.schemaCoverage.publicObjectCount < 1) {
+      issues.push(`${path}.schemaCoverage.publicObjectCount must be a positive safe integer`);
+    }
+    if (proof.schemaCoverage.unsupportedPublicObjectCount !== 0) {
+      issues.push(`${path}.schemaCoverage.unsupportedPublicObjectCount must be 0`);
+    }
+    if (proof.schemaCoverage.largeObjectCount !== 0) {
+      issues.push(`${path}.schemaCoverage.largeObjectCount must be 0`);
+    }
+    for (const field of ['publicSequenceCount', 'applicationIdentityColumnCount', 'applicationSequenceDefaultCount']) {
+      if (proof.schemaCoverage[field] !== proof[field]) {
+        issues.push(`${path}.schemaCoverage.${field} must bind ${path}.${field}`);
+      }
+    }
+  }
+  if (JSON.stringify(proof.schemaCertificationScope) !== JSON.stringify(databaseSchemaCertificationScope)) {
+    issues.push(`${path}.schemaCertificationScope must exactly match the approved database certification scope and exclusions`);
+  }
+
+  const commandEntries = Array.isArray(actualCheck.evidence)
+    ? actualCheck.evidence.filter((entry) => entry?.type === 'command-output')
+    : [];
+  const captureEntries = commandEntries.filter(
+    (entry) => typeof entry?.description === 'string' &&
+      hasWhitespaceDelimitedToken(entry.description, databaseIdentityCaptureCommand),
+  );
+  const proofEntries = commandEntries.filter(
+    (entry) => typeof entry?.description === 'string' &&
+      hasWhitespaceDelimitedToken(entry.description, databaseRestoreProofBaseCommand) &&
+      entry.description.includes('--recovery-set-id='),
+  );
+  if (captureEntries.length !== 1) {
+    issues.push(`${checkPath}.evidence must include exactly one source-identity command-output entry`);
+  }
+  if (proofEntries.length !== 1) {
+    issues.push(`${checkPath}.evidence must include exactly one prove-restore command-output entry`);
+  }
+  if (captureEntries[0] && proofEntries[0] && captureEntries[0] === proofEntries[0]) {
+    issues.push(`${checkPath}.evidence source identity and prove-restore commands must be distinct entries`);
+  }
+  if (captureEntries.length === 1) {
+    validateCanonicalCommandOptions(
+      captureEntries[0].description,
+      databaseCheckerCommandPrefix,
+      new Map([
+        ['--production-env-file', 'value'],
+        ['--capture-source-identity', 'boolean'],
+        ['--json', 'boolean'],
+        ['--expected-release-commit-sha', 'value'],
+      ]),
+      checkPath,
+      'source-identity command',
+      issues,
+    );
+  }
+  if (proofEntries.length === 1) {
+    validateCanonicalCommandOptions(
+      proofEntries[0].description,
+      databaseCheckerCommandPrefix,
+      new Map([
+        ['--production-env-file', 'value'],
+        ['--expected-release-commit-sha', 'value'],
+        ['--recovery-set-id', 'value'],
+        ['--expected-source-database-identity-sha256', 'value'],
+        ['--backup-output-dir', 'value'],
+        ['--keep-backup', 'boolean'],
+        ['--json', 'boolean'],
+      ]),
+      checkPath,
+      'prove-restore command',
+      issues,
+    );
+  }
+  if (captureEntries.length === 1 && !hasWhitespaceDelimitedToken(
+    captureEntries[0].description,
+    `--expected-release-commit-sha=${proof.expectedReleaseCommitSha}`,
+  )) {
+    issues.push(`${checkPath}.evidence source-identity command must bind --expected-release-commit-sha`);
+  }
+
+  const capturePayload = captureEntries.length === 1 ? embeddedVerifierJson(captureEntries[0].description) : null;
+  const captureKeys = [
+    'format',
+    'ok',
+    'mode',
+    'checksumAlgorithm',
+    'expectedReleaseCommitSha',
+    'helperImplementation',
+    'toolsImageReference',
+    'toolsImageDigestSha256',
+    'sourceDatabaseIdentitySha256',
+    'sourceReadOnlyVerified',
+    'sourceTlsServerAuthenticationVerified',
+    'restoreProofVerified',
+    'productionWritten',
+    'secretValuesPrinted',
+    'provenanceLimitation',
+  ];
+  if (!capturePayload || !hasExactObjectKeys(capturePayload, captureKeys)) {
+    issues.push(`${checkPath}.evidence source-identity entry must contain exactly one allowlisted JSON payload`);
+  } else {
+    if (
+      capturePayload.ok !== true ||
+      capturePayload.format !== databaseSourceIdentityEvidenceFormat ||
+      capturePayload.mode !== 'capture-source-identity' ||
+      capturePayload.checksumAlgorithm !== 'sha256' ||
+      capturePayload.expectedReleaseCommitSha !== release?.commitSha ||
+      JSON.stringify(capturePayload.helperImplementation) !== JSON.stringify(proof.helperImplementation) ||
+      capturePayload.toolsImageReference !== approvedDatabaseToolsImageReference ||
+      capturePayload.toolsImageDigestSha256 !== approvedDatabaseToolsImageDigestSha256 ||
+      capturePayload.sourceDatabaseIdentitySha256 !== proof.expectedSourceDatabaseIdentitySha256 ||
+      capturePayload.sourceReadOnlyVerified !== true ||
+      capturePayload.sourceTlsServerAuthenticationVerified !== true ||
+      capturePayload.restoreProofVerified !== false ||
+      capturePayload.productionWritten !== false ||
+      capturePayload.secretValuesPrinted !== false ||
+      capturePayload.provenanceLimitation !== databaseSourceIdentityProvenanceLimitation
+    ) {
+      issues.push(`${checkPath}.evidence source-identity JSON must exactly bind the read-only captured identity`);
+    }
+  }
+
+  const proofEntry = proofEntries.length === 1 ? proofEntries[0] : null;
+  const proofText = proofEntry?.description ?? '';
+  const proofCliBindings = [
+    [`--expected-release-commit-sha=${proof.expectedReleaseCommitSha}`, '--expected-release-commit-sha'],
+    [`--recovery-set-id=${proof.recoverySetId}`, '--recovery-set-id'],
+    [
+      `--expected-source-database-identity-sha256=${proof.expectedSourceDatabaseIdentitySha256}`,
+      '--expected-source-database-identity-sha256',
+    ],
+    ['--keep-backup', '--keep-backup'],
+    ['--json', '--json'],
+  ];
+  for (const [token, label] of proofCliBindings) {
+    if (!hasWhitespaceDelimitedToken(proofText, token)) {
+      issues.push(`${checkPath}.evidence prove-restore command must bind ${label}`);
+    }
+  }
+  const backupOutputMatch = proofText.match(/(?:^|\s)--backup-output-dir=(\/[A-Za-z0-9._/-]+)(?=\s|$)/);
+  const backupOutputPath = backupOutputMatch?.[1] ?? '';
+  const backupOutputSegments = backupOutputPath.split('/').filter(Boolean);
+  const unsafeBackupPrefix = /^(?:\/tmp(?:\/|$)|\/var\/tmp(?:\/|$)|\/workspace(?:\/|$)|\/app(?:\/|$)|\/repo(?:\/|$))/;
+  if (
+    !backupOutputMatch ||
+    backupOutputPath.includes('//') ||
+    backupOutputSegments.some((segment) => segment === '.' || segment === '..') ||
+    backupOutputSegments.length < 3 ||
+    unsafeBackupPrefix.test(backupOutputPath)
+  ) {
+    issues.push(`${checkPath}.evidence prove-restore command must use an explicit absolute non-repository --backup-output-dir; approved encryption and custody require separate evidence`);
+  }
+
+  const proofPayload = proofEntry ? embeddedVerifierJson(proofText) : null;
+  const proofPayloadKeys = [
+    'format',
+    'ok',
+    'mode',
+    'proof',
+    'checksumAlgorithm',
+    'expectedReleaseCommitSha',
+    'helperImplementation',
+    'toolsImageReference',
+    'toolsImageDigestSha256',
+    'snapshotBound',
+    'sourceReadOnlyVerified',
+    'sourceTlsServerAuthenticationVerified',
+    'sourceAndIsolatedRestoreFingerprintsMatch',
+    'productionWritten',
+    'recoverySetId',
+    'capturedAt',
+    ...databaseRestoreDigestFields,
+    ...databaseRestoreEnvironmentFields,
+    'databaseDumpBytes',
+    'capacityPreflight',
+    'tablesCompared',
+    'mismatchCount',
+    'sourceIdentityBindingMatched',
+    'sequenceStateIncluded',
+    'sequenceDefinitionAndOwnershipBound',
+    'publicSequenceCount',
+    'applicationIdentityColumnCount',
+    'applicationSequenceDefaultCount',
+    'sequenceStateExclusionReason',
+    'ownershipIncluded',
+    'ownershipExclusionReason',
+    'aclPrivilegesIncluded',
+    'aclPrivilegesExclusionReason',
+    'workloadSafety',
+    'schemaCoverage',
+    'schemaCertificationScope',
+    'backupArtifactsRetained',
+    'secretValuesPrinted',
+    'provenanceLimitation',
+  ];
+  if (!proofPayload || !hasExactObjectKeys(proofPayload, proofPayloadKeys)) {
+    issues.push(`${checkPath}.evidence prove-restore entry must contain exactly one allowlisted JSON success payload`);
+  } else {
+    if (
+      proofPayload.ok !== true ||
+      proofPayload.format !== databaseRestoreReportFormat ||
+      proofPayload.mode !== 'prove-restore' ||
+      proofPayload.proof !== databaseRestoreProofFormat
+    ) {
+      issues.push(`${checkPath}.evidence prove-restore JSON must contain the exact checker success identity`);
+    }
+    const boundFields = [
+      'format',
+      'checksumAlgorithm',
+      'expectedReleaseCommitSha',
+      'helperImplementation',
+      'toolsImageReference',
+      'toolsImageDigestSha256',
+      'snapshotBound',
+      'sourceReadOnlyVerified',
+      'sourceTlsServerAuthenticationVerified',
+      'sourceAndIsolatedRestoreFingerprintsMatch',
+      'productionWritten',
+      'recoverySetId',
+      'capturedAt',
+      ...databaseRestoreDigestFields,
+      ...databaseRestoreEnvironmentFields,
+      'databaseDumpBytes',
+      'capacityPreflight',
+      'tablesCompared',
+      'mismatchCount',
+      'sourceIdentityBindingMatched',
+      'sequenceStateIncluded',
+      'sequenceDefinitionAndOwnershipBound',
+      'publicSequenceCount',
+      'applicationIdentityColumnCount',
+      'applicationSequenceDefaultCount',
+      'sequenceStateExclusionReason',
+      'ownershipIncluded',
+      'ownershipExclusionReason',
+      'aclPrivilegesIncluded',
+      'aclPrivilegesExclusionReason',
+      'workloadSafety',
+      'schemaCoverage',
+      'schemaCertificationScope',
+      'backupArtifactsRetained',
+      'secretValuesPrinted',
+      'provenanceLimitation',
+    ];
+    for (const field of boundFields) {
+      const nestedBinding = field === 'helperImplementation' || field === 'capacityPreflight' ||
+        field.endsWith('DatabaseEnvironment') ||
+        field === 'workloadSafety' || field === 'schemaCoverage' ||
+        field === 'schemaCertificationScope';
+      if (nestedBinding ? JSON.stringify(proofPayload[field]) !== JSON.stringify(proof[field]) : proofPayload[field] !== proof[field]) {
+        issues.push(`${checkPath}.evidence prove-restore JSON must bind databaseRestoreProof.${field}`);
+      }
+    }
+  }
+
+  const reportEntries = Array.isArray(actualCheck.evidence)
+    ? actualCheck.evidence.filter((entry) => entry?.type === 'report')
+    : [];
+  const report = reportEntries.find((entry) => {
+    const description = entry?.description ?? '';
+    return [
+      proof.proofReportSha256,
+      proof.databaseDumpSha256,
+      proof.recoverySetId,
+      proof.sourceDatabaseFingerprintSha256,
+      proof.restoredDatabaseFingerprintSha256,
+    ].every((marker) => typeof marker === 'string' && description.includes(marker));
+  });
+  if (!report) {
+    issues.push(`${checkPath}.evidence must include report evidence bound to the recovery set, dump, proof report, and both fingerprints`);
+  }
+
+  const captureAt = captureEntries.length === 1 ? isoTimestamp(captureEntries[0].capturedAt) : null;
+  const proofCapturedAt = isoTimestamp(proof.capturedAt);
+  const provedAt = proofEntry ? isoTimestamp(proofEntry.capturedAt) : null;
+  const reportAt = report ? isoTimestamp(report.capturedAt) : null;
+  if (captureAt !== null && proofCapturedAt !== null && captureAt > proofCapturedAt) {
+    issues.push(`${checkPath}.evidence source identity capture must not be after the helper proof capture`);
+  }
+  if (proofCapturedAt !== null && provedAt !== null && proofCapturedAt > provedAt) {
+    issues.push(`${checkPath}.evidence prove-restore command capture must not predate the helper proof capture`);
+  }
+  if (provedAt !== null && reportAt !== null && provedAt > reportAt) {
+    issues.push(`${checkPath}.evidence report capture must not be before prove-restore evidence`);
+  }
+  if (provedAt !== null && typeof finalApprovedAt === 'number' && provedAt > finalApprovedAt) {
+    issues.push(`${checkPath}.evidence prove-restore capture must not be after finalSignoff.approvedAt`);
+  }
+}
+
+function validateDatabaseRestoreHumanEvidence(actualCheck, databaseCheck, checkPath, issues) {
+  const proof = databaseCheck?.databaseRestoreProof;
+  const text = evidenceText(actualCheck.evidence);
+  if (/sentinel/i.test(text)) {
+    issues.push(`${checkPath}.evidence must not contain production sentinel instructions or claims`);
+  }
+  for (const marker of [
+    'restore test',
+    'owner',
+    'restore date',
+    'recovery notes',
+    'isolated non-production target',
+    'read-only source',
+    'production database was not overwritten',
+    proof?.recoverySetId,
+    proof?.proofReportSha256,
+  ]) {
+    if (typeof marker !== 'string' || !text.includes(marker)) {
+      issues.push(`${checkPath}.evidence must include ${marker ?? 'database restore proof binding'}`);
+    }
+  }
+}
+
+function validateJointRecoveryReconciliation(
+  actualCheck,
+  checkPath,
+  issues,
+  finalApprovedAt,
+  validationNow,
+) {
+  const path = `${checkPath}.jointRecoveryReconciliation`;
+  if (!hasEvidenceType(actualCheck, 'command-output')) {
+    issues.push(`${checkPath}.evidence must include command-output evidence from the document recovery verifier`);
+  }
+  if (!hasEvidenceType(actualCheck, 'report')) {
+    issues.push(`${checkPath}.evidence must include report evidence for the joint recovery manifest`);
+  }
+  const commandEntries = Array.isArray(actualCheck.evidence)
+    ? actualCheck.evidence.filter((entry) => entry?.type === 'command-output')
+    : [];
+  const verifierCommandEntry = commandEntries.find(
+    (entry) => typeof entry?.description === 'string' && entry.description.includes(jointRecoveryVerifierBaseCommand),
+  );
+  const verifierCommandText = evidenceText(verifierCommandEntry ? [verifierCommandEntry] : []);
+  const reportText = evidenceText(
+    Array.isArray(actualCheck.evidence)
+      ? actualCheck.evidence.filter((entry) => entry?.type === 'report')
+      : [],
+  );
+  const reconciliation = actualCheck.jointRecoveryReconciliation;
+  if (!isPlainObject(reconciliation)) {
+    issues.push(`${path} is required`);
+    return;
+  }
+
+  if (!hasExactObjectKeys(reconciliation, [...jointRecoveryVerifierPayloadFields, 'reconciledBy'])) {
+    issues.push(`${path} must contain exactly the verifier success payload fields plus reconciledBy`);
+  }
+
+  if (reconciliation.manifestFormat !== jointRecoveryManifestFormat) {
+    issues.push(`${path}.manifestFormat must be ${jointRecoveryManifestFormat}`);
+  }
+  if (reconciliation.checksumAlgorithm !== 'sha256') {
+    issues.push(`${path}.checksumAlgorithm must be sha256`);
+  }
+
+  for (const field of jointRecoveryDigestFields) {
+    validateSha256Digest(reconciliation[field], `${path}.${field}`, issues);
+  }
+  if (typeof reconciliation.exerciseId !== 'string' || !recoverySetIdPattern.test(reconciliation.exerciseId)) {
+    issues.push(`${path}.exerciseId must be a bounded operational identifier`);
+  }
+  if (typeof reconciliation.recoverySetId !== 'string' || !recoverySetIdPattern.test(reconciliation.recoverySetId)) {
+    issues.push(`${path}.recoverySetId must be a bounded operational identifier`);
+  }
+
+  const validCounts = new Map();
+  for (const field of jointRecoveryCountFields) {
+    const valid = Number.isSafeInteger(reconciliation[field]) && reconciliation[field] >= 0;
+    validCounts.set(field, valid);
+    if (!valid) {
+      issues.push(`${path}.${field} must be a non-negative safe integer`);
+    }
+  }
+
+  if (validCounts.get('metadataRowCount') && reconciliation.metadataRowCount < 1) {
+    issues.push(`${path}.metadataRowCount must be at least 1 so recovery proof is not vacuous`);
+  }
+  if (
+    validCounts.get('metadataRowCount') &&
+    validCounts.get('expectedObjectCount') &&
+    reconciliation.metadataRowCount !== reconciliation.expectedObjectCount
+  ) {
+    issues.push(`${path}.metadataRowCount must match expectedObjectCount`);
+  }
+  for (const field of ['restoredObjectCount', 'matchedObjectCount']) {
+    if (
+      validCounts.get('expectedObjectCount') &&
+      validCounts.get(field) &&
+      reconciliation[field] !== reconciliation.expectedObjectCount
+    ) {
+      issues.push(`${path}.${field} must match expectedObjectCount`);
+    }
+  }
+  for (const field of [
+    'missingObjectCount',
+    'unexpectedObjectCount',
+    'orphanExpectedObjectCount',
+    'orphanRestoredObjectCount',
+    'checksumMismatchCount',
+  ]) {
+    if (validCounts.get(field) && reconciliation[field] !== 0) {
+      issues.push(`${path}.${field} must be 0`);
+    }
+  }
+  if (
+    validCounts.get('expectedBytes') &&
+    validCounts.get('restoredBytes') &&
+    reconciliation.expectedBytes !== reconciliation.restoredBytes
+  ) {
+    issues.push(`${path}.restoredBytes must match expectedBytes`);
+  }
+
+  if (
+    validCounts.get('storageDeletionCount') &&
+    validCounts.get('restoredStorageDeletionCount') &&
+    reconciliation.storageDeletionCount !== reconciliation.restoredStorageDeletionCount
+  ) {
+    issues.push(`${path}.restoredStorageDeletionCount must match storageDeletionCount`);
+  }
+  for (const field of [
+    'pendingStorageDeletionCount',
+    'deadLetterStorageDeletionCount',
+    'restoredPendingStorageDeletionCount',
+    'restoredDeadLetterStorageDeletionCount',
+    'processedDeletionObjectResidueCount',
+  ]) {
+    if (validCounts.get(field) && reconciliation[field] !== 0) {
+      issues.push(`${path}.${field} must be 0`);
+    }
+  }
+  if (
+    validCounts.get('storageDeletionCount') &&
+    validCounts.get('processedStorageDeletionCount') &&
+    reconciliation.storageDeletionCount !== reconciliation.processedStorageDeletionCount
+  ) {
+    issues.push(`${path}.processedStorageDeletionCount must match storageDeletionCount`);
+  }
+  if (
+    validCounts.get('restoredStorageDeletionCount') &&
+    validCounts.get('restoredProcessedStorageDeletionCount') &&
+    reconciliation.restoredStorageDeletionCount !== reconciliation.restoredProcessedStorageDeletionCount
+  ) {
+    issues.push(`${path}.restoredProcessedStorageDeletionCount must match restoredStorageDeletionCount`);
+  }
+  if (
+    validCounts.get('recoveryEventCount') &&
+    validCounts.get('restoredRecoveryEventCount') &&
+    reconciliation.recoveryEventCount !== reconciliation.restoredRecoveryEventCount
+  ) {
+    issues.push(`${path}.restoredRecoveryEventCount must match recoveryEventCount`);
+  }
+
+  if (reconciliation.restoreTargetType !== jointRecoveryTargetType) {
+    issues.push(`${path}.restoreTargetType must be ${jointRecoveryTargetType}`);
+  }
+  for (const field of [
+    'isolationAttestationRecorded',
+    'productionDatabaseNotOverwrittenAttestationRecorded',
+    'productionObjectStoreNotOverwrittenAttestationRecorded',
+    'restoreCredentialsScopedToTargetAttestationRecorded',
+  ]) {
+    if (reconciliation[field] !== true) {
+      issues.push(`${path}.${field} must be true`);
+    }
+  }
+
+  if (!isPlainObject(reconciliation.objectives) ||
+    !hasExactObjectKeys(reconciliation.objectives, ['database', 'documentBytes'])) {
+    issues.push(`${path}.objectives is required`);
+  } else {
+    validateJointRecoveryObjective(reconciliation.objectives.database, `${path}.objectives.database`, issues);
+    validateJointRecoveryObjective(
+      reconciliation.objectives.documentBytes,
+      `${path}.objectives.documentBytes`,
+      issues,
+    );
+  }
+
+  for (const field of [
+    'ownerRecorded',
+    'recoveryOperatorRecorded',
+    'notesRecorded',
+    'externalEvidenceReferencesRecorded',
+    'independentBindingArgumentsMatched',
+  ]) {
+    if (reconciliation[field] !== true) {
+      issues.push(`${path}.${field} must be true`);
+    }
+  }
+  if (reconciliation.sourceProvenanceExternallyVerified !== false) {
+    issues.push(`${path}.sourceProvenanceExternallyVerified must be false`);
+  }
+  if (reconciliation.secretValuesPrinted !== false) {
+    issues.push(`${path}.secretValuesPrinted must be false`);
+  }
+  if (reconciliation.provenanceLimitation !== jointRecoveryProvenanceLimitation) {
+    issues.push(`${path}.provenanceLimitation must match the verifier's offline consistency limitation`);
+  }
+
+  const parsedTimestamps = new Map();
+  for (const field of jointRecoveryTimestampFields) {
+    const parsed = isoTimestamp(reconciliation[field]);
+    parsedTimestamps.set(field, parsed);
+    if (parsed === null) {
+      issues.push(`${path}.${field} must be an ISO timestamp`);
+    }
+  }
+
+  for (const field of [
+    'sourceMetadataCaptureTransactionId',
+    'restoredMetadataCaptureTransactionId',
+  ]) {
+    const value = reconciliation[field];
+    if (
+      typeof value !== 'string' ||
+      !postgresTransactionIdPattern.test(value) ||
+      BigInt(value) > maximumPostgresTransactionId
+    ) {
+      issues.push(`${path}.${field} must be a canonical bounded PostgreSQL transaction identifier`);
+    }
+  }
+
+  const maximumAge = reconciliation.maximumDocumentProofAgeMinutes;
+  if (!Number.isSafeInteger(maximumAge) || maximumAge < 1 || maximumAge > maximumDocumentProofAgeMinutes) {
+    issues.push(`${path}.maximumDocumentProofAgeMinutes must be between 1 and ${maximumDocumentProofAgeMinutes}`);
+  }
+  if (!Number.isSafeInteger(reconciliation.documentProofAgeMinutes) || reconciliation.documentProofAgeMinutes < 0) {
+    issues.push(`${path}.documentProofAgeMinutes must be a non-negative safe integer`);
+  } else if (Number.isSafeInteger(maximumAge) && reconciliation.documentProofAgeMinutes > maximumAge) {
+    issues.push(`${path}.documentProofAgeMinutes must not exceed maximumDocumentProofAgeMinutes`);
+  }
+  if (reconciliation.documentProofFresh !== true) {
+    issues.push(`${path}.documentProofFresh must be true`);
+  }
+
+  const captureTimes = [
+    parsedTimestamps.get('sourceMetadataCapturedAt'),
+    parsedTimestamps.get('restoredMetadataCapturedAt'),
+    parsedTimestamps.get('sourceObjectInventoryCapturedAt'),
+    parsedTimestamps.get('restoredObjectInventoryCapturedAt'),
+  ];
+  const oldestCapturedAt = parsedTimestamps.get('documentProofOldestCapturedAt');
+  const freshThroughAt = parsedTimestamps.get('documentProofFreshThroughAt');
+  if (captureTimes.every((value) => value !== null) &&
+    oldestCapturedAt !== Math.min(...captureTimes)) {
+    issues.push(`${path}.documentProofOldestCapturedAt must equal the oldest bound inventory capture`);
+  }
+  if (oldestCapturedAt !== null && Number.isSafeInteger(maximumAge) &&
+    freshThroughAt !== oldestCapturedAt + maximumAge * 60_000) {
+    issues.push(`${path}.documentProofFreshThroughAt must be derived from the oldest capture and maximum age`);
+  }
+  if (oldestCapturedAt !== null && oldestCapturedAt > validationNow) {
+    issues.push(`${path}.document recovery captures must not be in the future`);
+  }
+  if (freshThroughAt !== null && validationNow > freshThroughAt) {
+    issues.push(`${path}.document recovery proof must still be fresh at validation time`);
+  }
+  if (oldestCapturedAt !== null && Number.isSafeInteger(reconciliation.documentProofAgeMinutes)) {
+    const currentAgeMinutes = Math.ceil(Math.max(0, validationNow - oldestCapturedAt) / 60_000);
+    if (reconciliation.documentProofAgeMinutes > currentAgeMinutes) {
+      issues.push(`${path}.documentProofAgeMinutes must not exceed the age at validation time`);
+    }
+    const verifierEvidenceAt = isoTimestamp(verifierCommandEntry?.capturedAt);
+    if (verifierEvidenceAt !== null) {
+      if (verifierEvidenceAt < oldestCapturedAt) {
+        issues.push(`${checkPath}.verifier evidence capture must not be before the oldest inventory capture`);
+      } else {
+        const evidenceAgeMinutes = Math.ceil((verifierEvidenceAt - oldestCapturedAt) / 60_000);
+        if (Math.abs(reconciliation.documentProofAgeMinutes - evidenceAgeMinutes) > 1) {
+          issues.push(`${path}.documentProofAgeMinutes must match the verifier evidence capture time`);
+        }
+      }
+      if (freshThroughAt !== null && verifierEvidenceAt > freshThroughAt) {
+        issues.push(`${checkPath}.verifier evidence must be captured before documentProofFreshThroughAt`);
+      }
+    }
+  }
+
+  const reconciledAt = parsedTimestamps.get('reconciledAt');
+  if (reconciledAt === null) {
+    // The field-specific timestamp error above is sufficient.
+  } else {
+    if (typeof finalApprovedAt === 'number' && reconciledAt > finalApprovedAt) {
+      issues.push(`${path}.reconciledAt must not be after finalSignoff.approvedAt`);
+    }
+    const chronologyEvidence = Array.isArray(actualCheck.evidence) ? actualCheck.evidence : [];
+    for (const [index, entry] of chronologyEvidence.entries()) {
+      if (entry?.type !== 'command-output' && entry?.type !== 'report') continue;
+      const capturedAt = isoTimestamp(entry.capturedAt);
+      if (capturedAt !== null && capturedAt < reconciledAt) {
+        issues.push(`${checkPath}.evidence[${index}].capturedAt must not be before ${path}.reconciledAt`);
+      }
+    }
+    for (const field of [
+      'sourceMetadataCapturedAt',
+      'restoredMetadataCapturedAt',
+      'sourceObjectInventoryCapturedAt',
+      'restoredObjectInventoryCapturedAt',
+    ]) {
+      const capturedAt = parsedTimestamps.get(field);
+      if (capturedAt !== null && capturedAt > reconciledAt) {
+        issues.push(`${path}.${field} must not be after reconciledAt`);
+      }
+    }
+    for (const [sourceField, restoredField] of [
+      ['sourceMetadataCapturedAt', 'restoredMetadataCapturedAt'],
+      ['sourceObjectInventoryCapturedAt', 'restoredObjectInventoryCapturedAt'],
+    ]) {
+      const sourceAt = parsedTimestamps.get(sourceField);
+      const restoredAt = parsedTimestamps.get(restoredField);
+      if (sourceAt !== null && restoredAt !== null && sourceAt > restoredAt) {
+        issues.push(`${path}.${sourceField} must not be after ${restoredField}`);
+      }
+    }
+  }
+  if (typeof reconciliation.reconciledBy !== 'string' || reconciliation.reconciledBy.trim().length < 3) {
+    issues.push(`${path}.reconciledBy is required`);
+  } else {
+    const reconciledBy = reconciliation.reconciledBy.trim();
+    if (/^REPLACE_WITH_/i.test(reconciledBy) || placeholderOrLocalPattern.test(reconciledBy)) {
+      issues.push(`${path}.reconciledBy must not be a placeholder or local reference`);
+    }
+    if (containsRawSecretText(reconciledBy)) {
+      issues.push(`${path}.reconciledBy must not contain raw secret-looking values`);
+    }
+  }
+
+  const cliBindings = [
+    ['--expected-recovery-manifest-sha256', reconciliation.recoveryManifestSha256],
+    ['--expected-source-binding-sha256', reconciliation.sourceBindingSha256],
+    ['--expected-database-dump-sha256', reconciliation.databaseDumpSha256],
+    ['--expected-object-backup-manifest-sha256', reconciliation.objectBackupManifestSha256],
+    ['--expected-source-capture-report-sha256', reconciliation.sourceCaptureReportSha256],
+    ['--expected-source-database-identity-sha256', reconciliation.sourceDatabaseIdentitySha256],
+    ['--expected-source-object-store-identity-sha256', reconciliation.sourceObjectStoreIdentitySha256],
+    ['--expected-metadata-inventory-sha256', reconciliation.sourceMetadataInventorySha256],
+    ['--expected-object-inventory-sha256', reconciliation.sourceObjectInventorySha256],
+    ['--expected-restored-metadata-inventory-sha256', reconciliation.restoredMetadataInventorySha256],
+    ['--expected-restored-object-inventory-sha256', reconciliation.restoredObjectInventorySha256],
+    ['--expected-storage-deletion-inventory-sha256', reconciliation.sourceStorageDeletionInventorySha256],
+    ['--expected-restored-storage-deletion-inventory-sha256', reconciliation.restoredStorageDeletionInventorySha256],
+    ['--expected-recovery-event-inventory-sha256', reconciliation.sourceRecoveryEventInventorySha256],
+    ['--expected-restored-recovery-event-inventory-sha256', reconciliation.restoredRecoveryEventInventorySha256],
+    ['--expected-production-document-count', reconciliation.metadataRowCount],
+    ['--expected-storage-deletion-count', reconciliation.storageDeletionCount],
+    ['--expected-pending-storage-deletion-count', reconciliation.pendingStorageDeletionCount],
+    ['--expected-dead-letter-storage-deletion-count', reconciliation.deadLetterStorageDeletionCount],
+    ['--expected-processed-storage-deletion-count', reconciliation.processedStorageDeletionCount],
+    ['--expected-recovery-event-count', reconciliation.recoveryEventCount],
+    ['--expected-source-metadata-captured-at', reconciliation.sourceMetadataCapturedAt],
+    ['--expected-restored-metadata-captured-at', reconciliation.restoredMetadataCapturedAt],
+    ['--expected-source-object-inventory-captured-at', reconciliation.sourceObjectInventoryCapturedAt],
+    ['--expected-restored-object-inventory-captured-at', reconciliation.restoredObjectInventoryCapturedAt],
+    ['--expected-source-metadata-capture-transaction-id', reconciliation.sourceMetadataCaptureTransactionId],
+    ['--expected-restored-metadata-capture-transaction-id', reconciliation.restoredMetadataCaptureTransactionId],
+    ['--expected-maximum-document-proof-age-minutes', reconciliation.maximumDocumentProofAgeMinutes],
+    ['--expected-exercise-id', reconciliation.exerciseId],
+    ['--expected-recovery-set-id', reconciliation.recoverySetId],
+  ];
+  validateCanonicalCommandOptions(
+    verifierCommandEntry?.description ?? '',
+    jointRecoveryVerifierCommandPrefix,
+    new Map([
+      ['--manifest-file', 'value'],
+      ...cliBindings.map(([flag]) => [flag, 'value']),
+      ['--json', 'boolean'],
+    ]),
+    checkPath,
+    'document recovery verifier command',
+    issues,
+  );
+  if (!hasWhitespaceDelimitedToken(verifierCommandText, jointRecoveryVerifierBaseCommand)) {
+    issues.push(`${checkPath}.evidence must include the document recovery verifier base command`);
+  }
+  const expectedFlagCount = [...verifierCommandText.matchAll(/(?:^|\s)--expected-[a-z0-9-]+=/g)].length;
+  if (expectedFlagCount !== cliBindings.length) {
+    issues.push(`${checkPath}.evidence must include exactly ${cliBindings.length} document recovery verifier binding flags`);
+  }
+  for (const [flag, value] of cliBindings) {
+    const occurrenceCount = [...verifierCommandText.matchAll(
+      new RegExp(`(?:^|\\s)${escapeRegExp(flag)}=`, 'g'),
+    )].length;
+    if (occurrenceCount !== 1) {
+      issues.push(`${checkPath}.evidence must include ${flag} exactly once`);
+    }
+    if (!hasWhitespaceDelimitedToken(verifierCommandText, `${flag}=${value}`)) {
+      issues.push(`${checkPath}.evidence must bind ${flag} to jointRecoveryReconciliation`);
+    }
+  }
+  const jsonFlagCount = [...verifierCommandText.matchAll(/(?:^|\s)--json(?=\s|$)/g)].length;
+  if (jsonFlagCount !== 1) {
+    issues.push(`${checkPath}.evidence must include the document recovery verifier --json flag`);
+  }
+  if (!verifierCommandText.includes(jointRecoveryConsistencySuccessText)) {
+    issues.push(`${checkPath}.evidence must include ${jointRecoveryConsistencySuccessText}`);
+  }
+  for (const forbiddenField of [
+    'isolationVerified',
+    'sourceProvenanceExternallyBound',
+    'productionDatabaseOverwritten',
+    'productionObjectStoreOverwritten',
+  ]) {
+    if (new RegExp(`"${forbiddenField}"\\s*:`).test(verifierCommandText)) {
+      issues.push(`${checkPath}.evidence must not include legacy automated verifier field ${forbiddenField}`);
+    }
+  }
+
+  const verifierPayload = embeddedVerifierJson(verifierCommandText);
+  if (!verifierPayload || !hasExactObjectKeys(verifierPayload, ['ok', ...jointRecoveryVerifierPayloadFields])) {
+    issues.push(`${checkPath}.evidence must include exactly one verifier JSON success payload with the final allowlisted schema`);
+  } else {
+    if (verifierPayload.ok !== true) {
+      issues.push(`${checkPath}.evidence must bind verifier JSON field ok`);
+    }
+    for (const field of jointRecoveryVerifierPayloadFields) {
+      const verifierValue = verifierPayload[field];
+      const ledgerValue = reconciliation[field];
+      const matches = isPlainObject(ledgerValue)
+        ? JSON.stringify(verifierValue) === JSON.stringify(ledgerValue)
+        : verifierValue === ledgerValue;
+      if (!matches) {
+        issues.push(`${checkPath}.evidence must bind verifier JSON field ${field}`);
+      }
+    }
+  }
+  for (const [marker, label] of [
+    ...jointRecoveryDigestFields.map((field) => [reconciliation[field], field]),
+    [reconciliation.exerciseId, 'exerciseId'],
+    [reconciliation.recoverySetId, 'recoverySetId'],
+    [reconciliation.sourceMetadataCaptureTransactionId, 'sourceMetadataCaptureTransactionId'],
+    [reconciliation.restoredMetadataCaptureTransactionId, 'restoredMetadataCaptureTransactionId'],
+  ]) {
+    if (typeof marker !== 'string' || !reportText.includes(marker)) {
+      issues.push(`${checkPath}.report evidence must include ${label}`);
+    }
+  }
+}
+
 function hasManagedTlsDeployEvidence(text) {
   const lowerText = text.toLowerCase();
   return (
@@ -569,11 +2127,6 @@ const executableCheckerEvidenceRequirements = new Map([
     commandLabel: 'check:production:hosting',
     command: 'npm run check:production:hosting -- --production-env-file=.env.production',
     successText: 'Production hosting check passed',
-  }],
-  ['database.database-check', {
-    commandLabel: 'check:production:database',
-    command: 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
-    successText: 'Production database check passed',
   }],
   ['supabaseStorage.supabase-check', {
     commandLabel: 'check:production:supabase',
@@ -874,7 +2427,17 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
   }
 }
 
-function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, issues, release) {
+function validateCheckSpecificEvidence(
+  areaId,
+  checkId,
+  actualCheck,
+  actualArea,
+  checkPath,
+  issues,
+  release,
+  finalApprovedAt,
+  validationNow,
+) {
   validateExecutableCheckerEvidence(areaId, checkId, actualCheck, checkPath, issues);
 
   if (areaId === 'browserQa' && BROWSER_QA_RELEASE_BOUND_CHECKS.has(checkId) && typeof release?.commitSha === 'string') {
@@ -942,27 +2505,45 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     }
   }
 
-  if (areaId === 'database' && checkId === 'database-check') {
-    if (!evidenceText(actualCheck.evidence).includes('--expect-operational-sentinel')) {
-      issues.push(`${checkPath}.evidence must show check:production:database was run with --expect-operational-sentinel`);
-    }
-  }
-
   if (areaId === 'database') {
     const text = evidenceText(actualCheck.evidence);
 
     const databaseMarkersByCheck = {
-      'postgres-provisioned': ['production PostgreSQL', 'provisioned'],
+      'postgres-provisioned': [
+        'production PostgreSQL', 'provisioned', 'sslmode=verify-full', 'sslrootcert=system',
+      ],
       'database-url-secret-store': ['DATABASE_URL', 'secret store'],
       'migrations-deployed': ['deploy:production', 'migration image alone', 'production'],
-      'backups-enabled': ['managed backups or PITR', 'backup window', 'retention period', 'backup owner'],
-      'restore-tested': ['restore test', 'owner', 'restore date', 'recovery notes', 'operational sentinel'],
+      'backups-enabled': [
+        'managed backups or PITR',
+        'backup window',
+        'retention period',
+        'backup owner',
+        'PostgreSQL RPO',
+        'PostgreSQL RTO',
+      ],
+      'restore-tested': [
+        'restore test',
+        'owner',
+        'restore date',
+        'recovery notes',
+        'isolated non-production target',
+        'read-only source',
+        'production database was not overwritten',
+      ],
     };
 
     for (const marker of databaseMarkersByCheck[checkId] ?? []) {
       if (!text.includes(marker)) {
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
+    }
+
+    if (checkId === 'database-check') {
+      validateDatabaseRestoreProof(actualCheck, checkPath, issues, finalApprovedAt, validationNow, release);
+    }
+    if (checkId === 'restore-tested') {
+      validateDatabaseRestoreHumanEvidence(actualCheck, actualArea?.checks?.['database-check'], checkPath, issues);
     }
   }
 
@@ -977,20 +2558,29 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'readiness-storage-reachable': ['storageBucketReachable: true'],
       'document-upload-download': ['document upload', 'authenticated API download', 'deployed app'],
       'supabase-backups-enabled': [
-        'Supabase backup policy',
-        'managed backups or PITR',
-        'backup window',
+        'document object bytes',
+        'separate from PostgreSQL backups and PITR',
+        'encrypted',
+        'versioned',
+        'backup schedule',
+        'document-object RPO',
+        'document-object RTO',
         'retention period',
         'backup owner',
+        'monitoring and alerting',
+        'secure deletion behavior',
       ],
       'supabase-restore-tested': [
-        'Supabase restore test',
+        'joint PostgreSQL metadata and document object-byte restore',
         'owner',
         'restore date',
         'recovery notes',
         'isolated restore target',
         'non-production restore target',
-        'production project was not overwritten',
+        'production database was not overwritten',
+        'production object storage was not overwritten',
+        'joint metadata/object reconciliation',
+        'SHA-256',
       ],
     };
 
@@ -998,6 +2588,16 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       if (!text.includes(marker)) {
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
+    }
+
+    if (checkId === 'supabase-restore-tested') {
+      validateJointRecoveryReconciliation(
+        actualCheck,
+        checkPath,
+        issues,
+        finalApprovedAt,
+        validationNow,
+      );
     }
   }
 
@@ -1410,7 +3010,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
   }
 }
 
-function validateFinalSignoffApprovals(finalSignoff, release, preparedAt, issues) {
+function validateFinalSignoffApprovals(finalSignoff, release, preparedAt, finalApprovedAt, validationNow, issues) {
   if (!isPlainObject(finalSignoff.approvals)) {
     issues.push('finalSignoff.approvals is required');
     return;
@@ -1435,6 +3035,10 @@ function validateFinalSignoffApprovals(finalSignoff, release, preparedAt, issues
       issues.push(`${approvalPath}.approvedAt must be an ISO timestamp`);
     } else if (preparedAt !== null && approvedAt < preparedAt) {
       issues.push(`${approvalPath}.approvedAt must not be before preparedAt`);
+    } else if (finalApprovedAt !== null && approvedAt > finalApprovedAt) {
+      issues.push(`${approvalPath}.approvedAt must not be after finalSignoff.approvedAt`);
+    } else if (approvedAt > validationNow) {
+      issues.push(`${approvalPath}.approvedAt must not be after the validation time`);
     }
     validateEvidenceEntries(approval.evidence, `${approvalPath}.evidence`, issues, {
       notAfter: approvedAt,
@@ -1463,11 +3067,29 @@ function validateFinalSignoffEvidence(finalSignoff, release, issues) {
   }
 }
 
-export function validateLaunchEvidence(evidence) {
+export function validateLaunchEvidence(evidence, { now = Date.now } = {}) {
   const issues = [];
 
-  if (!isPlainObject(evidence)) {
-    return ['evidence file must contain a JSON object'];
+  try {
+    if (!isPlainObject(evidence)) {
+      return ['evidence file must contain a JSON object'];
+    }
+  } catch {
+    return ['evidence ledger could not be safely inspected'];
+  }
+  let validationNow;
+  try {
+    validationNow = now();
+  } catch {
+    return ['validation time could not be established'];
+  }
+  if (!Number.isSafeInteger(validationNow)) {
+    return ['validation time must be a safe integer timestamp'];
+  }
+  try {
+    if (!validateWholeLedgerSafety(evidence, issues)) return issues;
+  } catch {
+    return ['evidence ledger could not be safely scanned'];
   }
   if (evidence.version !== 1) {
     issues.push('version must be 1');
@@ -1478,6 +3100,8 @@ export function validateLaunchEvidence(evidence) {
   const preparedAt = isoTimestamp(evidence.preparedAt);
   if (preparedAt === null) {
     issues.push('preparedAt must be an ISO timestamp');
+  } else if (preparedAt > validationNow) {
+    issues.push('preparedAt must not be after the validation time');
   }
   const finalApprovedAt = isPlainObject(evidence.finalSignoff) ? isoTimestamp(evidence.finalSignoff.approvedAt) : null;
   if (evidence.approvedForLaunch !== true) {
@@ -1521,7 +3145,34 @@ export function validateLaunchEvidence(evidence) {
         notAfter: finalApprovedAt,
         notAfterLabel: 'finalSignoff.approvedAt',
       });
-      validateCheckSpecificEvidence(area.id, check.id, actualCheck, checkPath, issues, evidence.release);
+      validateCheckSpecificEvidence(
+        area.id,
+        check.id,
+        actualCheck,
+        actualArea,
+        checkPath,
+        issues,
+        evidence.release,
+        finalApprovedAt,
+        validationNow,
+      );
+    }
+  }
+
+  const databaseRestoreProof = evidence.areas?.database?.checks?.['database-check']?.databaseRestoreProof;
+  const jointRecovery = evidence.areas?.supabaseStorage?.checks?.['supabase-restore-tested']?.jointRecoveryReconciliation;
+  if (isPlainObject(databaseRestoreProof) && isPlainObject(jointRecovery)) {
+    for (const [field, label] of [
+      ['recoverySetId', 'recovery-set identifier'],
+      ['databaseDumpSha256', 'database dump SHA-256'],
+      ['sourceDatabaseIdentitySha256', 'source database identity SHA-256'],
+    ]) {
+      if (jointRecovery[field] !== databaseRestoreProof[field]) {
+        issues.push(
+          `areas.supabaseStorage.checks.supabase-restore-tested.jointRecoveryReconciliation.${field} must match ` +
+          `areas.database.checks.database-check.databaseRestoreProof.${field} so both proofs describe the same ${label}`,
+        );
+      }
     }
   }
 
@@ -1539,13 +3190,22 @@ export function validateLaunchEvidence(evidence) {
       issues.push('finalSignoff.approvedAt must be an ISO timestamp');
     } else if (preparedAt !== null && approvedAt < preparedAt) {
       issues.push('finalSignoff.approvedAt must not be before preparedAt');
+    } else if (approvedAt > validationNow) {
+      issues.push('finalSignoff.approvedAt must not be after the validation time');
     }
     validateEvidenceEntries(evidence.finalSignoff.evidence, 'finalSignoff.evidence', issues, {
       notAfter: approvedAt,
       notAfterLabel: 'finalSignoff.approvedAt',
     });
     validateFinalSignoffEvidence(evidence.finalSignoff, evidence.release, issues);
-    validateFinalSignoffApprovals(evidence.finalSignoff, evidence.release, preparedAt, issues);
+    validateFinalSignoffApprovals(
+      evidence.finalSignoff,
+      evidence.release,
+      preparedAt,
+      approvedAt,
+      validationNow,
+      issues,
+    );
   }
 
   return issues;
@@ -1687,12 +3347,20 @@ export function redactLaunchEvidenceTranscript(value) {
     .replace(/\bgh[pousr]_[A-Za-z0-9_=-]+/g, '[redacted-github-token]')
     .replace(/\bgithub_pat_[A-Za-z0-9_=-]+/g, '[redacted-github-token]')
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/Basic\s+[A-Za-z0-9+/]{8,}={0,2}/gi, 'Basic [redacted]')
+    .replace(
+      /(\b(?:AWS[_-]?SECRET[_-]?ACCESS[_-]?KEY|SERVICE[_-]?ROLE[_-]?KEY)\s*[=:]\s*["']?)[^\s,"'}\]]+/gi,
+      '$1[redacted]',
+    )
     .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
     .replace(/([?&](?:token|signature|key|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
     .replace(/[A-Za-z0-9._%+-]+:[^@\s'")]+@/g, '[redacted-credentials]@');
 }
 
-export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)) {
+export function runProductionLaunchEvidenceFromArgs(
+  args = process.argv.slice(2),
+  { now = Date.now, readEvidenceFile = readStableLaunchEvidenceFile } = {},
+) {
   let options;
   try {
     options = parseArgs(args);
@@ -1707,16 +3375,19 @@ export function runProductionLaunchEvidenceFromArgs(args = process.argv.slice(2)
 
   let evidence;
   try {
-    evidence = JSON.parse(decodeJsonFile(evidencePath));
+    evidence = readEvidenceFile(evidencePath);
   } catch (error) {
+    const safeMessage = error instanceof LaunchEvidenceInputError
+      ? error.message
+      : 'evidence file could not be read as bounded, stable JSON';
     return result(
       1,
       '',
-      `Production launch evidence failed: evidence file is not valid JSON. ${redactLaunchEvidenceTranscript(error instanceof Error ? error.message : String(error))}\n`,
+      `Production launch evidence failed: ${safeMessage}.\n`,
     );
   }
 
-  const issues = validateLaunchEvidence(evidence);
+  const issues = validateLaunchEvidence(evidence, { now });
   if (issues.length > 0) {
     if (options.json) {
       return result(1, renderJsonStatus(evidence, issues));

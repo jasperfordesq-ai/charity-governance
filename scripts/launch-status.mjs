@@ -12,6 +12,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import { validateProductionEnvContent } from './check-production.mjs';
+import { DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS } from './verify-document-recovery.mjs';
 import {
   decodeJsonFile,
   isEvidenceStatusComplete,
@@ -23,6 +24,24 @@ import {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const DEFAULT_EVIDENCE_FILE = '.charitypilot-launch-evidence/production-launch-evidence.json';
+
+const DOCUMENT_RECOVERY_BINDING_PLACEHOLDER = Object.freeze({
+  sha256: 'EXTERNAL_SHA256',
+  count: 'EXTERNAL_POSITIVE_COUNT',
+  nonnegativeCount: 'EXTERNAL_NONNEGATIVE_COUNT',
+  timestamp: 'EXTERNAL_TIMESTAMP',
+  transactionId: 'EXTERNAL_TRANSACTION_ID',
+  proofAge: 'EXTERNAL_MAXIMUM_AGE_MINUTES',
+  id: 'EXTERNAL_ID',
+});
+const DOCUMENT_RECOVERY_COMMAND = [
+  'npm run check:production:document-recovery --',
+  '--manifest-file=.charitypilot-launch-evidence/document-recovery-manifest.json',
+  ...DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS.map(([flag, , kind]) => (
+    `${flag}=${DOCUMENT_RECOVERY_BINDING_PLACEHOLDER[kind]}`
+  )),
+  '--json',
+].join(' ');
 const EVIDENCE_STATUS_COMMAND = `npm run check:production:evidence:status -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 const EVIDENCE_STATUS_JSON_COMMAND = `npm run check:production:evidence:status -- --json --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
 const EVIDENCE_VALIDATION_COMMAND = `npm run check:production:evidence -- --evidence-file=${DEFAULT_EVIDENCE_FILE}`;
@@ -79,8 +98,12 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
   githubSecretStore: 'npm run check:production:github-secrets -- --environment=production',
   githubSecretStoreJson: 'npm run check:production:github-secrets -- --environment=production --json',
   hosting: 'npm run check:production:hosting -- --production-env-file=.env.production',
-  database: 'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
+  databaseSourceIdentity:
+    'npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA',
+  database:
+    'npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json',
   supabase: 'npm run check:production:supabase -- --production-env-file=.env.production',
+  documentRecovery: DOCUMENT_RECOVERY_COMMAND,
   providers: 'npm run check:production:providers -- --production-env-file=.env.production',
   observability: 'npm run check:production:observability -- --production-env-file=.env.production',
   deployedBrowserQaPreflight: 'npm run check:production:browser-qa-env',
@@ -126,9 +149,11 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
   githubEnvironment: 'production',
   requiredGitHubEnvironmentVariables: Object.freeze([
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=<managed-postgres-hostname>',
   ]),
   configureCommands: Object.freeze([
     'gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"',
+    'gh variable set DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST --env production --repo jasperfordesq-ai/charity-governance --body "<managed-postgres-hostname>"',
   ]),
   workflowCommand: 'gh workflow run release-images.yml --ref master',
   watchCommand: 'gh run watch RELEASE_RUN_ID --exit-status',
@@ -156,7 +181,7 @@ const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
   'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 86 machine-readable checks, including GitHub production environment, GitHub production secret-store verification, release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; first run npm run check:production:browser-qa-env and record Deployed browser QA environment preflight passed in browserQa.checks.browser-qa-completed; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, critical-flow evidence must include pending-navigation confirmation, conditional obligations, and readiness blockers, and every browser QA evidence slot must bind to the exact promoted release.commitSha: browserQa.checks.browser-qa-completed, browserQa.checks.desktop-coverage, browserQa.checks.mobile-coverage, browserQa.checks.accessibility-coverage, browserQa.checks.cross-browser-coverage, browserQa.checks.ios-safari-device-coverage, and browserQa.checks.critical-flows-covered.',
-  'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
+  'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git. Capture the PostgreSQL source identity immutably, then require the snapshot-bound read-only database proof to match source/restored SHA-256 fingerprints with zero mismatches. Database backup/PITR still does not prove document-object recovery: run check:production:document-recovery with independently captured source bindings and require zero missing, unexpected/orphan, metadata, key, size, or checksum mismatches.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
 ]);
 
@@ -176,7 +201,7 @@ const MISSING_VALUE_GROUPS = Object.freeze([
   },
   {
     label: 'PostgreSQL',
-    keys: ['DATABASE_URL'],
+    keys: ['DATABASE_URL', 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST'],
   },
   {
     label: 'Stripe billing',
@@ -862,8 +887,10 @@ export function renderLaunchStatusText(state) {
     lines.push(`  GitHub production secret store:  ${state.productionLaunchCommands.githubSecretStore}`);
     lines.push(`  GitHub production secret-store JSON:  ${state.productionLaunchCommands.githubSecretStoreJson}`);
     lines.push(`  Hosting/DNS/TLS:  ${state.productionLaunchCommands.hosting}`);
+    lines.push(`  Database source identity capture:  ${state.productionLaunchCommands.databaseSourceIdentity}`);
     lines.push(`  Database backup/restore:  ${state.productionLaunchCommands.database}`);
     lines.push(`  Supabase storage:  ${state.productionLaunchCommands.supabase}`);
+    lines.push(`  Joint document recovery:  ${state.productionLaunchCommands.documentRecovery}`);
     lines.push(`  Stripe/Resend providers:  ${state.productionLaunchCommands.providers}`);
     lines.push(`  Observability alerting:  ${state.productionLaunchCommands.observability}`);
     lines.push(`  Deployed browser QA env preflight:  ${state.productionLaunchCommands.deployedBrowserQaPreflight}`);

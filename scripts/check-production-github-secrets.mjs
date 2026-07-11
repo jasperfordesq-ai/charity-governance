@@ -13,7 +13,7 @@ const USAGE_TEXT =
   'Usage: node scripts/check-production-github-secrets.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance] [--json]';
 
 export const REQUIRED_GITHUB_PRODUCTION_SECRETS = Object.freeze([
-  { name: 'DATABASE_URL', hint: 'Managed production PostgreSQL URL with sslmode=require' },
+  { name: 'DATABASE_URL', hint: 'Managed production PostgreSQL URL with sslmode=verify-full and target_session_attrs=read-write' },
   { name: 'JWT_SECRET', hint: 'High-entropy API JWT signing secret' },
   { name: 'READINESS_API_KEY', hint: 'High-entropy keyed readiness probe secret' },
   { name: 'STRIPE_SECRET_KEY', hint: 'Stripe live secret key' },

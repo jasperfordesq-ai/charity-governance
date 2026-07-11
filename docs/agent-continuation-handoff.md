@@ -264,17 +264,17 @@ Local personal-use safety before heavy work:
 Known current state from `npm run launch:status -- --json` on 2026-07-11:
 
 - Phase: `ENV_INCOMPLETE`
-- `.env.production` exists but still has 17 values needing real production data.
-- Production values complete: `9 / 26`.
+- `.env.production` exists but still has 18 values needing real production data.
+- Production values complete: `9 / 27`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
 - Machine-readable launch evidence completion: `9 / 86`.
-- Strict counted launch gates: `18 / 117` complete (`15.4%`), counting only production values, launch evidence checks, and final signoff roles.
+- Strict counted launch gates: `18 / 118` complete (`15.3%`), counting only production values, launch evidence checks, and final signoff roles.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
 - Full-platform audit baseline captured on 2026-07-10 at
   `8809bac3a897afe6078df82142097c3fcc924e8f`; the remediation score was
-  `669 / 1000`, while the strict launch-gate score remained `18 / 120`.
+  `669 / 1000`, while the strict launch-gate score remained `18 / 117`.
 - GitHub CI for that audit baseline passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29068890047`.
 - Latest verified release-gate hardening commit captured by this handoff:
@@ -282,8 +282,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `548 / 548` checks on
-  2026-07-11. Older `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
+  `npm run test:production-check` passed on 2026-07-11 with `745` checks
+  passed, `0` failed, and `2` Windows-only symbolic-link privilege skips (`747`
+  total). Older `548 / 548`, `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
@@ -298,6 +299,9 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
 - GitHub `production` environment variables currently include
   `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`. That is the only public
   provider origin required by the web image; Supabase remains API/server-only.
+  The non-secret `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` variable is
+  now also required by the GitHub environment preflight and remains missing until
+  the real managed PostgreSQL hostname is selected.
 - `npm run check:production:github-env -- --environment=production` now verifies
   the release-image GitHub environment without reading secret values. Rerun it
   before promotion; the obsolete public Supabase variable is no longer a gate.
@@ -311,10 +315,11 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
   `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
   `ERROR_ALERT_WEBHOOK_URL`.
 
-The 17 missing production values are:
+The 18 missing production values are:
 
 - `TRUSTED_PROXY_ADDRESSES`
 - `DATABASE_URL`
+- `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
@@ -337,6 +342,7 @@ release-images.yml --ref master` can produce the `release-image-digests.env`
 artifact:
 
 - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
+- `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=<managed-postgres-hostname>`
 
 Validate those non-secret GitHub `production` environment variables before
 running the image workflow:
@@ -667,7 +673,9 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 352/352 production-tooling checks during the
     latest handoff refresh.
-  - Historical count; the current local production-tooling gate is 512/512.
+  - Historical count; the 2026-07-11 local production-tooling gate passed 745
+    checks with 0 failures and 2 Windows-only symbolic-link privilege skips
+    (747 total).
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
 - `node scripts/platform-completion-audit.mjs --json`
@@ -719,7 +727,9 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
-    Historical count; the current local production-tooling gate is 512/512.
+    Historical count; the 2026-07-11 local production-tooling gate passed 745
+    checks with 0 failures and 2 Windows-only symbolic-link privilege skips
+    (747 total).
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -732,14 +742,18 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
-  - Historical count; the current local production-tooling gate is 512/512.
+  - Historical count; the 2026-07-11 local production-tooling gate passed 745
+    checks with 0 failures and 2 Windows-only symbolic-link privilege skips
+    (747 total).
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
   - Passed again with 338/338 production-tooling checks after launch-evidence, release-ready, continuation-doc, and GitHub secret-store checker hardening.
-  - Historical count; the current local production-tooling gate is 512/512.
+  - Historical count; the 2026-07-11 local production-tooling gate passed 745
+    checks with 0 failures and 2 Windows-only symbolic-link privilege skips
+    (747 total).
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests
@@ -867,7 +881,8 @@ npm run check:production -- --production-env-file=.env.production
 npm run check:production:github-env -- --environment=production
 npm run check:production:github-secrets -- --environment=production
 npm run check:production:hosting -- --production-env-file=.env.production
-npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
+npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA
+npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json
 npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:observability -- --production-env-file=.env.production
@@ -899,14 +914,14 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 Strict launch evidence metric:
 
 - `77 / 86` machine-readable launch checks remain.
-- Strict counted launch gates are `18 / 117` complete, so `99 / 117`
+- Strict counted launch gates are `18 / 118` complete, so `100 / 118`
   counted gates remain. This is an operator progress metric only, not a legal,
   security, operations, or business readiness certification.
 - Strict launch evidence is still mostly incomplete because the remaining checks
   include the real production environment, deploy, rollback, provider,
   backup/restore, deployed QA, legal, pentest, and final signoff gates.
 - Final signoffs remain `0 / 5`.
-- Production values remain `9 / 26` complete, with 17 real provider/hosting/image-promotion values still missing.
+- Production values remain `9 / 27` complete, with 18 real provider/hosting/image-promotion values still missing.
 
 Whole-goal estimate:
 

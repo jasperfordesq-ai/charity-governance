@@ -7,7 +7,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
-import { runProductionPreflightFromArgs } from './check-production.mjs';
+import { runProductionPreflightFromArgs, validateProductionEnvContent } from './check-production.mjs';
+import { DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS } from './verify-document-recovery.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
@@ -242,7 +243,9 @@ function completeProductionEnv(overrides = {}) {
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
     READINESS_API_KEY: 'r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
-    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+    DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
+    DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: 'db.charitypilot.ie',
+    STORAGE_DELETE_TIMEOUT_MS: '5000',
     JWT_SECRET: 'J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
@@ -325,7 +328,9 @@ test('passes when the selected env file contains complete production values', ()
       'PORT=3002',
       'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
       'READINESS_API_KEY=r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
-      'DATABASE_URL=postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+      'DATABASE_URL=postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
+      'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=db.charitypilot.ie',
+      'STORAGE_DELETE_TIMEOUT_MS=5000',
       'JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
       'FRONTEND_URL=https://app.charitypilot.ie',
       'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
@@ -359,6 +364,249 @@ test('passes when the selected env file contains complete production values', ()
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test('production preflight binds document storage recovery to canonical DATABASE_URL hosts', () => {
+  assert.deepEqual(
+    validateProductionEnvContent(completeProductionEnv(), validRuntimeWebApiUrlEnv),
+    [],
+  );
+
+  const missing = validateProductionEnvContent(
+    completeProductionEnv({ DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: '' }),
+    validRuntimeWebApiUrlEnv,
+  );
+  assert.ok(missing.includes(
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST is missing or still contains a placeholder value',
+  ));
+
+  const mismatch = validateProductionEnvContent(
+    completeProductionEnv({ DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: 'other.charitypilot.ie' }),
+    validRuntimeWebApiUrlEnv,
+  );
+  assert.ok(mismatch.includes(
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST must include the exact DATABASE_URL hostname',
+  ));
+
+  const invalidCases = [
+    ['DB.charitypilot.ie', /canonical lowercase hostnames/],
+    ['*.charitypilot.ie', /public DNS hostnames/],
+    ['10.0.0.5', /public DNS hostnames/],
+    ['127.1', /public DNS hostnames/],
+    ['localhost', /public DNS hostnames/],
+    ['database.internal', /public DNS hostnames/],
+    ['database.private', /public DNS hostnames/],
+    ['database.home.arpa', /public DNS hostnames/],
+    ['database.onion', /public DNS hostnames/],
+    ['database.alt', /public DNS hostnames/],
+    ['xn--a.com', /valid IDNA/],
+    ['bücher.ie', /canonical lowercase hostnames/],
+    ['db.example.com', /public DNS hostnames/],
+    ['db.charitypilot.ie,db.charitypilot.ie', /duplicate or trailing-dot-equivalent/],
+    ['db.charitypilot.ie,db.charitypilot.ie.', /duplicate or trailing-dot-equivalent/],
+  ];
+  for (const [allowlist, expected] of invalidCases) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: allowlist }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.match(issues.join('\n'), expected, `allowlist should reject ${allowlist}`);
+  }
+
+  for (const hostname of ['xn--a.com', 'db.charitypilot.ie.']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({
+        DATABASE_URL: `postgresql://user:pass@${hostname}:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write`,
+        DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: hostname.replace(/\.$/, ''),
+      }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.ok(
+      issues.includes('DATABASE_URL hostname must be a syntactically public canonical ASCII DNS name'),
+      `database hostname should reject ${hostname}`,
+    );
+  }
+
+  const canonicalIdnaHostname = 'xn--bcher-kva.ie';
+  const canonicalIdnaIssues = validateProductionEnvContent(
+    completeProductionEnv({
+      DATABASE_URL: `postgresql://user:pass@${canonicalIdnaHostname}:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write`,
+      DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: canonicalIdnaHostname,
+    }),
+    validRuntimeWebApiUrlEnv,
+  );
+  assert.equal(
+    canonicalIdnaIssues.some((issue) => (
+      issue.startsWith('DATABASE_URL ') ||
+      issue.startsWith('DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST ')
+    )),
+    false,
+  );
+});
+
+test('production preflight accepts only the canonical storage deletion timeout range', () => {
+  for (const value of ['', '100', '5000', '8000']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ STORAGE_DELETE_TIMEOUT_MS: value }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.equal(
+      issues.some((issue) => issue.startsWith('STORAGE_DELETE_TIMEOUT_MS ')),
+      false,
+      `timeout should accept ${JSON.stringify(value)}`,
+    );
+  }
+
+  for (const value of ['99', '8001', '0100', '100.0', '+100', 'REPLACE_ME']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ STORAGE_DELETE_TIMEOUT_MS: value }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.ok(
+      issues.includes('STORAGE_DELETE_TIMEOUT_MS must be a canonical integer from 100 to 8000'),
+      `timeout should reject ${value}`,
+    );
+  }
+});
+
+test('production preflight requires recovery-compatible PostgreSQL TLS and read-write targeting', () => {
+  const invalidDatabaseUrls = [
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require&target_session_attrs=read-write',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-ca&target_session_attrs=read-write',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=VERIFY-FULL&target_session_attrs=read-write',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=any',
+  ];
+
+  for (const databaseUrl of invalidDatabaseUrls) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ DATABASE_URL: databaseUrl }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.match(
+      issues.join('\n'),
+      /exact lowercase sslmode=verify-full|target_session_attrs=read-write/,
+      `database authority should reject ${databaseUrl}`,
+    );
+  }
+});
+
+test('production preflight requires a complete single-database PostgreSQL authority without fragments', () => {
+  const invalidDatabaseUrls = [
+    [
+      'postgresql://db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
+      /must include a username and exactly one non-root database path segment/,
+    ],
+    [
+      'postgresql://user:pass@db.charitypilot.ie:5432/?sslmode=verify-full&target_session_attrs=read-write',
+      /must include a username and exactly one non-root database path segment/,
+    ],
+    [
+      'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot/archive?sslmode=verify-full&target_session_attrs=read-write',
+      /must include a username and exactly one non-root database path segment/,
+    ],
+    [
+      'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot%2Farchive?sslmode=verify-full&target_session_attrs=read-write',
+      /must include a username and exactly one non-root database path segment/,
+    ],
+    [
+      'postgresql://user:pass@db.charitypilot.ie:5432/%ZZ?sslmode=verify-full&target_session_attrs=read-write',
+      /must include a username and exactly one non-root database path segment/,
+    ],
+    [
+      'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write#ignored',
+      /must not contain a URL fragment/,
+    ],
+  ];
+
+  for (const [databaseUrl, expected] of invalidDatabaseUrls) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ DATABASE_URL: databaseUrl }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.match(issues.join('\n'), expected, `database authority should reject ${databaseUrl}`);
+  }
+});
+
+test('production preflight mirrors recovery-safe PostgreSQL option names and values', () => {
+  const baseDatabaseUrl = completeProductionEnv()
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('DATABASE_URL='))
+    .slice('DATABASE_URL='.length);
+  const databaseUrlWithOption = (name, value) => {
+    const url = new URL(baseDatabaseUrl);
+    url.searchParams.set(name, value);
+    return url.toString();
+  };
+
+  const trustedCaPath = resolve(repoRoot, 'trusted-production-ca.pem');
+  const validUrl = new URL(baseDatabaseUrl);
+  for (const [name, value] of [
+    ['application_name', 'charitypilot_document_recovery'],
+    ['channel_binding', 'require'],
+    ['connect_timeout', '10'],
+    ['keepalives', '1'],
+    ['keepalives_count', '5'],
+    ['keepalives_idle', '30'],
+    ['keepalives_interval', '10'],
+    ['sslrootcert', trustedCaPath],
+    ['tcp_user_timeout', '30000'],
+  ]) {
+    validUrl.searchParams.set(name, value);
+  }
+  assert.deepEqual(
+    validateProductionEnvContent(
+      completeProductionEnv({ DATABASE_URL: validUrl.toString() }),
+      validRuntimeWebApiUrlEnv,
+    ),
+    [],
+  );
+
+  const invalidOptions = [
+    ['gssencmode', 'prefer', /unsupported or routing-sensitive connection option gssencmode/],
+    ['requirepeer', 'postgres', /unsupported or routing-sensitive connection option requirepeer/],
+    ['sslkey', trustedCaPath, /unsupported or routing-sensitive connection option sslkey/],
+    ['channel_binding', 'disable', /channel_binding must equal require/],
+    ['sslrootcert', 'system', /sslrootcert must be a safe absolute .* never system/],
+    ['sslrootcert', 'relative-ca.pem', /sslrootcert must be a safe absolute/],
+    ['keepalives', '2', /keepalives must equal 0 or 1/],
+    ['connect_timeout', '-1', /connect_timeout must be a canonical integer/],
+    ['keepalives_count', '0005', /keepalives_count must be a canonical integer/],
+    ['tcp_user_timeout', '1000000', /tcp_user_timeout must be a canonical integer/],
+    ['application_name', 'bad\nname', /application_name must be a canonical/],
+  ];
+
+  for (const [name, value, expected] of invalidOptions) {
+    const databaseUrl = databaseUrlWithOption(name, value);
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ DATABASE_URL: databaseUrl }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.match(issues.join('\n'), expected, `database option should reject ${name}`);
+  }
+});
+
+test('production template and job containers wire document deletion recovery configuration', () => {
+  const template = readRepoFile('.env.production.example');
+  const compose = readRepoFile('compose.production.yml');
+  const configDocs = readRepoFile('docs/architecture/10-config-and-env.md');
+  const productionScheduler = composeServiceBlock(compose, 'production-scheduler');
+  const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
+
+  assert.match(template, /^STORAGE_DELETE_TIMEOUT_MS=5000$/m);
+  assert.match(
+    template,
+    /^DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=REPLACE_ME_MANAGED_POSTGRES_HOSTNAME$/m,
+  );
+  assert.match(
+    productionScheduler,
+    /DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST:\s+\$\{DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST:\?Set DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST\}/,
+  );
+  assert.match(productionScheduler, /STORAGE_DELETE_TIMEOUT_MS:\s+\$\{STORAGE_DELETE_TIMEOUT_MS:-5000\}/);
+  assert.match(documentStorageCleanup, /STORAGE_DELETE_TIMEOUT_MS:\s+\$\{STORAGE_DELETE_TIMEOUT_MS:-5000\}/);
+  assert.match(configDocs, /hostname checks are intentionally deterministic and perform no DNS\s+lookup/);
+  assert.match(configDocs, /does \*\*not\*\* prove that every future A\/AAAA answer is public/);
+  assert.match(configDocs, /egress\/network policy/);
 });
 
 test('fails when the API Supabase URL still contains project-ref placeholder text', () => {
@@ -1222,7 +1470,7 @@ test('fails when production values are local, malformed, or test-mode', () => {
     assert.match(result.stderr, /DATABASE_URL must not point at localhost for production/);
     assert.match(
       result.stderr,
-      /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/,
+      /DATABASE_URL must use exact lowercase sslmode=verify-full for production/,
     );
     assert.match(result.stderr, /FRONTEND_URL must not point at localhost for production/);
     assert.match(result.stderr, /NEXT_PUBLIC_API_URL must not point at localhost for production/);
@@ -1411,10 +1659,34 @@ test('fails when production database URL omits TLS mode', () => {
     assert.equal(result.status, 1);
     assert.match(
       result.stderr,
-      /DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full for production/,
+      /DATABASE_URL must use exact lowercase sslmode=verify-full for production/,
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails when production database URL uses libpq routing overrides or duplicate TLS modes', () => {
+  const unsafeDatabaseUrls = [
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?host=localhost&sslmode=require',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?hostaddr=127.0.0.1&sslmode=require',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?service=production&sslmode=require',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?dbname=other&sslmode=require',
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require&sslmode=disable',
+  ];
+
+  for (const [index, databaseUrl] of unsafeDatabaseUrls.entries()) {
+    const tempDir = mkdtempSync(join(tmpdir(), `charitypilot-production-libpq-${index}-`));
+    const envPath = join(tempDir, 'production.env');
+    writeFileSync(envPath, completeProductionEnv({ DATABASE_URL: databaseUrl }));
+    try {
+      const result = runPreflight([`--production-env-file=${envPath}`]);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /unsupported or routing-sensitive connection option|must not repeat/);
+      assert.doesNotMatch(result.stderr, /localhost|127\.0\.0\.1|service=production|dbname=other|sslmode=disable/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   }
 });
 
@@ -1653,6 +1925,12 @@ test('package test scripts stay compatible with the Node 22 production runtime',
     [],
     `Node 22 rejects --test-isolation in package scripts: ${incompatibleScripts.join(', ')}`,
   );
+  const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
+  assert.match(
+    apiPackage.scripts.test,
+    /node --test --test-concurrency=4 dist\/tests\/\*\.test\.js/,
+    'API tests must cap file concurrency so the real Docker migration proof is not starved on high-core runners',
+  );
 });
 
 test('web test discovery cannot be shell-expanded from stale compiled output', () => {
@@ -1802,6 +2080,55 @@ test('release image promotion requires the reusable managed E2E gate before writ
   assert.doesNotMatch(workflowPermissions, /packages:\s+write|id-token:\s+write/);
 });
 
+test('document recovery guidance binds independent object-byte evidence instead of database-only PITR', () => {
+  const setup = readRepoFile('docs/supabase-production-setup.md');
+  const checklist = readRepoFile('docs/production-launch-checklist.md');
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const launchGuide = readRepoFile('docs/LAUNCH-GUIDE.md');
+  const launchStatus = readRepoFile('scripts/launch-status.mjs');
+  const platformAudit = readRepoFile('docs/platform-completion-audit.md');
+  const verifier = readRepoFile('scripts/verify-document-recovery.mjs');
+
+  assert.match(setup, /database backups include Storage metadata but not the stored objects/);
+  assert.match(setup, /https:\/\/supabase\.com\/docs\/guides\/platform\/backups/);
+  assert.match(setup, /S3 bucket versioning is not supported/);
+  assert.match(setup, /https:\/\/supabase\.com\/docs\/guides\/storage\/s3\/compatibility/);
+  assert.match(setup, /separate encrypted, versioned backup of the actual document object bytes/);
+  assert.match(setup, /at least one approved non-sensitive QA document\/object/i);
+  assert.match(setup, /audited deletion lifecycle to reach `PROCESSED`/);
+  assert.match(setup, /complete `DocumentStorageDeletion` and append-only `DocumentStorageDeletionRecovery` inventories/);
+  assert.match(setup, /offline verifier records and consistency-checks these attestations but cannot authenticate them/);
+  assert.match(setup, /zero missing, unexpected\/orphan, metadata-mismatched, size-mismatched, or checksum-mismatched objects/);
+  assert.match(checklist, /At least one approved non-sensitive QA document\/object/);
+  assert.match(checklist, /audited deletion lifecycle reaches `PROCESSED`/);
+  assert.match(checklist, /check:production:document-recovery/);
+  assert.match(checklist, /never by copying it from the recovery manifest under test/);
+  assert.match(checklist, /productionLaunchCommands\.documentRecovery/);
+  assert.match(checklist, /complete set of 30[\s\S]*mandatory `--expected-\*` binding flags/);
+  assert.match(checklist, /all 30 mandatory independent bindings/);
+  assert.match(checklist, /`sourceProvenanceExternallyVerified` remains `false`/);
+  assert.match(runbook, /Every `--expected-\*` digest[\s\S]*must come from the (?:immutable )?independent source/);
+  assert.match(runbook, /Document recovery reconciliation consistency passed against independently supplied bindings\./);
+  assert.match(runbook, /does not authenticate the operator claims or external source provenance/);
+  assert.match(runbook, /v1 verifier deliberately rejects a vacuous zero-document exercise/);
+  assert.match(runbook, /Never introduce real charity data merely to make the proof pass/);
+  assert.match(runbook, /DocumentStorageDeletionRecovery/);
+  assert.match(runbook, /`sourceProvenanceExternallyVerified` must remain `false`/);
+  assert.match(runbook, /DOCUMENT_STORAGE_DELETION_DEAD_LETTERED/);
+  assert.match(runbook, /Do not repair a dead letter with ad-hoc SQL/);
+  assert.match(checklist, /No production dead letter was manufactured for launch evidence/);
+  assert.match(launchGuide, /check:production:document-recovery/);
+  assert.match(launchGuide, /productionLaunchCommands\.documentRecovery/);
+  assert.match(launchGuide, /all 30 mandatory verifier binding flags/);
+  assert.match(launchStatus, /documentRecovery:/);
+  assert.match(platformAudit, /Database source identity capture: `npm run check:production:database -- --production-env-file=\.env\.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA`/);
+  assert.match(platformAudit, /Joint document recovery: `npm run check:production:document-recovery/);
+  assert.equal(DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS.length, 30);
+  for (const [flag] of DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS) {
+    assert.match(verifier, new RegExp(flag));
+  }
+});
+
 test('reliability report rejects unknown options before reporting', () => {
   const result = spawnSync(process.execPath, ['scripts/reliability-report.mjs', '--no-run', '--surprise'], {
     cwd: repoRoot,
@@ -1831,10 +2158,10 @@ test('production todo reflects current launch blockers without overclaiming loca
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.match(productionTodo, /Current local status checked 2026-07-11/);
-  assert.match(productionTodo, /9 of 26 production values are complete/);
+  assert.match(productionTodo, /9 of 27 production values are complete/);
   assert.match(
     productionTodo,
-    /9 of 26 production values are complete[\s\S]*17[\s\S]*production values still require real data/,
+    /9 of 27 production values are complete[\s\S]*18[\s\S]*production values still require real data/,
   );
   assert.match(
     productionTodo,
@@ -1871,7 +2198,10 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /runs npm\/npx child gates without shell execution/);
   assert.doesNotMatch(productionTodo, /only Playwright E2E was skipped/);
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
-  assert.match(productionTodo, /352\/352 production-tooling checks/);
+  assert.match(
+    productionTodo,
+    /745 checks passed, 0 failed, and 2 Windows-only symbolic-link privilege skips \(747 total\)/,
+  );
   assert.doesNotMatch(productionTodo, /351\/351 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /349\/349 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /346\/346 production-tooling checks/);
@@ -1923,14 +2253,17 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}548\s*\/\s*548`? checks/);
+  assert.match(
+    handoff,
+    /Most recent local production-tooling gate[\s\S]{0,240}`745` checks[\s\S]{0,120}`0` failed[\s\S]{0,120}`2` Windows-only symbolic-link privilege skips \(`747`[\s\S]{0,40}total\)/,
+  );
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
   assert.match(
     handoff,
-    /Older `546 \/ 546`, `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
+    /Older `548 \/ 548`, `546 \/ 546`, `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
   );
   assert.match(
     handoff,
@@ -2744,10 +3077,13 @@ test('plain English launch guide names every final approval role', () => {
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-10/);
-  assert.match(launchGuide, /17 production values needing real data/);
-  assert.match(launchGuide, /production values are `9 \/ 26` complete/);
+  assert.match(launchGuide, /18 production values needing real data/);
+  assert.match(launchGuide, /production values are `9 \/ 27` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
-  assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 512\/512/);
+  assert.match(
+    launchGuide,
+    /Production-tooling tests \| Local `npm run test:production-check` passed 745 checks with 0 failures and 2 Windows-only symbolic-link privilege skips \(747 total\)/,
+  );
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 488\/488/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 350\/350/);
@@ -2973,7 +3309,7 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /Fresh production dependency audit on 2026-07-05/);
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
-  assert.match(backendAudit, /17 production values require real data/);
+  assert.match(backendAudit, /18 of 27 production values require real data/);
   assert.match(backendAudit, /86 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
@@ -3085,6 +3421,10 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   );
   assert.equal(packageJson.scripts['check:production:release-run'], 'node scripts/production-release-run-evidence.mjs');
   assert.equal(
+    packageJson.scripts['check:production:document-recovery'],
+    'node scripts/verify-document-recovery.mjs',
+  );
+  assert.equal(
     packageJson.scripts['prepare:production:evidence-upload'],
     'node scripts/prepare-production-launch-evidence-upload.mjs',
   );
@@ -3103,6 +3443,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence-status\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-release-run-evidence\.test\.mjs/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/verify-document-recovery\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-github-secrets\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-supabase\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/check-production-providers\.test\.mjs/);
@@ -3188,12 +3529,37 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
   assert.match(
     runbook,
-    /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/,
+    /npm run check:production:database -- --production-env-file=\.env\.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA/,
   );
   assert.match(
     runbook,
-    /representative organisation, user, document, compliance, storage deletion, and Stripe webhook sentinel rows/,
+    /npm run check:production:database -- --production-env-file=\.env\.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=\/mnt\/encrypted\/charitypilot\/recovery\/RECOVERY_SET_ID --keep-backup --json/,
   );
+  assert.match(runbook, /REPEATABLE READ READ ONLY/);
+  assert.match(runbook, /exact source\/restored covered-schema, table-membership, row-count, and SHA-256 fingerprint equality/);
+  assert.match(runbook, /certified schema scope is deliberately narrow and machine-readable/i);
+  assert.match(runbook, /covers only the `public` schema/);
+  assert.match(
+    runbook,
+    /Non-public schemas, extension installation\/membership metadata, comments\/security labels, and database-level roles[\s\S]*are excluded and must not be claimed as certified/,
+  );
+  assert.match(
+    runbook,
+    /PostgreSQL large objects are excluded and the proof fails unless both source and restore contain zero/,
+  );
+  assert.match(
+    runbook,
+    /postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c/,
+  );
+  assert.match(runbook, /64 GiB dump file-size ceiling and output-filesystem capacity preflight/);
+  assert.match(runbook, /no more than 24 hours before final approval/);
+  assert.match(runbook, /zero sequences, identity columns, and `nextval` defaults/);
+  assert.match(runbook, /do not treat a marker without the bound JSON\/report as evidence/);
+  assert.match(
+    runbook,
+    /This proof verifies a read-only source snapshot against one isolated restore\. PostgreSQL ownership and ACL privileges are intentionally excluded by --no-owner and --no-privileges, sequence runtime state is excluded/,
+  );
+  assert.doesNotMatch(runbook, /--expect-operational-sentinel|--allow-remote-sentinel/);
   assert.match(runbook, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:providers -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:evidence:init/);
@@ -3269,9 +3635,16 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /npm run check:production:observability -- --production-env-file=\.env\.production/);
   assert.match(
     launchChecklist,
-    /npm run check:production:database -- --production-env-file=\.env\.production --expect-operational-sentinel/,
+    /npm run check:production:database -- --production-env-file=\.env\.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA/,
   );
-  assert.match(launchChecklist, /Operational sentinel restore test location/);
+  assert.match(
+    launchChecklist,
+    /npm run check:production:database -- --production-env-file=\.env\.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=\/mnt\/encrypted\/charitypilot\/recovery\/RECOVERY_SET_ID --keep-backup --json/,
+  );
+  assert.match(launchChecklist, /Immutable source-identity capture location and SHA-256/);
+  assert.match(launchChecklist, /Restore-proof report location and SHA-256/);
+  assert.match(launchChecklist, /zero mismatches/);
+  assert.doesNotMatch(launchChecklist, /operational sentinel|--expect-operational-sentinel/i);
   assert.match(launchChecklist, /npm run check:production:supabase -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /supabaseStorage\.checks\.supabase-backups-enabled/);
   assert.match(launchChecklist, /supabaseStorage\.checks\.supabase-restore-tested/);
@@ -4036,21 +4409,37 @@ test('CI verifies PostgreSQL backup and restore against the migrated database', 
   assert.notEqual(stepStart, -1, 'CI must verify database backup and restore');
   const step = workflow.slice(stepStart, workflow.indexOf('name: Lint'));
 
-  assert.match(backupScript, /allow-remote-sentinel/);
-  assert.match(backupScript, /Refusing to seed restore sentinel into a non-local database URL/);
+  assert.match(backupScript, /--allow-remote-sentinel has been removed/);
+  assert.match(
+    backupScript,
+    /Refusing to seed restore sentinel unless the URL names a confirmed local CI\/test\/e2e\/disposable database/,
+  );
   assert.match(backupScript, /isLocalDatabaseUrl\(databaseUrl\)/);
   assert.match(step, /backup_dir="\$\(mktemp -d\)"/);
   assert.match(step, /node scripts\/postgres-backup\.mjs seed-restore-sentinel/);
-  assert.match(step, /node scripts\/postgres-backup\.mjs backup/);
-  assert.match(step, /--database-url="\$\{DATABASE_URL\}"/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs source-identity/);
+  assert.match(step, /sourceReadOnlyVerified/);
+  assert.match(step, /sourceDatabaseIdentitySha256/);
+  assert.match(step, /charitypilot-postgres-source-identity\/v2/);
+  assert.match(step, /helper\.commitSha !== process\.env\.GITHUB_SHA/);
+  assert.match(step, /helper\.sourceSha256 !== helper\.commitSourceSha256/);
+  assert.match(step, /helper\.sourceMatchesCommit !== true/);
+  assert.match(step, /helper\.canonicalRepositoryMatched !== true/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs prove-restore/);
   assert.match(step, /--docker-network=host/);
-  assert.match(step, /--output-file=ci-postgres\.dump/);
-  assert.match(step, /node scripts\/postgres-backup\.mjs verify-restore/);
-  assert.match(step, /--dump-file="\$\{backup_dir\}\/ci-postgres\.dump"/);
-  assert.match(step, /--expect-operational-sentinel/);
+  assert.match(step, /--recovery-set-id="ci-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}"/);
+  assert.match(step, /--expected-source-database-identity-sha256="\$\{source_identity_sha\}"/);
+  assert.match(step, /--output-file=ci-postgres-restore-proof\.dump/);
+  assert.match(step, /--report-file=ci-postgres-restore-proof\.json/);
+  assert.match(step, /charitypilot-postgres-restore-proof\/v2/);
+  assert.match(step, /value\.dump\?\.capacityPreflight\?\.verified !== true/);
+  assert.match(step, /comparison\.rowFingerprintsMatched !== true/);
+  assert.match(step, /comparison\.mismatchCount !== 0/);
+  assert.doesNotMatch(step, /postgres-backup\.mjs backup|postgres-backup\.mjs verify-restore|--expect-operational-sentinel/);
   assert.ok(
-    step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs backup'),
-    'CI must seed operational data before taking the backup dump',
+    step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs source-identity') &&
+      step.indexOf('postgres-backup.mjs source-identity') < step.indexOf('postgres-backup.mjs prove-restore'),
+    'CI must seed its local fixture, capture identity read-only, then prove the isolated restore',
   );
   assert.ok(
     workflow.indexOf('name: Verify Prisma migration status') < stepStart,
@@ -4625,7 +5014,7 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
     jobSmokeStep,
     /\[DeadlineReminders\] Run complete - 0 reminder\(s\) provider-accepted, 0 failed, 0 uncertain, 0 deadline\(s\) skipped/,
   );
-  assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
+  assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Retry scheduled: 0\. Newly dead-lettered: 0\./);
   assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),
@@ -4650,7 +5039,7 @@ test('CI validates API production env inside the built Docker image', () => {
   assert.match(workflow, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(
     workflow,
-    /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/,
+    /-e "DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=verify-full&target_session_attrs=read-write"/,
   );
   assert.match(workflow, /-e STRIPE_SECRET_KEY=sk_live_ci_configured_secret/);
   assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
@@ -4934,8 +5323,11 @@ test('release workflow rehearses deploy preflight against generated digest manif
   assert.match(rehearsalStep, /NODE_ENV=production/);
   assert.match(
     rehearsalStep,
-    /DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=require/,
+    /DATABASE_URL=postgresql:\/\/charitypilot:charitypilot@db\.charitypilot\.ie:5432\/charitypilot\?sslmode=verify-full&target_session_attrs=read-write/,
   );
+  assert.match(rehearsalStep, /DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=db\.charitypilot\.ie/);
+  assert.match(rehearsalStep, /SUPABASE_URL=https:\/\/xjvdkmqbtczrnlqpswfa\.supabase\.co/);
+  assert.doesNotMatch(rehearsalStep, /SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(rehearsalStep, /NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
   assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
   assert.doesNotMatch(rehearsalStep, /NEXT_PUBLIC_SUPABASE_URL/);
@@ -4992,16 +5384,29 @@ test('release workflow verifies PostgreSQL backup and restore before publishing 
 
   assert.match(step, /backup_dir="\$\(mktemp -d\)"/);
   assert.match(step, /node scripts\/postgres-backup\.mjs seed-restore-sentinel/);
-  assert.match(step, /node scripts\/postgres-backup\.mjs backup/);
-  assert.match(step, /--database-url="\$\{DATABASE_URL\}"/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs source-identity/);
+  assert.match(step, /sourceReadOnlyVerified/);
+  assert.match(step, /sourceDatabaseIdentitySha256/);
+  assert.match(step, /charitypilot-postgres-source-identity\/v2/);
+  assert.match(step, /helper\.commitSha !== process\.env\.GITHUB_SHA/);
+  assert.match(step, /helper\.sourceSha256 !== helper\.commitSourceSha256/);
+  assert.match(step, /helper\.sourceMatchesCommit !== true/);
+  assert.match(step, /helper\.canonicalRepositoryMatched !== true/);
+  assert.match(step, /node scripts\/postgres-backup\.mjs prove-restore/);
   assert.match(step, /--docker-network=host/);
-  assert.match(step, /--output-file=ci-postgres\.dump/);
-  assert.match(step, /node scripts\/postgres-backup\.mjs verify-restore/);
-  assert.match(step, /--dump-file="\$\{backup_dir\}\/ci-postgres\.dump"/);
-  assert.match(step, /--expect-operational-sentinel/);
+  assert.match(step, /--recovery-set-id="release-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}"/);
+  assert.match(step, /--expected-source-database-identity-sha256="\$\{source_identity_sha\}"/);
+  assert.match(step, /--output-file=release-postgres-restore-proof\.dump/);
+  assert.match(step, /--report-file=release-postgres-restore-proof\.json/);
+  assert.match(step, /charitypilot-postgres-restore-proof\/v2/);
+  assert.match(step, /value\.dump\?\.capacityPreflight\?\.verified !== true/);
+  assert.match(step, /comparison\.rowFingerprintsMatched !== true/);
+  assert.match(step, /comparison\.mismatchCount !== 0/);
+  assert.doesNotMatch(step, /postgres-backup\.mjs backup|postgres-backup\.mjs verify-restore|--expect-operational-sentinel/);
   assert.ok(
-    step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs backup'),
-    'release workflow must seed operational data before taking the backup dump',
+    step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs source-identity') &&
+      step.indexOf('postgres-backup.mjs source-identity') < step.indexOf('postgres-backup.mjs prove-restore'),
+    'release workflow must seed its local fixture, capture identity read-only, then prove the isolated restore',
   );
   assert.ok(
     workflow.indexOf('name: Run migration runner against CI PostgreSQL') < stepStart,
@@ -5119,7 +5524,7 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
     jobSmokeStep,
     /\[DeadlineReminders\] Run complete - 0 reminder\(s\) provider-accepted, 0 failed, 0 uncertain, 0 deadline\(s\) skipped/,
   );
-  assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
+  assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Retry scheduled: 0\. Newly dead-lettered: 0\./);
   assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
   assert.ok(
     workflow.indexOf('name: Build API Docker image') < workflow.indexOf('name: Smoke API Docker scheduled jobs'),

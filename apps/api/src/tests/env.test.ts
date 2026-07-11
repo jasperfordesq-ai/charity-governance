@@ -23,7 +23,7 @@ function setCompleteProductionEnv(overrides: Record<string, string | undefined> 
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
     READINESS_API_KEY: 'configured-readiness-key-32-chars',
-    DATABASE_URL: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require',
+    DATABASE_URL: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
     JWT_SECRET: 'a'.repeat(40),
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
@@ -86,7 +86,7 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -105,6 +105,65 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
+  assert.doesNotThrow(() => validateProductionEnv());
+});
+
+test('validateProductionEnv requires exact authenticated read-write PostgreSQL routing', async (t) => {
+  const cases = [
+    {
+      name: 'sslmode=require',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require&target_session_attrs=read-write',
+      issue: 'DATABASE_URL must use exact lowercase sslmode=verify-full in production',
+    },
+    {
+      name: 'sslmode=verify-ca',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-ca&target_session_attrs=read-write',
+      issue: 'DATABASE_URL must use exact lowercase sslmode=verify-full in production',
+    },
+    {
+      name: 'uppercase sslmode value',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=VERIFY-FULL&target_session_attrs=read-write',
+      issue: 'DATABASE_URL must use exact lowercase sslmode=verify-full in production',
+    },
+    {
+      name: 'duplicate sslmode',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&sslmode=verify-full&target_session_attrs=read-write',
+      issue: 'DATABASE_URL must use exact lowercase sslmode=verify-full in production',
+    },
+    {
+      name: 'missing target_session_attrs',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full',
+      issue: 'DATABASE_URL must explicitly set target_session_attrs=read-write in production',
+    },
+    {
+      name: 'duplicate target_session_attrs',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write&target_session_attrs=read-write',
+      issue: 'DATABASE_URL must explicitly set target_session_attrs=read-write in production',
+    },
+    {
+      name: 'wrong target_session_attrs',
+      databaseUrl: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-only',
+      issue: 'DATABASE_URL must explicitly set target_session_attrs=read-write in production',
+    },
+  ];
+
+  for (const entry of cases) {
+    await t.test(entry.name, () => {
+      setCompleteProductionEnv({ DATABASE_URL: entry.databaseUrl });
+
+      assert.throws(
+        () => validateProductionEnv(),
+        (error: unknown) =>
+          error instanceof AppError &&
+          Array.isArray(error.details) &&
+          error.details.includes(entry.issue),
+      );
+    });
+  }
+
+  setCompleteProductionEnv({
+    DATABASE_URL: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
+  });
   assert.doesNotThrow(() => validateProductionEnv());
 });
 
@@ -183,7 +242,7 @@ test('validateProductionEnv rejects non-canonical production public origins', ()
 
 test('validateDeadlineRemindersEnv rejects non-canonical production frontend origins', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.FRONTEND_URL = 'https://charitypilot.ie';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
@@ -234,7 +293,7 @@ test('validateProductionEnv rejects unapproved production email sender domains',
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -288,7 +347,7 @@ test('validateProductionEnv rejects malformed billing and email provider identif
 
 test('validateDocumentStorageCleanupEnv accepts storage-only production configuration', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
@@ -299,7 +358,7 @@ test('validateDocumentStorageCleanupEnv accepts storage-only production configur
 
 test('validateDeadlineRemindersEnv accepts reminder-only production configuration', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
@@ -310,7 +369,7 @@ test('validateDeadlineRemindersEnv accepts reminder-only production configuratio
 
 test('validateDeadlineRemindersEnv rejects malformed Resend API keys in production', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 'configuredResendSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
@@ -340,7 +399,7 @@ test('validateDeadlineRemindersEnv rejects missing reminder-only production conf
       error instanceof AppError &&
       error.message === 'Deadline reminders environment is not ready' &&
       Array.isArray(error.details) &&
-      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production') &&
+      error.details.includes('DATABASE_URL must use exact lowercase sslmode=verify-full in production') &&
       error.details.includes('FRONTEND_URL must not point at localhost in production') &&
       error.details.includes('RESEND_API_KEY is missing or still contains a placeholder value') &&
       error.details.includes('EMAIL_FROM must use an approved CharityPilot sender domain in production') &&
@@ -350,7 +409,7 @@ test('validateDeadlineRemindersEnv rejects missing reminder-only production conf
 
 test('validateDeadlineRemindersEnv rejects missing production job alert webhook', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.RESEND_API_KEY = 're_realisticConfiguredSecret';
   process.env.EMAIL_FROM = 'noreply@charitypilot.ie';
@@ -370,7 +429,7 @@ test('validateProductionEnv rejects missing production error alert webhook', () 
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -401,7 +460,7 @@ test('validateProductionEnv rejects local production error alert webhooks', () =
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -448,7 +507,7 @@ test('validateProductionEnv rejects private production error alert webhooks', ()
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -489,7 +548,7 @@ test('validateProductionEnv rejects malformed production error alert webhook hos
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -536,7 +595,7 @@ test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configur
       error instanceof AppError &&
       error.message === 'Document storage cleanup environment is not ready' &&
       Array.isArray(error.details) &&
-      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production') &&
+      error.details.includes('DATABASE_URL must use exact lowercase sslmode=verify-full in production') &&
       error.details.includes('SUPABASE_URL is missing or still contains a placeholder value') &&
       error.details.includes('SUPABASE_SERVICE_ROLE_KEY is missing or still contains a placeholder value') &&
       error.details.includes('SUPABASE_STORAGE_BUCKET is missing or still contains a placeholder value') &&
@@ -546,7 +605,7 @@ test('validateDocumentStorageCleanupEnv rejects missing storage cleanup configur
 
 test('validateDocumentStorageCleanupEnv rejects private Supabase URLs', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.SUPABASE_URL = 'https://10.0.0.5';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
@@ -563,7 +622,7 @@ test('validateDocumentStorageCleanupEnv rejects private Supabase URLs', () => {
 
 test('validateDocumentStorageCleanupEnv rejects missing production job alert webhook', () => {
   process.env.NODE_ENV = 'production';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.SUPABASE_URL = 'https://configured-project.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
@@ -594,7 +653,7 @@ test('validateProductionEnv rejects missing production readiness key', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -625,7 +684,7 @@ test('validateProductionEnv rejects short production readiness keys', () => {
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'short-readiness-key';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -655,7 +714,7 @@ test('validateProductionEnv requires explicit trusted proxy addresses in product
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -686,7 +745,7 @@ test('validateProductionEnv rejects comma-separated non-canonical production fro
   process.env.PORT = '3002';
   process.env.TRUSTED_PROXY_ADDRESSES = '10.0.0.10';
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie, https://admin.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -716,7 +775,7 @@ test('validateProductionEnv rejects comma-separated non-canonical production fro
 test('validateProductionEnv rejects missing production API origin used for cookie-domain checks', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.STRIPE_SECRET_KEY = 'sk_live_realisticConfiguredSecret';
@@ -743,7 +802,7 @@ test('validateProductionEnv rejects missing production API origin used for cooki
 test('validateProductionEnv rejects split production web and API hosts without a shared auth cookie domain', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
@@ -771,7 +830,7 @@ test('validateProductionEnv rejects split production web and API hosts without a
 test('validateProductionEnv rejects auth cookie domains that do not cover production web and API hosts', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
@@ -816,7 +875,7 @@ test('validateProductionEnv rejects invalid auth cookie domains even for same-ho
 test('validateProductionEnv rejects unapproved production public hostnames', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://attacker.example';
   process.env.NEXT_PUBLIC_API_URL = 'https://api.attacker.example';
@@ -868,14 +927,14 @@ test('validateProductionEnv rejects production database URLs without TLS', () =>
     (error: unknown) =>
       error instanceof AppError &&
       Array.isArray(error.details) &&
-      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+      error.details.includes('DATABASE_URL must use exact lowercase sslmode=verify-full in production'),
   );
 });
 
 test('validateProductionEnv rejects production frontend URLs that are not origins', () => {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '3002';
-  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie/login';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
@@ -966,7 +1025,7 @@ test('validateProductionEnv rejects the local database smoke override outside Gi
       error instanceof AppError &&
       Array.isArray(error.details) &&
       error.details.includes('DATABASE_URL must not point at localhost in production') &&
-      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+      error.details.includes('DATABASE_URL must use exact lowercase sslmode=verify-full in production'),
   );
 });
 
@@ -1000,7 +1059,7 @@ test('validateProductionEnv treats Docker host gateway database URLs as local pr
       error instanceof AppError &&
       Array.isArray(error.details) &&
       error.details.includes('DATABASE_URL must not point at localhost in production') &&
-      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+      error.details.includes('DATABASE_URL must use exact lowercase sslmode=verify-full in production'),
   );
 });
 
@@ -1065,7 +1124,7 @@ test('validateProductionEnv rejects non-local plaintext database URLs even for G
     (error: unknown) =>
       error instanceof AppError &&
       Array.isArray(error.details) &&
-      error.details.includes('DATABASE_URL must require TLS with sslmode=require, verify-ca, or verify-full in production'),
+      error.details.includes('DATABASE_URL must use exact lowercase sslmode=verify-full in production'),
   );
 });
 

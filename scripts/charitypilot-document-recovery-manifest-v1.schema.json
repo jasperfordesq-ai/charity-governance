@@ -1,0 +1,597 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://charitypilot.ie/schemas/charitypilot-document-recovery-manifest-v1.schema.json",
+  "title": "CharityPilot document recovery manifest v1",
+  "description": "Structural schema for the fail-closed CharityPilot joint database-metadata and document-object recovery manifest. Cross-field chronology, canonical digest, inventory-reconciliation, immutable-reference, secret-screening, and serialized-byte checks are enforced by scripts/verify-document-recovery.mjs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schemaVersion",
+    "hashContract",
+    "exercise",
+    "source",
+    "target",
+    "backupControls",
+    "objectives",
+    "restore",
+    "reconciliation",
+    "attestations"
+  ],
+  "properties": {
+    "kind": { "const": "charitypilot-document-recovery-manifest" },
+    "schemaVersion": { "const": 1 },
+    "hashContract": { "$ref": "#/$defs/hashContract" },
+    "exercise": { "$ref": "#/$defs/exercise" },
+    "source": { "$ref": "#/$defs/source" },
+    "target": { "$ref": "#/$defs/target" },
+    "backupControls": { "$ref": "#/$defs/backupControls" },
+    "objectives": { "$ref": "#/$defs/objectives" },
+    "restore": { "$ref": "#/$defs/restore" },
+    "reconciliation": { "$ref": "#/$defs/reconciliation" },
+    "attestations": { "$ref": "#/$defs/attestations" }
+  },
+  "x-charitypilot-manifest-format": "charitypilot-document-recovery-manifest-v1",
+  "x-charitypilot-max-serialized-bytes": 16777216,
+  "x-charitypilot-max-inventory-entries": 5000,
+  "x-charitypilot-max-document-bytes": 10485760,
+  "x-charitypilot-max-aggregate-object-bytes": 52428800000,
+  "x-charitypilot-max-json-nesting": 64,
+  "x-charitypilot-max-document-proof-age-minutes": 1440,
+  "x-charitypilot-runtime-validator": "scripts/verify-document-recovery.mjs",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "transactionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 19,
+      "pattern": "^[1-9][0-9]{0,18}$",
+      "description": "Positive canonical decimal PostgreSQL bigint transaction identifier; the authoritative verifier also enforces the signed bigint maximum."
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "immutableReference": {
+      "description": "HTTPS evidence URL on an approved host with no credentials, query, or fragment. It must either use the canonical repository at an immutable commit or contain a lowercase SHA-256 as an entire path segment.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "anyOf": [
+        {
+          "pattern": "^https://github\\.com/jasperfordesq-ai/charity-governance/(?:blob|commit)/[a-f0-9]{40}(?:/[^?#]*)?$"
+        },
+        {
+          "pattern": "^https://(?:(?:[A-Za-z0-9-]+\\.)*charitypilot\\.ie|(?:[A-Za-z0-9-]+\\.)*github\\.com)/(?:[^/?#]+/)*[a-f0-9]{64}(?:/[^/?#]+)*$"
+        }
+      ]
+    },
+    "hashContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "textEncoding",
+        "canonicalEncoding",
+        "backupArtifactEncoding",
+        "documentIdentityDomain",
+        "metadataBindingDomain",
+        "metadataBindingFields",
+        "objectKeyDomain",
+        "databaseIdentityDomain",
+        "databaseIdentityFields",
+        "objectStoreIdentityDomain",
+        "objectStoreIdentityFields",
+        "metadataInventoryDomain",
+        "metadataInventoryFields",
+        "objectInventoryDomain",
+        "objectInventoryFields",
+        "storageDeletionIdentityDomain",
+        "storageDeletionBindingDomain",
+        "storageDeletionBindingFields",
+        "storageDeletionInventoryDomain",
+        "storageDeletionInventoryFields",
+        "storageDeletionRecoveryIdentityDomain",
+        "storageDeletionRecoveryNonceDomain",
+        "storageDeletionRecoveryBindingDomain",
+        "storageDeletionRecoveryBindingFields",
+        "storageDeletionRecoveryInventoryDomain",
+        "storageDeletionRecoveryInventoryFields",
+        "sourceBindingDomain",
+        "sourceBindingFields",
+        "reconciliationReportDomain"
+      ],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "textEncoding": { "const": "utf-8" },
+        "canonicalEncoding": { "const": "domain-newline-json-array-v1" },
+        "backupArtifactEncoding": { "const": "raw-bytes-v1" },
+        "documentIdentityDomain": { "const": "charitypilot:document-identity:v1" },
+        "metadataBindingDomain": { "const": "charitypilot:document-metadata-binding:v1" },
+        "metadataBindingFields": { "const": "id|organisationId|fileUrl|fileSize|mimeType" },
+        "objectKeyDomain": { "const": "charitypilot:document-object-key:v1" },
+        "databaseIdentityDomain": { "const": "charitypilot:database-identity:v1" },
+        "databaseIdentityFields": { "const": "provider|projectRef|databaseName|schemaName" },
+        "objectStoreIdentityDomain": { "const": "charitypilot:object-store-identity:v1" },
+        "objectStoreIdentityFields": { "const": "provider|projectRef|bucketName" },
+        "metadataInventoryDomain": { "const": "charitypilot:document-metadata-inventory:v1" },
+        "metadataInventoryFields": { "const": "inventoryScope=complete-document-table|capturedAt|captureTransactionId|documentIdentitySha256|metadataBindingSha256|objectKeySha256|fileSize" },
+        "objectInventoryDomain": { "const": "charitypilot:document-object-inventory:v1" },
+        "objectInventoryFields": { "const": "inventoryScope=complete-whole-bucket|capturedAt|objectKeySha256|bytes|sha256" },
+        "storageDeletionIdentityDomain": { "const": "charitypilot:document-storage-deletion-identity:v1" },
+        "storageDeletionBindingDomain": { "const": "charitypilot:document-storage-deletion-binding:v1" },
+        "storageDeletionBindingFields": { "const": "id|organisationId|storagePath|state|attempts|lastError|lastAttemptAt|nextAttemptAt|claimedAt|deadLetteredAt|terminalReason|alertClaimToken|alertClaimedAt|alertedAt|processedAt|lastRecoveryId|lastRecoveryNonce|lastRecoveryDisposition|lastRecoveredAt|createdAt|updatedAt" },
+        "storageDeletionInventoryDomain": { "const": "charitypilot:document-storage-deletion-inventory:v1" },
+        "storageDeletionInventoryFields": { "const": "inventoryScope=complete-storage-deletion-table|capturedAt|captureTransactionId|deletionIdentitySha256|lifecycleBindingSha256|objectKeySha256|state|lastRecoveryIdentitySha256|lastRecoveryNonceSha256|lastRecoveryDisposition|lastRecoveredAt" },
+        "storageDeletionRecoveryIdentityDomain": { "const": "charitypilot:document-storage-deletion-recovery-identity:v1" },
+        "storageDeletionRecoveryNonceDomain": { "const": "charitypilot:document-storage-deletion-recovery-nonce:v1" },
+        "storageDeletionRecoveryBindingDomain": { "const": "charitypilot:document-storage-deletion-recovery-binding:v1" },
+        "storageDeletionRecoveryBindingFields": { "const": "id|recoveryNonce|transactionId|deletionId|organisationId|actorType|actorUserId|operatorIdentity|reason|disposition|previousAttempts|previousTerminalReason|previousStoragePath|correctedStoragePath|createdAt" },
+        "storageDeletionRecoveryInventoryDomain": { "const": "charitypilot:document-storage-deletion-recovery-inventory:v1" },
+        "storageDeletionRecoveryInventoryFields": { "const": "inventoryScope=complete-storage-deletion-recovery-table|capturedAt|captureTransactionId|recoveryIdentitySha256|recoveryNonceSha256|recoveryBindingSha256|transactionId|deletionIdentitySha256|actorType|disposition|previousTerminalReason|previousObjectKeySha256|correctedObjectKeySha256|createdAt" },
+        "sourceBindingDomain": { "const": "charitypilot:document-recovery-source-binding:v1" },
+        "sourceBindingFields": { "const": "exerciseId|recoverySetId|sourceCaptureReportSha256|databaseIdentitySha256|objectStoreIdentitySha256|databaseDumpSha256|objectBackupManifestSha256|productionDocumentCount|storageDeletionCount|pendingStorageDeletionCount|deadLetterStorageDeletionCount|processedStorageDeletionCount|recoveryEventCount|maximumDocumentProofAgeMinutes|sourceMetadataCapturedAt|restoredMetadataCapturedAt|sourceObjectInventoryCapturedAt|restoredObjectInventoryCapturedAt|sourceMetadataCaptureTransactionId|restoredMetadataCaptureTransactionId|metadataInventorySha256|restoredMetadataInventorySha256|objectInventorySha256|restoredObjectInventorySha256|storageDeletionInventorySha256|restoredStorageDeletionInventorySha256|recoveryEventInventorySha256|restoredRecoveryEventInventorySha256" },
+        "reconciliationReportDomain": { "const": "charitypilot:document-reconciliation-report:v1" }
+      }
+    },
+    "exercise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "owner",
+        "startedAt",
+        "simulatedFailureAt",
+        "completedAt",
+        "maximumRecoveryPointSkewMinutes",
+        "maximumDocumentProofAgeMinutes",
+        "notes",
+        "evidenceReference"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "owner": { "$ref": "#/$defs/owner" },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "simulatedFailureAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "maximumRecoveryPointSkewMinutes": { "type": "integer", "minimum": 0, "maximum": 60 },
+        "maximumDocumentProofAgeMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "notes": { "type": "string", "minLength": 10, "maxLength": 4000 },
+        "evidenceReference": { "$ref": "#/$defs/immutableReference" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "recoverySetId",
+        "databaseIdentitySha256",
+        "objectStoreIdentitySha256",
+        "databaseDumpSha256",
+        "objectBackupManifestSha256",
+        "sourceCaptureReportSha256",
+        "sourceCaptureReference",
+        "productionDocumentCount",
+        "metadataInventorySha256",
+        "objectInventorySha256",
+        "storageDeletionCount",
+        "pendingStorageDeletionCount",
+        "deadLetterStorageDeletionCount",
+        "processedStorageDeletionCount",
+        "storageDeletionInventorySha256",
+        "recoveryEventCount",
+        "recoveryEventInventorySha256",
+        "sourceBindingSha256",
+        "recoverySetReference"
+      ],
+      "properties": {
+        "environment": { "const": "production" },
+        "recoverySetId": { "$ref": "#/$defs/identifier" },
+        "databaseIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "objectStoreIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "databaseDumpSha256": { "$ref": "#/$defs/sha256" },
+        "objectBackupManifestSha256": { "$ref": "#/$defs/sha256" },
+        "sourceCaptureReportSha256": { "$ref": "#/$defs/sha256" },
+        "sourceCaptureReference": { "$ref": "#/$defs/immutableReference" },
+        "productionDocumentCount": { "type": "integer", "minimum": 1, "maximum": 5000 },
+        "metadataInventorySha256": { "$ref": "#/$defs/sha256" },
+        "objectInventorySha256": { "$ref": "#/$defs/sha256" },
+        "storageDeletionCount": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "pendingStorageDeletionCount": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "deadLetterStorageDeletionCount": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "processedStorageDeletionCount": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "storageDeletionInventorySha256": { "$ref": "#/$defs/sha256" },
+        "recoveryEventCount": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "recoveryEventInventorySha256": { "$ref": "#/$defs/sha256" },
+        "sourceBindingSha256": { "$ref": "#/$defs/sha256" },
+        "recoverySetReference": { "$ref": "#/$defs/immutableReference" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "restoreTargetType",
+        "isolated",
+        "databaseIdentitySha256",
+        "objectStoreIdentitySha256",
+        "isolationEvidenceReference"
+      ],
+      "properties": {
+        "environment": { "const": "non-production" },
+        "restoreTargetType": { "const": "isolated-non-production" },
+        "isolated": { "const": true },
+        "databaseIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "objectStoreIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "isolationEvidenceReference": { "$ref": "#/$defs/immutableReference" }
+      }
+    },
+    "backupControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "encrypted",
+        "versioned",
+        "owner",
+        "retentionDays",
+        "backupPolicyReference",
+        "retentionPolicyReference",
+        "monitoringReference",
+        "deletionPolicyReference"
+      ],
+      "properties": {
+        "encrypted": { "const": true },
+        "versioned": { "const": true },
+        "owner": { "$ref": "#/$defs/owner" },
+        "retentionDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "backupPolicyReference": { "$ref": "#/$defs/immutableReference" },
+        "retentionPolicyReference": { "$ref": "#/$defs/immutableReference" },
+        "monitoringReference": { "$ref": "#/$defs/immutableReference" },
+        "deletionPolicyReference": { "$ref": "#/$defs/immutableReference" }
+      }
+    },
+    "backupControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["database", "documentBytes"],
+      "properties": {
+        "database": { "$ref": "#/$defs/backupControl" },
+        "documentBytes": { "$ref": "#/$defs/backupControl" }
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rpoMinutes", "rtoMinutes", "policyReference"],
+      "properties": {
+        "rpoMinutes": { "type": "integer", "minimum": 1, "maximum": 525600 },
+        "rtoMinutes": { "type": "integer", "minimum": 1, "maximum": 525600 },
+        "policyReference": { "$ref": "#/$defs/immutableReference" }
+      }
+    },
+    "objectives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["database", "documentBytes"],
+      "properties": {
+        "database": { "$ref": "#/$defs/objective" },
+        "documentBytes": { "$ref": "#/$defs/objective" }
+      }
+    },
+    "restoreLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed", "recoverySetId", "backupReference", "recoveredThroughAt", "verifiedAt"],
+      "properties": {
+        "completed": { "const": true },
+        "recoverySetId": { "$ref": "#/$defs/identifier" },
+        "backupReference": { "$ref": "#/$defs/immutableReference" },
+        "recoveredThroughAt": { "$ref": "#/$defs/timestamp" },
+        "verifiedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "restore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["database", "documentBytes"],
+      "properties": {
+        "database": { "$ref": "#/$defs/restoreLayer" },
+        "documentBytes": { "$ref": "#/$defs/restoreLayer" }
+      }
+    },
+    "metadataEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentIdentitySha256", "metadataBindingSha256", "objectKeySha256", "fileSize"],
+      "properties": {
+        "documentIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "metadataBindingSha256": { "$ref": "#/$defs/sha256" },
+        "objectKeySha256": { "$ref": "#/$defs/sha256" },
+        "fileSize": { "type": "integer", "minimum": 0, "maximum": 10485760 }
+      }
+    },
+    "objectEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objectKeySha256", "bytes", "sha256"],
+      "properties": {
+        "objectKeySha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 0, "maximum": 10485760 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "storageDeletionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deletionIdentitySha256", "lifecycleBindingSha256", "objectKeySha256", "state", "lastRecoveryIdentitySha256", "lastRecoveryNonceSha256", "lastRecoveryDisposition", "lastRecoveredAt"],
+      "properties": {
+        "deletionIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "lifecycleBindingSha256": { "$ref": "#/$defs/sha256" },
+        "objectKeySha256": { "$ref": "#/$defs/sha256" },
+        "state": { "enum": ["PENDING", "DEAD_LETTER", "PROCESSED"] },
+        "lastRecoveryIdentitySha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "lastRecoveryNonceSha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "lastRecoveryDisposition": { "anyOf": [{ "enum": ["REQUEUE_UNCHANGED", "REQUEUE_CORRECTED_PATH", "COMPLETE_EXTERNALLY_REMEDIATED"] }, { "type": "null" }] },
+        "lastRecoveredAt": { "anyOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] }
+      }
+    },
+    "metadataInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventoryScope", "sourceCapturedAt", "restoredCapturedAt", "sourceCaptureTransactionId", "restoredCaptureTransactionId", "sourceInventorySha256", "restoredInventorySha256", "expected", "restored"],
+      "properties": {
+        "inventoryScope": { "const": "complete-document-table" },
+        "sourceCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "restoredCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "sourceCaptureTransactionId": { "$ref": "#/$defs/transactionId" },
+        "restoredCaptureTransactionId": { "$ref": "#/$defs/transactionId" },
+        "sourceInventorySha256": { "$ref": "#/$defs/sha256" },
+        "restoredInventorySha256": { "$ref": "#/$defs/sha256" },
+        "expected": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/metadataEntry" }
+        },
+        "restored": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/metadataEntry" }
+        }
+      }
+    },
+    "objectInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventoryScope", "sourceCapturedAt", "restoredCapturedAt", "sourceInventorySha256", "restoredInventorySha256", "expected", "restored"],
+      "properties": {
+        "inventoryScope": { "const": "complete-whole-bucket" },
+        "sourceCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "restoredCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "sourceInventorySha256": { "$ref": "#/$defs/sha256" },
+        "restoredInventorySha256": { "$ref": "#/$defs/sha256" },
+        "expected": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/objectEntry" }
+        },
+        "restored": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/objectEntry" }
+        }
+      }
+    },
+    "storageDeletionInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventoryScope", "sourceCapturedAt", "restoredCapturedAt", "sourceCaptureTransactionId", "restoredCaptureTransactionId", "sourceInventorySha256", "restoredInventorySha256", "expected", "restored"],
+      "properties": {
+        "inventoryScope": { "const": "complete-storage-deletion-table" },
+        "sourceCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "restoredCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "sourceCaptureTransactionId": { "$ref": "#/$defs/transactionId" },
+        "restoredCaptureTransactionId": { "$ref": "#/$defs/transactionId" },
+        "sourceInventorySha256": { "$ref": "#/$defs/sha256" },
+        "restoredInventorySha256": { "$ref": "#/$defs/sha256" },
+        "expected": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/storageDeletionEntry" }
+        },
+        "restored": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/storageDeletionEntry" }
+        }
+      }
+    },
+    "storageDeletionRecoveryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recoveryIdentitySha256", "recoveryNonceSha256", "recoveryBindingSha256", "transactionId", "deletionIdentitySha256", "actorType", "disposition", "previousTerminalReason", "previousObjectKeySha256", "correctedObjectKeySha256", "createdAt"],
+      "properties": {
+        "recoveryIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "recoveryNonceSha256": { "$ref": "#/$defs/sha256" },
+        "recoveryBindingSha256": { "$ref": "#/$defs/sha256" },
+        "transactionId": { "$ref": "#/$defs/transactionId" },
+        "deletionIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "actorType": { "enum": ["TENANT_USER", "PLATFORM_OPERATOR"] },
+        "disposition": { "enum": ["REQUEUE_UNCHANGED", "REQUEUE_CORRECTED_PATH", "COMPLETE_EXTERNALLY_REMEDIATED"] },
+        "previousTerminalReason": { "enum": ["MAX_ATTEMPTS_EXHAUSTED", "PERMANENT_STORAGE_PATH_REJECTED"] },
+        "previousObjectKeySha256": { "$ref": "#/$defs/sha256" },
+        "correctedObjectKeySha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "createdAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "storageDeletionRecoveryInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventoryScope", "sourceCapturedAt", "restoredCapturedAt", "sourceCaptureTransactionId", "restoredCaptureTransactionId", "sourceInventorySha256", "restoredInventorySha256", "expected", "restored"],
+      "properties": {
+        "inventoryScope": { "const": "complete-storage-deletion-recovery-table" },
+        "sourceCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "restoredCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "sourceCaptureTransactionId": { "$ref": "#/$defs/transactionId" },
+        "restoredCaptureTransactionId": { "$ref": "#/$defs/transactionId" },
+        "sourceInventorySha256": { "$ref": "#/$defs/sha256" },
+        "restoredInventorySha256": { "$ref": "#/$defs/sha256" },
+        "expected": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/storageDeletionRecoveryEntry" }
+        },
+        "restored": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/storageDeletionRecoveryEntry" }
+        }
+      }
+    },
+    "reportedSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedMetadataRows",
+        "restoredMetadataRows",
+        "matchedMetadataRows",
+        "expectedObjectCount",
+        "restoredObjectCount",
+        "matchedObjectCount",
+        "missingMetadataRows",
+        "unexpectedMetadataRows",
+        "missingObjectCount",
+        "unexpectedObjectCount",
+        "metadataMismatchCount",
+        "objectKeyMismatchCount",
+        "sizeMismatchCount",
+        "checksumMismatchCount",
+        "orphanExpectedObjectCount",
+        "orphanRestoredObjectCount",
+        "expectedBytes",
+        "restoredBytes",
+        "expectedStorageDeletionRows",
+        "restoredStorageDeletionRows",
+        "matchedStorageDeletionRows",
+        "missingStorageDeletionRows",
+        "unexpectedStorageDeletionRows",
+        "storageDeletionMismatchCount",
+        "sourcePendingStorageDeletionCount",
+        "sourceDeadLetterStorageDeletionCount",
+        "sourceProcessedStorageDeletionCount",
+        "restoredPendingStorageDeletionCount",
+        "restoredDeadLetterStorageDeletionCount",
+        "restoredProcessedStorageDeletionCount",
+        "processedDeletionObjectResidueCount",
+        "expectedRecoveryEventRows",
+        "restoredRecoveryEventRows",
+        "matchedRecoveryEventRows",
+        "missingRecoveryEventRows",
+        "unexpectedRecoveryEventRows",
+        "recoveryEventMismatchCount"
+      ],
+      "properties": {
+        "expectedMetadataRows": { "$ref": "#/$defs/summaryInteger" },
+        "restoredMetadataRows": { "$ref": "#/$defs/summaryInteger" },
+        "matchedMetadataRows": { "$ref": "#/$defs/summaryInteger" },
+        "expectedObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "restoredObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "matchedObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "missingMetadataRows": { "$ref": "#/$defs/summaryInteger" },
+        "unexpectedMetadataRows": { "$ref": "#/$defs/summaryInteger" },
+        "missingObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "unexpectedObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "metadataMismatchCount": { "$ref": "#/$defs/summaryInteger" },
+        "objectKeyMismatchCount": { "$ref": "#/$defs/summaryInteger" },
+        "sizeMismatchCount": { "$ref": "#/$defs/summaryInteger" },
+        "checksumMismatchCount": { "$ref": "#/$defs/summaryInteger" },
+        "orphanExpectedObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "orphanRestoredObjectCount": { "$ref": "#/$defs/summaryInteger" },
+        "expectedBytes": { "$ref": "#/$defs/summaryInteger" },
+        "restoredBytes": { "$ref": "#/$defs/summaryInteger" },
+        "expectedStorageDeletionRows": { "$ref": "#/$defs/summaryInteger" },
+        "restoredStorageDeletionRows": { "$ref": "#/$defs/summaryInteger" },
+        "matchedStorageDeletionRows": { "$ref": "#/$defs/summaryInteger" },
+        "missingStorageDeletionRows": { "$ref": "#/$defs/summaryInteger" },
+        "unexpectedStorageDeletionRows": { "$ref": "#/$defs/summaryInteger" },
+        "storageDeletionMismatchCount": { "$ref": "#/$defs/summaryInteger" },
+        "sourcePendingStorageDeletionCount": { "$ref": "#/$defs/summaryInteger" },
+        "sourceDeadLetterStorageDeletionCount": { "$ref": "#/$defs/summaryInteger" },
+        "sourceProcessedStorageDeletionCount": { "$ref": "#/$defs/summaryInteger" },
+        "restoredPendingStorageDeletionCount": { "$ref": "#/$defs/summaryInteger" },
+        "restoredDeadLetterStorageDeletionCount": { "$ref": "#/$defs/summaryInteger" },
+        "restoredProcessedStorageDeletionCount": { "$ref": "#/$defs/summaryInteger" },
+        "processedDeletionObjectResidueCount": { "$ref": "#/$defs/summaryInteger" },
+        "expectedRecoveryEventRows": { "$ref": "#/$defs/summaryInteger" },
+        "restoredRecoveryEventRows": { "$ref": "#/$defs/summaryInteger" },
+        "matchedRecoveryEventRows": { "$ref": "#/$defs/summaryInteger" },
+        "missingRecoveryEventRows": { "$ref": "#/$defs/summaryInteger" },
+        "unexpectedRecoveryEventRows": { "$ref": "#/$defs/summaryInteger" },
+        "recoveryEventMismatchCount": { "$ref": "#/$defs/summaryInteger" }
+      }
+    },
+    "summaryInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 52428800000
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checksumAlgorithm", "reportedSummary", "metadataInventory", "objectInventory", "storageDeletionInventory", "storageDeletionRecoveryInventory", "reportReference"],
+      "properties": {
+        "checksumAlgorithm": { "const": "sha256" },
+        "reportedSummary": { "$ref": "#/$defs/reportedSummary" },
+        "metadataInventory": { "$ref": "#/$defs/metadataInventory" },
+        "objectInventory": { "$ref": "#/$defs/objectInventory" },
+        "storageDeletionInventory": { "$ref": "#/$defs/storageDeletionInventory" },
+        "storageDeletionRecoveryInventory": { "$ref": "#/$defs/storageDeletionRecoveryInventory" },
+        "reportReference": { "$ref": "#/$defs/immutableReference" }
+      }
+    },
+    "attestations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productionDatabaseOverwritten",
+        "productionObjectStoreOverwritten",
+        "restoreCredentialsScopedToTarget",
+        "attestedBy",
+        "attestedAt",
+        "productionProtectionEvidenceReference",
+        "acknowledgement"
+      ],
+      "properties": {
+        "productionDatabaseOverwritten": { "const": false },
+        "productionObjectStoreOverwritten": { "const": false },
+        "restoreCredentialsScopedToTarget": { "const": true },
+        "attestedBy": { "$ref": "#/$defs/owner" },
+        "attestedAt": { "$ref": "#/$defs/timestamp" },
+        "productionProtectionEvidenceReference": { "$ref": "#/$defs/immutableReference" },
+        "acknowledgement": {
+          "const": "This recovery exercise used isolated non-production database and object-storage targets; production was not overwritten."
+        }
+      }
+    }
+  }
+}

@@ -133,10 +133,15 @@ Evidence:
 - [ ] Production PostgreSQL database is provisioned.
 - [ ] Production `DATABASE_URL` is present only in the secret store.
 - [ ] The `npm run deploy:production` transcript proves the digest-pinned migration image completed alone after bounded runtime quiescence and restore-verified backup; live Prisma history passed; quiesced reminder cutover preparation released residual reservations, quarantined interrupted provider I/O, and found no unresolved ambiguity; only then did API/web/scheduler start. Do not run the standalone workspace migration command against production for P0-06.
-- [ ] `npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel` completed from a trusted shell and recorded redacted backup/restore evidence.
-- [ ] Managed backups or point-in-time recovery are enabled with backup window, retention period, and backup owner recorded outside git.
-- [ ] Restore test evidence exists with owner, restore date, recovery notes, and operational sentinel verification.
-- [ ] Machine-readable launch evidence names PostgreSQL provisioning, secret-store ownership, migration output, backup/PITR coverage, backup ownership, restore date, recovery notes, and operational sentinel proof.
+- [ ] `npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA` completed from a trusted shell after replacing the release placeholder with the promoted lowercase full 40-character SHA; its redacted source-identity digest was stored immutably outside git before the restore proof ran.
+- [ ] `npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json` completed after replacing the release placeholder with the promoted lowercase full 40-character SHA, using the independently captured identity digest, and recorded the retained dump/proof-report SHA-256 values. The absolute path is an operator example, not proof of encryption; separately evidence the approved encrypted filesystem, access controls, off-host custody, retention, and deletion policy.
+- [ ] Managed backups or point-in-time recovery are enabled with backup window, retention period, backup owner, PostgreSQL RPO, and PostgreSQL RTO recorded outside git.
+- [ ] The database proof confirms one snapshot-bound `REPEATABLE READ READ ONLY` capture, a network-isolated ephemeral non-production restore target, exact source/restored certified-scope/table/row SHA-256 equality, zero mismatches, stable dump bytes, verified cleanup, bounded source workload, a pre-enforced 64 GiB dump ceiling/capacity check, and no production write or overwrite path. Evidence binds the exact approved tools-image digest and the full machine-readable schema certification scope.
+- [ ] Database scope is not overclaimed: only `public` relations/columns/constraints/indexes/triggers/policies/routines/types/sequence definitions/extended statistics/user rules and ordinary/partitioned/materialized-view rows are certified. Non-public schemas, extension membership, comments/security labels, and database-level objects are explicit exclusions; large objects are excluded and must have a zero source/restore count.
+- [ ] Database proof limitations are recorded exactly: PostgreSQL role ownership and ACL/default privileges are excluded by `--no-owner --no-privileges`; non-MVCC sequence runtime state is excluded; and the proof fails unless public sequences, identity columns, and `nextval` defaults are all zero. Separate provider/operator evidence covers ownership, grants/default privileges, and recovery custody.
+- [ ] The database proof was captured no more than 24 hours before final approval; an older report cannot be reused for a current launch ledger.
+- [ ] Restore test evidence exists with owner, restore date, recovery notes, the shared recovery-set identifier, immutable source-identity capture, retained dump/proof report, and the exact database-proof provenance limitation.
+- [ ] Machine-readable launch evidence binds PostgreSQL provisioning, secret-store ownership, migration output, backup/PITR coverage, backup ownership, source identity, dump/report/fingerprint digests, recovery set, restore date, recovery notes, and production-not-overwritten proof.
 
 Evidence:
 
@@ -144,9 +149,13 @@ Evidence:
 | --- | --- |
 | Migration output location | |
 | Backup policy location | |
-| Backup window/retention/owner | |
-| Operational sentinel restore test location | |
-| Restore date/recovery notes | |
+| Backup window/retention/owner/RPO/RTO | |
+| Immutable source-identity capture location and SHA-256 | |
+| Recovery-set identifier | |
+| Retained dump location and SHA-256 | |
+| Restore-proof report location and SHA-256 | |
+| Source/restored database fingerprint SHA-256 | |
+| Restore owner/date/recovery notes | |
 
 ## 5. Supabase Storage
 
@@ -157,9 +166,30 @@ Evidence:
 - [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
 - [ ] Document upload and authenticated API byte download are verified through the deployed app without exposing a provider URL or object path.
-- [ ] Supabase backup policy or PITR evidence is recorded outside git with backup window, retention period, and backup owner.
-- [ ] Supabase restore test evidence exists with owner, restore date, recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
-- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested` with owner/date/recovery details, isolated restore target, non-production restore target, and production-not-overwritten confirmation.
+- [ ] At least one approved non-sensitive QA document/object exists through the source backup, isolated database/object restore, complete inventory capture, and reconciliation; no real charity data was introduced merely to satisfy the proof. After evidence finalization, cleanup uses the normal authenticated document deletion flow and the audited deletion lifecycle reaches `PROCESSED`, with no out-of-band database-row or provider-object deletion.
+- [ ] A separate encrypted, versioned backup of the actual document object bytes exists in an approved independent destination; PostgreSQL/Supabase database backup or PITR evidence is not accepted as object-byte backup evidence.
+- [ ] Document-object backup evidence records schedule, owner, retention, RPO, RTO, monitoring/last-success proof, failure alerting, and secure deletion behavior outside git.
+- [ ] A joint PostgreSQL-metadata and document-object restore was completed against isolated non-production targets and bound to one recovery-set identifier.
+- [ ] Every source `Document` row and independently inventoried object was reconciled to restored metadata and bytes by canonical identity, object key, size, and SHA-256, with zero missing, unexpected/orphan, metadata, key, size, or checksum mismatches.
+- [ ] `npm run prepare:production:document-recovery-manifest -- template --output-file=.charitypilot-launch-evidence/document-recovery-build-input.json --json` created the deliberately invalid, non-secret operator template in ignored or approved encrypted external storage.
+- [ ] Provider-approved read-only tooling exported complete versioned source/restored database envelopes from one transaction per capture. Each envelope includes the exact `Document`, `DocumentStorageDeletion`, and `DocumentStorageDeletionRecovery` inventories, their declared counts, the capture transaction ID, exercise/recovery-set IDs, and `inventoryScope: "complete-document-and-storage-deletion-tables"`. The object export independently enumerated, downloaded, and SHA-256 hashed every source/restored whole-bucket object into versioned envelopes (`fileUrl`, `bytes`, `sha256`) without storing credentials, signed URLs, or object bytes in JSON.
+- [ ] `npm run prepare:production:document-recovery-manifest -- build` ingested all four envelopes, rejected no rows as out of bounds, wrote the one hashed manifest atomically with owner-only permissions, and its captured JSON result supplied canonical inventory/source-binding/reconciliation digests from the independently retained captures.
+- [ ] The complete production capture contains at most 5,000 documents, each object is at most 10 MiB, and the generated manifest is at most 16 MiB. If production exceeds 5,000 documents or the manifest exceeds 16 MiB, launch remains blocked pending a reviewed streaming/paginated v2 certification contract; sampling or truncation is forbidden.
+- [ ] The database restore checker identity digest was not reused as the document manifest database identity. The exercises are cross-bound by equal `recoverySetId` and `databaseDumpSha256`; the document manifest separately computes `charitypilot:database-identity:v1` from `provider|projectRef|databaseName|schemaName`.
+- [ ] The joint recovery verifier reported `Document recovery reconciliation consistency passed against independently supplied bindings.` using all 30 mandatory independent bindings: immutable source-capture report and database/object identities; source/restored document, deletion, recovery-event, and object inventory digests/counts; capture timestamps and database transaction IDs; proof-age bound; exercise/recovery-set IDs; and backup/reconciliation digests. Its redacted output and reconciliation report SHA-256 are stored outside git. This is a consistency check; real source provenance and the recovery exercise still require external evidence. Supply every `--expected-*` value from the independent source capture, never by copying it from the recovery manifest under test:
+
+```bash
+npm run launch:status -- --json
+npm run check:production:document-recovery -- --help
+```
+
+Copy `productionLaunchCommands.documentRecovery` from the launch-status JSON,
+replace every `EXTERNAL_*` placeholder from the independent source capture, and
+run it unchanged. It is generated from the verifier's complete set of 30
+mandatory `--expected-*` binding flags; omitting even one flag is a usage error.
+
+- [ ] A named operator's external evidence confirms both production systems were not overwritten or mutated and that restore credentials were target-scoped. The verifier output records `isolationAttestationRecorded`, both production-not-overwritten attestation fields, and `restoreCredentialsScopedToTargetAttestationRecorded`; it does not authenticate those attestations, and `sourceProvenanceExternallyVerified` remains `false`.
+- [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, object-byte backup controls under `supabaseStorage.checks.supabase-backups-enabled`, and the verifier-bound joint recovery summary under `supabaseStorage.checks.supabase-restore-tested`.
 
 Evidence:
 
@@ -168,10 +198,16 @@ Evidence:
 | Setup guide | `docs/supabase-production-setup.md` |
 | Readiness output location | |
 | Document QA evidence location | |
-| Backup policy location | |
+| Document-object backup policy/monitoring location | |
+| Versioned source/restored inventory export locations | |
+| Manifest generation result and schema version | |
+| Source database dump/inventory digest evidence | |
+| Source object-backup manifest digest evidence | |
+| Immutable source-capture report and source identity digest evidence | |
 | Isolated restore test location | |
 | Non-production restore target reference | |
-| Production-not-overwritten confirmation | |
+| Reconciliation report location and SHA-256 | |
+| Production database/object-store not-overwritten confirmation | |
 
 ## 6. Jobs
 
@@ -182,6 +218,9 @@ Evidence:
 - [ ] The scheduler and one-shot job runtimes receive the same production secret source that passed preflight, either as injected environment variables or as a non-committed env file materialized for the job runtime.
 - [ ] Scheduler and job logs are captured.
 - [ ] Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`.
+- [ ] Incident routing distinguishes `DOCUMENT_STORAGE_CLEANUP_FAILED` from the actionable `DOCUMENT_STORAGE_DELETION_DEAD_LETTERED` alert; a failed alert delivery is retried and a successfully acknowledged dead letter is not alerted every scheduler run.
+- [ ] The document-deletion recovery runbook was rehearsed only against an isolated non-production target: tenant users can only `REQUEUE_UNCHANGED`, corrected-path/external-completion dispositions require the named platform-operator dry-run/review/execute flow, and no ad-hoc SQL or direct provider mutation bypasses the append-only recovery event.
+- [ ] No production dead letter was manufactured for launch evidence. Any real recovery evidence records the named actor, reason, reviewed attempts/terminal reason, database-authority/path digests, exact execution confirmation, disposition, append-only `DocumentStorageDeletionRecovery` reference, and external provider proof where applicable.
 - [ ] Machine-readable launch evidence names scheduler ownership, command surface, shared production secret source, captured scheduler logs, and both job failure alerts.
 
 Evidence:
@@ -193,6 +232,8 @@ Evidence:
 | Reminder job test output location | |
 | Cleanup job test output location | |
 | Failure alert evidence location | |
+| Dead-letter alert/retry evidence location | |
+| Recovery rehearsal/operator evidence location | |
 
 ## 7. Billing And Email
 

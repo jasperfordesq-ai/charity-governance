@@ -882,8 +882,10 @@ function render() {
     md += `- GitHub production secret store: \`${launch.productionLaunchCommands.githubSecretStore}\`\n`;
     md += `- GitHub production secret-store JSON: \`${launch.productionLaunchCommands.githubSecretStoreJson}\`\n`;
     md += `- Hosting/DNS/TLS: \`${launch.productionLaunchCommands.hosting}\`\n`;
+    md += `- Database source identity capture: \`${launch.productionLaunchCommands.databaseSourceIdentity}\`\n`;
     md += `- Database backup/restore: \`${launch.productionLaunchCommands.database}\`\n`;
     md += `- Supabase storage: \`${launch.productionLaunchCommands.supabase}\`\n`;
+    md += `- Joint document recovery: \`${launch.productionLaunchCommands.documentRecovery}\`\n`;
     md += `- Stripe/Resend providers: \`${launch.productionLaunchCommands.providers}\`\n`;
     md += `- Observability alerting: \`${launch.productionLaunchCommands.observability}\`\n`;
     md += `- Deployed browser QA env preflight: \`${launch.productionLaunchCommands.deployedBrowserQaPreflight}\`\n`;

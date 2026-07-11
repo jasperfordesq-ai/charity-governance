@@ -5,7 +5,9 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   FINAL_SIGNOFF_ROLES,
+  LaunchEvidenceInputError,
   REQUIRED_LAUNCH_AREAS,
+  readStableLaunchEvidenceFile,
   redactLaunchEvidenceTranscript,
   validateLaunchEvidence,
 } from './production-launch-evidence.mjs';
@@ -367,7 +369,10 @@ function renderJsonStatus(evidence) {
   )}\n`;
 }
 
-export function runProductionLaunchEvidenceStatusFromArgs(args = process.argv.slice(2)) {
+export function runProductionLaunchEvidenceStatusFromArgs(
+  args = process.argv.slice(2),
+  { readEvidenceFile = readStableLaunchEvidenceFile } = {},
+) {
   let options;
   try {
     options = parseArgs(args);
@@ -382,12 +387,15 @@ export function runProductionLaunchEvidenceStatusFromArgs(args = process.argv.sl
 
   let evidence;
   try {
-    evidence = JSON.parse(decodeJsonFile(evidencePath));
+    evidence = readEvidenceFile(evidencePath);
   } catch (error) {
+    const safeMessage = error instanceof LaunchEvidenceInputError
+      ? error.message
+      : 'evidence file could not be read as bounded, stable JSON';
     return result(
       1,
       '',
-      `Production launch evidence status failed: evidence file is not valid JSON. ${redactLaunchEvidenceTranscript(error instanceof Error ? error.message : String(error))}\n`,
+      `Production launch evidence status failed: ${safeMessage}.\n`,
     );
   }
 

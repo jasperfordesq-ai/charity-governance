@@ -12,21 +12,22 @@ claim, accessibility issue, security concern, reliability weakness, and
 operational deficiency recorded here, while keeping genuine production,
 provider, legal, security-review, and human-signoff work explicit.
 
-## Baseline Verdict
+## Baseline Verdict and Current Launch Snapshot
 
 - Manual audit score: **669 / 1000**.
 - Backend, security, and data integrity: **228 / 300**.
 - Frontend, accessibility, UX, and product truth: **218 / 300**.
 - QA, release engineering, operations, and documentation: **188 / 300**.
 - Legal/compliance assurance: **35 / 100**.
-- Strict production launch score: **18 / 120 gates, or 150 / 1000**.
+- Current strict production launch score: **18 / 118 gates, or 153 / 1000**.
 - Launch phase: `ENV_INCOMPLETE`.
-- Production values: `9 / 28` complete.
-- Launch-evidence checks: `9 / 87` complete.
+- Production values: `9 / 27` complete.
+- Launch-evidence checks: `9 / 86` complete.
 - Final signoffs: `0 / 5` complete.
 - `approvedForLaunch`: `false`.
 
-These figures are the audit baseline, not permanent truth. Refresh them with
+The `669 / 1000` manual score is the historical 2026-07-10 audit baseline; the
+strict launch figures are the live 2026-07-11 workstation snapshot. Refresh them with
 the live commands below at the start and end of every remediation session.
 
 ## Completion Definitions
@@ -53,8 +54,8 @@ an external penetration test, remediation or formal human risk acceptance, and
 all five named final signoffs.
 
 Passing local tests is not launch completion. A `1000 / 1000` claim is prohibited
-until production values are `26 / 26`, evidence checks are `86 / 86`, strict
-gates are `117 / 117`, final signoffs are `5 / 5`, and all evidence is genuine
+until production values are `27 / 27`, evidence checks are `86 / 86`, strict
+gates are `118 / 118`, final signoffs are `5 / 5`, and all evidence is genuine
 and bound to the promoted release.
 
 ## Live Baseline Commands
@@ -1041,15 +1042,59 @@ Acceptance:
 
 ### P0-10 - Complete backup and recovery for metadata and document bytes
 
-Status: `CONFIRMED`
+Status: `IN_PROGRESS` overall; repository proof tooling is `LOCALLY_VERIFIED`
 
 Evidence:
 
 - PostgreSQL stores document metadata; Supabase Storage stores file bytes.
-- Current checklist/evidence wording can be satisfied by database backup/PITR
+- The audit-baseline checklist/evidence wording could be satisfied by database backup/PITR
   language even though database backups exclude Storage objects.
-- Production restore-sentinel instructions conflict with the helper's remote
+- Audit-baseline production restore-sentinel instructions conflicted with the helper's remote
   safety guard.
+
+Repository remediation on 2026-07-11:
+
+- Production instructions and workflows now forbid sentinel writes and use a
+  two-step, non-mutating database flow: independently capture the read-only
+  source identity, then prove one snapshot-bound dump against an internally
+  constructed network-isolated ephemeral restore target.
+- The PostgreSQL proof binds every supported public schema descriptor (including
+  routines, views, types/domains, constraints, indexes, trigger enabled state,
+  and policy roles), table membership, counts, and all table rows within explicit
+  source-workload bounds. Unsupported object kinds and sequence-backed identity
+  state fail closed. Artifact descriptors, hashes, publication, owner-only
+  storage, cleanup, redaction, and helper/checker canonical-hash compatibility
+  are independently tested.
+- Source encoding, collation, ctype, libc locale provider, and collation version
+  are now fingerprinted. The isolated database is created from those source
+  settings, and helper, checker, launch-evidence, CI, and release contracts all
+  fail closed unless the source, restored, and restore-target environments match.
+- The report explicitly excludes PostgreSQL role ownership, ACL/default
+  privileges, and non-MVCC sequence runtime state; it cannot be used to claim
+  those recovery controls or provider provenance.
+- `scripts/generate-document-recovery-manifest.mjs` builds an owner-only,
+  no-overwrite v1 manifest offline from four complete provider/operator exports.
+  `scripts/verify-document-recovery.mjs` requires immutable independent source
+  bindings and reconciles metadata plus object identities, keys, sizes, and
+  SHA-256 values with zero missing, unexpected/orphan, or mismatched items.
+  Sampling is forbidden; certification fails above 5,000 documents, 10 MiB per
+  object, or a 16 MiB manifest pending a reviewed streaming/paginated v2.
+- Launch evidence now requires both structured database proof and joint document
+  recovery. The two exercises cross-bind only on `recoverySetId` and the exact
+  database dump SHA-256; their deliberately different database-identity domains
+  are not equated.
+- A fresh adversarial disposable C-locale restore passed with source and restored
+  environments both `UTF8 / C / C / libc`, explicit
+  `databaseEnvironmentMatched=true`, source-driven target initialization, and
+  proof-report SHA-256
+  `d2d1c63842bad568fae76ae4af4a1e75d621d0a8ee79bc77e3d7cab985f50df1`.
+  The temporary database, containers, and artifacts were removed. This is local
+  implementation evidence, not production-provider or production-restore proof.
+- Final-tree local verification includes `npm run test:production-check` at `745`
+  passed / `0` failed / `2` Windows symbolic-link privilege skips (`747` total),
+  database checker `32 / 32`, database helper `39` passed / `1` Windows skip,
+  API production-environment validation `51 / 51`, and generated platform-audit
+  freshness. Exact commit and CI evidence will be added after push.
 
 Required result:
 
@@ -1071,6 +1116,24 @@ Acceptance:
 ## P1: Security, Integrity, and Service Resilience
 
 ### P1-01 - Bcrypt input boundary
+
+Status: `CI_VERIFIED`
+
+- Register, login, reset-password, and accept-invite now share one browser-safe
+  UTF-8 byte-length guard and reject inputs above bcrypt's 72-byte boundary
+  before account lookup, token lookup, password hashing, or comparison.
+- Shared tests cover exact 72/73-byte ASCII and multibyte boundaries, legacy
+  complexity rules, non-string inputs, and two different passwords with the same
+  first 72 bcrypt bytes; both over-boundary inputs are rejected. API route tests
+  prove the boundary is wired before service/database work.
+- Local proof passed shared `46 / 46`, focused API route `2 / 2`, API and web
+  production builds, and reliability linkage `395 / 395`.
+- Implementation SHA `e32520c55760d886bf4c2664daf8c3de861bd598` plus the
+  exact-title linkage correction in verification SHA
+  `21c7a52c4efa2a5f99d620a5eec7892b507e159f` passed CI run
+  `29155302868` and managed E2E run `29155302860`.
+
+Acceptance:
 
 - Enforce a maximum of 72 **encoded bytes**, not characters, or use a carefully
   specified and reviewed pre-hash construction.
@@ -1108,18 +1171,57 @@ Status: `CI_VERIFIED`
 
 ### P1-04 - Document deletion retry lifecycle
 
+Status: `LOCALLY_VERIFIED`; exact-SHA CI re-verification is pending after the
+scheduled-job smoke assertion is refreshed for the expanded cleanup summary
+
 - Add bounded attempts, exponential backoff, `nextAttemptAt`, terminal/dead-letter
   state, idempotency, alerting, and operator recovery.
 - Prevent malformed or permanently forbidden objects from alerting hourly
   forever.
+- Implementation is published through
+  `8c573e3d0ea3729293201b32e14bafc7d4365ae0`. Managed E2E run
+  `29159686871` passed; CI run `29159686841` reached the scheduled-job smoke and
+  then failed only because its grep still expected the older cleanup summary.
+  The updated workflow assertion is locally verified but must pass on the next
+  exact pushed SHA before this item can become `CI_VERIFIED`.
 
 ### P1-05 - Sanitized root-cause diagnostics
+
+Status: `CI_VERIFIED`
+
+- Route-caught unexpected 5xx errors now emit one structured, sanitized local
+  diagnostic before alert delivery is attempted, so a saturated, rejected, or
+  failed alert transport cannot erase the original root cause.
+- Production responses remain generic. Error messages, one-level causes, and
+  structured code/status fields redact credentials, provider keys, bearer/JWT
+  material, database URLs, emails, and storage paths; nested provider payloads
+  and `AppError.details` are not logged.
+- The duplicate billing-webhook direct error log was removed so the centralized
+  sanitized diagnostic is authoritative. Focused diagnostics, alert/redaction,
+  and adjacent degradation tests passed `21 / 21`, and the full API suite
+  passed `664 / 664` before publication.
+- Exact verification SHA `e4e45f68fb3b54f7447042918f3fe4ee3bd25dc2`
+  passed CI run `29155835494` and managed E2E run `29155835492`.
 
 - Route-caught unexpected 5xx errors must log the original sanitized diagnostic
   even when alert delivery fails.
 - Keep client responses generic and prove secrets/provider payloads are redacted.
 
 ### P1-06 - Graceful scheduler shutdown
+
+Status: `CI_VERIFIED`
+
+- `apps/api/src/jobs/production-scheduler.ts` tracks the active job, stops the
+  interval before shutdown, waits within the configured bounded grace window,
+  reports a timed-out active job as a failure, and disconnects Prisma for both
+  `SIGTERM` and `SIGINT`.
+- `apps/api/src/tests/production-scheduler.test.ts` covers normal stop, waiting
+  for an in-flight run, and timeout behavior.
+- Implementation commit `8474ab1d8b44e016f4782bf5c99302509cbd692f` is included
+  in exact verification SHA `096619cf3ee84ae7d3f62826b3510af388defd85`, which
+  passed CI run `29136095002` and managed E2E run `29136095004`.
+
+Acceptance:
 
 - Track in-flight reminder and cleanup jobs.
 - On SIGTERM/SIGINT, stop scheduling, await active work within a bounded timeout,
@@ -1134,6 +1236,19 @@ Status: `CI_VERIFIED`
   human/business policy.
 
 ### P1-08 - Immutable governance audit history
+
+Status: `CI_VERIFIED`
+
+- `ComplianceApprovalSnapshot` stores append-only, revision-bound approval
+  payloads with evidence and snapshot SHA-256 hashes; current approval points to
+  a preserved snapshot rather than rewriting the approved history.
+- Canonicalization, integrity verification, concurrency, migration, service, and
+  export tests prove later edits cannot silently mutate the approval evidence
+  used for board/regulator output.
+- Exact implementation SHA `e03b80a44150c384485b5e47e524b9ee60475f70`
+  passed CI run `29082113651`.
+
+Acceptance:
 
 - Extend P0-04 beyond the mutable activity feed.
 - Preserve who changed what, when, from which approved revision, and why.
@@ -1234,6 +1349,17 @@ Status: `CI_VERIFIED`
 
 ### P2-12 - Production restore evidence consistency
 
+Status: `LOCALLY_VERIFIED` for the repository contract; external proof remains under
+P0-10
+
+- Sentinel-based production instructions have been removed. The canonical flow
+  is the independently bound `source-identity` plus `prove-restore` database
+  check and the separate joint document-recovery manifest/verifier described in
+  P0-10.
+- Workflow, runbook, launch-status, generated-audit, checker JSON, and launch
+  evidence contracts now share the same commands, exclusions, recovery-set/dump
+  cross-bindings, and no-production-write semantics.
+
 - Reconcile the runbook's sentinel requirement with the helper's remote safety
   guard.
 - Use representative, controlled proof that does not require unsafe synthetic
@@ -1271,6 +1397,24 @@ Status: `CI_VERIFIED`
   browser QA gate.
 
 ### P3-03 - Cookie preference lifecycle
+
+Status: `CI_VERIFIED` for the current essential-only processing posture
+
+- The application currently has no page-view analytics, advertising cookies, or
+  optional-cookie processing. The former consent UI was replaced with an
+  informational essential-cookie notice: it offers no misleading `Accept All`
+  control and stores only a local acknowledgement preference.
+- Source-truth and managed browser tests fail if optional analytics claims or
+  consent controls reappear without an implemented processing purpose.
+- Implementation commit `44ff57b596b0ac6b527a3f338bddc71a095ca2cc` is included
+  in exact verification SHA `42888a41e86bd7235891e82a18623208b921d773`, which
+  passed CI run `29150323690` and managed E2E run `29150323669`.
+- A persistent settings/reopen lifecycle is not applicable while there is no
+  optional processing decision to change. Introducing any non-essential cookie
+  reopens this item and requires an approved, versioned consent-and-withdrawal
+  mechanism before that processing is enabled.
+
+Acceptance:
 
 - Add a persistent, accessible reopen/settings control.
 - Version and expire consent appropriately.

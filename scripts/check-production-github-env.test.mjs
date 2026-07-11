@@ -38,6 +38,7 @@ test('production GitHub environment check passes with canonical release variable
 
     return okGh([
       { name: 'NEXT_PUBLIC_API_URL', value: 'https://api.charitypilot.ie', updatedAt: '2026-07-09T00:00:00Z' },
+      { name: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', value: 'db.charitypilot.ie', updatedAt: '2026-07-11T00:00:00Z' },
     ]);
   };
 
@@ -47,6 +48,7 @@ test('production GitHub environment check passes with canonical release variable
   assert.equal(calls.length, 1);
   assert.deepEqual(REQUIRED_GITHUB_PRODUCTION_VARIABLES.map((item) => item.name), [
     'NEXT_PUBLIC_API_URL',
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
   ]);
   assert.match(result.stdout, /Production GitHub environment check passed/);
   assert.match(result.stdout, /secret values were not read/);
@@ -58,6 +60,7 @@ test('production GitHub environment check fails for missing and placeholder vari
     runGh: () =>
       okGh([
         { name: 'NEXT_PUBLIC_API_URL', value: 'REPLACE_ME_API_ORIGIN', updatedAt: '2026-07-09T00:00:00Z' },
+        { name: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', value: 'db.charitypilot.ie', updatedAt: '2026-07-11T00:00:00Z' },
       ]),
   });
 
@@ -80,6 +83,7 @@ test('production GitHub environment check validates the canonical API origin', (
     runGh: () =>
       okGh([
         { name: 'NEXT_PUBLIC_API_URL', value: 'https://charitypilot.ie', updatedAt: '2026-07-09T00:00:00Z' },
+        { name: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', value: 'db.charitypilot.ie', updatedAt: '2026-07-11T00:00:00Z' },
       ]),
   });
 
@@ -90,11 +94,34 @@ test('production GitHub environment check validates the canonical API origin', (
   );
 });
 
+test('production GitHub environment check rejects unsafe recovery database host allowlists', () => {
+  for (const value of [
+    'DB.charitypilot.ie',
+    'db.charitypilot.ie.',
+    'db.charitypilot.ie,db.charitypilot.ie',
+    '*.charitypilot.ie',
+    '127.0.0.1',
+    'db.internal',
+    'xn--a.com',
+  ]) {
+    const result = runProductionGitHubEnvironmentCheckFromArgs([], {
+      runGh: () => okGh([
+        { name: 'NEXT_PUBLIC_API_URL', value: 'https://api.charitypilot.ie', updatedAt: '2026-07-09T00:00:00Z' },
+        { name: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', value, updatedAt: '2026-07-11T00:00:00Z' },
+      ]),
+    });
+    assert.equal(result.status, 1, value);
+    assert.match(result.stderr, /DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST/);
+    assert.doesNotMatch(result.stderr, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
 test('production GitHub environment check renders redacted JSON for automation', () => {
   const result = runProductionGitHubEnvironmentCheckFromArgs(['--json'], {
     runGh: () =>
       okGh([
         { name: 'NEXT_PUBLIC_API_URL', value: 'REPLACE_ME_API_ORIGIN', updatedAt: '2026-07-09T00:00:00Z' },
+        { name: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', value: 'db.charitypilot.ie', updatedAt: '2026-07-11T00:00:00Z' },
       ]),
   });
 
@@ -103,7 +130,10 @@ test('production GitHub environment check renders redacted JSON for automation',
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.ok, false);
   assert.equal(payload.environment, 'production');
-  assert.deepEqual(payload.requiredVariableNames, ['NEXT_PUBLIC_API_URL']);
+  assert.deepEqual(payload.requiredVariableNames, [
+    'NEXT_PUBLIC_API_URL',
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
+  ]);
   assert.deepEqual(payload.missingVariableNames, []);
   assert.equal(payload.issueCount, 1);
   assert.match(payload.issues.join('\n'), /NEXT_PUBLIC_API_URL must not contain placeholder text/);

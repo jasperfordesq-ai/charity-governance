@@ -1,10 +1,10 @@
 # Configuration, Environment & the Two-Gate Model
 
-CharityPilot reads all runtime configuration from environment variables. In development the app is designed to run with **no external accounts** — local filesystem storage and an optionally seeded local admin let a developer boot the whole stack against a single PostgreSQL instance. In production a strict validator (`validateProductionEnv`) refuses to start unless every secret is real, every public URL is HTTPS on an approved hostname, and every dependency is reachable. This document maps the full environment surface and explains the project's **two-gate model**: an automated *code gate* that this repository keeps fully green, and an external *launch gate* that lives in the launch documentation.
+CharityPilot reads all runtime configuration from environment variables. In development the app is designed to run with **no external accounts** — local filesystem storage and an optionally seeded local admin let a developer boot the whole stack against a single PostgreSQL instance. In production, `validateProductionEnv` fails startup when required values are missing, placeholder-like, or structurally unsafe. It performs no provider, DNS, TLS-handshake, bucket, webhook, or application-reachability probe; the separate `check:production:*` commands perform those live checks. This document maps the full environment surface and explains the project's **two-gate model**: an automated *code gate* that must remain green, plus an external-evidence *launch gate* that repository tooling validates but cannot manufacture.
 
 ## Environment-variable surface
 
-The tables below group every documented variable by concern. "Required in production?" reflects what `apps/api/src/utils/env.ts` actually enforces when `NODE_ENV=production` (`apps/api/src/utils/env.ts:408-455`), not merely what appears in the template `.env.production.example`.
+The tables below group every documented variable by concern. "Required in production?" covers the complete supported deployment contract: API/job startup validation, mandatory production preflight, Compose interpolation, and restricted operator tools. A row states explicitly when a value is preflight/operator-only rather than enforced by `apps/api/src/utils/env.ts`.
 
 ### Core / server
 
@@ -20,7 +20,7 @@ The tables below group every documented variable by concern. "Required in produc
 
 | Var | Used by | Purpose | Required in production? |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | API (Prisma), migrations, jobs | PostgreSQL connection string; must use `postgresql:`/`postgres:` protocol, must not point at localhost, and must request TLS via `sslmode=require`, `verify-ca`, or `verify-full` (`apps/api/src/utils/env.ts:211-232`) | Yes |
+| `DATABASE_URL` | API (Prisma), migrations, jobs | PostgreSQL connection string. Real production API/job startup and mandatory preflight both require exact lowercase `sslmode=verify-full` and one `target_session_attrs=read-write`; only the explicit GitHub Actions local-database smoke exception bypasses those two query requirements. Preflight and the one-shot recovery authority add the username, one non-root database path segment, fragment, canonical public DNS hostname, connection-option allowlist, and optional normalized absolute `.crt`/`.pem` `sslrootcert` checks. The libpq-only `system` CA sentinel is never accepted by the recovery authority. | Yes |
 
 A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true` **and** `CI=true` **and** `GITHUB_ACTIONS=true`, a local database is accepted (`apps/api/src/utils/env.ts:13-19`, `apps/api/src/utils/env.ts:222-227`). This is used only by the Docker smoke steps in CI.
 
@@ -76,6 +76,16 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `DOCUMENT_STORAGE_DRIVER` | Selects storage backend; `local` switches to filesystem storage (`apps/api/src/services/storage.service.ts:17-19`) | No — production uses the Supabase driver |
 | `LOCAL_FILE_STORAGE_DIR` | Filesystem root for the local driver; defaults to `.charitypilot-local-storage/documents` (`apps/api/src/services/storage.service.ts:21-23`) | No (dev only) |
 | `STORAGE_DOWNLOAD_TIMEOUT_MS` | Bounds authenticated Supabase byte-proxy downloads, including response-body reads; defaults to 10000 ms and accepts 100-60000 ms | No |
+| `STORAGE_DELETE_TIMEOUT_MS` | Bounds each provider object-deletion request; defaults to 5000 ms. When set, the production preflight accepts only canonical integers from 100 through 8000 ms. | No (default `5000`) |
+| `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` | Exact comma-separated managed PostgreSQL hostnames authorized for the one-shot document-deletion recovery CLI. Entries must be unique syntactically public DNS names in canonical ASCII/IDNA form, lowercase and without wildcards or trailing dots, and the list must include the `DATABASE_URL` hostname. This is required by production preflight and the recovery operator environment; the API runtime does not consume it. | Yes for the supported production deploy/recovery path |
+
+The database hostname checks are intentionally deterministic and perform no DNS
+lookup. "Syntactically public" means that the configured text is a canonical DNS
+name rather than an IP, local/private/reserved name, wildcard, or invalid IDNA
+label. It does **not** prove that every future A/AAAA answer is public or is the
+intended managed database. Production DNS, egress/network policy, provider
+configuration, and authenticated `verify-full` TLS remain responsible for
+preventing private, loopback, or attacker-controlled resolution.
 
 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` are
 server-only. They are supplied to API and storage-cleanup/scheduler runtimes,
@@ -114,7 +124,9 @@ On top of presence, the validator applies structural rules:
 | Prefix | `requirePrefix` | Stripe (`sk_live_`/`whsec_`/`price_`) and Resend (`re_`) prefixes (`apps/api/src/utils/env.ts:234-239`) |
 | URL shape | `requireUrl` / `validateUrlValue` | HTTPS, no localhost, origin-only, approved/public host (`apps/api/src/utils/env.ts:37-93`) |
 | Canonical web/API origins | `validateUrlValue` | Production web/API origins must be `https://app.charitypilot.ie` and `https://api.charitypilot.ie`; approved-host checks alone are not sufficient for launch (`apps/api/src/utils/env.ts`) |
-| DB connection | `requireDatabaseUrl` | PostgreSQL protocol, non-local host, TLS `sslmode` (`apps/api/src/utils/env.ts:211-232`) |
+| DB connection | `requireDatabaseUrl` | PostgreSQL protocol, username, one non-root database path segment, no fragment, and a syntactically public canonical ASCII/IDNA hostname. The repository production preflight mirrors the recovery CLI's query-option allowlist and value constraints, requires exact lowercase `sslmode=verify-full` and `target_session_attrs=read-write`, and permits `sslrootcert` only as a normalized absolute `.crt`/`.pem` CA path. |
+| Recovery DB authority | `requireDocumentStorageRecoveryDatabaseHostAllowlist` | Unique syntactically public DNS names in canonical lowercase ASCII/IDNA form only; rejects wildcards, IP/local/private/reserved names and requires an exact match for the `DATABASE_URL` hostname. This is a textual authority check, not a DNS-resolution attestation (`scripts/check-production.mjs`). |
+| Storage deletion timeout | `requireOptionalCanonicalIntegerRange` | When set, `STORAGE_DELETE_TIMEOUT_MS` is a canonical integer from 100 through 8000 (`scripts/check-production.mjs`). |
 | Email sender | `requireApprovedEmailSender` | Valid address on an approved sender domain (`apps/api/src/utils/env.ts:178-191`) |
 | Proxy list | `requireTrustedProxyAddresses` | Explicit IPs/CIDRs only, no wildcards (`apps/api/src/utils/env.ts:303-314`) |
 
@@ -202,7 +214,7 @@ the complete operator contract.
 
 ## The two-gate model
 
-CharityPilot separates "is the code correct and shippable?" from "is the business ready to launch?" into two distinct gates. **All of this repository's automated work lives inside Gate 1.** Gate 2 is external — real money, real domains, real legal sign-off — and is documented (not duplicated) in the launch docs.
+CharityPilot separates "is the code correct and shippable?" from "is the business ready to launch?" into two distinct gates. Gate 1 contains self-contained repository proof. Gate 2 depends on real infrastructure, providers, deployment, people, and professional review. Repository commands automate Gate 2 preflight, probing, evidence-shape validation, and deployment, but successful output is valid only when it is backed by the genuine external system and promoted release under review.
 
 ```mermaid
 flowchart LR
@@ -215,7 +227,7 @@ flowchart LR
     E --> F["API / web smoke + scheduled-job smoke"]
     F --> G["npm audit --omit=dev"]
   end
-  subgraph G2["Gate 2 - Launch gate (external, documented)"]
+  subgraph G2["Gate 2 - Launch gate (external evidence, in-repo validation)"]
     direction TB
     H["Domain charitypilot.ie"] --> I["Provider accounts (Stripe live, Resend, Supabase)"]
     I --> J["Managed Postgres + hosting"]
@@ -238,7 +250,7 @@ Gate 1 is the CI pipeline in `.github/workflows/ci.yml` and the equivalent local
 | --- | --- | --- |
 | Security scan | `npm run security:scan` (`.github/workflows/ci.yml:32-33`) | Static secret/security scan |
 | Schema + migrations | Prisma generate/validate/deploy/status (`.github/workflows/ci.yml:35-49`) | Against an ephemeral CI Postgres |
-| Backup/restore proof | `postgres-backup.mjs` round trip (`.github/workflows/ci.yml:51-67`) | Verifies restore sentinel |
+| Backup/restore proof | `postgres-backup.mjs source-identity` plus `prove-restore` round trip (`.github/workflows/ci.yml`) | Uses one read-only exported snapshot, one code-allowlisted tools-image digest, bounded source/dump workload, and exact source/isolated-restore fingerprints for the declared `public` schema/data scope. The report carries explicit non-public, extension-membership, comments/security-label, database-level-object, ownership/ACL, and sequence-runtime exclusions; large objects and sequence-backed identities fail closed. The seeded sentinel is a local CI fixture only. |
 | Lint / test | `npm run lint`, `npm run test` (`.github/workflows/ci.yml:69-73`) | |
 | Local Docker smoke | `test:local-docker:smoke` (`.github/workflows/ci.yml:75-76`) | Boots the real containerised stack |
 | Builds | shared → API → web (`.github/workflows/ci.yml:78-88`) | Web build is fed dummy `charitypilot.ie` public URLs |
@@ -251,9 +263,9 @@ Crucially, the synthetic secrets the CI feeds to `validateProductionEnv` (e.g. `
 
 ### Gate 2 — the launch gate
 
-Gate 2 is everything `validateProductionEnv` *cannot* manufacture: a registered `charitypilot.ie` domain, live Stripe / Resend / Supabase accounts, a managed TLS-enabled PostgreSQL, a hosting target, the real secret values, legal document approval, browser QA, and an external penetration test. These steps are sequenced in `docs/LAUNCH-GUIDE.md` (Steps 1–10) and operationalised in `docs/production-runbook.md`; outstanding items are tracked in `PRODUCTION_TODO.md`. This repository deliberately does **not** automate or duplicate Gate 2 — it links out to those documents, and `npm run setup:production-env` only scaffolds `.env.production` and auto-fills the random secrets, leaving the provider-issued values for a human to paste in (`README.md:122-123`).
+Gate 2 is everything `validateProductionEnv` *cannot* manufacture: a registered `charitypilot.ie` domain, live Stripe / Resend / Supabase accounts, a managed TLS-enabled PostgreSQL, a hosting target, the real secret values, legal document approval, deployed browser QA, and an external penetration test. These steps are sequenced in `docs/LAUNCH-GUIDE.md` (Steps 1–10) and operationalised in `docs/production-runbook.md`; outstanding items are tracked in `PRODUCTION_TODO.md`. The repository automates safe checks and strict evidence validation for Gate 2, but it never substitutes synthetic values, local fixtures, or self-authored attestations for real provider, operator, professional, or deployed-release evidence. `npm run setup:production-env` only scaffolds `.env.production` and auto-fills the random secrets, leaving provider/operator values for the approved secret source (`README.md:122-123`).
 
-The relationship between the gates is one-directional: a green Gate 1 build is the **prerequisite** for attempting Gate 2, not the launch itself. `validateProductionEnv` is exactly where the two gates touch — it is the code-side guard that refuses to start until the human-side launch work has actually been completed.
+The relationship between the gates is one-directional: a green Gate 1 build is the **prerequisite** for attempting Gate 2, not the launch itself. `validateProductionEnv` is one fail-closed startup guard; production preflight, live provider/hosting checks, release binding, evidence validation, and final signoff are additional independent launch controls.
 
 ## Cross-references
 

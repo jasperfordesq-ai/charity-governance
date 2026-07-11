@@ -5,7 +5,6 @@ import { isConfiguredSecret } from './secrets.js';
 
 export { isConfiguredSecret } from './secrets.js';
 
-const REQUIRED_DATABASE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 const CANONICAL_PRODUCTION_WEB_ORIGIN = 'https://app.charitypilot.ie';
 const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
@@ -235,9 +234,16 @@ function requireDatabaseUrl(name: string, issues: string[]) {
     if (localDatabaseHost && !allowCiSmokeLocalDatabase) {
       issues.push(`${name} must not point at localhost in production`);
     }
-    const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
-    if ((!sslMode || !REQUIRED_DATABASE_SSL_MODES.has(sslMode)) && !(allowCiSmokeLocalDatabase && localDatabaseHost)) {
-      issues.push(`${name} must require TLS with sslmode=require, verify-ca, or verify-full in production`);
+    if (!(allowCiSmokeLocalDatabase && localDatabaseHost)) {
+      const sslModes = url.searchParams.getAll('sslmode');
+      if (sslModes.length !== 1 || sslModes[0] !== 'verify-full') {
+        issues.push(`${name} must use exact lowercase sslmode=verify-full in production`);
+      }
+
+      const targetSessionAttrs = url.searchParams.getAll('target_session_attrs');
+      if (targetSessionAttrs.length !== 1 || targetSessionAttrs[0] !== 'read-write') {
+        issues.push(`${name} must explicitly set target_session_attrs=read-write in production`);
+      }
     }
   } catch {
     issues.push(`${name} must be a valid PostgreSQL connection URL`);

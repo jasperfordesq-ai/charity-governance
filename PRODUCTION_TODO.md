@@ -11,12 +11,12 @@ Status marks reflect completed repository hardening work. Open items require rea
 > personal database you care about because it can reset tenant/app tables.
 
 > **Current local status checked 2026-07-11:** `npm run launch:status -- --json`
-> still reports `ENV_INCOMPLETE`: 9 of 26 production values are complete and 17
+> still reports `ENV_INCOMPLETE`: 9 of 27 production values are complete and 18
 > production values still require real data in `.env.production` or the approved
 > production secret store. The launch evidence ledger is now 9 of 86 checks
 > complete from local/CI release-gate evidence, final signoffs remain 0 of 5
-> approved, and the strict counted launch gates are 18 of 117 complete
-> (15.4%). This strict percentage counts only production values, evidence checks,
+> approved, and the strict counted launch gates are 18 of 118 complete
+> (15.3%). This strict percentage counts only production values, evidence checks,
 > and final signoff roles; it is not a legal or business readiness claim.
 > `approvedForLaunch` is false. Do not put real charity data into CharityPilot until those values,
 > provider checks, deployed QA, legal/privacy review, external security review,
@@ -119,7 +119,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 
 - [x] `npm run lint`
 - [x] `npm run test`
-- [x] `npm run test:production-check` - passed locally on 2026-07-09 with 352/352 production-tooling checks.
+- [x] `npm run test:production-check` - passed locally on 2026-07-11 with 745 checks passed, 0 failed, and 2 Windows-only symbolic-link privilege skips (747 total).
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`

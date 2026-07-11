@@ -27,6 +27,47 @@ test('production launch evidence init writes the template outside the repo root 
     const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
     assert.equal(evidence.approvedForLaunch, false);
     assert.equal(evidence.finalSignoff.status, 'pending');
+    const databaseProof = evidence.areas.database.checks['database-check'].databaseRestoreProof;
+    assert.equal(databaseProof.checksumAlgorithm, 'sha256');
+    assert.equal(databaseProof.recoverySetId, 'REPLACE_WITH_DATABASE_RECOVERY_SET_ID');
+    assert.equal(databaseProof.expectedSourceDatabaseIdentitySha256, 'REPLACE_WITH_EXPECTED_SOURCE_DATABASE_IDENTITY_SHA256');
+    assert.equal(databaseProof.databaseDumpBytes, null);
+    assert.equal(databaseProof.tablesCompared, null);
+    assert.equal(databaseProof.backupArtifactsRetained, null);
+    assert.equal(databaseProof.productionWritten, null);
+    const jointRecovery =
+      evidence.areas.supabaseStorage.checks['supabase-restore-tested'].jointRecoveryReconciliation;
+    assert.equal(jointRecovery.manifestFormat, 'charitypilot-document-recovery-manifest-v1');
+    assert.equal(jointRecovery.checksumAlgorithm, 'sha256');
+    assert.equal(jointRecovery.recoveryManifestSha256, 'REPLACE_WITH_RECOVERY_MANIFEST_SHA256');
+    assert.equal(jointRecovery.sourceBindingSha256, 'REPLACE_WITH_SOURCE_BINDING_SHA256');
+    assert.equal(jointRecovery.sourceCaptureReportSha256, 'REPLACE_WITH_SOURCE_CAPTURE_REPORT_SHA256');
+    assert.equal(jointRecovery.sourceDatabaseIdentitySha256, 'REPLACE_WITH_SOURCE_DATABASE_IDENTITY_SHA256');
+    assert.equal(jointRecovery.sourceObjectStoreIdentitySha256, 'REPLACE_WITH_SOURCE_OBJECT_STORE_IDENTITY_SHA256');
+    assert.equal(jointRecovery.databaseDumpSha256, 'REPLACE_WITH_DATABASE_DUMP_SHA256');
+    assert.equal(jointRecovery.objectBackupManifestSha256, 'REPLACE_WITH_OBJECT_BACKUP_MANIFEST_SHA256');
+    assert.equal(jointRecovery.exerciseId, 'REPLACE_WITH_EXERCISE_ID');
+    assert.equal(jointRecovery.recoverySetId, 'REPLACE_WITH_RECOVERY_SET_ID');
+    assert.equal(jointRecovery.metadataRowCount, null);
+    assert.equal(jointRecovery.orphanExpectedObjectCount, null);
+    assert.equal(jointRecovery.orphanRestoredObjectCount, null);
+    assert.equal(jointRecovery.sourceRecoveryEventInventorySha256, 'REPLACE_WITH_SOURCE_RECOVERY_EVENT_INVENTORY_SHA256');
+    assert.equal(jointRecovery.restoredRecoveryEventInventorySha256, 'REPLACE_WITH_RESTORED_RECOVERY_EVENT_INVENTORY_SHA256');
+    assert.equal(jointRecovery.recoveryEventCount, null);
+    assert.equal(jointRecovery.restoredRecoveryEventCount, null);
+    assert.equal(jointRecovery.sourceMetadataCaptureTransactionId, 'REPLACE_WITH_SOURCE_METADATA_CAPTURE_TRANSACTION_ID');
+    assert.equal(jointRecovery.restoredMetadataCaptureTransactionId, 'REPLACE_WITH_RESTORED_METADATA_CAPTURE_TRANSACTION_ID');
+    assert.equal(jointRecovery.isolationAttestationRecorded, null);
+    assert.equal(jointRecovery.productionDatabaseNotOverwrittenAttestationRecorded, null);
+    assert.equal(jointRecovery.productionObjectStoreNotOverwrittenAttestationRecorded, null);
+    assert.equal(jointRecovery.restoreCredentialsScopedToTargetAttestationRecorded, null);
+    assert.equal(jointRecovery.objectives.database.rpoObjectiveMinutes, null);
+    assert.equal(jointRecovery.objectives.documentBytes.rtoObjectiveMinutes, null);
+    assert.equal(jointRecovery.recoveryOperatorRecorded, null);
+    assert.equal(jointRecovery.independentBindingArgumentsMatched, null);
+    assert.equal(jointRecovery.sourceProvenanceExternallyVerified, false);
+    assert.equal(Object.hasOwn(jointRecovery, 'isolationVerified'), false);
+    assert.equal(Object.hasOwn(jointRecovery, 'sourceProvenanceExternallyBound'), false);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

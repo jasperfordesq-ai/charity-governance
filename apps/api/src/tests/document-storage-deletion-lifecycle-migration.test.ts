@@ -133,7 +133,10 @@ test('real migration proof uses the repository-approved digest-pinned PostgreSQL
 });
 
 test('real PostgreSQL 16 migration enforces nonce-bound recovery, dispositions, concurrency, and dirty-row backfill', { timeout: 180_000 }, async () => {
-  const dockerAvailable = docker(['version', '--format', '{{.Server.Version}}'], undefined, 10_000);
+  // Docker Desktop can serialize engine requests while the full API suite is
+  // running. Keep this availability probe bounded, but do not misclassify a
+  // temporarily busy local engine as an absent engine.
+  const dockerAvailable = docker(['version', '--format', '{{.Server.Version}}'], undefined, 60_000);
   assertDockerSuccess(dockerAvailable, 'Docker availability check for real migration proof');
   const container = `charitypilot-document-recovery-${randomUUID()}`;
   const start = docker([

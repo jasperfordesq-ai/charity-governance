@@ -14,6 +14,7 @@ import {
 } from './launch-status.mjs';
 import { OPERATOR_SUPPLIED_KEYS } from './generate-production-env.mjs';
 import { renderProductionLaunchEvidenceTemplate } from './generate-production-launch-evidence-template.mjs';
+import { DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS } from './verify-document-recovery.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const launchStatusScript = join(repoRoot, 'scripts', 'launch-status.mjs');
@@ -24,7 +25,8 @@ const stripePublishableFixture = ['pk', 'live', 'fixture'].join('_');
 const resendApiFixture = ['re', 'fixture'].join('_');
 const supabaseServiceRoleFixture = ['supabase', 'service-role', 'fixture'].join('_');
 const VALID_PRODUCTION_VALUES = {
-  DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+  DATABASE_URL: 'postgresql://charitypilot:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
+  DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: 'db.charitypilot.ie',
   FRONTEND_URL: 'https://app.charitypilot.ie',
   NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
@@ -147,10 +149,22 @@ function assertProductionLaunchCommands(commands) {
   );
   assert.equal(commands.hosting, 'npm run check:production:hosting -- --production-env-file=.env.production');
   assert.equal(
+    commands.databaseSourceIdentity,
+    'npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA',
+  );
+  assert.equal(
     commands.database,
-    'npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel',
+    'npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json',
   );
   assert.equal(commands.supabase, 'npm run check:production:supabase -- --production-env-file=.env.production');
+  assert.ok(commands.documentRecovery.startsWith('npm run check:production:document-recovery -- '));
+  assert.match(commands.documentRecovery, /--manifest-file=\.charitypilot-launch-evidence\/document-recovery-manifest\.json/);
+  assert.equal(DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS.length, 30);
+  for (const [flag] of DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS) {
+    assert.match(commands.documentRecovery, new RegExp(flag));
+    assert.equal(commands.documentRecovery.split(`${flag}=`).length - 1, 1);
+  }
+  assert.match(commands.documentRecovery, /--json/);
   assert.equal(commands.providers, 'npm run check:production:providers -- --production-env-file=.env.production');
   assert.equal(
     commands.observability,
@@ -215,9 +229,11 @@ function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.githubEnvironment, 'production');
   assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=<managed-postgres-hostname>',
   ]);
   assert.deepEqual(promotion.configureCommands, [
     'gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"',
+    'gh variable set DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST --env production --repo jasperfordesq-ai/charity-governance --body "<managed-postgres-hostname>"',
   ]);
   assert.doesNotMatch(promotion.requiredGitHubEnvironmentVariables.join('\n'), /REAL_SUPABASE_PROJECT_REF/);
   assert.doesNotMatch(promotion.configureCommands.join('\n'), /REAL_SUPABASE_PROJECT_REF/);
@@ -527,6 +543,7 @@ test('reports structurally invalid production values before ENV_COMPLETE', () =>
   assert.deepEqual(s.remainingKeys, [
     'TRUSTED_PROXY_ADDRESSES',
     'DATABASE_URL',
+    'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
     'FRONTEND_URL',
     'NEXT_PUBLIC_API_URL',
   ]);
@@ -535,6 +552,7 @@ test('reports structurally invalid production values before ENV_COMPLETE', () =>
     [
       { key: 'TRUSTED_PROXY_ADDRESSES', reason: 'preflight-invalid' },
       { key: 'DATABASE_URL', reason: 'preflight-invalid' },
+      { key: 'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', reason: 'preflight-invalid' },
       { key: 'FRONTEND_URL', reason: 'preflight-invalid' },
       { key: 'NEXT_PUBLIC_API_URL', reason: 'preflight-invalid' },
     ],
@@ -542,10 +560,10 @@ test('reports structurally invalid production values before ENV_COMPLETE', () =>
   const details = s.remainingKeyDetails.map((issue) => issue.detail).join('\n');
   assert.match(details, /explicit proxy IP addresses or CIDR ranges/);
   assert.match(details, /must not point at localhost/);
-  assert.match(details, /sslmode=require/);
+  assert.match(details, /sslmode=verify-full/);
   assert.match(details, /must use https:\/\//);
   assert.match(details, /origin-only URL/);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 23, total: 27, remaining: 4 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 22, total: 27, remaining: 5 });
 });
 
 test('keeps placeholder issue reasons ahead of canonical drift checks', () => {
@@ -614,7 +632,7 @@ test('reports missing operator-supplied production values instead of treating a 
   const env = [
     'NODE_ENV=production',
     'JWT_SECRET=already-generated-secret-value-1234567890',
-    'DATABASE_URL=postgresql://u:p@db.charitypilot.ie:5432/cp?sslmode=require',
+    'DATABASE_URL=postgresql://u:p@db.charitypilot.ie:5432/cp?sslmode=verify-full&target_session_attrs=read-write',
   ].join('\n');
 
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: false });

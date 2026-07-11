@@ -9,6 +9,8 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const statusScriptPath = join(scriptsDir, 'production-launch-evidence-status.mjs');
 const templateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
 const releaseCommitSha = 'b'.repeat(40);
+const recoveryConsistencySuccessText =
+  'Document recovery reconciliation consistency passed against independently supplied bindings.';
 const genericEvidence = {
   type: 'artifact',
   reference: 'https://evidence.charitypilot.ie/launch/generic-evidence',
@@ -240,6 +242,35 @@ test('production launch evidence status exposes a grouped work queue for every i
       'npm run check:production -- --production-env-file=.env.production',
       'Production preflight passed',
     ]);
+    const database = payload.workQueueByArea.find((area) => area.id === 'database');
+    const databaseCheck = database.checks.find((check) => check.path === 'database.database-check');
+    assert.ok(databaseCheck.requiredEvidenceHints.includes(
+      'npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json',
+    ));
+    assert.ok(databaseCheck.requiredEvidenceHints.includes('--recovery-set-id='));
+    assert.ok(databaseCheck.requiredEvidenceHints.includes('--backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID'));
+    assert.ok(databaseCheck.requiredEvidenceHints.includes('"backupArtifactsRetained": true'));
+    const objectStorage = payload.workQueueByArea.find((area) => area.id === 'supabaseStorage');
+    assert.equal(objectStorage.label, 'Document Object Storage (Supabase)');
+    const objectBackup = objectStorage.checks.find(
+      (check) => check.path === 'supabaseStorage.supabase-backups-enabled',
+    );
+    assert.ok(objectBackup.requiredEvidenceHints.includes('document object bytes'));
+    assert.ok(objectBackup.requiredEvidenceHints.includes('separate from PostgreSQL backups and PITR'));
+    assert.ok(objectBackup.requiredEvidenceHints.includes('document-object RPO'));
+    assert.ok(objectBackup.requiredEvidenceHints.includes('document-object RTO'));
+    const jointRecovery = objectStorage.checks.find(
+      (check) => check.path === 'supabaseStorage.supabase-restore-tested',
+    );
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('joint PostgreSQL metadata and document object-byte restore'));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('charitypilot-document-recovery-manifest-v1'));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('--expected-recovery-manifest-sha256='));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('--expected-source-capture-report-sha256='));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('--expected-source-database-identity-sha256='));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('--expected-source-object-store-identity-sha256='));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('--expected-production-document-count='));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('"ok": true'));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes(recoveryConsistencySuccessText));
     assert.ok(payload.workQueueByArea.some((area) => area.id === 'browserQa' && area.remaining === 7));
     assert.equal(
       payload.workQueueByArea.reduce((total, area) => total + area.remaining, 0),
@@ -348,6 +379,31 @@ test('production launch evidence status replaces stale stored hints with current
     approvedForLaunch: false,
     finalSignoff: { status: 'pending', approvals: {} },
     areas: {
+      database: {
+        status: 'pending',
+        checks: {
+          'database-check': {
+            status: 'pending',
+            requiredEvidenceHints: ['--expect-operational-sentinel'],
+            evidence: [],
+          },
+        },
+      },
+      supabaseStorage: {
+        status: 'pending',
+        checks: {
+          'supabase-backups-enabled': {
+            status: 'pending',
+            requiredEvidenceHints: ['managed backups or PITR'],
+            evidence: [],
+          },
+          'supabase-restore-tested': {
+            status: 'pending',
+            requiredEvidenceHints: ['Supabase restore test'],
+            evidence: [],
+          },
+        },
+      },
       browserQa: {
         status: 'pending',
         checks: {
@@ -382,6 +438,21 @@ test('production launch evidence status replaces stale stored hints with current
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
+    const database = payload.workQueueByArea.find((area) => area.id === 'database');
+    const databaseCheck = database.checks.find((check) => check.path === 'database.database-check');
+    assert.ok(databaseCheck.requiredEvidenceHints.some((hint) => hint.includes('--capture-source-identity --json')));
+    assert.ok(!databaseCheck.requiredEvidenceHints.some((hint) => /sentinel/i.test(hint)));
+    const objectStorage = payload.workQueueByArea.find((area) => area.id === 'supabaseStorage');
+    const objectBackup = objectStorage.checks.find(
+      (check) => check.path === 'supabaseStorage.supabase-backups-enabled',
+    );
+    const jointRecovery = objectStorage.checks.find(
+      (check) => check.path === 'supabaseStorage.supabase-restore-tested',
+    );
+    assert.ok(objectBackup.requiredEvidenceHints.includes('document object bytes'));
+    assert.ok(!objectBackup.requiredEvidenceHints.includes('managed backups or PITR'));
+    assert.ok(jointRecovery.requiredEvidenceHints.includes('joint metadata/object reconciliation'));
+    assert.ok(!jointRecovery.requiredEvidenceHints.includes('Supabase restore test'));
     const browserQa = payload.workQueueByArea.find((area) => area.id === 'browserQa');
     const browserQaCompleted = browserQa.checks.find((check) => check.path === 'browserQa.browser-qa-completed');
     assert.deepEqual(browserQaCompleted.requiredEvidenceHints.slice(0, 4), [
@@ -498,6 +569,27 @@ test('production launch evidence status complete flag requires release binding',
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.releaseBinding.complete, false);
     assert.equal(payload.evidenceStatusesComplete, false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence status rejects duplicate JSON keys before reporting completion', async () => {
+  const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
+  const evidence = await launchEvidenceTemplate();
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-launch-status-duplicate-'));
+  const evidencePath = join(tempDir, 'production-launch-evidence.json');
+  const raw = JSON.stringify(evidence, null, 2).replace(
+    '"approvedForLaunch": false',
+    '"approvedForLaunch": true,\n  "approvedForLaunch": false',
+  );
+  writeFileSync(evidencePath, raw);
+
+  try {
+    const result = runProductionLaunchEvidenceStatusFromArgs(['--json', '--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /duplicate JSON object keys/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -30,10 +30,10 @@ be rerun against the final production configuration:
 a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`;
 on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
-configured handoff still had 17 production values needing real data.
-On the latest checked workstation, production values are `9 / 26` complete,
+  configured handoff still had 18 production values needing real data.
+  On the latest checked workstation, production values are `9 / 27` complete,
 machine-readable launch evidence is `9 / 86` complete, final signoffs are
-`0 / 5`, the strict counted launch gates are `18 / 117` complete (`15.4%`),
+  `0 / 5`, the strict counted launch gates are `18 / 118` complete (`15.3%`),
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.
@@ -67,7 +67,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 512/512 on 2026-07-10; rerun for the final release ref |
+| Production-tooling tests | Local `npm run test:production-check` passed 745 checks with 0 failures and 2 Windows-only symbolic-link privilege skips (747 total) on 2026-07-11; rerun for the final release ref |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
@@ -136,8 +136,10 @@ You need four external services. Create the **production/live** versions
 
 ### Step 3 - Provision the production database
 - **What:** A managed PostgreSQL database (e.g. Supabase Postgres, Neon, RDS).
-- **Why:** Stores all governance data. Must have TLS (`sslmode=require`) and
-  managed backups with point-in-time recovery.
+- **Why:** Stores all governance data. Production connections must use exact
+  lowercase `sslmode=verify-full` plus
+  `target_session_attrs=read-write`, and the service must provide managed
+  backups with point-in-time recovery.
 - **You need:** The managed DB + its connection string (kept secret).
 - **Effort/cost:** ~1 hour; free tier to start, paid as you grow.
 
@@ -196,9 +198,42 @@ You need four external services. Create the **production/live** versions
   npm run check:production:providers -- --production-env-file=.env.production
   npm run check:production:supabase -- --production-env-file=.env.production
   npm run check:production:hosting -- --production-env-file=.env.production
-  npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
+  npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA
+  npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json
+  npm run launch:status -- --json
+  npm run check:production:document-recovery -- --help
   npm run check:production:observability -- --production-env-file=.env.production
   ```
+- The document-recovery command is an offline reconciliation gate. Obtain every
+  `--expected-*` value and the production `Document` count from the independent
+  read-only source capture; never copy those values from the recovery manifest
+  being checked. Copy `productionLaunchCommands.documentRecovery` from the
+  launch-status JSON and replace every `EXTERNAL_*` placeholder; that command is
+  generated from all 30 mandatory verifier binding flags, and omitting one is a
+  usage error. Database backup/PITR alone cannot satisfy document-object recovery
+  evidence.
+- Replace `PROMOTED_RELEASE_COMMIT_SHA` in both database commands with the
+  promoted lowercase full 40-character commit SHA. Preserve the first command's
+  redacted JSON immutably before running the second command. Use its
+  `sourceDatabaseIdentitySha256` as the second command's expected
+  identity, use a unique recovery-set directory, and retain the dump and proof
+  report outside git. The example path does not prove encryption: separately
+  record the approved encrypted filesystem, access controls, off-host custody,
+  retention, and deletion evidence. Both database commands are read-only against production;
+  the restore target is created and destroyed internally and cannot target the
+  production connection.
+- Read the database proof limitations literally. It binds the covered public
+  schema and all application rows within explicit workload bounds, but
+  `--no-owner --no-privileges` excludes PostgreSQL role ownership, grants, and
+  default privileges. Sequence runtime state is non-MVCC, so the checker fails
+  unless there are zero public sequences, identity columns, and `nextval`
+  defaults. Preserve separate provider/operator evidence for those excluded
+  recovery controls.
+- The report also records its exact certified schema scope and the one approved
+  digest-pinned PostgreSQL tools image. It does not certify non-public schemas,
+  extension membership, comments/security labels, or database-level objects;
+  large objects must be absent. The dump has a pre-enforced 64 GiB ceiling, and
+  final launch approval rejects a proof older than 24 hours.
 - If GitHub `production` is the approved secret store for deploys, also run:
   ```bash
   npm run check:production:github-secrets -- --environment=production
@@ -215,6 +250,7 @@ You need four external services. Create the **production/live** versions
 - **What:** Rehearse the exact signed images against a recent isolated production restore, then let the fail-closed deploy command stop the old runtime, create and restore-verify a protected backup, run migration alone, probe migration history, prepare/reconcile reminder cutover state, and only then start the signed runtime.
   ```bash
 gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"
+  gh variable set DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST --env production --repo jasperfordesq-ai/charity-governance --body "<managed-postgres-hostname>"
   npm run check:production:github-env -- --environment=production
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status
@@ -224,10 +260,12 @@ gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/cha
 - **Current known GitHub environment blocker:** the protected secret store still
   needs its real provider/operator secret names. Rerun
   `npm run check:production:github-secrets -- --environment=production`, then
-  rerun `npm run check:production:github-env -- --environment=production`; only
-  the canonical public API origin is required for the web image. Supabase
-  remains in the API secret source and must not be added as a public web
-  variable.
+  set the non-secret `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` variable
+  after selecting the real managed database hostname, and rerun
+  `npm run check:production:github-env -- --environment=production`. Only the
+  canonical public API origin is exposed to the web image; the recovery
+  allowlist remains server/operator configuration. Supabase remains in the API
+  secret source and must not be added as a public web variable.
 - **Why:** The GitHub `production` environment variable lets the release workflow
   build the web image for the real API origin. The workflow then
   uploads `release-image-digests.env`; copy its digest-pinned image values and
