@@ -36,6 +36,24 @@ import {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 
+test('restore proof never chmods the dump after opening its protected descriptor', () => {
+  const source = readFileSync(join(scriptsDir, 'postgres-backup.mjs'), 'utf8').replace(/\r\n/g, '\n');
+  const proofStart = source.indexOf('async function proveRestore(options) {');
+  const proofEnd = source.indexOf('\nasync function runStreamingCommand(', proofStart);
+  assert.ok(proofStart >= 0 && proofEnd > proofStart);
+  const proofSource = source.slice(proofStart, proofEnd);
+  const protectionLoopIndex = proofSource.indexOf('for (const path of [stagedDumpPath, sourceRawPath])');
+  const protectionCallIndex = proofSource.indexOf('protectOwnerOnly(path);', protectionLoopIndex);
+  const protectedOpenIndex = proofSource.indexOf(
+    "dumpHandle = openProtectedRegularFile(stagedDumpPath, 'captured PostgreSQL dump')",
+  );
+
+  assert.ok(protectionLoopIndex >= 0);
+  assert.ok(protectionCallIndex > protectionLoopIndex);
+  assert.ok(protectionCallIndex < protectedOpenIndex);
+  assert.doesNotMatch(proofSource.slice(protectedOpenIndex), /protectOwnerOnly\(stagedDumpPath\)/);
+});
+
 test('certified schema fingerprints bind recovery-relevant relation, inheritance, index, column, and routine state', () => {
   const source = readFileSync(join(scriptsDir, 'postgres-backup.mjs'), 'utf8');
   for (const field of [

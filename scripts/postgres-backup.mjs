@@ -2908,7 +2908,6 @@ async function proveRestore(options) {
       closeSync(reportWriteFd);
     }
     protectOwnerOnly(stagedReportPath);
-    protectOwnerOnly(stagedDumpPath);
     reportHandle = openProtectedRegularFile(stagedReportPath, 'restore proof report');
     assertProtectedFileUnchanged(dumpHandle, 'before proof publication');
     assertProtectedFileUnchanged(reportHandle, 'before proof publication');
