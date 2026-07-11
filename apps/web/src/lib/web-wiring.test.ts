@@ -2814,6 +2814,10 @@ test('team invite form and pending invite list are extracted from the oversized 
   assert.match(panelSrc, /isLoading=\{revokeInviteId === invite\.id\}/);
   assert.match(panelSrc, /isDisabled=\{!canInvite/);
   assert.match(panelSrc, /aria-describedby="team-invite-disabled-hint"/);
+  assert.match(pageSrc, /manualInviteUrl/);
+  assert.match(panelSrc, /Copy this private invitation now/);
+  assert.match(panelSrc, /CopyLinkButton url=\{manualInviteUrl\}/);
+  assert.match(panelSrc, /bearer link is shown only after creation/);
   assert.match(panelSrc, /statusPanelClassName/);
   assert.match(panelSrc, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
   assert.match(panelSrc, /className=\{statusPanelClassName\('neutral', 'p-3'\)\}/);
@@ -3119,6 +3123,15 @@ test('public SEO and sharing URLs use the canonical production app origin', () =
   assert.match(app('robots.ts'), /sitemap:\s*absoluteSiteUrl\('\/sitemap\.xml'\)/);
   assert.match(component('json-ld.tsx'), /mainEntityOfPage:\s*absoluteSiteUrl\(`\/blog\/\$\{slug\}`\)/);
   assert.match(app('(marketing)/blog/[slug]/page.tsx'), /const canonicalUrl = absoluteSiteUrl\(`\/blog\/\$\{meta\.slug\}`\)/);
+});
+
+test('personal-server metadata does not advertise the private workspace to crawlers', () => {
+  const sitemap = app('sitemap.ts');
+  const robots = app('robots.ts');
+
+  assert.match(sitemap, /if \(personalServer\) return \[\]/);
+  assert.match(robots, /NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server'/);
+  assert.match(robots, /disallow: '\/'/);
 });
 
 test('public attribution follows the Project NEXUS AGPL licensing model', () => {

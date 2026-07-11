@@ -10,8 +10,10 @@ FROM deps AS build
 WORKDIR /app
 COPY . .
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=public-production
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN node -e "function requireOrigin(name,validateHost,message){try{const value=process.env[name];const url=new URL(value);if(url.protocol!=='https:'||url.origin!==value.replace(/\/+$/,'')||!validateHost(url.hostname.toLowerCase()))throw new Error();}catch{console.error(message);process.exit(1)}}requireOrigin('NEXT_PUBLIC_API_URL',(host)=>host==='api.charitypilot.ie','NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL and must use the canonical API origin https://api.charitypilot.ie')"
+ENV NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=$NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE
+RUN node -e "const value=process.env.NEXT_PUBLIC_API_URL;const mode=process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;const fail=(message)=>{console.error(message);process.exit(1)};let url;try{url=new URL(value)}catch{fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL')};if(url.origin!==value.replace(/\/+$/,'')||url.username||url.password)fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL');const host=url.hostname.toLowerCase().replace(/^\[|\]$/g,'');if(mode==='personal-server'){const loopback=host==='localhost'||host==='127.0.0.1'||host==='::1';if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))fail('personal-server NEXT_PUBLIC_API_URL must use https:// or exact loopback http://')}else if(url.protocol!=='https:'||host!=='api.charitypilot.ie'){fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL and must use the canonical API origin https://api.charitypilot.ie')}"
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
 RUN rm -rf apps/web/.next/cache \

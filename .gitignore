@@ -16,6 +16,8 @@ out/
 .env.production
 .env.production.*
 !.env.production.example
+.env.personal-server
+!.env.personal-server.example
 .env.*.local
 
 # IDE

@@ -3037,7 +3037,7 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   );
   assert.match(
     apiClient,
-    /getApiBaseUrl\(\{\s*NODE_ENV:\s*process\.env\.NODE_ENV,\s*NEXT_PUBLIC_API_URL:\s*process\.env\.NEXT_PUBLIC_API_URL,\s*NEXT_PUBLIC_CHARITYPILOT_E2E_MODE:\s*process\.env\.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE,?\s*\}\)/,
+    /getApiBaseUrl\(\{\s*NODE_ENV:\s*process\.env\.NODE_ENV,\s*NEXT_PUBLIC_API_URL:\s*process\.env\.NEXT_PUBLIC_API_URL,\s*NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:\s*process\.env\.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,\s*NEXT_PUBLIC_CHARITYPILOT_E2E_MODE:\s*process\.env\.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE,?\s*\}\)/,
   );
   assert.doesNotMatch(apiClient, /const API_URL = getApiBaseUrl\(\);/);
   assert.match(fixturesSource, /async function openFencedContext/);

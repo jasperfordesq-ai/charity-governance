@@ -19,6 +19,42 @@ independently fact-checked; the diagrams are GitHub-renderable Mermaid.
 > documentation checks for the final release ref before treating every citation as
 > release evidence.
 
+## Deployment profiles and the Windows web server
+
+The repository has three deliberately separate operating paths:
+
+| Profile | Purpose | Front door | Runtime behavior |
+| --- | --- | --- | --- |
+| Local development | Source editing and disposable local testing | Direct loopback development ports | `next dev`, `tsx watch`, source mounts, migrations/seeding in the local Compose flow |
+| Personal server | One charity on a trusted Windows computer | **Caddy** on loopback, optionally reached through private Tailscale Serve HTTPS | Compiled Next.js and Fastify images, persistent PostgreSQL/documents, no routine migration or seed, no public providers |
+| Public production | Future hosted commercial service | Production TLS/hosting boundary | Canonical public origins, managed providers, release evidence and the full launch gate |
+
+Windows itself is not the application web server and IIS is not used. In the
+personal-server profile, Docker Desktop/WSL 2 runs Caddy, Next.js, Fastify and
+PostgreSQL. Caddy is the sole published front door:
+
+```mermaid
+flowchart LR
+    Browser["Director browser"] --> Tail["Tailscale private HTTPS (optional)"]
+    Tail --> Loopback["Windows loopback :8080"]
+    Loopback --> Caddy["Caddy web front door"]
+    Caddy -->|"/api/v1/*"| Fastify["Fastify API"]
+    Caddy -->|"all other paths"| Next["Compiled Next.js server"]
+    Fastify --> Postgres[("PostgreSQL")]
+    Fastify --> Documents["Local document volume"]
+```
+
+For local-only use the exact browser origin may be
+`http://localhost:8080`. Remote directors use one exact private HTTPS origin;
+Tailscale terminates HTTPS and proxies only to Caddy's loopback port. The
+fixed bridge pins Caddy's Docker gateway and API addresses: Caddy trusts
+forwarded scheme/client headers only from the exact gateway, while Fastify
+trusts only Caddy. The configured private origin remains authoritative for
+Next.js redirects, CSP and server-side refresh requests across that HTTP hop.
+The database, API and Next.js ports are not published. See
+[Personal Server Deployment on Windows](personal-server-deployment.md) for the
+complete operating and recovery contract.
+
 ## Component diagram
 
 ```mermaid

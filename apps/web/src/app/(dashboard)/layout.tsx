@@ -114,6 +114,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const sidebarRef = useRef<HTMLElement>(null);
   const sidebarId = 'dashboard-primary-navigation';
   const navInteractive = isDesktopNav || sidebarOpen;
+  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+  const visibleNavItems = personalServer
+    ? NAV_ITEMS.filter((item) => item.href !== '/billing')
+    : NAV_ITEMS;
 
   const closeSidebar = useCallback((restoreFocus = false) => {
     setSidebarOpen(false);
@@ -268,7 +272,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Navigation links */}
         <nav className="flex flex-col gap-0.5 p-3 mt-2">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item.href);
             return (
               <Link
@@ -296,7 +300,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Sidebar footer */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
           <div className="text-xs text-gray-400 dark:text-gray-400 text-center space-y-1">
-            <p>CharityPilot v1.0</p>
+            <p>{personalServer ? 'CharityPilot private server' : 'CharityPilot v1.0'}</p>
             <LegalAttribution className="leading-5" />
             <p className="hidden lg:block">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-[10px] font-mono">?</kbd> for shortcuts</p>
           </div>

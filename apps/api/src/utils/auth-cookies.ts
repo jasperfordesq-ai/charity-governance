@@ -4,6 +4,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from "./auth-cookie-names.js";
+import { personalServerAllowsInsecureCookies } from "./personal-server.js";
 
 export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE };
 export { getAccessTokenFromRequest } from "./auth-request-credential.js";
@@ -14,7 +15,9 @@ type AuthTokens = {
 };
 
 function commonCookieOptions(maxAge: number) {
-  const secure = process.env.NODE_ENV === "production";
+  const secure =
+    process.env.NODE_ENV === "production" &&
+    !personalServerAllowsInsecureCookies();
   return {
     path: "/",
     httpOnly: true,

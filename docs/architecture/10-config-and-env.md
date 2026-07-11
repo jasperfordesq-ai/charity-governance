@@ -2,6 +2,10 @@
 
 CharityPilot reads all runtime configuration from environment variables. In development the app is designed to run with **no external accounts** — local filesystem storage and an optionally seeded local admin let a developer boot the whole stack against a single PostgreSQL instance. In production, `validateProductionEnv` fails startup when required values are missing, placeholder-like, or structurally unsafe. It performs no provider, DNS, TLS-handshake, bucket, webhook, or application-reachability probe; the separate `check:production:*` commands perform those live checks. This document maps the full environment surface and explains the project's **two-gate model**: an automated *code gate* that must remain green, plus an external-evidence *launch gate* that repository tooling validates but cannot manufacture.
 
+The strict public-production statement above applies to every normal production
+mode. The exact `personal-server` marker selects the separate private-appliance
+validator documented below; unknown and lookalike markers cannot select it.
+
 ## Environment-variable surface
 
 The tables below group every documented variable by concern. "Required in production?" covers the complete supported deployment contract: API/job startup validation, mandatory production preflight, Compose interpolation, and restricted operator tools. A row states explicitly when a value is preflight/operator-only rather than enforced by `apps/api/src/utils/env.ts`.
@@ -110,7 +114,7 @@ Two additional validator entry points enforce subsets of the surface for the sta
 
 ### Turbo `globalEnv`
 
-`turbo.json:3-24` lists the environment variables that participate in Turbo's task-cache hashing, so that changing any of them invalidates cached `build`/`lint`/`test` outputs. The list covers `DATABASE_URL`, server, JWT, all six Stripe vars, Resend, the three Supabase vars, and the two `NEXT_PUBLIC_*` values. Note `JWT_REFRESH_SECRET` and `API_URL` appear here for cache correctness even though they are not enforced by `validateProductionEnv`.
+`turbo.json` lists the environment variables that participate in Turbo's task-cache hashing, so that changing any of them invalidates cached `build`/`lint`/`test` outputs. The list covers `DATABASE_URL`, server, JWT, all six Stripe vars, Resend, the three Supabase vars, and the `NEXT_PUBLIC_*` build values, including the deployment-mode marker. Note `JWT_REFRESH_SECRET` and `API_URL` appear here for cache correctness even though they are not enforced by `validateProductionEnv`.
 
 ## How secret strength and placeholders are checked
 
@@ -131,6 +135,50 @@ On top of presence, the validator applies structural rules:
 | Proxy list | `requireTrustedProxyAddresses` | Explicit IPs/CIDRs only, no wildcards (`apps/api/src/utils/env.ts:303-314`) |
 
 Every failure is collected into an `issues` array and, if non-empty, thrown together as a single `AppError` (`apps/api/src/utils/env.ts:356-365`) — so an operator sees all configuration problems at once rather than one per restart.
+
+## Personal-server production environment
+
+The `personal-server` path deliberately runs with `NODE_ENV=production` while
+using a narrower validator selected by
+`CHARITYPILOT_DEPLOYMENT_MODE=personal-server`. This is not a bypass of the
+public validator: any other marker continues through the strict canonical
+public-production checks.
+
+The profile is configured by `.env.personal-server`, which is ignored by Git;
+only `.env.personal-server.example` is committed. Its durable values are:
+
+| Variable | Personal-server contract |
+| --- | --- |
+| `CHARITYPILOT_PERSONAL_SERVER_ORIGIN` | One exact HTTPS DNS origin, or exact loopback HTTP for local-only use; becomes both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` |
+| `CHARITYPILOT_PERSONAL_SERVER_PORT` | Caddy's loopback-published host port; default `8080` |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Credentials for only the internal PostgreSQL container; the generated password is URL-safe |
+| `JWT_SECRET`, `READINESS_API_KEY` | Distinct random secrets of at least 32 characters |
+| `PERSONAL_SERVER_OWNER_EMAIL`, `PERSONAL_SERVER_OWNER_NAME`, `PERSONAL_SERVER_ORGANISATION_NAME` | Non-secret inputs used only by the empty-database initializer |
+
+`PERSONAL_SERVER_OWNER_PASSWORD`, reset tokens and emergency account passwords
+are transient child-process values. They must not be written to the env file.
+The normal API environment fixes local document storage, disables in-process
+jobs and public registration, trusts only Caddy's exact internal address, and
+does not contain Stripe, Resend, Supabase or alert-webhook variables. HTTPS uses
+host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookies. Exact loopback HTTP is
+the only personal-server exception to the `Secure` attribute; non-loopback
+plain HTTP is rejected.
+
+The fixed `172.30.250.0/24` bridge uses `172.30.250.1` as the private-tunnel
+gateway hop and `172.30.250.10` for Caddy. Caddy applies strict trusted-proxy
+parsing only to the exact gateway/loopback sources; the API's
+`TRUSTED_PROXY_ADDRESSES` contains only Caddy. The exact configured public origin
+is used directly for server-side refresh requests, CSP and redirects so TLS
+termination outside Caddy cannot cause an HTTPS-to-HTTP downgrade.
+
+`CHARITYPILOT_INTERNAL_API_URL=http://api:3002` is server-only. Browser requests
+stay on the configured public origin and Caddy routes `/api/v1/*` internally,
+so CORS and shared-domain cookies are unnecessary. The public origin is built
+into the Next.js image; changing a Tailscale hostname requires a rebuild.
+
+The complete variable template, initialization rules, lifecycle commands and
+secret-handling procedure are in
+[Personal Server Deployment on Windows](../personal-server-deployment.md).
 
 ## Local / development defaults — running with no external accounts
 

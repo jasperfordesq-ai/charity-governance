@@ -111,6 +111,91 @@ test('isolated production E2E requires its exact internal service origin', () =>
   }
 });
 
+test('personal-server production accepts an exact HTTPS origin and the fixed internal API service', () => {
+  const env = {
+    NODE_ENV: 'production',
+    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+    NEXT_PUBLIC_API_URL: 'https://charitypilot.example-tailnet.ts.net/',
+    CHARITYPILOT_INTERNAL_API_URL: 'http://api:3002/',
+  };
+
+  assert.equal(getApiBaseUrl(env), 'https://charitypilot.example-tailnet.ts.net');
+  assert.equal(getServerApiBaseUrl(env), 'http://api:3002');
+});
+
+test('personal-server production permits plain HTTP only on an exact loopback origin', () => {
+  for (const NEXT_PUBLIC_API_URL of [
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://[::1]:8080',
+  ]) {
+    assert.equal(
+      getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+        NEXT_PUBLIC_API_URL,
+      }),
+      NEXT_PUBLIC_API_URL,
+    );
+  }
+
+  for (const NEXT_PUBLIC_API_URL of [
+    'http://192.168.1.20:8080',
+    'http://charitypilot.internal:8080',
+    'ftp://localhost:8080',
+    'https://user@example-tailnet.ts.net',
+    'https://example-tailnet.ts.net/api',
+    'https://example-tailnet.ts.net?token=secret',
+  ]) {
+    assert.throws(
+      () => getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+        NEXT_PUBLIC_API_URL,
+      }),
+      /must be an origin-only|must use https:\/\/ or exact loopback http:\/\//,
+      NEXT_PUBLIC_API_URL,
+    );
+  }
+});
+
+test('personal-server production requires its exact internal Docker API origin', () => {
+  const baseEnv = {
+    NODE_ENV: 'production',
+    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+    NEXT_PUBLIC_API_URL: 'http://localhost:8080',
+  };
+
+  assert.throws(
+    () => getServerApiBaseUrl(baseEnv),
+    /CHARITYPILOT_INTERNAL_API_URL must be set for personal-server production/,
+  );
+
+  for (const CHARITYPILOT_INTERNAL_API_URL of [
+    'http://localhost:3002',
+    'http://api:3003',
+    'http://api:3002/api/v1',
+    'https://api:3002',
+  ]) {
+    assert.throws(
+      () => getServerApiBaseUrl({ ...baseEnv, CHARITYPILOT_INTERNAL_API_URL }),
+      /must use the exact personal-server internal origin http:\/\/api:3002/,
+      CHARITYPILOT_INTERNAL_API_URL,
+    );
+  }
+});
+
+test('lookalike personal-server markers cannot bypass canonical public-production validation', () => {
+  assert.throws(
+    () => getApiBaseUrl({
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server-preview',
+      NEXT_PUBLIC_API_URL: 'http://localhost:8080',
+    }),
+    /NEXT_PUBLIC_API_URL must use https:\/\/ in production/,
+  );
+});
+
 test('a lookalike isolated marker cannot bypass canonical production validation', () => {
   assert.throws(
     () => getApiBaseUrl({

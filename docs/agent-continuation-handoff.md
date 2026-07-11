@@ -286,6 +286,101 @@ Local personal-use safety before heavy work:
   disposable tenant/app tables.
 - This local safety gate does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
 
+### Compiled one-charity personal server added on 2026-07-11
+
+The user's immediate operating goal is now explicitly separate from the public
+SaaS launch: run CharityPilot for one charity on a trusted Windows computer,
+with optional private access for named directors, while retaining the existing
+multi-organisation/provider/public-production work for a later VM or commercial
+deployment.
+
+The implemented front door is **Caddy**. Windows is only the host; Docker
+Desktop/WSL 2 runs Caddy, the compiled Next.js server, the compiled Fastify API,
+PostgreSQL and the document volume. Caddy alone publishes
+`127.0.0.1:8080`, routes `/api/v1/*` to Fastify and all other paths to Next.js.
+There is no IIS dependency, no API/database host port, no source bind mount and
+no development watcher in this profile. Tailscale Serve may terminate private
+HTTPS and proxy to that loopback Caddy port; Funnel and router forwarding are
+out of scope/prohibited.
+
+Source-of-truth files:
+
+- `docs/personal-server-deployment.md` - complete Windows/Tailscale/accounts/
+  lifecycle/backup/recovery/security/VM-migration runbook;
+- `compose.personal-server.yml` and `caddy/Caddyfile.personal-server` - isolated
+  compiled runtime;
+- `.env.personal-server.example` - non-secret field contract; the generated
+  `.env.personal-server` is Git-ignored;
+- `scripts/personal-server.mjs` - supported `init`, `start`, `status`, `stop`,
+  `backup`, `update`, `reset-link`, and emergency `reset-password` operations;
+- API `personal-server` env/initializer/account utilities - fail-closed private
+  startup, empty-database one-charity initialization, manual invitation and
+  hash-only one-hour reset links; and
+- `AGENTS.md`, `README.md`, and the architecture map - permanent discovery
+  pointers and the answer to which web server is used.
+
+Safety invariants:
+
+- routine `start` never builds, migrates or seeds;
+- initialization creates one blank organisation, one verified Owner, an active
+  Complete entitlement and governance reference data, and refuses nonempty
+  Organisation/User state;
+- the Owner password and account recovery secrets are transient and are never
+  persisted to `.env.personal-server`;
+- registration and provider-backed email recovery fail closed; directors use
+  Owner/Admin-created fragment invitation links and host-issued fragment reset
+  links;
+- billing UI/public signup are hidden or redirected and provider jobs remain
+  disabled, while the strict public-production validator is unchanged;
+- the fixed Docker gateway/Caddy addresses form a narrow trusted-proxy chain;
+  personal HTTPS refreshes, redirects and CSP use the validated configured
+  origin rather than the plaintext internal hop;
+- web and Caddy health checks probe the non-redirecting internal `/login` route,
+  so they never attempt to follow `/` out to a Tailscale hostname;
+- backups quiesce writers, restore-verify PostgreSQL, archive the matching
+  document volume, hash both artifacts and restore the prior service state; and
+- normal stop/update commands never delete the personal database or document
+  volumes.
+
+Current repository evidence:
+
+- API `726 / 726` passed;
+- web `363 / 363` passed;
+- personal wrapper/Compose contracts `21 / 21` passed;
+- default, `personal-init`, and `maintenance` Compose renders passed;
+- lint passed; and
+- wrapper secret/SAST scans passed across 597 files; and
+- the full production-tooling gate passed `746`, failed `0`, with `2`
+  Windows-only symbolic-link privilege skips (`748` total).
+
+Both public and personal-server native optimized web builds passed. Docker
+exported the personal migration and API runner images. A separate web-only
+Docker build returned no compile error but did not export its image within a
+15-minute bound on the already heavily loaded Docker Desktop daemon. Its
+orphaned compose client was stopped, Docker's long-lived service was preserved,
+and read-only inspection confirmed no personal containers, volumes or network.
+The installer was then changed to build `migrate`, `api` and `web` sequentially;
+its 21 safety contracts remained green. Do not describe the personal profile as
+live-certified until the web image and real initialization complete.
+An attempted `caddy:2-alpine` pull for binary Caddyfile validation failed at the
+registry blob download with `EOF`; no Caddy container remained. Static
+Caddy/trusted-proxy contracts and all Compose renders passed, but real binary
+validation therefore remains part of first initialization.
+
+No real `.env.personal-server`, Owner account, personal data, private Tailscale
+route or live personal-server container was created during this implementation.
+Before entering real records, initialize from a reviewed clean checkout, run a
+real second-device access check, create an encrypted off-host recovery set and
+complete the acceptance checklist in the runbook. A private-profile success is
+not public-production launch evidence and closes none of the external/provider,
+legal, pentest, recovery or final-signoff gates below.
+
+The updater creates a verified pre-update database/document set, but its v1
+manifest does not retain old application images or automate destructive schema
+rollback. A migration/start failure may intentionally leave writers stopped.
+Record the compatible commit/image identity and rehearse the runbook's deliberate
+restore procedure before treating updates as production-grade.
+
 Known current state from `npm run launch:status -- --json` on 2026-07-11:
 
 - Phase: `ENV_INCOMPLETE`

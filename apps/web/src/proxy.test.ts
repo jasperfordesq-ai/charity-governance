@@ -632,6 +632,113 @@ test("isolated production browser CSP and server auth validation use their disti
   );
 });
 
+test("personal-server production uses Caddy's public origin and the internal Fastify service", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
+  process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:8080";
+  process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3002";
+
+  const fetchCalls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    fetchCalls.push(input.toString());
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+
+  const response = await proxy(
+    new NextRequest("http://127.0.0.1:8080/dashboard", {
+      headers: {
+        host: "127.0.0.1:8080",
+        cookie: "charitypilot_access=personal-access; charitypilot_refresh=personal-refresh",
+      },
+    }),
+  );
+
+  assert.equal(response.headers.get("location"), null);
+  assert.deepEqual(fetchCalls, ["http://api:3002/api/v1/auth/me"]);
+  const csp = response.headers.get("Content-Security-Policy") ?? "";
+  assert.match(csp, /connect-src 'self' http:\/\/127\.0\.0\.1:8080(?:;|$)/);
+  assert.doesNotMatch(csp, /upgrade-insecure-requests|api\.charitypilot\.ie|unsafe-eval/);
+});
+
+test("personal-server production redirects public setup and billing entry points", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
+  process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:8080";
+  process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3002";
+
+  for (const [pathname, expectedPathname] of [
+    ["/", "/login"],
+    ["/register", "/login"],
+    ["/forgot-password", "/login"],
+    ["/billing", "/dashboard"],
+  ] as const) {
+    const response = await proxy(new NextRequest(`http://127.0.0.1:8080${pathname}`));
+    assert.equal(new URL(response.headers.get("location") ?? "").pathname, expectedPathname);
+  }
+});
+
+test("personal-server HTTPS uses the configured public origin across an internal HTTP proxy hop", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
+  process.env.NEXT_PUBLIC_API_URL =
+    "https://charitypilot-board.example-tailnet.ts.net";
+  process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3002";
+
+  const fetchCalls: Array<{ url: string; origin: string | null }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls.push({
+      url: input.toString(),
+      origin: new Headers(init?.headers).get("Origin"),
+    });
+    if (input.toString().endsWith("/api/v1/auth/me")) {
+      return new Response(null, { status: 401 });
+    }
+    return new Response(null, {
+      status: 401,
+      headers: deletedAuthCookieHeaders(),
+    });
+  }) as typeof fetch;
+
+  const response = await proxy(
+    new NextRequest("http://web:3003/dashboard?view=board", {
+      headers: {
+        host: "web:3003",
+        "x-forwarded-proto": "http",
+        cookie:
+          "charitypilot_access=expired-personal; charitypilot_refresh=personal-refresh",
+      },
+    }),
+  );
+
+  assert.deepEqual(fetchCalls, [
+    { url: "http://api:3002/api/v1/auth/me", origin: null },
+    {
+      url: "http://api:3002/api/v1/auth/refresh",
+      origin: "https://charitypilot-board.example-tailnet.ts.net",
+    },
+  ]);
+  const redirect = new URL(response.headers.get("location") ?? "");
+  assert.equal(redirect.origin, "https://charitypilot-board.example-tailnet.ts.net");
+  assert.equal(redirect.pathname, "/login");
+  assert.equal(redirect.searchParams.get("next"), "/dashboard?view=board");
+  const csp = response.headers.get("Content-Security-Policy") ?? "";
+  assert.match(
+    csp,
+    /connect-src 'self' https:\/\/charitypilot-board\.example-tailnet\.ts\.net(?:;|$)/,
+  );
+  assert.doesNotMatch(csp, /http:\/\/web:3003/);
+
+  const setupRedirect = await proxy(
+    new NextRequest("http://web:3003/register", {
+      headers: { host: "web:3003", "x-forwarded-proto": "http" },
+    }),
+  );
+  assert.equal(
+    setupRedirect.headers.get("location"),
+    "https://charitypilot-board.example-tailnet.ts.net/login",
+  );
+});
+
 test("a lookalike isolated marker cannot enable loopback production API access", async () => {
   process.env.NODE_ENV = "production";
   process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = "local-disposable-lookalike";

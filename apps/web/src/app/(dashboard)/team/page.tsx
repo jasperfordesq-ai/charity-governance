@@ -22,6 +22,8 @@ import { TeamSecurityAuditPanel } from './team-security-audit-panel';
 import { actionContent, apiErrorCode, replaceWithLoginAfterServerRevocation, type GovernanceAction } from './team-page-helpers';
 import { useTeamSessions } from './use-team-sessions';
 
+const IS_PERSONAL_SERVER = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+
 export default function TeamPage() {
   useDocumentTitle('Team');
   const router = useRouter();
@@ -43,6 +45,7 @@ export default function TeamPage() {
   const [securityError, setSecurityError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manualInviteUrl, setManualInviteUrl] = useState<string | null>(null);
   const [teamUnavailable, setTeamUnavailable] = useState(false);
   const teamRequestId = useRef(0);
   const securityRequestId = useRef(0);
@@ -171,12 +174,19 @@ export default function TeamPage() {
     setSaving(true);
     setMessage(null);
     setError(null);
+    setManualInviteUrl(null);
 
     try {
-      await api.post('/team/invites', { email, role });
+      const { data } = await api.post<{ accepted: boolean; manualInviteUrl?: string }>('/team/invites', { email, role });
+      const inviteUrl = IS_PERSONAL_SERVER && typeof data.manualInviteUrl === 'string' ? data.manualInviteUrl : null;
+      setManualInviteUrl(inviteUrl);
       setEmail('');
       setRole(UserRole.MEMBER);
-      setMessage('Invite sent. CharityPilot will record whether the email was delivered when reminders are configured.');
+      setMessage(inviteUrl
+        ? 'Invitation created. Copy the private link below and send it through a trusted channel.'
+        : IS_PERSONAL_SERVER
+          ? 'No new invitation link was issued. Revoke an existing pending invite before creating a replacement.'
+          : 'Invite sent. CharityPilot will record whether the email was delivered when reminders are configured.');
       await fetchTeam();
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Invite could not be sent.'));
@@ -378,6 +388,8 @@ export default function TeamPage() {
           inviteDisabledReason={inviteDisabledReason}
           inviteMember={inviteMember}
           inviteRoleHint={inviteRoleHint}
+          manualInviteUrl={manualInviteUrl}
+          onDismissManualInvite={() => setManualInviteUrl(null)}
           permissionDisabledReason={permissionDisabledReason}
           managementDisabled={managementDisabled}
           revokeInvite={revokeInvite}

@@ -149,3 +149,50 @@ test('isolated production trusts only the exact managed-runner document origin a
     else process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = previousE2eMode;
   }
 });
+
+test('personal-server production trusts only its configured authenticated document origin', () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousDeploymentMode = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;
+  const previousApiUrl = process.env.NEXT_PUBLIC_API_URL;
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = 'personal-server';
+    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:8080';
+
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://127.0.0.1:8080/api/v1/documents/doc-1/download'),
+      'http://127.0.0.1:8080/api/v1/documents/doc-1/download',
+    );
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://localhost:8080/api/v1/documents/doc-1/download'),
+      null,
+    );
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://127.0.0.1:8080/api/v1/documents/doc-1/download?token=secret'),
+      null,
+    );
+
+    process.env.NEXT_PUBLIC_API_URL = 'http://192.168.1.20:8080';
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://192.168.1.20:8080/api/v1/documents/doc-1/download'),
+      null,
+    );
+
+    process.env.NEXT_PUBLIC_API_URL = 'https://charitypilot.example-tailnet.ts.net';
+    assert.equal(
+      getTrustedDocumentDownloadUrl('https://charitypilot.example-tailnet.ts.net/api/v1/documents/doc-1/download'),
+      'https://charitypilot.example-tailnet.ts.net/api/v1/documents/doc-1/download',
+    );
+    assert.equal(
+      getTrustedDocumentDownloadUrl('https://api.charitypilot.ie/api/v1/documents/doc-1/download'),
+      null,
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousDeploymentMode === undefined) delete process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;
+    else process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = previousDeploymentMode;
+    if (previousApiUrl === undefined) delete process.env.NEXT_PUBLIC_API_URL;
+    else process.env.NEXT_PUBLIC_API_URL = previousApiUrl;
+  }
+});

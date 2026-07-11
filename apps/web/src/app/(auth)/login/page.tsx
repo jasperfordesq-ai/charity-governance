@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -59,7 +60,9 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-950 dark:text-white">Welcome back</h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              Sign in to your CharityPilot account
+              {personalServer
+                ? 'Sign in to your charity\'s private CharityPilot server'
+                : 'Sign in to your CharityPilot account'}
             </p>
           </div>
 
@@ -106,11 +109,17 @@ export default function LoginPage() {
                 }
               />
 
-              <div className="flex justify-end">
-                <Link href="/forgot-password" className="text-sm text-teal-primary dark:text-teal-bright font-medium hover:underline">
-                  Forgot your password?
-                </Link>
-              </div>
+              {personalServer ? (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Ask the server owner for an account or password-reset link. Public registration and email recovery are disabled on this private server.
+                </p>
+              ) : (
+                <div className="flex justify-end">
+                  <Link href="/forgot-password" className="text-sm text-teal-primary dark:text-teal-bright font-medium hover:underline">
+                    Forgot your password?
+                  </Link>
+                </div>
+              )}
 
               <Button
                 type="submit"
@@ -123,12 +132,14 @@ export default function LoginPage() {
               </Button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-300">
-            Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-teal-primary dark:text-teal-bright font-semibold hover:underline">
-              Start your free trial
-            </Link>
-          </p>
+          {!personalServer ? (
+            <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-300">
+              Don&apos;t have an account?{' '}
+              <Link href="/register" className="text-teal-primary dark:text-teal-bright font-semibold hover:underline">
+                Start your free trial
+              </Link>
+            </p>
+          ) : null}
         </CardBody>
       </Card>
     </div>

@@ -11,6 +11,7 @@ import { FieldGroup, FormHint } from '@/components/ui/forms';
 import { EmptyState, PermissionHint } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { ROLE_META, formatDate, inviteStatus } from './team-display';
+import { CopyLinkButton } from '@/components/copy-link-button';
 
 export function TeamInvitesPanel({
   allowedInviteRoles,
@@ -20,6 +21,8 @@ export function TeamInvitesPanel({
   inviteDisabledReason,
   inviteMember,
   inviteRoleHint,
+  manualInviteUrl,
+  onDismissManualInvite,
   permissionDisabledReason,
   managementDisabled,
   revokeInvite,
@@ -37,6 +40,8 @@ export function TeamInvitesPanel({
   inviteDisabledReason: string;
   inviteMember: (event: FormEvent) => void;
   inviteRoleHint: string;
+  manualInviteUrl: string | null;
+  onDismissManualInvite: () => void;
   permissionDisabledReason: string;
   managementDisabled: boolean;
   revokeInvite: (inviteId: string) => void;
@@ -91,6 +96,26 @@ export function TeamInvitesPanel({
           </Button>
         </FieldGroup>
       </form>
+
+      {manualInviteUrl ? (
+        <AppSection
+          title="Copy this private invitation now"
+          description="This bearer link is shown only after creation. Send it to the intended director through a trusted channel; anyone holding it can use the invitation until it expires or is revoked."
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              aria-label="Private invitation link"
+              value={manualInviteUrl}
+              isReadOnly
+              className="min-w-0 flex-1"
+            />
+            <CopyLinkButton url={manualInviteUrl} />
+          </div>
+          <Button type="button" size="sm" variant="flat" onPress={onDismissManualInvite}>
+            Dismiss link
+          </Button>
+        </AppSection>
+      ) : null}
 
       <AppSection title="Pending invites" description="Pending invites can be revoked by owners or admins until accepted or expired.">
         {!team?.invites.length ? (

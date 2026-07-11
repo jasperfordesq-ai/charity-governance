@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createContentSecurityPolicy } from "./lib/content-security-policy";
-import { getServerApiBaseUrl } from "./lib/api-config";
+import {
+  getApiBaseUrl,
+  getServerApiBaseUrl,
+  isPersonalServerProduction,
+} from "./lib/api-config";
 import { isProtectedAppPath } from "./lib/protected-routes";
 
 const AUTH_COOKIE_NAMES = [
@@ -71,6 +75,38 @@ function createApiAuthUrl(pathname: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function isPersonalServerRuntime(): boolean {
+  return isPersonalServerProduction({
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+      process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+  });
+}
+
+function personalServerPublicOrigin(): string | null {
+  if (!isPersonalServerRuntime()) return null;
+
+  try {
+    // Personal-server mode deliberately uses one public origin for both the web
+    // application and browser API. Use that fail-closed configuration instead
+    // of the internal HTTP hop seen after Tailscale/Cloudflare terminates TLS.
+    return getApiBaseUrl();
+  } catch {
+    return null;
+  }
+}
+
+function externalRequestUrl(request: NextRequest): URL {
+  const configuredOrigin = personalServerPublicOrigin();
+  if (!configuredOrigin) return request.nextUrl.clone();
+
+  const externalUrl = new URL(configuredOrigin);
+  externalUrl.pathname = request.nextUrl.pathname;
+  externalUrl.search = request.nextUrl.search;
+  externalUrl.hash = request.nextUrl.hash;
+  return externalUrl;
 }
 
 function isSetCookieBoundary(header: string, commaIndex: number): boolean {
@@ -186,9 +222,14 @@ function parseSetCookieHeader(header: string): ParsedSetCookie | null {
 
 function hasExpectedAuthCookieScope(cookie: ParsedSetCookie): boolean {
   const sameSite = cookie.attributes.get("samesite");
-  const secureRequired =
-    process.env.NODE_ENV === "production" &&
-    process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE !== ISOLATED_E2E_MODE;
+  const personalServer = isPersonalServerProduction({
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+      process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+  });
+  const secureRequired = process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE !== ISOLATED_E2E_MODE &&
+    (!personalServer || process.env.NEXT_PUBLIC_API_URL?.startsWith("https://"));
 
   return (
     cookie.attributes.get("path") === "/" &&
@@ -269,13 +310,15 @@ async function validateProtectedAuthSession(
   const refreshUrl = createApiAuthUrl("/api/v1/auth/refresh");
   if (!refreshUrl) return unavailableAuthSession();
 
+  const refreshOrigin = personalServerPublicOrigin() ?? request.nextUrl.origin;
+
   try {
     const response = await fetch(refreshUrl, {
       method: "POST",
       headers: {
         Cookie: cookieHeader,
         "Content-Type": "application/json",
-        Origin: request.nextUrl.origin,
+        Origin: refreshOrigin,
       },
       body: "{}",
       cache: "no-store",
@@ -341,6 +384,9 @@ function createNonce(): string {
 }
 
 function requestWebOrigin(request: NextRequest): string | undefined {
+  const configuredOrigin = personalServerPublicOrigin();
+  if (configuredOrigin) return configuredOrigin;
+
   const host = request.headers.get("host")?.trim();
   if (!host) return undefined;
 
@@ -361,6 +407,11 @@ function createRequestContentSecurityPolicy(
     isIsolatedE2e:
       process.env.NODE_ENV === "production" &&
       process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE === ISOLATED_E2E_MODE,
+    isPersonalServer: isPersonalServerProduction({
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+        process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+    }),
     apiUrl: process.env.NEXT_PUBLIC_API_URL,
     webUrl: requestWebOrigin(request),
   });
@@ -405,7 +456,7 @@ function redirectSensitiveQueryToken(
   const token = request.nextUrl.searchParams.get("token");
   if (!token) return null;
 
-  const redirectUrl = request.nextUrl.clone();
+  const redirectUrl = externalRequestUrl(request);
   redirectUrl.searchParams.delete("token");
 
   const fragmentParams = new URLSearchParams(
@@ -428,7 +479,7 @@ function redirectToLogin(
   setCookieHeaders: string[] = [],
 ): NextResponse {
   const { pathname, search } = request.nextUrl;
-  const loginUrl = request.nextUrl.clone();
+  const loginUrl = externalRequestUrl(request);
   loginUrl.pathname = "/login";
   loginUrl.search = "";
   loginUrl.searchParams.set("next", `${pathname}${search}`);
@@ -458,6 +509,25 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const nonce = createNonce();
   const csp = createRequestContentSecurityPolicy(request, nonce);
+
+  if (isPersonalServerProduction({
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+      process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+  })) {
+    const destination = pathname === "/" || pathname === "/register" || pathname === "/forgot-password"
+      ? "/login"
+      : pathname === "/billing"
+        ? "/dashboard"
+        : null;
+    if (destination) {
+      const redirectUrl = externalRequestUrl(request);
+      redirectUrl.pathname = destination;
+      redirectUrl.search = "";
+      return addContentSecurityPolicy(NextResponse.redirect(redirectUrl), csp);
+    }
+  }
+
   const sensitiveTokenRedirect = redirectSensitiveQueryToken(request, csp);
   if (sensitiveTokenRedirect) return sensitiveTokenRedirect;
 

@@ -11,6 +11,18 @@ function resolveNextDistDir(): string {
   return distDir;
 }
 
+function personalServerOriginUsesHttps(): boolean {
+  if (process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE !== 'personal-server') {
+    return false;
+  }
+
+  try {
+    return new URL(process.env.NEXT_PUBLIC_API_URL ?? '').protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 const nextConfig: NextConfig = {
   agentRules: false,
   allowedDevOrigins: ['127.0.0.1'],
@@ -56,10 +68,13 @@ const nextConfig: NextConfig = {
       },
     ];
 
-    if (process.env.NODE_ENV === 'production') {
+    const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+    if (process.env.NODE_ENV === 'production' && (!personalServer || personalServerOriginUsesHttps())) {
       securityHeaders.push({
         key: 'Strict-Transport-Security',
-        value: 'max-age=63072000; includeSubDomains; preload',
+        value: personalServer
+          ? 'max-age=31536000'
+          : 'max-age=63072000; includeSubDomains; preload',
       });
     }
 

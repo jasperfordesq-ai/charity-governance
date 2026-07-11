@@ -1,6 +1,7 @@
 import {
   ISOLATED_E2E_BROWSER_API_ORIGIN,
   isIsolatedE2eProduction,
+  isPersonalServerProduction,
 } from './api-config';
 
 const STRIPE_REDIRECT_ORIGINS = new Set([
@@ -76,9 +77,25 @@ function isLocalApiDocumentDownloadUrl(url: URL): boolean {
       NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE,
     }) &&
     url.origin === ISOLATED_E2E_BROWSER_API_ORIGIN;
+  const configuredPersonalOrigin = parseUrl(process.env.NEXT_PUBLIC_API_URL);
+  const isExactPersonalServerOrigin =
+    isPersonalServerProduction({
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+        process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+    }) &&
+    configuredPersonalOrigin !== null &&
+    configuredPersonalOrigin.origin === process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') &&
+    !configuredPersonalOrigin.username &&
+    !configuredPersonalOrigin.password &&
+    (
+      configuredPersonalOrigin.protocol === 'https:' ||
+      (configuredPersonalOrigin.protocol === 'http:' && isLoopbackHostname(configuredPersonalOrigin.hostname))
+    ) &&
+    url.origin === configuredPersonalOrigin.origin;
 
   return (
-    (isDevelopmentLoopback || isExactIsolatedProductionOrigin) &&
+    (isDevelopmentLoopback || isExactIsolatedProductionOrigin || isExactPersonalServerOrigin) &&
     isDocumentDownloadRoute(url)
   );
 }
@@ -135,6 +152,14 @@ export function getTrustedDocumentDownloadUrl(
 
   if (isLocalApiDocumentDownloadUrl(url)) {
     return url.toString();
+  }
+
+  if (isPersonalServerProduction({
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+      process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+  })) {
+    return null;
   }
 
   if (

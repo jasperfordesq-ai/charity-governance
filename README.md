@@ -49,6 +49,42 @@ compose*.yml      Docker Compose: local dev stack and production stack
 
 ---
 
+## Private personal server on Windows
+
+For one charity using a Windows computer as a small private server, use the
+compiled `personal-server` profile rather than the source-mounted development
+stack. Windows is the host; it does not need IIS or Windows Server. Docker
+Desktop runs these services:
+
+- **Caddy** is the only front-door web server and the only container with a
+  host port (`127.0.0.1:8080` by default).
+- **Next.js** serves the compiled website and application pages.
+- **Fastify** serves `/api/v1/*`.
+- **PostgreSQL** stores accounts and governance records; a separate persistent
+  volume stores uploaded documents.
+
+Caddy routes `/api/v1/*` to Fastify and everything else to Next.js, so browsers
+use one exact origin. Normal start reuses compiled images and persistent data;
+it does not compile pages, watch Windows files, migrate, or seed demo data.
+
+The first-install helper creates one empty charity workspace, one verified
+Owner and local Complete access. It prints a generated Owner password once
+without storing that password in `.env.personal-server`:
+
+```powershell
+npm run personal:server:init -- --owner-email=owner@example.org --owner-name="Owner Name" --organisation-name="Charity Name" --origin=http://localhost:8080
+```
+
+For access by other directors, configure the profile with the exact private
+Tailscale HTTPS origin instead of the loopback origin, then point Tailscale
+Serve at Caddy. Do not forward a router port or use Tailscale Funnel.
+
+The complete installation, private-access, account, backup, recovery, update,
+security and VM-migration runbook is
+[`docs/personal-server-deployment.md`](docs/personal-server-deployment.md).
+
+---
+
 ## Local development
 
 **Prerequisites:** Node.js ≥ 22 and npm. Docker Desktop is optional but is the
@@ -122,6 +158,15 @@ The API runs on <http://localhost:3002> and the web app on
 | `npm run db:seed -w @charitypilot/api` | Seed reference/demo data |
 | `npm run security:scan` | Secret + static analysis scan |
 | `npm run personal:ready` | Local personal-use readiness gate; no live payments or production providers |
+| `npm run personal:server:init -- --help` | Show safe first-install options for the compiled private server |
+| `npm run personal:server:start` | Start the compiled private server without migration or seeding |
+| `npm run personal:server:status` | Show private-server health and the newest completed recovery-set name in the default backup root |
+| `npm run personal:server:backup` | Create a matched database-and-document recovery set |
+| `npm run personal:server:update` | Back up, build, migrate and restart during a deliberate maintenance window |
+| `npm run personal:server:stop` | Gracefully stop services without deleting persistent volumes |
+| `npm run personal:server:reset-link -- --email=name@example.org` | Issue a one-hour private password-reset link for one active account |
+| `npm run personal:server:reset-password -- --email=name@example.org` | Emergency fallback: set a generated replacement password and revoke that account's sessions |
+| `npm run test:personal-server` | Validate the private profile and operator safety contracts without starting Docker |
 | `npm run launch:status` | Show where you are in the launch process and the next step |
 
 ---

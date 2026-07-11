@@ -7,6 +7,8 @@ import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { ShieldCheck } from 'lucide-react';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
+  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+
   return (
     <div className="min-h-screen flex flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Skip to content — a11y */}
@@ -34,12 +36,14 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               >
                 Features
               </Link>
-              <Link
-                href="/pricing"
-                className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
-              >
-                Pricing
-              </Link>
+              {!personalServer ? (
+                <Link
+                  href="/pricing"
+                  className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
+                >
+                  Pricing
+                </Link>
+              ) : null}
               <Link
                 href="/blog"
                 className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
@@ -62,15 +66,15 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
 
             {/* Desktop CTA */}
             <Link
-              href="/register"
+              href={personalServer ? '/login' : '/register'}
               className={primaryActionButtonClasses('hidden items-center rounded-md px-5 py-2.5 text-sm font-semibold transition-colors md:inline-flex')}
             >
-              Start free trial
+              {personalServer ? 'Open workspace' : 'Start free trial'}
             </Link>
 
             {/* Mobile hamburger */}
             <div className="dark:[&_button]:text-gray-300 dark:[&_button:hover]:bg-gray-800 dark:[&_button:hover]:text-gray-100 dark:[&_.absolute]:bg-gray-950 dark:[&_.absolute]:border-gray-800 dark:[&_nav>a]:text-gray-200 dark:[&_nav>a:hover]:bg-gray-900">
-              <MobileNav />
+              <MobileNav personalServer={personalServer} />
             </div>
           </div>
         </div>
@@ -88,8 +92,9 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <div className="md:col-span-2">
               <p className="text-xl font-bold text-white mb-3">CharityPilot</p>
               <p className="text-sm leading-relaxed max-w-sm text-gray-400 dark:text-gray-300">
-                The affordable, Ireland-specific governance compliance tool for registered
-                charities. A product of Project Nexus Ltd, Skibbereen, Co. Cork.
+                {personalServer
+                  ? 'A private, single-charity CharityPilot workspace served from this organisation\'s own computer.'
+                  : 'The affordable, Ireland-specific governance compliance tool for registered charities. A product of Project Nexus Ltd, Skibbereen, Co. Cork.'}
               </p>
             </div>
 
@@ -109,11 +114,13 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                     Features
                   </Link>
                 </li>
-                <li>
-                  <Link href="/pricing" className="hover:text-white dark:hover:text-teal-bright transition-colors">
-                    Pricing
-                  </Link>
-                </li>
+                {!personalServer ? (
+                  <li>
+                    <Link href="/pricing" className="hover:text-white dark:hover:text-teal-bright transition-colors">
+                      Pricing
+                    </Link>
+                  </li>
+                ) : null}
                 <li>
                   <Link href="/blog" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                     Blog

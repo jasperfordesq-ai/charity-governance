@@ -20,7 +20,7 @@ import { teamRoutes } from './routes/team/index.js';
 import { healthRoutes } from './routes/health/index.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
 import { startCronJobs } from './utils/cron.js';
-import { validateProductionEnv } from './utils/env.js';
+import { validateRuntimeEnv } from './utils/personal-server-env.js';
 import { apiLoggerOptionsForEnvironment } from './utils/logger.js';
 import { parsePort } from './utils/port.js';
 import { normaliseOrigin } from './utils/request-origin.js';
@@ -40,7 +40,7 @@ const trustedProxyAddresses = (process.env.TRUSTED_PROXY_ADDRESSES ?? '')
   .map((address) => address.trim())
   .filter(Boolean);
 
-validateProductionEnv();
+validateRuntimeEnv();
 
 const app = Fastify({
   logger: apiLoggerOptionsForEnvironment(environment),

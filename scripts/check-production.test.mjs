@@ -3705,16 +3705,22 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /cosign signature verification/);
 });
 
-test('web Docker build requires only the production HTTPS API origin before Next build', () => {
+test('web Docker build keeps canonical public production strict while explicitly allowing the personal profile', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
 
   assertDockerfileUsesDigestPinnedNodeBase(dockerfile, 'apps/web/Dockerfile');
   assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_API_URL/);
+  assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=public-production/);
   assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_API_URL=\$NEXT_PUBLIC_API_URL/);
-  assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_API_URL'/);
+  assert.match(
+    dockerfile,
+    /ENV\s+NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=\$NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE/,
+  );
+  assert.match(dockerfile, /mode==='personal-server'/);
+  assert.match(dockerfile, /url\.protocol!=='https:'&&!\(url\.protocol==='http:'&&loopback\)/);
   assert.doesNotMatch(dockerfile, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(dockerfile, /api\.charitypilot\.ie/);
-  assert.match(dockerfile, /host\)=>host==='api\.charitypilot\.ie'/);
+  assert.match(dockerfile, /host!=='api\.charitypilot\.ie'/);
   assert.doesNotMatch(dockerfile, /host\.endsWith\('\.charitypilot\.ie'\)/);
   assert.match(dockerfile, /origin-only CharityPilot production URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);
@@ -4171,7 +4177,10 @@ test('web proxy validates protected sessions with API auth authority before rend
     '';
 
   assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
-  assert.match(proxy, /import \{ getServerApiBaseUrl \} from ["']\.\/lib\/api-config["']/);
+  assert.match(
+    proxy,
+    /import\s*\{\s*getApiBaseUrl,\s*getServerApiBaseUrl,\s*isPersonalServerProduction,?\s*\}\s*from ["']\.\/lib\/api-config["']/,
+  );
   assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(\)\)/);
   assert.doesNotMatch(proxy, /process\.env\.NEXT_PUBLIC_API_URL\?\.trim\(\)\s*\|\|/);
   assert.match(proxy, /type ProtectedAuthSession\s*=/);

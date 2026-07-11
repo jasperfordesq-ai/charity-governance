@@ -4,6 +4,7 @@ import { BillingService } from '../../services/billing.service.js';
 import { EmailService } from '../../services/email.service.js';
 import { StorageService, withReadinessTimeout } from '../../services/storage.service.js';
 import { isConfiguredSecret } from '../../utils/env.js';
+import { isPersonalServerDeployment } from '../../utils/personal-server.js';
 
 const READINESS_HEADER = 'x-charitypilot-readiness-key';
 const E2E_MARKER_VERSION = 1;
@@ -204,10 +205,12 @@ export async function healthRoutes(app: FastifyInstance) {
       storageBucketReachable: await storage.verifyBucket(),
     };
 
+    const providerChecksReady = isPersonalServerDeployment() || (
+      checks.billingConfigured && checks.emailConfigured
+    );
     const ready =
       database &&
-      checks.billingConfigured &&
-      checks.emailConfigured &&
+      providerChecksReady &&
       checks.storageConfigured &&
       checks.storageBucketReachable;
 

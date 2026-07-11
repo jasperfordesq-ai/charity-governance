@@ -1478,6 +1478,46 @@ Acceptance:
   denied, locked, disabled, slow-provider, success, mobile, desktop, light, dark,
   keyboard, and screen-reader-relevant states.
 
+## Separate private personal-server operating profile
+
+This audit continues to govern the future public/commercial launch. A separate
+`personal-server` profile was added on 2026-07-11 for the user's immediate
+single-charity Windows use; it must not be counted as remediation closure for a
+public-production issue or launch-evidence slot.
+
+Status: `LOCAL_CONTRACT_VERIFIED`, not live-deployment or public-launch proof.
+
+- Caddy is the only loopback-published web front door; it routes one browser
+  origin to the compiled Next.js and Fastify services.
+- The fixed Docker gateway/Caddy addresses define the trusted proxy chain;
+  private HTTPS redirects, CSP and refresh-origin validation stay bound to the
+  configured public origin, and internal health probes use `/login` without
+  following the public redirect.
+- PostgreSQL/documents use isolated personal-server volumes; the development,
+  E2E and public-production stores are not reused.
+- One-shot initialization, provider-free private auth/invitations, safe account
+  reset links, lifecycle operations and paired database/document backup tooling
+  are implemented.
+- `726 / 726` API, `363 / 363` web and `21 / 21` personal profile contracts
+  passed, alongside all three Compose config renders and lint.
+- Native public/personal optimized web builds passed and Docker exported the
+  migration/API images. Web-image export exceeded a 15-minute local bound on a
+  loaded Docker Desktop host, so live image/runtime certification remains open;
+  the installer now builds targets sequentially.
+- A separate actual-Caddy validation attempt was blocked by a transient Docker
+  registry blob-download `EOF`; static Caddy/trusted-proxy contracts passed, so
+  binary validation remains part of real initialization rather than claimed
+  local evidence.
+- No real personal-server initialization, second-device Tailscale test,
+  off-host encrypted backup or full application restore rehearsal has yet been
+  claimed.
+
+The authoritative operating runbook is
+`docs/personal-server-deployment.md`. Do not weaken organisation scoping or the
+strict public validator to simplify this adapter. A later VM migration should
+move the same schema/data through a verified recovery set and then satisfy this
+audit's public-production gates independently.
+
 ## External and Repository-Owner Blockers
 
 These must remain visible and must not cause an autonomous session to stop while

@@ -3,6 +3,9 @@ import { ALL_POSTS } from '@/lib/blog';
 import { absoluteSiteUrl } from '@/lib/site-origin';
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+  if (personalServer) return [];
+
   const staticPages = [
     { url: absoluteSiteUrl(), lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 1 },
     { url: absoluteSiteUrl('/features'), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.8 },

@@ -2,6 +2,7 @@ type CreateContentSecurityPolicyOptions = {
   nonce: string;
   isDevelopment: boolean;
   isIsolatedE2e?: boolean;
+  isPersonalServer?: boolean;
   apiUrl?: string;
   webUrl?: string;
 };
@@ -11,6 +12,11 @@ const DEFAULT_DEVELOPMENT_API_ORIGIN = 'http://localhost:3002';
 const DEFAULT_DEVELOPMENT_WEB_ORIGIN = 'http://localhost:3003';
 const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
 const DEVELOPMENT_API_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1';
+}
 
 function developmentApiConnectSource(apiUrl?: string): string | undefined {
   const configuredUrl = apiUrl?.trim();
@@ -86,10 +92,28 @@ function isolatedE2eApiConnectSource(apiUrl?: string): string | undefined {
     : undefined;
 }
 
+function personalServerApiConnectSource(apiUrl?: string): string | undefined {
+  const configuredUrl = apiUrl?.trim();
+  if (!configuredUrl) return undefined;
+
+  try {
+    const url = new URL(configuredUrl);
+    const normalizedConfiguredUrl = configuredUrl.replace(/\/+$/, '');
+    const validProtocol = url.protocol === 'https:' ||
+      (url.protocol === 'http:' && isLoopbackHostname(url.hostname));
+    return validProtocol && url.origin === normalizedConfiguredUrl && !url.username && !url.password
+      ? url.origin
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createContentSecurityPolicy({
   nonce,
   isDevelopment,
   isIsolatedE2e = false,
+  isPersonalServer = false,
   apiUrl,
   webUrl,
 }: CreateContentSecurityPolicyOptions): string {
@@ -102,7 +126,9 @@ export function createContentSecurityPolicy({
         ]
       : isIsolatedE2e
         ? ["'self'", isolatedE2eApiConnectSource(apiUrl)]
-        : ["'self'", productionApiConnectSource(apiUrl)]
+        : isPersonalServer
+          ? ["'self'", personalServerApiConnectSource(apiUrl)]
+          : ["'self'", productionApiConnectSource(apiUrl)]
   )
     .filter((source): source is string => Boolean(source))
     .join(' ');
@@ -123,6 +149,12 @@ export function createContentSecurityPolicy({
     "img-src 'self' data: blob:",
     `connect-src ${connectSrc}`,
     "form-action 'self'",
-    ...(isDevelopment || isIsolatedE2e ? [] : ['upgrade-insecure-requests']),
+    ...(
+      isDevelopment ||
+      isIsolatedE2e ||
+      (isPersonalServer && personalServerApiConnectSource(apiUrl)?.startsWith('http://'))
+        ? []
+        : ['upgrade-insecure-requests']
+    ),
   ].join('; ');
 }

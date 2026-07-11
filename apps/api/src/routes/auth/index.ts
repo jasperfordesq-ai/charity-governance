@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
 import { authIdentityGuard } from "../../middleware/auth.js";
@@ -24,6 +24,7 @@ import {
   bodyIdentifierRateLimit,
   refreshTokenRateLimit,
 } from "../../utils/identifier-rate-limit.js";
+import { isPersonalServerDeployment } from "../../utils/personal-server.js";
 
 function formatZodError(error: ZodError) {
   return {
@@ -36,6 +37,14 @@ function formatZodError(error: ZodError) {
   };
 }
 
+async function personalServerProviderAuthGuard(
+  _request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  if (!isPersonalServerDeployment()) return;
+  reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
+}
+
 export async function authRoutes(app: FastifyInstance) {
   const authService = new AuthService(app.prisma);
   const checkAuthMeCoarseIpRateLimit = app.hasDecorator("createRateLimit")
@@ -46,6 +55,11 @@ export async function authRoutes(app: FastifyInstance) {
     "/register",
     { config: { rateLimit: bodyIdentifierRateLimit(["email"]) } },
     async (request, reply) => {
+      if (isPersonalServerDeployment()) {
+        reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
+        return;
+      }
+
       try {
         const body = registerSchema.parse(request.body);
         const result = await authService.register(body);
@@ -182,7 +196,10 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post(
     "/forgot-password",
-    { config: { rateLimit: bodyIdentifierRateLimit(["email"]) } },
+    {
+      preHandler: [personalServerProviderAuthGuard],
+      config: { rateLimit: bodyIdentifierRateLimit(["email"]) },
+    },
     async (request, reply) => {
       try {
         const body = forgotPasswordSchema.parse(request.body);
@@ -202,7 +219,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post(
     "/resend-verification",
     {
-      preHandler: [authIdentityGuard],
+      preHandler: [personalServerProviderAuthGuard, authIdentityGuard],
       config: { rateLimit: authCredentialRateLimit() },
     },
     async (request, reply) => {

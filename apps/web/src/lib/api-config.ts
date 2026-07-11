@@ -3,9 +3,12 @@ const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
 export const ISOLATED_E2E_MODE = 'local-disposable';
 export const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
 const ISOLATED_E2E_INTERNAL_API_ORIGIN = 'http://api:3302';
+export const PERSONAL_SERVER_MODE = 'personal-server';
+export const PERSONAL_SERVER_INTERNAL_API_ORIGIN = 'http://api:3002';
 
 export type ApiEnv = {
   CHARITYPILOT_INTERNAL_API_URL?: string;
+  NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE?: string;
   NEXT_PUBLIC_API_URL?: string;
   NEXT_PUBLIC_CHARITYPILOT_E2E_MODE?: string;
   NODE_ENV?: string;
@@ -18,6 +21,13 @@ export function isIsolatedE2eProduction(env: ApiEnv): boolean {
   );
 }
 
+export function isPersonalServerProduction(env: ApiEnv): boolean {
+  return (
+    env.NODE_ENV === 'production' &&
+    env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === PERSONAL_SERVER_MODE
+  );
+}
+
 export function getApiBaseUrl(env: ApiEnv = process.env): string {
   const configuredUrl = env.NEXT_PUBLIC_API_URL?.trim();
 
@@ -27,6 +37,8 @@ export function getApiBaseUrl(env: ApiEnv = process.env): string {
     if (env.NODE_ENV === 'production') {
       if (isIsolatedE2eProduction(env)) {
         validateIsolatedE2eBrowserApiUrl(normalizedUrl);
+      } else if (isPersonalServerProduction(env)) {
+        validatePersonalServerBrowserApiUrl(normalizedUrl);
       } else {
         validateProductionApiUrl(normalizedUrl);
       }
@@ -55,7 +67,38 @@ export function getServerApiBaseUrl(env: ApiEnv = process.env): string {
     throw new Error('CHARITYPILOT_INTERNAL_API_URL must be set for isolated production E2E');
   }
 
+  if (isPersonalServerProduction(env)) {
+    throw new Error('CHARITYPILOT_INTERNAL_API_URL must be set for personal-server production');
+  }
+
   return getApiBaseUrl(env);
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1';
+}
+
+function validatePersonalServerBrowserApiUrl(value: string): void {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('NEXT_PUBLIC_API_URL must be a valid origin in personal-server production');
+  }
+
+  if (url.origin !== value || url.username || url.password) {
+    throw new Error('NEXT_PUBLIC_API_URL must be an origin-only URL in personal-server production');
+  }
+
+  const secureOrigin = url.protocol === 'https:';
+  const exactLoopbackHttpOrigin = url.protocol === 'http:' && isLoopbackHostname(url.hostname);
+  if (!secureOrigin && !exactLoopbackHttpOrigin) {
+    throw new Error(
+      'NEXT_PUBLIC_API_URL must use https:// or exact loopback http:// in personal-server production',
+    );
+  }
 }
 
 function validateIsolatedE2eBrowserApiUrl(value: string): void {
@@ -94,6 +137,15 @@ function validateServerApiUrl(value: string, env: ApiEnv): void {
       if (value !== ISOLATED_E2E_INTERNAL_API_ORIGIN) {
         throw new Error(
           `CHARITYPILOT_INTERNAL_API_URL must use the exact isolated E2E internal origin ${ISOLATED_E2E_INTERNAL_API_ORIGIN}`,
+        );
+      }
+      return;
+    }
+
+    if (isPersonalServerProduction(env)) {
+      if (value !== PERSONAL_SERVER_INTERNAL_API_ORIGIN) {
+        throw new Error(
+          `CHARITYPILOT_INTERNAL_API_URL must use the exact personal-server internal origin ${PERSONAL_SERVER_INTERNAL_API_ORIGIN}`,
         );
       }
       return;

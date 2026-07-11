@@ -14,7 +14,7 @@ const NAV_LINKS = [
   { href: '/login', label: 'Sign in' },
 ];
 
-export function MobileNav() {
+export function MobileNav({ personalServer = false }: { personalServer?: boolean }) {
   const [open, setOpen] = useState(false);
   const navId = 'marketing-mobile-navigation';
 
@@ -42,7 +42,7 @@ export function MobileNav() {
       {open && (
         <div className="absolute top-16 inset-x-0 bg-white border-y border-gray-200 shadow-lg z-50 dark:border-gray-800 dark:bg-gray-900">
           <nav id={navId} className="max-w-7xl mx-auto px-4 py-4 space-y-1" aria-label="Mobile navigation">
-            {NAV_LINKS.map((link) => (
+            {NAV_LINKS.filter((link) => !personalServer || link.href !== '/pricing').map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -54,11 +54,11 @@ export function MobileNav() {
             ))}
             <div className="pt-2 px-4">
               <Link
-                href="/register"
+                href={personalServer ? '/login' : '/register'}
                 onClick={() => setOpen(false)}
                 className={primaryActionButtonClasses('block w-full rounded-md py-3 text-center font-semibold transition-colors')}
               >
-                Start free trial
+                {personalServer ? 'Open workspace' : 'Start free trial'}
               </Link>
             </div>
           </nav>

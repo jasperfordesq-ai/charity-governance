@@ -6,6 +6,10 @@ import { EmailService } from './email.service.js';
 import { hashOpaqueToken, issueSessionTokensInTransaction } from './session-tokens.js';
 import { publicOrganisationSelect, type PublicOrganisationSource } from '../utils/public-dtos.js';
 import { hasSubscriptionAccess } from '../utils/subscription-access.js';
+import {
+  isPersonalServerDeployment,
+  personalServerManualInviteUrl,
+} from '../utils/personal-server.js';
 
 interface InviteTeamMemberData {
   email: string;
@@ -22,6 +26,7 @@ const SALT_ROUNDS = 12;
 const INVITE_EXPIRY_DAYS = 7;
 const INVALID_INVITE_MESSAGE = 'This invite is invalid or has expired';
 const TEAM_INVITE_ACCEPTED_MESSAGE = 'If the invite can be sent, we will email the recipient.';
+const PERSONAL_SERVER_INVITE_CREATED_MESSAGE = 'Invite created. Share the one-time link with the recipient.';
 const TEAM_MEMBER_LIMITS = {
   ESSENTIALS: 5,
   COMPLETE: null,
@@ -349,6 +354,16 @@ export class TeamService {
 
     const email = normalizeEmail(data.email);
     const inviteToken = crypto.randomBytes(32).toString('base64url');
+    const manualInviteUrl = isPersonalServerDeployment()
+      ? personalServerManualInviteUrl(inviteToken)
+      : null;
+    if (isPersonalServerDeployment() && !manualInviteUrl) {
+      throw new AppError(
+        500,
+        'PERSONAL_SERVER_ORIGIN_INVALID',
+        'Personal server invite origin is not configured safely',
+      );
+    }
     const client = this.prisma as unknown as TeamInviteClient;
     let inviteEmailPayload: { organisationName: string; inviterName: string } | null;
     try {
@@ -448,6 +463,10 @@ export class TeamService {
     }
 
     if (inviteEmailPayload) {
+      if (manualInviteUrl) {
+        return { message: PERSONAL_SERVER_INVITE_CREATED_MESSAGE, manualInviteUrl };
+      }
+
       void this.emailService.sendTeamInvite(
         email,
         inviteEmailPayload.organisationName,

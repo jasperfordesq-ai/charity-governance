@@ -45,9 +45,30 @@ the development database and every implicit database URL.
 
 The API binds to `0.0.0.0` by default (`apps/api/src/server.ts:88`) and logs `CharityPilot API running on http://${host}:${port}` once listening (`apps/api/src/server.ts:91-92`). It installs `SIGINT`/`SIGTERM` handlers for a guarded graceful shutdown via `app.close()` (`apps/api/src/server.ts:102-120`).
 
+### Compiled personal-server topology
+
+`compose.personal-server.yml` is a separate one-charity operating profile. It
+does not publish the development ports above. Caddy is its only host-facing web
+server and binds to `127.0.0.1:8080` by default. It routes `/api/v1/*` to the
+compiled Fastify container and all other paths to the compiled Next.js
+container. PostgreSQL and uploaded documents use personal-server-specific named
+volumes; no source tree or dependency directory is mounted into the runtime.
+On the fixed private bridge, Caddy trusts forwarding headers only from the exact
+Docker host gateway and Fastify trusts only Caddy's exact container address.
+For the Tailscale TLS-termination hop, the validated configured HTTPS origin is
+authoritative for Next.js refresh Origin headers, redirects and CSP; an internal
+plain-HTTP request URL cannot downgrade the browser-facing URL.
+
+The API still enforces organisation-scoped authorization, but the one-shot
+initializer permits only an empty database and creates exactly one organisation,
+one verified Owner and an active Complete entitlement. Routine start performs
+neither migration nor seeding. Registration and provider-backed recovery/email
+routes fail closed; director invitations and password recovery use explicit
+fragment-only links. See [Personal Server Deployment on Windows](../personal-server-deployment.md).
+
 ### API process startup
 
-The production entrypoint `apps/api/src/start.ts` defaults `NODE_ENV` to `production` and then dynamically imports `./server.js` (`apps/api/src/start.ts:1-3`); the `start` script runs `node dist/start.js` (`apps/api/package.json:10`). In development the API runs directly under `tsx --watch` against `src/server.ts` (`apps/api/package.json:7`). On boot, `server.ts` calls `validateProductionEnv()` (`apps/api/src/server.ts:42`), then registers plugins (error handler, security headers, cookies, browser-origin protection, a 100-requests-per-minute rate limit, multipart uploads, and the Prisma plugin) (`apps/api/src/server.ts:51-66`).
+The production entrypoint `apps/api/src/start.ts` defaults `NODE_ENV` to `production` and then dynamically imports `./server.js`; the `start` script runs `node dist/start.js`. In development the API runs directly under `tsx --watch` against `src/server.ts`. On boot, `server.ts` calls `validateRuntimeEnv()`: exact `personal-server` mode uses its local-appliance validator and every other production mode delegates to the strict public `validateProductionEnv()`. It then registers the error handler, security headers, cookies, browser-origin protection, global rate limit, multipart support, and Prisma plugin.
 
 ### API route surface
 

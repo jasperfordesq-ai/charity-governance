@@ -73,6 +73,53 @@ test('isolated production E2E CSP fails closed instead of trusting lookalike or 
   }
 });
 
+test('personal-server CSP permits its exact HTTPS origin and keeps production hardening', () => {
+  const csp = createContentSecurityPolicy({
+    nonce: 'test-nonce',
+    isDevelopment: false,
+    isPersonalServer: true,
+    apiUrl: 'https://charitypilot.example-tailnet.ts.net',
+    webUrl: 'https://charitypilot.example-tailnet.ts.net',
+  });
+
+  assert.match(csp, /connect-src 'self' https:\/\/charitypilot\.example-tailnet\.ts\.net(?:;|$)/);
+  assert.match(csp, /upgrade-insecure-requests/);
+  assert.doesNotMatch(csp, /api\.charitypilot\.ie|unsafe-eval|ws:\/\//);
+});
+
+test('personal-server CSP permits exact loopback HTTP without forcing an HTTPS upgrade', () => {
+  const csp = createContentSecurityPolicy({
+    nonce: 'test-nonce',
+    isDevelopment: false,
+    isPersonalServer: true,
+    apiUrl: 'http://127.0.0.1:8080',
+    webUrl: 'http://127.0.0.1:8080',
+  });
+
+  assert.match(csp, /connect-src 'self' http:\/\/127\.0\.0\.1:8080(?:;|$)/);
+  assert.doesNotMatch(csp, /upgrade-insecure-requests|api\.charitypilot\.ie|unsafe-eval|ws:\/\//);
+});
+
+test('personal-server CSP fails closed for non-loopback HTTP and non-origin values', () => {
+  for (const apiUrl of [
+    undefined,
+    'http://192.168.1.20:8080',
+    'http://charitypilot.internal:8080',
+    'https://example-tailnet.ts.net/path',
+    'https://user@example-tailnet.ts.net',
+  ]) {
+    const csp = createContentSecurityPolicy({
+      nonce: 'test-nonce',
+      isDevelopment: false,
+      isPersonalServer: true,
+      apiUrl,
+    });
+
+    assert.match(csp, /connect-src 'self'(?:;|$)/);
+    assert.doesNotMatch(csp, /192\.168\.1\.20|charitypilot\.internal|example-tailnet\.ts\.net/);
+  }
+});
+
 test('development CSP selects the configured isolated API origin without retaining the personal API', () => {
   const csp = createContentSecurityPolicy({
     nonce: 'test-nonce',
