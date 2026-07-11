@@ -1526,7 +1526,7 @@ test("runner keeps signal handling active through exact-project cleanup without 
   const source = readFileSync(
     join(ROOT, "scripts", "run-isolated-e2e.mjs"),
     "utf8",
-  );
+  ).replace(/\r\n/g, "\n");
   const shutdownBody = source.slice(
     source.indexOf("const requestShutdown ="),
     source.indexOf("const onSigint ="),
