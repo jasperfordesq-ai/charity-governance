@@ -16,7 +16,9 @@ test('organisation conditional triggers surface workflow prompts', async ({ owne
     (response) => /\/api\/v1\/organisation$/.test(response.url()) && response.request().method() === 'PATCH',
     { timeout: 30_000 },
   );
-  await ownerPage.getByRole('button', { name: 'Save profile' }).click();
+  const saveProfile = ownerPage.getByRole('button', { name: 'Save profile' });
+  await expect(saveProfile).toBeEnabled();
+  await saveProfile.click();
   await expect.poll(
     async () => (await saved).ok(),
     { message: 'organisation profile save should succeed', timeout: 30_000 },

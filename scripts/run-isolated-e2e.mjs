@@ -114,6 +114,8 @@ const EXACT_CHILD_PROBE_INTERVAL_MS = 25;
 const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;
 const DEFAULT_RUNNER_TIMEOUT_MS = 2_400_000;
 const MAX_RUNNER_TIMEOUT_MS = 7_200_000;
+const LOCAL_COMPOSE_BUILD_TIMEOUT_MS = 1_500_000;
+const LOCAL_RESIDUE_CHECK_TIMEOUT_MS = 120_000;
 const REMOTE_JANITOR_TIMEOUTS = Object.freeze({
   connect: 15_000,
   identity: 45_000,
@@ -2616,7 +2618,7 @@ export async function runIsolatedE2e(
             residue = await cleanupRunCommand("docker", args, {
               capture: true,
               env: composeChildEnv,
-              timeoutMs: 60_000,
+              timeoutMs: LOCAL_RESIDUE_CHECK_TIMEOUT_MS,
             });
           } catch (error) {
             throw recoveryFailure(
@@ -2757,7 +2759,7 @@ export async function runIsolatedE2e(
         "--builder",
         "default",
       ),
-      { env: composeChildEnv, timeoutMs: 900_000 },
+      { env: composeChildEnv, timeoutMs: LOCAL_COMPOSE_BUILD_TIMEOUT_MS },
     );
     shutdownController.signal.throwIfAborted();
     const builtAttestation = await (

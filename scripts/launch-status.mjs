@@ -86,9 +86,9 @@ const PRODUCTION_LAUNCH_COMMANDS = Object.freeze({
   deployedBrowserQaPreflight: 'npm run check:production:browser-qa-env',
   deployedBrowserQaPreflightJson: 'npm run check:production:browser-qa-env -- --json',
   deployPreflight: 'npm run deploy:preflight -- --production-env-file=.env.production',
-  deployProduction: 'npm run deploy:production -- --production-env-file=.env.production',
+  deployProduction: 'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers',
   rollbackRehearsal:
-    'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+    'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/secure/charitypilot/rollback-cutovers',
   releaseRunEvidence:
     'npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json',
   releaseRunEvidenceJson:

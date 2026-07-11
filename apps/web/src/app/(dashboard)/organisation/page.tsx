@@ -12,6 +12,7 @@ import { useOrganisationWorkflow } from './use-organisation-workflow';
 export default function OrganisationPage() {
   useDocumentTitle('Organisation');
   const {
+    canManage,
     charitablePurpose,
     completionItems,
     complexity,
@@ -19,20 +20,29 @@ export default function OrganisationPage() {
     conditionalObligationProfile,
     contactEmail,
     contactPhone,
+    croAnnualReturnDate,
+    croAnnualReturnDateConfirmed,
     croNumber,
     dateRegistered,
     dirtyStateLabel,
     financialYearEnd,
+    formValidationErrors,
     handleComplexityChange,
     handleConditionalFactChange,
+    handleCroAnnualReturnDateChange,
+    handleLegalFormChange,
     handlePurposeChange,
     handleSave,
+    incorporationDate,
     isDirty,
     isLoading,
-    lastAgmDate,
+    lastActualAgmDate,
+    lastUnanimousAnnualMemberResolutionDate,
     legalForm,
+    legalFormConfirmed,
     legalFormOptions,
     name,
+    memberCount,
     org,
     purposeOptions,
     profileSaveStatus,
@@ -44,11 +54,15 @@ export default function OrganisationPage() {
     selectedPurposes,
     setContactEmail,
     setContactPhone,
+    setCroAnnualReturnDateConfirmed,
     setCroNumber,
     setDateRegistered,
     setFinancialYearEnd,
-    setLastAgmDate,
-    setLegalForm,
+    setIncorporationDate,
+    setLastActualAgmDate,
+    setLastUnanimousAnnualMemberResolutionDate,
+    setLegalFormConfirmed,
+    setMemberCount,
     setName,
     setRcnNumber,
     setRegisteredAddress,
@@ -99,25 +113,35 @@ export default function OrganisationPage() {
       <OrganisationSetupSummary completionItems={completionItems} />
 
       <OrganisationProfileForm
+        canManage={canManage}
         charitablePurpose={charitablePurpose}
         completionItems={completionItems}
         complexity={complexity}
         conditionalObligationProfile={conditionalObligationProfile}
         contactEmail={contactEmail}
         contactPhone={contactPhone}
+        croAnnualReturnDate={croAnnualReturnDate}
+        croAnnualReturnDateConfirmed={croAnnualReturnDateConfirmed}
         croNumber={croNumber}
         dateRegistered={dateRegistered}
         dirtyStateLabel={dirtyStateLabel}
         financialYearEnd={financialYearEnd}
+        formValidationErrors={formValidationErrors}
         handleComplexityChange={handleComplexityChange}
         handleConditionalFactChange={handleConditionalFactChange}
+        handleCroAnnualReturnDateChange={handleCroAnnualReturnDateChange}
+        handleLegalFormChange={handleLegalFormChange}
         handlePurposeChange={handlePurposeChange}
         handleSave={handleSave}
+        incorporationDate={incorporationDate}
         isDirty={isDirty}
-        lastAgmDate={lastAgmDate}
+        lastActualAgmDate={lastActualAgmDate}
+        lastUnanimousAnnualMemberResolutionDate={lastUnanimousAnnualMemberResolutionDate}
         legalForm={legalForm}
+        legalFormConfirmed={legalFormConfirmed}
         legalFormOptions={legalFormOptions}
         name={name}
+        memberCount={memberCount}
         purposeOptions={purposeOptions}
         profileSaveStatus={profileSaveStatus}
         rcnNumber={rcnNumber}
@@ -127,11 +151,15 @@ export default function OrganisationPage() {
         selectedPurposes={selectedPurposes}
         setContactEmail={setContactEmail}
         setContactPhone={setContactPhone}
+        setCroAnnualReturnDateConfirmed={setCroAnnualReturnDateConfirmed}
         setCroNumber={setCroNumber}
         setDateRegistered={setDateRegistered}
         setFinancialYearEnd={setFinancialYearEnd}
-        setLastAgmDate={setLastAgmDate}
-        setLegalForm={setLegalForm}
+        setIncorporationDate={setIncorporationDate}
+        setLastActualAgmDate={setLastActualAgmDate}
+        setLastUnanimousAnnualMemberResolutionDate={setLastUnanimousAnnualMemberResolutionDate}
+        setLegalFormConfirmed={setLegalFormConfirmed}
+        setMemberCount={setMemberCount}
         setName={setName}
         setRcnNumber={setRcnNumber}
         setRegisteredAddress={setRegisteredAddress}

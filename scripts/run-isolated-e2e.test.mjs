@@ -1860,8 +1860,24 @@ test("runner-owned deadline cleans only its exact project and verifies zero Dock
     "unix:///var/run/docker.sock",
   ]);
   assert.ok(build?.includes("--builder") && build.includes("default"));
+  assert.equal(
+    commandTimeouts.find(
+      (entry) => entry.args.includes("build") && !entry.args.includes("buildx"),
+    )?.timeoutMs,
+    1_500_000,
+  );
   assert.ok(up?.includes("--no-build"));
   assert.ok(up?.includes("--pull") && up.includes("never"));
+  const residueTimeouts = commandTimeouts.filter(
+    (entry) =>
+      entry.args.includes("--filter") ||
+      (entry.args.includes("image") && entry.args.includes("ls")),
+  );
+  assert.equal(residueTimeouts.length, 6);
+  assert.equal(
+    residueTimeouts.every((entry) => entry.timeoutMs === 120_000),
+    true,
+  );
   for (const command of commands.filter(
     (entry) =>
       entry.includes("buildx") ||
@@ -3133,7 +3149,7 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   );
   assert.match(releaseReady, /detached: process\.platform !== 'win32'/);
   assert.match(releaseReady, /process\.kill\(-pid, 'SIGKILL'\)/);
-  assert.match(releaseReady, /RELEASE_READY_E2E_TIMEOUT_MS \+ 1200000/);
+  assert.match(releaseReady, /RELEASE_READY_E2E_TIMEOUT_MS \+ 1800000/);
   assert.match(
     releaseReady,
     /positiveIntEnv\('RELEASE_READY_E2E_TIMEOUT_MS', 2400000\)/,

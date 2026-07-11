@@ -1,6 +1,6 @@
 'use client';
 
-import type { DeadlineResponse } from '@charitypilot/shared';
+import type { DeadlineView } from '@/lib/deadline-contract';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
 
 export function DeadlineDeleteModal({
@@ -14,7 +14,7 @@ export function DeadlineDeleteModal({
 }: {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedDeadline: DeadlineResponse | null;
+  selectedDeadline: DeadlineView | null;
   deleting: boolean;
   deleteDisabled: boolean;
   onCancel: () => void;

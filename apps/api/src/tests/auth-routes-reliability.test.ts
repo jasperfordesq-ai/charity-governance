@@ -205,7 +205,7 @@ test('GET /me requires authentication and returns only the caller\'s public user
         organisationId: 'org-1',
         // A secret that must never appear in the public response.
         passwordHash: '$2b$12$shouldNeverBeSerialised',
-        organisation: { id: 'org-1', name: 'Org One' },
+        organisation: { id: 'org-1', name: 'Org One', updatedAt: new Date('2026-07-10T00:00:00.000Z') },
       }),
     },
   } as never);

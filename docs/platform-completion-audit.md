@@ -1,6 +1,6 @@
 # CharityPilot Platform Completion Audit
 
-Generated: 2026-07-10
+Generated: 2026-07-11
 
 Branch: `master`
 
@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 51 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 55 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 20 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 24 web unit test files, 51 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 29 web unit test files, 55 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -351,13 +351,13 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 145 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 102 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 133 | yes | no obvious static risk; verify in browser |
-| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 127 | yes | no obvious static risk; verify in browser |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 187 | yes | no obvious static risk; verify in browser |
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 201 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 157 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 253 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 137 | yes | no obvious static risk; verify in browser |
-| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 150 | yes | no obvious static risk; verify in browser |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 178 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 256 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 278 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 267 | yes | no obvious static risk; verify in browser |
@@ -376,8 +376,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 3 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
-| `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 95 | auth, subscription | 1 | preserve current guard and tenant boundary |
-| `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 64 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 101 | auth, subscription | 1 | preserve current guard and tenant boundary |
+| `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 107 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
 | `documents` | `apps/api/src/routes/documents/index.ts` | 316 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
@@ -466,8 +466,8 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - Deployed browser QA env preflight: `npm run check:production:browser-qa-env`
 - Deployed browser QA env preflight JSON: `npm run check:production:browser-qa-env -- --json`
 - Deploy preflight: `npm run deploy:preflight -- --production-env-file=.env.production`
-- Deploy production: `npm run deploy:production -- --production-env-file=.env.production`
-- Rollback rehearsal: `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env`
+- Deploy production: `npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers`
+- Rollback rehearsal: `npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/secure/charitypilot/rollback-cutovers`
 - Release-run evidence: `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Release-run evidence JSON: `npm run check:production:release-run -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Final evidence validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`

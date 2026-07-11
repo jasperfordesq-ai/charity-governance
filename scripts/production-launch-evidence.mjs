@@ -718,6 +718,7 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
       `${checkPath}.evidence must include the production deploy command`,
       issues,
     );
+    requireEvidenceText(text, '--backup-output-dir=', `${checkPath}.evidence must include protected backup output`, issues);
     requireEvidenceText(
       text,
       'Production compose deploy completed',
@@ -728,6 +729,13 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
       'compose.production.yml',
       'release-image-digests.env',
       'digest-pinned images',
+      'old runtime stopped before migration',
+      'migration image alone',
+      'live migration-history probe',
+      'quiesced reminder cutover preparation',
+      'zero unresolved reminder outcomes',
+      'retained restore-verified backup',
+      'host-wide production cutover lock',
     ]) {
       requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
     }
@@ -751,6 +759,7 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
       `${checkPath}.evidence must include the production deploy smoke command`,
       issues,
     );
+    requireEvidenceText(text, '--backup-output-dir=', `${checkPath}.evidence must include protected backup output`, issues);
     requireEvidenceText(
       text,
       'node scripts/smoke-production-deploy.mjs',
@@ -779,6 +788,13 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     );
     requireEvidenceText(
       text,
+      '--schema-compatibility-attestation-file=',
+      `${checkPath}.evidence must include the fresh manifest-bound schema compatibility attestation`,
+      issues,
+    );
+    requireEvidenceText(text, '--backup-output-dir=', `${checkPath}.evidence must include protected backup output`, issues);
+    requireEvidenceText(
+      text,
       'Production compose rollback completed',
       `${checkPath}.evidence must include Production compose rollback completed`,
       issues,
@@ -787,6 +803,8 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
       'previous signed digest manifest',
       'release-image-digests.previous.env',
       'Production deploy smoke passed',
+      'live migration-history probe',
+      'host-wide production cutover lock',
     ]) {
       requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
     }
@@ -811,6 +829,12 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
 
   if (checkId === 'digest-manifest') {
     requireEvidenceText(text, 'release-image-digests', `${checkPath}.evidence must include release-image-digests artifact`, issues);
+    requireEvidenceText(
+      text,
+      'CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1',
+      `${checkPath}.evidence must include the reviewed database compatibility marker`,
+      issues,
+    );
     for (const [, image] of images) {
       requireEvidenceText(text, image, `${checkPath}.evidence must include ${image}`, issues);
     }
@@ -954,7 +978,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
     const databaseMarkersByCheck = {
       'postgres-provisioned': ['production PostgreSQL', 'provisioned'],
       'database-url-secret-store': ['DATABASE_URL', 'secret store'],
-      'migrations-deployed': ['db:migrate:deploy', 'production'],
+      'migrations-deployed': ['deploy:production', 'migration image alone', 'production'],
       'backups-enabled': ['managed backups or PITR', 'backup window', 'retention period', 'backup owner'],
       'restore-tested': ['restore test', 'owner', 'restore date', 'recovery notes', 'operational sentinel'],
     };

@@ -608,10 +608,9 @@ Published SHA-bound verification:
 - This is repository CI/E2E evidence, not release-promotion or deployed-browser
   evidence. Those independent requirements remain tracked under P0-09.
 
-Pending verification:
-
-- Push the implementation and record a green CI/E2E workflow run. Do not add a
-  commit SHA or workflow URL until those proofs exist.
+Repository verification is complete for P0-05 at the exact SHA and workflow
+URLs above. Release-promotion, deployed-browser, and live repository-protection
+evidence remain separate P0-09 requirements.
 
 Required result:
 
@@ -629,22 +628,24 @@ Acceptance:
   database names, default databases, malformed URLs, mismatched sentinels, and
   missing opt-ins.
 - Positive tests cover only a known disposable target.
-- The safely isolated E2E suite is run only after these guards pass. The local
-  live browser/database proof is complete; pushed SHA-bound CI/E2E proof remains
-  pending at the status above.
+- The safely isolated E2E suite is run only after these guards pass. Local and
+  exact-SHA CI/E2E browser/database proof are complete; release-promotion and
+  deployed-browser proof remain tracked under P0-09.
 
 ### P0-06 - Incorrect derived deadline dates and recurrence state
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
 Evidence:
 
-- `apps/api/src/services/deadline.service.ts:87-105` uses JavaScript `setMonth()`
-  overflow semantics.
-- 31 August plus ten months can become 1 July instead of the intended end-of-June
-  planning date.
-- `apps/api/src/services/deadline.service.ts:101-142` can reuse a completed
-  constant-title AGM deadline without clearing `isComplete` or `completedDate`.
+- The audited implementation used JavaScript `setMonth()` overflow semantics,
+  so 31 August plus ten months could become 1 July instead of the intended
+  end-of-June planning date.
+- The audited constant-title upsert could reuse a completed AGM occurrence and
+  its completion timestamp instead of creating a genuinely new recurrence.
+- The repaired implementation now treats every governance date as an exact
+  civil date and every generated deadline as a versioned occurrence with
+  immutable completed/superseded history.
 
 Required result:
 
@@ -658,6 +659,136 @@ Acceptance:
 - Exact-date tests cover all month ends, leap years, DST/timezones, 31 August
   plus ten months, changed financial years, completed recurrences, duplicate
   prevention, and reminder visibility.
+
+Repository remediation completed on 2026-07-10:
+
+- Added shared strict `YYYY-MM-DD` civil-date parsing, formatting, comparison,
+  day arithmetic, clamped month arithmetic, Europe/Dublin calendar extraction,
+  Irish public-holiday calculation, and Companies Act working-day adjustment.
+  All twelve month-end classes, leap/non-leap years, DST boundaries, and
+  invalid dates are regression tested.
+- Replaced title-based generation with source-input fingerprints, stable rule
+  keys, rule/generation versions, explicit provenance, current/superseded links,
+  and history-preserving reconciliation. A completed generated occurrence is
+  never reopened; changed facts supersede it and create a new incomplete
+  successor, while removed or unconfirmed facts supersede without inventing a
+  replacement.
+- Removed the unverified default `CLG` legal form. Company and CRO rules now
+  require explicit confirmation; confirmation can be revoked through the UI,
+  which supersedes affected current occurrences. Chronology, future-event,
+  contradiction, and derivation-safe-range checks fail closed.
+- Implemented source-cited planning calculations for the charity annual report,
+  CLG financial statements, AGM/member action, and CRO annual return. The
+  charity rule follows section 52's ten-month period; company statements follow
+  section 341's nine-month period; AGM planning reflects sections 175 and 1202;
+  and CRO planning uses the confirmed ARD plus the section 343 filing window.
+  Companies Act dates apply section 3 weekend/public-holiday adjustment.
+- Labels month-end clamping and the sole-member written-resolution twelve-month
+  review cadence as internal planning conventions rather than statutory claims.
+  Legal/accounting professional approval remains external and no generated date
+  is presented as legal advice or certification.
+- Manual deadlines now use history-preserving archive, deliberate reopen, and a
+  `scheduleVersion` that advances only when reminder occurrence identity changes.
+  Generated deadlines are immutable except for one-way atomic completion.
+- Reminder selection pages through every current eligible deadline and delivers
+  separately to every verified owner. It revalidates the exact recipient,
+  subscription, occurrence, schedule version, due date, and reminder window
+  under a deterministic organisation-then-deadline lock order before reserving.
+- Reminder logs are immutable per-attempt occurrence records with explicit
+  `RESERVED`, `SENDING`, `SENT`, `FAILED`, `SKIPPED`, and `UNCERTAIN` states.
+  Post-cutover `SENT` requires a substantive unique provider acceptance id;
+  bare booleans, malformed responses, crashes, timeouts, 409s, 5xxs, and unknown
+  SDK shapes fail closed as `UNCERTAIN`. Active uniqueness includes recipient,
+  window, and schedule version. Every retry is a fresh row with a new token and
+  attempt-scoped Resend key.
+- Pre-provider rereading narrows, but does not falsely claim to eliminate, the
+  non-atomic boundary between database state and first external provider I/O.
+  A durable `SENDING` transition occurs before I/O, so a crash after possible
+  acceptance becomes `UNCERTAIN` rather than retryable. Unresolved ambiguity
+  alerts on every run. Restricted one-time reconciliation records immutable
+  actor/time/reference evidence: provider acceptance or an unknowable outcome
+  continues suppression, while only conclusive proof that the provider never
+  accepted/created the original message permits a fresh later attempt. Bounce
+  or inbox-delivery failure never qualifies as provider non-acceptance.
+- The deadline/reminder UI now separates current, generated history, and
+  admin-only reminder delivery history; exposes source/provenance and exact
+  civil dates; paginates through all current/history rows; explains and confirms
+  one-way generated completion; supports manual reopen; surfaces uncertain
+  reminder outcomes; and truthfully labels legacy completions whose date was
+  never recorded.
+- Organisation and manual-deadline writes are version-bound to `updatedAt`, so
+  stale browser tabs receive a conflict instead of overwriting newer legal-form,
+  calendar, completion, reminder, or archive state.
+- The upgrade migration fails closed on non-midnight/out-of-range civil dates,
+  deadline/user tenant mismatches, ambiguous/duplicate/renamed generated rows,
+  legacy AGM delivery evidence, and deterministic generated-id collision. Exact
+  current annual occurrences are promoted in place with id/completion/log
+  identity preserved; genuine prior-year rows remain archived evidence. Every
+  legacy `SENT`/`FAILED`/`SKIPPED` claim becomes `UNCERTAIN`, with no fabricated
+  provider start, acceptance id, or exact email snapshot; only the original
+  unverified status/timestamp survive in explicit legacy fields.
+- The production cutover now fully quiesces the old runtime, protects and
+  restore-verifies a unique off-repository backup, migrates and probes history in
+  isolation, releases residual pre-I/O reservations, quarantines interrupted
+  provider I/O, and blocks runtime start until ambiguity is reconciled. The
+  scheduler waits for active work inside a bounded grace period. Cross-boundary
+  rollback can skip the P0-06 gate only through a fresh exact-backup-bound restore
+  attestation, never an env marker. A real PostgreSQL 16 historical-upgrade
+  fixture covers eleven fail-closed scenarios and runs before fresh migration in
+  both CI and release-image publication.
+
+Current local verification:
+
+- Full API, web, and shared suites pass at `545 / 545`, `313 / 313`, and
+  `35 / 35` respectively.
+- Prisma schema validation passes. Static migration tests cover exact-date
+  conversion, removal of the unverified CLG default, generated-history
+  retention, lifecycle constraints, clamped backfill fingerprints, and reminder
+  state conversion.
+- Disposable PostgreSQL 16 verification passed both from zero and as an upgrade
+  through all 15 migrations. It proved the delivery-state check constraint,
+  current-profile uniqueness after completion, active-reminder uniqueness, and
+  concurrent claim behavior.
+- A live non-UTC PostgreSQL session (`America/Los_Angeles`) exposed and then
+  verified the repair of a final boundary bug: the row-lock predicate now binds
+  the civil ISO string directly, so stored, bound, and snapshotted
+  `2030-01-15` remain identical. Both organisation/deadline lock arrival orders
+  completed without deadlock.
+- `git diff --check` and the focused deadline/calendar/reminder suites pass.
+- Root lint and all workspace production builds pass. Production tooling is
+  `544 / 544`, local-Docker contracts are `44 / 44`, the managed E2E safety
+  contract is `113 / 113`, secret/SAST scans pass across `545` staged files, and both
+  production-only and full dependency audits report zero vulnerabilities.
+- Focused managed browser regressions passed for the Organisation light-theme
+  accessibility defect, the migrated-profile conditional-save defect, and the
+  irreversible generated-completion confirmation.
+- The complete managed `npm run test:e2e` gate then passed `113 / 113`
+  isolation contracts and `97 / 97` Playwright tests against the runner-owned
+  disposable PostgreSQL stack. Verified teardown left no runner residue or
+  personal-stack drift.
+- The unified reliability report is green with `396 / 396` covered guarantees
+  linked to passing tests, and the generated platform audit is current.
+
+Primary-source basis:
+
+- Charities Act 2009, section 52:
+  `https://revisedacts.lawreform.ie/eli/2009/act/6/section/52/revised/en/html`.
+- Companies Act 2014, sections 3, 175, 341, 343 and 1202:
+  `https://revisedacts.lawreform.ie/eli/2014/act/38/revised/en/html`.
+- CRO annual-return filing guidance:
+  `https://cro.ie/Annual-Return/Filing-an-Annual-Return/`.
+- Organisation of Working Time Act 1997, Schedule 2, plus S.I. 50/2022 for the
+  current public-holiday set:
+  `https://www.irishstatutebook.ie/eli/1997/act/20/schedule/2/enacted/en/html`
+  and `https://www.irishstatutebook.ie/eli/2022/si/50/made/en/print`.
+
+Pending verification:
+
+- Publish the implementation commit and record green exact-SHA CI and managed
+  E2E runs before advancing this item to `CI_VERIFIED`.
+- Named Irish legal/governance and accounting reviewers must approve the rule
+  interpretation and user-facing framing before production launch; that is
+  professional launch evidence, not repository work.
 
 ### P0-07 - Team offboarding, session revocation, and ownership continuity
 

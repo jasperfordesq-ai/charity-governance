@@ -3,14 +3,16 @@ import {
   conditionalObligationProfileSchema,
   type ConditionalObligationProfile,
 } from '@charitypilot/shared';
+import { nullableCivilDateFromPrisma } from './civil-date.js';
 
-export type PublicOrganisation = Pick<
+export type PublicOrganisationSource = Pick<
   Organisation,
   | 'id'
   | 'name'
   | 'rcnNumber'
   | 'croNumber'
   | 'legalForm'
+  | 'legalFormConfirmedAt'
   | 'complexity'
   | 'charitablePurpose'
   | 'financialYearEnd'
@@ -19,13 +21,40 @@ export type PublicOrganisation = Pick<
   | 'contactPhone'
   | 'website'
   | 'dateRegistered'
-  | 'lastAgmDate'
+  | 'incorporationDate'
+  | 'croAnnualReturnDate'
+  | 'croAnnualReturnDateConfirmedAt'
+  | 'lastActualAgmDate'
+  | 'lastUnanimousAnnualMemberResolutionDate'
+  | 'memberCount'
+  | 'updatedAt'
 > & {
-  conditionalObligationProfile: ConditionalObligationProfile | null;
+  conditionalObligationProfile: unknown;
 };
 
-export type PublicOrganisationSource = Omit<PublicOrganisation, 'conditionalObligationProfile'> & {
-  conditionalObligationProfile: unknown;
+export type PublicOrganisation = Omit<
+  PublicOrganisationSource,
+  | 'financialYearEnd'
+  | 'dateRegistered'
+  | 'incorporationDate'
+  | 'croAnnualReturnDate'
+  | 'lastActualAgmDate'
+  | 'lastUnanimousAnnualMemberResolutionDate'
+  | 'legalFormConfirmedAt'
+  | 'croAnnualReturnDateConfirmedAt'
+  | 'conditionalObligationProfile'
+  | 'updatedAt'
+> & {
+  financialYearEnd: string | null;
+  dateRegistered: string | null;
+  incorporationDate: string | null;
+  croAnnualReturnDate: string | null;
+  lastActualAgmDate: string | null;
+  lastUnanimousAnnualMemberResolutionDate: string | null;
+  legalFormConfirmedAt: string | null;
+  croAnnualReturnDateConfirmedAt: string | null;
+  conditionalObligationProfile: ConditionalObligationProfile | null;
+  updatedAt: string;
 };
 
 export const publicOrganisationSelect = {
@@ -34,6 +63,7 @@ export const publicOrganisationSelect = {
   rcnNumber: true,
   croNumber: true,
   legalForm: true,
+  legalFormConfirmedAt: true,
   complexity: true,
   charitablePurpose: true,
   financialYearEnd: true,
@@ -42,8 +72,14 @@ export const publicOrganisationSelect = {
   contactPhone: true,
   website: true,
   dateRegistered: true,
-  lastAgmDate: true,
+  incorporationDate: true,
+  croAnnualReturnDate: true,
+  croAnnualReturnDateConfirmedAt: true,
+  lastActualAgmDate: true,
+  lastUnanimousAnnualMemberResolutionDate: true,
+  memberCount: true,
   conditionalObligationProfile: true,
+  updatedAt: true,
 } satisfies Record<keyof PublicOrganisationSource, true>;
 
 export type PublicUserSource = {
@@ -71,16 +107,25 @@ export function publicOrganisation(organisation: PublicOrganisationSource): Publ
     rcnNumber: organisation.rcnNumber,
     croNumber: organisation.croNumber,
     legalForm: organisation.legalForm,
+    legalFormConfirmedAt: organisation.legalFormConfirmedAt?.toISOString() ?? null,
     complexity: organisation.complexity,
     charitablePurpose: organisation.charitablePurpose,
-    financialYearEnd: organisation.financialYearEnd,
+    financialYearEnd: nullableCivilDateFromPrisma(organisation.financialYearEnd),
     registeredAddress: organisation.registeredAddress,
     contactEmail: organisation.contactEmail,
     contactPhone: organisation.contactPhone,
     website: organisation.website,
-    dateRegistered: organisation.dateRegistered,
-    lastAgmDate: organisation.lastAgmDate,
+    dateRegistered: nullableCivilDateFromPrisma(organisation.dateRegistered),
+    incorporationDate: nullableCivilDateFromPrisma(organisation.incorporationDate),
+    croAnnualReturnDate: nullableCivilDateFromPrisma(organisation.croAnnualReturnDate),
+    croAnnualReturnDateConfirmedAt: organisation.croAnnualReturnDateConfirmedAt?.toISOString() ?? null,
+    lastActualAgmDate: nullableCivilDateFromPrisma(organisation.lastActualAgmDate),
+    lastUnanimousAnnualMemberResolutionDate: nullableCivilDateFromPrisma(
+      organisation.lastUnanimousAnnualMemberResolutionDate,
+    ),
+    memberCount: organisation.memberCount,
     conditionalObligationProfile: publicConditionalObligationProfile(organisation.conditionalObligationProfile),
+    updatedAt: organisation.updatedAt.toISOString(),
   };
 }
 

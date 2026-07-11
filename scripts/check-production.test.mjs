@@ -1804,7 +1804,7 @@ test('release readiness child gates have finite process timeouts', () => {
   assert.doesNotMatch(releaseReady, /shell:\s*true/);
   assert.match(releaseReady, /taskkill', \['\/PID', String\(pid\), '\/T', '\/F'\]/);
   assert.match(releaseReady, /Gate timed out after \$\{\(timeoutMs \/ 1000\)\.toFixed\(0\)\}s/);
-  assert.match(releaseReady, /timeoutMs:\s*RELEASE_READY_E2E_TIMEOUT_MS \+ 1200000/);
+  assert.match(releaseReady, /timeoutMs:\s*RELEASE_READY_E2E_TIMEOUT_MS \+ 1800000/);
   assert.match(releaseReady, /managedLocalE2eEnvironment\(RELEASE_READY_E2E_TIMEOUT_MS\)/);
 });
 
@@ -1862,6 +1862,18 @@ test('reliability report rejects unknown options before reporting', () => {
   assert.match(result.stderr, /Unknown option: --surprise/);
   assert.match(result.stderr, /Usage: node scripts\/reliability-report\.mjs/);
   assert.equal(result.stdout, '');
+});
+
+test('reliability report removes stale compiled tests before collecting proof', () => {
+  const source = readRepoFile('scripts/reliability-report.mjs');
+  assert.match(source, /rmSync\(join\(API_DIR, 'dist', 'tests'\), \{ recursive: true, force: true \}\)/);
+  assert.match(source, /rmSync\(join\(WEB_DIR, '\.test-dist'\), \{ recursive: true, force: true \}\)/);
+  assert.ok(
+    source.indexOf("rmSync(join(API_DIR, 'dist', 'tests')") < source.indexOf("compile(API_DIR, 'tsconfig.json')"),
+  );
+  assert.ok(
+    source.indexOf("rmSync(join(WEB_DIR, '.test-dist')") < source.indexOf("compile(WEB_DIR, 'tsconfig.test.json')"),
+  );
 });
 
 test('production todo reflects current launch blockers without overclaiming local browser smoke', () => {
@@ -2061,6 +2073,7 @@ test('production env template documents the compose runtime web public origins',
     template,
     /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/,
   );
+  assert.match(template, /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/);
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(
     template,
@@ -2290,7 +2303,7 @@ test('API Dockerfile includes a dedicated Prisma migration runner target', () =>
   assert.doesNotMatch(migrationRunnerStage, /npm init/);
 });
 
-test('production Docker compose runs migrations before API and keeps web away from secrets', () => {
+test('production Docker compose isolates maintenance migrations and keeps web away from secrets', () => {
   const productionComposePath = join(repoRoot, 'compose.production.yml');
   assert.equal(existsSync(productionComposePath), true, 'compose.production.yml must exist');
 
@@ -2312,6 +2325,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
   const api = composeServiceBlock(compose, 'api');
   const web = composeServiceBlock(compose, 'web');
   const productionScheduler = composeServiceBlock(compose, 'production-scheduler');
+  const productionSchedulerSource = readRepoFile('apps/api/src/jobs/production-scheduler.ts');
   const deadlineReminders = composeServiceBlock(compose, 'deadline-reminders');
   const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
 
@@ -2321,12 +2335,13 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.match(migrate, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
   assert.match(migrate, /command:\s+\["migrate",\s*"deploy",\s*"--schema",\s*"prisma\/schema\.prisma"\]/);
   assert.match(migrate, /restart:\s+"no"/);
+  assert.match(migrate, /profiles:[\s\S]*- maintenance/);
 
   assert.match(api, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
   assert.match(api, /env_file:[\s\S]*\$\{CHARITYPILOT_PRODUCTION_ENV_FILE:-\.env\.production\}/);
   assert.match(api, /NODE_ENV:\s+production/);
   assert.match(api, /ENABLE_IN_PROCESS_JOBS:\s+"false"/);
-  assert.match(api, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
+  assert.doesNotMatch(api, /depends_on:[\s\S]*migrate:/);
   assert.match(api, /fetch\('http:\/\/127\.0\.0\.1:3002\/api\/v1\/health\/readiness'/);
   assert.match(api, /'x-charitypilot-readiness-key':\s*process\.env\.READINESS_API_KEY/);
   assert.match(api, /ports:[\s\S]*127\.0\.0\.1:\$\{CHARITYPILOT_API_PORT:-3002\}:3002/);
@@ -2381,7 +2396,21 @@ test('production Docker compose runs migrations before API and keeps web away fr
   assert.doesNotMatch(productionScheduler, /env_file:/);
   assert.match(productionScheduler, /command:\s+\["node",\s*"dist\/jobs\/production-scheduler\.js"\]/);
   assert.match(productionScheduler, /restart:\s+unless-stopped/);
-  assert.match(productionScheduler, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
+  const stopGraceSeconds = Number(
+    /stop_grace_period:\s+(\d+)s/.exec(productionScheduler)?.[1],
+  );
+  const maximumShutdownTimeoutSeconds = Number(
+    /MAX_SCHEDULER_SHUTDOWN_TIMEOUT_MS\s*=\s*(\d+)\s*\*\s*1000/.exec(
+      productionSchedulerSource,
+    )?.[1],
+  );
+  assert.ok(Number.isFinite(stopGraceSeconds), 'production scheduler must declare stop_grace_period');
+  assert.ok(Number.isFinite(maximumShutdownTimeoutSeconds), 'scheduler maximum shutdown timeout must remain explicit');
+  assert.ok(
+    stopGraceSeconds > maximumShutdownTimeoutSeconds,
+    'compose stop grace must exceed every permitted scheduler shutdown timeout',
+  );
+  assert.doesNotMatch(productionScheduler, /depends_on:[\s\S]*migrate:/);
   assert.match(productionScheduler, /NODE_ENV:\s+production/);
   assert.match(productionScheduler, /DATABASE_URL:\s+\$\{DATABASE_URL:\?Set DATABASE_URL\}/);
   assert.match(productionScheduler, /FRONTEND_URL:\s+\$\{FRONTEND_URL:\?Set FRONTEND_URL\}/);
@@ -2442,7 +2471,7 @@ test('production Docker compose runs migrations before API and keeps web away fr
     assert.match(job, /profiles:[\s\S]*- jobs/);
     assert.match(job, /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/);
     assert.doesNotMatch(job, /env_file:/);
-    assert.match(job, /depends_on:[\s\S]*migrate:[\s\S]*condition:\s+service_completed_successfully/);
+    assert.doesNotMatch(job, /depends_on:[\s\S]*migrate:/);
     assert.match(job, /NODE_ENV:\s+production/);
     assert.match(job, /restart:\s+"no"/);
     assert.doesNotMatch(job, /ports:/);
@@ -2906,7 +2935,10 @@ test('organisation profile form uses the shared save-status primitive', () => {
 
   assert.match(workflow, /profileSaveStatus/);
   assert.match(page, /profileSaveStatus=\{profileSaveStatus\}/);
-  assert.match(form, /import \{ SaveStatusIndicator \} from '@\/components\/ui\/states'/);
+  assert.match(
+    form,
+    /import \{[^}]*\bSaveStatusIndicator\b[^}]*\} from '@\/components\/ui\/states'/,
+  );
   assert.match(form, /profileSaveStatus:\s*'idle' \| 'saving' \| 'saved' \| 'error'/);
   assert.match(form, /<SaveStatusIndicator\s+status=\{profileSaveStatus\}/);
 });
@@ -3085,6 +3117,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-deploy-preflight.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-deploy.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-rollback.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'production-cutover-lock.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'init-production-launch-evidence.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence-status.mjs')));
@@ -3133,6 +3166,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-deploy-preflight\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-deploy\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-rollback\.test\.mjs/);
+  assert.match(packageJson.scripts['test:production-check'], /scripts\/production-cutover-lock\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/init-production-launch-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence-status\.test\.mjs/);
@@ -3154,6 +3188,8 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /runProductionComposeDeployFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /--no-tls-proxy/);
+  assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /acquireProductionCutoverLock/);
+  assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /cutoverLock/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /REQUIRED_LAUNCH_AREAS/);
   assert.match(readRepoFile('scripts/init-production-launch-evidence.mjs'), /\.charitypilot-launch-evidence/);
   assert.match(readRepoFile('scripts/init-production-launch-evidence.mjs'), /--json/);
@@ -3273,13 +3309,18 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(runbook, /node dist\/jobs\/cleanup-document-storage\.js/);
   assert.match(runbook, /failure-alert evidence/);
-  assert.match(
-    runbook,
-    /docker compose --env-file \.env\.production -f compose\.production\.yml -f compose\.production-tls\.yml up --wait --wait-timeout 180 -d/,
-  );
+  assert.match(runbook, /--profile maintenance --profile jobs down --remove-orphans/);
+  assert.match(runbook, /--profile maintenance run --rm --no-deps migrate/);
+  assert.match(runbook, /old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change/);
+  assert.match(runbook, /pre-migration backup is restore-verifiable/);
+  assert.match(runbook, /runtime remains stopped/);
   assert.match(runbook, /--no-tls-proxy/);
-  assert.match(runbook, /post-deploy public HTTPS smoke/);
-  assert.match(runbook, /Rollback reuses the production deploy path/);
+  assert.match(runbook, /public HTTPS smoke/);
+  assert.match(runbook, /Rollback reuses the same maintenance-mode deploy path/);
+  assert.match(runbook, /Image-only rollback remains exceptional/);
+  assert.match(runbook, /--database-restore-attestation-file/);
+  assert.match(runbook, /0700.*0600/);
+  assert.match(runbook, /encrypted off-host storage/);
   assert.match(runbook, /CHARITYPILOT_API_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_WEB_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_MIGRATION_IMAGE=.*@sha256:/);
@@ -3295,14 +3336,9 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
 
   assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:production -- --production-env-file=\.env\.production/);
-  assert.match(
-    launchChecklist,
-    /npm run deploy:rollback -- --production-env-file=\.env\.production --rollback-digest-file=release-image-digests\.previous\.env/,
-  );
-  assert.match(
-    launchChecklist,
-    /rollback rehearsal completed against a previous signed digest manifest with post-deploy smoke evidence/,
-  );
+  assert.match(launchChecklist, /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/);
+  assert.match(launchChecklist, /legacy manifest fails closed without.*`--database-restore-attestation-file`/);
+  assert.match(launchChecklist, /approved encrypted storage/);
   assert.doesNotMatch(launchChecklist, /dry-run evidence capture/);
   assert.match(launchChecklist, /web image build origins match the promoted production public origins/);
   assert.match(launchChecklist, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
@@ -3362,7 +3398,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
     /Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`/,
   );
   assert.match(launchChecklist, /post-deploy public HTTPS smoke/);
-  assert.match(launchChecklist, /rollback rehearsal/);
+  assert.match(launchChecklist, /rollback rehearsal/i);
   assert.match(launchChecklist, /digest-pinned/);
   assert.match(launchChecklist, /cosign signature verification/);
 });
@@ -4663,7 +4699,7 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(
     jobSmokeStep,
-    /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/,
+    /\[DeadlineReminders\] Run complete - 0 reminder\(s\) provider-accepted, 0 failed, 0 uncertain, 0 deadline\(s\) skipped/,
   );
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
   assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);
@@ -4942,6 +4978,7 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_repository\}@\$\{api_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_IMAGE="\$\{web_repository\}@\$\{web_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_MIGRATION_IMAGE="\$\{migration_repository\}@\$\{migration_digest\}"/);
+  assert.match(manifestStep, /CHARITYPILOT_DATABASE_COMPATIBILITY="p006-deadline-calendar-v1"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"/);
   assert.doesNotMatch(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_image\}@\$\{api_digest\}"/);
@@ -5162,7 +5199,7 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(jobSmokeStep, /Deadline reminders job completed successfully\./);
   assert.match(
     jobSmokeStep,
-    /\[DeadlineReminders\] Run complete - 0 reminder\(s\) sent, 0 failed, 0 deadline\(s\) skipped/,
+    /\[DeadlineReminders\] Run complete - 0 reminder\(s\) provider-accepted, 0 failed, 0 uncertain, 0 deadline\(s\) skipped/,
   );
   assert.match(jobSmokeStep, /Document storage cleanup completed\. Processed: 0\. Failed: 0\./);
   assert.match(jobSmokeStep, /Production scheduler run-once completed successfully\./);

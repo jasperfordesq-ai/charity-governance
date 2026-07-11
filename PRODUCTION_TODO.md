@@ -67,7 +67,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > attribution and no-warranty surfaces, shares auth status/loading primitives, lets
 > the evidence package be prepared before evidence is collected while requiring
 > every checklist item to predate final signoff, and aligns the deploy-smoke evidence
-> hints with the strict validator: `npm run deploy:production -- --production-env-file=.env.production`,
+> hints with the strict validator: `npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers`,
 > `node scripts/smoke-production-deploy.mjs --production-env-file .env.production`,
 > `Production deploy smoke passed`, and both canonical production origins. A later
 > local `npm run release:ready` run passed on 2026-07-09 at commit

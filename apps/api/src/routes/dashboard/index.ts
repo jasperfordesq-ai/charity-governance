@@ -5,6 +5,9 @@ import { ComplianceService } from '../../services/compliance.service.js';
 import { ActivityService } from '../../services/activity.service.js';
 import { handleError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
+import { todayInTimeZone } from '@charitypilot/shared';
+import { prismaDateFromCivil } from '../../utils/civil-date.js';
+import { publicDeadline } from '../../services/deadline.service.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authGuard);
@@ -20,6 +23,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       const activityService = new ActivityService(app.prisma);
 
       const now = new Date();
+      const today = prismaDateFromCivil(todayInTimeZone('Europe/Dublin', now));
       const eightYearsAgo = new Date(now);
       eightYearsAgo.setFullYear(eightYearsAgo.getFullYear() - 8);
       const nineYearsAgo = new Date(now);
@@ -32,7 +36,9 @@ export async function dashboardRoutes(app: FastifyInstance) {
           where: {
             organisationId,
             isComplete: false,
-            dueDate: { gte: now },
+            supersededAt: null,
+            archivedAt: null,
+            dueDate: { gte: today },
           },
           orderBy: { dueDate: 'asc' },
           take: 5,
@@ -83,7 +89,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, {
         compliance,
-        upcomingDeadlines,
+        upcomingDeadlines: upcomingDeadlines.map((deadline) => publicDeadline(deadline)),
         boardAlerts,
         recentActivity,
       });

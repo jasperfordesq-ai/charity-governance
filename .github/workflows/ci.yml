@@ -60,6 +60,9 @@ jobs:
       - name: Start PostgreSQL
         run: node scripts/start-ci-postgres.mjs
 
+      - name: Verify P0-06 upgrade from legacy PostgreSQL data
+        run: npm run db:verify:p006-upgrade
+
       - name: Deploy Prisma migrations
         run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 
@@ -288,7 +291,7 @@ jobs:
             -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/send-deadline-reminders.js | tee "${deadline_output}"
-          grep -F "[DeadlineReminders] Run complete - 0 reminder(s) sent, 0 failed, 0 deadline(s) skipped" "${deadline_output}"
+          grep -F "[DeadlineReminders] Run complete - 0 reminder(s) provider-accepted, 0 failed, 0 uncertain, 0 deadline(s) skipped" "${deadline_output}"
           grep -F "Deadline reminders job completed successfully." "${deadline_output}"
 
           cleanup_output="$(mktemp)"

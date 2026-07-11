@@ -6,7 +6,7 @@
     "dev": "next dev --webpack --port 3003",
     "build": "node --require ../../scripts/next-build-fs-retry.cjs ../../node_modules/next/dist/bin/next build --webpack && node ../../scripts/clean-next-export.cjs",
     "start": "node server.mjs",
-    "test": "tsc -p tsconfig.test.json && node --test .test-dist/**/*.test.js",
+    "test": "node -e \"require('node:fs').rmSync('.test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node --import tsx --require ./test-register.cjs --test .test-dist/**/*.test.js",
     "lint": "eslint src next.config.ts"
   },
   "dependencies": {

@@ -168,6 +168,9 @@ jobs:
       - name: Start PostgreSQL
         run: node scripts/start-ci-postgres.mjs
 
+      - name: Verify P0-06 upgrade from legacy PostgreSQL data
+        run: npm run db:verify:p006-upgrade
+
       - name: Run migration runner against CI PostgreSQL
         run: |
           set -euo pipefail
@@ -372,7 +375,7 @@ jobs:
             -e ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot \
             -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             charitypilot-api-ci node dist/jobs/send-deadline-reminders.js | tee "${deadline_output}"
-          grep -F "[DeadlineReminders] Run complete - 0 reminder(s) sent, 0 failed, 0 deadline(s) skipped" "${deadline_output}"
+          grep -F "[DeadlineReminders] Run complete - 0 reminder(s) provider-accepted, 0 failed, 0 uncertain, 0 deadline(s) skipped" "${deadline_output}"
           grep -F "Deadline reminders job completed successfully." "${deadline_output}"
 
           cleanup_output="$(mktemp)"
@@ -550,6 +553,7 @@ jobs:
           CHARITYPILOT_API_IMAGE="${api_repository}@${api_digest}"
           CHARITYPILOT_WEB_IMAGE="${web_repository}@${web_digest}"
           CHARITYPILOT_MIGRATION_IMAGE="${migration_repository}@${migration_digest}"
+          CHARITYPILOT_DATABASE_COMPATIBILITY="p006-deadline-calendar-v1"
           CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}"
           CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"
           EOF

@@ -1,10 +1,11 @@
-import { Resend } from 'resend';
+import { Resend, type CreateEmailRequestOptions } from 'resend';
 import { isConfiguredSecret } from '../utils/env.js';
 import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
 import { formatProviderError } from '../utils/provider-errors.js';
 
 const BRAND_TEAL = '#0D7377';
 const BRAND_TEAL_LIGHT = '#e6f4f5';
+const DEADLINE_REMINDER_PROVIDER_TIMEOUT_MS = 30 * 1000;
 
 function escapeHtml(value: string): string {
   return value
@@ -91,6 +92,24 @@ type EmailLogger = {
   error(message: string): void;
 };
 
+export type DeadlineReminderDeliveryResult =
+  | { outcome: 'ACCEPTED'; providerMessageId: string }
+  | { outcome: 'REJECTED' }
+  | { outcome: 'UNCERTAIN' };
+
+function providerErrorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const candidate = error as { statusCode?: unknown; status?: unknown };
+  const raw = candidate.statusCode ?? candidate.status;
+  return typeof raw === 'number' && Number.isInteger(raw) ? raw : undefined;
+}
+
+function providerErrorName(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const name = (error as { name?: unknown }).name;
+  return typeof name === 'string' ? name : undefined;
+}
+
 const silentEmailLogger: EmailLogger = {
   warn: () => undefined,
   error: () => undefined,
@@ -104,8 +123,16 @@ export class EmailService {
   private resend?: Resend;
   private from: string;
   private frontendUrl: string;
+  private deadlineReminderProviderTimeoutMs: number;
 
-  constructor(private logger: EmailLogger = defaultEmailLogger()) {
+  constructor(
+    private logger: EmailLogger = defaultEmailLogger(),
+    deadlineReminderProviderTimeoutMs = DEADLINE_REMINDER_PROVIDER_TIMEOUT_MS,
+  ) {
+    if (!Number.isInteger(deadlineReminderProviderTimeoutMs) || deadlineReminderProviderTimeoutMs <= 0) {
+      throw new TypeError('Deadline reminder provider timeout must be a positive integer');
+    }
+    this.deadlineReminderProviderTimeoutMs = deadlineReminderProviderTimeoutMs;
     this.resend = this.hasConfiguredResendKey() ? new Resend(process.env.RESEND_API_KEY) : undefined;
     this.from = process.env.EMAIL_FROM ?? 'noreply@charitypilot.ie';
     this.frontendUrl = getPrimaryFrontendOrigin();
@@ -210,7 +237,8 @@ export class EmailService {
     to: string,
     orgName: string,
     deadline: { title: string; dueDate: Date; daysUntilDue: number },
-  ): Promise<boolean> {
+    options: { idempotencyKey: string },
+  ): Promise<DeadlineReminderDeliveryResult> {
     const { title, dueDate, daysUntilDue } = deadline;
 
     const urgencyColour = daysUntilDue <= 7 ? '#dc2626' : daysUntilDue <= 14 ? '#d97706' : BRAND_TEAL;
@@ -218,9 +246,9 @@ export class EmailService {
       daysUntilDue <= 7 ? 'Urgent' : daysUntilDue <= 14 ? 'Coming up soon' : 'Reminder';
 
     const formattedDate = dueDate.toLocaleDateString('en-IE', {
-      // Deadline due dates are stored at UTC midnight and the day-count is
-      // computed in UTC, so format in UTC too — otherwise a server in a
-      // timezone behind UTC renders the date one day early.
+      // The Date is an adapter for an exact Europe/Dublin civil date.
+      // Day counts are computed by the scheduler before this rendering step;
+      // UTC formatting prevents the Date adapter from shifting that civil date.
       timeZone: 'UTC',
       weekday: 'long',
       year: 'numeric',
@@ -253,17 +281,100 @@ export class EmailService {
       ${smallNote(`You are receiving this reminder because you are the account owner for ${orgName} on CharityPilot. To adjust reminder settings, visit your dashboard.`)}
     `;
 
-    return this._send(to, subject, emailLayout(subject, body));
+    return this._sendDeadlineReminder(to, subject, emailLayout(subject, body), options.idempotencyKey);
   }
 
-  private async _send(to: string, subject: string, html: string): Promise<boolean> {
+  private async _sendDeadlineReminder(
+    to: string,
+    subject: string,
+    html: string,
+    idempotencyKey: string,
+  ): Promise<DeadlineReminderDeliveryResult> {
+    if (!this.isConfigured() || this.resend === undefined) {
+      this.logger.warn('[EmailService] Deadline reminder not sent because delivery is not configured');
+      return { outcome: 'REJECTED' };
+    }
+
+    const providerAbortController = new AbortController();
+    const providerTimeout = setTimeout(() => {
+      providerAbortController.abort(new Error('Deadline reminder provider request exceeded its bounded timeout'));
+    }, this.deadlineReminderProviderTimeoutMs);
+
+    try {
+      // Resend 4.5.0 spreads its request options into the underlying fetch
+      // RequestInit. Its public type currently exposes only idempotency metadata,
+      // so retain the intersection here to pass an application-owned abort signal
+      // without replacing the SDK or weakening the idempotency contract.
+      const requestOptions: CreateEmailRequestOptions & { signal: AbortSignal } = {
+        idempotencyKey,
+        signal: providerAbortController.signal,
+      };
+      const response = await this.resend.emails.send(
+        { from: this.from, to, subject, html },
+        requestOptions,
+      );
+      if (response.error !== null) {
+        this.logger.error(
+          `[EmailService] Failed to send deadline reminder: ${formatEmailDeliveryError(response.error)}`,
+        );
+        const status = providerErrorStatus(response.error);
+        const name = providerErrorName(response.error)?.toLowerCase();
+        if (
+          status === 409 ||
+          status === 408 ||
+          (status !== undefined && status >= 500) ||
+          name === 'invalid_idempotent_request' ||
+          name === 'concurrent_idempotent_requests'
+        ) {
+          return { outcome: 'UNCERTAIN' };
+        }
+        // Only an explicit, non-timeout 4xx response is treated as a definite
+        // rejection. Unknown or changed SDK error shapes fail closed because
+        // automatic retry after possible acceptance can duplicate delivery.
+        if (status !== undefined && status >= 400 && status < 500) {
+          return { outcome: 'REJECTED' };
+        }
+        return { outcome: 'UNCERTAIN' };
+      }
+
+      const acceptanceId = response.data?.id;
+      if (typeof acceptanceId !== 'string' || acceptanceId.trim() === '') {
+        this.logger.error(
+          `[EmailService] Failed to send deadline reminder: ${formatEmailDeliveryError({
+            name: 'InvalidProviderResponse',
+            message: 'Email provider did not return an acceptance id',
+          })}`,
+        );
+        return { outcome: 'UNCERTAIN' };
+      }
+
+      return { outcome: 'ACCEPTED', providerMessageId: acceptanceId };
+    } catch (err) {
+      this.logger.error(
+        `[EmailService] Failed to send deadline reminder: ${formatEmailDeliveryError(err)}`,
+      );
+      return { outcome: 'UNCERTAIN' };
+    } finally {
+      clearTimeout(providerTimeout);
+    }
+  }
+
+  private async _send(
+    to: string,
+    subject: string,
+    html: string,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<boolean> {
     if (!this.isConfigured() || this.resend === undefined) {
       this.logger.warn('[EmailService] Email not sent because delivery is not configured');
       return false;
     }
 
     try {
-      const response = await this.resend.emails.send({ from: this.from, to, subject, html });
+      const payload = { from: this.from, to, subject, html };
+      const response = options.idempotencyKey
+        ? await this.resend.emails.send(payload, { idempotencyKey: options.idempotencyKey })
+        : await this.resend.emails.send(payload);
       if (response.error !== null) {
         this.logger.error(`[EmailService] Failed to send email: ${formatEmailDeliveryError(response.error)}`);
         return false;

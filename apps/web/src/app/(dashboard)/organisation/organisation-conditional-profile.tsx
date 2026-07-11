@@ -73,9 +73,11 @@ export function normaliseConditionalObligationProfile(
 export function OrganisationConditionalProfileFields({
   profile,
   onChange,
+  isDisabled = false,
 }: {
   profile: ConditionalObligationProfile;
   onChange: (key: keyof ConditionalObligationProfile, checked: boolean) => void;
+  isDisabled?: boolean;
 }) {
   return (
     <FieldGroup
@@ -89,6 +91,7 @@ export function OrganisationConditionalProfileFields({
             <Checkbox
               key={field.key}
               isSelected={profile[field.key]}
+              isDisabled={isDisabled}
               onValueChange={(checked) => onChange(field.key, checked)}
               aria-describedby={hintId}
               classNames={{

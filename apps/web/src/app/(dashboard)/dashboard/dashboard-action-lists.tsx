@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { BoardAlert, DeadlineResponse } from '@charitypilot/shared';
 import { EmptyState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
+import { deadlineMeta, formatCivilDate, sortCurrentDeadlines } from '@/lib/deadline-display';
 
 const stateActionClass = 'text-xs font-semibold text-teal-primary hover:underline dark:text-teal-bright';
 
@@ -30,14 +31,10 @@ export function DashboardActionLists({
           />
         ) : deadlines && deadlines.length > 0 ? (
           <Card className={statusPanelClassName('neutral', 'divide-y divide-gray-100 shadow-sm dark:divide-gray-800')}>
-            {deadlines
-              .filter((d) => !d.isComplete)
-              .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+            {sortCurrentDeadlines(deadlines.filter((deadline) => !deadline.isComplete))
               .slice(0, 5)
               .map((d) => {
-                const due = new Date(d.dueDate);
-                const now = new Date();
-                const daysUntil = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                const { daysUntil } = deadlineMeta(d);
 
                 let chipTone: StatusTone = 'success';
                 if (daysUntil < 0) chipTone = 'danger';
@@ -48,11 +45,7 @@ export function DashboardActionLists({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{d.title}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {due.toLocaleDateString('en-IE', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatCivilDate(d.dueDate)}
                       </p>
                     </div>
                     <StatusChip tone={chipTone}>

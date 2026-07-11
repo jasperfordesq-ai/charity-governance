@@ -1,4 +1,11 @@
-import { test, expect, uniqueEmail, sendInviteViaUi, acceptInviteViaUi } from '../fixtures';
+import {
+  test,
+  expect,
+  uniqueEmail,
+  sendInviteViaUi,
+  acceptInviteViaUi,
+  reliableFill,
+} from '../fixtures';
 import { setInviteToken, getUserAndOrg } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
@@ -15,7 +22,7 @@ test.describe('Deadlines & Team', () => {
     await gotoWithDevServerRetry(ownerPage, '/deadlines');
     await expect(ownerPage.getByRole('heading', { name: 'Deadline Tracker' })).toBeVisible();
 
-    // Open the modal (header button) — there is a second "Add Deadline" in the footer.
+    // Open the modal from the page header.
     await ownerPage.getByRole('button', { name: 'Add Deadline' }).first().click();
     const dialog = ownerPage.getByRole('dialog');
     await dialog.getByLabel('Title').fill(title);
@@ -29,12 +36,83 @@ test.describe('Deadlines & Team', () => {
     const completePatch = ownerPage.waitForResponse(
       (r) => /\/api\/v1\/deadlines\//.test(r.url()) && r.request().method() === 'PATCH',
     );
-    await ownerPage.getByRole('checkbox', { name: new RegExp(`^Mark ${escapeRegExp(title)} as complete$`) }).click();
+    await ownerPage.getByRole('checkbox', { name: new RegExp(`^Mark ${escapeRegExp(title)}, due .+, as complete$`) }).click();
     expect((await completePatch).ok()).toBeTruthy();
 
     await expect(
-      ownerPage.getByRole('checkbox', { name: new RegExp(`^Mark ${escapeRegExp(title)} as incomplete$`) }),
+      ownerPage.getByRole('checkbox', { name: new RegExp(`^Mark ${escapeRegExp(title)}, due .+, as incomplete$`) }),
     ).toBeVisible();
+  });
+
+  test('generated deadline completion requires an explicit irreversible confirmation', async ({ ownerPage }) => {
+    await gotoWithDevServerRetry(ownerPage, '/organisation');
+    await expect(ownerPage.getByRole('heading', { name: 'Organisation' })).toBeVisible();
+
+    const financialYearEnd = ownerPage.getByLabel('Financial year end');
+    const priorYear = new Date().getFullYear() - 1;
+    const primaryYearEnd = `${priorYear}-12-31`;
+    const alternateYearEnd = `${priorYear}-12-30`;
+    const nextYearEnd = (await financialYearEnd.inputValue()) === primaryYearEnd
+      ? alternateYearEnd
+      : primaryYearEnd;
+    await reliableFill(financialYearEnd, nextYearEnd);
+
+    const saved = ownerPage.waitForResponse(
+      (response) => /\/api\/v1\/organisation$/.test(response.url()) && response.request().method() === 'PATCH',
+    );
+    const saveProfile = ownerPage.getByRole('button', { name: 'Save profile' });
+    await expect(saveProfile).toBeEnabled();
+    await saveProfile.click();
+    expect((await saved).ok()).toBeTruthy();
+
+    await gotoWithDevServerRetry(ownerPage, '/deadlines');
+    await expect(ownerPage.getByRole('heading', { name: 'Deadline Tracker' })).toBeVisible();
+
+    const generatedTitle = 'Charities Regulator annual report';
+    const generatedRow = ownerPage.locator('article').filter({
+      has: ownerPage.getByRole('heading', { name: generatedTitle, exact: true }),
+    });
+    await expect(generatedRow).toBeVisible();
+
+    let completionPatchCount = 0;
+    ownerPage.on('request', (request) => {
+      if (/\/api\/v1\/deadlines\//.test(request.url()) && request.method() === 'PATCH') {
+        completionPatchCount += 1;
+      }
+    });
+
+    const incompleteCheckbox = generatedRow.getByRole('checkbox', {
+      name: new RegExp(`^Mark ${escapeRegExp(generatedTitle)}, due .+, as complete$`),
+    });
+    await incompleteCheckbox.click();
+
+    const completionDialog = ownerPage.getByRole('dialog', {
+      name: 'Mark generated deadline complete?',
+    });
+    await expect(completionDialog.getByRole('heading', { name: 'Mark generated deadline complete?' })).toBeVisible();
+    await expect(completionDialog.getByText(/Generated occurrences cannot be reopened, edited, or deleted\./)).toBeVisible();
+    await completionDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(completionDialog).toBeHidden();
+    await expect(incompleteCheckbox).not.toBeChecked();
+    expect(completionPatchCount).toBe(0);
+
+    await incompleteCheckbox.click();
+    await expect(completionDialog).toBeVisible();
+    const completed = ownerPage.waitForResponse(
+      (response) => /\/api\/v1\/deadlines\//.test(response.url()) && response.request().method() === 'PATCH',
+    );
+    await completionDialog.getByRole('button', { name: 'Mark complete permanently' }).click();
+    const completedResponse = await completed;
+    expect(completedResponse.ok()).toBeTruthy();
+    expect(completedResponse.request().postDataJSON()).toMatchObject({ isComplete: true });
+    await expect(completionDialog).toBeHidden();
+    expect(completionPatchCount).toBe(1);
+
+    const completedCheckbox = generatedRow.getByRole('checkbox', {
+      name: new RegExp(`^Mark ${escapeRegExp(generatedTitle)}, due .+, as incomplete$`),
+    });
+    await expect(completedCheckbox).toBeChecked();
+    await expect(completedCheckbox).toBeDisabled();
   });
 
   test('invite a team member who then accepts and joins the workspace', async ({ ownerPage, owner, newFencedContext }) => {

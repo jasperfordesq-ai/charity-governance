@@ -4,10 +4,29 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { redactPostgresTranscript, runPostgresBackupFromArgs } from './postgres-backup.mjs';
+import {
+  linuxDockerHostUserArgs,
+  redactPostgresTranscript,
+  runPostgresBackupFromArgs,
+} from './postgres-backup.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
+
+test('remote URL backup containers write as the native Linux deploy owner', () => {
+  assert.deepEqual(
+    linuxDockerHostUserArgs({ platform: 'linux', getuid: () => 1001, getgid: () => 1002 }),
+    ['--user', '1001:1002'],
+  );
+  assert.deepEqual(
+    linuxDockerHostUserArgs({ platform: 'win32', getuid: undefined, getgid: undefined }),
+    [],
+  );
+  assert.throws(
+    () => linuxDockerHostUserArgs({ platform: 'linux', getuid: () => -1, getgid: () => 1002 }),
+    /Could not determine the Linux deploy owner uid:gid/,
+  );
+});
 
 function cleanEnv() {
   const env = {
@@ -285,6 +304,8 @@ test('postgres backup CLI renders restore verification commands in dry-run mode'
     assert.match(result.stdout, /'Document'/);
     assert.match(result.stdout, /'DocumentStorageDeletion'/);
     assert.match(result.stdout, /'StripeWebhookEvent'/);
+    assert.match(result.stdout, /'Deadline'/);
+    assert.match(result.stdout, /'DeadlineReminderLog'/);
     assert.match(result.stdout, /from \\"GovernancePrinciple\\"/);
     assert.match(result.stdout, /from \\"GovernanceStandard\\"/);
     assert.match(result.stdout, /core_standards/);

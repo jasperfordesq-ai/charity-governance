@@ -13,8 +13,15 @@ import type {
   AnnualReportFilingStatus,
   UserRole,
   DeadlineReminderStatus,
-} from './enums.js';
-import type { ComplianceSourceRef, CommencementStatus, ProfessionalReviewFlag } from '../constants/irish-compliance-matrix.js';
+  DeadlineReminderReconciliationOutcome,
+  GeneratedDeadlineKind,
+  DeadlineSupersessionReason,
+} from "./enums.js";
+import type {
+  ComplianceSourceRef,
+  CommencementStatus,
+  ProfessionalReviewFlag,
+} from "../constants/irish-compliance-matrix.js";
 
 // ── Generic API response ──
 
@@ -128,11 +135,32 @@ export interface UpdateTeamMemberRoleRequest {
 export interface DeadlineReminderLogResponse {
   id: string;
   deadlineId: string;
+  deadlineTitle: string;
+  deadlineDueDate: string;
+  deadlineScheduleVersion: number;
+  deadlineContextKind: 'RECORDED_AT_RESERVATION' | 'MIGRATION_TIME_CONTEXT';
+  deadlineSnapshotKnown: boolean;
+  deliveryTimingKnown: boolean;
+  legacyDeliveryStatus: 'SENT' | 'FAILED' | 'SKIPPED' | null;
+  legacyRecordedAt: string | null;
   email: string;
   reminderDays: number;
   status: DeadlineReminderStatus;
   error: string | null;
-  sentAt: string;
+  reservedAt: string | null;
+  attemptedAt: string | null;
+  providerRequestStartedAt: string | null;
+  reconciliationOutcome: DeadlineReminderReconciliationOutcome | null;
+  reconciledAt: string | null;
+  sentAt: string | null;
+}
+
+export interface DeadlineReminderHistoryResponse {
+  data: DeadlineReminderLogResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
 // ── Organisation ──
@@ -142,7 +170,8 @@ export interface OrganisationResponse {
   name: string;
   rcnNumber: string | null;
   croNumber: string | null;
-  legalForm: LegalForm;
+  legalForm: LegalForm | null;
+  legalFormConfirmedAt: string | null;
   complexity: OrganisationComplexity;
   charitablePurpose: CharitablePurpose[];
   financialYearEnd: string | null;
@@ -151,15 +180,23 @@ export interface OrganisationResponse {
   contactPhone: string | null;
   website: string | null;
   dateRegistered: string | null;
-  lastAgmDate: string | null;
+  incorporationDate: string | null;
+  croAnnualReturnDate: string | null;
+  croAnnualReturnDateConfirmedAt: string | null;
+  lastActualAgmDate: string | null;
+  lastUnanimousAnnualMemberResolutionDate: string | null;
+  memberCount: number | null;
   conditionalObligationProfile: ConditionalObligationProfile | null;
+  updatedAt: string;
 }
 
 export interface UpdateOrganisationRequest {
+  expectedUpdatedAt: string;
   name?: string;
   rcnNumber?: string | null;
   croNumber?: string | null;
-  legalForm?: LegalForm;
+  legalForm?: LegalForm | null;
+  confirmLegalForm?: boolean;
   complexity?: OrganisationComplexity;
   charitablePurpose?: CharitablePurpose[];
   financialYearEnd?: string | null;
@@ -168,7 +205,12 @@ export interface UpdateOrganisationRequest {
   contactPhone?: string | null;
   website?: string | null;
   dateRegistered?: string | null;
-  lastAgmDate?: string | null;
+  incorporationDate?: string | null;
+  croAnnualReturnDate?: string | null;
+  confirmCroAnnualReturnDate?: boolean;
+  lastActualAgmDate?: string | null;
+  lastUnanimousAnnualMemberResolutionDate?: string | null;
+  memberCount?: number | null;
   conditionalObligationProfile?: ConditionalObligationProfile | null;
 }
 
@@ -223,9 +265,9 @@ export interface ComplianceRecordResponse {
 }
 
 export type ComplianceApprovalInvalidationReason =
-  | 'RECORD_CHANGED'
-  | 'MANUAL_STATUS_CHANGE'
-  | 'LEGACY_APPROVAL_UNBOUND';
+  | "RECORD_CHANGED"
+  | "MANUAL_STATUS_CHANGE"
+  | "LEGACY_APPROVAL_UNBOUND";
 
 export interface ComplianceApprovalSnapshotSummary {
   id: string;
@@ -262,13 +304,13 @@ export interface ComplianceSignoffResponse {
 export interface ComplianceApprovalMissingRecord {
   standardId: string;
   standardCode: string;
-  status: 'NOT_STARTED';
+  status: "NOT_STARTED";
 }
 
 export interface ComplianceApprovalMissingEvidence {
   standardId: string;
   standardCode: string;
-  status: 'COMPLIANT' | 'WORKING_TOWARDS';
+  status: "COMPLIANT" | "WORKING_TOWARDS";
   missingActionTaken: boolean;
   missingEvidence: boolean;
 }
@@ -276,11 +318,11 @@ export interface ComplianceApprovalMissingEvidence {
 export interface ComplianceApprovalMissingExplanation {
   standardId: string;
   standardCode: string;
-  status: 'NOT_APPLICABLE' | 'EXPLAIN';
+  status: "NOT_APPLICABLE" | "EXPLAIN";
 }
 
 export interface ComplianceApprovalProfileIssue {
-  code: 'CONDITIONAL_OBLIGATION_PROFILE_MISSING';
+  code: "CONDITIONAL_OBLIGATION_PROFILE_MISSING";
   message: string;
 }
 
@@ -299,7 +341,7 @@ export interface ComplianceApprovalMatrixReviewItem {
   standardCode: string;
   matrixEntryId: string;
   commencementStatus: CommencementStatus;
-  boardApproval: 'required' | 'recommended' | 'conditional' | 'not_applicable';
+  boardApproval: "required" | "recommended" | "conditional" | "not_applicable";
   professionalReview: ProfessionalReviewFlag[];
   sourceRefs: ComplianceSourceRef[];
   applicabilityNote: string;
@@ -343,7 +385,12 @@ export interface UpsertComplianceSignoffRequest {
 export interface ComplianceEvidenceRecordSnapshot {
   id: string;
   revision: number;
-  status: 'COMPLIANT' | 'WORKING_TOWARDS' | 'NOT_STARTED' | 'NOT_APPLICABLE' | 'EXPLAIN';
+  status:
+    | "COMPLIANT"
+    | "WORKING_TOWARDS"
+    | "NOT_STARTED"
+    | "NOT_APPLICABLE"
+    | "EXPLAIN";
   actionTaken: string | null;
   evidence: string | null;
   notes: string | null;
@@ -378,17 +425,17 @@ export interface ComplianceEvidenceSnapshotPayload {
   };
   reportingYear: number;
   scope: {
-    complexity: 'SIMPLE' | 'COMPLEX';
-    plan: 'ESSENTIALS' | 'COMPLETE';
+    complexity: "SIMPLE" | "COMPLEX";
+    plan: "ESSENTIALS" | "COMPLETE";
     conditionalObligationProfile: ConditionalObligationProfile | null;
   };
   matrixLastChecked: string;
   standards: ComplianceEvidenceStandardSnapshot[];
-  readiness: Omit<ComplianceApprovalReadinessResponse, 'evidenceHash'>;
+  readiness: Omit<ComplianceApprovalReadinessResponse, "evidenceHash">;
 }
 
 export interface ComplianceApprovalSnapshotPayload {
-  kind: 'charitypilot.compliance-approval';
+  kind: "charitypilot.compliance-approval";
   formatVersion: 1;
   evidence: ComplianceEvidenceSnapshotPayload;
   approval: {
@@ -586,7 +633,8 @@ export interface CreateComplaintRecordRequest {
   boardMinuteReference?: string | null;
 }
 
-export type UpdateComplaintRecordRequest = Partial<CreateComplaintRecordRequest>;
+export type UpdateComplaintRecordRequest =
+  Partial<CreateComplaintRecordRequest>;
 
 export interface FundraisingRecordResponse {
   id: string;
@@ -620,7 +668,8 @@ export interface CreateFundraisingRecordRequest {
   boardMinuteReference?: string | null;
 }
 
-export type UpdateFundraisingRecordRequest = Partial<CreateFundraisingRecordRequest>;
+export type UpdateFundraisingRecordRequest =
+  Partial<CreateFundraisingRecordRequest>;
 
 export interface AnnualReportReadinessResponse {
   id: string | null;
@@ -712,10 +761,33 @@ export interface DeadlineResponse {
   description: string | null;
   dueDate: string;
   isAutoGenerated: boolean;
+  scheduleVersion: number;
+  generatedKind: GeneratedDeadlineKind | null;
+  generatedKey: string | null;
+  generationVersion: number | null;
+  generationRuleVersion: number | null;
+  generationFingerprint: string | null;
+  generationSource: Record<string, unknown> | null;
+  generationInputs: Record<string, unknown> | null;
+  profileRuleKey: keyof ConditionalObligationProfile | null;
   isComplete: boolean;
   completedDate: string | null;
+  completionDateKnown: boolean;
   reminderDays: number[];
+  supersededAt: string | null;
+  supersededById: string | null;
+  supersessionReason: DeadlineSupersessionReason | null;
+  archivedAt: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface DeadlineHistoryResponse {
+  data: DeadlineResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
 export interface CreateDeadlineRequest {
@@ -723,9 +795,11 @@ export interface CreateDeadlineRequest {
   description?: string;
   dueDate: string;
   reminderDays?: number[];
+  profileRuleKey?: keyof ConditionalObligationProfile;
 }
 
 export interface UpdateDeadlineRequest {
+  expectedUpdatedAt: string;
   title?: string;
   description?: string | null;
   dueDate?: string;
@@ -733,11 +807,15 @@ export interface UpdateDeadlineRequest {
   reminderDays?: number[];
 }
 
+export interface DeleteDeadlineRequest {
+  expectedUpdatedAt: string;
+}
+
 // ── Billing ──
 
 export interface CreateCheckoutRequest {
   plan: SubscriptionPlan;
-  interval: 'monthly' | 'yearly';
+  interval: "monthly" | "yearly";
 }
 
 export interface CheckoutResponse {
@@ -752,7 +830,7 @@ export interface BillingStatusResponse {
   plan: SubscriptionPlan | null;
   status: SubscriptionStatus | null;
   stripeStatus: string | null;
-  billingInterval: 'monthly' | 'yearly' | null;
+  billingInterval: "monthly" | "yearly" | null;
   cancelAtPeriodEnd: boolean;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
@@ -774,13 +852,17 @@ export interface DashboardResponse {
 export interface BoardAlert {
   boardMemberId: string;
   memberName: string;
-  type: 'term_expiring' | 'conduct_unsigned' | 'induction_pending';
+  type: "term_expiring" | "conduct_unsigned" | "induction_pending";
   message: string;
 }
 
 export interface ActivityItem {
   id: string;
-  type: 'compliance_update' | 'document_upload' | 'board_member_change' | 'deadline_change';
+  type:
+    | "compliance_update"
+    | "document_upload"
+    | "board_member_change"
+    | "deadline_change";
   description: string;
   userId: string;
   userName: string;

@@ -32,7 +32,7 @@ npm run check:production:github-secrets -- --environment=production
 npm run check:production:github-secrets -- --environment=production --json
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml config --quiet
-npm run deploy:production -- --production-env-file=.env.production
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
 npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:database -- --production-env-file=.env.production --expect-operational-sentinel
 npm run check:production:supabase -- --production-env-file=.env.production
@@ -78,23 +78,84 @@ Download the release-image-digests artifact from the release workflow run and co
 CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<api-digest>
 CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<web-digest>
 CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
+CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1
 CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
 CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 npm run deploy:preflight -- --production-env-file=.env.production
-npm run deploy:production -- --production-env-file=.env.production
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
 ```
 
 The deploy preflight validates the selected production env file, confirms the promoted web image build origins match `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SUPABASE_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
 
-The production deploy command runs the same preflight first, then executes `docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml up --wait --wait-timeout 180 -d`, then runs a post-deploy public HTTPS smoke against the configured web and API origins. The smoke checks the public web root, API health, approved-origin CORS, unauthenticated readiness protection, keyed readiness, and required security headers. Use `--dry-run` to print the preflight, compose, and post-deploy public HTTPS smoke commands without deploying. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:production`.
+Before booking the production cutover, restore a recent production backup into an isolated non-production PostgreSQL target and run the exact promoted migration image followed by the exact promoted API reconciliation tool. Record clone age/source and destruction, prove the migration found no out-of-range civil dates, tenant mismatches, renamed/duplicate generated occurrences, legacy AGM reminder evidence, or generated-id collision, and inventory the legacy reminder rows that will require downtime reconciliation. Never point this rehearsal at live production. Resolve anomalies through an approved data plan, take a newer clone, and repeat; discovering a known fail-closed blocker only after production shutdown is not acceptable launch evidence.
 
-For a bad digest promotion, download the previous signed `release-image-digests.env` artifact as `release-image-digests.previous.env` and run:
+The production deploy command is the only supported Compose migration path for this release. It runs the same preflight and pulls every promoted image before downtime. It then enters fail-closed maintenance mode with `docker compose ... --profile maintenance --profile jobs down --remove-orphans`, which stops and removes the old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change. The scheduler waits up to 45 seconds for active work and Compose grants 60 seconds before forced termination. With the runtime down, deploy creates and restore-verifies a retained PostgreSQL backup, runs the migration image alone, probes live Prisma history, then runs the digest-pinned API reconciliation tool with `--prepare-quiesced-cutover --confirm-schedulers-quiesced`. That step safely releases residual pre-provider reservations, quarantines residual provider-I/O rows, and refuses startup while any unresolved reminder outcome remains. Only then does it start the promoted runtime and run the public HTTPS smoke.
+
+For transcript verification, the isolated migration step owned by that deploy is equivalent to the following command. Do not invoke it independently against production:
 
 ```bash
-npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env
+docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml --profile maintenance run --rm --no-deps migrate
 ```
 
-Rollback reuses the production deploy path: the command validates that the rollback manifest contains only digest-pinned API, web, and migration images plus the web build-origin metadata, writes a temporary merged env file with the rollback image refs overlaid onto the selected production env file, runs the same preflight, Docker Compose wait, and post-deploy public HTTPS smoke, then removes the temporary env file. Use `--dry-run` to print the delegated deploy path before changing running containers. If production deploy used `--no-tls-proxy` because TLS is terminated by a managed load balancer or hosting platform, pass the same flag to rollback so the rehearsal and emergency path render the same compose stack.
+Pass `--backup-output-dir` pointing at an approved encrypted filesystem with sufficient capacity. It is a protected base directory: every invocation creates a unique timestamp-and-random-id child, so a later deploy cannot overwrite the sole pre-migration dump. The remote PostgreSQL tool container runs as the native Linux deploy owner's uid/gid, and the helper requests owner-only child-directory/file permissions (`0700`/`0600`) where the host supports POSIX modes. The real backup path is omitted from normal transcripts. Those controls are defence in depth, not encryption. Move or replicate each required dump to approved encrypted off-host storage, apply the human-approved retention/deletion schedule, and record its protected reference and SHA-256 outside Git. Object-storage backup, joint metadata/object recovery, encryption ownership, off-host retention, and secure deletion remain external P0-10 obligations; this cutover dump does not satisfy them by itself.
+
+If image pull fails, the old compatible runtime remains untouched and no migration is attempted. After maintenance mode begins, the runtime remains stopped after any backup, migration, compatibility probe, reminder-reconciliation gate, startup, or smoke failure and never silently restarts an older image. If the reminder gate reports unresolved rows, keep every scheduler stopped, follow the restricted `--list` and one-time reconciliation procedure in `docs/architecture/07-reminder-scheduler.md`, then rerun deploy. Do not manually run `compose up`, restart old containers, or use a previous application image against the migrated database. Use `--dry-run` to review ordered commands without changing runtime state.
+
+Deploy and rollback acquire one host-wide production cutover lock before preflight or rollback-attestation validation. Rollback passes that exact lock handle reentrantly into the delegated deploy, so two deploys, two rollbacks, or a deploy and rollback cannot interleave shutdown, backup, migration, probe, or startup. Contention fails before Docker or database work. Nested deploy entry and lock release both re-read the on-disk token and fail closed if the lock disappeared or ownership changed. A release failure preserves the preceding deploy/rollback result but changes the command status to failure with explicit operator guidance; do not begin another cutover until the lock owner and runtime state are reconciled. After a process or host crash, treat a remaining lock as an incident artefact and remove it only after an operator has proved no deploy or rollback process is running. Never bypass the lock with raw Compose commands.
+
+For a bad digest promotion, prefer a corrected forward release. Image-only rollback remains exceptional: it requires both the same `CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1` marker and a fresh (no more than 30 minutes old) operator attestation bound to the SHA-256 of the exact previous digest manifest. The marker is not trusted by itself. Create a non-committed attestation like this:
+
+```json
+{
+  "kind": "charitypilot-schema-compatibility-attestation",
+  "schemaVersion": 1,
+  "environment": "production",
+  "databaseCompatibility": "p006-deadline-calendar-v1",
+  "assessedAt": "2026-07-10T20:00:00.000Z",
+  "rollbackDigestManifest": "release-image-digests.previous.env",
+  "rollbackDigestManifestSha256": "<sha256-of-exact-manifest-bytes>",
+  "evidenceReference": "change://approved-schema-compatibility-review",
+  "operator": "named-operations-owner",
+  "acknowledgement": "I confirm the selected application images are compatible with the live P0-06 database schema and migration history."
+}
+```
+
+Then run:
+
+```bash
+npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/mnt/encrypted/charitypilot/rollback-cutovers
+```
+
+Rollback reuses the same maintenance-mode deploy path, including a unique new retained backup, migration isolation, fail-closed startup, and public smoke. It copies the production env file byte-for-byte into an owner-only temporary file and appends only validated rollback image/build-origin/compatibility overrides. After the selected migration image runs, deploy probes live Prisma history and, for P0-06-compatible schemas, runs the same reminder cutover/reconciliation gate before any runtime starts. A cross-boundary rollback is different: only a freshly validated, exact-manifest-and-backup-hash-bound restore attestation can propagate the internal `pre-p006-restored` state, and only that trusted path skips the unavailable P0-06 job/schema gate. The env marker alone can never authorise the skip.
+
+Crossing that boundary is restore-and-redeploy, not image rollback. Keep the runtime stopped, restore the production database from the protected pre-migration backup, complete restore checks, and create a non-committed JSON attestation like this:
+
+```json
+{
+  "kind": "charitypilot-database-restore-attestation",
+  "schemaVersion": 1,
+  "environment": "production",
+  "databaseRestoreCompleted": true,
+  "runtimeStoppedDuringRestore": true,
+  "backupCapturedBeforeIncompatibleMigration": true,
+  "databaseRestoreCompletedAt": "2026-07-10T20:00:00.000Z",
+  "backupReference": "encrypted-backup://approved-reference",
+  "restoreEvidenceReference": "incident://approved-restore-evidence",
+  "operator": "named-operations-owner",
+  "rollbackDigestManifest": "release-image-digests.previous.env",
+  "rollbackDigestManifestSha256": "<sha256-of-exact-manifest-bytes>",
+  "restoredBackupSha256": "<sha256-of-exact-restored-backup-bytes>",
+  "acknowledgement": "I confirm the production runtime was stopped and the database was restored from a backup captured before the incompatible migration."
+}
+```
+
+Then deliberately run:
+
+```bash
+npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --database-restore-attestation-file=/secure/database-restore-attestation.json --restored-backup-file=/mnt/encrypted/charitypilot/pre-p006/production-check.dump --backup-output-dir=/mnt/encrypted/charitypilot/restored-cutovers
+```
+
+The tool rejects future or more-than-30-minute-old attestations, hashes the exact rollback manifest and restored backup file, verifies both hashes, probes the restored live migration history, and passes the trusted pre-P0-06 compatibility result directly to the nested deploy. It cannot prove the external restore itself occurred, so the named operator and restore evidence remain mandatory. Never commit the attestation, backup, database URL, or provider credentials.
 
 ## Environment
 
@@ -112,11 +173,13 @@ Run `npm run check:production:hosting -- --production-env-file=.env.production` 
 
 ## Database
 
-Apply migrations with:
+For local/disposable migration verification only, use:
 
 ```bash
 npm run db:migrate:deploy -w @charitypilot/api
 ```
+
+Do not run that standalone command against production for P0-06. Production migration is owned by `npm run deploy:production`, which proves the old runtime is down and the pre-migration backup is restore-verifiable first. A managed platform replacement must implement and evidence the same quiesce, backup, isolated-migration, roll-forward, and restore-before-old-image contract.
 
 Use managed PostgreSQL backups with point-in-time recovery enabled. Confirm backup restore quarterly and record the evidence in `docs/production-launch-checklist.md`.
 
@@ -126,7 +189,7 @@ For Supabase storage and project recovery, record restore evidence only from an 
 
 ## Jobs
 
-In production, the API container does not run scheduled jobs in-process. The default Docker Compose stack runs a separate `production-scheduler` service, and the `jobs` profile exposes one-shot reminder and cleanup commands for rehearsal or platform scheduler integrations:
+In production, the API container does not run scheduled jobs in-process. The default Docker Compose stack runs a separate `production-scheduler` service, and the `jobs` profile exposes one-shot reminder and cleanup commands for rehearsal or platform scheduler integrations. The scheduler stops future timers on SIGTERM, waits up to `PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS` (45 seconds by default) for active runs, and has a 60-second Compose grace period:
 
 ```bash
 node dist/jobs/production-scheduler.js
@@ -134,7 +197,7 @@ node dist/jobs/send-deadline-reminders.js
 node dist/jobs/cleanup-document-storage.js
 ```
 
-The scheduled job runtime must receive the same production secret source that passed preflight. For Docker Compose, `production-scheduler` must be running after deploy, and the `deadline-reminders` and `document-storage-cleanup` profile jobs must have recorded successful test-run evidence. If a platform scheduler replaces Compose scheduling, materialize a non-committed env file for the API job runtime from the approved production secrets, or inject equivalent environment variables and invoke the built job entrypoints directly.
+The scheduled job runtime must receive the same production secret source that passed preflight. For Docker Compose, `production-scheduler` must be running after deploy, and the profile jobs must have successful test-run evidence. A platform scheduler that replaces Compose must implement the same technical quiescence contract: stop new invocations, await/cancel in-flight runs, prove no provider I/O remains active, and run the P0-06 cutover preparation/reconciliation gate before starting the promoted scheduler. Merely disabling a cron expression is insufficient.
 
 Record scheduler ownership, command coverage for all three job entrypoints, log capture, and failure-alert evidence in `docs/production-launch-checklist.md`.
 

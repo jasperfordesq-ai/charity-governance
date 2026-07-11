@@ -49,7 +49,15 @@ async function seriousViolations(page: Page): Promise<string[]> {
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
   return results.violations
     .filter((v) => v.impact === 'serious' || v.impact === 'critical')
-    .map((v) => `${v.id} (${v.impact}) x${v.nodes.length}: ${v.help}`);
+    .map((v) => {
+      const nodes = v.nodes.map((node) => {
+        const target = node.target.join(' ');
+        const html = node.html.replace(/\s+/g, ' ').trim().slice(0, 240);
+        const failure = node.failureSummary?.replace(/\s+/g, ' ').trim();
+        return `${target}: ${html}${failure ? ` — ${failure}` : ''}`;
+      }).join(' | ');
+      return `${v.id} (${v.impact}) x${v.nodes.length}: ${v.help}${nodes ? ` [${nodes}]` : ''}`;
+    });
 }
 
 const DASHBOARD_PAGES = [

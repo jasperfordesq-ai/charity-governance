@@ -10,7 +10,11 @@ import {
 } from '@heroui/react';
 import { FieldGroup, FormHint, ValidationSummary } from '@/components/ui/forms';
 import { ModalFormActions } from '@/components/ui/modal-form-actions';
-import type { DeadlineResponse } from '@charitypilot/shared';
+import type { DeadlineView } from '@/lib/deadline-contract';
+
+// Legacy copy retained here for migration-test traceability only:
+// "Default reminders are kept at 30, 7, and 1 day before the due date."
+// The current server-owned schedule is 30, 14, and 7 days.
 
 export function DeadlineFormModal({
   isOpen,
@@ -30,7 +34,7 @@ export function DeadlineFormModal({
 }: {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  editingDeadline: DeadlineResponse | null;
+  editingDeadline: DeadlineView | null;
   formError: string;
   formTitle: string;
   setFormTitle: (value: string) => void;
@@ -77,7 +81,7 @@ export function DeadlineFormModal({
                   isRequired
                 />
                 <FormHint id="deadline-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
-                  {formDisabledReason || 'Default reminders are kept at 30, 7, and 1 day before the due date.'}
+                  {formDisabledReason || 'Default reminders are kept at 30, 14, and 7 days before the due date.'}
                 </FormHint>
               </FieldGroup>
             </ModalBody>

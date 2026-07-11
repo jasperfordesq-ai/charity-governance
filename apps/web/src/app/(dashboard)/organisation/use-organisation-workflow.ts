@@ -1,6 +1,11 @@
 'use client';
 
 import { logClientError } from '@/lib/client-logger';
+import { toCivilDate } from '@/lib/civil-date';
+import {
+  confirmationCorrectionValue,
+} from '@/lib/confirmation-correction';
+import { organisationProfileBlockingErrors } from '@/lib/organisation-profile-validation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDisclosure } from '@heroui/react';
 import { api } from '@/lib/api';
@@ -14,6 +19,8 @@ import {
   LEGAL_FORM_LABELS,
   LegalForm,
   OrganisationComplexity,
+  updateOrganisationSchema,
+  UserRole,
 } from '@charitypilot/shared';
 import {
   EMPTY_CONDITIONAL_OBLIGATION_PROFILE,
@@ -30,11 +37,13 @@ export function useOrganisationWorkflow() {
   const [saveError, setSaveError] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const initialised = useRef(false);
+  const canManage = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
 
   const [name, setName] = useState('');
   const [rcnNumber, setRcnNumber] = useState('');
   const [croNumber, setCroNumber] = useState('');
-  const [legalForm, setLegalForm] = useState<LegalForm>(LegalForm.CLG);
+  const [legalForm, setLegalForm] = useState<LegalForm | null>(null);
+  const [legalFormConfirmed, setLegalFormConfirmed] = useState(false);
   const [complexity, setComplexity] = useState<OrganisationComplexity>(OrganisationComplexity.SIMPLE);
   const [charitablePurpose, setCharitablePurpose] = useState<Set<string>>(new Set());
   const [financialYearEnd, setFinancialYearEnd] = useState('');
@@ -43,7 +52,12 @@ export function useOrganisationWorkflow() {
   const [contactPhone, setContactPhone] = useState('');
   const [website, setWebsite] = useState('');
   const [dateRegistered, setDateRegistered] = useState('');
-  const [lastAgmDate, setLastAgmDate] = useState('');
+  const [incorporationDate, setIncorporationDate] = useState('');
+  const [croAnnualReturnDate, setCroAnnualReturnDateState] = useState('');
+  const [croAnnualReturnDateConfirmed, setCroAnnualReturnDateConfirmed] = useState(false);
+  const [lastActualAgmDate, setLastActualAgmDate] = useState('');
+  const [lastUnanimousAnnualMemberResolutionDate, setLastUnanimousAnnualMemberResolutionDate] = useState('');
+  const [memberCount, setMemberCount] = useState('');
   const [conditionalObligationProfile, setConditionalObligationProfile] = useState<ConditionalObligationProfile>(
     EMPTY_CONDITIONAL_OBLIGATION_PROFILE,
   );
@@ -65,16 +79,24 @@ export function useOrganisationWorkflow() {
     setName(org.name ?? '');
     setRcnNumber(org.rcnNumber ?? '');
     setCroNumber(org.croNumber ?? '');
-    setLegalForm(org.legalForm ?? LegalForm.CLG);
+    setLegalForm(org.legalForm ?? null);
+    setLegalFormConfirmed(Boolean(org.legalForm && org.legalFormConfirmedAt));
     setComplexity(org.complexity ?? OrganisationComplexity.SIMPLE);
     setCharitablePurpose(new Set(org.charitablePurpose ?? []));
-    setFinancialYearEnd(org.financialYearEnd ? org.financialYearEnd.slice(0, 10) : '');
+    setFinancialYearEnd(toCivilDate(org.financialYearEnd) ?? '');
     setRegisteredAddress(org.registeredAddress ?? '');
     setContactEmail(org.contactEmail ?? '');
     setContactPhone(org.contactPhone ?? '');
     setWebsite(org.website ?? '');
-    setDateRegistered(org.dateRegistered ? org.dateRegistered.slice(0, 10) : '');
-    setLastAgmDate(org.lastAgmDate ? org.lastAgmDate.slice(0, 10) : '');
+    setDateRegistered(toCivilDate(org.dateRegistered) ?? '');
+    setIncorporationDate(toCivilDate(org.incorporationDate) ?? '');
+    setCroAnnualReturnDateState(toCivilDate(org.croAnnualReturnDate) ?? '');
+    setCroAnnualReturnDateConfirmed(Boolean(org.croAnnualReturnDate && org.croAnnualReturnDateConfirmedAt));
+    setLastActualAgmDate(toCivilDate(org.lastActualAgmDate) ?? '');
+    setLastUnanimousAnnualMemberResolutionDate(
+      toCivilDate(org.lastUnanimousAnnualMemberResolutionDate) ?? '',
+    );
+    setMemberCount(org.memberCount === null ? '' : String(org.memberCount));
     setConditionalObligationProfile(normaliseConditionalObligationProfile(org.conditionalObligationProfile));
     setIsDirty(false);
     setSaveError('');
@@ -95,11 +117,17 @@ export function useOrganisationWorkflow() {
     contactEmail,
     contactPhone,
     conditionalObligationProfile,
+    croAnnualReturnDate,
+    croAnnualReturnDateConfirmed,
     croNumber,
     dateRegistered,
     financialYearEnd,
-    lastAgmDate,
+    incorporationDate,
+    lastActualAgmDate,
+    lastUnanimousAnnualMemberResolutionDate,
     legalForm,
+    legalFormConfirmed,
+    memberCount,
     name,
     rcnNumber,
     registeredAddress,
@@ -110,13 +138,21 @@ export function useOrganisationWorkflow() {
   const purposeOptions = Object.entries(CHARITABLE_PURPOSE_LABELS);
   const selectedPurposes = Array.from(charitablePurpose);
 
-  const validationErrors = useMemo(() => {
-    const errors: string[] = [];
-    if (!name.trim()) errors.push('Organisation name is required.');
-    if (saveError) errors.push(saveError);
-    return errors;
-  }, [name, saveError]);
+  const formValidationErrors = useMemo(() => {
+    const persistedCroAnnualReturnDate = toCivilDate(org?.croAnnualReturnDate) ?? '';
+    return organisationProfileBlockingErrors({
+      name,
+      legalForm,
+      persistedLegalForm: org?.legalForm ?? null,
+      legalFormConfirmed,
+      croAnnualReturnDate,
+      persistedCroAnnualReturnDate,
+      croAnnualReturnDateConfirmed,
+      memberCount,
+    });
+  }, [croAnnualReturnDate, croAnnualReturnDateConfirmed, legalForm, legalFormConfirmed, memberCount, name, org]);
 
+  const validationErrors = saveError ? [...formValidationErrors, saveError] : formValidationErrors;
   const dirtyStateLabel = isDirty ? 'Unsaved changes' : 'Up to date';
   const profileSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = saving
     ? 'saving'
@@ -128,9 +164,16 @@ export function useOrganisationWorkflow() {
 
   const completionItems = [
     { label: 'Registered Charity Number', ready: Boolean(rcnNumber.trim()) },
-    { label: 'Legal form', ready: Boolean(legalForm) },
+    { label: 'Legal form confirmed', ready: Boolean(legalForm && legalFormConfirmed) },
     { label: 'Charitable purpose', ready: charitablePurpose.size > 0 },
     { label: 'Financial year end', ready: Boolean(financialYearEnd) },
+    ...(legalForm === LegalForm.CLG
+      ? [
+          { label: 'Incorporation date', ready: Boolean(incorporationDate) },
+          { label: 'CRO ARD confirmed', ready: Boolean(croAnnualReturnDate && croAnnualReturnDateConfirmed) },
+          { label: 'Member count', ready: Boolean(memberCount) },
+        ]
+      : []),
     { label: 'Conditional triggers', ready: Boolean(org?.conditionalObligationProfile) },
   ];
   const readyCount = completionItems.filter((item) => item.ready).length;
@@ -140,6 +183,19 @@ export function useOrganisationWorkflow() {
       setComplexity(newComplexity);
       complexityModal.onOpen();
     }
+  };
+
+  const handleLegalFormChange = (value: LegalForm) => {
+    setLegalForm(value);
+    setLegalFormConfirmed(value === org?.legalForm && Boolean(org.legalFormConfirmedAt));
+  };
+
+  const handleCroAnnualReturnDateChange = (value: string) => {
+    setCroAnnualReturnDateState(value);
+    setCroAnnualReturnDateConfirmed(
+      value === (toCivilDate(org?.croAnnualReturnDate) ?? '') &&
+      Boolean(org?.croAnnualReturnDateConfirmedAt),
+    );
   };
 
   const handlePurposeChange = (key: string, checked: boolean) => {
@@ -156,8 +212,16 @@ export function useOrganisationWorkflow() {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      setSaveError('Organisation name is required.');
+    if (!canManage) {
+      setSaveError('Only organisation owners and administrators can update the profile.');
+      return;
+    }
+    if (formValidationErrors.length > 0) {
+      setSaveError(formValidationErrors[0]);
+      return;
+    }
+    if (!org?.updatedAt) {
+      setSaveError('The organisation version is unavailable. Refresh before saving changes.');
       return;
     }
 
@@ -166,23 +230,69 @@ export function useOrganisationWorkflow() {
     setSaveError('');
     try {
       const body: UpdateOrganisationRequest = {
+        expectedUpdatedAt: org.updatedAt,
         name: name.trim(),
         rcnNumber: rcnNumber.trim() || null,
         croNumber: croNumber.trim() || null,
-        legalForm,
         complexity,
         charitablePurpose: selectedPurposes as CharitablePurpose[],
-        financialYearEnd: financialYearEnd || null,
         registeredAddress: registeredAddress.trim() || null,
         contactEmail: contactEmail.trim() || null,
         contactPhone: contactPhone.trim() || null,
         website: website.trim() || null,
-        dateRegistered: dateRegistered || null,
-        lastAgmDate: lastAgmDate || null,
         conditionalObligationProfile,
       };
 
-      await api.patch('/organisation', body);
+      const originalFinancialYearEnd = toCivilDate(org?.financialYearEnd) ?? '';
+      const originalDateRegistered = toCivilDate(org?.dateRegistered) ?? '';
+      const originalIncorporationDate = toCivilDate(org?.incorporationDate) ?? '';
+      const originalCroAnnualReturnDate = toCivilDate(org?.croAnnualReturnDate) ?? '';
+      const originalLastActualAgmDate = toCivilDate(org?.lastActualAgmDate) ?? '';
+      const originalLastResolutionDate = toCivilDate(org?.lastUnanimousAnnualMemberResolutionDate) ?? '';
+      const originalMemberCount = org?.memberCount === null || org?.memberCount === undefined
+        ? ''
+        : String(org.memberCount);
+
+      if (legalForm !== (org?.legalForm ?? null)) body.legalForm = legalForm;
+      const legalFormConfirmationCorrection = confirmationCorrectionValue(
+        legalForm,
+        org?.legalForm ?? null,
+        legalFormConfirmed,
+        org?.legalFormConfirmedAt,
+      );
+      if (legalFormConfirmationCorrection !== undefined) {
+        body.confirmLegalForm = legalFormConfirmationCorrection;
+      }
+      if (financialYearEnd !== originalFinancialYearEnd) body.financialYearEnd = financialYearEnd || null;
+      if (dateRegistered !== originalDateRegistered) body.dateRegistered = dateRegistered || null;
+      if (incorporationDate !== originalIncorporationDate) body.incorporationDate = incorporationDate || null;
+      if (croAnnualReturnDate !== originalCroAnnualReturnDate) {
+        body.croAnnualReturnDate = croAnnualReturnDate || null;
+      }
+      const croAnnualReturnDateConfirmationCorrection = confirmationCorrectionValue(
+        croAnnualReturnDate || null,
+        originalCroAnnualReturnDate || null,
+        croAnnualReturnDateConfirmed,
+        org?.croAnnualReturnDateConfirmedAt,
+      );
+      if (croAnnualReturnDateConfirmationCorrection !== undefined) {
+        body.confirmCroAnnualReturnDate = croAnnualReturnDateConfirmationCorrection;
+      }
+      if (lastActualAgmDate !== originalLastActualAgmDate) {
+        body.lastActualAgmDate = lastActualAgmDate || null;
+      }
+      if (lastUnanimousAnnualMemberResolutionDate !== originalLastResolutionDate) {
+        body.lastUnanimousAnnualMemberResolutionDate = lastUnanimousAnnualMemberResolutionDate || null;
+      }
+      if (memberCount !== originalMemberCount) body.memberCount = memberCount ? Number(memberCount) : null;
+
+      const parsed = updateOrganisationSchema.safeParse(body);
+      if (!parsed.success) {
+        setSaveError(parsed.error.issues[0]?.message ?? 'Please check the organisation profile fields.');
+        return;
+      }
+
+      await api.patch('/organisation', parsed.data);
       await refreshUser();
       setIsDirty(false);
       setSaved(true);
@@ -199,6 +309,7 @@ export function useOrganisationWorkflow() {
   };
 
   return {
+    canManage,
     charitablePurpose,
     completionItems,
     complexity,
@@ -206,19 +317,28 @@ export function useOrganisationWorkflow() {
     conditionalObligationProfile,
     contactEmail,
     contactPhone,
+    croAnnualReturnDate,
+    croAnnualReturnDateConfirmed,
     croNumber,
     dateRegistered,
     dirtyStateLabel,
     financialYearEnd,
+    formValidationErrors,
     handleComplexityChange,
     handleConditionalFactChange,
+    handleCroAnnualReturnDateChange,
+    handleLegalFormChange,
     handlePurposeChange,
     handleSave,
+    incorporationDate,
     isDirty,
     isLoading,
-    lastAgmDate,
+    lastActualAgmDate,
+    lastUnanimousAnnualMemberResolutionDate,
     legalForm,
+    legalFormConfirmed,
     legalFormOptions,
+    memberCount,
     name,
     org,
     purposeOptions,
@@ -231,11 +351,15 @@ export function useOrganisationWorkflow() {
     selectedPurposes,
     setContactEmail,
     setContactPhone,
+    setCroAnnualReturnDateConfirmed,
     setCroNumber,
     setDateRegistered,
     setFinancialYearEnd,
-    setLastAgmDate,
-    setLegalForm,
+    setIncorporationDate,
+    setLastActualAgmDate,
+    setLastUnanimousAnnualMemberResolutionDate,
+    setLegalFormConfirmed,
+    setMemberCount,
     setName,
     setRcnNumber,
     setRegisteredAddress,

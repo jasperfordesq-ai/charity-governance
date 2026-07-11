@@ -4,6 +4,7 @@ import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable, isSubscriptionLapseError } from '@/lib/plan-feature';
 import { api } from '@/lib/api';
 import { approvalReadinessSummary, countApprovalReadinessBlockers } from '@/lib/approval-readiness';
+import { listCurrentDeadlines } from '@/lib/deadline-api';
 import { useAuth } from '@/lib/auth-context';
 import { useCallback, useEffect, useState } from 'react';
 import type {
@@ -38,15 +39,15 @@ export function useDashboardWorkflow() {
     setError(false);
     setSubscriptionLapsed(false);
     try {
-      const [summaryRes, deadlinesRes, boardRes, signoffRes] = await Promise.all([
+      const [summaryRes, currentDeadlines, boardRes, signoffRes] = await Promise.all([
         api.get(`/compliance/summary?year=${currentYear}`),
-        api.get('/deadlines'),
+        listCurrentDeadlines(),
         api.get('/board-members'),
         api.get(`/compliance/signoff?year=${currentYear}`),
       ]);
 
       setCompliance(summaryRes.data);
-      setDeadlines(deadlinesRes.data?.data ?? deadlinesRes.data);
+      setDeadlines(currentDeadlines);
       setSignoff(signoffRes.data);
 
       try {

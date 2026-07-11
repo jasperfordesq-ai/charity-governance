@@ -11,19 +11,13 @@ documented n/a), the job is finished and stays finished.
 
 ## At a glance
 
-Generated: 2026-07-10 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-07-11 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 273 | 0 | 0 | 14 | 287 |
-| Web | 101 | 0 | 0 | 7 | 108 |
-| **Total** | **374** | **0** | **0** | **21** | **395** |
-
-**API suite:** 488 passing, 0 failing. **Web suite:** 295 passing, 0 failing. **E2E:** 23 Playwright titles linked (executed by the CI E2E gate).
-
-**Linkage:** 374/374 covered guarantees verified against a passing/linked test.
-
-**Overall: GREEN**
+| API | 292 | 0 | 0 | 14 | 306 |
+| Web | 104 | 0 | 0 | 6 | 110 |
+| **Total** | **396** | **0** | **0** | **20** | **416** |
 
 ## How to verify
 
@@ -51,7 +45,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (287 guarantees)
+## API surface - the matrix (306 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -98,7 +92,7 @@ _10 guarantees - covered 10_
 | Subscription / plan gating | An expired-trial / past-due-grace-expired / inactive subscription blocks GET and PATCH with the corresponding 403 code (TRIAL_EXPIRED \| PAST_DUE_GRACE_EXPIRED \| SUBSCRIPTION_INACTIVE). | covered | `organisation routes reject an expired trial`<br/><sub>organisation-route.test.ts</sub> |
 | Tenant isolation | GET / returns ONLY the authenticated caller's organisation: the service calls organisation.findUnique with where.id === request.user.organisationId and never with any client-supplied id, so a user in org A can never read org B's organisation record. | covered | `getOrganisation scopes the lookup to the caller's organisationId`<br/><sub>organisation-route.test.ts</sub> |
 | Tenant isolation | PATCH / writes ONLY to the caller's organisation: organisation.update is always called with where.id === request.user.organisationId, so a user in org A can never mutate org B's organisation record. | covered | `updateOrganisation scopes the update to the caller's organisationId`<br/><sub>organisation-route.test.ts</sub> |
-| Tenant isolation | The GET/PATCH response body never leaks fields outside the publicOrganisation allow-list (id, name, rcnNumber, croNumber, legalForm, complexity, charitablePurpose, financialYearEnd, registeredAddress, contactEmail, contactPhone, website, dateRegistered, lastAgmDate) — i.e. no internal/cross-tenant columns are returned. | covered | `GET / returns only the public organisation field allow-list`<br/><sub>organisation-route.test.ts</sub> |
+| Tenant isolation | The GET/PATCH response body never leaks fields outside the publicOrganisation allow-list, including the confirmed legal-calendar inputs and civil dates, and excludes every internal/cross-tenant column. | covered | `GET / returns only the public organisation field allow-list`<br/><sub>organisation-route.test.ts</sub> |
 
 ### compliance - `/api/v1/compliance`
 
@@ -188,7 +182,7 @@ _34 guarantees - covered 34_
 
 ### deadlines - `/api/v1/deadlines`
 
-_14 guarantees - covered 13  n/a 1_
+_20 guarantees - covered 19  n/a 1_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -199,12 +193,18 @@ _14 guarantees - covered 13  n/a 1_
 | Authorization boundary | GET / (list) is readable by a MEMBER (it carries authGuard+subscriptionGuard but NOT requireAdmin), returning 200. | covered | `a MEMBER can read the deadline list`<br/><sub>deadlines-reliability.test.ts</sub> |
 | Input validation | POST / rejects a malformed/oversized create body (missing title, title>300 chars, missing/invalid dueDate, description>1000 chars, reminderDays element out of 1..365 or non-integer) with 400 {code:'VALIDATION_ERROR'} and never calls prisma.deadline.create. | covered | `POST / rejects malformed create bodies with 400 VALIDATION_ERROR and does not write`<br/><sub>deadlines-reliability.test.ts</sub> |
 | Input validation | PATCH /:id rejects a malformed update body (e.g. title>300, invalid dueDate string, isComplete non-boolean, reminderDays out of range) with 400 {code:'VALIDATION_ERROR'} and never calls prisma.deadline.update. | covered | `PATCH /:id rejects malformed update bodies with 400 VALIDATION_ERROR and does not write`<br/><sub>deadlines-reliability.test.ts</sub> |
+| Input validation | The charity annual-report planning rule uses timezone-independent clamped month arithmetic, including 31 August plus ten months becoming 30 June rather than overflowing into July. | covered | `charity annual-report calculation clamps 31 August plus ten months to 30 June`<br/><sub>deadline-calendar.test.ts</sub> |
+| Input validation | Company-specific deadline rules are generated only from explicitly confirmed CLG status; an absent, unconfirmed, or non-CLG legal form cannot activate those rules. | covered | `company rules require explicitly confirmed CLG status`<br/><sub>deadline-calendar.test.ts</sub> |
 | Subscription / plan gating | All deadline routes are blocked by subscriptionGuard when the organisation has no subscription (403 NO_SUBSCRIPTION), an expired trial (403 TRIAL_EXPIRED), a past-due grace-expired sub (403 PAST_DUE_GRACE_EXPIRED), or an inactive sub (403 SUBSCRIPTION_INACTIVE), before the handler runs. | covered | `deadline routes require an active subscription`<br/><sub>deadlines-reliability.test.ts</sub> |
 | Subscription / plan gating | COMPLETE-only (requireCompletePlan) gating does not apply to the deadlines route group. | n/a | _routes/deadlines/index.ts wires only authGuard, subscriptionGuard and requireAdmin; it never imports or applies requireCompletePlan, so there is no COMPLETE-plan feature boundary to prove for this gro_ |
-| Tenant isolation | DeadlineService.update(orgA, idOwnedByOrgB, data) performs findFirst({where:{id, organisationId:orgA}}), gets null, throws AppError 404 DEADLINE_NOT_FOUND, and never calls prisma.deadline.update. | covered | `update rejects a deadline from another organisation (no cross-tenant write)`<br/><sub>deadline-service.test.ts</sub> |
-| Tenant isolation | DeadlineService.remove(orgA, idOwnedByOrgB) performs findFirst({where:{id, organisationId:orgA}}), gets null, throws AppError 404 DEADLINE_NOT_FOUND, and never calls prisma.deadline.delete. | covered | `remove rejects a deadline from another organisation (no cross-tenant delete)`<br/><sub>deadline-service.test.ts</sub> |
-| Tenant isolation | DeadlineService.list(orgId, ...) issues findMany and count whose where clause is exactly {organisationId: orgId}, so a caller can only ever read deadlines of their own organisation. | covered | `list reports hasMore based on total versus the returned page`<br/><sub>deadline-service.test.ts</sub> |
-| Tenant isolation | DeadlineService.create(orgId, data) sets data.organisationId to the caller's orgId (a member cannot create a deadline owned by another organisation). | covered | `create scopes to the organisation and defaults reminderDays`<br/><sub>deadline-service.test.ts</sub> |
+| State integrity / no data loss | Generated deadlines are immutable planning occurrences: normal edits, reopen, and delete are rejected, while completion is a one-way compare-and-set update against the current incomplete occurrence. | covered | `generated deadlines reject edits, reopen, and delete but permit one atomic completion`<br/><sub>deadline-service.test.ts</sub> |
+| State integrity / no data loss | When confirmed calendar inputs change, the current generated occurrence is retained as superseded history and a new incomplete version is created without carrying completion state forward. | covered | `changed source inputs supersede history and create a new incomplete successor version`<br/><sub>deadline-service.test.ts</sub> |
+| State integrity / no data loss | Removing or unconfirming a legal-calendar input supersedes the affected generated deadline without deleting its history or fabricating a replacement. | covered | `removed or unconfirmed inputs supersede the current generated row without deleting history`<br/><sub>deadline-service.test.ts</sub> |
+| State integrity / no data loss | Reminder history returns the immutable title, due date, schedule version, recipient, and lifecycle timestamps captured for the attempted occurrence rather than mutable live deadline fields. | covered | `reminder history returns immutable occurrence snapshots instead of live edited deadline fields`<br/><sub>deadline-service.test.ts</sub> |
+| Tenant isolation | DeadlineService.update(orgA, idOwnedByOrgB, data) scopes its lookup by id and organisationId, returns 404 DEADLINE_NOT_FOUND when absent, and performs no mutation. | covered | `cross-tenant updates and deletes fail before mutation`<br/><sub>deadline-service.test.ts</sub> |
+| Tenant isolation | DeadlineService.remove(orgA, idOwnedByOrgB) scopes its lookup by id and organisationId, returns 404 DEADLINE_NOT_FOUND when absent, and never archives or mutates another tenant's deadline. | covered | `cross-tenant updates and deletes fail before mutation`<br/><sub>deadline-service.test.ts</sub> |
+| Tenant isolation | DeadlineService.list(orgId, ...) scopes current, non-superseded, non-archived rows to organisationId, so a caller can only read current deadlines for its own organisation. | covered | `list returns current non-archived rows with exact civil dates`<br/><sub>deadline-service.test.ts</sub> |
+| Tenant isolation | DeadlineService.create(orgId, data) supplies the caller's organisationId itself, preserves a stable profile rule identity, and applies safe default reminder windows. | covered | `create scopes a manual deadline, preserves stable profile rule identity, and defaults reminders`<br/><sub>deadline-service.test.ts</sub> |
 | Tenant isolation | End-to-end through the HTTP stack: PATCH /:id and DELETE /:id for a deadline owned by org B, called with a valid org-A admin Bearer token, return 404 {code:'DEADLINE_NOT_FOUND'} and never invoke prisma.deadline.update / prisma.deadline.delete. | covered | `PATCH/DELETE /:id for a deadline owned by another organisation returns 404 DEADLINE_NOT_FOUND without writing`<br/><sub>deadlines-reliability.test.ts</sub> |
 
 ### billing - `/api/v1/billing`
@@ -396,18 +396,31 @@ _19 guarantees - covered 19_
 
 ### cross-cutting - idempotency & jobs
 
-_12 guarantees - covered 12_
+_25 guarantees - covered 25_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Graceful degradation | If the error-alert webhook sender itself throws while reporting a job failure, sendJobFailureAlert swallows the alerting error (logs it) so the scheduler does not crash and the run-failed signal is still returned. | covered | `job failure alerting tolerates a throwing alert sender without crashing the run`<br/><sub>idempotency-reliability.test.ts</sub> |
 | At-least-once / idempotency | BillingService.handleWebhook returns without retrieving the Stripe subscription, without creating a StripeWebhookEvent ledger row, and without any subscription mutation when an event id already exists in StripeWebhookEvent (replayed/redelivered event). | covered | `duplicate Stripe webhook event ids are ignored before subscription mutation`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | At-least-once / idempotency | When no Postgres row-locking is available ($transaction/$queryRaw absent, e.g. the standalone cron path), claimPendingStorageDeletions falls back to findMany({where:{processedAt:null},orderBy:{createdAt:'asc'},take:limit}) and still processes/marks each pending row exactly once. | covered | `retryPendingStorageDeletions processes pending cleanup records`<br/><sub>document-storage-cleanup.test.ts</sub> |
+| At-least-once / idempotency | Every stale SENDING reminder is globally quarantined to terminal UNCERTAIN before candidate scanning, produces a count-only operational failure, and triggers no provider call even when its deadline is outside the current scan. | covered | `stale provider requests are quarantined globally and raise a count-only alert`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | A provider result explicitly classified as UNCERTAIN finalizes the owned SENDING row as UNCERTAIN rather than retryable FAILED, and the scheduler raises a sanitized count-only alert. | covered | `ambiguous provider outcomes become terminal UNCERTAIN rather than retryable FAILED`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | An unexpected provider-adapter throw after RESERVED becomes SENDING is conservatively finalized as UNCERTAIN, never FAILED, because provider acceptance cannot be disproved. | covered | `an unexpected provider adapter throw after SENDING is quarantined as UNCERTAIN`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | An unreconciled UNCERTAIN row remains inside the partial delivery identity and suppresses reservation, provider I/O, and automatic retry until immutable restricted reconciliation is recorded. | covered | `an unreconciled uncertain delivery suppresses automatic resend`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | Only a definite provider rejection permits retry, and each retry receives a new reservation token and attempt-scoped provider idempotency key rather than reusing a mutable logical payload under one key. | covered | `definite rejection retries use a new attempt-scoped provider key`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | If global cleanup quarantines a slow in-flight request but the original token-owning worker later obtains a definitive acceptance, its final compare-and-set may replace UNCERTAIN with SENT and retain the provider message id without issuing a second send. | covered | `a definitive slow-provider result can finalize a concurrently quarantined attempt`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | ACCEPTED_CONFIRMED and UNKNOWN_ACKNOWLEDGED reconciliation stop recurring incident alerts but remain inside the active delivery identity, so neither can permit a duplicate send. | covered | `reconciled provider-accepted and acknowledged-unknown outcomes remain active resend suppressors`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | Only NOT_ACCEPTED_CONFIRMED proof releases an ambiguous row from active uniqueness, and any retry is a fresh immutable attempt with a new reservation token and provider key. | covered | `NOT_ACCEPTED_CONFIRMED reconciliation permits one fresh immutable reminder attempt`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | A legacy boolean adapter result cannot synthesize provider acceptance evidence; without a structured nonblank provider message id it is quarantined as UNCERTAIN. | covered | `a legacy boolean delivery adapter cannot fabricate provider acceptance evidence`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | At-least-once / idempotency | When two deliveries of the SAME (not-yet-recorded) Stripe event race past the pre-check and both enter the transaction, the second's stripeWebhookEvent.create raises P2002 and handleWebhook swallows it (returns) so the subscription is upserted at most once; a P2002 NOT on the ledger create (e.g. subscription.upsert) is rethrown. | covered | `concurrent delivery of the same Stripe event aborts the second transaction when the ledger insert collides`<br/><sub>idempotency-reliability.test.ts</sub> |
-| At-least-once / idempotency | DeadlineRemindersService reserves the DeadlineReminderLog (unique deadlineId_email_reminderDays) before sending: on a fresh deadline it performs reserve -> send -> finalize in that order, so the email is only dispatched after the dedup row is claimed. | covered | `deadline reminders reserve the unique reminder log before sending email`<br/><sub>billing-reminders-hardening.test.ts</sub> |
-| At-least-once / idempotency | When another worker has already reserved the same reminder window (reserveReminderLog.create throws P2002 and the existing row is SENT or a fresh non-reclaimable reservation), sendDueReminders skips: no email is sent and no finalize update runs. | covered | `deadline reminders skip sending when another worker already reserved the reminder log`<br/><sub>billing-reminders-hardening.test.ts</sub> |
-| At-least-once / idempotency | A FAILED prior reminder row, or a stale (>15min) SKIPPED 'Reserved before delivery' reservation, is reclaimed exactly once (updateMany returns count===1) and re-sent; a non-stale or already-SENT row is not reclaimed. | covered | `deadline reminders skip when a concurrent worker wins the reclaim race`<br/><sub>idempotency-reliability.test.ts</sub> |
-| At-least-once / idempotency | Reminder dedup keys on the configured window, not the live day count: if the exact trigger day was missed, the next run still sends the most urgent reached window and reserves DeadlineReminderLog.reminderDays = that window value (catch-up), and fires nothing before any window is reached. | covered | `reminder catches up to the most urgent window when the exact day was missed`<br/><sub>deadline-reminder-catchup.test.ts</sub> |
+| At-least-once / idempotency | Reminder finalization requires a null reconciliation outcome, so an immutable operator decision that wins the compare-and-set race cannot be overwritten by a late provider result. | covered | `operator reconciliation wins the compare-and-set race against a late provider finalizer`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | Recurring production jobs stop future timers and await an in-flight provider run before shutdown, preventing a normal deploy from disconnecting Prisma beneath active work. | covered | `recurring job stop waits for an in-flight provider run and prevents rescheduling`<br/><sub>production-scheduler.test.ts</sub> |
+| At-least-once / idempotency | Quiesced cutover preparation releases residual pre-I/O reservations, quarantines residual provider-I/O attempts, and the startup gate remains red while any unresolved blocker exists. | covered | `quiesced cutover preparation releases pre-I/O reservations and quarantines in-flight sends`<br/><sub>deadline-reminder-reconciliation.test.ts</sub> |
+| At-least-once / idempotency | Deadline reminder provider I/O carries an application-owned AbortSignal into the installed Resend fetch request. A request that does not settle inside the 30-second bound is actually aborted and returns UNCERTAIN, so the recurring scheduler cannot hang indefinitely and a late settlement cannot release duplicate suppression. | covered | `deadline reminder abort signal reaches the installed Resend fetch request`<br/><sub>email.service.test.ts</sub> |
+| At-least-once / idempotency | DeadlineRemindersService creates a RESERVED immutable attempt, compare-and-sets it to SENDING before provider I/O, then finalizes that exact reservation token; the active partial unique identity includes deadline, recipient, reminder window, and schedule version. | covered | `deadline reminders reserve the unique reminder log before sending email`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | When another worker already owns a SENT or fresh RESERVED row for the same recipient, window, and schedule version, sendDueReminders skips before creating an attempt, sending email, or finalizing anything. | covered | `deadline reminders skip sending when another worker already reserved the reminder log`<br/><sub>billing-reminders-hardening.test.ts</sub> |
+| At-least-once / idempotency | A stale RESERVED attempt is atomically expired to SKIPPED and retained as immutable history before a new attempt is created; a worker that loses the expiry compare-and-set sends nothing, while FAILED rows remain history and are retryable through a new attempt. | covered | `deadline reminders skip when a concurrent worker wins the reclaim race`<br/><sub>idempotency-reliability.test.ts</sub> |
+| At-least-once / idempotency | Reminder occurrence identity keys on the configured window and deadline schedule version, not the live day count: a missed exact trigger day catches up at the most urgent reached window, and no reminder fires before a configured window is reached. | covered | `reminder catches up to the most urgent window when the exact day was missed`<br/><sub>deadline-reminder-catchup.test.ts</sub> |
 | At-least-once / idempotency | Document deletion uses a transactional outbox: remove() enqueues a DocumentStorageDeletion row and deletes the document row in one $transaction (deletion record created at order 1, db delete at order 2), and if the db delete throws, storage is never deleted and the outbox row is never marked processed. | covered | `document delete removes storage after deleting the database record`<br/><sub>documents-route.test.ts</sub> |
 | At-least-once / idempotency | retryPendingStorageDeletions processes each pending row at most once per success: on success it marks processedAt with lastError/claimedAt cleared (so a redelivery won't re-delete), and on storage failure it increments attempts and clears claimedAt leaving processedAt null so the row is retried safely on a later run rather than double-charged. | covered | `retryPendingStorageDeletions processes pending cleanup records`<br/><sub>document-storage-cleanup.test.ts</sub> |
 | At-least-once / idempotency | Concurrent cleanup runs never double-process a deletion: claimPendingStorageDeletions claims rows with a single UPDATE ... SET claimedAt ... WHERE processedAt IS NULL AND (claimedAt IS NULL OR claimedAt < now - 10min) ... FOR UPDATE SKIP LOCKED RETURNING ..., bound with the 600000ms stale window and limit, so a row already claimed by another worker within 10 minutes is skipped. | covered | `claim query reclaims rows whose claim is older than the stale window`<br/><sub>idempotency-reliability.test.ts</sub> |
@@ -454,7 +467,7 @@ _9 guarantees - covered 9_
 
 ---
 
-## Web surface - the matrix (108 guarantees)
+## Web surface - the matrix (110 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -603,12 +616,14 @@ _3 guarantees - covered 2  n/a 1_
 
 ### organisation - `/organisation`
 
-_3 guarantees - covered 2  n/a 1_
+_5 guarantees - covered 5_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Input validation | The shared updateOrganisationSchema rejects malformed fields (bad email/url/date) — the server-enforced authority. | n/a | _Validation for this form is server-authoritative — the page submits the typed fields and the server validates with the shared Zod schema (proven on the API surface). There is no client-side validation_ |
-| State integrity / no data loss | Save is guarded against double-submit (isLoading + isDisabled until name present); a dirty-form beforeunload guard warns before discarding unsaved edits. | covered | `organisation warns before discarding unsaved edits (no silent data loss)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| Accessibility & resilience | The organisation page is axe-clean in both light and dark themes. | covered | `${path} is axe-clean in light and dark themes` <sup>e2e</sup><br/><sub>tests/accessibility.spec.ts</sub> |
+| Input validation | A newly selected legal form or changed CRO Annual Return Date cannot be saved until that changed fact is explicitly confirmed. | covered | `new legal and CRO facts remain blocked until explicitly confirmed`<br/><sub>lib/organisation-profile-validation.test.ts</sub> |
+| State integrity / no data loss | Dirty organisation-profile edits register a beforeunload guard so navigation cannot silently discard unsaved changes. | covered | `organisation warns before discarding unsaved edits (no silent data loss)`<br/><sub>lib/web-wiring.test.ts</sub> |
+| State integrity / no data loss | Missing optional legal-calendar setup facts do not block an owner from saving an unrelated conditional-obligation fact; the persisted trigger drives downstream workflow prompts. | covered | `organisation conditional triggers surface workflow prompts` <sup>e2e</sup><br/><sub>tests/conditional-obligations.spec.ts</sub> |
 | Tenant isolation | The organisation profile is read from useAuth().user.organisation and saved with PATCH /organisation carrying NO org id — a user can only ever edit their own org (server resolves the tenant from the cookie). | covered | `no API request carries an organisation id as a query or path parameter`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### team - `/team`

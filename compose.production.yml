@@ -3,11 +3,18 @@
 # =============================================================================
 # This stack runs published runtime images. It intentionally does not include a
 # database service, source-code bind mounts, or local development containers.
+# The migration service is maintenance-profile-only. Never use a raw `compose
+# up` as a deployment command: `npm run deploy:production` first pulls images,
+# takes the old runtime fully down, creates and restore-verifies a retained
+# database backup, runs migration alone, prepares/reconciles reminder cutover
+# state with the runtime still quiesced, and only then starts the new runtime.
 # =============================================================================
 
 services:
   migrate:
     image: ${CHARITYPILOT_MIGRATION_IMAGE:?Set CHARITYPILOT_MIGRATION_IMAGE}
+    profiles:
+      - maintenance
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
@@ -28,9 +35,6 @@ services:
     env_file:
       - ${CHARITYPILOT_PRODUCTION_ENV_FILE:-.env.production}
     restart: unless-stopped
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       PORT: 3002
@@ -96,13 +100,12 @@ services:
   production-scheduler:
     image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
     command: ["node", "dist/jobs/production-scheduler.js"]
+    stop_grace_period: 60s
     restart: unless-stopped
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: ${PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS:-45000}
       FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL}
       RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
@@ -129,9 +132,6 @@ services:
       - jobs
     command: ["node", "dist/jobs/send-deadline-reminders.js"]
     restart: "no"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
@@ -155,9 +155,6 @@ services:
       - jobs
     command: ["node", "dist/jobs/cleanup-document-storage.js"]
     restart: "no"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}

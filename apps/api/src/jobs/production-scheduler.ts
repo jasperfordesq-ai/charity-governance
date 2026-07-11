@@ -14,6 +14,8 @@ import { serializeErrorForLog } from '../utils/logger.js';
 const DEFAULT_DEADLINE_REMINDERS_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_LIMIT = 25;
+const DEFAULT_SCHEDULER_SHUTDOWN_TIMEOUT_MS = 45 * 1000;
+const MAX_SCHEDULER_SHUTDOWN_TIMEOUT_MS = 55 * 1000;
 
 type SchedulerEnv = Record<string, string | undefined>;
 
@@ -43,6 +45,7 @@ export type ProductionSchedulerConfig = {
   deadlineRemindersIntervalMs: number;
   documentStorageCleanupIntervalMs: number;
   documentStorageCleanupLimit: number;
+  shutdownTimeoutMs: number;
   runOnce: boolean;
 };
 
@@ -65,6 +68,11 @@ export function productionSchedulerConfigFromEnv(env: SchedulerEnv = process.env
       env.DOCUMENT_STORAGE_CLEANUP_LIMIT,
       DEFAULT_DOCUMENT_STORAGE_CLEANUP_LIMIT,
     ),
+    shutdownTimeoutMs: boundedPositiveIntegerEnv(
+      env.PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS,
+      DEFAULT_SCHEDULER_SHUTDOWN_TIMEOUT_MS,
+      MAX_SCHEDULER_SHUTDOWN_TIMEOUT_MS,
+    ),
     runOnce: env.PRODUCTION_SCHEDULER_RUN_ONCE === 'true',
   };
 }
@@ -72,6 +80,15 @@ export function productionSchedulerConfigFromEnv(env: SchedulerEnv = process.env
 function positiveIntegerEnv(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function boundedPositiveIntegerEnv(
+  value: string | undefined,
+  fallback: number,
+  maximum: number,
+): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= maximum ? parsed : fallback;
 }
 
 export function logSchedulerError(logger: SchedulerLogger, message: string, error: unknown): void {
@@ -185,35 +202,65 @@ export async function sendJobFailureAlert(input: {
   }
 }
 
-function startRecurringJob(input: {
+export type RecurringJobHandle = {
+  stop(): Promise<void>;
+};
+
+export function startRecurringJob(input: {
   name: string;
   intervalMs: number;
   run: () => Promise<boolean>;
   logger: SchedulerLogger;
-}): () => void {
+}): RecurringJobHandle {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let activeRun: Promise<void> | undefined;
 
-  const runAndSchedule = async () => {
+  const runAndSchedule = () => {
     if (stopped) return;
-    const failed = await input.run();
-    if (failed) {
-      input.logger.error(`[ProductionScheduler] ${input.name} reported a failed run.`);
-    }
-    if (!stopped) {
-      timer = setTimeout(() => {
-        void runAndSchedule();
-      }, input.intervalMs);
-    }
+    const currentRun = (async () => {
+      try {
+        const failed = await input.run();
+        if (failed) {
+          input.logger.error(`[ProductionScheduler] ${input.name} reported a failed run.`);
+        }
+      } catch (error) {
+        logSchedulerError(input.logger, `[ProductionScheduler] ${input.name} threw outside its runner.`, error);
+      }
+    })();
+    activeRun = currentRun;
+    void currentRun.then(() => {
+      if (activeRun === currentRun) activeRun = undefined;
+      if (!stopped) {
+        timer = setTimeout(runAndSchedule, input.intervalMs);
+      }
+    });
   };
 
   input.logger.info(`[ProductionScheduler] ${input.name} scheduled every ${input.intervalMs}ms.`);
-  void runAndSchedule();
+  runAndSchedule();
 
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
+  return {
+    async stop() {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      await activeRun;
+    },
   };
+}
+
+export async function waitForRecurringJobsToStop(
+  handles: RecurringJobHandle[],
+  timeoutMs: number,
+): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timeout = setTimeout(() => resolve(false), timeoutMs);
+  });
+  const stopped = Promise.all(handles.map((handle) => handle.stop())).then(() => true as const);
+  const result = await Promise.race([stopped, timedOut]);
+  if (timeout) clearTimeout(timeout);
+  return result;
 }
 
 async function main(): Promise<void> {
@@ -245,13 +292,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const stopDeadlineReminders = startRecurringJob({
+  const deadlineRemindersJob = startRecurringJob({
     name: 'Deadline reminders',
     intervalMs: config.deadlineRemindersIntervalMs,
     logger,
     run: () => runDeadlineReminders({ deadlineService, logger }),
   });
-  const stopDocumentStorageCleanup = startRecurringJob({
+  const documentStorageCleanupJob = startRecurringJob({
     name: 'Document storage cleanup',
     intervalMs: config.documentStorageCleanupIntervalMs,
     logger,
@@ -263,12 +310,22 @@ async function main(): Promise<void> {
     }),
   });
 
+  let shutdownStarted = false;
   const shutdown = async (signal: NodeJS.Signals) => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
     logger.info(`[ProductionScheduler] Received ${signal}; shutting down.`);
-    stopDeadlineReminders();
-    stopDocumentStorageCleanup();
+    const stopped = await waitForRecurringJobsToStop(
+      [deadlineRemindersJob, documentStorageCleanupJob],
+      config.shutdownTimeoutMs,
+    );
+    if (!stopped) {
+      logger.error(
+        '[ProductionScheduler] Graceful shutdown timed out with an active job; cutover preparation must quarantine any residual delivery state.',
+      );
+    }
     await prisma.$disconnect();
-    process.exit(0);
+    process.exit(stopped ? 0 : 1);
   };
 
   process.on('SIGINT', (signal) => {

@@ -15,12 +15,13 @@ function deadlineDueInDays(days: number, reminderDays: number[]) {
     organisationId: 'org_1',
     title: 'Annual report',
     dueDate,
+    scheduleVersion: 1,
     reminderDays,
     organisation: {
       id: 'org_1',
       name: 'Governance Charity',
       subscription: { status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: null },
-      users: [{ id: 'user_1', email: 'owner@example.org', emailVerified: true }],
+      users: [{ id: 'user_1', email: 'owner@example.org', role: 'OWNER', emailVerified: true }],
     },
   };
 }
@@ -29,20 +30,40 @@ function harness(deadline: ReturnType<typeof deadlineDueInDays>) {
   const reserved: Array<Record<string, unknown>> = [];
   const sent: unknown[][] = [];
   const prisma = {
-    deadline: { findMany: async () => [deadline] },
+    deadline: {
+      findMany: async () => [deadline],
+      findFirst: async () => ({ id: deadline.id }),
+    },
     deadlineReminderLog: {
+      findFirst: async () => null,
+      count: async () => 0,
       create: async (args: { data: Record<string, unknown> }) => {
         reserved.push(args.data);
         return { id: 'log_1', ...args.data };
       },
-      update: async () => undefined,
-      findUnique: async () => null,
+      updateMany: async (args: { where?: { status?: unknown } }) => ({
+        count:
+          args.where?.status === 'SENDING' &&
+          'providerRequestStartedAt' in (args.where ?? {})
+            ? 0
+            : 1,
+      }),
     },
+    user: { findFirst: async () => ({ id: 'user_1' }) },
+    subscription: {
+      findUnique: async () => ({ status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: null }),
+    },
+    organisation: { findUnique: async () => ({ name: 'Governance Charity' }) },
+    $queryRaw: async () => [{ id: deadline.id }],
   };
-  const service = new DeadlineRemindersService(prisma as never, {
+  const client = {
+    ...prisma,
+    $transaction: async (operation: (tx: typeof prisma) => Promise<unknown>) => operation(prisma),
+  };
+  const service = new DeadlineRemindersService(client as never, {
     sendDeadlineReminder: async (...a: unknown[]) => {
       sent.push(a);
-      return true;
+      return { outcome: 'ACCEPTED', providerMessageId: 'provider-catchup-accepted' };
     },
   } as never);
   return { service, reserved, sent };

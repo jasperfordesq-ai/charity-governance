@@ -106,6 +106,50 @@ The detailed issue contract remains in
   `29116192729` both completed successfully for that exact SHA, with the latter
   passing `96 / 96` Playwright tests in `3.2m`. Release-promotion and deployed
   browser proof remain separate P0-09/launch gates.
+- **P0-06 deadline calendar and recurrence integrity - `LOCALLY_VERIFIED`.**
+  Strict civil-date helpers replace JavaScript month overflow and cover every
+  month-end class, leap years, Europe/Dublin DST boundaries, Irish public
+  holidays, and Companies Act working-day adjustment. Generated deadlines now
+  carry source/input fingerprints, stable rule identity, versions, provenance,
+  supersession links, and immutable history; changed inputs create a new
+  incomplete successor and revoked confirmations remove the current occurrence
+  without deleting history. Company/CRO rules require explicit confirmed facts,
+  while contradictions, impossible chronology, future actual events, and unsafe
+  date ranges fail closed. Manual due-date/reopen changes advance reminder
+  schedule identity, generated occurrences allow only one-way atomic completion,
+  and reminder history stores immutable occurrence snapshots. Generated
+  completion now requires an explicit irreversible confirmation, current lists
+  traverse every API page, and organisation/manual-deadline writes reject stale
+  `updatedAt` versions rather than overwriting newer governance facts. The scheduler
+  pages all current eligible rows, sends separately to every verified owner,
+  revalidates recipient/subscription/occurrence under a proven lock order,
+  expires stale pre-I/O reservations atomically, marks `SENDING` before provider
+  I/O, and quarantines every crash, timeout, 409, 5xx, malformed, boolean, or
+  unknown provider outcome as `UNCERTAIN`. Acceptance-confirmed and
+  unknown-acknowledged reconciliation remain dedupe suppressors; only immutable
+  proof that the provider never accepted/created the original message permits a
+  fresh token/key. The scheduler awaits active work during bounded shutdown, and
+  deploy releases residual reservations, quarantines residual provider I/O, and
+  blocks startup on unresolved ambiguity. The migration conservatively
+  quarantines all legacy reminder states without fabricating provider/timing
+  evidence, preserves exact annual-report id/completion/log identity, and fails
+  closed on range, tenant, generated-row, AGM-evidence, duplicate, and id-collision
+  ambiguity. A real PostgreSQL historical-upgrade fixture exercises eleven
+  fail-closed scenarios in CI and release-image publication. Full API/web/shared
+  suites are green (`545 / 545`, `313 / 313`, `35 / 35`), Prisma validates, and a
+  disposable PostgreSQL 16 proof passed fresh/upgrade migrations, constraint and
+  concurrency probes. A non-UTC (`America/Los_Angeles`) live application-path
+  probe also proves the fixed civil-date claim binds and snapshots
+  `2030-01-15` unchanged. Root lint/build, production tooling `544 / 544`,
+  local-Docker contracts `44 / 44`, E2E safety contracts `113 / 113`, security
+  scans across `545` staged files, zero-vulnerability dependency audits, generated-audit currency, and
+  reliability linkage `396 / 396` is green. A focused managed browser run
+  passed the Organisation contrast and migrated-profile save regressions, then
+  the complete managed gate passed `113 / 113` isolation contracts and `97 / 97`
+  Playwright tests with verified teardown. This is local working-tree proof;
+  publish the implementation and obtain exact-SHA CI/E2E
+  before changing this item to `CI_VERIFIED`; professional rule review remains
+  external launch evidence.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -166,7 +210,7 @@ Known current state from `npm run launch:status -- --json` on 2026-07-10:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `512 / 512` checks on
+  `npm run test:production-check` passed with `544 / 544` checks on
   2026-07-10. Older `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
@@ -427,7 +471,7 @@ The launch evidence model has been tightened substantially:
 - Deploy-smoke evidence hints now match the strict validator:
 
 ```powershell
-npm run deploy:production -- --production-env-file=.env.production
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers
 node scripts/smoke-production-deploy.mjs --production-env-file .env.production
 Production deploy smoke passed
 https://app.charitypilot.ie
@@ -439,22 +483,24 @@ https://api.charitypilot.ie
 Recently successful checks in this workstream:
 
 - `npm run test:e2e`
-  - Passed on 2026-07-10 through the P0-05 managed runner with `113 / 113`
-    isolation contracts and `96 / 96` live Playwright tests in `9.6m`; the full
-    fresh-build/test/verified-teardown command took approximately `25.0m`
-    against the UUID-marked disposable PostgreSQL instance. Exact teardown left
-    no runner Docker/private-state residue or personal-stack drift.
+  - Passed locally on 2026-07-10 for P0-06 with `113 / 113` isolation contracts
+    and `97 / 97` live Playwright tests in `7.0m`; the cached production-image,
+    attestation, readiness, test, and verified-teardown command took `11.6m`
+    against the UUID-marked disposable PostgreSQL instance. A preceding focused
+    managed run also passed the Organisation contrast and migrated-profile save
+    regressions. Exact teardown left no runner Docker/private-state residue or
+    personal-stack drift. Exact-SHA GitHub evidence remains pending for P0-06.
 - `npm test`
-  - Passed on 2026-07-10 with API `488 / 488`, web `295 / 295`, shared
-    `23 / 23`, production tooling `512 / 512`, and local-Docker tooling
+  - Passed on 2026-07-10 with API `520 / 520`, web `311 / 311`, shared
+    `35 / 35`, production tooling `512 / 512`, and local-Docker tooling
     `44 / 44`.
 - `npm run reliability:report -- --write`
-  - Passed on 2026-07-10 with `374 / 374` covered guarantees linked to passing
+  - Passed on 2026-07-10 with `383 / 383` covered guarantees linked to passing
     test titles. Static linkage alone is not browser execution; separate E2E run
     `29116192729` supplies exact-SHA execution for P0-05. P0-09 remains open for
     release-promotion, deployed-browser, and live repository-protection proof.
 - `npm run build`, `npm run security:scan`, and both dependency audits
-  - Passed on 2026-07-10; all workspaces built, `497` files passed secret/SAST
+  - Passed on 2026-07-10; all workspaces built, `545` staged files passed secret/SAST
     scans, and both audits reported zero vulnerabilities.
 - `node --test apps/api/dist/tests/billing-subscription-integrity.test.js apps/api/dist/tests/billing-reliability.test.js apps/api/dist/tests/billing-reminders-hardening.test.js apps/api/dist/tests/idempotency-reliability.test.js`
   - Passed on 2026-07-10 with `50 / 50` focused P0-03 billing tests.
@@ -701,8 +747,8 @@ npm run check:production:supabase -- --production-env-file=.env.production
 npm run check:production:providers -- --production-env-file=.env.production
 npm run check:production:observability -- --production-env-file=.env.production
 npm run deploy:preflight -- --production-env-file=.env.production
-npm run deploy:production -- --production-env-file=.env.production
-npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers
+npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/secure/charitypilot/rollback-cutovers
 npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 ```
 

@@ -77,6 +77,7 @@ function releaseDigestManifest(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'a'.repeat(64)}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'a'.repeat(64)}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'a'.repeat(64)}`,
+    CHARITYPILOT_DATABASE_COMPATIBILITY: 'p006-deadline-calendar-v1',
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
@@ -273,6 +274,7 @@ test('production release run checker rejects digest artifact contents that do no
       return binaryResponse(200, zipWithReleaseManifest(releaseDigestManifest({
         CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'c'.repeat(64)}`,
         CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.drifted.charitypilot.ie',
+        CHARITYPILOT_DATABASE_COMPATIBILITY: 'unreviewed-breaking-change',
       })));
     }
     return response(404, {});
@@ -284,6 +286,7 @@ test('production release run checker rejects digest artifact contents that do no
     assert.equal(result.status, 1);
     assert.match(result.stderr, /release-image-digests artifact CHARITYPILOT_API_IMAGE must match release\.imageDigestManifest\.apiImage/);
     assert.match(result.stderr, /release-image-digests artifact CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL must match release\.imageDigestManifest\.webBuildNextPublicApiUrl/);
+    assert.match(result.stderr, /CHARITYPILOT_DATABASE_COMPATIBILITY must equal p006-deadline-calendar-v1/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

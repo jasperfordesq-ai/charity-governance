@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { z } from "zod";
+import { isCivilDate } from "../calendar/civil-date.js";
 
 function hasValidIsoDatePart(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
@@ -27,18 +28,26 @@ export function isIsoDateOrDateTime(value: string) {
   );
 }
 
-export const dateInputSchema = z.string().refine(
-  isIsoDateOrDateTime,
-  'Date must be a valid ISO date or datetime',
-);
+export const civilDateSchema = z
+  .string()
+  .refine(
+    isCivilDate,
+    "Date must be a valid calendar date in YYYY-MM-DD format",
+  );
+
+export const nullableCivilDateSchema = civilDateSchema.nullable().optional();
+
+export const dateInputSchema = z
+  .string()
+  .refine(isIsoDateOrDateTime, "Date must be a valid ISO date or datetime");
 
 export const nullableDateInputSchema = z
   .string()
   .trim()
   .refine(
-    (value) => value === '' || isIsoDateOrDateTime(value),
-    'Date must be a valid ISO date or datetime',
+    (value) => value === "" || isIsoDateOrDateTime(value),
+    "Date must be a valid ISO date or datetime",
   )
   .nullable()
   .optional()
-  .transform((value) => (value === '' ? null : value));
+  .transform((value) => (value === "" ? null : value));

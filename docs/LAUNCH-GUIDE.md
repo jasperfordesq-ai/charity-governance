@@ -168,7 +168,7 @@ You need four external services. Create the **production/live** versions
      `TRUSTED_PROXY_ADDRESSES` (so the API trusts the proxy's forwarded client IPs).
   3. Bring up the stack with the proxy overlay:
      ```bash
-     npm run deploy:production -- --production-env-file=.env.production
+     npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
      ```
   Caddy terminates HTTPS for both domains and proxies to the internal containers;
   certificates are issued and renewed with no further action. You still need the
@@ -211,16 +211,15 @@ You need four external services. Create the **production/live** versions
 - **Effort:** A couple of hours, iterating until all checks pass.
 
 ### Step 6 - Deploy
-- **What:** Run migrations against the production DB, then deploy the signed images.
+- **What:** Rehearse the exact signed images against a recent isolated production restore, then let the fail-closed deploy command stop the old runtime, create and restore-verify a protected backup, run migration alone, probe migration history, prepare/reconcile reminder cutover state, and only then start the signed runtime.
   ```bash
-  npm run db:migrate:deploy -w @charitypilot/api
 gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"
 gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first
   npm run check:production:github-env -- --environment=production
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
-  npm run deploy:production -- --production-env-file=.env.production
+  npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
   ```
 - **Current known GitHub environment blocker:** the latest live
   `npm run check:production:github-env -- --environment=production` check
@@ -232,7 +231,12 @@ gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-a
   uploads `release-image-digests.env`; copy its digest-pinned image values and
   `CHARITYPILOT_WEB_BUILD_*` origins into `.env.production` before preflight.
   The preflight verifies signed, digest-pinned images and renders the compose
-  file; the deploy brings the stack up and runs a public HTTPS smoke test
+  file. Do not run the standalone migration command against production and do
+  not use raw `docker compose up`: the deploy command must take the old API,
+  web, scheduler, jobs, and proxy down before the breaking migration. It keeps
+  failures in maintenance mode, blocks startup on unresolved reminder-provider
+  ambiguity, requires roll-forward unless the database is explicitly restored
+  before an older image is selected, and then runs a public HTTPS smoke test
   automatically.
 - **Effort:** ~1 hour first time. Full details in `docs/production-runbook.md`.
 

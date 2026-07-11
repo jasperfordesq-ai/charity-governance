@@ -3,13 +3,14 @@
 import { Button } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
 import { SourceReferenceList } from '@/components/ui/source-reference';
-import { EmptyState, ErrorState } from '@/components/ui/states';
+import { EmptyState, ErrorState, PermissionHint } from '@/components/ui/states';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   CONDITIONAL_OBLIGATION_REVIEW_RULES,
   getMatrixEntriesForStandard,
   type OrganisationResponse,
 } from '@charitypilot/shared';
+import type { DeadlineView } from '@/lib/deadline-contract';
 
 type ConditionalProfile = OrganisationResponse['conditionalObligationProfile'];
 
@@ -18,7 +19,10 @@ const formatReviewFlag = (value: string) =>
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
-export function buildDeadlineProfilePrompts(profile: ConditionalProfile | undefined, deadlineSearchText: string) {
+export function buildDeadlineProfilePrompts(
+  profile: ConditionalProfile | undefined,
+  deadlines: DeadlineView[],
+) {
   if (!profile) return [];
 
   return CONDITIONAL_OBLIGATION_REVIEW_RULES
@@ -35,9 +39,12 @@ export function buildDeadlineProfilePrompts(profile: ConditionalProfile | undefi
       const professionalReview = Array.from(
         new Set(matrixEntries.flatMap((entry) => entry.professionalReview)),
       );
-      const reviewDateAlreadyScheduled =
-        deadlineSearchText.includes(rule.label.toLowerCase()) ||
-        rule.standardCodes.some((code) => deadlineSearchText.includes(code.toLowerCase()));
+      const reviewDateAlreadyScheduled = deadlines.some(
+        (deadline) =>
+          !deadline.isComplete &&
+          !deadline.supersededAt &&
+          deadline.profileRuleKey === rule.profileKey,
+      );
 
       return {
         ...rule,
@@ -56,6 +63,7 @@ export function DeadlineProfilePromptsPanel({
   missingCount,
   error,
   saving,
+  canManage,
   onRetry,
   onSchedule,
 }: {
@@ -64,6 +72,7 @@ export function DeadlineProfilePromptsPanel({
   missingCount: number;
   error: string;
   saving: boolean;
+  canManage: boolean;
   onRetry: () => void;
   onSchedule: (item: DeadlineProfilePrompt) => void;
 }) {
@@ -128,15 +137,19 @@ export function DeadlineProfilePromptsPanel({
                 </div>
                 <SourceReferenceList sources={item.sourceRefs} className="mt-3" />
                 {!item.reviewDateAlreadyScheduled ? (
-                  <Button
-                    size="sm"
-                    variant="flat"
-                    className="mt-4"
-                    onPress={() => onSchedule(item)}
-                    isDisabled={saving}
-                  >
-                    Schedule review
-                  </Button>
+                  canManage ? (
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      className="mt-4"
+                      onPress={() => onSchedule(item)}
+                      isDisabled={saving}
+                    >
+                      Schedule review
+                    </Button>
+                  ) : (
+                    <PermissionHint>Ask an owner or administrator to schedule this review.</PermissionHint>
+                  )
                 ) : null}
               </div>
             );

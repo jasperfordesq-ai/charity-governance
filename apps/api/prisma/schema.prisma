@@ -127,47 +127,78 @@ enum UserRole {
 }
 
 enum DeadlineReminderStatus {
+  RESERVED
+  SENDING
   SENT
   SKIPPED
   FAILED
+  UNCERTAIN
+}
+
+enum DeadlineReminderReconciliationOutcome {
+  ACCEPTED_CONFIRMED
+  NOT_ACCEPTED_CONFIRMED
+  UNKNOWN_ACKNOWLEDGED
+}
+
+enum GeneratedDeadlineKind {
+  CHARITY_ANNUAL_REPORT
+  COMPANY_FINANCIAL_STATEMENTS
+  COMPANY_ANNUAL_MEMBER_ACTION
+  CRO_ANNUAL_RETURN
+  LEGACY_UNVERIFIED
+}
+
+enum DeadlineSupersessionReason {
+  INPUT_CHANGED
+  INPUT_REMOVED
+  RULE_CHANGED
+  RECURRENCE_ADVANCED
+  LEGACY_MIGRATION
 }
 
 model Organisation {
-  id                           String                 @id @default(cuid())
-  name                         String
-  rcnNumber                    String?
-  croNumber                    String?
-  legalForm                    LegalForm              @default(CLG)
-  complexity                   OrganisationComplexity @default(SIMPLE)
-  charitablePurpose            CharitablePurpose[]
-  financialYearEnd             DateTime?
-  registeredAddress            String?
-  contactEmail                 String?
-  contactPhone                 String?
-  website                      String?
-  dateRegistered               DateTime?
-  lastAgmDate                  DateTime?
-  conditionalObligationProfile Json?
+  id                                      String                 @id @default(cuid())
+  name                                    String
+  rcnNumber                               String?
+  croNumber                               String?
+  legalForm                               LegalForm?
+  legalFormConfirmedAt                    DateTime?
+  complexity                              OrganisationComplexity @default(SIMPLE)
+  charitablePurpose                       CharitablePurpose[]
+  financialYearEnd                        DateTime?              @db.Date
+  registeredAddress                       String?
+  contactEmail                            String?
+  contactPhone                            String?
+  website                                 String?
+  dateRegistered                          DateTime?              @db.Date
+  incorporationDate                       DateTime?              @db.Date
+  croAnnualReturnDate                     DateTime?              @db.Date
+  croAnnualReturnDateConfirmedAt          DateTime?
+  lastActualAgmDate                       DateTime?              @db.Date
+  lastUnanimousAnnualMemberResolutionDate DateTime?              @db.Date
+  memberCount                             Int?
+  conditionalObligationProfile            Json?
 
   stripeCustomerId String? @unique
 
-  users                   User[]
-  boardMembers            BoardMember[]
-  complianceRecords       ComplianceRecord[]
-  complianceSignoffs      ComplianceSignoff[]
+  users                       User[]
+  boardMembers                BoardMember[]
+  complianceRecords           ComplianceRecord[]
+  complianceSignoffs          ComplianceSignoff[]
   complianceApprovalSnapshots ComplianceApprovalSnapshot[]
-  documents               Document[]
-  deadlines               Deadline[]
-  conflictRecords         ConflictRecord[]
-  riskRecords             RiskRecord[]
-  complaintRecords        ComplaintRecord[]
-  fundraisingRecords      FundraisingRecord[]
-  annualReportReadiness   AnnualReportReadiness[]
-  financialControlReviews FinancialControlReview[]
-  teamInvites             TeamInvite[]
-  deadlineReminderLogs    DeadlineReminderLog[]
-  subscription            Subscription?
-  billingCheckoutAttempt  BillingCheckoutAttempt?
+  documents                   Document[]
+  deadlines                   Deadline[]
+  conflictRecords             ConflictRecord[]
+  riskRecords                 RiskRecord[]
+  complaintRecords            ComplaintRecord[]
+  fundraisingRecords          FundraisingRecord[]
+  annualReportReadiness       AnnualReportReadiness[]
+  financialControlReviews     FinancialControlReview[]
+  teamInvites                 TeamInvite[]
+  deadlineReminderLogs        DeadlineReminderLog[]
+  subscription                Subscription?
+  billingCheckoutAttempt      BillingCheckoutAttempt?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -198,6 +229,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([id, organisationId])
   @@index([organisationId])
 }
 
@@ -279,10 +311,10 @@ model ComplianceSignoff {
   approvedByRole   String?
   approvalNotes    String?
   approvedAt       DateTime?
-  revision         Int                              @default(1)
-  approvalSequence Int                              @default(0)
+  revision         Int                     @default(1)
+  approvalSequence Int                     @default(0)
 
-  currentApprovalSnapshotId String?                      @unique
+  currentApprovalSnapshotId String?                     @unique
   currentApprovalSnapshot   ComplianceApprovalSnapshot? @relation("CurrentComplianceApproval", fields: [currentApprovalSnapshotId], references: [id], onDelete: Restrict)
 
   invalidatedAt      DateTime?
@@ -324,10 +356,10 @@ model ComplianceApprovalSnapshot {
 }
 
 model ComplianceAuditEvent {
-  id               String                   @id @default(cuid())
-  organisationId   String
-  reportingYear    Int
-  type             ComplianceAuditEventType
+  id             String                   @id @default(cuid())
+  organisationId String
+  reportingYear  Int
+  type           ComplianceAuditEventType
 
   standardId         String?
   complianceRecordId String?
@@ -342,7 +374,7 @@ model ComplianceAuditEvent {
   reason       ComplianceApprovalInvalidationReason?
   beforeState  Json?
   afterState   Json?
-  occurredAt   DateTime @default(now())
+  occurredAt   DateTime                              @default(now())
 
   @@unique([complianceRecordId, toRevision])
   @@unique([signoffId, toRevision])
@@ -563,22 +595,43 @@ model FinancialControlReview {
 }
 
 model Deadline {
-  id              String                @id @default(cuid())
-  organisationId  String
-  organisation    Organisation          @relation(fields: [organisationId], references: [id])
-  title           String
-  description     String?
-  dueDate         DateTime
-  isAutoGenerated Boolean               @default(false)
-  isComplete      Boolean               @default(false)
-  completedDate   DateTime?
-  reminderDays    Int[]                 @default([30, 14, 7])
-  reminderLogs    DeadlineReminderLog[]
+  id                    String                      @id @default(cuid())
+  organisationId        String
+  organisation          Organisation                @relation(fields: [organisationId], references: [id])
+  title                 String
+  description           String?
+  dueDate               DateTime                    @db.Date
+  scheduleVersion       Int                         @default(1)
+  isAutoGenerated       Boolean                     @default(false)
+  generatedKind         GeneratedDeadlineKind?
+  generatedKey          String?
+  generationVersion     Int?
+  generationRuleVersion Int?
+  generationFingerprint String?                     @db.Char(64)
+  generationSource      Json?
+  generationInputs      Json?
+  profileRuleKey        String?
+  isComplete            Boolean                     @default(false)
+  completedDate         DateTime?
+  completionDateKnown   Boolean                     @default(true)
+  reminderDays          Int[]                       @default([30, 14, 7])
+  supersededAt          DateTime?
+  supersededById        String?
+  supersessionReason    DeadlineSupersessionReason?
+  supersededBy          Deadline?                   @relation("DeadlineSupersession", fields: [supersededById, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Cascade)
+  supersedes            Deadline?                   @relation("DeadlineSupersession")
+  archivedAt            DateTime?
+  reminderLogs          DeadlineReminderLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([organisationId])
+  @@unique([id, organisationId])
+  @@unique([supersededById, organisationId])
+  @@unique([organisationId, generatedKey, generationVersion])
+  @@index([organisationId, supersededAt, archivedAt, dueDate])
+  @@index([organisationId, isComplete, dueDate])
+  @@index([dueDate, id])
 }
 
 model TeamInvite {
@@ -602,22 +655,41 @@ model TeamInvite {
 }
 
 model DeadlineReminderLog {
-  id             String                 @id @default(cuid())
-  organisationId String
-  organisation   Organisation           @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  deadlineId     String
-  deadline       Deadline               @relation(fields: [deadlineId], references: [id], onDelete: Cascade)
-  userId         String?
-  user           User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
-  email          String
-  reminderDays   Int
-  status         DeadlineReminderStatus
-  error          String?
-  sentAt         DateTime               @default(now())
+  id                       String                                 @id @default(cuid())
+  organisationId           String
+  organisation             Organisation                           @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  deadlineId               String
+  deadline                 Deadline                               @relation(fields: [deadlineId, organisationId], references: [id, organisationId], onDelete: Cascade, onUpdate: Cascade)
+  deadlineScheduleVersion  Int
+  deadlineTitle            String
+  deadlineDueDate          DateTime                               @db.Date
+  deadlineSnapshotKnown    Boolean                                @default(true)
+  deliveryTimingKnown      Boolean                                @default(true)
+  legacyDeliveryStatus     String?
+  legacyRecordedAt         DateTime?
+  userId                   String?
+  user                     User?                                  @relation(fields: [userId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Cascade)
+  email                    String
+  reminderDays             Int
+  status                   DeadlineReminderStatus
+  reservationToken         String                                 @unique
+  providerIdempotencyKey   String?                                @unique
+  providerRequestStartedAt DateTime?
+  providerMessageId        String?                                @unique
+  reconciliationOutcome    DeadlineReminderReconciliationOutcome?
+  reconciledAt             DateTime?
+  reconciledBy             String?
+  reconciliationReference  String?
+  error                    String?
+  reservedAt               DateTime                               @default(now())
+  attemptedAt              DateTime?
+  sentAt                   DateTime?
 
-  @@unique([deadlineId, email, reminderDays])
   @@index([organisationId])
+  @@index([organisationId, reservedAt, id])
   @@index([userId])
+  @@index([deadlineId, status])
+  @@index([status, providerRequestStartedAt])
 }
 
 model Subscription {

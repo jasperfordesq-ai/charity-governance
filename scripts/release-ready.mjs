@@ -152,7 +152,7 @@ if (noE2e) {
   results.push({ name: 'End-to-end (Playwright)', ok: true, ms: 0, skipped: true });
 } else {
   results.push(run('End-to-end (Playwright)', 'npm', ['run', 'test:e2e'], {
-    timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS + 1200000,
+    timeoutMs: RELEASE_READY_E2E_TIMEOUT_MS + 1800000,
     env: managedLocalE2eEnvironment(RELEASE_READY_E2E_TIMEOUT_MS),
     replaceEnv: true,
   }));

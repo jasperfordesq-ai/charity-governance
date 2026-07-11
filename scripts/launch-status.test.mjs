@@ -162,10 +162,10 @@ function assertProductionLaunchCommands(commands) {
   assert.equal(commands.deployedBrowserQaPreflight, 'npm run check:production:browser-qa-env');
   assert.equal(commands.deployedBrowserQaPreflightJson, 'npm run check:production:browser-qa-env -- --json');
   assert.equal(commands.deployPreflight, 'npm run deploy:preflight -- --production-env-file=.env.production');
-  assert.equal(commands.deployProduction, 'npm run deploy:production -- --production-env-file=.env.production');
+  assert.equal(commands.deployProduction, 'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers');
   assert.equal(
     commands.rollbackRehearsal,
-    'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+    'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/secure/charitypilot/rollback-cutovers',
   );
   assert.equal(
     commands.releaseRunEvidence,

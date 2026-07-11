@@ -89,7 +89,7 @@ function evidenceEntry(areaId, checkId) {
 
   if (areaId === 'database' && checkId === 'migrations-deployed') {
     entry.type = 'command-output';
-    entry.description = 'npm run db:migrate:deploy -w @charitypilot/api completed against production.';
+    entry.description = 'npm run deploy:production completed with the migration image alone against production.';
   }
 
   if (areaId === 'database' && checkId === 'backups-enabled') {
@@ -497,9 +497,13 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'releaseGate' && checkId === 'deploy-production') {
     entry.type = 'command-output';
     entry.description = [
-      'npm run deploy:production -- --production-env-file=.env.production',
+      'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers',
       'compose.production.yml and compose.production-tls.yml were used for the production deploy.',
       'release-image-digests.env supplied digest-pinned images for API, web, and migration services.',
+      'The old runtime stopped before migration and a retained restore-verified backup completed.',
+      'The migration image alone completed, followed by the live migration-history probe.',
+      'The quiesced reminder cutover preparation completed with zero unresolved reminder outcomes.',
+      'The host-wide production cutover lock covered preflight through smoke.',
       'Production deploy preflight passed: env, compose config, and image signatures verified.',
       'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
       'Production compose deploy completed.',
@@ -509,7 +513,7 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'releaseGate' && checkId === 'deploy-smoke') {
     entry.type = 'command-output';
     entry.description = [
-      'npm run deploy:production -- --production-env-file=.env.production',
+      'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers',
       'node scripts/smoke-production-deploy.mjs --production-env-file .env.production',
       'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
       'Web origin: https://app.charitypilot.ie',
@@ -520,8 +524,10 @@ function evidenceEntry(areaId, checkId) {
   if (areaId === 'releaseGate' && checkId === 'deploy-rollback') {
     entry.type = 'command-output';
     entry.description = [
-      'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+      'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/secure/charitypilot/rollback-cutovers',
       'Rollback used the previous signed digest manifest release-image-digests.previous.env.',
+      'The live migration-history probe passed before the rollback runtime started.',
+      'The host-wide production cutover lock covered rollback validation and delegated deploy.',
       'Production compose rollback completed.',
       'Production deploy smoke passed after rollback.',
     ].join(' ');
@@ -546,6 +552,7 @@ function evidenceEntry(areaId, checkId) {
       apiImage,
       webImage,
       migrationImage,
+      'CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1',
       'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
       `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
     ].join(' ');
@@ -1738,11 +1745,15 @@ test('production launch evidence validator accepts managed TLS deploy evidence',
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
   evidence.areas.releaseGate.checks['deploy-production'].evidence[0].description = [
-    'npm run deploy:production -- --production-env-file=.env.production --no-tls-proxy',
+    'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers --no-tls-proxy',
     'compose.production.yml was used for the production deploy.',
     'Managed load balancer TLS terminated HTTPS for https://app.charitypilot.ie and https://api.charitypilot.ie.',
     'External TLS certificate evidence confirmed app.charitypilot.ie and api.charitypilot.ie certificates.',
     'release-image-digests.env supplied digest-pinned images for API, web, and migration services.',
+    'The old runtime stopped before migration and a retained restore-verified backup completed.',
+    'The migration image alone completed, followed by the live migration-history probe.',
+    'The quiesced reminder cutover preparation completed with zero unresolved reminder outcomes.',
+    'The host-wide production cutover lock covered preflight through smoke.',
     'Production deploy preflight passed: env, compose config, and image signatures verified.',
     'Production deploy smoke passed: public web, API health, CORS, and keyed readiness verified.',
     'Production compose deploy completed.',
@@ -1781,6 +1792,8 @@ test('production launch evidence validator requires production deploy and rollba
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include compose\.production-tls\.yml/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include release-image-digests\.env/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include digest-pinned images/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include quiesced reminder cutover preparation/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-production\.evidence must include zero unresolved reminder outcomes/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include command-output evidence/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include the production rollback command/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include Production compose rollback completed/);
@@ -2141,7 +2154,7 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.releaseGate.checks['deploy-smoke'].requiredEvidenceHints,
       [
-        'npm run deploy:production -- --production-env-file=.env.production',
+        'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers',
         'node scripts/smoke-production-deploy.mjs --production-env-file .env.production',
         'Production deploy smoke passed',
         'https://app.charitypilot.ie',
@@ -2155,11 +2168,14 @@ test('production launch evidence template covers every required area and final s
     assert.deepEqual(
       template.areas.releaseGate.checks['deploy-production'].requiredEvidenceHints,
       [
-        'npm run deploy:production -- --production-env-file=.env.production',
+        'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers',
         'compose.production.yml',
         'compose.production-tls.yml or --no-tls-proxy with managed TLS certificate evidence',
         'release-image-digests.env',
         'digest-pinned images',
+        'host-wide production cutover lock',
+        'quiesced reminder cutover preparation',
+        'zero unresolved reminder outcomes',
         'post-deploy smoke',
       ],
     );
@@ -2309,6 +2325,15 @@ test('production launch evidence template uses the strict check-production succe
     'Production preflight passed',
   ]);
   assert.doesNotMatch(JSON.stringify(hints), /Production configuration check passed/);
+});
+
+test('production launch evidence template requires reminder cutover clearance proof', async () => {
+  const { renderProductionLaunchEvidenceTemplate } = await loadEvidenceTemplateGenerator();
+  const template = JSON.parse(renderProductionLaunchEvidenceTemplate());
+  const hints = template.areas.releaseGate.checks['deploy-production'].requiredEvidenceHints;
+
+  assert.ok(hints.includes('quiesced reminder cutover preparation'));
+  assert.ok(hints.includes('zero unresolved reminder outcomes'));
 });
 
 test('production launch evidence validator rejects chronologically impossible evidence dates', async () => {

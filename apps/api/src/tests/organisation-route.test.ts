@@ -20,6 +20,7 @@ const PUBLIC_ORG_KEYS = [
   'rcnNumber',
   'croNumber',
   'legalForm',
+  'legalFormConfirmedAt',
   'complexity',
   'charitablePurpose',
   'financialYearEnd',
@@ -28,9 +29,17 @@ const PUBLIC_ORG_KEYS = [
   'contactPhone',
   'website',
   'dateRegistered',
-  'lastAgmDate',
+  'incorporationDate',
+  'croAnnualReturnDate',
+  'croAnnualReturnDateConfirmedAt',
+  'lastActualAgmDate',
+  'lastUnanimousAnnualMemberResolutionDate',
+  'memberCount',
   'conditionalObligationProfile',
+  'updatedAt',
 ] as const;
+
+const EXPECTED_UPDATED_AT = '2026-01-01T00:00:00.000Z';
 
 const conditionalProfile = {
   hasPaidStaff: true,
@@ -52,6 +61,7 @@ function fullOrgRecord() {
     rcnNumber: null,
     croNumber: null,
     legalForm: 'CLG',
+    legalFormConfirmedAt: null,
     complexity: 'SIMPLE',
     charitablePurpose: [],
     financialYearEnd: null,
@@ -60,8 +70,14 @@ function fullOrgRecord() {
     contactPhone: null,
     website: null,
     dateRegistered: null,
-    lastAgmDate: null,
+    incorporationDate: null,
+    croAnnualReturnDate: null,
+    croAnnualReturnDateConfirmedAt: null,
+    lastActualAgmDate: null,
+    lastUnanimousAnnualMemberResolutionDate: null,
+    memberCount: null,
     conditionalObligationProfile: null,
+    updatedAt: new Date(EXPECTED_UPDATED_AT),
     // forbidden / internal columns that must NOT appear in the response:
     stripeCustomerId: 'cus_secret_123',
     createdAt: new Date(0),
@@ -94,6 +110,7 @@ async function buildApp(
     ...authModels(role, subscription),
     ...prismaOverrides,
   } as Record<string, unknown>;
+  prisma.$queryRaw = async () => [{ id: 'org-1' }];
   prisma.$transaction = async (callback: (transaction: typeof prisma) => Promise<unknown>) => callback(prisma);
   app.decorate('prisma', prisma as never);
   await app.register(organisationRoutes);
@@ -169,7 +186,7 @@ test('an ADMIN may PATCH the organisation', async () => {
       method: 'PATCH',
       url: '/',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { name: 'Renamed' },
+      payload: { expectedUpdatedAt: EXPECTED_UPDATED_AT, name: 'Renamed' },
     });
     assert.equal(res.statusCode, 200);
     assert.equal(updateCalled, true, 'organisation.update must run for an ADMIN');
@@ -197,7 +214,7 @@ test('PATCH / accepts and returns conditional obligation profile facts', async (
       method: 'PATCH',
       url: '/',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { conditionalObligationProfile: conditionalProfile },
+      payload: { expectedUpdatedAt: EXPECTED_UPDATED_AT, conditionalObligationProfile: conditionalProfile },
     });
     assert.equal(res.statusCode, 200);
     assert.deepEqual(updateData, { conditionalObligationProfile: conditionalProfile });
@@ -268,9 +285,13 @@ test('organisation routes reject an expired trial', async () => {
 
 test('PATCH / rejects malformed bodies with VALIDATION_ERROR and skips the write', async () => {
   for (const payload of [
-    { contactEmail: 'not-an-email' },
-    { financialYearEnd: '31-12-2026' },
-    { conditionalObligationProfile: { hasPaidStaff: 'yes', unknownTrigger: true } },
+    { expectedUpdatedAt: EXPECTED_UPDATED_AT, contactEmail: 'not-an-email' },
+    { expectedUpdatedAt: EXPECTED_UPDATED_AT, financialYearEnd: '31-12-2026' },
+    { expectedUpdatedAt: EXPECTED_UPDATED_AT, memberCount: 2_147_483_648 },
+    {
+      expectedUpdatedAt: EXPECTED_UPDATED_AT,
+      conditionalObligationProfile: { hasPaidStaff: 'yes', unknownTrigger: true },
+    },
   ]) {
     let updateCalled = false;
     const app = await buildApp(
@@ -370,12 +391,12 @@ test("updateOrganisation scopes the update to the caller's organisationId", asyn
   );
   try {
     // A name-only payload avoids the auto-deadline regeneration branch (which only fires
-    // when financialYearEnd / lastAgmDate change), keeping this focused on the write scope.
+    // when legal-calendar profile inputs change), keeping this focused on the write scope.
     const res = await app.inject({
       method: 'PATCH',
       url: '/',
       headers: { authorization: tokenFor('ADMIN') },
-      payload: { name: 'Scoped' },
+      payload: { expectedUpdatedAt: EXPECTED_UPDATED_AT, name: 'Scoped' },
     });
     assert.equal(res.statusCode, 200);
     assert.equal(whereId, 'org-1', 'the update must be scoped to the caller organisationId from the token');

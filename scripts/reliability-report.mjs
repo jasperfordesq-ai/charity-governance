@@ -19,7 +19,7 @@
 //   node scripts/reliability-report.mjs --surface=web|api   # run only one surface's suite
 //
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -103,10 +103,18 @@ function compile(dir, project) {
   execSync(`npx tsc -p ${project}`, { cwd: dir, stdio: 'inherit' });
 }
 
-function runNodeTest(dir, glob) {
+function runNodeTest(dir, glob, nodeArgs = []) {
+  const globs = Array.isArray(glob) ? glob : [glob];
+  const command = [
+    'node',
+    ...nodeArgs,
+    '--test',
+    '--test-reporter=spec',
+    ...globs,
+  ].map((part) => JSON.stringify(part)).join(' ');
   let out = '';
   try {
-    out = execSync(`node --test --test-reporter=spec "${glob}"`, {
+    out = execSync(command, {
       cwd: dir,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
@@ -119,13 +127,24 @@ function runNodeTest(dir, glob) {
 }
 
 function runApiSuite() {
+  // A deleted or renamed source test must not survive as compiled evidence.
+  // Clear only the emitted test directory; production source compilation can
+  // continue to use the package's normal build output.
+  rmSync(join(API_DIR, 'dist', 'tests'), { recursive: true, force: true });
   compile(API_DIR, 'tsconfig.json');
   return runNodeTest(API_DIR, 'dist/tests/*.test.js');
 }
 
 function runWebSuite() {
+  // tsconfig.test.json emits into this dedicated tree. Start from an empty tree
+  // so a removed test title cannot falsely satisfy the reliability ledger.
+  rmSync(join(WEB_DIR, '.test-dist'), { recursive: true, force: true });
   compile(WEB_DIR, 'tsconfig.test.json');
-  return runNodeTest(WEB_DIR, '.test-dist/**/*.test.js');
+  return runNodeTest(
+    WEB_DIR,
+    '.test-dist/**/*.test.js',
+    ['--import', 'tsx', '--require', './test-register.cjs'],
+  );
 }
 
 function parseResults(out) {

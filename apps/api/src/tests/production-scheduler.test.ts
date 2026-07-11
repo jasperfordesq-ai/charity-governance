@@ -7,6 +7,8 @@ import {
   runDeadlineReminders,
   runDocumentStorageCleanup,
   runProductionSchedulerOnce,
+  startRecurringJob,
+  waitForRecurringJobsToStop,
 } from '../jobs/production-scheduler.js';
 import type { ErrorAlertPayload } from '../services/error-alerts.service.js';
 
@@ -30,6 +32,7 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     DEADLINE_REMINDERS_INTERVAL_MS: '120000',
     DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: '60000',
     DOCUMENT_STORAGE_CLEANUP_LIMIT: '7',
+    PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: '15000',
     PRODUCTION_SCHEDULER_RUN_ONCE: 'true',
   });
 
@@ -37,6 +40,7 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     deadlineRemindersIntervalMs: 120000,
     documentStorageCleanupIntervalMs: 60000,
     documentStorageCleanupLimit: 7,
+    shutdownTimeoutMs: 15000,
     runOnce: true,
   });
 });
@@ -46,14 +50,64 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     DEADLINE_REMINDERS_INTERVAL_MS: '0',
     DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: '-1',
     DOCUMENT_STORAGE_CLEANUP_LIMIT: 'not-a-number',
+    PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: '60000',
   });
 
   assert.deepEqual(config, {
     deadlineRemindersIntervalMs: 24 * 60 * 60 * 1000,
     documentStorageCleanupIntervalMs: 60 * 60 * 1000,
     documentStorageCleanupLimit: 25,
+    shutdownTimeoutMs: 45 * 1000,
     runOnce: false,
   });
+});
+
+test('recurring job stop waits for an in-flight provider run and prevents rescheduling', async () => {
+  let finishRun: (() => void) | undefined;
+  let runs = 0;
+  const handle = startRecurringJob({
+    name: 'in-flight reminder test',
+    intervalMs: 5,
+    logger: { info() {}, error() {} },
+    run: async () => {
+      runs += 1;
+      await new Promise<void>((resolve) => {
+        finishRun = resolve;
+      });
+      return false;
+    },
+  });
+
+  let stopped = false;
+  const stopping = handle.stop().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  assert.equal(stopped, false, 'shutdown must await the active reminder run');
+  finishRun?.();
+  await stopping;
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.equal(stopped, true);
+  assert.equal(runs, 1, 'a stopped job must not schedule another run');
+});
+
+test('bounded scheduler shutdown reports an active run that exceeds the grace window', async () => {
+  let finishRun: (() => void) | undefined;
+  const handle = startRecurringJob({
+    name: 'timeout reminder test',
+    intervalMs: 1000,
+    logger: { info() {}, error() {} },
+    run: async () => {
+      await new Promise<void>((resolve) => {
+        finishRun = resolve;
+      });
+      return false;
+    },
+  });
+
+  assert.equal(await waitForRecurringJobsToStop([handle], 5), false);
+  finishRun?.();
+  await handle.stop();
 });
 
 test('production job entrypoints use the scheduler logger contract instead of direct console.log', () => {

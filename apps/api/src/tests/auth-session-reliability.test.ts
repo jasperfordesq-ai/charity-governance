@@ -56,6 +56,7 @@ function publicOrganisation() {
     rcnNumber: null,
     croNumber: null,
     legalForm: 'CLG',
+    legalFormConfirmedAt: null,
     complexity: 'STANDARD',
     charitablePurpose: null,
     financialYearEnd: null,
@@ -64,7 +65,14 @@ function publicOrganisation() {
     contactPhone: null,
     website: null,
     dateRegistered: null,
-    lastAgmDate: null,
+    incorporationDate: null,
+    croAnnualReturnDate: null,
+    croAnnualReturnDateConfirmedAt: null,
+    lastActualAgmDate: null,
+    lastUnanimousAnnualMemberResolutionDate: null,
+    memberCount: null,
+    conditionalObligationProfile: null,
+    updatedAt: new Date('2026-07-10T00:00:00.000Z'),
   };
 }
 

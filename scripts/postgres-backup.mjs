@@ -20,6 +20,8 @@ const CRITICAL_RESTORE_TABLES = [
   'Document',
   'DocumentStorageDeletion',
   'StripeWebhookEvent',
+  'Deadline',
+  'DeadlineReminderLog',
 ];
 const EXPECTED_GOVERNANCE_REFERENCE_DATA = {
   principles: 6,
@@ -59,6 +61,25 @@ function requireDigestPinnedPostgresImage(image) {
 function postgresToolsImage() {
   const configuredImage = process.env.CHARITYPILOT_POSTGRES_TOOLS_IMAGE?.trim();
   return requireDigestPinnedPostgresImage(configuredImage || DEFAULT_POSTGRES_IMAGE);
+}
+
+export function linuxDockerHostUserArgs(
+  {
+    platform = process.platform,
+    getuid = process.getuid,
+    getgid = process.getgid,
+  } = {},
+) {
+  if (platform !== 'linux' || typeof getuid !== 'function' || typeof getgid !== 'function') {
+    return [];
+  }
+
+  const uid = getuid();
+  const gid = getgid();
+  if (!Number.isSafeInteger(uid) || uid < 0 || !Number.isSafeInteger(gid) || gid < 0) {
+    throw new Error('Could not determine the Linux deploy owner uid:gid for protected backup output');
+  }
+  return ['--user', `${uid}:${gid}`];
 }
 
 function usage() {
@@ -617,6 +638,7 @@ async function backup(options) {
     const args = [
       'run',
       '--rm',
+      ...linuxDockerHostUserArgs(),
       ...(dockerNetwork ? ['--network', dockerNetwork] : []),
       '-e',
       'CHARITYPILOT_BACKUP_DATABASE_URL',

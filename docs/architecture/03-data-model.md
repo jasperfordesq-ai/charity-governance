@@ -1,10 +1,10 @@
 # Data Model Reference
 
-CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 25 models and 17 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
+CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 25 models and 19 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
 
 ## Migration history
 
-The schema was built up across fourteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
+The schema was built up across fifteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
 
 | Migration directory | Purpose (inferred from name) |
 | --- | --- |
@@ -22,12 +22,13 @@ The schema was built up across fourteen migrations under `apps/api/prisma/migrat
 | `20260703214500_add_conditional_obligation_profile` | Conditional-obligation profile on `Organisation` |
 | `20260710064500_add_billing_checkout_attempts` | Stripe subscription facts and one active Checkout-attempt lease per organisation |
 | `20260710123000_add_compliance_revision_snapshots` | Compliance revisions, immutable approval snapshots, append-only audit history, and truthful legacy-approval invalidation |
+| `20260710190000_add_deadline_calendar_lifecycle` | Exact civil-date calendar facts, confirmed legal evidence, versioned generated deadlines, and concurrent reminder-attempt lifecycle |
 
 A `seed.ts` script also lives at `apps/api/prisma/seed.ts`.
 
 ## Enums
 
-All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:10-116`).
+All enums are declared at the top of the schema.
 
 | Enum | Values | Used by |
 | --- | --- | --- |
@@ -47,7 +48,10 @@ All enums are declared at the top of the schema (`apps/api/prisma/schema.prisma:
 | `RiskCategory` | `GOVERNANCE`, `FINANCIAL`, `OPERATIONAL`, `LEGAL`, `SAFEGUARDING`, `REPUTATIONAL`, `FUNDRAISING`, `DATA_PROTECTION`, `OTHER` | `RiskRecord.category` |
 | `AnnualReportFilingStatus` | `NOT_STARTED`, `IN_PROGRESS`, `BOARD_APPROVED`, `FILED` | `AnnualReportReadiness.filingStatus` |
 | `UserRole` | `OWNER`, `ADMIN`, `MEMBER` | `User.role`, `TeamInvite.role` |
-| `DeadlineReminderStatus` | `SENT`, `SKIPPED`, `FAILED` | `DeadlineReminderLog.status` |
+| `DeadlineReminderStatus` | `RESERVED`, `SENDING`, `SENT`, `SKIPPED`, `FAILED`, `UNCERTAIN` | `DeadlineReminderLog.status` |
+| `DeadlineReminderReconciliationOutcome` | `ACCEPTED_CONFIRMED`, `NOT_ACCEPTED_CONFIRMED`, `UNKNOWN_ACKNOWLEDGED` | Immutable restricted-operator resolution of an `UNCERTAIN` attempt |
+| `GeneratedDeadlineKind` | `CHARITY_ANNUAL_REPORT`, `COMPANY_FINANCIAL_STATEMENTS`, `COMPANY_ANNUAL_MEMBER_ACTION`, `CRO_ANNUAL_RETURN`, `LEGACY_UNVERIFIED` | `Deadline.generatedKind` |
+| `DeadlineSupersessionReason` | `INPUT_CHANGED`, `INPUT_REMOVED`, `RULE_CHANGED`, `RECURRENCE_ADVANCED`, `LEGACY_MIGRATION` | `Deadline.supersessionReason` |
 
 ## Tenant-isolation pattern
 
@@ -70,17 +74,23 @@ Notes on the differently-keyed models:
 ## Models
 
 ### Organisation
-`apps/api/prisma/schema.prisma:118-156` — the tenant root.
+The tenant root in `apps/api/prisma/schema.prisma`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | `String` | `@id @default(cuid())` |
 | `name` | `String` | |
 | `rcnNumber`, `croNumber` | `String?` | Registered Charity Number / Companies Registration Office number |
-| `legalForm` | `LegalForm` | `@default(CLG)` |
+| `legalForm` | `LegalForm?` | No default: CharityPilot must not infer CLG status |
+| `legalFormConfirmedAt` | `DateTime?` | Evidence that the retained legal-form value was explicitly checked; may be cleared without deleting `legalForm` |
 | `complexity` | `OrganisationComplexity` | `@default(SIMPLE)` |
 | `charitablePurpose` | `CharitablePurpose[]` | enum array |
-| `financialYearEnd`, `dateRegistered`, `lastAgmDate` | `DateTime?` | |
+| `financialYearEnd`, `dateRegistered`, `incorporationDate` | `DateTime? @db.Date` | Exact civil dates; API representation is `YYYY-MM-DD`, not an instant |
+| `croAnnualReturnDate` | `DateTime? @db.Date` | Exact ARD copied from CRO CORE |
+| `croAnnualReturnDateConfirmedAt` | `DateTime?` | Evidence that the retained ARD was explicitly checked; may be cleared without deleting the ARD |
+| `lastActualAgmDate` | `DateTime? @db.Date` | An AGM that actually occurred; the migration renames the legacy ambiguous AGM column |
+| `lastUnanimousAnnualMemberResolutionDate` | `DateTime? @db.Date` | Kept separate from the actual AGM fact |
+| `memberCount` | `Int?` | Database check permits null or an integer of at least 1 |
 | `registeredAddress`, `contactEmail`, `contactPhone`, `website` | `String?` | |
 | `stripeCustomerId` | `String? @unique` | links to the organisation's metadata-verified Stripe customer |
 | `createdAt` / `updatedAt` | `DateTime` | |
@@ -91,6 +101,12 @@ Has-many relations to nearly every org-scoped model, including immutable
 (`BillingCheckoutAttempt?`) relations. Deleting an organisation cascades its
 Checkout-attempt lease; the subscription relation retains Prisma's default
 referential action.
+
+Database checks prevent a confirmation timestamp without its corresponding
+value. Organisation calendar updates are validated and reconciled with
+generated deadlines inside one serializable transaction protected by an
+organisation-row lock. Clearing a confirmation retains the recorded fact but
+causes dependent current generated deadlines to be superseded.
 
 ### User
 `apps/api/prisma/schema.prisma:150-176`
@@ -106,7 +122,7 @@ referential action.
 | `resetToken`, `verifyToken` | `String? @unique` | password reset / email verification tokens |
 | `resetTokenExpiry`, `verifyTokenExpiry` | `DateTime?` | |
 
-Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `documentUploads`, `sentInvites`, plus `reminderLogs` and `authSessions`. Index `@@index([organisationId])` (`apps/api/prisma/schema.prisma:175`) supports tenant-scoped user lookups.
+Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `documentUploads`, `sentInvites`, plus `reminderLogs` and `authSessions`. Composite uniqueness on `(id, organisationId)` lets reminder recipients be constrained to the same tenant; `@@index([organisationId])` supports tenant-scoped user lookups.
 
 ### AuthSession
 `apps/api/prisma/schema.prisma:178-191` — refresh-token store for rotating JWT sessions.
@@ -366,7 +382,7 @@ Constraint `@@unique([organisationId, reportingYear])` (`apps/api/prisma/schema.
 Constraint `@@unique([organisationId, reportingYear])` (`apps/api/prisma/schema.prisma:474`) — one review per tenant per year. Index `@@index([organisationId, reportingYear])` (`apps/api/prisma/schema.prisma:475`).
 
 ### Deadline
-`apps/api/prisma/schema.prisma:478-495`
+Current and historical calendar occurrences in `apps/api/prisma/schema.prisma`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -374,12 +390,36 @@ Constraint `@@unique([organisationId, reportingYear])` (`apps/api/prisma/schema.
 | `organisationId` | `String` | FK → `Organisation` |
 | `title` | `String` | |
 | `description` | `String?` | |
-| `dueDate` | `DateTime` | |
-| `isAutoGenerated`, `isComplete` | `Boolean` | `@default(false)` |
-| `completedDate` | `DateTime?` | |
+| `dueDate` | `DateTime @db.Date` | Exact civil date returned by the API as `YYYY-MM-DD` |
+| `scheduleVersion` | `Int` | `@default(1)`; incremented when a manual occurrence is rescheduled or reopened so reminder identity cannot leak across schedules |
+| `isAutoGenerated` | `Boolean` | `@default(false)` |
+| `generatedKind`, `generatedKey` | nullable enum / string | Stable rule identity for generated occurrences |
+| `generationVersion`, `generationRuleVersion` | `Int?` | Occurrence version and implemented rule version |
+| `generationFingerprint` | `String? @db.Char(64)` | Deterministic SHA-256 of rule, sources, inputs and output |
+| `generationSource`, `generationInputs` | `Json?` | Frozen provenance, warnings and exact calculation inputs |
+| `profileRuleKey` | `String?` | Stable identity for a manual conditional-profile review deadline |
+| `isComplete` | `Boolean` | `@default(false)` |
+| `completedDate` | `DateTime?` | Completion instant when known |
+| `completionDateKnown` | `Boolean` | `false` only for a retained completed legacy row whose completion instant was not recorded |
 | `reminderDays` | `Int[]` | `@default([30, 14, 7])` — days-before-due to send reminders |
+| `supersededAt`, `supersededById`, `supersessionReason` | nullable | Append-only generated lifecycle; the old occurrence points to its successor when one exists |
+| `archivedAt` | `DateTime?` | Soft deletion for manual deadlines |
 
-Has-many `reminderLogs`. Index `@@index([organisationId])` (`apps/api/prisma/schema.prisma:494`).
+Generated rows are immutable apart from a one-way atomic completion. A changed
+rule or verified input supersedes the current row and creates a new
+`generationVersion`; removed or unconfirmed inputs supersede without inventing
+a successor. Legacy generated rows are retained as `LEGACY_UNVERIFIED`,
+superseded history rather than treated as current guidance.
+
+The schema has composite tenant-safe identity, successor, and generated-version
+keys. Migration-level partial unique indexes allow only one current generated
+row per `(organisationId, generatedKey)` and only one incomplete current manual
+profile review per `(organisationId, profileRuleKey)`. Checks enforce coherent
+generation metadata, a positive schedule version, a lowercase 64-character
+fingerprint, object-shaped JSON provenance, truthful completion state,
+consistent supersession state, allowed profile keys, and exclusion of
+`profileRuleKey` from generated rows. Current-list indexes cover
+tenant/lifecycle/due-date and tenant/completion/due-date access.
 
 ### TeamInvite
 `apps/api/prisma/schema.prisma:497-515`
@@ -398,21 +438,55 @@ Has-many `reminderLogs`. Index `@@index([organisationId])` (`apps/api/prisma/sch
 Indexes: `@@index([organisationId])`, `@@index([email])` (`apps/api/prisma/schema.prisma:513-514`). Deleting an `Organisation` cascades its invites; deleting the inviting `User` nulls `invitedById`. (Migration `20260608053000_add_active_team_invite_unique_index` adds a partial unique index enforcing one active invite per email per organisation at the database level, beyond what the schema annotations express.)
 
 ### DeadlineReminderLog
-`apps/api/prisma/schema.prisma:517-534` — record of reminder emails sent for a deadline.
+One reservation/delivery attempt for one deadline schedule occurrence and
+recipient. It also serves as immutable historical evidence after the attempt is
+terminal.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | `String` | `@id @default(cuid())` |
 | `organisationId` | `String` | FK → `Organisation`, `onDelete: Cascade` |
-| `deadlineId` | `String` | FK → `Deadline`, `onDelete: Cascade` |
-| `userId` | `String?` | FK → `User`, `onDelete: SetNull` |
+| `deadlineId` | `String` | Composite FK with `organisationId` → tenant-owned `Deadline`, `onDelete: Cascade` |
+| `deadlineScheduleVersion` | `Int` | Snapshot of the deadline schedule identity; manual reschedule/reopen increments it, while generated recurrence uses a new deadline row |
+| `deadlineTitle` | `String` | Title snapshot for post-cutover rows; migration-time context only when `deadlineSnapshotKnown=false` |
+| `deadlineDueDate` | `DateTime @db.Date` | Exact due-date snapshot for post-cutover rows; migration-time context only when `deadlineSnapshotKnown=false` |
+| `deadlineSnapshotKnown`, `deliveryTimingKnown` | `Boolean` | Explicit provenance discriminators; both are false for every pre-P0-06 row |
+| `legacyDeliveryStatus` | `String?` | Original pre-P0-06 `SENT` / `FAILED` / `SKIPPED` claim, preserved as unverified evidence |
+| `legacyRecordedAt` | `DateTime?` | Original legacy timestamp with deliberately unspecified meaning; never presented as provider-start/reservation proof |
+| `userId` | `String?` | Composite FK with `organisationId` → tenant-owned `User`, `onDelete: Restrict` |
 | `email` | `String` | recipient |
 | `reminderDays` | `Int` | which reminder offset this log covers |
-| `status` | `DeadlineReminderStatus` | `SENT` / `SKIPPED` / `FAILED` |
+| `status` | `DeadlineReminderStatus` | `RESERVED` / `SENDING` / `SENT` / `SKIPPED` / `FAILED` / `UNCERTAIN` |
+| `reservationToken` | `String @unique` | Random compare-and-set token for the worker that owns an active claim; migrated rows receive a unique `legacy:` token |
+| `providerIdempotencyKey` | `String? @unique` | Attempt-scoped provider key retained for restricted operator correlation |
+| `providerRequestStartedAt` | `DateTime?` | Written in the `RESERVED` → `SENDING` compare-and-set before provider I/O |
+| `providerMessageId` | `String? @unique` | Resend acceptance id when a definitive success response is available |
+| `reconciliationOutcome` | `DeadlineReminderReconciliationOutcome?` | Immutable operator conclusion: provider acceptance confirmed, provider non-acceptance confirmed, or outcome acknowledged as unknowable |
+| `reconciledAt`, `reconciledBy`, `reconciliationReference` | nullable evidence tuple | All-or-none, bounded, nonblank operator evidence; the internal reference/actor are not returned by the tenant API |
 | `error` | `String?` | |
-| `sentAt` | `DateTime` | `@default(now())` |
+| `reservedAt` | `DateTime` | Claim time, `@default(now())` |
+| `attemptedAt`, `sentAt` | `DateTime?` | Provider-attempt and provider-acceptance instants |
 
-Constraint `@@unique([deadlineId, email, reminderDays])` (`apps/api/prisma/schema.prisma:531`) guarantees a given reminder offset is only ever logged once per (deadline, recipient) — the idempotency guard preventing duplicate reminder emails. Indexes: `@@index([organisationId])`, `@@index([userId])` (`apps/api/prisma/schema.prisma:532-533`). Deleting the `Organisation` or `Deadline` cascades the logs; deleting the `User` nulls `userId`.
+There is deliberately no full unique constraint across all attempts. The
+migration creates a partial unique index on
+`(deadlineId, email, reminderDays, deadlineScheduleVersion)` for `RESERVED`,
+`SENDING`, `SENT`, and every `UNCERTAIN` row except one immutably reconciled as
+`NOT_ACCEPTED_CONFIRMED`. Thus `ACCEPTED_CONFIRMED`,
+`UNKNOWN_ACKNOWLEDGED`, and unresolved ambiguity continue to suppress duplicate
+delivery; only a definite `FAILED`, a pre-I/O `SKIPPED`, or conclusive proof that
+the provider never accepted/created the original message permits a fresh row
+with a new token/provider key. A bounce or later delivery failure is still
+provider acceptance and must never be classified as non-acceptance.
+
+Post-cutover delivery-state checks require real provider evidence: `SENT` has a
+nonblank unique provider message id plus attempt/provider-start/send times;
+`SENDING`/`FAILED`/`UNCERTAIN` have attempt/provider-start times without
+`sentAt`; and `RESERVED`/`SKIPPED` have none. Legacy rows use a separate branch:
+all former `SENT`, `FAILED`, and `SKIPPED` states become `UNCERTAIN`, have no
+attempt/provider-start/send claim, and retain only `legacyRecordedAt` and the
+unverified original status. A database trigger makes any non-null
+reconciliation tuple immutable. The original same-token worker can finalise a
+cleanup-produced `UNCERTAIN` only while no operator reconciliation exists.
 
 ### Subscription
 One-to-one current billing projection per organisation. Stripe webhooks are the
@@ -484,9 +558,10 @@ The schema declares explicit referential actions only where deletion semantics m
 | `TeamInvite.organisation` → `Organisation` | `Cascade` | invites deleted with the organisation |
 | `DeadlineReminderLog.organisation` → `Organisation` | `Cascade` | logs deleted with the organisation |
 | `DeadlineReminderLog.deadline` → `Deadline` | `Cascade` | logs deleted with the deadline |
+| `Deadline.supersededBy` → `Deadline` | `Restrict` | a referenced successor cannot be deleted out from under historical provenance |
 | `ConflictRecord.boardMember` → `BoardMember` | `SetNull` | conflict retained, `boardMemberId` nulled |
 | `TeamInvite.invitedBy` → `User` | `SetNull` | invite retained, `invitedById` nulled |
-| `DeadlineReminderLog.user` → `User` | `SetNull` | log retained, `userId` nulled |
+| `DeadlineReminderLog.user` → `User` | `Restrict` | tenant-scoped reminder history blocks user deletion until an explicit retention/offboarding decision is applied |
 | `BillingCheckoutAttempt.organisation` → `Organisation` | `Cascade` | short-lived Checkout lease deleted with the organisation |
 
 ## Entity-relationship diagram — tenant root

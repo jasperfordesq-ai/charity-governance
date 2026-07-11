@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "jobs:production-scheduler": "node dist/jobs/production-scheduler.js",
     "jobs:deadline-reminders": "node dist/jobs/send-deadline-reminders.js",
+    "jobs:reconcile-deadline-reminder": "node dist/jobs/reconcile-deadline-reminder.js",
     "jobs:document-storage-cleanup": "node dist/jobs/cleanup-document-storage.js"
   },
   "dependencies": {

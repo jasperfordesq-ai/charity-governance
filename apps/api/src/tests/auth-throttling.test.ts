@@ -444,6 +444,7 @@ test(
         rcnNumber: null,
         croNumber: null,
         legalForm: null,
+        legalFormConfirmedAt: null,
         complexity: null,
         charitablePurpose: null,
         financialYearEnd: null,
@@ -452,8 +453,14 @@ test(
         contactPhone: null,
         website: null,
         dateRegistered: null,
-        lastAgmDate: null,
+        incorporationDate: null,
+        croAnnualReturnDate: null,
+        croAnnualReturnDateConfirmedAt: null,
+        lastActualAgmDate: null,
+        lastUnanimousAnnualMemberResolutionDate: null,
+        memberCount: null,
         conditionalObligationProfile: null,
+        updatedAt: new Date("2026-07-10T00:00:00.000Z"),
       },
     };
     const app = await buildSensitiveRoutesApp({

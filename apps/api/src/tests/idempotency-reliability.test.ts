@@ -273,14 +273,54 @@ function reminderDeadline() {
     organisationId: 'org_1',
     title: 'Annual report',
     dueDate,
+    scheduleVersion: 1,
     reminderDays: [7],
     organisation: {
       id: 'org_1',
       name: 'Governance Charity',
       subscription: { status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: null },
-      users: [{ id: 'user_1', email: 'owner@example.org', emailVerified: true }],
+      users: [{ id: 'user_1', email: 'owner@example.org', role: 'OWNER', emailVerified: true }],
     },
   };
+}
+
+function withReminderClaim<T extends { deadline: Record<string, unknown> }>(prisma: T) {
+  const suppliedReminderLog = 'deadlineReminderLog' in prisma
+    ? (prisma as { deadlineReminderLog: Record<string, unknown> }).deadlineReminderLog
+    : {};
+  const suppliedUpdateMany = suppliedReminderLog.updateMany as
+    | ((args: Record<string, unknown>) => Promise<{ count: number }>)
+    | undefined;
+  const client = {
+    ...prisma,
+    deadline: {
+      findFirst: async () => ({ id: 'deadline_1' }),
+      ...prisma.deadline,
+    },
+    deadlineReminderLog: {
+      findFirst: async () => null,
+      count: async () => 0,
+      ...suppliedReminderLog,
+      updateMany: async (args: Record<string, unknown>) => {
+        const where = args.where as Record<string, unknown> | undefined;
+        if (where?.status === 'SENDING' && 'providerRequestStartedAt' in where) {
+          return { count: 0 };
+        }
+        return suppliedUpdateMany ? suppliedUpdateMany(args) : { count: 1 };
+      },
+    },
+    user: { findFirst: async () => ({ id: 'user_1' }) },
+    subscription: {
+      findUnique: async () => ({ status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: null }),
+    },
+    organisation: { findUnique: async () => ({ name: 'Governance Charity' }) },
+    $queryRaw: async () => [{ id: 'deadline_1' }],
+  } as T & {
+    $queryRaw: () => Promise<Array<{ id: string }>>;
+    $transaction?: (operation: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+  };
+  client.$transaction = async (operation) => operation(client);
+  return client;
 }
 
 // x-idempotency-idempotency-5
@@ -289,7 +329,7 @@ test('deadline reminders skip when a concurrent worker wins the reclaim race', a
   // A stale (>15min) SKIPPED 'Reserved before delivery' reservation is, in
   // principle, reclaimable — but another worker reclaims it first, so updateMany
   // matches 0 rows and this run must NOT send a duplicate email.
-  const staleSentAt = new Date(Date.now() - 30 * 60 * 1000);
+  const staleReservedAt = new Date(Date.now() - 30 * 60 * 1000);
   const prisma = {
     deadline: {
       findMany: async () => [reminderDeadline()],
@@ -297,38 +337,35 @@ test('deadline reminders skip when a concurrent worker wins the reclaim race', a
     deadlineReminderLog: {
       create: async () => {
         operations.push('reserve');
-        throw Object.assign(new Error('duplicate reminder'), { code: 'P2002' });
+        throw new Error('must not create after losing the expiry race');
       },
-      findUnique: async () => {
-        operations.push('findUnique');
+      findFirst: async () => {
+        operations.push('findActive');
         return {
           id: 'log_stale',
-          status: 'SKIPPED',
-          error: 'Reserved before delivery',
-          sentAt: staleSentAt,
+          status: 'RESERVED',
+          reservationToken: 'stale-token',
+          reservedAt: staleReservedAt,
         };
       },
       updateMany: async () => {
         operations.push('reclaim');
         return { count: 0 };
       },
-      update: async () => {
-        operations.push('finalize');
-      },
     },
   };
 
-  const service = new DeadlineRemindersService(prisma as never, {
+  const service = new DeadlineRemindersService(withReminderClaim(prisma) as never, {
     sendDeadlineReminder: async () => {
       operations.push('send');
-      return true;
+      return { outcome: 'ACCEPTED', providerMessageId: 'provider-race-accepted' };
     },
   } as never);
 
   await service.sendDueReminders();
 
   // The lost reclaim race short-circuits: no 'send' and no 'finalize'.
-  assert.deepEqual(operations, ['reserve', 'findUnique', 'reclaim']);
+  assert.deepEqual(operations, ['findActive', 'reclaim']);
 });
 
 // ---------------------------------------------------------------------------

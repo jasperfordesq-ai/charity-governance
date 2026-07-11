@@ -68,16 +68,32 @@ test('board member update normalises optional date fields (clear vs leave-untouc
 function orgPrisma(opts: { org?: Record<string, unknown> | null; updateResult?: Record<string, unknown> } = {}) {
   const calls: Call[] = [];
   const tx = {
+    $queryRaw: async (args: unknown) => {
+      calls.push({ name: '$queryRaw', args });
+      return [{ id: 'org_1' }];
+    },
     organisation: {
-      findUnique: async (args: unknown) => { calls.push({ name: 'organisation.findUnique', args }); return opts.org === undefined ? { id: 'org_1', name: 'Charity' } : opts.org; },
-      update: async (args: { data: Record<string, unknown> }) => { calls.push({ name: 'organisation.update', args }); return opts.updateResult ?? { id: 'org_1', name: 'Charity' }; },
-      findUniqueOrThrow: async (args: unknown) => { calls.push({ name: 'organisation.findUniqueOrThrow', args }); return { id: 'org_1', financialYearEnd: null, lastAgmDate: null }; },
+      findUnique: async (args: unknown) => { calls.push({ name: 'organisation.findUnique', args }); return opts.org === undefined ? { id: 'org_1', name: 'Charity', updatedAt: new Date('2026-01-01T00:00:00.000Z') } : opts.org; },
+      update: async (args: { data: Record<string, unknown> }) => { calls.push({ name: 'organisation.update', args }); return opts.updateResult ?? { id: 'org_1', name: 'Charity', updatedAt: new Date('2026-01-01T00:00:00.000Z') }; },
+      findUniqueOrThrow: async (args: unknown) => {
+        calls.push({ name: 'organisation.findUniqueOrThrow', args });
+        return {
+          financialYearEnd: null,
+          legalForm: null,
+          legalFormConfirmedAt: null,
+          incorporationDate: null,
+          memberCount: null,
+          lastActualAgmDate: null,
+          lastUnanimousAnnualMemberResolutionDate: null,
+          croAnnualReturnDate: null,
+          croAnnualReturnDateConfirmedAt: null,
+        };
+      },
     },
     deadline: {
-      findFirst: async () => null,
+      findMany: async () => [],
       create: async () => ({}),
       update: async () => ({}),
-      deleteMany: async () => ({ count: 0 }),
     },
   };
   const prisma = {
@@ -97,7 +113,10 @@ test('getOrganisation throws when the organisation does not exist', async () => 
 
 test('updateOrganisation regenerates auto-deadlines when the financial year end changes', async () => {
   const { service, calls } = orgPrisma();
-  await service.updateOrganisation('org_1', { financialYearEnd: '2026-12-31' } as never);
+  await service.updateOrganisation('org_1', {
+    expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
+    financialYearEnd: '2026-12-31',
+  } as never);
   assert.ok(
     calls.some((c) => c.name === 'organisation.findUniqueOrThrow'),
     'auto-deadline regeneration (which re-reads the org) must run when financialYearEnd changes',
@@ -106,7 +125,10 @@ test('updateOrganisation regenerates auto-deadlines when the financial year end 
 
 test('updateOrganisation does not regenerate auto-deadlines for unrelated edits', async () => {
   const { service, calls } = orgPrisma();
-  await service.updateOrganisation('org_1', { contactEmail: 'info@charity.ie' } as never);
+  await service.updateOrganisation('org_1', {
+    expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
+    contactEmail: 'info@charity.ie',
+  } as never);
   assert.equal(
     calls.some((c) => c.name === 'organisation.findUniqueOrThrow'),
     false,
