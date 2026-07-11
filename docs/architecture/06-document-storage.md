@@ -137,7 +137,9 @@ Hard-deleting a document must remove both the DB row and the stored object, but 
 
 The route then performs the inline ("happy path") removal: it calls `storageService.deleteFile` and, on success, immediately marks the deletion record processed via `markStorageDeletionProcessed`. If the object removal throws, it records the failure on the same record via `recordStorageDeletionFailure` (itself wrapped so an outbox-write failure is only logged), and the request still returns `204` (`apps/api/src/routes/documents/index.ts:300-324`). The pending record left behind is what the cleanup job reconciles.
 
-### `DocumentStorageDeletion` columns and indexes
+### Historical deletion-worker summary (superseded)
+
+> The historical summary through the following diagram describes the original unbounded worker. It is retained only as change context. The authoritative bounded lifecycle and operator procedure are in the next section.
 
 | Column | Type | Role |
 | --- | --- | --- |
@@ -178,6 +180,52 @@ flowchart TD
     H --> F
     D --> I["Reconciled"]
 ```
+
+### Current bounded claim, retry, and dead-letter lifecycle
+
+`DocumentStorageDeletion.state` is one of `PENDING`, `DEAD_LETTER`, or `PROCESSED`. Pending rows carry the bounded attempt count, sanitized last error, last-attempt time, next-attempt time, and claim time. Five failed attempts terminally dead-letter a row; a path rejected by the organisation path guard dead-letters on its first attempt with `PERMANENT_STORAGE_PATH_REJECTED`. Retry delay is deterministic exponential backoff.
+
+Claiming is one atomic `UPDATE ... RETURNING` over due pending rows selected with `FOR UPDATE SKIP LOCKED`. Finalization and failure recording compare the exact `claimedAt` ownership value, so a stale worker cannot change a row after another worker reclaims it. The ten-minute claim lease, ten-second maximum per-attempt outer bound, and 60-second safety margin derive a maximum sequential claim batch of 54: `floor((600000 - 60000) / 10000)`. A configured cleanup limit above that value is clamped.
+
+Supabase deletion uses a timed fetch whose `AbortSignal` closes the underlying provider request, plus a bounded outer timeout. `STORAGE_DELETE_TIMEOUT_MS` defaults to 5000 and accepts only 100 through 8000 milliseconds. The service-level ten-second outer bound remains authoritative even if a callback ignores cancellation; a promise that resolves after timeout cannot finalize the row.
+
+Dead letters are claimed separately for alert delivery. Alert acknowledgement and release compare a random claim token. Failed delivery releases the token for a later run; successful delivery sets `alertedAt`. Alerts include an affected count and action but never object keys.
+
+### Audited recovery and disposition
+
+Every recovery writes an append-only `DocumentStorageDeletionRecovery` event and updates the deletion row in the same transaction. The event has a random recovery nonce; its `transactionId` is overwritten by the database with `txid_current()`. The deletion's `lastRecoveryId`, nonce, disposition, and timestamp must exactly bind that event. The trigger checks the same transaction ID, tenant, previous attempt count, terminal reason, and previous path. Recovery first locks the dead-letter row with `FOR UPDATE`; timestamp comparison is not used as authorization.
+
+There are three explicit dispositions:
+
+- `REQUEUE_UNCHANGED` resets the bounded retry lifecycle. Active, entitled tenant owners and administrators may perform only this disposition through the authenticated route. A permanently rejected path cannot be requeued unchanged.
+- `REQUEUE_CORRECTED_PATH` records both old and corrected keys and permits the otherwise-immutable key to change only to the audited, tenant-scoped corrected key.
+- `COMPLETE_EXTERNALLY_REMEDIATED` records that an operator independently completed and evidenced removal, then transitions terminally to `PROCESSED`; it does not fabricate a provider delete.
+
+Corrected-path and external completion dispositions are reserved for the one-shot platform-operator CLI. There is no unauthenticated HTTP bypass. The CLI requires a safe named operator, substantive reason, exact tenant/deletion IDs, reviewed attempt count and terminal reason, explicit production-database authority, and a target-bound execute confirmation. Its database URL must use `sslmode=verify-full`, explicitly target a read-write server, contain no routing options or private/reserved hosts, and exactly match `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST`. Prisma uses its default CA trust when `sslrootcert` is omitted; when supplied, `sslrootcert` must be a safe absolute `.crt`/`.pem` path, never the libpq-only `system` sentinel.
+
+Run a dry-run first from the published API image environment using the exact
+deployed `DATABASE_URL` from the production environment file; do not put
+credentials in the command line or substitute a second DSN. The recovery CLI
+requires that canonical DSN to identify the allowlisted managed host, use
+`sslmode=verify-full`, and explicitly set `target_session_attrs=read-write`.
+Use the same exact environment-file bytes for dry-run and execute:
+
+```powershell
+docker compose --env-file .env.production -f compose.production.yml run --rm production-scheduler node dist/jobs/recover-document-storage-deletion.js --dry-run --confirm-production-database-authority --organisation-id ORG_ID --deletion-id DELETION_ID --operator "NAMED OPERATOR" --reason "CASE-BOUND REASON" --disposition REQUEUE_CORRECTED_PATH --corrected-storage-path "ORG_ID/CORRECTED_OBJECT_KEY"
+```
+
+Review the returned attempts, terminal reason, `databaseAuthoritySha256`,
+`correctedStoragePathSha256`, and exact `requiredExecutionConfirmation`. Repeat
+the same command with `--execute`, `--expected-attempts`,
+`--expected-terminal-reason`, `--expected-database-authority-sha256`,
+`--expected-corrected-storage-path-sha256`, and `--confirm-execute` populated
+exactly from that dry-run. The execute path recomputes both digests and refuses
+a DSN or corrected-key change. For externally verified removal use
+`COMPLETE_EXTERNALLY_REMEDIATED`, omit the corrected-path input and digest, and
+retain the database-authority binding. Output never includes object keys,
+provider payloads, database URLs, or secrets.
+
+The always-on scheduler and the `jobs`-profile cleanup entrypoint both call the same bounded reconciler. Transient retries remain durable without alert noise; newly dead-lettered or previously unalerted rows produce the actionable dead-letter alert.
 
 ## Cross-references
 

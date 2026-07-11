@@ -222,6 +222,57 @@ test('Supabase byte download aborts within the configured bound and returns no b
   }
 });
 
+test('Supabase deletion aborts the underlying request within the configured bound', async () => {
+  const originalEnv = {
+    DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET,
+    STORAGE_DELETE_TIMEOUT_MS: process.env.STORAGE_DELETE_TIMEOUT_MS,
+  };
+  let requestClosed = false;
+  const server = createServer((request, response) => {
+    request.on('close', () => {
+      requestClosed = true;
+    });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.flushHeaders();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP test server');
+
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.SUPABASE_URL = `http://127.0.0.1:${address.port}`;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.STORAGE_DELETE_TIMEOUT_MS = '100';
+
+  try {
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => new StorageService().deleteFile('org-timeout', 'org-timeout/stalled.pdf'),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        assert.equal((error as AppError).code, 'STORAGE_DELETE_FAILED');
+        return true;
+      },
+    );
+    assert.ok(Date.now() - startedAt < 1_000, 'delete timeout must bound the provider request');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(requestClosed, true, 'the timed fetch must close the underlying provider request');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test('uploadFile generates unique storage paths for same-name uploads', async () => {
   const originalEnv = {
     DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,

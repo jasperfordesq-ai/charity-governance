@@ -19,20 +19,30 @@ try {
   const documentService = new DocumentService(prisma);
   const storageService = new StorageService();
   const result = await documentService.retryPendingStorageDeletions(
-    (organisationId, storagePath) => storageService.deleteFile(organisationId, storagePath),
+    (organisationId, storagePath, signal) => storageService.deleteFile(organisationId, storagePath, signal),
     cleanupLimit(),
   );
 
-  logger.info(`Document storage cleanup completed. Processed: ${result.processed}. Failed: ${result.failed}.`);
-  if (result.failed > 0) {
-    const cleanupFailure = new Error(`Document storage cleanup reported ${result.failed} failed deletion(s).`);
-    cleanupFailure.name = 'DocumentStorageCleanupFailure';
-    await sendJobFailureAlert({
+  logger.info(
+    `Document storage cleanup completed. Processed: ${result.processed}. Retry scheduled: ${result.retryScheduled}. Newly dead-lettered: ${result.newlyDeadLettered}.`,
+  );
+  if (result.deadLetterAlert) {
+    const cleanupFailure = new Error(
+      `Document storage cleanup requires operator review for ${result.deadLetterAlert.ids.length} dead-lettered deletion(s).`,
+    );
+    cleanupFailure.name = 'DocumentStorageDeletionDeadLettered';
+    const delivered = await sendJobFailureAlert({
       job: 'document-storage-cleanup',
-      code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
+      code: 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED',
       error: cleanupFailure,
       logger,
+      affectedCount: result.deadLetterAlert.ids.length,
     });
+    if (delivered) {
+      await documentService.markDeadLetterAlertSent(result.deadLetterAlert);
+    } else {
+      await documentService.releaseDeadLetterAlertClaim(result.deadLetterAlert);
+    }
     process.exitCode = 1;
   }
 } catch (error) {

@@ -33,8 +33,11 @@ type PrismaMock = {
   };
   documentStorageDeletion?: {
     create?: (args: unknown) => Promise<{ id: string }>;
-    update?: (args: unknown) => Promise<unknown>;
+    findFirst?: (args: unknown) => Promise<unknown>;
+    findMany?: (args: unknown) => Promise<unknown[]>;
+    updateMany?: (args: unknown) => Promise<{ count: number }>;
   };
+  documentStorageDeletionRecovery?: { create?: (args: unknown) => Promise<{ id: string }> };
   governanceStandard?: {
     findUnique?: (args: unknown) => Promise<unknown>;
   };
@@ -582,8 +585,8 @@ test('document delete removes storage after deleting the database record', { con
   let outboxProcessedOrder = 0;
   let storageDeleteArgs: string[] = [];
 
-  StorageService.prototype.deleteFile = async (...args: string[]) => {
-    storageDeleteArgs = args;
+  StorageService.prototype.deleteFile = async (organisationId: string, storagePath: string) => {
+    storageDeleteArgs = [organisationId, storagePath];
     storageDeleteOrder = ++order;
   };
 
@@ -601,9 +604,9 @@ test('document delete removes storage after deleting the database record', { con
         outboxCreateOrder = ++order;
         return { id: 'deletion-1' };
       },
-      update: async () => {
+      updateMany: async () => {
         outboxProcessedOrder = ++order;
-        return {};
+        return { count: 1 };
       },
     },
   });
@@ -645,7 +648,7 @@ test('document delete does not remove storage when database deletion fails', { c
     },
     documentStorageDeletion: {
       create: async () => ({ id: 'deletion-1' }),
-      update: async () => {
+      updateMany: async () => {
         throw new Error('outbox should not be processed');
       },
     },
@@ -689,9 +692,15 @@ test('document delete reports success when post-delete storage cleanup fails', {
     },
     documentStorageDeletion: {
       create: async () => ({ id: 'deletion-1' }),
-      update: async (args: unknown) => {
+      findFirst: async () => ({
+        id: 'deletion-1',
+        state: 'PENDING',
+        attempts: 0,
+        claimedAt: null,
+      }),
+      updateMany: async (args: unknown) => {
         outboxUpdates.push(args);
-        return {};
+        return { count: 1 };
       },
     },
   });
@@ -713,14 +722,22 @@ test('document delete reports success when post-delete storage cleanup fails', {
     assert.match(lastError, /\[storage-path\]/);
     assert.doesNotMatch(lastError, /ops@example\.org/);
     assert.doesNotMatch(lastError, /secret-token/);
-    assert.deepEqual(outboxUpdates, [{
-      where: { id: 'deletion-1' },
-      data: {
-        attempts: { increment: 1 },
-        lastError,
-        claimedAt: null,
-      },
-    }]);
+    assert.equal((outboxUpdates[0] as { where: { state: string } }).where.state, 'PENDING');
+    assert.deepEqual((outboxUpdates[0] as { data: Record<string, unknown> }).data, {
+      state: 'PENDING',
+      attempts: 1,
+      lastError,
+      lastAttemptAt: (outboxUpdates[0] as { data: { lastAttemptAt: Date } }).data.lastAttemptAt,
+      nextAttemptAt: (outboxUpdates[0] as { data: { nextAttemptAt: Date } }).data.nextAttemptAt,
+      claimedAt: null,
+      deadLetteredAt: null,
+      terminalReason: null,
+      alertClaimToken: null,
+      alertClaimedAt: null,
+      alertedAt: null,
+    });
+    assert.ok((outboxUpdates[0] as { data: { lastAttemptAt: Date } }).data.lastAttemptAt instanceof Date);
+    assert.ok((outboxUpdates[0] as { data: { nextAttemptAt: Date } }).data.nextAttemptAt instanceof Date);
   } finally {
     StorageService.prototype.deleteFile = originalDeleteFile;
     await app.close();

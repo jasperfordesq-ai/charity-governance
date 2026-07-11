@@ -295,16 +295,25 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
   assert.equal(serializedLog.includes('token=[redacted]'), true);
 });
 
-test('runDocumentStorageCleanup alerts when cleanup records failed storage deletions without throwing', async () => {
+test('runDocumentStorageCleanup sends one actionable alert and acknowledges claimed dead letters', async () => {
   process.env.NODE_ENV = 'production';
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   const alerts: ErrorAlertPayload[] = [];
+  const acknowledgements: unknown[] = [];
   const failed = await runDocumentStorageCleanup({
     documentService: {
       async retryPendingStorageDeletions() {
-        return { processed: 3, failed: 1 };
+        return {
+          processed: 3,
+          failed: 1,
+          retryScheduled: 0,
+          newlyDeadLettered: 1,
+          deadLetterAlert: { claimToken: 'alert-claim-1', ids: ['deletion-1'] },
+        };
       },
+      async markDeadLetterAlertSent(claim) { acknowledgements.push(claim); return 1; },
+      async releaseDeadLetterAlertClaim() { assert.fail('successful alert must not release its claim'); },
     },
     storageService: {
       async deleteFile() {},
@@ -322,6 +331,57 @@ test('runDocumentStorageCleanup alerts when cleanup records failed storage delet
   assert.equal(failed, true);
   assert.equal(alerts.length, 1);
   assert.equal(alerts[0].url, '/jobs/document-storage-cleanup');
-  assert.equal(alerts[0].code, 'DOCUMENT_STORAGE_CLEANUP_FAILED');
-  assert.equal(alerts[0].errorName, 'DocumentStorageCleanupFailure');
+  assert.equal(alerts[0].code, 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED');
+  assert.equal(alerts[0].errorName, 'DocumentStorageDeletionDeadLettered');
+  assert.equal(alerts[0].affectedCount, 1);
+  assert.equal(alerts[0].action, 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS');
+  assert.deepEqual(acknowledgements, [{ claimToken: 'alert-claim-1', ids: ['deletion-1'] }]);
+});
+
+test('transient document storage retries do not alert or fail the scheduler run', async () => {
+  const alerts: ErrorAlertPayload[] = [];
+  const failed = await runDocumentStorageCleanup({
+    documentService: {
+      async retryPendingStorageDeletions() {
+        return {
+          processed: 0,
+          failed: 1,
+          retryScheduled: 1,
+          newlyDeadLettered: 0,
+          deadLetterAlert: null,
+        };
+      },
+    },
+    storageService: { async deleteFile() {} },
+    documentStorageCleanupLimit: 7,
+    logger: { info() {}, error() {} },
+    alertSender: async (payload) => { alerts.push(payload); },
+  });
+  assert.equal(failed, false);
+  assert.deepEqual(alerts, []);
+});
+
+test('failed dead-letter alert delivery releases the claim for a later scheduler run', async () => {
+  const released: unknown[] = [];
+  const failed = await runDocumentStorageCleanup({
+    documentService: {
+      async retryPendingStorageDeletions() {
+        return {
+          processed: 0,
+          failed: 0,
+          retryScheduled: 0,
+          newlyDeadLettered: 0,
+          deadLetterAlert: { claimToken: 'alert-claim-2', ids: ['deletion-2'] },
+        };
+      },
+      async markDeadLetterAlertSent() { assert.fail('failed alert must not be acknowledged'); },
+      async releaseDeadLetterAlertClaim(claim) { released.push(claim); return 1; },
+    },
+    storageService: { async deleteFile() {} },
+    documentStorageCleanupLimit: 7,
+    logger: { info() {}, error() {} },
+    alertSender: async () => { throw new Error('alert transport unavailable'); },
+  });
+  assert.equal(failed, true);
+  assert.deepEqual(released, [{ claimToken: 'alert-claim-2', ids: ['deletion-2'] }]);
 });

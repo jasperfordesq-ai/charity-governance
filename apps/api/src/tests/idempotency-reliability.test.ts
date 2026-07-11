@@ -374,18 +374,34 @@ test('deadline reminders skip when a concurrent worker wins the reclaim race', a
 
 // x-idempotency-idempotency-9
 test('claim query reclaims rows whose claim is older than the stale window', async () => {
-  let query = '';
-  let queryValues: unknown[] = [];
+  const queries: Array<{ query: string; values: unknown[] }> = [];
+  const claimedAt = new Date('2026-07-11T12:00:00.000Z');
   const prisma = {
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
     async $queryRaw(this: unknown, strings: TemplateStringsArray, ...values: unknown[]) {
-      query = strings.join('?');
-      queryValues = values;
-      return [{ id: 'deletion-1', organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }];
+      const query = strings.join('?');
+      queries.push({ query, values });
+      return query.includes('"state" = \'PENDING\'')
+        ? [{
+            id: 'deletion-1',
+            organisationId: 'org-1',
+            storagePath: 'org-1/policy.pdf',
+            state: 'PENDING',
+            attempts: 0,
+            claimedAt,
+            nextAttemptAt: new Date('2026-07-11T11:00:00.000Z'),
+            deadLetteredAt: null,
+            terminalReason: null,
+            alertClaimToken: null,
+            alertClaimedAt: null,
+            alertedAt: null,
+          }]
+        : [];
     },
     documentStorageDeletion: {
-      update: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
     },
+    documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
   };
   const service = new DocumentService(prisma as never);
 
@@ -394,14 +410,23 @@ test('claim query reclaims rows whose claim is older than the stale window', asy
   // The atomic-claim WHERE clause must include the stale-reclaim predicate so a
   // row whose claimedAt is older than the 10-minute stale window is re-claimable
   // after a worker crash (not only rows with claimedAt IS NULL).
-  assert.match(query, /"processedAt" IS NULL/);
-  assert.match(query, /"claimedAt" IS NULL OR/);
-  assert.match(query, /"claimedAt" < CURRENT_TIMESTAMP - \(\?\s*\* INTERVAL '1 millisecond'\)/);
+  const pendingQuery = queries.find(({ query }) => query.includes('"state" = \'PENDING\''));
+  assert.ok(pendingQuery);
+  assert.match(pendingQuery.query, /"processedAt" IS NULL/);
+  assert.match(pendingQuery.query, /"nextAttemptAt" <= CURRENT_TIMESTAMP/);
+  assert.match(pendingQuery.query, /"claimedAt" IS NULL OR/);
+  assert.match(pendingQuery.query, /"claimedAt" < CURRENT_TIMESTAMP - \(\?\s*\* INTERVAL '1 millisecond'\)/);
   // And it must still be a single atomic claim bound with the 600000ms stale
   // window and the caller's limit.
-  assert.match(query, /FOR UPDATE SKIP LOCKED/);
-  assert.deepEqual(queryValues, [600000, 10]);
-  assert.deepEqual(result, { processed: 1, failed: 0 });
+  assert.match(pendingQuery.query, /FOR UPDATE SKIP LOCKED/);
+  assert.deepEqual(pendingQuery.values, [5, 600000, 10]);
+  assert.deepEqual(result, {
+    processed: 1,
+    failed: 0,
+    retryScheduled: 0,
+    newlyDeadLettered: 0,
+    deadLetterAlert: null,
+  });
 });
 
 // ---------------------------------------------------------------------------

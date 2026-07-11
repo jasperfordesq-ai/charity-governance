@@ -16,12 +16,18 @@ export type ErrorAlertPayload = {
   errorName: string;
   requestId: string;
   timestamp: string;
+  affectedCount?: number;
+  action?: 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS';
 };
 
 export type OperationalErrorAlertInput = {
   job: 'deadline-reminders' | 'document-storage-cleanup';
-  code: 'DEADLINE_REMINDERS_FAILED' | 'DOCUMENT_STORAGE_CLEANUP_FAILED';
+  code:
+    | 'DEADLINE_REMINDERS_FAILED'
+    | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
+    | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED';
   error: unknown;
+  affectedCount?: number;
 };
 
 function alertTimeoutMs(): number {
@@ -88,16 +94,22 @@ export function buildOperationalErrorAlertPayload(input: OperationalErrorAlertIn
     errorName: errorName(input.error),
     requestId: `job-${input.job}-${Date.now()}`,
     timestamp: new Date().toISOString(),
+    ...(input.code === 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
+      ? {
+          affectedCount: input.affectedCount ?? 0,
+          action: 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS' as const,
+        }
+      : {}),
   };
 }
 
 export async function sendErrorAlert(
   payload: ErrorAlertPayload,
   fetchImpl: typeof fetch = globalThis.fetch,
-): Promise<void> {
+): Promise<boolean> {
   const webhookUrl = process.env.ERROR_ALERT_WEBHOOK_URL;
-  if (!isConfiguredSecret(webhookUrl)) return;
-  if (inFlightAlerts >= maxInFlightAlerts()) return;
+  if (!isConfiguredSecret(webhookUrl)) return false;
+  if (inFlightAlerts >= maxInFlightAlerts()) return false;
 
   inFlightAlerts += 1;
   const controller = new AbortController();
@@ -117,6 +129,7 @@ export async function sendErrorAlert(
     if (!response.ok) {
       throw new Error(`Error alert webhook returned HTTP ${response.status}`);
     }
+    return true;
   } finally {
     clearTimeout(timeout);
     inFlightAlerts -= 1;

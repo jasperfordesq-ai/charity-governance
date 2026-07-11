@@ -109,6 +109,28 @@ enum DocumentCategory {
   OTHER
 }
 
+enum DocumentStorageDeletionState {
+  PENDING
+  DEAD_LETTER
+  PROCESSED
+}
+
+enum DocumentStorageDeletionTerminalReason {
+  MAX_ATTEMPTS_EXHAUSTED
+  PERMANENT_STORAGE_PATH_REJECTED
+}
+
+enum DocumentStorageDeletionRecoveryActorType {
+  TENANT_USER
+  PLATFORM_OPERATOR
+}
+
+enum DocumentStorageDeletionRecoveryDisposition {
+  REQUEUE_UNCHANGED
+  REQUEUE_CORRECTED_PATH
+  COMPLETE_EXTERNALLY_REMEDIATED
+}
+
 enum RegisterStatus {
   OPEN
   MONITORING
@@ -296,15 +318,15 @@ model User {
   verifyToken       String?   @unique
   verifyTokenExpiry DateTime?
 
-  complianceUpdates            ComplianceRecord[]    @relation("UpdatedBy")
-  signoffUpdates               ComplianceSignoff[]   @relation("SignoffUpdatedBy")
-  documentUploads              Document[]            @relation("UploadedBy")
-  sentInvites                  TeamInvite[]          @relation("InvitedBy")
+  complianceUpdates            ComplianceRecord[]      @relation("UpdatedBy")
+  signoffUpdates               ComplianceSignoff[]     @relation("SignoffUpdatedBy")
+  documentUploads              Document[]              @relation("UploadedBy")
+  sentInvites                  TeamInvite[]            @relation("InvitedBy")
   reminderLogs                 DeadlineReminderLog[]
   authSessions                 AuthSession[]
   billingAuthorityGrants       BillingAuthorityGrant[] @relation("BillingAuthorityActor")
-  securityAuditEventsAsActor   SecurityAuditEvent[]  @relation("SecurityAuditActor")
-  securityAuditEventsAsSubject SecurityAuditEvent[]  @relation("SecurityAuditSubject")
+  securityAuditEventsAsActor   SecurityAuditEvent[]    @relation("SecurityAuditActor")
+  securityAuditEventsAsSubject SecurityAuditEvent[]    @relation("SecurityAuditSubject")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -315,50 +337,50 @@ model User {
 }
 
 model AuthSession {
-  id               String                       @id @default(cuid())
-  userId           String
-  user             User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  billingAuthorityGrants BillingAuthorityGrant[] @relation("BillingAuthoritySession")
-  refreshTokenHash String                       @unique
-  familyId         String                       @default(uuid()) @db.Uuid
-  familyCreatedAt  DateTime                     @default(now())
-  deviceLabel      String?
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  revocationReason AuthSessionRevocationReason?
+  id                     String                       @id @default(cuid())
+  userId                 String
+  user                   User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingAuthorityGrants BillingAuthorityGrant[]      @relation("BillingAuthoritySession")
+  refreshTokenHash       String                       @unique
+  familyId               String                       @default(uuid()) @db.Uuid
+  familyCreatedAt        DateTime                     @default(now())
+  deviceLabel            String?
+  expiresAt              DateTime
+  revokedAt              DateTime?
+  revocationReason       AuthSessionRevocationReason?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])
   @@unique([id, userId])
+  @@index([userId])
   @@index([userId, revokedAt, expiresAt, id])
   @@index([userId, familyCreatedAt, familyId])
   @@index([expiresAt])
 }
 
 model BillingAuthorityGrant {
-  id                     String                             @id @default(uuid()) @db.Uuid
+  id                     String                              @id @default(uuid()) @db.Uuid
   organisationId         String
-  organisation           Organisation                       @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  organisation           Organisation                        @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   kind                   BillingAuthorityGrantKind
   actorUserId            String
-  actorUser              User                               @relation("BillingAuthorityActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  actorUser              User                                @relation("BillingAuthorityActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
   actorSessionId         String
-  actorSession           AuthSession                        @relation("BillingAuthoritySession", fields: [actorSessionId, actorUserId], references: [id, userId], onDelete: Restrict, onUpdate: Restrict)
+  actorSession           AuthSession                         @relation("BillingAuthoritySession", fields: [actorSessionId, actorUserId], references: [id, userId], onDelete: Restrict, onUpdate: Restrict)
   actorMembershipVersion Int
-  state                  BillingAuthorityGrantState         @default(CLAIMED)
-  providerResourceId     String?                            @unique
+  state                  BillingAuthorityGrantState          @default(CLAIMED)
+  providerResourceId     String?                             @unique
   safeReleaseAfter       DateTime?
-  claimedAt              DateTime                           @default(now())
+  claimedAt              DateTime                            @default(now())
   providerStartedAt      DateTime?
   capabilityIssuedAt     DateTime?
   releasedAt             DateTime?
   releaseReason          BillingAuthorityGrantReleaseReason?
   releaseActor           String?
   releaseEvidence        Json?
-  createdAt              DateTime                           @default(now())
-  updatedAt              DateTime                           @default(now()) @updatedAt
+  createdAt              DateTime                            @default(now())
+  updatedAt              DateTime                            @default(now()) @updatedAt
 
   @@index([organisationId, state, id])
   @@index([actorUserId, state, id])
@@ -584,19 +606,57 @@ model DocumentStandardLink {
 }
 
 model DocumentStorageDeletion {
-  id             String    @id @default(cuid())
-  organisationId String
-  storagePath    String
-  attempts       Int       @default(0)
-  lastError      String?
-  claimedAt      DateTime?
-  processedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                      String                                      @id @default(cuid())
+  organisationId          String
+  storagePath             String
+  state                   DocumentStorageDeletionState                @default(PENDING)
+  attempts                Int                                         @default(0)
+  lastError               String?
+  lastAttemptAt           DateTime?
+  nextAttemptAt           DateTime?                                   @default(now())
+  claimedAt               DateTime?
+  deadLetteredAt          DateTime?
+  terminalReason          DocumentStorageDeletionTerminalReason?
+  alertClaimToken         String?
+  alertClaimedAt          DateTime?
+  alertedAt               DateTime?
+  processedAt             DateTime?
+  lastRecoveryId          String?
+  lastRecoveryNonce       String?
+  lastRecoveryDisposition DocumentStorageDeletionRecoveryDisposition?
+  lastRecoveredAt         DateTime?
+  createdAt               DateTime                                    @default(now())
+  updatedAt               DateTime                                    @updatedAt
+  recoveries              DocumentStorageDeletionRecovery[]
 
   @@index([organisationId])
   @@index([processedAt, createdAt])
   @@index([processedAt, claimedAt, createdAt])
+  @@index([state, nextAttemptAt, claimedAt, createdAt])
+  @@index([state, alertedAt, alertClaimedAt, deadLetteredAt])
+  @@index([organisationId, state, deadLetteredAt])
+}
+
+model DocumentStorageDeletionRecovery {
+  id                     String                                     @id @default(cuid())
+  recoveryNonce          String                                     @unique
+  transactionId          BigInt                                     @default(dbgenerated("txid_current()"))
+  deletionId             String
+  deletion               DocumentStorageDeletion                    @relation(fields: [deletionId], references: [id], onDelete: Restrict)
+  organisationId         String
+  actorType              DocumentStorageDeletionRecoveryActorType
+  actorUserId            String?
+  operatorIdentity       String?
+  reason                 String
+  disposition            DocumentStorageDeletionRecoveryDisposition
+  previousAttempts       Int
+  previousTerminalReason DocumentStorageDeletionTerminalReason
+  previousStoragePath    String
+  correctedStoragePath   String?
+  createdAt              DateTime                                   @default(now())
+
+  @@index([deletionId, createdAt])
+  @@index([organisationId, createdAt])
 }
 
 model ConflictRecord {

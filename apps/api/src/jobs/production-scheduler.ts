@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { pathToFileURL } from 'node:url';
 import { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
-import { DocumentService } from '../services/document.service.js';
+import { DocumentService, type DocumentStorageCleanupResult } from '../services/document.service.js';
 import {
   buildOperationalErrorAlertPayload,
   sendErrorAlert,
@@ -30,16 +30,18 @@ type DeadlineReminderRunner = {
 
 type DocumentStorageCleanupRunner = {
   retryPendingStorageDeletions(
-    deleteFile: (organisationId: string, storagePath: string) => Promise<void>,
+    deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<void>,
     limit: number,
-  ): Promise<{ processed: number; failed: number }>;
+  ): Promise<DocumentStorageCleanupResult | { processed: number; failed: number }>;
+  markDeadLetterAlertSent?(claim: { claimToken: string; ids: string[] }): Promise<number>;
+  releaseDeadLetterAlertClaim?(claim: { claimToken: string; ids: string[] }): Promise<number>;
 };
 
 type StorageDeletionRunner = {
-  deleteFile(organisationId: string, storagePath: string): Promise<void>;
+  deleteFile(organisationId: string, storagePath: string, signal?: AbortSignal): Promise<void>;
 };
 
-type AlertSender = (payload: ErrorAlertPayload) => Promise<void>;
+type AlertSender = (payload: ErrorAlertPayload) => Promise<void | boolean>;
 
 export type ProductionSchedulerConfig = {
   deadlineRemindersIntervalMs: number;
@@ -126,24 +128,37 @@ export async function runDocumentStorageCleanup(input: {
 }): Promise<boolean> {
   try {
     const result = await input.documentService.retryPendingStorageDeletions(
-      (organisationId, storagePath) => input.storageService.deleteFile(organisationId, storagePath),
+      (organisationId, storagePath, signal) => input.storageService.deleteFile(organisationId, storagePath, signal),
       input.documentStorageCleanupLimit,
     );
     input.logger.info(
-      `[ProductionScheduler] Document storage cleanup run completed. Processed: ${result.processed}. Failed: ${result.failed}.`,
+      `[ProductionScheduler] Document storage cleanup run completed. Processed: ${result.processed}. Retry scheduled: ${'retryScheduled' in result ? result.retryScheduled : result.failed}. Newly dead-lettered: ${'newlyDeadLettered' in result ? result.newlyDeadLettered : 0}.`,
     );
-    if (result.failed > 0) {
-      const cleanupFailure = new Error(`Document storage cleanup reported ${result.failed} failed deletion(s).`);
-      cleanupFailure.name = 'DocumentStorageCleanupFailure';
-      await sendJobFailureAlert({
+    const deadLetterAlert = 'deadLetterAlert' in result ? result.deadLetterAlert : null;
+    if (deadLetterAlert) {
+      if (!input.documentService.markDeadLetterAlertSent || !input.documentService.releaseDeadLetterAlertClaim) {
+        throw new Error('Document storage cleanup dead-letter alert acknowledgement is unavailable');
+      }
+      const cleanupFailure = new Error(
+        `Document storage cleanup requires operator review for ${deadLetterAlert.ids.length} dead-lettered deletion(s).`,
+      );
+      cleanupFailure.name = 'DocumentStorageDeletionDeadLettered';
+      const delivered = await sendJobFailureAlert({
         job: 'document-storage-cleanup',
-        code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
+        code: 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED',
         error: cleanupFailure,
         logger: input.logger,
         alertSender: input.alertSender,
+        affectedCount: deadLetterAlert.ids.length,
       });
+      if (delivered) {
+        await input.documentService.markDeadLetterAlertSent(deadLetterAlert);
+      } else {
+        await input.documentService.releaseDeadLetterAlertClaim(deadLetterAlert);
+      }
+      return true;
     }
-    return result.failed > 0;
+    return false;
   } catch (error) {
     logSchedulerError(input.logger, '[ProductionScheduler] Document storage cleanup run failed.', error);
     await sendJobFailureAlert({
@@ -183,22 +198,29 @@ export async function runProductionSchedulerOnce(input: {
 
 export async function sendJobFailureAlert(input: {
   job: 'deadline-reminders' | 'document-storage-cleanup';
-  code: 'DEADLINE_REMINDERS_FAILED' | 'DOCUMENT_STORAGE_CLEANUP_FAILED';
+  code:
+    | 'DEADLINE_REMINDERS_FAILED'
+    | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
+    | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED';
   error: unknown;
   logger: SchedulerLogger;
   alertSender?: AlertSender;
-}): Promise<void> {
+  affectedCount?: number;
+}): Promise<boolean> {
   const alertSender = input.alertSender ?? sendErrorAlert;
   const payload = buildOperationalErrorAlertPayload({
     job: input.job,
     code: input.code,
     error: input.error,
+    affectedCount: input.affectedCount,
   });
 
   try {
-    await alertSender(payload);
+    const delivered = await alertSender(payload);
+    return delivered !== false;
   } catch (alertError) {
     logSchedulerError(input.logger, `[ProductionScheduler] Failed to send ${input.job} failure alert.`, alertError);
+    return false;
   }
 }
 

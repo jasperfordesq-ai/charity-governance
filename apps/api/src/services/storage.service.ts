@@ -11,6 +11,8 @@ const LOCAL_STORAGE_DRIVER = 'local';
 const DEFAULT_LOCAL_STORAGE_DIR = '.charitypilot-local-storage/documents';
 const MAX_DOCUMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 const DEFAULT_STORAGE_DOWNLOAD_TIMEOUT_MS = 10_000;
+const DEFAULT_STORAGE_DELETE_TIMEOUT_MS = 5_000;
+const MAX_STORAGE_DELETE_TIMEOUT_MS = 8_000;
 
 function getBucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET ?? 'documents';
@@ -36,6 +38,13 @@ function downloadTimeoutMs(): number {
     : DEFAULT_STORAGE_DOWNLOAD_TIMEOUT_MS;
 }
 
+export function storageDeleteTimeoutMs(): number {
+  const configured = Number(process.env.STORAGE_DELETE_TIMEOUT_MS);
+  return Number.isInteger(configured) && configured >= 100 && configured <= MAX_STORAGE_DELETE_TIMEOUT_MS
+    ? configured
+    : DEFAULT_STORAGE_DELETE_TIMEOUT_MS;
+}
+
 export async function withReadinessTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
@@ -49,12 +58,11 @@ export async function withReadinessTimeout<T>(promise: Promise<T>, timeoutMs: nu
   }
 }
 
-function timedFetch(timeoutMs: number): typeof fetch {
+function timedFetch(timeoutMs: number, operationSignal?: AbortSignal): typeof fetch {
   return (input, init = {}) => {
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
-    const signal = init.signal
-      ? AbortSignal.any([init.signal, timeoutSignal])
-      : timeoutSignal;
+    const signals = [timeoutSignal, ...(init.signal ? [init.signal] : []), ...(operationSignal ? [operationSignal] : [])];
+    const signal = signals.length === 1 ? timeoutSignal : AbortSignal.any(signals);
     return globalThis.fetch(input, { ...init, signal });
   };
 }
@@ -71,7 +79,7 @@ async function withOperationTimeout<T>(promise: Promise<T>, timeoutMs: number): 
   }
 }
 
-function getSupabaseClient(options: { operationTimeoutMs?: number } = {}) {
+function getSupabaseClient(options: { operationTimeoutMs?: number; operationSignal?: AbortSignal } = {}) {
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -83,7 +91,7 @@ function getSupabaseClient(options: { operationTimeoutMs?: number } = {}) {
     url,
     serviceRoleKey,
     options.operationTimeoutMs
-      ? { global: { fetch: timedFetch(options.operationTimeoutMs) } }
+      ? { global: { fetch: timedFetch(options.operationTimeoutMs, options.operationSignal) } }
       : undefined,
   );
 }
@@ -96,13 +104,15 @@ function sanitiseFilename(filename: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function assertOrganisationStoragePath(organisationId: string, storagePath: string): string {
+export function assertOrganisationStoragePath(organisationId: string, storagePath: string): string {
   const normalisedPath = storagePath.replace(/\\/g, '/');
   const expectedPrefix = `${organisationId}/`;
   const segments = normalisedPath.split('/');
 
   if (
     normalisedPath !== storagePath ||
+    normalisedPath.length > 1024 ||
+    /[\u0000-\u001f\u007f]/u.test(normalisedPath) ||
     segments.some((segment) => segment === '' || segment === '.' || segment === '..') ||
     !normalisedPath.startsWith(expectedPrefix) ||
     normalisedPath.length <= expectedPrefix.length
@@ -250,12 +260,16 @@ export class StorageService {
     }
   }
 
-  async deleteFile(organisationId: string, storagePath: string): Promise<void> {
+  async deleteFile(organisationId: string, storagePath: string, signal?: AbortSignal): Promise<void> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
+
+    if (signal?.aborted) {
+      throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
+    }
 
     if (isLocalStorageDriver()) {
       try {
-        await unlink(localFilePath(guardedPath));
+        await withOperationTimeout(unlink(localFilePath(guardedPath)), storageDeleteTimeoutMs());
       } catch (error) {
         if (!isMissingFileError(error)) {
           throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
@@ -264,7 +278,14 @@ export class StorageService {
       return;
     }
 
-    const { error } = await getSupabaseClient().storage.from(getBucketName()).remove([guardedPath]);
+    const timeoutMs = storageDeleteTimeoutMs();
+    const { error } = await withOperationTimeout(
+      getSupabaseClient({ operationTimeoutMs: timeoutMs, operationSignal: signal })
+        .storage
+        .from(getBucketName())
+        .remove([guardedPath]),
+      timeoutMs + 250,
+    );
 
     if (error) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);

@@ -8,7 +8,7 @@ import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { AppError, handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent } from '../../utils/response.js';
 import { formatProviderError } from '../../utils/provider-errors.js';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
   DOCUMENT_UPLOAD_MAX_FILE_SIZE,
   DOCUMENT_UPLOAD_MULTIPART_LIMITS,
@@ -20,6 +20,25 @@ import {
 } from './document-upload-validation.js';
 
 export { DOCUMENT_UPLOAD_MAX_FILE_SIZE, DOCUMENT_UPLOAD_MULTIPART_LIMITS } from './document-upload-validation.js';
+
+const requeueStorageDeletionSchema = z.object({
+  reason: z
+    .string()
+    .transform((value) => value.replace(/\r\n?/g, '\n').trim())
+    .pipe(
+      z
+        .string()
+        .min(10, 'Give a recovery reason of at least 10 characters')
+        .max(500, 'Recovery reason must be at most 500 characters')
+        .refine(
+          (value) => !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/.test(value),
+          'Recovery reason contains unsupported control characters',
+        ),
+    ),
+  confirmation: z.literal('REQUEUE DOCUMENT STORAGE DELETION'),
+  disposition: z.literal('REQUEUE_UNCHANGED'),
+}).strict();
+const storageDeletionIdSchema = z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/);
 
 function safeDownloadFilename(name: string, storagePath: string): string {
   const storedFilename = storagePath.split('/').pop() ?? '';
@@ -57,6 +76,46 @@ export async function documentRoutes(app: FastifyInstance) {
       handleError(reply, err);
     }
   });
+
+  app.get('/storage-deletions/dead-letter', { preHandler: [requireAdmin] }, async (request, reply) => {
+    try {
+      const { limit } = request.query as { limit?: string };
+      return await service.listDeadLetterStorageDeletions(
+        request.user.organisationId,
+        Math.min(100, Math.max(1, Number.parseInt(limit ?? '50', 10) || 50)),
+      );
+    } catch (error) {
+      handleError(reply, error);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>(
+    '/storage-deletions/:id/requeue',
+    { preHandler: [requireAdmin] },
+    async (request, reply) => {
+      try {
+        const body = requeueStorageDeletionSchema.parse(request.body);
+        const deletionId = storageDeletionIdSchema.parse(request.params.id);
+        const result = await service.recoverDeadLetterStorageDeletion({
+          organisationId: request.user.organisationId,
+          deletionId,
+          actor: { actorType: 'TENANT_USER', actorUserId: request.user.userId },
+          reason: body.reason,
+          disposition: body.disposition,
+        });
+        return reply.status(200).send(result);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return reply.status(400).send({
+            error: 'Validation failed',
+            code: 'VALIDATION_ERROR',
+            details: error.errors,
+          });
+        }
+        handleError(reply, error);
+      }
+    },
+  );
 
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     try {
