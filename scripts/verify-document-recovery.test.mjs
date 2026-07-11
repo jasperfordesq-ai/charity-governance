@@ -1360,9 +1360,7 @@ test('stable reader opens first, proves descriptor identity, applies policy, the
     },
     openFile: (_path, flags) => {
       events.push('open');
-      if (constants.O_NOFOLLOW !== undefined) {
-        assert.equal(flags & constants.O_NOFOLLOW, constants.O_NOFOLLOW);
-      }
+      assert.equal(flags, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
       return 7;
     },
     closeFile: () => {

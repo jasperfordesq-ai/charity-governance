@@ -2550,7 +2550,7 @@ export function readStableManifest(
     repoRoot = defaultRepoRoot,
     gitPathStatus = defaultGitPathStatus,
     pathLstat = (path) => lstatSync(path, { bigint: true }),
-    openFile = (path) => openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)),
+    openFile = (path, flags) => openSync(path, flags),
     closeFile = closeSync,
     descriptorStat = (descriptor) => fstatSync(descriptor, { bigint: true }),
     pathStat = (path) => statSync(path, { bigint: true }),
@@ -2568,7 +2568,8 @@ export function readStableManifest(
     }
     const pathBeforeOpen = stableFileFacts(pathBeforeOpenStats);
     if (!pathBeforeOpen.identity) return { issues: ['manifest path identity could not be proven conclusively'] };
-    descriptor = openFile(requestedPath);
+    const openFlags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
+    descriptor = openFile(requestedPath, openFlags);
     const beforeStats = descriptorStat(descriptor);
     if (!beforeStats.isFile()) return { issues: ['manifest path must identify a regular file'] };
     const before = stableFileFacts(beforeStats);
