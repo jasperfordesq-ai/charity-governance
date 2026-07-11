@@ -1,6 +1,6 @@
 # CharityPilot Full-Platform Remediation Audit
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 This is the authoritative, human-maintained remediation ledger for the full
 CharityPilot audit completed on 2026-07-10. It is intentionally separate from
@@ -872,9 +872,9 @@ CI evidence:
 
 ### P0-08 - Product, legal, pricing, role, reminder, retention, and privacy truth
 
-Status: `CONFIRMED`
+Status: `IN_PROGRESS`
 
-Track and resolve every contradiction separately:
+Baseline contradictions, with remediation state recorded below:
 
 1. Terms promise full Complete-plan trial access, while registration creates
    `ESSENTIALS` in `apps/api/src/services/auth.service.ts:105-112`.
@@ -917,6 +917,43 @@ Acceptance:
   workflows.
 - Pricing surfaces disclose VAT treatment consistently.
 - Role-based UI affordances match server enforcement on every route.
+
+Repository progress on 2026-07-11:
+
+- Role/member authorization sub-slice: `LOCALLY_VERIFIED`. `OWNER` and `ADMIN`
+  remain the governance mutation roles. `MEMBER` retains legitimate reads,
+  navigation, authenticated document downloads, and export access while mutation
+  controls are hidden or read-only across Team, Board, Documents, Compliance,
+  Dashboard, Registers, Deadlines, Organisation, and Export.
+- Exact `403` plus `FORBIDDEN` stale-role denials now fail closed in place:
+  privileged modals, drafts, queues, and timers are cleared; persisted or
+  canonical state is restored where required; authentication is refreshed; and
+  the user is not redirected away from the current route.
+- Privacy/cookie processing-truth sub-slice: `LOCALLY_VERIFIED`. The draft notice
+  now reflects PostgreSQL through Prisma, custom authentication, private Supabase
+  document storage only, the Stripe identifiers and subscription state actually
+  stored, and the implemented Resend transactional-email purposes. It explicitly
+  leaves the controller, legal bases, retention, rights workflow, production
+  providers and regions, transfer safeguards, and contacts unapproved.
+- The cookie UI is now an informational necessary-authentication-cookie notice,
+  not invented analytics consent. Dismissal stores only a local acknowledgement
+  and migrates the legacy accepted/declined values.
+- Local proof passed web `351 / 351`, API `658 / 658`, shared `40 / 40`,
+  production tooling `545 / 545`, local-Docker tooling `44 / 44`, web lint and
+  production build, E2E typecheck, `113 / 113` isolation contracts, and `3 / 3`
+  focused managed Playwright scenarios. The browser proof uses a real disposable
+  `MEMBER`, real seeded trustee and document records, authenticated byte download,
+  absence of privileged mutation requests, a live `ADMIN` to `MEMBER` demotion
+  producing the real API denial, and rendered privacy/cookie assertions. Teardown
+  left no managed E2E container residue.
+
+P0-08 remains `IN_PROGRESS`. Trial entitlement and selected-plan propagation,
+expired-trial and account-closure deletion, the approved retention and rights
+workflows, VAT treatment, final controller/provider/region/transfer/contact
+claims, operational mailboxes, and professional legal, privacy, and accounting
+approval remain unresolved. These require product, business, professional, or
+external-provider decisions and evidence; they must not be inferred from passing
+repository tests.
 
 ### P0-09 - Executed browser assurance and repository/release protections
 

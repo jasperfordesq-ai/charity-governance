@@ -56,3 +56,35 @@ test('principle route loads are abortable and stale responses cannot replace the
   assert.match(workflow, /if \(!active \|\| requestSeq !== principleLoadRequestSeq\.current\) return/);
   assert.match(workflow, /controller\.abort\(\)/);
 });
+
+test('compliance records are role-aware and exact forbidden saves fail closed without navigation', () => {
+  const overview = dashboard('compliance', 'page.tsx');
+  const list = dashboard('compliance', 'compliance-principle-list.tsx');
+  const page = dashboard('compliance', '[principleId]', 'page.tsx');
+  const workflow = dashboard('compliance', '[principleId]', 'use-principle-detail-workflow.ts');
+  const editor = dashboard('compliance', '[principleId]', 'standard-editor-card.tsx');
+
+  assert.match(overview, /canManageGovernance\(user\?\.role\)/);
+  assert.match(list, /canManageRecords \? 'Edit records' : 'View records'/);
+  assert.match(page, /Records are view-only for Members/);
+
+  assert.match(workflow, /const canManageRecords = roleCanManageRecords && !editingRevoked/);
+  assert.match(workflow, /if \(canManageRecords\) \{\s*initialQueues\[standard\.id\] = createSaveQueue/);
+  assert.match(workflow, /const updateField =[\s\S]*?if \(!canManageRecordsRef\.current\) return;/);
+  assert.match(workflow, /const autoSave =[\s\S]*?if \(!canManageRecordsRef\.current\) return;/);
+
+  const forbiddenStart = workflow.indexOf('const handleGovernanceForbidden');
+  const forbiddenEnd = workflow.indexOf('\n\n  const refreshApprovalReadiness', forbiddenStart);
+  const forbiddenHandler = workflow.slice(forbiddenStart, forbiddenEnd);
+  assert.match(forbiddenHandler, /isApiForbiddenError\(error\)/);
+  assert.match(forbiddenHandler, /setEditingRevoked\(true\)/);
+  assert.match(forbiddenHandler, /clearPrivilegedComplianceState\(\)/);
+  assert.match(forbiddenHandler, /void refreshUser\(\)/);
+  assert.doesNotMatch(forbiddenHandler, /router\.(?:push|replace)/);
+
+  assert.match(workflow, /Object\.values\(saveQueues\.current\)\.forEach\(\(queue\) => queue\.dispose\(\)\)/);
+  assert.match(workflow, /debounceTimers\.current = \{\}/);
+  assert.match(editor, /isDisabled=\{!canManageRecords\}/);
+  assert.match(editor, /isReadOnly=\{!canManageRecords\}/);
+  assert.match(editor, /<StatusChip tone="neutral">View only<\/StatusChip>/);
+});

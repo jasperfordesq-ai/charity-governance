@@ -6,10 +6,11 @@ import {
   confirmationCorrectionValue,
 } from '@/lib/confirmation-correction';
 import { organisationProfileBlockingErrors } from '@/lib/organisation-profile-validation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDisclosure } from '@heroui/react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { useToast } from '@/components/toast';
 import { useAuth } from '@/lib/auth-context';
 import type { ConditionalObligationProfile, UpdateOrganisationRequest } from '@charitypilot/shared';
@@ -20,7 +21,6 @@ import {
   LegalForm,
   OrganisationComplexity,
   updateOrganisationSchema,
-  UserRole,
 } from '@charitypilot/shared';
 import {
   EMPTY_CONDITIONAL_OBLIGATION_PROFILE,
@@ -36,8 +36,9 @@ export function useOrganisationWorkflow() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [isDirty, setIsDirty] = useState(false);
+  const [permissionRevoked, setPermissionRevoked] = useState(false);
   const initialised = useRef(false);
-  const canManage = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
+  const canManage = canManageGovernance(user?.role) && !permissionRevoked;
 
   const [name, setName] = useState('');
   const [rcnNumber, setRcnNumber] = useState('');
@@ -62,17 +63,7 @@ export function useOrganisationWorkflow() {
     EMPTY_CONDITIONAL_OBLIGATION_PROFILE,
   );
 
-  useEffect(() => {
-    if (!isDirty) return;
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty]);
-
-  useEffect(() => {
+  const restorePersistedProfile = useCallback(() => {
     if (!org) return;
 
     initialised.current = false;
@@ -99,11 +90,30 @@ export function useOrganisationWorkflow() {
     setMemberCount(org.memberCount === null ? '' : String(org.memberCount));
     setConditionalObligationProfile(normaliseConditionalObligationProfile(org.conditionalObligationProfile));
     setIsDirty(false);
+    setSaved(false);
     setSaveError('');
     setTimeout(() => {
       initialised.current = true;
     }, 0);
   }, [org]);
+
+  useEffect(() => {
+    setPermissionRevoked(false);
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    restorePersistedProfile();
+  }, [restorePersistedProfile]);
 
   useEffect(() => {
     if (initialised.current) {
@@ -179,6 +189,7 @@ export function useOrganisationWorkflow() {
   const readyCount = completionItems.filter((item) => item.ready).length;
 
   const handleComplexityChange = (newComplexity: OrganisationComplexity) => {
+    if (!canManage) return;
     if (newComplexity !== complexity) {
       setComplexity(newComplexity);
       complexityModal.onOpen();
@@ -186,11 +197,13 @@ export function useOrganisationWorkflow() {
   };
 
   const handleLegalFormChange = (value: LegalForm) => {
+    if (!canManage) return;
     setLegalForm(value);
     setLegalFormConfirmed(value === org?.legalForm && Boolean(org.legalFormConfirmedAt));
   };
 
   const handleCroAnnualReturnDateChange = (value: string) => {
+    if (!canManage) return;
     setCroAnnualReturnDateState(value);
     setCroAnnualReturnDateConfirmed(
       value === (toCivilDate(org?.croAnnualReturnDate) ?? '') &&
@@ -199,6 +212,7 @@ export function useOrganisationWorkflow() {
   };
 
   const handlePurposeChange = (key: string, checked: boolean) => {
+    if (!canManage) return;
     setCharitablePurpose((current) => {
       const next = new Set(current);
       if (checked) next.add(key);
@@ -208,6 +222,7 @@ export function useOrganisationWorkflow() {
   };
 
   const handleConditionalFactChange = (key: keyof ConditionalObligationProfile, checked: boolean) => {
+    if (!canManage) return;
     setConditionalObligationProfile((current) => ({ ...current, [key]: checked }));
   };
 
@@ -299,6 +314,17 @@ export function useOrganisationWorkflow() {
       toast('Organisation profile saved');
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
+      if (isApiForbiddenError(err)) {
+        // Drop the stale write surface immediately; the refreshed session is
+        // allowed to update the rendered role only after the page is read-only.
+        setPermissionRevoked(true);
+        complexityModal.onClose();
+        restorePersistedProfile();
+        setSaveError('Your role changed. The organisation profile is now read-only.');
+        toast('Your permissions changed. The organisation profile is now read-only.', 'error');
+        void refreshUser();
+        return;
+      }
       const message = apiErrorMessage(err, 'Failed to save changes');
       logClientError('Save failed', err);
       setSaveError(message);
@@ -349,21 +375,23 @@ export function useOrganisationWorkflow() {
     registeredAddress,
     saving,
     selectedPurposes,
-    setContactEmail,
-    setContactPhone,
-    setCroAnnualReturnDateConfirmed,
-    setCroNumber,
-    setDateRegistered,
-    setFinancialYearEnd,
-    setIncorporationDate,
-    setLastActualAgmDate,
-    setLastUnanimousAnnualMemberResolutionDate,
-    setLegalFormConfirmed,
-    setMemberCount,
-    setName,
-    setRcnNumber,
-    setRegisteredAddress,
-    setWebsite,
+    setContactEmail: (value: string) => { if (canManage) setContactEmail(value); },
+    setContactPhone: (value: string) => { if (canManage) setContactPhone(value); },
+    setCroAnnualReturnDateConfirmed: (value: boolean) => { if (canManage) setCroAnnualReturnDateConfirmed(value); },
+    setCroNumber: (value: string) => { if (canManage) setCroNumber(value); },
+    setDateRegistered: (value: string) => { if (canManage) setDateRegistered(value); },
+    setFinancialYearEnd: (value: string) => { if (canManage) setFinancialYearEnd(value); },
+    setIncorporationDate: (value: string) => { if (canManage) setIncorporationDate(value); },
+    setLastActualAgmDate: (value: string) => { if (canManage) setLastActualAgmDate(value); },
+    setLastUnanimousAnnualMemberResolutionDate: (value: string) => {
+      if (canManage) setLastUnanimousAnnualMemberResolutionDate(value);
+    },
+    setLegalFormConfirmed: (value: boolean) => { if (canManage) setLegalFormConfirmed(value); },
+    setMemberCount: (value: string) => { if (canManage) setMemberCount(value); },
+    setName: (value: string) => { if (canManage) setName(value); },
+    setRcnNumber: (value: string) => { if (canManage) setRcnNumber(value); },
+    setRegisteredAddress: (value: string) => { if (canManage) setRegisteredAddress(value); },
+    setWebsite: (value: string) => { if (canManage) setWebsite(value); },
     validationErrors,
     website,
   };

@@ -57,6 +57,7 @@ function labelForStatus(status: ComplianceStatus, fallback?: string) {
 }
 
 export function StandardEditorCard({
+  canManageRecords,
   standard,
   form,
   save,
@@ -65,6 +66,7 @@ export function StandardEditorCard({
   onRetrySave,
   onResolveConflict,
 }: {
+  canManageRecords: boolean;
   standard: ComplianceStandard;
   form: StandardFormState;
   save: SaveState[string];
@@ -82,6 +84,7 @@ export function StandardEditorCard({
     form.status === ComplianceStatus.EXPLAIN;
 
   const reconcileWithServer = async () => {
+    if (!canManageRecords) return;
     setReconciling(true);
     setReconcileError('');
     try {
@@ -125,25 +128,29 @@ export function StandardEditorCard({
             </div>
           </div>
           <div className="flex shrink-0 justify-end">
-            <SaveStatusIndicator
-              status={save}
-              retryAction={
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="flat"
-                  color="danger"
-                  className="h-6 min-w-0 px-2 text-[11px] font-semibold"
-                  onPress={() => onRetrySave(standard.id, form)}
-                >
-                  Retry
-                </Button>
-              }
-            />
+            {canManageRecords ? (
+              <SaveStatusIndicator
+                status={save}
+                retryAction={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="flat"
+                    color="danger"
+                    className="h-6 min-w-0 px-2 text-[11px] font-semibold"
+                    onPress={() => onRetrySave(standard.id, form)}
+                  >
+                    Retry
+                  </Button>
+                }
+              />
+            ) : (
+              <StatusChip tone="neutral">View only</StatusChip>
+            )}
           </div>
         </div>
 
-        {save === 'conflict' ? (
+        {canManageRecords && save === 'conflict' ? (
           <div
             role="alert"
             className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-5 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100"
@@ -170,9 +177,13 @@ export function StandardEditorCard({
 
         <Select
           label="Status"
+          isDisabled={!canManageRecords}
           selectedKeys={new Set([form.status])}
-          onBlur={() => void flushSave(standard.id)}
+          onBlur={() => {
+            if (canManageRecords) void flushSave(standard.id);
+          }}
           onSelectionChange={(keys) => {
+            if (!canManageRecords) return;
             const val = Array.from(keys)[0] as ComplianceStatus;
             if (val) updateField(standard.id, 'status', val);
           }}
@@ -203,9 +214,14 @@ export function StandardEditorCard({
         <Textarea
           label="Action Taken"
           placeholder="Describe what your organisation has done to address this standard..."
+          isReadOnly={!canManageRecords}
           value={form.actionTaken}
-          onValueChange={(val) => updateField(standard.id, 'actionTaken', val)}
-          onBlur={() => void flushSave(standard.id)}
+          onValueChange={(val) => {
+            if (canManageRecords) updateField(standard.id, 'actionTaken', val);
+          }}
+          onBlur={() => {
+            if (canManageRecords) void flushSave(standard.id);
+          }}
           minRows={2}
           maxRows={6}
           size="sm"
@@ -214,9 +230,14 @@ export function StandardEditorCard({
         <Textarea
           label="Evidence"
           placeholder="List supporting evidence (e.g. policies, minutes, documents)..."
+          isReadOnly={!canManageRecords}
           value={form.evidence}
-          onValueChange={(val) => updateField(standard.id, 'evidence', val)}
-          onBlur={() => void flushSave(standard.id)}
+          onValueChange={(val) => {
+            if (canManageRecords) updateField(standard.id, 'evidence', val);
+          }}
+          onBlur={() => {
+            if (canManageRecords) void flushSave(standard.id);
+          }}
           minRows={2}
           maxRows={6}
           size="sm"
@@ -226,9 +247,14 @@ export function StandardEditorCard({
           label="Internal Notes"
           description="Not included in CRA submission"
           placeholder="Any internal notes or reminders for your team..."
+          isReadOnly={!canManageRecords}
           value={form.notes}
-          onValueChange={(val) => updateField(standard.id, 'notes', val)}
-          onBlur={() => void flushSave(standard.id)}
+          onValueChange={(val) => {
+            if (canManageRecords) updateField(standard.id, 'notes', val);
+          }}
+          onBlur={() => {
+            if (canManageRecords) void flushSave(standard.id);
+          }}
           minRows={2}
           maxRows={4}
           size="sm"
@@ -245,9 +271,14 @@ export function StandardEditorCard({
                 : 'Explanation for Non-Compliance'
             }
             placeholder="Please explain why this standard does not apply or why your organisation is not compliant..."
+            isReadOnly={!canManageRecords}
             value={form.explanationIfNA}
-            onValueChange={(val) => updateField(standard.id, 'explanationIfNA', val)}
-            onBlur={() => void flushSave(standard.id)}
+            onValueChange={(val) => {
+              if (canManageRecords) updateField(standard.id, 'explanationIfNA', val);
+            }}
+            onBlur={() => {
+              if (canManageRecords) void flushSave(standard.id);
+            }}
             minRows={2}
             maxRows={6}
             size="sm"
@@ -259,7 +290,7 @@ export function StandardEditorCard({
         )}
       </div>
       <ConfirmActionModal
-        isOpen={reconcileOpen}
+        isOpen={canManageRecords && reconcileOpen}
         onOpenChange={(open) => {
           if (!reconciling) setReconcileOpen(open);
         }}

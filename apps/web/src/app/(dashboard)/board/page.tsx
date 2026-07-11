@@ -15,6 +15,7 @@ export default function BoardPage() {
   useDocumentTitle('Board Members');
   const {
     boardDataReady,
+    canManage,
     displayMembers,
     editing,
     fetchMembers,
@@ -57,13 +58,15 @@ export default function BoardPage() {
     <AppPage
       eyebrow="Trustee register"
       title="Board Members Register"
-      description="Maintain a review-ready trustee register with conduct, induction, appointment, and term evidence for Irish charity governance workflows."
-      actions={(
+      description={canManage
+        ? 'Maintain a review-ready trustee register with conduct, induction, appointment, and term evidence for Irish charity governance workflows.'
+        : 'Review trustee conduct, induction, appointment, and term evidence in this read-only board register.'}
+      actions={canManage ? (
         <Button className={primaryActionButtonClassName} onPress={openAdd}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Add trustee
         </Button>
-      )}
+      ) : undefined}
     >
       {boardDataReady && (
         <BoardSummaryPanel summary={summary} />
@@ -72,6 +75,7 @@ export default function BoardPage() {
       {boardDataReady && <TrusteeEvidencePromptCards />}
 
       <BoardMemberListPanel
+        canManage={canManage}
         displayMembers={displayMembers}
         fetchMembers={fetchMembers}
         loadError={loadError}
@@ -86,7 +90,8 @@ export default function BoardPage() {
       />
 
       <BoardMemberModal
-        isOpen={memberModal.isOpen}
+        accessDisabled={!canManage}
+        isOpen={canManage && memberModal.isOpen}
         onOpenChange={memberModal.onOpenChange}
         editing={editing}
         formError={formError}

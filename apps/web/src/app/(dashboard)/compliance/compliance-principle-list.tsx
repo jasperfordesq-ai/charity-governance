@@ -16,6 +16,7 @@ function scoreColour(pct: number): 'success' | 'warning' | 'danger' {
 }
 
 export function CompliancePrincipleList({
+  canManageRecords,
   loading,
   loadError,
   principles,
@@ -25,6 +26,7 @@ export function CompliancePrincipleList({
   onExpandedIdChange,
   onRetry,
 }: {
+  canManageRecords: boolean;
   loading: boolean;
   loadError: string;
   principles: GovernancePrincipleResponse[];
@@ -40,7 +42,12 @@ export function CompliancePrincipleList({
 
   return (
     <div id="principles">
-      <AppSection title="Principles" description="Open a principle to edit standards, evidence, and explanations.">
+      <AppSection
+        title="Principles"
+        description={canManageRecords
+          ? 'Open a principle to edit standards, evidence, and explanations.'
+          : 'Open a principle to review its recorded standards, evidence, and explanations.'}
+      >
         {loading ? (
           <LoadingState title="Loading compliance principles" description="Checking Governance Code principles, reporting-year progress, and approval-readiness." />
         ) : loadError ? (
@@ -105,7 +112,7 @@ export function CompliancePrincipleList({
                             size="sm"
                             className={primaryActionButtonClassName}
                           >
-                            Edit records
+                            {canManageRecords ? 'Edit records' : 'View records'}
                           </Button>
                           <Button
                             type="button"
@@ -186,7 +193,9 @@ export function CompliancePrincipleList({
                         )}
 
                         <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
-                          Select Edit records to update this principle's statuses, evidence, and explanations.
+                          {canManageRecords
+                            ? "Select Edit records to update this principle's statuses, evidence, and explanations."
+                            : "Select View records to review this principle's saved statuses, evidence, and explanations."}
                         </div>
                       </div>
                     )}

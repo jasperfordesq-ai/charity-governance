@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { approvalReadinessSummary, countApprovalReadinessBlockers } from '@/lib/approval-readiness';
 import { listCurrentDeadlines } from '@/lib/deadline-api';
 import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { useCallback, useEffect, useState } from 'react';
 import type {
   BoardAlert,
@@ -21,6 +22,8 @@ type ApprovalReadiness = ComplianceApprovalReadinessResponse;
 
 export function useDashboardWorkflow() {
   const { user } = useAuth();
+  const canManage = canManageGovernance(user?.role);
+  const canManageBilling = user?.role === 'OWNER';
   const [compliance, setCompliance] = useState<ComplianceSummary | null>(null);
   const [deadlines, setDeadlines] = useState<DeadlineResponse[] | null>(null);
   const [boardAlerts, setBoardAlerts] = useState<BoardAlert[] | null>(null);
@@ -130,6 +133,8 @@ export function useDashboardWorkflow() {
     approvalReadinessSummaryText,
     boardAlerts,
     boardMemberCount,
+    canManage,
+    canManageBilling,
     compliance,
     currentYear,
     deadlines,

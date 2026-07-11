@@ -81,13 +81,44 @@ test('dirty sign-off edits block year and SPA navigation until explicitly discar
   assert.match(workflow, /Save or discard the unsaved sign-off changes before changing reporting year/);
   assert.match(workflow, /window\.addEventListener\('beforeunload', warnIfSignoffDirty\)/);
   assert.match(workflow, /document\.addEventListener\('click', interceptSignoffNavigation, true\)/);
-  assert.match(workflow, /const signoffNavigationBlocked = signoffDirty \|\| signoffReviewRequired/);
+  assert.match(workflow, /const signoffNavigationBlocked = canManageSignoff && \(signoffDirty \|\| signoffReviewRequired\)/);
   assert.match(workflow, /replaceSignoffForm\(complianceSignoffToDraft\(signoff\)\)/);
   assert.match(panel, /Discard changes/);
   assert.match(panel, /signoffSaveStatus/);
   assert.match(modal, /Discard changes and leave/);
   assert.match(modal, /ariaLabel="Confirm leaving unsaved board sign-off"/);
   assert.match(page, /<ExportNavigationConfirmModal/);
+});
+
+test('member exports stay available while sign-off editing and dirty navigation fail closed', () => {
+  const workflow = exportSource('use-export-workflow.ts');
+  const panel = exportSource('export-board-approval-panel.tsx');
+  const controls = exportSource('export-controls-panel.tsx');
+
+  assert.match(workflow, /const roleCanManageSignoff = canManageGovernance\(user\?\.role\)/);
+  assert.match(workflow, /const canManageSignoff = roleCanManageSignoff && !signoffEditingRevoked/);
+  assert.match(workflow, /if \(!canManageSignoff\) return;/);
+  assert.match(workflow, /const signoffDirty = canManageSignoff && isComplianceSignoffDirty/);
+  assert.match(workflow, /const signoffNavigationBlocked = canManageSignoff &&/);
+  assert.match(workflow, /handleExportCurrent: \(\) => handleExport\('current'\)/);
+  assert.match(workflow, /handleExportApproved: \(\) => handleExport\('approved'/);
+  assert.match(workflow, /result\.status === 'error'[\s\S]*?failClosedOnForbidden\(result\.error\)/);
+
+  const forbiddenStart = workflow.indexOf('const failClosedOnForbidden');
+  const forbiddenEnd = workflow.indexOf('\n\n  useEffect', forbiddenStart);
+  const forbiddenHandler = workflow.slice(forbiddenStart, forbiddenEnd);
+  assert.match(forbiddenHandler, /isApiForbiddenError\(error\)/);
+  assert.match(forbiddenHandler, /setSignoffEditingRevoked\(true\)/);
+  assert.match(forbiddenHandler, /clearPrivilegedSignoffState\(\)/);
+  assert.match(forbiddenHandler, /void refreshUser\(\)/);
+  assert.doesNotMatch(forbiddenHandler, /router\.(?:push|replace)/);
+
+  assert.match(panel, /Only an Owner or Admin can change the approval record/);
+  assert.match(panel, /isDisabled=\{!canManageSignoff\}/);
+  assert.match(panel, /isReadOnly=\{!canManageSignoff\}/);
+  assert.match(panel, /<StatusChip tone="neutral">View only<\/StatusChip>/);
+  assert.match(controls, /Generate Compliance Report \(working copy\)/);
+  assert.match(controls, /Open latest approved snapshot/);
 });
 
 test('dashboard sign-off card never treats an invalidated APPROVED status as current', () => {

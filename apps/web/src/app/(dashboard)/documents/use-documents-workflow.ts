@@ -4,7 +4,9 @@ import { logClientError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDisclosure } from '@heroui/react';
 import { api } from '@/lib/api';
-import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
+import { apiErrorMessage, isApiForbiddenError, isApiNotFoundError } from '@/lib/errors';
+import { canManageGovernance } from '@/lib/governance-permissions';
+import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/components/toast';
 import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-guidance';
 import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
@@ -32,6 +34,9 @@ export function useDocumentsWorkflow() {
   const [standardsError, setStandardsError] = useState('');
   const [organisationProfileError, setOrganisationProfileError] = useState('');
   const { toast } = useToast();
+  const { user, refreshUser } = useAuth();
+  const [governanceAccessRevoked, setGovernanceAccessRevoked] = useState(false);
+  const canManage = canManageGovernance(user?.role) && !governanceAccessRevoked;
 
   const uploadModal = useDisclosure();
   const [uploadName, setUploadName] = useState('');
@@ -151,20 +156,22 @@ export function useDocumentsWorkflow() {
   const selectedDeleteDoc = documents.find((doc) => doc.id === deleteDocId);
 
   const uploadDisabledReason = useMemo(() => {
+    if (!canManage) return 'Only organisation owners and administrators can upload documents.';
     if (!uploadName.trim()) return 'Add a document name before uploading.';
     if (!uploadFile) return 'Choose a file to upload.';
     if (uploadFile.size > MAX_FILE_SIZE) return 'Choose a file under the 10 MB upload limit.';
     return '';
-  }, [uploadFile, uploadName]);
+  }, [canManage, uploadFile, uploadName]);
 
   const linkDisabledReason = useMemo(() => {
+    if (!canManage) return 'Only organisation owners and administrators can change evidence links.';
     if (standardsError) return standardsError;
     if (standards.length === 0) return 'Compliance standards are still loading.';
     if (!linkStandardId) return 'Choose a standard to link this document as evidence.';
     return '';
-  }, [linkStandardId, standards.length, standardsError]);
+  }, [canManage, linkStandardId, standards.length, standardsError]);
 
-  const resetUploadForm = () => {
+  const resetUploadForm = useCallback(() => {
     setUploadName('');
     setUploadCategory(DocumentCategory.OTHER);
     setUploadDescription('');
@@ -174,9 +181,45 @@ export function useDocumentsWorkflow() {
     setUploadMinuteReference('');
     setUploadFile(null);
     setUploadError('');
+  }, []);
+
+  useEffect(() => {
+    setGovernanceAccessRevoked(false);
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (canManage) return;
+    uploadModal.onClose();
+    deleteModal.onClose();
+    linkModal.onClose();
+    setDeleteDocId(null);
+    setLinkDocId(null);
+    setLinkStandardId('');
+    setUnlinkingStandard(null);
+    resetUploadForm();
+  }, [canManage, deleteModal, linkModal, resetUploadForm, uploadModal]);
+
+  const reconcileForbiddenMutation = async (error: unknown) => {
+    if (!isApiForbiddenError(error)) return false;
+    setGovernanceAccessRevoked(true);
+    uploadModal.onClose();
+    deleteModal.onClose();
+    linkModal.onClose();
+    setDeleteDocId(null);
+    setLinkDocId(null);
+    setLinkStandardId('');
+    setUnlinkingStandard(null);
+    resetUploadForm();
+    toast('Your role no longer allows document changes. The evidence vault is now read-only.', 'error');
+    await refreshUser();
+    return true;
   };
 
   const handleUpload = async () => {
+    if (!canManage) {
+      setUploadError('Only organisation owners and administrators can upload documents.');
+      return;
+    }
     if (uploadDisabledReason) {
       setUploadError(uploadDisabledReason);
       return;
@@ -208,6 +251,7 @@ export function useDocumentsWorkflow() {
       await fetchDocuments();
       toast('Document uploaded successfully');
     } catch (err) {
+      if (await reconcileForbiddenMutation(err)) return;
       const message = apiErrorMessage(err, 'Upload failed. Please try again.');
       logClientError('Upload failed', err);
       setUploadError(message);
@@ -218,12 +262,13 @@ export function useDocumentsWorkflow() {
   };
 
   const confirmDelete = (docId: string) => {
+    if (!canManage) return;
     setDeleteDocId(docId);
     deleteModal.onOpen();
   };
 
   const handleDelete = async () => {
-    if (!deleteDocId) return;
+    if (!deleteDocId || !canManage) return;
     setDeleting(true);
     try {
       await api.delete(`/documents/${deleteDocId}`);
@@ -232,6 +277,7 @@ export function useDocumentsWorkflow() {
       setDeleteDocId(null);
       toast('Document deleted');
     } catch (err) {
+      if (await reconcileForbiddenMutation(err)) return;
       logClientError('Delete failed', err);
       toast(apiErrorMessage(err, 'Failed to delete document'), 'error');
     } finally {
@@ -240,13 +286,14 @@ export function useDocumentsWorkflow() {
   };
 
   const openLinkModal = (docId: string) => {
+    if (!canManage) return;
     setLinkDocId(docId);
     setLinkStandardId('');
     linkModal.onOpen();
   };
 
   const handleLinkStandard = async () => {
-    if (!linkDocId || linkDisabledReason) return;
+    if (!linkDocId || linkDisabledReason || !canManage) return;
 
     setLinkingStandard(true);
     try {
@@ -257,6 +304,7 @@ export function useDocumentsWorkflow() {
       await fetchDocuments();
       toast('Standard linked to document');
     } catch (err) {
+      if (await reconcileForbiddenMutation(err)) return;
       logClientError('Link failed', err);
       toast(apiErrorMessage(err, 'Could not link this standard'), 'error');
     } finally {
@@ -265,6 +313,7 @@ export function useDocumentsWorkflow() {
   };
 
   const handleUnlinkStandard = async (docId: string, standardId: string) => {
+    if (!canManage) return;
     const linkKey = `${docId}:${standardId}`;
     setUnlinkingStandard(linkKey);
     try {
@@ -272,6 +321,7 @@ export function useDocumentsWorkflow() {
       await fetchDocuments();
       toast('Standard link removed');
     } catch (err) {
+      if (await reconcileForbiddenMutation(err)) return;
       logClientError('Unlink failed', err);
       toast(apiErrorMessage(err, 'Could not remove this standard link'), 'error');
     } finally {
@@ -318,6 +368,7 @@ export function useDocumentsWorkflow() {
   };
 
   return {
+    canManage,
     categoryOptions,
     conditionalObligationPrompts,
     conditionalProfile,

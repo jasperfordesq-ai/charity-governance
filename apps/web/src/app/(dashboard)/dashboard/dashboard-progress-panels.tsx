@@ -14,9 +14,11 @@ const scoreColour = (pct: number) => {
 };
 
 export function DashboardProgressPanels({
+  canManage,
   compliance,
   loading,
 }: {
+  canManage: boolean;
   compliance: ComplianceSummary | null;
   loading: boolean;
 }) {
@@ -83,7 +85,9 @@ export function DashboardProgressPanels({
 
       <AppSection
         title="Progress by Principle"
-        description="Open a principle to close evidence gaps and prepare the annual Compliance Record."
+        description={canManage
+          ? 'Open a principle to close evidence gaps and prepare the annual Compliance Record.'
+          : 'Open a principle to review recorded progress and evidence gaps in the annual Compliance Record.'}
       >
         {loading ? (
           <LoadingState

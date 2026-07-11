@@ -422,17 +422,18 @@ export function OrganisationProfileForm({
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{dirtyStateLabel}</span>
             <SaveStatusIndicator status={profileSaveStatus} />
           </div>
-          {!canManage ? (
+          {canManage ? (
+            <Button
+              className={primaryActionButtonClassName}
+              onPress={handleSave}
+              isLoading={saving}
+              isDisabled={saving || !isDirty || formValidationErrors.length > 0}
+            >
+              Save profile
+            </Button>
+          ) : (
             <PermissionHint>Organisation profile changes are available to owners and administrators.</PermissionHint>
-          ) : null}
-          <Button
-            className={primaryActionButtonClassName}
-            onPress={handleSave}
-            isLoading={saving}
-            isDisabled={saving || !isDirty || formValidationErrors.length > 0 || !canManage}
-          >
-            Save profile
-          </Button>
+          )}
         </StickyFormActions>
       </div>
     </AppSection>

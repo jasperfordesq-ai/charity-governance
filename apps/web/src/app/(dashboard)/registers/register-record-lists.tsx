@@ -46,6 +46,7 @@ export function RegisterRecordsPanel({
   onClose,
   closingRecordId,
   saving,
+  canManage,
 }: {
   conflicts: ConflictRecordResponse[];
   risks: RiskRecordResponse[];
@@ -55,6 +56,7 @@ export function RegisterRecordsPanel({
   onClose: (type: RegisterType, id: string) => void;
   closingRecordId: string | null;
   saving: boolean;
+  canManage: boolean;
 }) {
   const actionsDisabled = saving || Boolean(closingRecordId);
   const actionDisabledReason = closingRecordId
@@ -73,6 +75,7 @@ export function RegisterRecordsPanel({
         onAdd={() => onAdd('conflict')}
         actionDisabled={actionsDisabled}
         actionDisabledReason={actionDisabledReason}
+        canManage={canManage}
         emptyTitle="No conflicts recorded"
         emptyDescription="Add declared trustee interests so decisions and minute references stay visible."
       >
@@ -92,7 +95,7 @@ export function RegisterRecordsPanel({
                 </EvidenceChip>
               </>
             )}
-            action={item.status !== ConflictStatus.CLOSED ? (
+            action={canManage && item.status !== ConflictStatus.CLOSED ? (
               <Button
                 size="sm"
                 variant="flat"
@@ -115,6 +118,7 @@ export function RegisterRecordsPanel({
         onAdd={() => onAdd('risk')}
         actionDisabled={actionsDisabled}
         actionDisabledReason={actionDisabledReason}
+        canManage={canManage}
         emptyTitle="No risks recorded"
         emptyDescription="Add key risks so mitigation, owner, and review dates are ready for trustee oversight."
       >
@@ -133,7 +137,7 @@ export function RegisterRecordsPanel({
                 </EvidenceChip>
               </>
             )}
-            action={item.status !== RegisterStatus.CLOSED ? (
+            action={canManage && item.status !== RegisterStatus.CLOSED ? (
               <Button
                 size="sm"
                 variant="flat"
@@ -156,6 +160,7 @@ export function RegisterRecordsPanel({
         onAdd={() => onAdd('complaint')}
         actionDisabled={actionsDisabled}
         actionDisabledReason={actionDisabledReason}
+        canManage={canManage}
         emptyTitle="No complaints recorded"
         emptyDescription="Record complaints and board review status so improvement actions do not disappear."
       >
@@ -175,7 +180,7 @@ export function RegisterRecordsPanel({
                 </EvidenceChip>
               </>
             )}
-            action={item.status !== RegisterStatus.CLOSED ? (
+            action={canManage && item.status !== RegisterStatus.CLOSED ? (
               <Button
                 size="sm"
                 variant="flat"
@@ -198,6 +203,7 @@ export function RegisterRecordsPanel({
         onAdd={() => onAdd('fundraising')}
         actionDisabled={actionsDisabled}
         actionDisabledReason={actionDisabledReason}
+        canManage={canManage}
         emptyTitle="No fundraising activities recorded"
         emptyDescription="Add public-facing campaigns, controls, and third-party fundraiser checks where relevant."
       >
@@ -217,7 +223,7 @@ export function RegisterRecordsPanel({
                 {item.complaintsReceived ? <ReviewFlag tone="needs-review">Complaint linked</ReviewFlag> : null}
               </>
             )}
-            action={item.status !== RegisterStatus.CLOSED ? (
+            action={canManage && item.status !== RegisterStatus.CLOSED ? (
               <Button
                 size="sm"
                 variant="flat"
@@ -246,6 +252,7 @@ function RegisterSection({
   emptyTitle,
   emptyDescription,
   children,
+  canManage,
 }: {
   title: string;
   description: string;
@@ -257,6 +264,7 @@ function RegisterSection({
   emptyTitle: string;
   emptyDescription: string;
   children: ReactNode;
+  canManage: boolean;
 }) {
   const actionHintId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-add-action-hint`;
 
@@ -269,7 +277,7 @@ function RegisterSection({
         </span>
       )}
       description={description}
-      actions={(
+      actions={canManage ? (
         <>
           <Button
             size="sm"
@@ -282,10 +290,15 @@ function RegisterSection({
           </Button>
           {actionDisabled ? <span id={actionHintId} className="sr-only">{actionDisabledReason}</span> : null}
         </>
-      )}
+      ) : null}
     >
       {count === 0 ? (
-        <EmptyState title={emptyTitle} description={emptyDescription} />
+        <EmptyState
+          title={emptyTitle}
+          description={canManage
+            ? emptyDescription
+            : 'No records are available in this register. Owners or administrators can add new entries.'}
+        />
       ) : (
         <DataListItems divided={false}>
           <div className="space-y-3 p-3">{children}</div>

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — CharityPilot',
+  title: 'Privacy Policy - CharityPilot',
   description:
-    'Privacy Policy for CharityPilot.ie. Learn how Project Nexus Ltd collects, uses, and protects your personal data in compliance with GDPR.',
+    'How CharityPilot handles account, governance, billing, document, and technical data.',
 };
 
 export default function PrivacyPage() {
@@ -15,173 +15,129 @@ export default function PrivacyPage() {
             Legal
           </p>
           <h1 className="text-4xl font-bold text-gray-950 dark:text-white mb-4">Privacy Policy</h1>
-          <p className="text-gray-600 dark:text-gray-300 text-sm">Effective date: 1 April 2026</p>
+          <p className="text-gray-600 dark:text-gray-300 text-sm">
+            Pre-launch draft - not approved for production
+          </p>
         </div>
 
         <div className="prose prose-gray max-w-none dark:prose-invert prose-headings:font-bold prose-headings:text-gray-950 dark:prose-headings:text-white prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-relaxed prose-a:text-teal-primary dark:prose-a:text-teal-bright prose-a:no-underline hover:prose-a:underline prose-li:text-gray-700 dark:prose-li:text-gray-300 dark:prose-strong:text-white">
+          <div className="not-prose mb-8 rounded-lg border border-amber-300 bg-amber-50 p-5 text-sm leading-relaxed text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            <strong>Pre-launch privacy status.</strong> CharityPilot is in early development. This
+            notice describes the current repository implementation. The production controller,
+            contact channels, providers and processing regions, transfer safeguards, retention
+            schedule, rights-request process, policy version, and effective date require accountable
+            legal and privacy approval before production launch.
+          </div>
 
           <p>
-            This Privacy Policy describes how <strong>Project Nexus Ltd</strong> (&ldquo;we&rdquo;,
-            &ldquo;us&rdquo;, or &ldquo;our&rdquo;) collects, uses, and protects personal data when
-            you use <strong>CharityPilot.ie</strong> (the &ldquo;Service&rdquo;). We are committed to
-            protecting your privacy and complying with the General Data Protection Regulation (GDPR)
-            and the Data Protection Acts 1988&ndash;2018.
+            This pre-launch notice describes the personal data processed by CharityPilot while the
+            Service is being prepared for production. It records current product behavior without
+            claiming that outstanding legal, provider, or operational decisions have been completed.
           </p>
 
-          <h2>1. Data Controller</h2>
+          <h2>1. Production Data Controller</h2>
           <p>
-            The data controller for personal data processed through CharityPilot.ie is:
+            The final production data controller has not yet been formally approved. Its legal name,
+            registered contact details, privacy contact, and controller responsibilities must be
+            verified and published before production use.
           </p>
-          <address className="not-italic bg-gray-50 dark:bg-gray-900 rounded-lg p-5 border border-gray-200 dark:border-gray-800 my-4 text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
-            <strong className="text-gray-950 dark:text-white">Project Nexus Ltd</strong><br />
-            Skibbereen<br />
-            Co. Cork<br />
-            Ireland<br />
-            <a href="mailto:privacy@charitypilot.ie" className="text-teal-primary">
-              privacy@charitypilot.ie
-            </a>
-          </address>
 
-          <h2>2. What Personal Data We Collect</h2>
-          <p>We collect the following categories of personal data:</p>
+          <h2>2. What Personal Data CharityPilot Processes</h2>
+          <p>The current application processes the following categories of personal data:</p>
           <ul>
             <li>
-              <strong>Account data:</strong> your name, email address, and password (stored in
-              hashed form) when you register for an account.
+              <strong>Account and team data:</strong> names, email addresses, password hashes,
+              roles, verification and membership status, team-invitation details, session/device
+              information, and security-audit records.
             </li>
             <li>
-              <strong>Organisation data:</strong> your charity&apos;s name, Registered Charity
-              Number (RCN), address, and classification details (simple or complex) that you
-              provide when setting up your charity profile.
+              <strong>Organisation data:</strong> the charity&apos;s name, Registered Charity Number
+              (RCN), address, contact details, legal form, classification, registration dates, and
+              conditional governance profile information entered by authorised users.
             </li>
             <li>
-              <strong>Compliance data:</strong> governance standards assessments, evidence notes,
-              document metadata, board member records, and deadline information that you enter into
-              the Service.
+              <strong>Governance and compliance data:</strong> standards assessments, evidence
+              notes, sign-offs and approval snapshots, governance-register entries, deadlines,
+              board-member records, document metadata, and the contents of files the organisation
+              uploads.
             </li>
             <li>
-              <strong>Billing data:</strong> your payment method details are processed directly by
-              our payment provider (Stripe). We store only the last four digits of your card,
-              billing name, and subscription status — we never store full card numbers.
+              <strong>Billing data:</strong> payment-method and billing details are collected and
+              processed by Stripe on Stripe-hosted pages. CharityPilot stores Stripe customer,
+              subscription, and Checkout Session identifiers together with the selected plan,
+              billing interval, subscription status, cancellation state, and relevant billing dates.
+              CharityPilot&apos;s application database does not store card numbers, card last-four
+              values, or billing names.
             </li>
             <li>
-              <strong>Usage data:</strong> log files, IP addresses, browser type, and pages
-              visited, collected automatically when you use the Service.
+              <strong>Transactional email data:</strong> recipient names and email addresses plus
+              the content needed for welcome, email-verification, password-reset, team-invitation,
+              and deadline-reminder messages sent through Resend.
             </li>
             <li>
-              <strong>Communications:</strong> the content of any emails or support messages you
-              send to us.
+              <strong>Technical and security data:</strong> API requests can generate operational
+              and security logs containing timestamps, request methods and paths, response status,
+              request identifiers, network-address data, and technical error information. These
+              records support rate limiting, security, diagnostics, and incident response. The
+              current web application does not include a page-view analytics integration.
             </li>
           </ul>
 
-          <h2>3. How We Use Your Personal Data</h2>
-          <p>We use your personal data for the following purposes:</p>
+          <h2>3. Current Processing Purposes</h2>
+          <p>The current application uses personal data for the following implemented purposes:</p>
           <ul>
-            <li>To create and manage your account and provide access to the Service.</li>
+            <li>To create and secure accounts and provide access to the Service.</li>
+            <li>To maintain organisation, governance, compliance, document, and deadline records.</li>
+            <li>To administer subscriptions through Stripe.</li>
             <li>
-              To process subscription payments and manage your billing relationship with us.
+              To send transactional welcome, email-verification, password-reset, team-invitation,
+              and deadline-reminder emails through Resend.
             </li>
-            <li>
-              To send you transactional emails such as password reset links, payment receipts,
-              and deadline reminders.
-            </li>
-            <li>
-              To send you occasional product updates and governance news relevant to Irish
-              charities (you may unsubscribe at any time).
-            </li>
-            <li>
-              To detect, investigate, and prevent fraudulent activity and abuse of the Service.
-            </li>
-            <li>
-              To improve the Service by analysing aggregated, anonymised usage patterns.
-            </li>
-            <li>To comply with our legal obligations under Irish and EU law.</li>
+            <li>To enforce tenant access, role permissions, rate limits, and session security.</li>
+            <li>To diagnose failures and respond to security or operational incidents.</li>
           </ul>
-
-          <h2>4. Legal Basis for Processing</h2>
-          <p>We rely on the following legal bases under Article 6 GDPR:</p>
-          <ul>
-            <li>
-              <strong>Performance of a contract (Art. 6(1)(b)):</strong> processing your account,
-              organisation, and compliance data is necessary to provide the Service you have
-              subscribed to.
-            </li>
-            <li>
-              <strong>Legitimate interests (Art. 6(1)(f)):</strong> processing usage data and
-              sending product-related communications is in our legitimate interest in operating,
-              improving, and promoting the Service, provided this does not override your rights.
-            </li>
-            <li>
-              <strong>Legal obligation (Art. 6(1)(c)):</strong> retaining certain billing and
-              transaction records as required by Irish tax and company law.
-            </li>
-            <li>
-              <strong>Consent (Art. 6(1)(a)):</strong> for optional analytics cookies, where we
-              will ask for your consent separately via our cookie banner.
-            </li>
-          </ul>
-
-          <h2>5. Data Retention</h2>
           <p>
-            We retain your personal data for as long as your account is active or as necessary to
-            provide the Service. Upon account closure:
+            The repository does not currently implement marketing-email campaigns or page-view
+            analytics. Any future purpose must be assessed, approved, and reflected in this notice
+            before it is enabled in production.
           </p>
-          <ul>
-            <li>
-              Your account data, organisation profile, compliance data, and documents will be
-              permanently deleted within 30 days of account closure.
-            </li>
-            <li>
-              Billing and transaction records will be retained for 7 years to comply with Irish
-              Revenue requirements.
-            </li>
-            <li>
-              Anonymised, aggregated usage statistics (which cannot identify you) may be retained
-              indefinitely.
-            </li>
-          </ul>
 
-          <h2>6. Your Rights Under GDPR</h2>
+          <h2>4. Legal Bases</h2>
           <p>
-            As a data subject under GDPR, you have the following rights, which you can exercise
-            by contacting us at{' '}
-            <a href="mailto:privacy@charitypilot.ie">privacy@charitypilot.ie</a>:
+            Production legal bases have not yet been approved. Before launch, accountable legal and
+            privacy review must map every processing purpose to an appropriate legal basis, document
+            any legitimate-interest assessment or consent requirement, and align the approved notice
+            with the implemented product and provider configuration.
           </p>
-          <ul>
-            <li>
-              <strong>Right of access (Art. 15):</strong> to request a copy of the personal data
-              we hold about you.
-            </li>
-            <li>
-              <strong>Right to rectification (Art. 16):</strong> to request that inaccurate or
-              incomplete data be corrected.
-            </li>
-            <li>
-              <strong>Right to erasure (Art. 17):</strong> to request deletion of your personal
-              data (&ldquo;right to be forgotten&rdquo;), subject to our legal retention
-              obligations.
-            </li>
-            <li>
-              <strong>Right to data portability (Art. 20):</strong> to receive your data in a
-              structured, machine-readable format where technically feasible. You may export your
-              compliance position as a printable report from within your account at any time.
-            </li>
-            <li>
-              <strong>Right to restrict processing (Art. 18):</strong> to request that we limit
-              how we use your data in certain circumstances.
-            </li>
-            <li>
-              <strong>Right to object (Art. 21):</strong> to object to processing based on
-              legitimate interests, including direct marketing.
-            </li>
-            <li>
-              <strong>Right to withdraw consent (Art. 7(3)):</strong> where processing is based
-              on consent, you may withdraw it at any time without affecting the lawfulness of
-              prior processing.
-            </li>
-          </ul>
+
+          <h2>5. Data Retention and Account Closure</h2>
           <p>
-            You also have the right to lodge a complaint with the{' '}
+            CharityPilot does not yet have an approved production retention schedule or a complete
+            account-closure deletion workflow. The current application therefore does not guarantee
+            deletion within 30 days, enforce a seven-year billing-record period, or create anonymised
+            page-analytics records for indefinite retention.
+          </p>
+          <p>
+            Before production launch, an approved schedule and implemented workflow must cover
+            application records, uploaded document objects, provider records, technical logs,
+            security and audit history, backups, legal holds, account closure, and data-rights
+            requests.
+          </p>
+
+          <h2>6. Data-Protection Rights</h2>
+          <p>
+            Applicable data-protection rights may include access, rectification, erasure, restriction,
+            objection, portability, and withdrawal of consent where processing relies on consent.
+            Before production launch, CharityPilot must have an approved request-handling process,
+            identity-verification controls, and a verified contact channel for exercising those
+            rights.
+          </p>
+          <p>
+            The in-product compliance report is a governance report. It is not a complete export of
+            all personal data held about an individual or a complete Article 20 portability response.
+          </p>
+          <p>
+            Individuals also have the right to lodge a complaint with the{' '}
             <a
               href="https://www.dataprotection.ie"
               target="_blank"
@@ -189,86 +145,97 @@ export default function PrivacyPage() {
             >
               Data Protection Commission (DPC)
             </a>{' '}
-            of Ireland if you believe your rights under GDPR have been infringed.
+            of Ireland. The wording and operation of the production rights process remain subject to
+            accountable legal and privacy approval.
           </p>
 
-          <h2>7. Third-Party Processors</h2>
+          <h2>7. Third-Party Services and Production Status</h2>
           <p>
-            We share personal data with the following sub-processors who assist us in delivering
-            the Service. Each is bound by a data processing agreement and complies with GDPR:
+            CharityPilot stores application records in PostgreSQL through Prisma and implements its
+            own authentication using password hashes, signed access tokens, and hashed rotating
+            refresh sessions. The current Supabase integration is used only for private document
+            object storage; Supabase Auth is not used. The production PostgreSQL provider has not yet
+            been selected or configured.
+          </p>
+          <p>
+            The repository integrates with the services below. Listing an integration does not claim
+            that a production account, data processing agreement, processing region, or international-
+            transfer safeguard has been verified. Those records must be approved before production
+            launch.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden my-4">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-900">
-                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Processor</th>
-                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Purpose</th>
-                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Location</th>
+                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Service</th>
+                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Current purpose</th>
+                  <th className="text-left p-3 border border-gray-200 dark:border-gray-800 font-semibold text-gray-950 dark:text-white">Production status</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Stripe</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Payment processing and subscription billing</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">USA/EU (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Hosted checkout, customer/subscription administration, and billing portal</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Integration implemented; production account, agreement, processing locations, and transfer safeguards are not yet verified</td>
                 </tr>
                 <tr className="bg-gray-50 dark:bg-gray-900">
                   <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Supabase</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Database hosting and authentication</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">EU (Ireland)</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Private document object storage only</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Integration implemented; production project, agreement, processing region, and transfer safeguards are not yet verified</td>
                 </tr>
                 <tr>
                   <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Resend</td>
                   <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Transactional email delivery</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">USA (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Integration implemented; production account/domain, agreement, processing locations, and transfer safeguards are not yet verified</td>
                 </tr>
                 <tr className="bg-gray-50 dark:bg-gray-900">
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Vercel</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Application hosting and CDN</td>
-                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">EU/USA (SCCs in place)</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">PostgreSQL and application hosting</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Application database and API/web hosting</td>
+                  <td className="p-3 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300">Production providers and processing regions are not yet selected or configured</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            We do not sell your personal data to third parties, and we do not use it for
-            advertising purposes.
+            CharityPilot does not sell personal data or use it for advertising in the current
+            application. These statements must be reconfirmed as part of production privacy review.
           </p>
 
-          <h2>8. Cookies</h2>
+          <h2>8. Cookies and Local Preferences</h2>
           <p>
-            We use cookies and similar technologies on our website. Essential cookies are required
-            for the Service to function. We will request your consent before placing any
-            non-essential (analytics or preference) cookies via our cookie banner. You can change
-            your cookie preferences at any time.
+            CharityPilot currently uses only strictly necessary, HTTP-only authentication cookies to
+            maintain and secure signed-in sessions. The current application does not set analytics or
+            advertising cookies. The existing cookie notice records a local preference only and does
+            not control a tracking technology.
+          </p>
+          <p>
+            Whether to retain an informational notice or introduce non-essential consent tooling is
+            an outstanding product and privacy decision. If non-essential cookies are introduced,
+            they must remain disabled until an approved consent-and-withdrawal mechanism and updated
+            notice are in place.
           </p>
 
           <h2>9. Security</h2>
           <p>
-            We implement appropriate technical and organisational measures to protect your personal
-            data against unauthorised access, loss, or disclosure. These include TLS encryption
-            in transit, encryption at rest in our database, and role-based access controls.
-            However, no transmission over the internet is entirely secure, and we cannot guarantee
-            absolute security.
+            The application code hashes passwords and stored refresh tokens, uses HTTP-only cookies,
+            enforces tenant and role checks, and requires HTTPS origins in production configuration.
+            Database and object-storage encryption at rest, hosting controls, logging retention,
+            backup security, and other provider controls must be verified against the selected
+            production services before launch. No internet service can guarantee absolute security.
           </p>
 
-          <h2>10. Changes to This Policy</h2>
+          <h2>10. Changes to This Notice</h2>
           <p>
-            We may update this Privacy Policy from time to time. When we do, we will update the
-            effective date at the top of this page and, where the changes are material, notify
-            you by email. Your continued use of the Service after any change constitutes acceptance
-            of the updated policy.
+            The production policy version, effective date, material-change notification method, and
+            any acknowledgement requirements have not yet been approved. This draft will be updated
+            when those decisions and the corresponding operational process are complete.
           </p>
 
-          <h2>11. Contact Us</h2>
+          <h2>11. Privacy Contact</h2>
           <p>
-            For any questions, requests, or complaints relating to this Privacy Policy or our
-            data processing practices, please contact our data protection point of contact:
-          </p>
-          <p>
-            <a href="mailto:privacy@charitypilot.ie">privacy@charitypilot.ie</a>
-            <br />
-            Project Nexus Ltd, Skibbereen, Co. Cork, Ireland
+            No production privacy contact channel has yet been verified. A published and monitored
+            privacy and data-rights contact, together with request-handling evidence, must be in place
+            before production launch.
           </p>
         </div>
       </div>

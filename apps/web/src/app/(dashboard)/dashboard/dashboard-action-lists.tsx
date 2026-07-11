@@ -10,11 +10,13 @@ import { deadlineMeta, formatCivilDate, sortCurrentDeadlines } from '@/lib/deadl
 const stateActionClass = 'text-xs font-semibold text-teal-primary hover:underline dark:text-teal-bright';
 
 export function DashboardActionLists({
+  canManage,
   loading,
   deadlines,
   boardAlerts,
   boardMemberCount,
 }: {
+  canManage: boolean;
   loading: boolean;
   deadlines: DeadlineResponse[] | null;
   boardAlerts: BoardAlert[] | null;
@@ -67,7 +69,9 @@ export function DashboardActionLists({
         ) : (
           <EmptyState
             title="No upcoming deadlines"
-            description="Add filing dates, trustee reviews, and annual return milestones as they become known."
+            description={canManage
+              ? 'Add filing dates, trustee reviews, and annual return milestones as they become known.'
+              : 'No filing dates, trustee reviews, or annual return milestones are currently available to review.'}
             action={(
               <Link href="/deadlines" className={stateActionClass}>
                 Review deadlines
@@ -115,10 +119,12 @@ export function DashboardActionLists({
         ) : boardMemberCount === 0 ? (
           <ReviewWarningState
             title="No charity trustees have been added yet"
-            description="Add the board register so conduct, induction, and term-limit evidence is visible before the annual review."
+            description={canManage
+              ? 'Add the board register so conduct, induction, and term-limit evidence is visible before the annual review.'
+              : 'An owner or administrator must add the board register before trustee evidence can be reviewed.'}
             action={(
               <Link href="/board" className={stateActionClass}>
-                Add board members
+                {canManage ? 'Add board members' : 'View board register'}
               </Link>
             )}
           />

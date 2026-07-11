@@ -2,7 +2,9 @@
 
 import { logClientError } from '@/lib/client-logger';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
+import { canManageGovernance } from '@/lib/governance-permissions';
+import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/components/toast';
 import { useDisclosure } from '@heroui/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +23,9 @@ export function useBoardWorkflow() {
   const [showInactive, setShowInactive] = useState(false);
   const [mutatingMemberId, setMutatingMemberId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user, refreshUser } = useAuth();
+  const [governanceAccessRevoked, setGovernanceAccessRevoked] = useState(false);
+  const canManage = canManageGovernance(user?.role) && !governanceAccessRevoked;
 
   const memberModal = useDisclosure();
   const [editing, setEditing] = useState<BoardMemberResponse | null>(null);
@@ -77,11 +82,12 @@ export function useBoardWorkflow() {
   }, [members]);
 
   const formDisabledReason = useMemo(() => {
+    if (!canManage) return 'Only organisation owners and administrators can change the board register.';
     if (!formName.trim()) return 'Add the trustee name before saving.';
     if (!formRole.trim()) return 'Add the trustee role before saving.';
     if (!formAppointed) return 'Add the appointment date before saving.';
     return '';
-  }, [formAppointed, formName, formRole]);
+  }, [canManage, formAppointed, formName, formRole]);
 
   const boardDataReady = !loading && !loadError;
 
@@ -99,12 +105,35 @@ export function useBoardWorkflow() {
     setEditing(null);
   }, []);
 
+  useEffect(() => {
+    setGovernanceAccessRevoked(false);
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (canManage) return;
+    memberModal.onClose();
+    resetForm();
+  }, [canManage, memberModal, resetForm]);
+
+  const reconcileForbiddenMutation = useCallback(async (error: unknown) => {
+    if (!isApiForbiddenError(error)) return false;
+    setGovernanceAccessRevoked(true);
+    setMutatingMemberId(null);
+    memberModal.onClose();
+    resetForm();
+    toast('Your role no longer allows board register changes. The page is now read-only.', 'error');
+    await refreshUser();
+    return true;
+  }, [memberModal, refreshUser, resetForm, toast]);
+
   const openAdd = useCallback(() => {
+    if (!canManage) return;
     resetForm();
     memberModal.onOpen();
-  }, [memberModal, resetForm]);
+  }, [canManage, memberModal, resetForm]);
 
   const openEdit = useCallback((member: BoardMemberResponse) => {
+    if (!canManage) return;
     setEditing(member);
     setFormName(member.name);
     setFormRole(member.role);
@@ -117,9 +146,13 @@ export function useBoardWorkflow() {
     setFormInductionDate(member.inductionDate ? member.inductionDate.slice(0, 10) : '');
     setFormError('');
     memberModal.onOpen();
-  }, [memberModal]);
+  }, [canManage, memberModal]);
 
   const handleSave = useCallback(async () => {
+    if (!canManage) {
+      setFormError('Only organisation owners and administrators can change the board register.');
+      return;
+    }
     if (formDisabledReason) {
       setFormError(formDisabledReason);
       return;
@@ -161,6 +194,7 @@ export function useBoardWorkflow() {
       await fetchMembers();
       toast(editing ? 'Board member updated' : 'Board member added');
     } catch (err) {
+      if (await reconcileForbiddenMutation(err)) return;
       const message = apiErrorMessage(err, 'Failed to save board member');
       logClientError('Save failed', err);
       setFormError(message);
@@ -169,6 +203,7 @@ export function useBoardWorkflow() {
       setSaving(false);
     }
   }, [
+    canManage,
     editing,
     fetchMembers,
     formAppointed,
@@ -182,11 +217,13 @@ export function useBoardWorkflow() {
     formRole,
     formTermEnd,
     memberModal,
+    reconcileForbiddenMutation,
     resetForm,
     toast,
   ]);
 
   const toggleActive = useCallback(async (member: BoardMemberResponse) => {
+    if (!canManage) return;
     setMutatingMemberId(member.id);
     try {
       await api.patch(`/board-members/${member.id}`, {
@@ -195,16 +232,18 @@ export function useBoardWorkflow() {
       await fetchMembers();
       toast(member.isActive ? 'Board member marked inactive' : 'Board member reactivated');
     } catch (err) {
+      if (await reconcileForbiddenMutation(err)) return;
       const message = apiErrorMessage(err, 'Failed to update board member');
       logClientError('Toggle failed', err);
       toast(message, 'error');
     } finally {
       setMutatingMemberId(null);
     }
-  }, [fetchMembers, toast]);
+  }, [canManage, fetchMembers, reconcileForbiddenMutation, toast]);
 
   return {
     boardDataReady,
+    canManage,
     displayMembers,
     editing,
     fetchMembers,

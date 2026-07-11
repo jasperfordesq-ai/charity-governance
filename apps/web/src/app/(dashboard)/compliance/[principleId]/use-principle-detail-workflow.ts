@@ -7,9 +7,11 @@ import {
   type ComplianceAutosaveFlushOutcome,
   type ComplianceRevisionConflict,
 } from '@/lib/compliance-autosave-queue';
-import { apiErrorMessage } from '@/lib/errors';
+import { useAuth } from '@/lib/auth-context';
+import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type {
   ComplianceRecordResponse,
   GovernancePrincipleResponse,
@@ -67,7 +69,9 @@ function complianceRecordToForm(record?: ComplianceRecordResponse): StandardForm
 export function usePrincipleDetailWorkflow() {
   const params = useParams();
   const router = useRouter();
+  const { user, refreshUser } = useAuth();
   const principleId = params.principleId as string;
+  const roleCanManageRecords = canManageGovernance(user?.role);
 
   const currentYear = new Date().getFullYear();
   const [principle, setPrinciple] = useState<GovernancePrincipleResponse | null>(null);
@@ -80,6 +84,8 @@ export function usePrincipleDetailWorkflow() {
   const [navigationConfirmBusy, setNavigationConfirmBusy] = useState(false);
   const [navigationConfirmError, setNavigationConfirmError] = useState('');
   const [pendingNavigationHref, setPendingNavigationHref] = useState('/compliance');
+  const [editingRevoked, setEditingRevoked] = useState(false);
+  const canManageRecords = roleCanManageRecords && !editingRevoked;
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   // The former pendingSaveData ref was not request-generation aware. Each
@@ -89,11 +95,43 @@ export function usePrincipleDetailWorkflow() {
   const skipNextUnmountFlush = useRef(false);
   const readinessRequestSeq = useRef(0);
   const principleLoadRequestSeq = useRef(0);
+  const canManageRecordsRef = useRef(canManageRecords);
+
+  useLayoutEffect(() => {
+    canManageRecordsRef.current = canManageRecords;
+  }, [canManageRecords]);
 
   const clearPendingSaveTimers = useCallback(() => {
     Object.values(debounceTimers.current).forEach(clearTimeout);
     debounceTimers.current = {};
   }, []);
+
+  const clearPrivilegedComplianceState = useCallback(() => {
+    clearPendingSaveTimers();
+    Object.values(saveQueues.current).forEach((queue) => queue.dispose());
+    saveQueues.current = {};
+    formStateRef.current = {};
+    setFormState({});
+    setSaveState({});
+    setNavigationConfirmOpen(false);
+    setNavigationConfirmBusy(false);
+    setNavigationConfirmError('');
+  }, [clearPendingSaveTimers]);
+
+  const handleGovernanceForbidden = useCallback((error: unknown): boolean => {
+    if (!isApiForbiddenError(error)) return false;
+
+    // Fail closed immediately. The auth refresh can complete later, but no
+    // queued or timed write may survive the authoritative 403 response.
+    canManageRecordsRef.current = false;
+    setEditingRevoked(true);
+    readinessRequestSeq.current += 1;
+    principleLoadRequestSeq.current += 1;
+    clearPrivilegedComplianceState();
+    setApprovalReadiness(null);
+    void refreshUser();
+    return true;
+  }, [clearPrivilegedComplianceState, refreshUser]);
 
   const refreshApprovalReadiness = useCallback(async () => {
     const requestSeq = ++readinessRequestSeq.current;
@@ -104,28 +142,43 @@ export function usePrincipleDetailWorkflow() {
       }
     } catch (readinessErr) {
       logClientError('Failed to load approval readiness', readinessErr);
+      handleGovernanceForbidden(readinessErr);
       if (requestSeq === readinessRequestSeq.current) {
         setApprovalReadiness(null);
       }
     }
-  }, [currentYear]);
+  }, [currentYear, handleGovernanceForbidden]);
 
   const createSaveQueue = useCallback(
     (standardId: string, initialRevision: number) => {
       const queue = new ComplianceAutosaveQueue<StandardFormState>({
         initialRevision,
         parseConflict: parseRevisionConflict,
-        onError: (error) => logClientError(`Failed to save standard ${standardId}`, error),
+        onError: (error) => {
+          if (!isApiForbiddenError(error)) {
+            logClientError(`Failed to save standard ${standardId}`, error);
+          }
+        },
         save: async (data, expectedRevision) => {
-          const response = await api.put(`/compliance/records/${standardId}`, {
-            reportingYear: currentYear,
-            expectedRevision,
-            status: data.status,
-            actionTaken: data.actionTaken || null,
-            evidence: data.evidence || null,
-            notes: data.notes || null,
-            explanationIfNA: data.explanationIfNA || null,
-          });
+          if (!canManageRecordsRef.current) {
+            throw new Error('Compliance editing access is no longer available');
+          }
+
+          let response;
+          try {
+            response = await api.put(`/compliance/records/${standardId}`, {
+              reportingYear: currentYear,
+              expectedRevision,
+              status: data.status,
+              actionTaken: data.actionTaken || null,
+              evidence: data.evidence || null,
+              notes: data.notes || null,
+              explanationIfNA: data.explanationIfNA || null,
+            });
+          } catch (error) {
+            handleGovernanceForbidden(error);
+            throw error;
+          }
           const revision = Number((response.data as { revision?: number } | null)?.revision);
           if (!Number.isInteger(revision) || revision < 1) {
             throw new Error('Compliance save response did not include a valid revision');
@@ -133,6 +186,7 @@ export function usePrincipleDetailWorkflow() {
           return { revision };
         },
         onStateChange: (snapshot) => {
+          if (!canManageRecordsRef.current) return;
           if (snapshot.phase === 'saved') {
             const durableGeneration = snapshot.durableGeneration;
             void (async () => {
@@ -154,7 +208,7 @@ export function usePrincipleDetailWorkflow() {
       });
       return queue;
     },
-    [currentYear, refreshApprovalReadiness],
+    [currentYear, handleGovernanceForbidden, refreshApprovalReadiness],
   );
 
   useEffect(() => {
@@ -182,7 +236,9 @@ export function usePrincipleDetailWorkflow() {
         for (const standard of nextPrinciple.standards ?? []) {
           const record = records.find((item: ComplianceRecordResponse) => item.standardId === standard.id);
           initialForm[standard.id] = complianceRecordToForm(record);
-          initialQueues[standard.id] = createSaveQueue(standard.id, record?.revision ?? 0);
+          if (canManageRecords) {
+            initialQueues[standard.id] = createSaveQueue(standard.id, record?.revision ?? 0);
+          }
         }
 
         Object.values(saveQueues.current).forEach((queue) => queue.dispose());
@@ -193,6 +249,7 @@ export function usePrincipleDetailWorkflow() {
         await refreshApprovalReadiness();
       } catch (err) {
         if (!active || requestSeq !== principleLoadRequestSeq.current) return;
+        handleGovernanceForbidden(err);
         const message = apiErrorMessage(err, 'Compliance principle could not be loaded. Please try again.');
         logClientError('Failed to load principle data', err);
         setPrinciple(null);
@@ -209,10 +266,11 @@ export function usePrincipleDetailWorkflow() {
       active = false;
       controller.abort();
     };
-  }, [principleId, currentYear, createSaveQueue, refreshApprovalReadiness]);
+  }, [principleId, currentYear, canManageRecords, createSaveQueue, handleGovernanceForbidden, refreshApprovalReadiness]);
 
   const flushSave = useCallback(
     async (standardId: string): Promise<ComplianceAutosaveFlushOutcome | undefined> => {
+      if (!canManageRecordsRef.current) return undefined;
       if (debounceTimers.current[standardId]) {
         clearTimeout(debounceTimers.current[standardId]);
         delete debounceTimers.current[standardId];
@@ -227,6 +285,7 @@ export function usePrincipleDetailWorkflow() {
 
   const flushAllPendingComplianceSaves = useCallback(
     async () => {
+      if (!canManageRecordsRef.current) return true;
       clearPendingSaveTimers();
       const queues = Object.values(saveQueues.current).filter((queue) => queue.hasUnsettledChanges());
       const outcomes = await Promise.all(queues.map((queue) => queue.flush()));
@@ -245,8 +304,14 @@ export function usePrincipleDetailWorkflow() {
     setSaveState({});
   }, [clearPendingSaveTimers]);
 
+  useEffect(() => {
+    if (canManageRecords) return;
+    clearPrivilegedComplianceState();
+  }, [canManageRecords, clearPrivilegedComplianceState]);
+
   const autoSave = useCallback(
     (standardId: string, data: StandardFormState) => {
+      if (!canManageRecordsRef.current) return;
       const queue = saveQueues.current[standardId];
       if (!queue) return;
       queue.enqueue(data);
@@ -263,6 +328,7 @@ export function usePrincipleDetailWorkflow() {
   );
 
   const updateField = (standardId: string, field: keyof StandardFormState, value: string) => {
+    if (!canManageRecordsRef.current) return;
     const current = formStateRef.current[standardId];
     if (!current) return;
 
@@ -290,11 +356,16 @@ export function usePrincipleDetailWorkflow() {
   }, [clearPendingSaveTimers]);
 
   const hasPendingComplianceSaves = useCallback(() => {
+    if (!canManageRecordsRef.current) return false;
     return Object.values(saveQueues.current).some((queue) => queue.hasUnsettledChanges());
   }, []);
 
   const requestComplianceNavigation = useCallback(
     (href = '/compliance') => {
+      if (!canManageRecordsRef.current) {
+        router.push(href);
+        return;
+      }
       if (!hasPendingComplianceSaves()) {
         router.push(href);
         return;
@@ -309,6 +380,10 @@ export function usePrincipleDetailWorkflow() {
   );
 
   const stayOnCompliancePage = useCallback(() => {
+    if (!canManageRecordsRef.current) {
+      setNavigationConfirmOpen(false);
+      return;
+    }
     if (navigationConfirmBusy) return;
     Object.entries(saveQueues.current).forEach(([standardId, queue]) => {
       const snapshot = queue.getSnapshot();
@@ -331,6 +406,11 @@ export function usePrincipleDetailWorkflow() {
   }, [discardPendingComplianceSaves, pendingNavigationHref, router]);
 
   const saveAndContinueNavigation = useCallback(async () => {
+    if (!canManageRecordsRef.current) {
+      setNavigationConfirmOpen(false);
+      router.push(pendingNavigationHref);
+      return;
+    }
     setNavigationConfirmBusy(true);
     try {
       const allSaved = await flushAllPendingComplianceSaves();
@@ -421,6 +501,7 @@ export function usePrincipleDetailWorkflow() {
 
   const retrySave = useCallback(
     (standardId: string) => {
+      if (!canManageRecordsRef.current) return;
       const queue = saveQueues.current[standardId];
       if (!queue) return;
       void queue.retry();
@@ -430,6 +511,9 @@ export function usePrincipleDetailWorkflow() {
 
   const resolveConflictFromServer = useCallback(
     async (standardId: string): Promise<string | null> => {
+      if (!canManageRecordsRef.current) {
+        return 'Compliance records are now view-only for this account.';
+      }
       const conflictedQueue = saveQueues.current[standardId];
       if (!conflictedQueue || conflictedQueue.getSnapshot().phase !== 'conflict') {
         return 'This standard no longer has a revision conflict.';
@@ -462,16 +546,18 @@ export function usePrincipleDetailWorkflow() {
         return null;
       } catch (error) {
         logClientError(`Failed to reload conflicted standard ${standardId}`, error);
+        handleGovernanceForbidden(error);
         return apiErrorMessage(
           error,
           'The latest saved version could not be loaded. Your local draft is still preserved; try again when the connection recovers.',
         );
       }
     },
-    [createSaveQueue, currentYear, principleId],
+    [createSaveQueue, currentYear, handleGovernanceForbidden, principleId],
   );
 
   return {
+    canManageRecords,
     currentYear,
     flushSave,
     formState,

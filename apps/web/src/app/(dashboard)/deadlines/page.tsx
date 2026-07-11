@@ -147,7 +147,7 @@ export default function DeadlinesPage() {
       ) : null}
 
       <DeadlineFormModal
-        isOpen={deadlineModal.isOpen}
+        isOpen={canManage && deadlineModal.isOpen}
         onOpenChange={deadlineModal.onOpenChange}
         editingDeadline={editingDeadline}
         formError={formError}
@@ -164,7 +164,7 @@ export default function DeadlinesPage() {
       />
 
       <DeadlineDeleteModal
-        isOpen={deleteModal.isOpen}
+        isOpen={canManage && deleteModal.isOpen}
         onOpenChange={deleteModal.onOpenChange}
         selectedDeadline={selectedDeleteDeadline}
         deleting={Boolean(deletingDeadlineId) && deletingDeadlineId === deleteDeadlineId}
@@ -174,7 +174,7 @@ export default function DeadlinesPage() {
       />
 
       <DeadlineCompletionModal
-        isOpen={completionModal.isOpen}
+        isOpen={canManage && completionModal.isOpen}
         onOpenChange={handleCompletionModalOpenChange}
         deadline={pendingGeneratedCompletion}
         confirming={Boolean(toggleDeadlineId) && toggleDeadlineId === pendingGeneratedCompletion?.id}

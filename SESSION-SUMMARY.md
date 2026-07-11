@@ -77,7 +77,7 @@ single PASS/FAIL table with per-gate timing.
 
 - `tenant-isolation.spec.ts` — foreign principle id → clean not-found, no leak.
 - `auth-session.spec.ts` — unauthenticated → `/login?next=`; expired session → login.
-- `authz.spec.ts` — a MEMBER sees admin-only team controls disabled/hidden.
+- `authz.spec.ts` — a MEMBER gets read-only governance routes without privileged mutation affordances; a live Admin demotion fails closed in place.
 - `validation.spec.ts` — register blocks a long-but-weak password inline, sends no 400.
 - `accessibility.spec.ts` — axe: 0 serious/critical WCAG 2.1 AA on every key page in BOTH
   the light and dark themes (uses bounded retries + `reducedMotion` to absorb dev-server

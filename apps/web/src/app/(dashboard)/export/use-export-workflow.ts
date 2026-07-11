@@ -7,7 +7,10 @@ import {
   countApprovalReadinessBlockers,
 } from '@/lib/approval-readiness';
 import { useToast } from '@/components/toast';
+import { useAuth } from '@/lib/auth-context';
 import { openAuthenticatedReport } from '@/lib/authenticated-report-open';
+import { isApiForbiddenError } from '@/lib/errors';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import {
   complianceSignoffToDraft,
   isCurrentSignoffDraftGeneration,
@@ -15,7 +18,7 @@ import {
   persistedApprovalPresentation,
 } from '@/lib/compliance-approval-ui';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ComplianceApprovalReadinessResponse, ComplianceSignoffResponse, ComplianceSummary } from '@charitypilot/shared';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
 import type { ExportSignoffForm } from './export-board-approval-panel';
@@ -37,6 +40,8 @@ type ApprovalReadiness = ComplianceApprovalReadinessResponse;
 export function useExportWorkflow() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user, refreshUser } = useAuth();
+  const roleCanManageSignoff = canManageGovernance(user?.role);
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
@@ -55,11 +60,20 @@ export function useExportWorkflow() {
   const [navigationConfirmOpen, setNavigationConfirmOpen] = useState(false);
   const [pendingNavigationHref, setPendingNavigationHref] = useState('/dashboard');
   const [exportingVersion, setExportingVersion] = useState<ExportVersion | null>(null);
+  const [signoffEditingRevoked, setSignoffEditingRevoked] = useState(false);
+  const canManageSignoff = roleCanManageSignoff && !signoffEditingRevoked;
   const loadRequestSeq = useRef(0);
   const signoffSaveInFlight = useRef(false);
   const exportInFlight = useRef(false);
+  const canManageSignoffRef = useRef(canManageSignoff);
+  const signoffRef = useRef<ComplianceSignoffResponse | null>(signoff);
   const signoffFormRef = useRef<ExportSignoffForm>(initialSignoffForm);
   const signoffDraftGeneration = useRef(0);
+
+  useLayoutEffect(() => {
+    canManageSignoffRef.current = canManageSignoff;
+    signoffRef.current = signoff;
+  }, [canManageSignoff, signoff]);
 
   const replaceSignoffForm = useCallback((nextForm: ExportSignoffForm) => {
     signoffFormRef.current = nextForm;
@@ -68,6 +82,7 @@ export function useExportWorkflow() {
   }, []);
 
   const setSignoffForm = useCallback<Dispatch<SetStateAction<ExportSignoffForm>>>((update) => {
+    if (!canManageSignoff) return;
     const currentForm = signoffFormRef.current;
     const nextForm = typeof update === 'function'
       ? (update as (previous: ExportSignoffForm) => ExportSignoffForm)(currentForm)
@@ -75,7 +90,33 @@ export function useExportWorkflow() {
     signoffFormRef.current = nextForm;
     signoffDraftGeneration.current += 1;
     setSignoffFormState(nextForm);
-  }, []);
+  }, [canManageSignoff]);
+
+  const clearPrivilegedSignoffState = useCallback(() => {
+    replaceSignoffForm(complianceSignoffToDraft(signoffRef.current));
+    setSignoffError('');
+    setSignoffSaveState('idle');
+    setSignoffReviewRequired(false);
+    setSignoffConflictRefreshFailed(false);
+    setNavigationConfirmOpen(false);
+  }, [replaceSignoffForm]);
+
+  const failClosedOnForbidden = useCallback((error: unknown): boolean => {
+    if (!isApiForbiddenError(error)) return false;
+
+    // The API is authoritative. Drop all local sign-off editing state before
+    // the auth refresh resolves so a stale Admin/Owner render cannot retry.
+    canManageSignoffRef.current = false;
+    setSignoffEditingRevoked(true);
+    clearPrivilegedSignoffState();
+    void refreshUser();
+    return true;
+  }, [clearPrivilegedSignoffState, refreshUser]);
+
+  useEffect(() => {
+    if (canManageSignoff) return;
+    clearPrivilegedSignoffState();
+  }, [canManageSignoff, clearPrivilegedSignoffState]);
 
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
@@ -110,6 +151,7 @@ export function useExportWorkflow() {
       } else {
         if (readinessResult.status === 'rejected') {
           logClientError('Failed to load approval readiness', readinessResult.reason);
+          failClosedOnForbidden(readinessResult.reason);
         }
         setApprovalReadiness(null);
         setReadinessState('unavailable');
@@ -126,6 +168,7 @@ export function useExportWorkflow() {
       return true;
     } catch (err) {
       if (requestSeq !== loadRequestSeq.current) return false;
+      failClosedOnForbidden(err);
       logClientError('Failed to load compliance summary', err);
       if (!preserveForm) {
         setSummary(null);
@@ -138,7 +181,7 @@ export function useExportWorkflow() {
     } finally {
       if (requestSeq === loadRequestSeq.current) setLoading(false);
     }
-  }, [replaceSignoffForm, year]);
+  }, [failClosedOnForbidden, replaceSignoffForm, year]);
 
   const fetchSummary = useCallback(async () => loadExportState(false), [loadExportState]);
 
@@ -152,17 +195,22 @@ export function useExportWorkflow() {
       return nextReadiness;
     } catch (readinessErr) {
       logClientError('Failed to load approval readiness', readinessErr);
+      failClosedOnForbidden(readinessErr);
       setApprovalReadiness(null);
       setReadinessState('unavailable');
       return null;
     }
-  }, [year]);
+  }, [failClosedOnForbidden, year]);
 
   useEffect(() => {
     void fetchSummary();
   }, [fetchSummary]);
 
   const handleSaveSignoff = async () => {
+    if (!canManageSignoffRef.current) {
+      clearPrivilegedSignoffState();
+      return;
+    }
     if (signoffSaveInFlight.current) return;
     setSignoffError('');
 
@@ -209,6 +257,11 @@ export function useExportWorkflow() {
         }
       }
 
+      if (!canManageSignoffRef.current) {
+        clearPrivilegedSignoffState();
+        return;
+      }
+
       const res = await api.put('/compliance/signoff', {
         reportingYear: year,
         expectedRevision: submittedSignoff.revision,
@@ -222,6 +275,10 @@ export function useExportWorkflow() {
         approvedByRole: submittedForm.approvedByRole.trim() || null,
         approvalNotes: submittedForm.approvalNotes.trim() || null,
       });
+      if (!canManageSignoffRef.current) {
+        clearPrivilegedSignoffState();
+        return;
+      }
       const savedSignoff = res.data as ComplianceSignoffResponse;
       setSignoff(savedSignoff);
       setSignoffReviewRequired(false);
@@ -236,6 +293,10 @@ export function useExportWorkflow() {
       }
     } catch (err) {
       logClientError('Failed to save board sign-off', err);
+      if (failClosedOnForbidden(err)) {
+        await loadExportState(false);
+        return;
+      }
       const code = apiErrorCode(err);
       setSignoffSaveState('error');
       if (code === 'COMPLIANCE_APPROVAL_INCOMPLETE') {
@@ -306,10 +367,12 @@ export function useExportWorkflow() {
         toast('The report tab was closed before the authenticated report finished loading.');
       } else if (result.status === 'error') {
         logClientError('Export failed', result.error);
+        failClosedOnForbidden(result.error);
         toast('The report could not be generated. Please try again.');
       }
     } catch (err) {
       logClientError('Export failed', err);
+      failClosedOnForbidden(err);
       toast('The report could not be generated. Please try again.');
     } finally {
       exportInFlight.current = false;
@@ -317,7 +380,7 @@ export function useExportWorkflow() {
     }
   };
 
-  const signoffDirty = isComplianceSignoffDirty(signoff, signoffForm);
+  const signoffDirty = canManageSignoff && isComplianceSignoffDirty(signoff, signoffForm);
   const approvalPresentation = persistedApprovalPresentation(signoff, approvalReadiness);
   const displayedSignoffSaveState: 'idle' | 'dirty' | 'saving' | 'saved' | 'error' = savingSignoff
     ? 'saving'
@@ -328,15 +391,16 @@ export function useExportWorkflow() {
         : signoffSaveState;
   const approvalUnavailable = readinessState === 'unavailable';
   const approvalSaveBlocked =
-    signoffForm.status === ComplianceSignoffStatus.APPROVED &&
-    (readinessState !== 'available' || approvalReadiness?.ready !== true);
+    !canManageSignoff ||
+    (signoffForm.status === ComplianceSignoffStatus.APPROVED &&
+      (readinessState !== 'available' || approvalReadiness?.ready !== true));
   const conditionalReviewItems = approvalReadiness?.conditionalReviewItems ?? [];
   const readinessBlockerCount = countApprovalReadinessBlockers(approvalReadiness);
   const readinessBlockerCodes = approvalReadinessBlockerCodes(approvalReadiness);
 
   const requestYearChange = (nextYear: number) => {
     if (nextYear === year) return;
-    if (signoffDirty || savingSignoff || signoffReviewRequired) {
+    if (canManageSignoff && (signoffDirty || savingSignoff || signoffReviewRequired)) {
       setSignoffError('Save or discard the unsaved sign-off changes before changing reporting year.');
       return;
     }
@@ -354,6 +418,10 @@ export function useExportWorkflow() {
   };
 
   const discardSignoffChanges = () => {
+    if (!canManageSignoff) {
+      clearPrivilegedSignoffState();
+      return;
+    }
     if (!signoff) return;
     replaceSignoffForm(complianceSignoffToDraft(signoff));
     setSignoffError('');
@@ -363,6 +431,7 @@ export function useExportWorkflow() {
   };
 
   const acknowledgeSignoffReview = () => {
+    if (!canManageSignoff) return;
     if (signoffConflictRefreshFailed) {
       setSignoffError('Load the latest saved position before reviewing and retrying this sign-off.');
       return;
@@ -373,6 +442,7 @@ export function useExportWorkflow() {
   };
 
   const retrySignoffConflictRefresh = async () => {
+    if (!canManageSignoff) return;
     const refreshed = await loadExportState(true);
     setSignoffConflictRefreshFailed(!refreshed);
     setSignoffError(refreshed
@@ -396,7 +466,7 @@ export function useExportWorkflow() {
     router.push(pendingNavigationHref);
   }, [pendingNavigationHref, replaceSignoffForm, router, signoff]);
 
-  const signoffNavigationBlocked = signoffDirty || signoffReviewRequired;
+  const signoffNavigationBlocked = canManageSignoff && (signoffDirty || signoffReviewRequired);
 
   useEffect(() => {
     const interceptSignoffNavigation = (event: MouseEvent) => {
@@ -443,13 +513,13 @@ export function useExportWorkflow() {
 
   useEffect(() => {
     const warnIfSignoffDirty = (event: BeforeUnloadEvent) => {
-      if (!signoffDirty && !signoffReviewRequired) return;
+      if (!signoffNavigationBlocked) return;
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warnIfSignoffDirty);
     return () => window.removeEventListener('beforeunload', warnIfSignoffDirty);
-  }, [signoffDirty, signoffReviewRequired]);
+  }, [signoffNavigationBlocked]);
 
   return {
     acknowledgeSignoffReview,
@@ -457,6 +527,7 @@ export function useExportWorkflow() {
     approvalPresentation,
     approvalSaveBlocked,
     approvalUnavailable,
+    canManageSignoff,
     conditionalReviewItems,
     discardSignoffChanges,
     displayedSignoffSaveState,

@@ -4,48 +4,47 @@ import { useEffect, useState } from 'react';
 import { Button } from '@heroui/react';
 import { CircleAlert } from 'lucide-react';
 
-const STORAGE_KEY = 'cookie-consent';
+const STORAGE_KEY = 'cookie-notice';
+const LEGACY_STORAGE_KEY = 'cookie-consent';
 
-type ConsentValue = 'accepted' | 'declined' | null;
+type NoticeValue = 'acknowledged' | null;
 
 export function CookieConsent() {
-  const [consent, setConsent] = useState<ConsentValue | 'loading'>('loading');
+  const [notice, setNotice] = useState<NoticeValue | 'loading'>('loading');
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) as ConsentValue | null;
-      setConsent(stored);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (stored === 'acknowledged' || legacy === 'accepted' || legacy === 'declined') {
+        localStorage.setItem(STORAGE_KEY, 'acknowledged');
+        setNotice('acknowledged');
+      } else {
+        setNotice(null);
+      }
     } catch {
-      setConsent(null);
+      setNotice(null);
     }
   }, []);
 
-  const handleAccept = () => {
+  const handleAcknowledge = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, 'accepted');
+      localStorage.setItem(STORAGE_KEY, 'acknowledged');
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
     } catch {
       // localStorage may not be available in all environments
     }
-    setConsent('accepted');
+    setNotice('acknowledged');
   };
 
-  const handleDecline = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, 'declined');
-    } catch {
-      // localStorage may not be available in all environments
-    }
-    setConsent('declined');
-  };
-
-  // Don't render during SSR hydration or once consent has been given/declined
-  if (consent !== null) return null;
+  // Don't render during SSR hydration or once the informational notice is acknowledged.
+  if (notice !== null) return null;
 
   return (
     <div
       role="dialog"
       aria-live="polite"
-      aria-label="Cookie consent"
+      aria-label="Cookie information"
       className="fixed bottom-0 left-0 right-0 z-50 bg-teal-primary text-white shadow-2xl"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
@@ -57,11 +56,11 @@ export function CookieConsent() {
 
           {/* Text */}
           <p className="text-sm text-teal-50 leading-relaxed flex-1">
-            We use <strong className="text-white font-semibold">essential cookies</strong> to
-            make CharityPilot work, and optional{' '}
-            <strong className="text-white font-semibold">analytics cookies</strong> to help us
-            understand how people use the site so we can improve it. No advertising cookies
-            are ever used. See our{' '}
+            CharityPilot currently uses only{' '}
+            <strong className="text-white font-semibold">strictly necessary authentication cookies</strong>{' '}
+            to maintain and secure signed-in sessions. It does not set analytics or advertising
+            cookies. Dismissing this notice stores only a local browser preference so the notice
+            stays closed. See our{' '}
             <a
               href="/privacy"
               className="underline underline-offset-2 text-white font-medium hover:text-amber-light transition-colors"
@@ -76,19 +75,10 @@ export function CookieConsent() {
             <Button
               type="button"
               radius="lg"
-              onPress={handleAccept}
+              onPress={handleAcknowledge}
               className="bg-amber-accent px-5 font-semibold text-gray-900 hover:bg-amber-light whitespace-nowrap"
             >
-              Accept All
-            </Button>
-            <Button
-              type="button"
-              radius="lg"
-              variant="bordered"
-              onPress={handleDecline}
-              className="border-white/20 bg-white/10 px-5 font-semibold text-white hover:bg-white/20 whitespace-nowrap"
-            >
-              Essential Only
+              Continue with essential cookies
             </Button>
           </div>
         </div>

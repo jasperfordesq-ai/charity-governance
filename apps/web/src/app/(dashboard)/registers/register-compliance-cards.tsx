@@ -25,12 +25,14 @@ export function AnnualReportCard({
   onSave,
   saving,
   saveDisabled,
+  canManage,
 }: {
   annual: AnnualReportReadinessResponse;
   setAnnual: (value: AnnualReportReadinessResponse) => void;
   onSave: () => void;
   saving: boolean;
   saveDisabled: boolean;
+  canManage: boolean;
 }) {
   const checks = [
     ['financialStatementsApproved', 'Financial statements/accounts approved'],
@@ -65,34 +67,39 @@ export function AnnualReportCard({
       </div>
       <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Annual Report readiness" />
       <div className="mt-5 space-y-5">
+        {!canManage ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300">You have read-only access. Owners or administrators can update Annual Report readiness.</p>
+        ) : null}
         <FieldGroup title="Narrative sources" description="Short, board-readable notes are enough here; keep the source file in the evidence vault.">
-          <Textarea label="Activities narrative" value={annual.activitiesNarrative ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, activitiesNarrative: value })} />
-          <Textarea label="Public benefit statement" value={annual.publicBenefitStatement ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, publicBenefitStatement: value })} />
-          <Textarea label="Beneficiaries / stakeholders" value={annual.beneficiariesSummary ?? ''} minRows={2} onValueChange={(value) => setAnnual({ ...annual, beneficiariesSummary: value })} />
+          <Textarea label="Activities narrative" value={annual.activitiesNarrative ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, activitiesNarrative: value })} />
+          <Textarea label="Public benefit statement" value={annual.publicBenefitStatement ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, publicBenefitStatement: value })} />
+          <Textarea label="Beneficiaries / stakeholders" value={annual.beneficiariesSummary ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, beneficiariesSummary: value })} />
         </FieldGroup>
         <FieldGroup title="Board review flags">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {checks.map(([key, label]) => (
-              <ToggleRow key={key} label={label} checked={annual[key]} onChange={(checked) => setAnnual({ ...annual, [key]: checked })} />
+              <ToggleRow key={key} label={label} checked={annual[key]} onChange={(checked) => setAnnual({ ...annual, [key]: checked })} isDisabled={!canManage} />
             ))}
           </div>
         </FieldGroup>
         <FieldGroup title="Filing evidence">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input type="date" label="Board approval date" value={dateInput(annual.boardApprovalDate)} onValueChange={(value) => setAnnual({ ...annual, boardApprovalDate: value || null })} />
-            <Select label="Filing status" selectedKeys={new Set([annual.filingStatus])} onSelectionChange={(keys) => {
+            <Input type="date" label="Board approval date" value={dateInput(annual.boardApprovalDate)} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, boardApprovalDate: value || null })} />
+            <Select label="Filing status" selectedKeys={new Set([annual.filingStatus])} isDisabled={!canManage} onSelectionChange={(keys) => {
               const value = Array.from(keys)[0] as AnnualReportFilingStatus | undefined;
               if (value) setAnnual({ ...annual, filingStatus: value });
             }}>
               {Object.entries(filingLabels).map(([value, label]) => <SelectItem key={value}>{label}</SelectItem>)}
             </Select>
-            <Input type="date" label="Filed date" value={dateInput(annual.filedDate)} onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })} />
-            <Input label="Notes" value={annual.notes ?? ''} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
+            <Input type="date" label="Filed date" value={dateInput(annual.filedDate)} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })} />
+            <Input label="Notes" value={annual.notes ?? ''} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
           </div>
         </FieldGroup>
-        <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
-          Save Annual Report readiness
-        </Button>
+        {canManage ? (
+          <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
+            Save Annual Report readiness
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -104,12 +111,14 @@ export function FinancialControlsCard({
   onSave,
   saving,
   saveDisabled,
+  canManage,
 }: {
   financial: FinancialControlReviewResponse;
   setFinancial: (value: FinancialControlReviewResponse) => void;
   onSave: () => void;
   saving: boolean;
   saveDisabled: boolean;
+  canManage: boolean;
 }) {
   const checks = [
     ['bankReconciliationsReviewed', 'Bank reconciliations reviewed'],
@@ -142,33 +151,39 @@ export function FinancialControlsCard({
       </div>
       <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Financial controls readiness" />
       <div className="mt-5 space-y-5">
+        {!canManage ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300">You have read-only access. Owners or administrators can update financial controls.</p>
+        ) : null}
         <FieldGroup title="Control checks" description="Tick only the controls the board has actually reviewed for this reporting year.">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {checks.map(([key, label]) => (
-              <ToggleRow key={key} label={label} checked={financial[key]} onChange={(checked) => setFinancial({ ...financial, [key]: checked })} />
+              <ToggleRow key={key} label={label} checked={financial[key]} onChange={(checked) => setFinancial({ ...financial, [key]: checked })} isDisabled={!canManage} />
             ))}
           </div>
         </FieldGroup>
         <FieldGroup title="Review evidence">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Reviewed by" value={financial.reviewedBy ?? ''} onValueChange={(value) => setFinancial({ ...financial, reviewedBy: value })} />
-            <Input type="date" label="Review date" value={dateInput(financial.reviewDate)} onValueChange={(value) => setFinancial({ ...financial, reviewDate: value || null })} />
-            <Input label="Minute reference" value={financial.minuteReference ?? ''} onValueChange={(value) => setFinancial({ ...financial, minuteReference: value })} />
-            <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
+            <Input label="Reviewed by" value={financial.reviewedBy ?? ''} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, reviewedBy: value })} />
+            <Input type="date" label="Review date" value={dateInput(financial.reviewDate)} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, reviewDate: value || null })} />
+            <Input label="Minute reference" value={financial.minuteReference ?? ''} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, minuteReference: value })} />
+            <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
           </div>
         </FieldGroup>
-        <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
-          Save controls review
-        </Button>
+        {canManage ? (
+          <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
+            Save controls review
+          </Button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-export function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+export function ToggleRow({ label, checked, onChange, isDisabled = false }: { label: string; checked: boolean; onChange: (checked: boolean) => void; isDisabled?: boolean }) {
   return (
     <Checkbox
       isSelected={checked}
+      isDisabled={isDisabled}
       onValueChange={onChange}
       classNames={{
         base: 'm-0 flex min-h-12 max-w-none items-start gap-3 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-950',

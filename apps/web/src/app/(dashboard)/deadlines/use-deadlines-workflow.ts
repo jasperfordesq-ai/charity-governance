@@ -4,7 +4,8 @@ import { logClientError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDisclosure } from '@heroui/react';
 import { api } from '@/lib/api';
-import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
+import { apiErrorMessage, isApiForbiddenError, isApiNotFoundError } from '@/lib/errors';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { addCivilDays, civilToday, toCivilDate } from '@/lib/civil-date';
 import {
   listCurrentDeadlines,
@@ -26,7 +27,6 @@ import type {
   OrganisationResponse,
   UpdateDeadlineRequest,
 } from '@charitypilot/shared';
-import { UserRole } from '@charitypilot/shared';
 
 const dateInDays = (days: number) => {
   return addCivilDays(civilToday(), days) ?? '';
@@ -66,8 +66,13 @@ export function useDeadlinesWorkflow() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
-  const canManage = user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN;
+  const { user, refreshUser } = useAuth();
+  const [permissionRevoked, setPermissionRevoked] = useState(false);
+  const canManage = canManageGovernance(user?.role) && !permissionRevoked;
+
+  useEffect(() => {
+    setPermissionRevoked(false);
+  }, [user?.id, user?.role]);
 
   const fetchDeadlines = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -179,11 +184,12 @@ export function useDeadlinesWorkflow() {
   const deadlineDataReady = !loading && !loadError;
 
   const formDisabledReason = useMemo(() => {
+    if (!canManage) return 'Only organisation owners and administrators can change deadlines.';
     if (!formTitle.trim()) return 'Add a title before saving.';
     if (!formDueDate) return 'Choose the due date before saving.';
     if (!toCivilDate(formDueDate)) return 'Choose a valid calendar date before saving.';
     return '';
-  }, [formDueDate, formTitle]);
+  }, [canManage, formDueDate, formTitle]);
 
   const selectedDeleteDeadline = useMemo(
     () => deadlines.find((deadline) => deadline.id === deleteDeadlineId) ?? null,
@@ -197,6 +203,26 @@ export function useDeadlinesWorkflow() {
     setFormDueDate('');
     setFormProfileRuleKey(null);
     setFormError('');
+  };
+
+  const reconcileForbiddenMutation = (error: unknown) => {
+    if (!isApiForbiddenError(error)) return false;
+
+    // The API is authoritative. Close every write surface and fail closed
+    // before refreshing the potentially stale client-side role.
+    setPermissionRevoked(true);
+    resetForm();
+    setPendingGeneratedCompletion(null);
+    setDeleteDeadlineId(null);
+    setToggleDeadlineId(null);
+    setDeletingDeadlineId(null);
+    deadlineModal.onClose();
+    deleteModal.onClose();
+    completionModal.onClose();
+    setFormError('Your role changed. Deadlines are now read-only.');
+    toast('Your permissions changed. Deadlines are now read-only.', 'error');
+    void refreshUser();
+    return true;
   };
 
   const openAdd = () => {
@@ -271,6 +297,7 @@ export function useDeadlinesWorkflow() {
       await Promise.all([fetchDeadlineHistory(), fetchReminderHistory()]);
       toast(editingDeadline ? 'Deadline updated' : 'Deadline added');
     } catch (err) {
+      if (reconcileForbiddenMutation(err)) return;
       const message = apiErrorMessage(err, 'Deadline could not be saved. Please review the fields and try again.');
       logClientError('Failed to save deadline', err);
       setFormError(message);
@@ -295,6 +322,7 @@ export function useDeadlinesWorkflow() {
       toast(deadline.isComplete ? 'Deadline reopened' : 'Deadline completed');
       return true;
     } catch (err) {
+      if (reconcileForbiddenMutation(err)) return false;
       logClientError('Toggle failed', err);
       toast(apiErrorMessage(err, 'Failed to update deadline'), 'error');
       return false;
@@ -304,6 +332,7 @@ export function useDeadlinesWorkflow() {
   };
 
   const toggleComplete = async (deadline: DeadlineView) => {
+    if (!canManage) return;
     if (isGeneratedDeadline(deadline) && !deadline.isComplete) {
       setPendingGeneratedCompletion(deadline);
       completionModal.onOpen();
@@ -350,6 +379,7 @@ export function useDeadlinesWorkflow() {
       setDeleteDeadlineId(null);
       toast('Deadline deleted');
     } catch (err) {
+      if (reconcileForbiddenMutation(err)) return;
       logClientError('Delete deadline failed', err);
       toast(apiErrorMessage(err, 'Failed to delete deadline'), 'error');
     } finally {

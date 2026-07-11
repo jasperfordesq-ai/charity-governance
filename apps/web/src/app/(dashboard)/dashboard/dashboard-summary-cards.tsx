@@ -8,12 +8,13 @@ import { LoadingState } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 
 type DashboardSummaryCardsProps = {
+  canManage: boolean;
   loading: boolean;
   registerSummary: GovernanceRegistersSummary | null;
   signoff: ComplianceSignoffResponse | null;
 };
 
-export function DashboardSummaryCards({ loading, registerSummary, signoff }: DashboardSummaryCardsProps) {
+export function DashboardSummaryCards({ canManage, loading, registerSummary, signoff }: DashboardSummaryCardsProps) {
   if (loading) {
     return (
       <LoadingState
@@ -55,7 +56,9 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
     signoffMeta = {
       tone: 'neutral',
       label: 'Draft',
-      text: 'Record board approval before reporting the annual compliance position.',
+      text: canManage
+        ? 'Record board approval before reporting the annual compliance position.'
+        : 'An owner or administrator must record board approval before the annual compliance position is reported.',
     };
   }
   const openRegisterItems = registerSummary
@@ -87,7 +90,7 @@ export function DashboardSummaryCards({ loading, registerSummary, signoff }: Das
             ) : null}
           </div>
           <Button as={Link} href="/export" size="sm" variant="flat">
-            Manage sign-off
+            {canManage ? 'Manage sign-off' : 'View sign-off'}
           </Button>
         </div>
       </Card>

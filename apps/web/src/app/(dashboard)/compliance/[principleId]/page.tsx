@@ -14,6 +14,7 @@ export default function PrincipleDetailPage() {
   useDocumentTitle('Compliance Principle');
 
   const {
+    canManageRecords,
     currentYear,
     flushSave,
     formState,
@@ -57,7 +58,10 @@ export default function PrincipleDetailPage() {
         description={(
           <>
             {principle.description}{' '}
-            Changes auto-save after 800ms. Evidence prompts are review aids and not legal advice.
+            {canManageRecords
+              ? 'Changes auto-save after 800ms.'
+              : 'Records are view-only for Members; an Owner or Admin can make changes.'}{' '}
+            Evidence prompts are review aids and not legal advice.
           </>
         )}
         actions={(
@@ -79,6 +83,7 @@ export default function PrincipleDetailPage() {
         />
 
         <PrincipleStandardList
+          canManageRecords={canManageRecords}
           standards={principle.standards}
           formState={formState}
           saveState={saveState}
@@ -89,7 +94,7 @@ export default function PrincipleDetailPage() {
         />
       </AppPage>
       <PrincipleNavigationConfirmModal
-        isOpen={navigationConfirmOpen}
+        isOpen={canManageRecords && navigationConfirmOpen}
         isSaving={navigationConfirmBusy}
         saveError={navigationConfirmError}
         onKeepEditing={stayOnCompliancePage}

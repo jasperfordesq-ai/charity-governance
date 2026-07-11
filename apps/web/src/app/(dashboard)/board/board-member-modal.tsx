@@ -13,6 +13,7 @@ import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 
 export function BoardMemberModal({
+  accessDisabled,
   isOpen,
   onOpenChange,
   editing,
@@ -40,6 +41,7 @@ export function BoardMemberModal({
   handleSave,
   saving,
 }: {
+  accessDisabled: boolean;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   editing: BoardMemberResponse | null;
@@ -86,6 +88,7 @@ export function BoardMemberModal({
                     value={formName}
                     onValueChange={setFormName}
                     isRequired
+                    isReadOnly={accessDisabled}
                   />
                   <Input
                     label="Role"
@@ -93,6 +96,7 @@ export function BoardMemberModal({
                     value={formRole}
                     onValueChange={setFormRole}
                     isRequired
+                    isReadOnly={accessDisabled}
                   />
                   <Input
                     label="Email"
@@ -100,6 +104,7 @@ export function BoardMemberModal({
                     type="email"
                     value={formEmail}
                     onValueChange={setFormEmail}
+                    isReadOnly={accessDisabled}
                   />
                   <Input
                     label="Date appointed"
@@ -107,12 +112,14 @@ export function BoardMemberModal({
                     value={formAppointed}
                     onValueChange={setFormAppointed}
                     isRequired
+                    isReadOnly={accessDisabled}
                   />
                   <Input
                     label="Term end date"
                     type="date"
                     value={formTermEnd}
                     onValueChange={setFormTermEnd}
+                    isReadOnly={accessDisabled}
                   />
                 </div>
               </FieldGroup>
@@ -126,6 +133,7 @@ export function BoardMemberModal({
                     <Checkbox
                       isSelected={formConductSigned}
                       onValueChange={setFormConductSigned}
+                      isDisabled={accessDisabled}
                       classNames={{
                         base: 'm-0 flex max-w-none items-start gap-3',
                         wrapper: 'mt-0.5',
@@ -141,6 +149,7 @@ export function BoardMemberModal({
                         value={formConductDate}
                         onValueChange={setFormConductDate}
                         className="mt-3"
+                        isReadOnly={accessDisabled}
                       />
                     ) : (
                       <FormHint tone="warning">Add the signing date once the trustee conduct record is ready.</FormHint>
@@ -150,6 +159,7 @@ export function BoardMemberModal({
                     <Checkbox
                       isSelected={formInduction}
                       onValueChange={setFormInduction}
+                      isDisabled={accessDisabled}
                       classNames={{
                         base: 'm-0 flex max-w-none items-start gap-3',
                         wrapper: 'mt-0.5',
@@ -165,14 +175,17 @@ export function BoardMemberModal({
                         value={formInductionDate}
                         onValueChange={setFormInductionDate}
                         className="mt-3"
+                        isReadOnly={accessDisabled}
                       />
                     ) : (
                       <FormHint tone="warning">Add the induction date once the trustee has completed onboarding.</FormHint>
                     )}
                   </div>
                 </div>
-                <FormHint id="board-disabled-hint" tone={formDisabledReason ? 'warning' : 'neutral'}>
-                  {formDisabledReason || 'Saving updates the trustee register after the API confirms the change.'}
+                <FormHint id="board-disabled-hint" tone={formDisabledReason || accessDisabled ? 'warning' : 'neutral'}>
+                  {accessDisabled
+                    ? 'Only organisation owners and administrators can change the board register.'
+                    : formDisabledReason || 'Saving updates the trustee register after the API confirms the change.'}
                 </FormHint>
               </FieldGroup>
             </ModalBody>
@@ -183,7 +196,7 @@ export function BoardMemberModal({
               }}
               onSubmit={handleSave}
               submitting={saving}
-              submitDisabled={Boolean(formDisabledReason) || saving}
+              submitDisabled={Boolean(formDisabledReason) || saving || accessDisabled}
               submitAriaDescribedBy="board-disabled-hint"
               submitLabel={editing ? 'Save trustee' : 'Add trustee'}
             />

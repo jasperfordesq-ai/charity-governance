@@ -1,6 +1,6 @@
 # CharityPilot Agent Continuation Handoff
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 This document exists so a new Codex, Claude, or other coding agent can continue the same CharityPilot production-completion goal without relying on chat memory or a pasted prompt.
 
@@ -182,6 +182,23 @@ The detailed issue contract remains in
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29146063808`;
   E2E passed `113 / 113` isolation contracts and `103 / 103` Playwright
   scenarios in `3.4m`.
+- **P0-08 role authorization and current processing/cookie truth - overall
+  `IN_PROGRESS`; completed repository sub-slices `LOCALLY_VERIFIED`.** Members now
+  have truthful read-only governance affordances across Team, Board, Documents,
+  Compliance, Dashboard, Registers, Deadlines, Organisation, and Export while
+  retaining legitimate reads, navigation, authenticated document download, and
+  export access. Exact stale-role `403`/`FORBIDDEN` responses fail closed without
+  redirecting and restore persisted or canonical state where needed. The privacy
+  draft now matches PostgreSQL/Prisma, custom authentication, private Supabase
+  object storage, stored Stripe state, and implemented Resend messages; the cookie
+  UI is a necessary-cookie information notice backed only by local
+  acknowledgement. Local proof passed web `351 / 351`, API `658 / 658`, shared
+  `40 / 40`, production tooling `545 / 545`, local-Docker tooling `44 / 44`,
+  production web build, lint, E2E typecheck, `113 / 113` isolation contracts, and
+  `3 / 3` focused managed browser scenarios with verified teardown. P0-08 remains
+  open for trial/plan behavior, deletion and retention workflows, VAT treatment,
+  controller/legal-basis/rights/provider/contact decisions, operational
+  mailboxes, and professional legal, privacy, and accounting approval.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -221,7 +238,7 @@ Local personal-use safety before heavy work:
   disposable tenant/app tables.
 - This local safety gate does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
 
-Known current state from `npm run launch:status -- --json` on 2026-07-10:
+Known current state from `npm run launch:status -- --json` on 2026-07-11:
 
 - Phase: `ENV_INCOMPLETE`
 - `.env.production` exists but still has 17 values needing real production data.
@@ -242,8 +259,8 @@ Known current state from `npm run launch:status -- --json` on 2026-07-10:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `544 / 544` checks on
-  2026-07-10. Older `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
+  `npm run test:production-check` passed with `545 / 545` checks on
+  2026-07-11. Older `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
@@ -510,6 +527,17 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- P0-08 role/privacy local verification
+  - Web `351 / 351`, API `658 / 658`, shared `40 / 40`, production tooling
+    `545 / 545`, local-Docker tooling `44 / 44`, web lint/build, E2E typecheck,
+    and security checks passed.
+  - The focused managed run passed `113 / 113` isolation contracts and `3 / 3`
+    Playwright scenarios in `54.5s`: real-member route traversal and authenticated
+    document-byte download, live Admin-to-Member demotion with an exact API
+    denial, and rendered privacy/cookie truth. Teardown left no managed E2E
+    container residue.
+  - This is local repository evidence only. Add the implementation SHA and exact
+    CI/E2E run links after the pushed SHA reaches terminal success.
 - P0-07 exact-SHA verification
   - Full suites passed on 2026-07-11: API `658 / 658`, web `335 / 335`, and
     shared `40 / 40`.

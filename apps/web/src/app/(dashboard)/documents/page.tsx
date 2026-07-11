@@ -20,6 +20,7 @@ export default function DocumentsPage() {
   useDocumentTitle('Documents');
   const {
     categoryOptions,
+    canManage,
     conditionalObligationPrompts,
     conditionalProfile,
     confirmDelete,
@@ -85,8 +86,10 @@ export default function DocumentsPage() {
     <AppPage
       eyebrow="Evidence vault"
       title="Document Vault"
-      description="Store governance files in private evidence storage, then link them to standards so trustee review packs are review-ready."
-      actions={(
+      description={canManage
+        ? 'Store governance files in private evidence storage, then link them to standards so trustee review packs are review-ready.'
+        : 'Review and download governance files from the private evidence vault. Uploads and evidence links are managed by owners and administrators.'}
+      actions={canManage ? (
         <>
           <SaveStatusIndicator status={documentMutationStatus} />
           <Button
@@ -97,7 +100,7 @@ export default function DocumentsPage() {
             Upload document
           </Button>
         </>
-      )}
+      ) : undefined}
     >
       {documentDataReady && (
         <DocumentSummaryPanel
@@ -132,6 +135,7 @@ export default function DocumentsPage() {
       )}
 
       <DocumentListPanel
+        canManage={canManage}
         documents={documents}
         loading={loading}
         loadError={loadError}
@@ -148,7 +152,7 @@ export default function DocumentsPage() {
       />
 
       <DocumentUploadModal
-        isOpen={uploadModal.isOpen}
+        isOpen={canManage && uploadModal.isOpen}
         onOpenChange={uploadModal.onOpenChange}
         categoryOptions={categoryOptions}
         uploadName={uploadName}
@@ -176,7 +180,7 @@ export default function DocumentsPage() {
       />
 
       <DocumentDeleteModal
-        isOpen={deleteModal.isOpen}
+        isOpen={canManage && deleteModal.isOpen}
         onOpenChange={deleteModal.onOpenChange}
         selectedDeleteDoc={selectedDeleteDoc}
         deleting={deleting}
@@ -184,7 +188,7 @@ export default function DocumentsPage() {
       />
 
       <DocumentLinkModal
-        isOpen={linkModal.isOpen}
+        isOpen={canManage && linkModal.isOpen}
         onOpenChange={linkModal.onOpenChange}
         selectedLinkDoc={selectedLinkDoc}
         standards={standards}

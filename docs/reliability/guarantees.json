@@ -4782,11 +4782,11 @@
     "surface": "web",
     "group": "web-team",
     "concern": "authz-boundary",
-    "guarantee": "A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end.",
+    "guarantee": "A real MEMBER session retains Team read access while invite and role controls are absent, and its read-only governance traversal emits no privileged API mutation request.",
     "status": "covered",
     "testType": "e2e",
     "testFile": "e2e/tests/authz.spec.ts",
-    "testTitle": "a MEMBER sees admin-only team controls disabled/hidden",
+    "testTitle": "a MEMBER gets read-only governance routes without privileged mutation affordances",
     "gapDescription": "",
     "proposedTitle": ""
   },

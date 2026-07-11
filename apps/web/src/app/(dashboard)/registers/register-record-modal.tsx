@@ -21,6 +21,7 @@ export function RegisterRecordModal({
   formDisabledReason,
   saving,
   handleCreate,
+  canManage,
 }: {
   modalType: RegisterType | null;
   closeModal: () => void;
@@ -30,9 +31,10 @@ export function RegisterRecordModal({
   formDisabledReason: string;
   saving: boolean;
   handleCreate: () => void | Promise<void>;
+  canManage: boolean;
 }) {
   return (
-    <Modal isOpen={Boolean(modalType)} onOpenChange={(open) => !open && closeModal()} size="2xl" scrollBehavior="inside">
+    <Modal isOpen={Boolean(modalType && canManage)} onOpenChange={(open) => !open && closeModal()} size="2xl" scrollBehavior="inside">
       <ModalContent>
         <ModalHeader>{modalType ? modalTitle(modalType) : 'Add register record'}</ModalHeader>
         <ModalBody className="gap-5">
@@ -49,7 +51,7 @@ export function RegisterRecordModal({
           onCancel={closeModal}
           onSubmit={handleCreate}
           submitting={saving}
-          submitDisabled={Boolean(formDisabledReason) || saving}
+          submitDisabled={!canManage || Boolean(formDisabledReason) || saving}
           submitAriaDescribedBy="register-disabled-hint"
           submitLabel="Save record"
         />

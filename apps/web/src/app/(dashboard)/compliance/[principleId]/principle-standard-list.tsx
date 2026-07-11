@@ -6,6 +6,7 @@ import { StandardEditorCard, type SaveState, type StandardFormState } from './st
 export type { SaveState, StandardFormState } from './standard-editor-card';
 
 export function PrincipleStandardList({
+  canManageRecords,
   flushSave,
   formState,
   onResolveConflict,
@@ -14,6 +15,7 @@ export function PrincipleStandardList({
   standards,
   updateField,
 }: {
+  canManageRecords: boolean;
   flushSave: (standardId: string) => Promise<unknown>;
   formState: Record<string, StandardFormState>;
   onResolveConflict: (standardId: string) => Promise<string | null>;
@@ -35,6 +37,7 @@ export function PrincipleStandardList({
 
           return (
             <StandardEditorCard
+              canManageRecords={canManageRecords}
               key={standard.id}
               standard={standard}
               form={form}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { apiErrorMessage, isApiNotFoundError } from './errors';
+import { apiErrorMessage, isApiForbiddenError, isApiNotFoundError } from './errors';
 
 // Concern: graceful degradation / input validation — a server error must render a
 // SAFE, SPECIFIC message (never a raw exception or stack), and the renderer must never
@@ -19,6 +19,17 @@ test('isApiNotFoundError recognises axios-style 404 responses only', () => {
   assert.equal(isApiNotFoundError({ response: { status: '404' } }), false);
   assert.equal(isApiNotFoundError(new Error('not found')), false);
   assert.equal(isApiNotFoundError(null), false);
+});
+
+test('isApiForbiddenError recognises only the exact role-denial contract', () => {
+  assert.equal(isApiForbiddenError({ response: { status: 403, data: { code: 'FORBIDDEN' } } }), true);
+  assert.equal(isApiForbiddenError({ response: { status: 403, data: { code: 'PLAN_FEATURE_UNAVAILABLE' } } }), false);
+  assert.equal(isApiForbiddenError({ response: { status: 403, data: { code: 'TRIAL_EXPIRED' } } }), false);
+  assert.equal(isApiForbiddenError({ response: { status: 403, data: {} } }), false);
+  assert.equal(isApiForbiddenError({ response: { status: 401, data: { code: 'FORBIDDEN' } } }), false);
+  assert.equal(isApiForbiddenError({ response: { status: '403', data: { code: 'FORBIDDEN' } } }), false);
+  assert.equal(isApiForbiddenError({ response: null }), false);
+  assert.equal(isApiForbiddenError(null), false);
 });
 
 test('apiErrorMessage falls back to the server message field', () => {

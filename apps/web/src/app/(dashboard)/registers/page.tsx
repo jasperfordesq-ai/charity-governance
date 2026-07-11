@@ -21,6 +21,7 @@ export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
   const {
     annual,
+    canManage,
     canSaveAnnual,
     canSaveFinancial,
     closeModal,
@@ -88,10 +89,12 @@ export default function RegistersPage() {
     <AppPage
       eyebrow="Complete plan governance registers"
       title="Governance Registers"
-      description="Maintain review-ready operational records for conflicts, risk, complaints, fundraising, Annual Report readiness, and financial controls."
+      description={canManage
+        ? 'Maintain review-ready operational records for conflicts, risk, complaints, fundraising, Annual Report readiness, and financial controls.'
+        : 'Review operational records for conflicts, risk, complaints, fundraising, Annual Report readiness, and financial controls.'}
       actions={(
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <SaveStatusIndicator status={registerSaveStatus} />
+          {canManage ? <SaveStatusIndicator status={registerSaveStatus} /> : null}
           <Select
             label="Reporting year"
             className="w-44"
@@ -150,6 +153,7 @@ export default function RegistersPage() {
               fundraising={fundraisingForSelectedYear}
               onAdd={openModal}
               onClose={closeRecord}
+              canManage={canManage}
               closingRecordId={closingRecordId}
               saving={saving}
             />
@@ -160,8 +164,8 @@ export default function RegistersPage() {
             description="Use these source/review flags as prompts for the board pack. They do not replace trustee judgement or professional review where needed."
           >
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} saveDisabled={!canSaveAnnual} />
-              <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} saveDisabled={!canSaveFinancial} />
+              <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} saveDisabled={!canSaveAnnual} canManage={canManage} />
+              <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} saveDisabled={!canSaveFinancial} canManage={canManage} />
             </div>
           </AppSection>
         </>
@@ -176,6 +180,7 @@ export default function RegistersPage() {
         formDisabledReason={formDisabledReason}
         saving={saving}
         handleCreate={handleCreate}
+        canManage={canManage}
       />
     </AppPage>
   );

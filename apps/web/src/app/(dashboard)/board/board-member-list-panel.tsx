@@ -13,7 +13,7 @@ import {
 } from '@heroui/react';
 import { DataList, DataListItems, DataListTable } from '@/components/ui/data-list';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { EmptyState, ErrorState, LoadingState, SaveStatusIndicator } from '@/components/ui/states';
+import { EmptyState, ErrorState, LoadingState, PermissionHint, SaveStatusIndicator } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { BoardMemberResponse } from '@charitypilot/shared';
 import { BoardEvidenceChips } from './board-evidence';
@@ -28,6 +28,7 @@ const formatDate = (value: string | null | undefined) => {
 };
 
 type BoardMemberListPanelProps = {
+  canManage: boolean;
   displayMembers: BoardMemberResponse[];
   fetchMembers: (showLoading?: boolean) => Promise<void>;
   loadError: string;
@@ -42,6 +43,7 @@ type BoardMemberListPanelProps = {
 };
 
 export function BoardMemberListPanel({
+  canManage,
   displayMembers,
   fetchMembers,
   loadError,
@@ -59,10 +61,14 @@ export function BoardMemberListPanel({
   return (
     <DataList
       title="Trustees"
-      description="The active view is the default register. Toggle inactive members when you need historic appointment evidence."
+      description={canManage
+        ? 'The active view is the default register. Toggle inactive members when you need historic appointment evidence.'
+        : 'Review active and historic trustee appointment evidence. Board register changes are available to owners and administrators.'}
       actions={(
         <>
-          <SaveStatusIndicator status={boardMutationStatus} />
+          {canManage ? <SaveStatusIndicator status={boardMutationStatus} /> : (
+            <PermissionHint>Read-only board register</PermissionHint>
+          )}
           <Switch
             size="sm"
             color="primary"
@@ -92,12 +98,16 @@ export function BoardMemberListPanel({
       ) : displayMembers.length === 0 ? (
         <EmptyState
           title={showInactive ? 'No trustees in this view' : 'No active trustees added yet'}
-          description={showInactive ? 'No active or inactive trustees are available.' : 'Add trustees so conduct, induction, appointment, and term evidence can be reviewed before annual sign-off.'}
-          action={(
+          description={showInactive
+            ? 'No active or inactive trustees are available.'
+            : canManage
+              ? 'Add trustees so conduct, induction, appointment, and term evidence can be reviewed before annual sign-off.'
+              : 'An owner or administrator must add trustees before board evidence can be reviewed.'}
+          action={canManage ? (
             <Button size="sm" className={primaryActionButtonClassName} onPress={onAdd}>
               Add first trustee
             </Button>
-          )}
+          ) : undefined}
         />
       ) : (
         <div className="space-y-3">
@@ -148,7 +158,7 @@ export function BoardMemberListPanel({
                         </div>
                       </dl>
                       <BoardEvidenceChips member={member} />
-                      <div className="flex flex-wrap gap-2">
+                      {canManage ? <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           variant="flat"
@@ -167,7 +177,7 @@ export function BoardMemberListPanel({
                         >
                           {member.isActive ? 'Deactivate' : 'Activate'}
                         </Button>
-                      </div>
+                      </div> : null}
                     </div>
                   </article>
                 ))}
@@ -226,7 +236,7 @@ export function BoardMemberListPanel({
                         </StatusChip>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        {canManage ? <div className="flex items-center gap-2">
                           <Button
                             size="sm"
                             variant="flat"
@@ -245,7 +255,7 @@ export function BoardMemberListPanel({
                           >
                             {member.isActive ? 'Deactivate' : 'Activate'}
                           </Button>
-                        </div>
+                        </div> : <span className="text-xs text-gray-500 dark:text-gray-400">Read only</span>}
                       </TableCell>
                     </TableRow>
                   ))}

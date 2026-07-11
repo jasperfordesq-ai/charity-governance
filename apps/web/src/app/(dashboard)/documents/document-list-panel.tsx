@@ -25,6 +25,7 @@ const formatFileSize = (bytes: number) => {
 };
 
 export function DocumentListPanel({
+  canManage,
   documents,
   loading,
   loadError,
@@ -39,6 +40,7 @@ export function DocumentListPanel({
   handleUnlinkStandard,
   confirmDelete,
 }: {
+  canManage: boolean;
   documents: DocumentResponse[];
   loading: boolean;
   loadError: string;
@@ -56,7 +58,9 @@ export function DocumentListPanel({
   return (
     <DataList
       title="Uploaded documents"
-      description="Download links are generated only when requested. Link each file to the standards it supports."
+      description={canManage
+        ? 'Download links are generated only when requested. Link each file to the standards it supports.'
+        : 'Download links are generated only when requested. Evidence-link and document changes are available to owners and administrators.'}
     >
       {loading ? (
         <LoadingState title="Loading documents" description="Checking the private evidence vault." />
@@ -73,12 +77,14 @@ export function DocumentListPanel({
       ) : documents.length === 0 ? (
         <EmptyState
           title="No documents uploaded yet"
-          description="Upload the governing document, board conduct records, minutes, accounts, policies, and other evidence before the annual review."
-          action={(
+          description={canManage
+            ? 'Upload the governing document, board conduct records, minutes, accounts, policies, and other evidence before the annual review.'
+            : 'No governance documents are available to review or download yet.'}
+          action={canManage ? (
             <Button size="sm" className={primaryActionButtonClassName} onPress={onUploadFirst}>
               Upload first document
             </Button>
-          )}
+          ) : undefined}
         />
       ) : (
         <div className="space-y-3">
@@ -141,7 +147,7 @@ export function DocumentListPanel({
                                 <StatusChip tone="brand" ariaLabel={`Linked standard ${link.standardCode}`}>
                                   {link.standardCode}
                                 </StatusChip>
-                                <Button
+                                {canManage ? <Button
                                   size="sm"
                                   variant="light"
                                   isIconOnly
@@ -152,7 +158,7 @@ export function DocumentListPanel({
                                   className="h-7 w-7 min-w-7"
                                 >
                                   <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                                </Button>
+                                </Button> : null}
                               </span>
                             );
                           })
@@ -172,7 +178,7 @@ export function DocumentListPanel({
                       >
                         Download
                       </Button>
-                      <Button
+                      {canManage ? <Button
                         size="sm"
                         variant="flat"
                         aria-label={`Link ${doc.name} to a standard`}
@@ -180,8 +186,8 @@ export function DocumentListPanel({
                         isDisabled={linkingStandard || Boolean(unlinkingStandard)}
                       >
                         Link standard
-                      </Button>
-                      <Button
+                      </Button> : null}
+                      {canManage ? <Button
                         size="sm"
                         variant="flat"
                         color="danger"
@@ -190,7 +196,7 @@ export function DocumentListPanel({
                         isDisabled={deleting || Boolean(downloadDocId)}
                       >
                         Delete
-                      </Button>
+                      </Button> : null}
                     </div>
                   </div>
                 </article>

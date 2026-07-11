@@ -9,10 +9,14 @@ import { statusPanelClassName } from '@/components/ui/status';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import { CompliancePrincipleList } from './compliance-principle-list';
 import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
+import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { scoreColour, useComplianceOverviewWorkflow } from './use-compliance-overview-workflow';
 
 export default function CompliancePage() {
   useDocumentTitle('Compliance');
+  const { user } = useAuth();
+  const canManageRecords = canManageGovernance(user?.role);
   const {
     approvalReadinessBlockerCount,
     approvalReadinessSummaryText,
@@ -130,6 +134,7 @@ export default function CompliancePage() {
       </Switch>
 
       <CompliancePrincipleList
+        canManageRecords={canManageRecords}
         loading={loading}
         loadError={loadError}
         principles={principles}

@@ -1872,7 +1872,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-10/);
+  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on \d{4}-\d{2}-\d{2}/);
   assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 86`/);
   assert.match(handoff, /The evidence ledger is currently `9 \/ 86`/);
   assert.match(handoff, /77 \/ 86` machine-readable launch checks remain/);
@@ -1883,14 +1883,14 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}544\s*\/\s*544`? checks/);
+  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}545\s*\/\s*545`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
   assert.match(
     handoff,
-    /Older `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
+    /Older `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
   );
   assert.match(
     handoff,

@@ -32,6 +32,7 @@ export function ExportBoardApprovalPanel({
   approvalSaveBlocked,
   approvalTone,
   approvalUnavailable,
+  canManageSignoff,
   onAcknowledgeReview,
   onDiscardSignoff,
   onRetryConflictRefresh,
@@ -53,6 +54,7 @@ export function ExportBoardApprovalPanel({
   approvalSaveBlocked: boolean;
   approvalTone: 'success' | 'warning' | 'default';
   approvalUnavailable: boolean;
+  canManageSignoff: boolean;
   onAcknowledgeReview: () => void;
   onDiscardSignoff: () => void;
   onRetryConflictRefresh: () => void | Promise<void>;
@@ -80,7 +82,9 @@ export function ExportBoardApprovalPanel({
             </StatusChip>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-            Record the board meeting where trustees approved the annual Compliance Record before reporting the position to the Charities Regulator.
+            {canManageSignoff
+              ? 'Record the board meeting where trustees approved the annual Compliance Record before reporting the position to the Charities Regulator.'
+              : 'Review the saved board sign-off. Only an Owner or Admin can change the approval record.'}
           </p>
           {signoff?.updatedAt && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -95,25 +99,31 @@ export function ExportBoardApprovalPanel({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <SaveStatusIndicator status={signoffSaveStatus} />
-          {(signoffDirty || signoffReviewRequired) ? (
-            <Button
-              type="button"
-              variant="flat"
-              onPress={onDiscardSignoff}
-              isDisabled={savingSignoff}
-            >
-              Discard changes
-            </Button>
-          ) : null}
-          <Button
-            className={primaryActionButtonClassName}
-            onPress={onSaveSignoff}
-            isLoading={savingSignoff}
-            isDisabled={!signoffDirty || approvalSaveBlocked || signoffReviewRequired}
-          >
-            Save sign-off
-          </Button>
+          {canManageSignoff ? (
+            <>
+              <SaveStatusIndicator status={signoffSaveStatus} />
+              {(signoffDirty || signoffReviewRequired) ? (
+                <Button
+                  type="button"
+                  variant="flat"
+                  onPress={onDiscardSignoff}
+                  isDisabled={savingSignoff}
+                >
+                  Discard changes
+                </Button>
+              ) : null}
+              <Button
+                className={primaryActionButtonClassName}
+                onPress={onSaveSignoff}
+                isLoading={savingSignoff}
+                isDisabled={!signoffDirty || approvalSaveBlocked || signoffReviewRequired}
+              >
+                Save sign-off
+              </Button>
+            </>
+          ) : (
+            <StatusChip tone="neutral">View only</StatusChip>
+          )}
         </div>
       </div>
 
@@ -125,7 +135,7 @@ export function ExportBoardApprovalPanel({
         </div>
       )}
 
-      {signoffReviewRequired ? (
+      {canManageSignoff && signoffReviewRequired ? (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
           {signoffConflictRefreshFailed ? (
             <>
@@ -177,8 +187,10 @@ export function ExportBoardApprovalPanel({
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         <Select
           label="Approval status"
+          isDisabled={!canManageSignoff}
           selectedKeys={new Set([signoffForm.status])}
           onSelectionChange={(keys) => {
+            if (!canManageSignoff) return;
             const value = Array.from(keys)[0] as ComplianceSignoffStatus | undefined;
             if (value) setSignoffForm((prev) => ({ ...prev, status: value }));
           }}
@@ -190,32 +202,47 @@ export function ExportBoardApprovalPanel({
         <Input
           label="Board meeting date"
           type="date"
+          isReadOnly={!canManageSignoff}
           value={signoffForm.boardMeetingDate}
-          onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, boardMeetingDate: value }))}
+          onValueChange={(value) => {
+            if (canManageSignoff) setSignoffForm((prev) => ({ ...prev, boardMeetingDate: value }));
+          }}
         />
         <Input
           label="Minute reference"
           placeholder="e.g. Board minutes 24 Oct 2026, item 6"
+          isReadOnly={!canManageSignoff}
           value={signoffForm.minuteReference}
-          onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, minuteReference: value }))}
+          onValueChange={(value) => {
+            if (canManageSignoff) setSignoffForm((prev) => ({ ...prev, minuteReference: value }));
+          }}
         />
         <Input
           label="Approved by"
           placeholder="Chairperson or authorised trustee"
+          isReadOnly={!canManageSignoff}
           value={signoffForm.approvedByName}
-          onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvedByName: value }))}
+          onValueChange={(value) => {
+            if (canManageSignoff) setSignoffForm((prev) => ({ ...prev, approvedByName: value }));
+          }}
         />
         <Input
           label="Role"
           placeholder="e.g. Chairperson"
+          isReadOnly={!canManageSignoff}
           value={signoffForm.approvedByRole}
-          onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvedByRole: value }))}
+          onValueChange={(value) => {
+            if (canManageSignoff) setSignoffForm((prev) => ({ ...prev, approvedByRole: value }));
+          }}
         />
         <Textarea
           label="Approval notes"
           placeholder="Actions agreed, exceptions noted, or follow-up owners."
+          isReadOnly={!canManageSignoff}
           value={signoffForm.approvalNotes}
-          onValueChange={(value) => setSignoffForm((prev) => ({ ...prev, approvalNotes: value }))}
+          onValueChange={(value) => {
+            if (canManageSignoff) setSignoffForm((prev) => ({ ...prev, approvalNotes: value }));
+          }}
           minRows={2}
           className="md:col-span-2"
         />

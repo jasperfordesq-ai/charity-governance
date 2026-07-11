@@ -4,7 +4,9 @@ import { logClientError } from '@/lib/client-logger';
 import { isPlanFeatureUnavailable } from '@/lib/plan-feature';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
+import { apiErrorMessage, isApiForbiddenError, isApiNotFoundError } from '@/lib/errors';
+import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { useToast } from '@/components/toast';
 import { buildRegisterPriorities, buildRegisterSearchText } from './register-priority-panel';
 import { normalizeRegisterForm, type RegisterType } from './register-record-forms';
@@ -65,9 +67,12 @@ const emptyFinancial = (year: number): FinancialControlReviewResponse => ({
 
 export function useRegistersWorkflow() {
   const { toast } = useToast();
+  const { user, refreshUser } = useAuth();
   const currentYear = new Date().getFullYear();
   const registersRequestSeq = useRef(0);
   const latestYearRef = useRef(currentYear);
+  const persistedAnnualRef = useRef<AnnualReportReadinessResponse>(emptyAnnual(currentYear));
+  const persistedFinancialRef = useRef<FinancialControlReviewResponse>(emptyFinancial(currentYear));
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,6 +92,26 @@ export function useRegistersWorkflow() {
   const [loadedRegistersYear, setLoadedRegistersYear] = useState<number | null>(null);
   const [modalType, setModalType] = useState<RegisterType | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean>>({});
+  const [permissionRevoked, setPermissionRevoked] = useState(false);
+  const canManage = canManageGovernance(user?.role) && !permissionRevoked;
+
+  useEffect(() => {
+    setPermissionRevoked(false);
+  }, [user?.id, user?.role]);
+
+  const reconcileForbidden = useCallback(async (error: unknown) => {
+    if (!isApiForbiddenError(error)) return false;
+    setPermissionRevoked(true);
+    setModalType(null);
+    setForm({});
+    setAnnual(persistedAnnualRef.current);
+    setFinancial(persistedFinancialRef.current);
+    setFormError('Your role changed. Governance registers are now read-only.');
+    setClosingRecordId(null);
+    toast('Your permissions changed. Registers are now read-only.', 'error');
+    void refreshUser();
+    return true;
+  }, [refreshUser, toast]);
 
   const isLatestRegistersRequest = useCallback((requestSeq: number) => requestSeq === registersRequestSeq.current, []);
 
@@ -112,6 +137,8 @@ export function useRegistersWorkflow() {
       setRisks(risksRes.data ?? []);
       setComplaints(complaintsRes.data ?? []);
       setFundraising(fundraisingRes.data ?? []);
+      persistedAnnualRef.current = annualRes.data ?? emptyAnnual(requestedYear);
+      persistedFinancialRef.current = financialRes.data ?? emptyFinancial(requestedYear);
       setAnnual(annualRes.data ?? emptyAnnual(requestedYear));
       setFinancial(financialRes.data ?? emptyFinancial(requestedYear));
       setLoadedRegistersYear(requestedYear);
@@ -125,8 +152,12 @@ export function useRegistersWorkflow() {
         setRisks([]);
         setComplaints([]);
         setFundraising([]);
-        setAnnual(emptyAnnual(requestedYear));
-        setFinancial(emptyFinancial(requestedYear));
+        const emptyAnnualState = emptyAnnual(requestedYear);
+        const emptyFinancialState = emptyFinancial(requestedYear);
+        persistedAnnualRef.current = emptyAnnualState;
+        persistedFinancialRef.current = emptyFinancialState;
+        setAnnual(emptyAnnualState);
+        setFinancial(emptyFinancialState);
         return;
       }
       if (!isLatestRegistersRequest(requestSeq)) return;
@@ -141,6 +172,8 @@ export function useRegistersWorkflow() {
       logClientError('Failed to load governance registers', err);
       setLoadError('Governance registers could not be loaded. Please try again.');
       toast('Failed to load governance registers', 'error');
+      persistedAnnualRef.current = emptyAnnual(requestedYear);
+      persistedFinancialRef.current = emptyFinancial(requestedYear);
     } finally {
       if (isLatestRegistersRequest(requestSeq)) {
         setLoading(false);
@@ -175,6 +208,7 @@ export function useRegistersWorkflow() {
   const canSaveFinancial = hasLoadedSelectedYear && financial.reportingYear === year;
 
   const openModal = (type: RegisterType) => {
+    if (!canManage) return;
     setModalType(type);
     setFormError('');
     if (type === 'conflict') {
@@ -235,6 +269,7 @@ export function useRegistersWorkflow() {
   };
 
   const updateForm = (key: string, value: string | number | boolean) => {
+    if (!canManage) return;
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -245,6 +280,7 @@ export function useRegistersWorkflow() {
   };
 
   const formDisabledReason = useMemo(() => {
+    if (!canManage) return 'Owners and administrators can update governance registers.';
     if (!modalType) return '';
     if (modalType === 'conflict') {
       if (!String(form.trusteeName ?? '').trim()) return 'Add the trustee or connected person before saving.';
@@ -265,10 +301,10 @@ export function useRegistersWorkflow() {
       if (!String(form.activityType ?? '').trim()) return 'Add the activity type before saving.';
     }
     return '';
-  }, [form, modalType]);
+  }, [canManage, form, modalType]);
 
   const handleCreate = async () => {
-    if (!modalType) return;
+    if (!modalType || !canManage) return;
     if (formDisabledReason) {
       setFormError(formDisabledReason);
       return;
@@ -288,6 +324,7 @@ export function useRegistersWorkflow() {
       await fetchRegisters();
       toast('Register record added');
     } catch (err) {
+      if (await reconcileForbidden(err)) return;
       logClientError('Failed to save register record', err);
       setFormError('Register record could not be saved. Please review the fields and try again.');
       toast('Failed to save register record', 'error');
@@ -297,6 +334,7 @@ export function useRegistersWorkflow() {
   };
 
   const closeRecord = async (type: RegisterType, id: string) => {
+    if (!canManage) return;
     const endpoint = {
       conflict: `/governance-registers/conflicts/${id}`,
       risk: `/governance-registers/risks/${id}`,
@@ -310,6 +348,7 @@ export function useRegistersWorkflow() {
       await fetchRegisters();
       toast('Register record closed');
     } catch (err) {
+      if (await reconcileForbidden(err)) return;
       logClientError('Failed to close register record', err);
       toast('Failed to close record', 'error');
     } finally {
@@ -318,6 +357,7 @@ export function useRegistersWorkflow() {
   };
 
   const saveAnnual = async () => {
+    if (!canManage) return;
     if (!canSaveAnnual) {
       toast('Refresh this reporting year before saving Annual Report readiness.', 'error');
       return;
@@ -331,6 +371,7 @@ export function useRegistersWorkflow() {
       await fetchRegisters();
       toast('Annual Report readiness saved');
     } catch (err) {
+      if (await reconcileForbidden(err)) return;
       logClientError('Failed to save Annual Report readiness', err);
       toast('Failed to save Annual Report readiness', 'error');
     } finally {
@@ -339,6 +380,7 @@ export function useRegistersWorkflow() {
   };
 
   const saveFinancial = async () => {
+    if (!canManage) return;
     if (!canSaveFinancial) {
       toast('Refresh this reporting year before saving financial controls.', 'error');
       return;
@@ -352,6 +394,7 @@ export function useRegistersWorkflow() {
       await fetchRegisters();
       toast('Financial controls review saved');
     } catch (err) {
+      if (await reconcileForbidden(err)) return;
       logClientError('Failed to save financial controls review', err);
       toast('Failed to save financial controls review', 'error');
     } finally {
@@ -405,9 +448,16 @@ export function useRegistersWorkflow() {
   }, [organisation?.conditionalObligationProfile, registerSearchText]);
   const missingConditionalRegisterCount = conditionalRegisterPriorities.filter((item) => !item.registerEvidenceTracked).length;
   const registerSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = saving || closingRecordId ? 'saving' : 'idle';
+  const updateAnnual = (value: AnnualReportReadinessResponse) => {
+    if (canManage) setAnnual(value);
+  };
+  const updateFinancial = (value: FinancialControlReviewResponse) => {
+    if (canManage) setFinancial(value);
+  };
 
   return {
     annual,
+    canManage,
     canSaveAnnual,
     canSaveFinancial,
     closeModal,
@@ -441,8 +491,8 @@ export function useRegistersWorkflow() {
     saveAnnual,
     saveFinancial,
     saving,
-    setAnnual,
-    setFinancial,
+    setAnnual: updateAnnual,
+    setFinancial: updateFinancial,
     setYear,
     summaryForSelectedYear,
     updateForm,

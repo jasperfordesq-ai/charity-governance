@@ -30,6 +30,7 @@ export default function ExportPage() {
     approvalPresentation,
     approvalSaveBlocked,
     approvalUnavailable,
+    canManageSignoff,
     conditionalReviewItems,
     discardSignoffChanges,
     displayedSignoffSaveState,
@@ -117,6 +118,7 @@ export default function ExportPage() {
           approvalSaveBlocked={approvalSaveBlocked}
           approvalTone={approvalPresentation.tone}
           approvalUnavailable={approvalUnavailable}
+          canManageSignoff={canManageSignoff}
           onAcknowledgeReview={acknowledgeSignoffReview}
           onDiscardSignoff={discardSignoffChanges}
           onRetryConflictRefresh={retrySignoffConflictRefresh}
@@ -147,7 +149,7 @@ export default function ExportPage() {
         />
       </AppPage>
       <ExportNavigationConfirmModal
-        isOpen={navigationConfirmOpen}
+        isOpen={canManageSignoff && navigationConfirmOpen}
         onKeepEditing={stayOnExportPage}
         onDiscardAndLeave={discardSignoffAndContinueNavigation}
       />

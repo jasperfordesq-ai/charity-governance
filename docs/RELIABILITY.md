@@ -19,7 +19,7 @@ Generated: 2026-07-11 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 104 | 0 | 0 | 6 | 110 |
 | **Total** | **395** | **0** | **0** | **20** | **415** |
 
-**API suite:** 656 passing, 0 failing. **Web suite:** 335 passing, 0 failing. **E2E:** 29 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 656 passing, 0 failing. **Web suite:** 351 passing, 0 failing. **E2E:** 31 Playwright titles linked (executed by the CI E2E gate).
 
 **Linkage:** 395/395 covered guarantees verified against a passing/linked test.
 
@@ -641,7 +641,7 @@ _6 guarantees - covered 6_
 | Auth & session integrity | An invited MEMBER can accept and join the inviting org; the new user belongs to the owner's organisation (no cross-org leak). | covered | `invite a team member who then accepts and joins the workspace` <sup>e2e</sup><br/><sub>tests/deadlines-team.spec.ts</sub> |
 | Authorization boundary | A MEMBER cannot see or trigger the invite controls: the email/role/submit are disabled and an explanatory note is shown (canInvite = OWNER\|\|ADMIN). | covered | `only OWNER and ADMIN can invite or revoke team members`<br/><sub>lib/team-permissions.test.ts</sub> |
 | Authorization boundary | Only an OWNER sees the per-member role selector; it is never shown for an OWNER row or for the current user (canChangeRoles = OWNER; no self/owner demotion). | covered | `role editing is owner-only and excludes the owner row and your own row`<br/><sub>lib/team-permissions.test.ts</sub> |
-| Authorization boundary | A MEMBER session sees the invite form disabled AND the invite API rejects the action — affordance hidden AND enforcement holds end-to-end. | covered | `a MEMBER sees admin-only team controls disabled/hidden` <sup>e2e</sup><br/><sub>tests/authz.spec.ts</sub> |
+| Authorization boundary | A real MEMBER session retains Team read access while invite and role controls are absent, and its read-only governance traversal emits no privileged API mutation request. | covered | `a MEMBER gets read-only governance routes without privileged mutation affordances` <sup>e2e</sup><br/><sub>tests/authz.spec.ts</sub> |
 | Input validation | The invite form surfaces the server's actual validation/error message inline via apiErrorMessage (e.g. a malformed email), never a generic or raw error. | covered | `team surfaces the server's specific error message (apiErrorMessage), not a generic string`<br/><sub>lib/web-wiring.test.ts</sub> |
 
 ### billing & pricing - `/billing`, `/pricing`

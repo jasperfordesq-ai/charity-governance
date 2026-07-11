@@ -19,6 +19,8 @@ export default function DashboardPage() {
     approvalReadinessSummaryText,
     boardAlerts,
     boardMemberCount,
+    canManage,
+    canManageBilling,
     compliance,
     currentYear,
     deadlines,
@@ -35,7 +37,9 @@ export default function DashboardPage() {
     <AppPage
       eyebrow={`Compliance year ${currentYear}`}
       title={<>Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</>}
-      description="Trustee next actions for sign-off, evidence gaps, deadlines, registers, and annual return readiness."
+      description={canManage
+        ? 'Trustee next actions for sign-off, evidence gaps, deadlines, registers, and annual return readiness.'
+        : 'Read-only overview of sign-off, evidence gaps, deadlines, registers, and annual return readiness.'}
       actions={(
         <>
           <Button as={Link} href="/compliance" size="sm" variant="flat">
@@ -57,8 +61,9 @@ export default function DashboardPage() {
               Keep the board ready for Governance Code sign-off and Annual Report filing.
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-              Update the Compliance Record Form, check trustee conduct and induction,
-              keep evidence linked to standards, and watch the 10-month Annual Report deadline.
+              {canManage
+                ? 'Update the Compliance Record Form, check trustee conduct and induction, keep evidence linked to standards, and watch the 10-month Annual Report deadline.'
+                : 'Review the Compliance Record, trustee conduct and induction, linked evidence, and the 10-month Annual Report deadline. Ask an owner or administrator to make changes.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -78,7 +83,9 @@ export default function DashboardPage() {
       {!loading && approvalReadinessBlockerCount > 0 && (
         <ReviewWarningState
           title="Annual approval has readiness blockers"
-          description={`${approvalReadinessSummaryText} Resolve these before the board sign-off can be approved.`}
+          description={`${approvalReadinessSummaryText} ${canManage
+            ? 'Resolve these before the board sign-off can be approved.'
+            : 'An owner or administrator must resolve these before the board sign-off can be approved.'}`}
           action={(
             <Button as={Link} href="/export" size="sm" variant="flat">
               Review blockers
@@ -91,10 +98,12 @@ export default function DashboardPage() {
       {subscriptionLapsed && !loading && (
         <ReviewWarningState
           title="Your subscription or free trial has ended"
-          description="Reactivate your plan to regain access to your governance data."
+          description={canManageBilling
+            ? 'Reactivate your plan to regain access to your governance data.'
+            : 'An owner must reactivate the plan before the workspace can regain access to governance data.'}
           action={(
             <Button as={Link} href="/billing" size="sm" variant="flat">
-              Manage billing
+              {canManageBilling ? 'Manage billing' : 'View billing status'}
             </Button>
           )}
         />
@@ -114,10 +123,10 @@ export default function DashboardPage() {
       )}
 
       {/* ── Overall compliance score ── */}
-      <DashboardProgressPanels loading={loading} compliance={compliance} />
+      <DashboardProgressPanels loading={loading} compliance={compliance} canManage={canManage} />
 
       {/* Summary cards */}
-      <DashboardSummaryCards loading={loading} registerSummary={registerSummary} signoff={signoff} />
+      <DashboardSummaryCards loading={loading} registerSummary={registerSummary} signoff={signoff} canManage={canManage} />
 
 
       {/* ── Two-column: Deadlines + Board alerts ── */}
@@ -126,6 +135,7 @@ export default function DashboardPage() {
         deadlines={deadlines}
         boardAlerts={boardAlerts}
         boardMemberCount={boardMemberCount}
+        canManage={canManage}
       />
     </AppPage>
   );

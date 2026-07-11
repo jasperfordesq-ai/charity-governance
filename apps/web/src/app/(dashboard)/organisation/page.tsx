@@ -169,7 +169,7 @@ export default function OrganisationPage() {
       />
 
       <OrganisationComplexityModal
-        isOpen={complexityModal.isOpen}
+        isOpen={canManage && complexityModal.isOpen}
         onOpenChange={complexityModal.onOpenChange}
       />
     </AppPage>
