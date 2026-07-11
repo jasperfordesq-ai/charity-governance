@@ -5,7 +5,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
-import { handleError } from '../../utils/errors.js';
+import { AppError, handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent } from '../../utils/response.js';
 import { formatProviderError } from '../../utils/provider-errors.js';
 import { ZodError } from 'zod';
@@ -20,6 +20,23 @@ import {
 } from './document-upload-validation.js';
 
 export { DOCUMENT_UPLOAD_MAX_FILE_SIZE, DOCUMENT_UPLOAD_MULTIPART_LIMITS } from './document-upload-validation.js';
+
+function safeDownloadFilename(name: string, storagePath: string): string {
+  const storedFilename = storagePath.split('/').pop() ?? '';
+  const storedExtension = storedFilename.match(/\.[a-z0-9]{1,10}$/i)?.[0] ?? '';
+  const candidate = name || storedFilename || 'document';
+  const safeBase = candidate
+    .replace(/[\u0000-\u001f\u007f<>:"\\/|?*]/g, '-')
+    .replace(/[^\x20-\x7e]/g, '-')
+    .replace(/-{2,}/g, '-')
+    .trim()
+    .slice(0, 180)
+    .replace(/[. ]+$/g, '');
+  const safe = safeBase || 'document';
+  return storedExtension && !safe.toLowerCase().endsWith(storedExtension.toLowerCase())
+    ? `${safe.slice(0, 180 - storedExtension.length).replace(/[. ]+$/g, '') || 'document'}${storedExtension}`
+    : safe;
+}
 
 export async function documentRoutes(app: FastifyInstance) {
   const service = new DocumentService(app.prisma);
@@ -41,27 +58,6 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/_local-download', async (request, reply) => {
-    try {
-      const { path } = request.query as { path?: string };
-      if (!path) {
-        return reply.status(400).send({ error: 'Missing local storage path', code: 'LOCAL_STORAGE_PATH_REQUIRED' });
-      }
-
-      storageService.assertLocalStorageEnabled();
-      await service.assertStoragePathBelongsToDocument(request.user.organisationId, path);
-      const file = await storageService.readLocalFile(request.user.organisationId, path);
-      const filename = path.split('/').pop()?.replace(/["\r\n]/g, '') || 'document';
-
-      return reply
-        .type('application/octet-stream')
-        .header('Content-Disposition', `attachment; filename="${filename}"`)
-        .send(file);
-    } catch (err) {
-      handleError(reply, err);
-    }
-  });
-
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     try {
       return await service.getById(request.user.organisationId, request.params.id);
@@ -70,12 +66,47 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
-  // GET /api/v1/documents/:id/download — returns a time-limited signed URL
+  // Authenticated proxy download: storage capabilities never leave the API.
   app.get<{ Params: { id: string } }>('/:id/download', async (request, reply) => {
     try {
-      const storagePath = await service.getStoragePath(request.user.organisationId, request.params.id);
-      const url = await storageService.getSignedUrl(request.user.organisationId, storagePath);
-      return reply.send({ url });
+      const descriptor = await service.getDownloadDescriptor(
+        request.user.organisationId,
+        request.params.id,
+      );
+      const file = await storageService.downloadFile(
+        request.user.organisationId,
+        descriptor.storagePath,
+      );
+
+      // Storage reads can take long enough for an administrator to offboard the
+      // caller. Revalidate after provider I/O so a completed revocation wins.
+      const activeSession = await app.prisma.authSession.findFirst({
+        where: {
+          id: request.user.sessionId,
+          userId: request.user.userId,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+          user: {
+            is: {
+              organisationId: request.user.organisationId,
+              lifecycleStatus: 'ACTIVE',
+              organisation: { is: { lifecycleStatus: 'ACTIVE' } },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (!activeSession) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Your authenticated session is no longer active');
+      }
+
+      const filename = safeDownloadFilename(descriptor.name, descriptor.storagePath);
+      return reply
+        .type(hasAllowedMimeType(descriptor.mimeType) ? descriptor.mimeType : 'application/octet-stream')
+        .header('Cache-Control', 'private, no-store, max-age=0')
+        .header('Pragma', 'no-cache')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(file);
     } catch (err) {
       handleError(reply, err);
     }

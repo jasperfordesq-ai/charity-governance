@@ -53,8 +53,8 @@ an external penetration test, remediation or formal human risk acceptance, and
 all five named final signoffs.
 
 Passing local tests is not launch completion. A `1000 / 1000` claim is prohibited
-until production values are `29 / 29`, evidence checks are `87 / 87`, strict
-gates are `121 / 121`, final signoffs are `5 / 5`, and all evidence is genuine
+until production values are `26 / 26`, evidence checks are `86 / 86`, strict
+gates are `117 / 117`, final signoffs are `5 / 5`, and all evidence is genuine
 and bound to the promoted release.
 
 ## Live Baseline Commands
@@ -806,34 +806,62 @@ External production verification:
 
 ### P0-07 - Team offboarding, session revocation, and ownership continuity
 
-Status: `CONFIRMED`
+Status: `LOCALLY_VERIFIED`
 
-Evidence:
+Implemented:
 
-- `apps/api/src/routes/team/index.ts:83-110` provides role changes and invite
-  revocation, but no member deactivate/remove path.
-- `apps/api/src/services/team.service.ts:364-406` explicitly rejects ownership
-  transfer.
-- `apps/api/prisma/schema.prisma:151-177` has no active/suspended/revoked user
-  state.
-- Demotion to `MEMBER` preserves sensitive read access.
+- Team members now have explicit active/suspended/removed lifecycle state,
+  optimistic membership versions, suspension/removal/reactivation operations,
+  role changes, immediate session revocation, last-owner protection, and a
+  serializable ownership-transfer path with bounded conflict retry.
+- Session security exposes only bounded, non-reversible family summaries. It
+  supports tenant- and version-bound single-family/all-family revocation and
+  uses ordered organisation -> user -> token-family row locks. Refresh creates
+  one same-family successor; replay quarantines only the affected family, and
+  logout racing refresh revokes any successor before it can survive.
+- Invitation acceptance rechecks organisation lifecycle and subscription
+  access inside the consumption transaction. Expired trials, past-due outside
+  grace, cancelled, expired, suspended, and otherwise inactive states fail
+  without consuming the invitation or creating a user; active and in-grace
+  states remain valid.
+- Ownership transfer and the restricted offline recovery job both interlock
+  with durable Checkout/Portal authority grants. Only the exact provider-start
+  compare-and-swap winner can create a capability, ambiguous provider-started
+  authority cannot be request-locally released, and reconciliation is explicit
+  and evidence-bound.
+- Immutable security audit rows retain bounded subject-label snapshots after a
+  rename or soft removal. Database constraints enforce lifecycle, family,
+  ownership, grant, evidence, and tenant invariants, and both P0-07 migrations
+  own explicit atomic transaction boundaries.
+- Emergency ownership recovery is an offline, dry-run-first command with exact
+  target/evidence confirmation; it is not exposed through an HTTP route.
 
-Required result:
+Local verification:
 
-- Add member deactivation/removal and immediate session revocation.
-- Add per-session and all-session administrative revocation.
-- Add safe ownership transfer/recovery with last-owner protection.
-- Preserve exactly one accountable owner unless the product explicitly and
-  safely supports more.
-- Reject invitation acceptance when the organisation becomes inactive before
-  completion.
-- Record an immutable security/governance audit event.
+- Full suites: API `658 / 658`, web `335 / 335`, and shared `40 / 40`.
+- Production tooling `545 / 545`; local-Docker tooling `44 / 44`; secret and
+  SAST scans passed across `576` files; Prisma schema validation and web lint
+  passed.
+- The live PostgreSQL P0-07 upgrade fixture applied the historical boundary and
+  passed lifecycle, owner, session-family, tenant, immutable-audit, and atomic
+  fail-closed rollback probes, including truncation-bound label canonicalization.
+- The reliability ledger is green: `415` guarantees, `395 / 395` covered links,
+  and `20` explicitly not-applicable rows. Its family-rotation wording matches
+  the implemented affected-family-only quarantine.
+- The managed logout-vs-refresh race passed `113 / 113` isolation contracts,
+  all `18` migrations, and `1 / 1` real Playwright scenario with exact-project
+  teardown. Team and billing-authority scenarios also passed in the combined
+  managed stack.
+- A fresh current-tree managed document run passed the same `113 / 113`
+  contracts, production build, all `18` migrations, and the real upload then
+  authenticated-download journey `1 / 1`; post-run proof found zero processes,
+  containers, volumes, networks, runner images, or recovery directories.
 
-Acceptance:
+Remaining gate:
 
-- API, UI, RBAC, tenant-isolation, session, concurrency, last-owner, billing
-  ownership, removed-user, and recovery tests pass.
-- A removed user immediately loses both read and write access.
+- Do not promote this item to `CI_VERIFIED` until the implementation commit's
+  exact SHA passes both GitHub CI and managed E2E. Production/provider evidence
+  remains governed by the separate launch ledger and must not be fabricated.
 
 ### P0-08 - Product, legal, pricing, role, reminder, retention, and privacy truth
 
@@ -846,8 +874,9 @@ Track and resolve every contradiction separately:
 2. Pricing CTAs do not carry a selected plan into registration.
 3. Member-role copy says Members can maintain governance records, while most
    mutations require Owner/Admin and the UI still exposes failing controls.
-4. Marketing promises reminder timing of 30/14/7 days and a visible delivery
-   log, while new deadlines use 30/7/1 and no history endpoint/UI exists.
+4. Resolved by P0-06 (`CI_VERIFIED`): reminder scheduling and user-facing copy
+   use 30/14/7 days, and immutable reminder-delivery history is available
+   through the API and UI with fail-closed provider-outcome handling.
 5. Terms promise expired-trial suspension and deletion after 30 days, but no
    account-expiry deletion workflow exists.
 6. Privacy promises deletion within 30 days of closure without an implemented
@@ -961,16 +990,28 @@ Acceptance:
 
 ### P1-02 - Refresh-token race and token-family revocation
 
-- Make refresh consumption/rotation atomic under simultaneous replay.
-- A conditional-update loser must trigger the intended token-family/session
-  revocation without allowing the attacker's winning successor to survive.
-- Add race, replay, device/session, and revocation tests.
+Status: `LOCALLY_VERIFIED`
+
+- Refresh, replay, and logout use ordered organisation -> user -> token-family
+  row locks. Successful rotation creates one same-family successor; replay or
+  logout quarantines the affected family without revoking unrelated device
+  families.
+- API race/replay/family tests pass, and the managed concurrent
+  logout-vs-refresh browser scenario passed with all `18` migrations and
+  verified zero-residue teardown.
+- Exact-SHA GitHub CI/E2E remains required before `CI_VERIFIED`.
 
 ### P1-03 - Inactive invitation acceptance
 
-- Reject acceptance for expired, cancelled, past-due-outside-grace, suspended,
-  or otherwise inactive organisations.
-- Recheck status transactionally at consumption time.
+Status: `LOCALLY_VERIFIED`
+
+- Invite consumption now transactionally rechecks lifecycle and subscription
+  access after locking the invitation and organisation.
+- Focused tests cover expired trial, past-due outside grace, cancelled, expired,
+  active, and past-due inside grace. Every rejected state proves the invitation
+  remains unconsumed and no user is created; suspension is covered by the
+  concurrent inactive-organisation regression.
+- Exact-SHA GitHub CI/E2E remains required before `CI_VERIFIED`.
 
 ### P1-04 - Document deletion retry lifecycle
 
@@ -1113,13 +1154,26 @@ Acceptance:
 - Reuse the compliance navigation-confirmation pattern and cover keyboard,
   sidebar, browser-back, save, discard, and retry behavior.
 
-### P3-02 - Reliable signed downloads
+### P3-02 - Reliable authenticated downloads
 
-- Avoid opening a popup only after an awaited request has consumed transient
-  user activation.
-- Use a pre-opened safe window, same-tab navigation, or an accessible download
-  flow with popup-failure handling.
-- Exercise the real UI click journey in WebKit/Safari-oriented tests.
+Status: `LOCALLY_VERIFIED`
+
+- The browser now fetches the exact authenticated CharityPilot API document
+  route as bytes; it does not wait for or navigate to a provider-signed URL.
+- URL trust accepts only the expected CharityPilot API origin and exact document
+  download route, with an exact marker-bound loopback origin only inside the
+  disposable production-build E2E runner. Lookalike markers, localhost aliases,
+  alternate ports, queries, Supabase origins, and signed storage paths are
+  explicitly rejected.
+- The API streams private bytes only after tenant/session checks, revalidates the
+  session after storage I/O, applies a bounded storage/body timeout, and never
+  returns the internal object key or a reusable provider capability.
+- API `658 / 658` and web `335 / 335` pass. The fresh managed document journey
+  passed `113 / 113` isolation contracts, the production build, all `18`
+  migrations, and upload/download `1 / 1`, followed by zero-residue teardown.
+- Exact-SHA GitHub CI/E2E remains required before `CI_VERIFIED`.
+- Deployed WebKit/Safari click-journey evidence remains part of the external
+  browser QA gate.
 
 ### P3-03 - Cookie preference lifecycle
 
@@ -1181,8 +1235,7 @@ other safe repo work exists.
 
 Audit-time blockers, to refresh live:
 
-- 19 unresolved production values.
-- Missing GitHub production variable: `NEXT_PUBLIC_SUPABASE_URL`.
+- 17 unresolved production values.
 - Missing GitHub production secret names:
   - `DATABASE_URL`;
   - `STRIPE_SECRET_KEY`;

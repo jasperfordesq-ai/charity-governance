@@ -1,5 +1,7 @@
 -- P0-07 is a fail-closed lifecycle cutover. Block concurrent writers while the
 -- legacy ownership and invitation state is checked and upgraded.
+BEGIN;
+
 LOCK TABLE "Organisation" IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE "User" IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE "TeamInvite" IN SHARE ROW EXCLUSIVE MODE;
@@ -186,9 +188,9 @@ CREATE TABLE "SecurityAuditEvent" (
         "actorLabel" = BTRIM("actorLabel")
         AND CHAR_LENGTH("actorLabel") BETWEEN 1 AND 160
         AND "actorLabel" !~ '[[:cntrl:]]'
-        AND "reason" = BTRIM("reason")
+        AND "reason" = BTRIM("reason", ' ' || CHR(10))
         AND CHAR_LENGTH("reason") BETWEEN 1 AND 500
-        AND "reason" !~ '[[:cntrl:]]'
+        AND REPLACE("reason", CHR(10), '') !~ '[[:cntrl:]]'
         AND (
             "requestId" IS NULL
             OR (
@@ -585,3 +587,5 @@ $$;
 CREATE TRIGGER "User_soft_removal_only"
     BEFORE DELETE ON "User"
     FOR EACH ROW EXECUTE FUNCTION "reject_user_hard_delete"();
+
+COMMIT;

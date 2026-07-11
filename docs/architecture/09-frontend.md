@@ -188,7 +188,7 @@ These are consumed where a feature may be plan-gated: the dashboard suppresses a
 | `getSensitiveUrlToken(rawUrl, paramName)` | reads a token from the URL fragment first, then the query string | `apps/web/src/lib/url-security.ts:108-117` |
 | `removeSensitiveSearchParams(rawUrl, names)` | strips named params from both query and fragment, preserving relative vs absolute form | `apps/web/src/lib/url-security.ts:84-106` |
 | `getTrustedStripeRedirectUrl(value)` | only returns `https:` URLs on `checkout.stripe.com` / `billing.stripe.com` | `apps/web/src/lib/url-security.ts:1-4`, `apps/web/src/lib/url-security.ts:119-126` |
-| `getTrustedDocumentDownloadUrl(value, opts)` | only returns `https:` URLs on allow-listed download origins (env + API + Supabase signed-object) or, in dev, a loopback local-download path | `apps/web/src/lib/url-security.ts:128-150` |
+| `getTrustedDocumentDownloadUrl(value)` | only returns the exact authenticated document-download route on the expected HTTPS CharityPilot API origin or, in development, the same exact route on loopback; Supabase storage paths are rejected | `apps/web/src/lib/url-security.ts` |
 
 ### `use-sensitive-query-token.ts`
 

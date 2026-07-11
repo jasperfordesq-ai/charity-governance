@@ -309,9 +309,10 @@ export async function verifyTeamLifecycleUpgrade({
   ], `create disposable database ${database}`);
   const applyMigration = (database, migrationName, options = {}) => {
     const sql = readFileSync(join(migrationsRoot, migrationName, 'migration.sql'), 'utf8');
+    const hasOwnTransaction = /^\s*(?:--[^\r\n]*(?:\r?\n|$)\s*)*BEGIN\s*;/i.test(sql);
     return psql(
       database,
-      `BEGIN;\n${sql}\nCOMMIT;\n`,
+      hasOwnTransaction ? sql : `BEGIN;\n${sql}\nCOMMIT;\n`,
       `apply ${migrationName} to ${database}`,
       options,
     );

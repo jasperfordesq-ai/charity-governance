@@ -16,7 +16,7 @@ export const ROLE_META: Record<UserRole, { label: string; description: string; t
   },
   [UserRole.MEMBER]: {
     label: 'Member',
-    description: 'Can maintain compliance records, documents, registers, and deadlines.',
+    description: 'Can view governance records, deadlines, registers, and available documents, but cannot change them.',
     tone: 'neutral',
   },
 };
@@ -33,5 +33,12 @@ export function formatDate(value: string) {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+  });
+}
+
+export function formatDateTime(value: string) {
+  return new Date(value).toLocaleString('en-IE', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
   });
 }

@@ -133,6 +133,52 @@ saved local subscription ID absent from the provider-confirmed terminal set
 blocks Checkout. The same uniqueness check is repeated against the newly
 created subscription before a Checkout-completion webhook may persist it.
 
+## Billing authority grants and restricted release
+
+Provider-hosted Checkout and Portal URLs are bearer capabilities. Before a
+provider operation, the API persists an actor-, session-, membership-version-,
+and organisation-bound `BillingAuthorityGrant`; an organisation can have only
+one unresolved grant. Its state advances from `CLAIMED` through
+`PROVIDER_STARTED` to `CAPABILITY_ISSUED`, then to `RELEASED`. Provider start,
+resource, capability, and safe-release facts become immutable once recorded.
+`safeReleaseAfter` is forbidden before a Checkout capability is issued, and an
+elapsed release is valid only with the matching issued-capability and provider-
+resource evidence. Portal grants never carry a safe-release timestamp.
+
+After provider I/O, the API records the capability and then re-locks the
+organisation, grant, exact owner membership version, and exact authenticated
+session before returning the bearer URL. A concurrent logout, administrative
+session revocation, demotion, or ownership change therefore withholds the URL
+and leaves the durable grant for restricted reconciliation. Billing status
+offers Checkout resumption only to that same owner and session; a replacement
+login cannot inherit another session's unresolved capability.
+Capability preflight runs while the grant is still `CLAIMED`; immediately
+before the capability-issuing provider call, exactly one request must win the
+`CLAIMED` to `PROVIDER_STARTED` compare-and-set. Concurrent losers never call
+the provider. A definite pre-create failure may release only a still-`CLAIMED`
+grant. Once any request reaches `PROVIDER_STARTED`, request-local absence of a
+URL is never treated as proof that the provider issued nothing.
+
+An unresolved grant interlocks owner membership and organisation lifecycle
+changes in both the service layer and PostgreSQL. Checkout may be automatically
+released only after its explicitly persisted safe-release time. Portal is never
+time-released. Exceptional release uses the restricted offline
+`jobs:reconcile-billing-authority` command, with an exact grant and expected
+state, operator/case/provider evidence, explicit authority confirmation, a
+target-bound phrase that includes the exact release reason, serializable
+organisation-then-grant locking, and an exact compare-and-set. Checkout cannot
+use the generic restricted-operator attestation reason; it needs concrete
+not-issued, revoked, terminal, or elapsed-safe-time evidence. The job is not
+mounted as a route.
+
+Releasing `CLAIMED` or `PROVIDER_STARTED` also requires a documented maintenance
+window and explicit proof that all billing mutations are paused and provider
+I/O has drained. A transaction lock alone cannot prove that an external create
+call is not already in flight. The quiescence controls remain active through
+the dependent ownership/lifecycle change. See
+[Restricted Billing Authority Reconciliation](../billing-authority-reconciliation.md)
+for the reason matrix and operator procedure.
+
 ## `BillingCheckoutAttempt` lifecycle
 
 `BillingCheckoutAttempt` is a one-to-one, organisation-scoped lease that binds
@@ -288,3 +334,5 @@ configuration object that was not read from the live account.
   validation and the repository/external gate split.
 - [Stripe and Resend Production Setup](../billing-and-email-setup.md) - live
   provider configuration and proof.
+- [Restricted Billing Authority Reconciliation](../billing-authority-reconciliation.md) -
+  exceptional offline grant release, evidence, and provider-I/O quiescence.

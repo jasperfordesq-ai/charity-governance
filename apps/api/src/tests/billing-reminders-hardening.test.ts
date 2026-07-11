@@ -16,6 +16,17 @@ const { DeadlineRemindersService } = await import('../services/deadline-reminder
 const { default: Fastify } = await import('fastify');
 const { billingRoutes } = await import('../routes/billing/index.js');
 
+function testOnlyBillingInternals(service: InstanceType<typeof BillingService>) {
+  return service as unknown as {
+    createCheckoutSession: (
+      organisationId: string,
+      plan: never,
+      interval: 'monthly' | 'yearly',
+    ) => Promise<{ url: string }>;
+    createPortalSession: (organisationId: string) => Promise<{ url: string }>;
+  };
+}
+
 type BillingHarnessOptions = {
   existingSubscription?: Record<string, unknown> | null;
   checkoutExistingSubscription?: Record<string, unknown> | null;
@@ -451,10 +462,13 @@ test('billing status only allows past-due access inside the grace window', async
     subscription: {
       findUnique: async () => subscription,
     },
+    billingAuthorityGrant: {
+      findFirst: async () => null,
+    },
   };
   const service = new BillingService(prisma as never);
 
-  const expired = await service.getStatus('org_1');
+  const expired = await service.getStatus('org_1', { id: 'u1', sessionId: 'sess-1', role: 'OWNER' });
 
   assert.equal(expired.hasAccess, false);
 
@@ -465,7 +479,7 @@ test('billing status only allows past-due access inside the grace window', async
     currentPeriodEnd: new Date(now - 6 * 24 * 60 * 60 * 1000),
   };
 
-  const inGrace = await service.getStatus('org_1');
+  const inGrace = await service.getStatus('org_1', { id: 'u1', sessionId: 'sess-1', role: 'OWNER' });
 
   assert.equal(inGrace.hasAccess, true);
 });
@@ -534,8 +548,8 @@ test('billing redirects use the primary frontend origin when multiple browser or
   const service = new BillingService(prisma as never);
   (service as unknown as { getStripe: () => unknown }).getStripe = () => stripe;
 
-  await service.createCheckoutSession('org_1', 'COMPLETE' as never, 'monthly');
-  await service.createPortalSession('org_1');
+  await testOnlyBillingInternals(service).createCheckoutSession('org_1', 'COMPLETE' as never, 'monthly');
+  await testOnlyBillingInternals(service).createPortalSession('org_1');
 
   assert.equal(checkoutSessions[0]?.success_url, 'https://app.example.org/billing?success=true');
   assert.equal(checkoutSessions[0]?.cancel_url, 'https://app.example.org/billing?cancelled=true');
@@ -699,7 +713,11 @@ test('deadline reminder lookup is scoped to entitled subscriptions and verified 
   const users = (findManyArgs.include as {
     organisation: { include: { users: { where: Record<string, unknown> } } };
   }).organisation.include.users;
-  assert.deepEqual(users.where, { role: 'OWNER', emailVerified: true });
+  assert.deepEqual(users.where, {
+    role: 'OWNER',
+    emailVerified: true,
+    lifecycleStatus: 'ACTIVE',
+  });
   assert.deepEqual((users as { orderBy?: unknown }).orderBy, { id: 'asc' });
 });
 

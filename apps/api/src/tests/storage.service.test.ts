@@ -8,7 +8,7 @@ import { StorageService, withReadinessTimeout } from '../services/storage.servic
 import { AppError } from '../utils/errors.js';
 
 type GuardedStorageService = {
-  getSignedUrl(organisationId: string, storagePath: string, expiresIn?: number): Promise<string>;
+  downloadFile(organisationId: string, storagePath: string): Promise<Buffer>;
   deleteFile(organisationId: string, storagePath: string): Promise<void>;
 };
 
@@ -25,12 +25,12 @@ async function assertForbiddenStoragePath(action: () => Promise<unknown>) {
   );
 }
 
-test('getSignedUrl rejects storage paths outside the organisation prefix before storage access', async () => {
+test('downloadFile rejects storage paths outside the organisation prefix before storage access', async () => {
   const service = new StorageService() as unknown as GuardedStorageService;
 
-  await assertForbiddenStoragePath(() => service.getSignedUrl('org-a', 'org-b/policy.pdf'));
-  await assertForbiddenStoragePath(() => service.getSignedUrl('org-a', '../org-a/policy.pdf'));
-  await assertForbiddenStoragePath(() => service.getSignedUrl('org-a', 'org-a'));
+  await assertForbiddenStoragePath(() => service.downloadFile('org-a', 'org-b/policy.pdf'));
+  await assertForbiddenStoragePath(() => service.downloadFile('org-a', '../org-a/policy.pdf'));
+  await assertForbiddenStoragePath(() => service.downloadFile('org-a', 'org-a'));
 });
 
 test('deleteFile rejects storage paths outside the organisation prefix before storage access', async () => {
@@ -103,7 +103,7 @@ test('verifyBucket returns false when the configured document bucket is public',
   }
 });
 
-test('local storage driver writes, reads, signs, and deletes files without Supabase', async () => {
+test('local storage driver writes, downloads, and deletes files without Supabase', async () => {
   const originalEnv = {
     API_URL: process.env.API_URL,
     DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
@@ -142,14 +142,23 @@ test('local storage driver writes, reads, signs, and deletes files without Supab
       '%PDF-1.7\nlocal file',
     );
 
-    const signedUrl = await service.getSignedUrl('org-local', uploaded.storagePath);
-    assert.match(
-      signedUrl,
-      /^http:\/\/localhost:3002\/api\/v1\/documents\/_local-download\?path=org-local%2F\d+-[0-9a-f-]+-board-minutes-june-2026\.pdf$/,
-    );
-
     const file = await service.readLocalFile('org-local', uploaded.storagePath);
     assert.equal(file.toString('utf8'), '%PDF-1.7\nlocal file');
+    const downloaded = await service.downloadFile('org-local', uploaded.storagePath);
+    assert.equal(downloaded.toString('utf8'), '%PDF-1.7\nlocal file');
+
+    const dotted = await service.uploadFile(
+      'org-local',
+      'Board..Minutes.pdf',
+      Buffer.from('dotted filename'),
+      'application/pdf',
+    );
+    assert.match(dotted.storagePath, /-board\.\.minutes\.pdf$/);
+    assert.equal(
+      (await service.downloadFile('org-local', dotted.storagePath)).toString('utf8'),
+      'dotted filename',
+    );
+    await service.deleteFile('org-local', dotted.storagePath);
 
     await service.deleteFile('org-local', uploaded.storagePath);
     await assert.rejects(() => readFile(join(storageDir, uploaded.storagePath)));
@@ -161,6 +170,54 @@ test('local storage driver writes, reads, signs, and deletes files without Supab
       } else {
         process.env[key] = value;
       }
+    }
+  }
+});
+
+test('Supabase byte download aborts within the configured bound and returns no bytes', async () => {
+  const originalEnv = {
+    DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET,
+    STORAGE_DOWNLOAD_TIMEOUT_MS: process.env.STORAGE_DOWNLOAD_TIMEOUT_MS,
+  };
+  const server = createServer((_request, response) => {
+    response.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': '1024',
+    });
+    response.flushHeaders();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP test server');
+
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.SUPABASE_URL = `http://127.0.0.1:${address.port}`;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.STORAGE_DOWNLOAD_TIMEOUT_MS = '100';
+
+  try {
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => new StorageService().downloadFile('org-timeout', 'org-timeout/stalled.pdf'),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        assert.equal((error as AppError).code, 'STORAGE_DOWNLOAD_FAILED');
+        return true;
+      },
+    );
+    assert.ok(Date.now() - startedAt < 2_000, 'download timeout must bound the API request');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });

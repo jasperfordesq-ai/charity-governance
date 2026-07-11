@@ -196,7 +196,7 @@ async function issueSessionTokensWithClient(client: SessionClient, expectedUser:
   const refreshToken = crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
   const refreshTokenHash = hashOpaqueToken(refreshToken);
   const familyId = crypto.randomUUID();
-  const familyCreatedAt = new Date();
+  const issuedAt = new Date();
 
   const user = await lockActivePrincipal(
     client,
@@ -208,8 +208,10 @@ async function issueSessionTokensWithClient(client: SessionClient, expectedUser:
       userId: user.id,
       refreshTokenHash,
       familyId,
-      familyCreatedAt,
-      expiresAt: refreshTokenExpiresAt(familyCreatedAt),
+      // Let PostgreSQL assign familyCreatedAt and createdAt from the same
+      // CURRENT_TIMESTAMP. Supplying an application-host timestamp here can
+      // put the family start fractionally after the database-created row.
+      expiresAt: refreshTokenExpiresAt(issuedAt),
     },
     select: { id: true },
   });
@@ -324,16 +326,53 @@ export async function revokeSessionToken(
   refreshToken: string,
   reason: AuthSessionRevocationReason,
 ): Promise<void> {
-  const now = new Date();
-  await client.$executeRaw`
-    UPDATE "AuthSession"
-    SET
-      "revokedAt" = ${now},
-      "revocationReason" = ${reason}::"AuthSessionRevocationReason",
-      "updatedAt" = ${now}
-    WHERE "refreshTokenHash" = ${hashOpaqueToken(refreshToken)}
-      AND "revokedAt" IS NULL
-  `;
+  const refreshTokenHash = hashOpaqueToken(refreshToken);
+  const revokeLockedFamily = async (tx: Prisma.TransactionClient) => {
+    const locators = await tx.$queryRaw<SessionLocatorRow[]>`
+      SELECT "id", "userId", "familyId"
+      FROM "AuthSession"
+      WHERE "refreshTokenHash" = ${refreshTokenHash}
+      LIMIT 1
+    `;
+    const locator = locators[0];
+
+    // Logout is deliberately idempotent. An unknown token must not disclose
+    // whether a session ever existed and has no family that can be locked.
+    if (!locator) return;
+
+    const family = await lockPrincipalAndFamily(tx, locator);
+    const presentedSession = family.find(
+      (candidate) =>
+        candidate.sessionId === locator.id &&
+        candidate.refreshTokenHash === refreshTokenHash,
+    );
+
+    // The row may have been deleted between the non-locking locator read and
+    // the ordered locks. Treat that exactly like an unknown token.
+    if (!presentedSession) return;
+
+    // Revoke the whole family, not just the presented row. If rotation won the
+    // race, its successor is now covered; if logout won, rotation observes the
+    // revoked original under the same family lock and cannot mint a successor.
+    await tx.authSession.updateMany({
+      where: {
+        userId: presentedSession.id,
+        familyId: presentedSession.familyId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+        revocationReason: reason,
+      },
+    });
+  };
+
+  if ('$transaction' in client) {
+    await client.$transaction(revokeLockedFamily);
+    return;
+  }
+
+  await revokeLockedFamily(client);
 }
 
 export async function revokeSessionFamily(

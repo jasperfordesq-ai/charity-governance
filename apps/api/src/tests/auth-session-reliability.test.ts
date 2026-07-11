@@ -348,6 +348,7 @@ test('refresh rotation rejects unknown and expired refresh tokens without mintin
 test('login issues tokens and persists a session with the hashed refresh token on valid credentials', async () => {
   const passwordHash = bcrypt.hashSync('GoodPass1', 12);
   let storedHash = '';
+  let createData: Record<string, unknown> | undefined;
   const prisma = {
     user: {
       findUnique: async () => ({
@@ -371,7 +372,8 @@ test('login issues tokens and persists a session with the hashed refresh token o
         organisationLifecycleStatus: 'ACTIVE',
       }],
       authSession: {
-        create: async ({ data }: { data: { refreshTokenHash: string } }) => {
+        create: async ({ data }: { data: Record<string, unknown> & { refreshTokenHash: string } }) => {
+          createData = data;
           storedHash = data.refreshTokenHash;
           return { id: 's1' };
         },
@@ -389,31 +391,121 @@ test('login issues tokens and persists a session with the hashed refresh token o
   // The stored value is the SHA-256 hash of the issued refresh token, never the raw token.
   assert.equal(storedHash, hashOpaqueToken(result.refreshToken));
   assert.notEqual(storedHash, result.refreshToken);
+  // Initial issuance must let both database timestamp defaults share one
+  // CURRENT_TIMESTAMP; only rotations explicitly carry the persisted family start.
+  assert.equal('familyCreatedAt' in (createData ?? {}), false);
+  assert.ok(createData?.expiresAt instanceof Date);
 });
 
-// ── x-auth-session-auth-session-12: logout revokes only the presented hash ──
+// ── x-auth-session-auth-session-12: logout revokes the locked token family ──
 
-test('logout revokes only the session for the presented refresh token', async () => {
-  let capturedValues: unknown[] = [];
+test('logout locks the presented token family and revokes a rotated successor', async () => {
+  const familyId = '00000000-0000-4000-8000-000000000012';
+  const capturedQueries: Array<{ sql: string; values: unknown[] }> = [];
+  let revokedWhere: Record<string, unknown> | undefined;
+  let revokedData: Record<string, unknown> | undefined;
+  let transactionCommitted = false;
+  const tx = {
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join('?');
+      capturedQueries.push({ sql, values });
+      if (sql.includes('WITH principal_organisation')) {
+        return [
+          {
+            id: 'u1',
+            organisationId: 'org-1',
+            role: 'OWNER',
+            userLifecycleStatus: 'ACTIVE',
+            organisationLifecycleStatus: 'ACTIVE',
+            sessionId: 's1',
+            refreshTokenHash: hashOpaqueToken('tok'),
+            familyId,
+            familyCreatedAt: new Date('2026-07-11T10:00:00.000Z'),
+            expiresAt: new Date('2026-07-18T10:00:00.000Z'),
+            revokedAt: new Date('2026-07-11T10:01:00.000Z'),
+          },
+          {
+            id: 'u1',
+            organisationId: 'org-1',
+            role: 'OWNER',
+            userLifecycleStatus: 'ACTIVE',
+            organisationLifecycleStatus: 'ACTIVE',
+            sessionId: 's2',
+            refreshTokenHash: hashOpaqueToken('rotated-successor'),
+            familyId,
+            familyCreatedAt: new Date('2026-07-11T10:00:00.000Z'),
+            expiresAt: new Date('2026-07-18T10:01:00.000Z'),
+            revokedAt: null,
+          },
+        ];
+      }
+      return [{ id: 's1', userId: 'u1', familyId }];
+    },
+    authSession: {
+      updateMany: async ({ where, data }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
+        revokedWhere = where;
+        revokedData = data;
+        return { count: 1 };
+      },
+    },
+  };
   const prisma = {
-    $executeRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
-      capturedValues = values;
-      return 1;
+    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => {
+      const result = await callback(tx);
+      transactionCommitted = true;
+      return result;
     },
   };
   const service = new AuthService(prisma as never, {} as never);
 
   const result = await service.logout('tok');
 
-  // The UPDATE is scoped to exactly the hash of the presented token.
-  assert.ok(capturedValues.includes(hashOpaqueToken('tok')));
-  assert.equal(capturedValues.includes('tok'), false);
+  assert.equal(transactionCommitted, true);
+  assert.equal(capturedQueries.length, 2);
+  assert.ok(capturedQueries[0]?.values.includes(hashOpaqueToken('tok')));
+  assert.equal(capturedQueries.some((query) => query.values.includes('tok')), false);
+  const lockSql = capturedQueries[1]?.sql ?? '';
+  assert.ok(lockSql.indexOf('locked_organisation') < lockSql.indexOf('locked_user'));
+  assert.ok(lockSql.indexOf('locked_user') < lockSql.indexOf('locked_family'));
+  assert.match(lockSql, /FOR SHARE OF organisation/);
+  assert.match(lockSql, /FOR SHARE OF account/);
+  assert.match(lockSql, /FOR UPDATE OF session/);
+  assert.deepEqual(revokedWhere, {
+    userId: 'u1',
+    familyId,
+    revokedAt: null,
+  });
+  assert.equal(revokedData?.revocationReason, 'LOGOUT');
+  assert.ok(revokedData?.revokedAt instanceof Date);
   assert.deepEqual(result, { message: 'Signed out successfully.' });
+});
 
-  // Never throws for an unknown/absent token (0 rows affected).
-  const noopPrisma = { $executeRaw: async () => 0 };
+test('logout remains idempotent for an unknown refresh token', async () => {
+  let locatorLookupCount = 0;
+  let familyUpdateRan = false;
+  const tx = {
+    $queryRaw: async () => {
+      locatorLookupCount += 1;
+      return [];
+    },
+    authSession: {
+      updateMany: async () => {
+        familyUpdateRan = true;
+        return { count: 0 };
+      },
+    },
+  };
+  const noopPrisma = {
+    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => callback(tx),
+  };
   const noopService = new AuthService(noopPrisma as never, {} as never);
+
   await assert.doesNotReject(() => noopService.logout('unknown-token'));
+  assert.equal(locatorLookupCount, 1);
+  assert.equal(familyUpdateRan, false);
 });
 
 // ── x-auth-session-auth-session-16: refresh route clears cookies + 401 ──

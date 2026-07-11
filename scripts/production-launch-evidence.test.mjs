@@ -18,7 +18,6 @@ const releaseGitRef = 'refs/heads/master';
 const apiImage = `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`;
 const webImage = `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`;
 const migrationImage = `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`;
-const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const launchCriticalRoutes = [
   '/',
   '/about',
@@ -123,16 +122,12 @@ function evidenceEntry(areaId, checkId) {
     entry.description = 'Production origins are fixed to https://app.charitypilot.ie and https://api.charitypilot.ie.';
   }
 
-  if (areaId === 'secretsAndEnv' && checkId === 'supabase-public-origin') {
-    entry.description = 'SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL use the same HTTPS Supabase project.';
+  if (areaId === 'secretsAndEnv' && checkId === 'supabase-api-only') {
+    entry.description = 'SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_STORAGE_BUCKET are available to API/server runtimes only.';
   }
 
   if (areaId === 'secretsAndEnv' && checkId === 'web-compose-api-origin') {
     entry.description = 'CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL matches NEXT_PUBLIC_API_URL in the production secret source.';
-  }
-
-  if (areaId === 'secretsAndEnv' && checkId === 'web-compose-supabase-origin') {
-    entry.description = 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL matches NEXT_PUBLIC_SUPABASE_URL in the production secret source.';
   }
 
   if (areaId === 'secretsAndEnv' && checkId === 'auth-cookie-domain') {
@@ -163,9 +158,8 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       'npm run check:production:github-env -- --environment=production',
-      'Production GitHub environment check passed: production has the required release-image public variables; secret values were not read.',
+      'Production GitHub environment check passed: production has the required release-image public API variable; secret values were not read.',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      `NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
     ].join(' ');
   }
 
@@ -263,7 +257,7 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       'npm run check:production:supabase -- --production-env-file=.env.production',
-      'Production Supabase storage check passed: private bucket, service-role probe upload, signed URL creation, anonymous access denial, and probe cleanup verified.',
+      'Production Supabase storage check passed: private bucket, service-role upload and download, anonymous access denial, and probe cleanup verified.',
     ].join(' ');
   }
 
@@ -288,7 +282,7 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'supabaseStorage' && checkId === 'document-upload-download') {
-    entry.description = 'document upload and signed download were verified through the deployed app.';
+    entry.description = 'document upload and authenticated API download were verified through the deployed app.';
   }
 
   if (areaId === 'supabaseStorage' && checkId === 'supabase-backups-enabled') {
@@ -480,7 +474,6 @@ function evidenceEntry(areaId, checkId) {
       `webImage=${webImage}`,
       `migrationImage=${migrationImage}`,
       'webBuildNextPublicApiUrl=https://api.charitypilot.ie',
-      `webBuildNextPublicSupabaseUrl=${productionSupabaseUrl}`,
     ].join(' ');
   }
 
@@ -554,7 +547,6 @@ function evidenceEntry(areaId, checkId) {
       migrationImage,
       'CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1',
       'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
     ].join(' ');
   }
 
@@ -665,7 +657,7 @@ function evidenceEntry(areaId, checkId) {
       'E2E_WEB_URL=https://app.charitypilot.ie',
       'E2E_API_URL=https://api.charitypilot.ie',
       'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
-      'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
+      'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, authenticated API download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
       'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
       `Browser QA release commit: ${commitSha}.`,
       `Routes covered: ${launchCriticalRoutes.join(', ')}.`,
@@ -692,7 +684,6 @@ function completeEvidence(requiredAreas) {
         webImage,
         migrationImage,
         webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-        webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
       },
     },
     areas: Object.fromEntries(requiredAreas.map((area) => [
@@ -817,26 +808,29 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /87 check\(s\)/);
+    assert.match(result.stdout, /86 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test('production launch evidence validator rejects sample Supabase project refs', async () => {
+test('production launch evidence tolerates deprecated public Supabase fields from older ledgers', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
-  evidence.release.imageDigestManifest.webBuildNextPublicSupabaseUrl = 'https://configured-project.supabase.co';
-  evidence.areas.releaseGate.checks['github-environment'].evidence[0].description +=
-    ' NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co';
+  evidence.release.imageDigestManifest.webBuildNextPublicSupabaseUrl = 'https://legacy-project.supabase.co';
+  evidence.areas.secretsAndEnv.checks['supabase-public-origin'] = {
+    status: 'complete',
+    evidence: [evidenceEntry('secretsAndEnv', 'supabase-public-origin')],
+  };
+  evidence.areas.secretsAndEnv.checks['web-compose-supabase-origin'] = {
+    status: 'complete',
+    evidence: [evidenceEntry('secretsAndEnv', 'web-compose-supabase-origin')],
+  };
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
   try {
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
-
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /must not use a sample Supabase project ref/);
-    assert.doesNotMatch(result.stderr, /configured-project/);
+    assert.equal(result.status, 0, result.stderr);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -849,6 +843,9 @@ test('production launch evidence validator renders machine-readable JSON status'
   incomplete.approvedForLaunch = false;
   incomplete.areas.releaseGate.checks['check-production'].status = 'pending';
   incomplete.areas.releaseGate.checks['check-production'].evidence = [];
+  incomplete.areas.releaseGate.checks['check-production'].requiredEvidenceHints = [
+    'obsolete stored production-check guidance',
+  ];
   incomplete.finalSignoff.approvals.engineering.status = 'pending';
   const incompleteFile = writeEvidenceFile(incomplete);
 
@@ -876,9 +873,9 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.equal(failurePayload.incompleteCheckCount, 1);
     assert.deepEqual(failurePayload.progress, {
       checklistChecks: {
-        completed: 86,
-        total: 87,
-        percentage: 98.9,
+        completed: 85,
+        total: 86,
+        percentage: 98.8,
       },
       finalSignoffRoles: {
         approved: 4,
@@ -897,8 +894,8 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.deepEqual(successPayload.issues, []);
     assert.deepEqual(successPayload.progress, {
       checklistChecks: {
-        completed: 87,
-        total: 87,
+        completed: 86,
+        total: 86,
         percentage: 100,
       },
       finalSignoffRoles: {
@@ -1218,9 +1215,8 @@ test('production launch evidence validator requires concrete secrets and environ
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.node-env-production\.evidence must include NODE_ENV=production/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.jwt-secret-entropy\.evidence must include high entropy/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.frontend-api-origins\.evidence must include https:\/\/app\.charitypilot\.ie/);
-    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-public-origin\.evidence must include same HTTPS Supabase project/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-api-only\.evidence must include API\/server runtimes only/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.web-compose-api-origin\.evidence must include CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
-    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.web-compose-supabase-origin\.evidence must include CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.auth-cookie-domain\.evidence must include AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.stripe-live-keys\.evidence must include Stripe live mode/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.resend-domain\.evidence must include verified/);
@@ -1310,7 +1306,7 @@ test('production launch evidence validator requires concrete hosting database an
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.separate-production-project\.evidence must include production Supabase project/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.bucket-private\.evidence must include private bucket/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.readiness-storage-reachable\.evidence must include storageBucketReachable: true/);
-    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.document-upload-download\.evidence must include signed download/);
+    assert.match(result.stderr, /areas\.supabaseStorage\.checks\.document-upload-download\.evidence must include authenticated API download/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include Supabase backup policy/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include backup window/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-backups-enabled\.evidence must include retention period/);
@@ -1537,7 +1533,7 @@ test('production launch evidence validator requires every launch-critical route 
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
     'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
-    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
+    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, authenticated API download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
     'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
     `Routes covered: ${launchCriticalRoutes.filter((route) => route !== '/export').join(', ')}.`,
     'zero critical or high-severity browser QA defects remain unresolved.',
@@ -1571,7 +1567,7 @@ test('production launch evidence validator treats the root route as an explicit 
     'E2E_WEB_URL=https://app.charitypilot.ie',
     'E2E_API_URL=https://api.charitypilot.ie',
     'E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD supplied from the secret store',
-    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, signed download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
+    'docs/production-browser-qa.md recorded auth flow, dashboard flow, billing flow, document upload, authenticated API download, logout, error states, pending-navigation confirmation, conditional obligations, and readiness blockers.',
     'Launch-Critical Route Inventory completed across every route in desktop, mobile, light-mode, and dark-mode evidence.',
     `Routes covered: ${launchCriticalRoutes.filter((route) => route !== '/').join(', ')}.`,
     'zero critical or high-severity browser QA defects remain unresolved.',
@@ -2134,7 +2130,6 @@ test('production launch evidence template covers every required area and final s
         'npm run check:production:github-env -- --environment=production',
         'Production GitHub environment check passed',
         'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-        'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co',
         'secret values were not read',
       ],
     );
@@ -2301,7 +2296,7 @@ test('production launch evidence template covers every required area and final s
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Checklist checks complete: 0 \/ 87 \(0% complete\)/);
+    assert.match(result.stderr, /Checklist checks complete: 0 \/ 86 \(0% complete\)/);
     assert.match(result.stderr, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(
       result.stderr,

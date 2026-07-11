@@ -282,28 +282,25 @@ export class DocumentService {
     return publicDocument(doc);
   }
 
-  async getStoragePath(organisationId: string, id: string): Promise<string> {
+  async getDownloadDescriptor(organisationId: string, id: string): Promise<{
+    storagePath: string;
+    mimeType: string;
+    name: string;
+  }> {
     const doc = await this.prisma.document.findFirst({
       where: { id, organisationId },
-      select: { fileUrl: true },
+      select: { fileUrl: true, mimeType: true, name: true },
     });
 
     if (!doc) {
       throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     }
 
-    return doc.fileUrl;
-  }
-
-  async assertStoragePathBelongsToDocument(organisationId: string, storagePath: string): Promise<void> {
-    const doc = await this.prisma.document.findFirst({
-      where: { organisationId, fileUrl: storagePath },
-      select: { id: true },
-    });
-
-    if (!doc) {
-      throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
-    }
+    return {
+      storagePath: doc.fileUrl,
+      mimeType: doc.mimeType,
+      name: doc.name,
+    };
   }
 
   async create(

@@ -26,7 +26,7 @@ the generated audit is the current route inventory source of truth.
 | P0 | `/dashboard` | App | Trustee overview, next actions, empty states, and responsive dashboard navigation. |
 | P0 | `/compliance` | App | Compliance year, simple/complex standards, progress language, and source posture. |
 | P0 | `/compliance/[principleId]` | App | Autosave, pending-save navigation guard, retry state, and evidence/explanation editing. |
-| P0 | `/documents` | App | Upload, linked standards, signed downloads, delete flow, and private-storage messaging. |
+| P0 | `/documents` | App | Upload, linked standards, authenticated API downloads, delete flow, and private-storage messaging. |
 | P0 | `/deadlines` | App | Auto/manual deadlines, profile-triggered prompts, completion toggles, and delete confirmation. |
 | P0 | `/board` | App | Trustee register, induction/conduct evidence prompts, mobile cards, and edit states. |
 | P0 | `/registers` | App | Complete-plan gate, conflicts, risks, complaints, fundraising, annual report, and financial controls. |

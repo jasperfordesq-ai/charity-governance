@@ -76,6 +76,26 @@ enum BillingCheckoutAttemptStatus {
   COMPLETED
 }
 
+enum BillingAuthorityGrantKind {
+  CHECKOUT
+  PORTAL
+}
+
+enum BillingAuthorityGrantState {
+  CLAIMED
+  PROVIDER_STARTED
+  CAPABILITY_ISSUED
+  RELEASED
+}
+
+enum BillingAuthorityGrantReleaseReason {
+  PROVIDER_CONFIRMED_NOT_ISSUED
+  PROVIDER_CAPABILITY_REVOKED
+  PROVIDER_CAPABILITY_TERMINAL
+  CHECKOUT_SAFE_RELEASE_AFTER_ELAPSED
+  RESTRICTED_OPERATOR_ATTESTATION
+}
+
 enum DocumentCategory {
   CONSTITUTION
   POLICY
@@ -147,6 +167,8 @@ enum AuthSessionRevocationReason {
   MEMBER_REMOVED
   ADMIN_SESSION_REVOKED
   ADMIN_ALL_SESSIONS_REVOKED
+  USER_SESSION_REVOKED
+  USER_ALL_SESSIONS_REVOKED
   OWNERSHIP_CHANGED
   ORGANISATION_INACTIVE
   LEGACY_UNSPECIFIED
@@ -249,6 +271,7 @@ model Organisation {
   deadlineReminderLogs        DeadlineReminderLog[]
   subscription                Subscription?
   billingCheckoutAttempt      BillingCheckoutAttempt?
+  billingAuthorityGrants      BillingAuthorityGrant[]
   securityAuditEvents         SecurityAuditEvent[]
 
   createdAt DateTime @default(now())
@@ -279,6 +302,7 @@ model User {
   sentInvites                  TeamInvite[]          @relation("InvitedBy")
   reminderLogs                 DeadlineReminderLog[]
   authSessions                 AuthSession[]
+  billingAuthorityGrants       BillingAuthorityGrant[] @relation("BillingAuthorityActor")
   securityAuditEventsAsActor   SecurityAuditEvent[]  @relation("SecurityAuditActor")
   securityAuditEventsAsSubject SecurityAuditEvent[]  @relation("SecurityAuditSubject")
 
@@ -294,6 +318,7 @@ model AuthSession {
   id               String                       @id @default(cuid())
   userId           String
   user             User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingAuthorityGrants BillingAuthorityGrant[] @relation("BillingAuthoritySession")
   refreshTokenHash String                       @unique
   familyId         String                       @default(uuid()) @db.Uuid
   familyCreatedAt  DateTime                     @default(now())
@@ -306,9 +331,39 @@ model AuthSession {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@unique([id, userId])
   @@index([userId, revokedAt, expiresAt, id])
   @@index([userId, familyCreatedAt, familyId])
   @@index([expiresAt])
+}
+
+model BillingAuthorityGrant {
+  id                     String                             @id @default(uuid()) @db.Uuid
+  organisationId         String
+  organisation           Organisation                       @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kind                   BillingAuthorityGrantKind
+  actorUserId            String
+  actorUser              User                               @relation("BillingAuthorityActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  actorSessionId         String
+  actorSession           AuthSession                        @relation("BillingAuthoritySession", fields: [actorSessionId, actorUserId], references: [id, userId], onDelete: Restrict, onUpdate: Restrict)
+  actorMembershipVersion Int
+  state                  BillingAuthorityGrantState         @default(CLAIMED)
+  providerResourceId     String?                            @unique
+  safeReleaseAfter       DateTime?
+  claimedAt              DateTime                           @default(now())
+  providerStartedAt      DateTime?
+  capabilityIssuedAt     DateTime?
+  releasedAt             DateTime?
+  releaseReason          BillingAuthorityGrantReleaseReason?
+  releaseActor           String?
+  releaseEvidence        Json?
+  createdAt              DateTime                           @default(now())
+  updatedAt              DateTime                           @default(now()) @updatedAt
+
+  @@index([organisationId, state, id])
+  @@index([actorUserId, state, id])
+  @@index([actorSessionId, state, id])
+  @@index([safeReleaseAfter, state, id])
 }
 
 model SecurityAuditEvent {
@@ -320,6 +375,7 @@ model SecurityAuditEvent {
   actorUserId      String?
   actorUser        User?                  @relation("SecurityAuditActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
   actorLabel       String
+  subjectLabel     String
   subjectUserId    String?
   subjectUser      User?                  @relation("SecurityAuditSubject", fields: [subjectUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
   subjectSessionId String?

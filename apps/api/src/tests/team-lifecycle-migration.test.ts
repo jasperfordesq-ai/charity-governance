@@ -6,6 +6,10 @@ const migration = readFileSync(
   new URL('../../prisma/migrations/20260711030000_add_team_lifecycle_security/migration.sql', import.meta.url),
   'utf8',
 );
+const subjectLabelMigration = readFileSync(
+  new URL('../../prisma/migrations/20260711180000_add_security_audit_subject_label_snapshot/migration.sql', import.meta.url),
+  'utf8',
+);
 const schema = readFileSync(new URL('../../prisma/schema.prisma', import.meta.url), 'utf8');
 const seed = readFileSync(new URL('../../prisma/seed.ts', import.meta.url), 'utf8');
 const databaseSafety = readFileSync(
@@ -16,6 +20,11 @@ const backup = readFileSync(
   new URL('../../../../scripts/postgres-backup.mjs', import.meta.url),
   'utf8',
 );
+
+test('P0-07 lifecycle migration is atomic under Prisma Migrate', () => {
+  assert.match(migration, /^\s*(?:--[^\r\n]*(?:\r?\n|$)\s*)*BEGIN\s*;/i);
+  assert.match(migration, /COMMIT;\s*$/i);
+});
 
 test('P0-07 migration fails closed on ambiguous owners and invitations before schema mutation', () => {
   const preflightEnd = migration.indexOf('CREATE TYPE "OrganisationLifecycleStatus"');
@@ -55,6 +64,32 @@ test('P0-07 security evidence is tenant-scoped, bounded, append-only, and soft-r
   assert.match(migration, /CREATE TRIGGER "SecurityAuditEvent_append_only"/);
   assert.match(migration, /CREATE TRIGGER "User_soft_removal_only"/);
   assert.doesNotMatch(migration, /ON TRUNCATE/i);
+});
+
+test('P0-07 subject labels are forward-migrated as bounded immutable snapshots with safe backfill', () => {
+  assert.match(schema, /model SecurityAuditEvent[\s\S]*subjectLabel\s+String/);
+  assert.match(subjectLabelMigration, /^--[\s\S]*BEGIN;/);
+  assert.match(subjectLabelMigration, /ADD COLUMN "subjectLabel" TEXT/);
+  assert.match(subjectLabelMigration, /LEFT JOIN "User" AS subject_user/);
+  assert.match(subjectLabelMigration, /LEFT JOIN "TeamInvite" AS invite/);
+  assert.match(subjectLabelMigration, /DISABLE TRIGGER "SecurityAuditEvent_append_only"[\s\S]*ENABLE TRIGGER "SecurityAuditEvent_append_only"/);
+  assert.match(subjectLabelMigration, /ALTER COLUMN "subjectLabel" SET NOT NULL/);
+  assert.match(subjectLabelMigration, /SecurityAuditEvent_subject_label_check/);
+  assert.match(subjectLabelMigration, /CHAR_LENGTH\("subjectLabel"\) BETWEEN 1 AND 160/);
+  assert.match(subjectLabelMigration, /"subjectLabel" !~ '\[\[:cntrl:\]\]'/);
+  assert.equal(
+    (subjectLabelMigration.match(/BTRIM\s*\(\s*LEFT\s*\(/g) ?? []).length,
+    4,
+    'every bounded migration fallback must trim again after truncation',
+  );
+  assert.doesNotMatch(subjectLabelMigration, /NULLIF\(LEFT\(BTRIM/);
+  assert.match(subjectLabelMigration, /COMMIT;/);
+});
+
+test('P0-07 security evidence permits normalized LF while rejecting every other control character', () => {
+  assert.match(migration, /"reason" = BTRIM\("reason", ' ' \|\| CHR\(10\)\)/);
+  assert.match(migration, /REPLACE\("reason", CHR\(10\), ''\) !~ '\[\[:cntrl:\]\]'/);
+  assert.doesNotMatch(migration, /AND "reason" !~ '\[\[:cntrl:\]\]'/);
 });
 
 test('P0-07 operational paths know about the owner transaction and immutable audit table', () => {

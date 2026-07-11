@@ -10,7 +10,6 @@ const releaseRunScriptPath = join(scriptsDir, 'production-release-run-evidence.m
 const capturedAt = '2026-06-08T12:00:00.000Z';
 const commitSha = 'b'.repeat(40);
 const workflowRunUrl = 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789';
-const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 
 async function loadReleaseRunChecker() {
   assert.ok(existsSync(releaseRunScriptPath), 'production release run checker must exist');
@@ -35,7 +34,6 @@ function launchEvidence(overrides = {}) {
         webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'a'.repeat(64)}`,
         migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'a'.repeat(64)}`,
         webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-        webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
       },
       ...overrides,
     },
@@ -79,7 +77,6 @@ function releaseDigestManifest(overrides = {}) {
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'a'.repeat(64)}`,
     CHARITYPILOT_DATABASE_COMPATIBILITY: 'p006-deadline-calendar-v1',
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 
@@ -147,7 +144,6 @@ test('production release run checker verifies GitHub workflow metadata and diges
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:/);
     assert.match(result.stdout, /ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:/);
     assert.match(result.stdout, /webBuildNextPublicApiUrl=https:\/\/api\.charitypilot\.ie/);
-    assert.match(result.stdout, /webBuildNextPublicSupabaseUrl=https:\/\/xjvdkmqbtczrnlqpswfa\.supabase\.co/);
     assert.equal(seenRequests.length, 3);
     assert.equal(seenRequests[0].options.headers.authorization, 'Bearer ghp_not_printed_token');
     assert.equal(seenRequests[2].options.headers.authorization, 'Bearer ghp_not_printed_token');
@@ -210,39 +206,6 @@ test('production release run checker emits redacted machine-readable JSON', asyn
     assert.equal(payload.releaseBinding.webBuildNextPublicApiUrl, 'https://api.charitypilot.ie');
     assert.deepEqual(payload.issues, []);
     assert.doesNotMatch(result.stdout + result.stderr, /ghp_not_printed_token/);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
-
-test('production release run checker rejects sample Supabase release binding before GitHub calls', async () => {
-  const { runProductionReleaseRunEvidenceFromArgs } = await loadReleaseRunChecker();
-  const { tempDir, evidencePath } = writeEvidenceFile(launchEvidence({
-    imageDigestManifest: {
-      apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'a'.repeat(64)}`,
-      webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'a'.repeat(64)}`,
-      migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'a'.repeat(64)}`,
-      webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-      webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
-    },
-  }));
-  let fetched = false;
-
-  try {
-    const result = await runProductionReleaseRunEvidenceFromArgs(['--evidence-file', evidencePath], {
-      fetchImpl: async () => {
-        fetched = true;
-        return response(500, {});
-      },
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(fetched, false, 'checker must reject sample release bindings before GitHub calls');
-    assert.match(
-      result.stderr,
-      /release.imageDigestManifest.webBuildNextPublicSupabaseUrl must not use a sample Supabase project ref/,
-    );
-    assert.doesNotMatch(result.stderr, /configured-project/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

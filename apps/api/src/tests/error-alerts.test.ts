@@ -49,8 +49,8 @@ async function buildErrorApp() {
     try {
       throw new AppError(
         500,
-        'STORAGE_SIGNED_URL_FAILED',
-        'Failed to generate signed URL: provider-secret',
+        'STORAGE_DOWNLOAD_FAILED',
+        'Failed to download file: provider-secret',
       );
     } catch (err) {
       handleError(reply, err);
@@ -185,7 +185,7 @@ test('caught route 5xx errors are sanitized and still send alert webhooks', { co
     assert.equal(alertCalls.length, 1);
     assert.equal(alertCalls[0].url, 'https://alerts.charitypilot.ie/hooks/charitypilot');
     assert.equal(alertCalls[0].body.statusCode, 500);
-    assert.equal(alertCalls[0].body.code, 'STORAGE_SIGNED_URL_FAILED');
+    assert.equal(alertCalls[0].body.code, 'STORAGE_DOWNLOAD_FAILED');
     assert.equal(alertCalls[0].body.method, 'GET');
     assert.equal(alertCalls[0].body.url, '/caught-provider-error');
     assert.equal(alertCalls[0].body.errorName, 'AppError');

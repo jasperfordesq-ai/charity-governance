@@ -42,9 +42,8 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `API_URL` | API/dev | Self-reference for local links (`.env.example:24`); also in Turbo `globalEnv` (`turbo.json:8`) | Not enforced by `validateProductionEnv` |
 | `NEXT_PUBLIC_API_URL` | web (browser) + API validation | Canonical production API origin baked into the web build: `https://api.charitypilot.ie`; HTTPS and origin-only (`apps/api/src/utils/env.ts`) | Yes |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | web | Stripe.js publishable key (`.env.example:31`, `turbo.json:23`) | Not enforced by the API validator (browser-side) |
-| `NEXT_PUBLIC_SUPABASE_URL` | web | Public Supabase project URL for the browser (`.env.production.example:59`) | Not enforced by the API validator |
-| `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` / `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` | Docker Compose | Map the public values into the web runtime; API value must be `https://api.charitypilot.ie` and must match the `NEXT_PUBLIC_API_URL` value (`.env.production.example`) | Compose-time, deployment-specific |
-| `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL` / `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL` | deploy preflight | Prove the published web image was built for the promoted public origins (`.env.production.example:70-72`) | Deployment-specific |
+| `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` | Docker Compose | Maps the canonical API origin into the web runtime; it must be `https://api.charitypilot.ie` and match `NEXT_PUBLIC_API_URL` | Compose-time, deployment-specific |
+| `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL` | deploy preflight | Proves the published web image was built for the promoted public API origin | Deployment-specific |
 
 ### Stripe (billing)
 
@@ -72,10 +71,16 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | Var | Purpose | Required in production? |
 | --- | --- | --- |
 | `SUPABASE_URL` | Supabase project URL; HTTPS and a public (non-local) host (`apps/api/src/utils/env.ts:449`) | Yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-side key for signed download URLs (`apps/api/src/utils/env.ts:450`) | Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key for private-bucket upload, authenticated proxy download, deletion, and readiness checks | Yes |
 | `SUPABASE_STORAGE_BUCKET` | Private bucket name; defaults to `documents` at read time (`apps/api/src/utils/env.ts:451`, `apps/api/src/services/storage.service.ts:13-15`) | Yes |
 | `DOCUMENT_STORAGE_DRIVER` | Selects storage backend; `local` switches to filesystem storage (`apps/api/src/services/storage.service.ts:17-19`) | No — production uses the Supabase driver |
 | `LOCAL_FILE_STORAGE_DIR` | Filesystem root for the local driver; defaults to `.charitypilot-local-storage/documents` (`apps/api/src/services/storage.service.ts:21-23`) | No (dev only) |
+| `STORAGE_DOWNLOAD_TIMEOUT_MS` | Bounds authenticated Supabase byte-proxy downloads, including response-body reads; defaults to 10000 ms and accepts 100-60000 ms | No |
+
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` are
+server-only. They are supplied to API and storage-cleanup/scheduler runtimes,
+never the web image or browser. Document bytes cross the browser boundary only
+through the authenticated CharityPilot API download route.
 
 ### Observability / readiness / scheduler
 

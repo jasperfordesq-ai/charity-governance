@@ -1,10 +1,10 @@
 # Data Model Reference
 
-CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 25 models and 19 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
+CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 27 models and 28 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
 
 ## Migration history
 
-The schema was built up across fifteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
+The schema was built up across eighteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
 
 | Migration directory | Purpose (inferred from name) |
 | --- | --- |
@@ -23,6 +23,9 @@ The schema was built up across fifteen migrations under `apps/api/prisma/migrati
 | `20260710064500_add_billing_checkout_attempts` | Stripe subscription facts and one active Checkout-attempt lease per organisation |
 | `20260710123000_add_compliance_revision_snapshots` | Compliance revisions, immutable approval snapshots, append-only audit history, and truthful legacy-approval invalidation |
 | `20260710190000_add_deadline_calendar_lifecycle` | Exact civil-date calendar facts, confirmed legal evidence, versioned generated deadlines, and concurrent reminder-attempt lifecycle |
+| `20260711030000_add_team_lifecycle_security` | Organisation/member lifecycle versions, rotating-session families and revocation reasons, exactly-one-owner constraints, and append-only security audit events |
+| `20260711120000_add_billing_authority_grants` | Session/version-bound Checkout and Portal authority, immutable provider evidence, and ownership/lifecycle interlocks |
+| `20260711180000_add_security_audit_subject_label_snapshot` | Immutable bounded subject-label snapshots with safe historical backfill |
 
 A `seed.ts` script also lives at `apps/api/prisma/seed.ts`.
 
@@ -42,12 +45,20 @@ All enums are declared at the top of the schema.
 | `SubscriptionPlan` | `ESSENTIALS`, `COMPLETE` | `Subscription.plan` |
 | `SubscriptionStatus` | `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED` | `Subscription.status` |
 | `BillingCheckoutAttemptStatus` | `PENDING`, `SESSION_CREATED`, `COMPLETED` | `BillingCheckoutAttempt.status` |
+| `BillingAuthorityGrantKind` | `CHECKOUT`, `PORTAL` | `BillingAuthorityGrant.kind` |
+| `BillingAuthorityGrantState` | `CLAIMED`, `PROVIDER_STARTED`, `CAPABILITY_ISSUED`, `RELEASED` | `BillingAuthorityGrant.state` |
+| `BillingAuthorityGrantReleaseReason` | provider not-issued/revoked/terminal, elapsed Checkout safe-release time, restricted operator attestation | `BillingAuthorityGrant.releaseReason` |
 | `DocumentCategory` | `CONSTITUTION`, `POLICY`, `BOARD_MINUTES`, `FINANCIAL_STATEMENT`, `INSURANCE`, `ANNUAL_REPORT`, `RISK_REGISTER`, `CODE_OF_CONDUCT`, `STRATEGIC_PLAN`, `OTHER` | `Document.category` |
 | `RegisterStatus` | `OPEN`, `MONITORING`, `CLOSED` | `RiskRecord`, `ComplaintRecord`, `FundraisingRecord` |
 | `ConflictStatus` | `DECLARED`, `MANAGED`, `CLOSED` | `ConflictRecord.status` |
 | `RiskCategory` | `GOVERNANCE`, `FINANCIAL`, `OPERATIONAL`, `LEGAL`, `SAFEGUARDING`, `REPUTATIONAL`, `FUNDRAISING`, `DATA_PROTECTION`, `OTHER` | `RiskRecord.category` |
 | `AnnualReportFilingStatus` | `NOT_STARTED`, `IN_PROGRESS`, `BOARD_APPROVED`, `FILED` | `AnnualReportReadiness.filingStatus` |
 | `UserRole` | `OWNER`, `ADMIN`, `MEMBER` | `User.role`, `TeamInvite.role` |
+| `OrganisationLifecycleStatus` | `ACTIVE`, `SUSPENDED`, `CLOSED` | `Organisation.lifecycleStatus` |
+| `UserLifecycleStatus` | `ACTIVE`, `SUSPENDED`, `REMOVED` | `User.lifecycleStatus` |
+| `AuthSessionRevocationReason` | logout, rotation/reuse/expiry, password/member/ownership/admin/user revocation reasons | `AuthSession.revocationReason` |
+| `SecurityAuditActorKind` | `USER`, `SUPPORT`, `SYSTEM` | `SecurityAuditEvent.actorKind` |
+| `SecurityAuditEventType` | member/invite/role/ownership/session security transitions | `SecurityAuditEvent.type` |
 | `DeadlineReminderStatus` | `RESERVED`, `SENDING`, `SENT`, `SKIPPED`, `FAILED`, `UNCERTAIN` | `DeadlineReminderLog.status` |
 | `DeadlineReminderReconciliationOutcome` | `ACCEPTED_CONFIRMED`, `NOT_ACCEPTED_CONFIRMED`, `UNKNOWN_ACKNOWLEDGED` | Immutable restricted-operator resolution of an `UNCERTAIN` attempt |
 | `GeneratedDeadlineKind` | `CHARITY_ANNUAL_REPORT`, `COMPANY_FINANCIAL_STATEMENTS`, `COMPANY_ANNUAL_MEMBER_ACTION`, `CRO_ANNUAL_RETURN`, `LEGACY_UNVERIFIED` | `Deadline.generatedKind` |
@@ -59,7 +70,7 @@ All enums are declared at the top of the schema.
 
 | Category | Models | Isolation key |
 | --- | --- | --- |
-| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `BoardMember`, `Document`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt` | `organisationId` |
+| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `BoardMember`, `Document`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt`, `BillingAuthorityGrant`, `SecurityAuditEvent` | `organisationId` |
 | **Global reference data** (shared across all tenants, no `organisationId`) | `GovernancePrinciple`, `GovernanceStandard` | none — read-only catalogue |
 | **Keyed differently** | `AuthSession` (by `userId`), `DocumentStandardLink` (by `documentId`/`standardId`), `DocumentStorageDeletion` and `ComplianceAuditEvent` (retain tenant identifiers as scalar history), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
 
@@ -70,6 +81,12 @@ Notes on the differently-keyed models:
 - **`DocumentStorageDeletion`** (`apps/api/prisma/schema.prisma:325-339`) stores `organisationId` as a plain string column with no relation back to `Organisation` — it is a background deletion queue keyed by `storagePath`, so the row can outlive the parent organisation row.
 - **`ComplianceAuditEvent`** stores organisation, actor and entity identifiers as scalar historical facts rather than cascading relations. Removing a user must not erase who changed governance evidence. Retention and eventual erasure policy still require external privacy/legal approval before production use.
 - **`StripeWebhookEvent`** (`apps/api/prisma/schema.prisma:581-588`) is entirely global; its `id` is the Stripe event ID and the row exists purely for webhook idempotency.
+- **`BillingAuthorityGrant`** uses composite tenant/actor and actor/session foreign
+  keys. It is append-only after release and has a partial unique index allowing
+  at most one unresolved provider capability per organisation.
+- **`SecurityAuditEvent`** is organisation-scoped and append-only. Actor and
+  subject relations use composite tenant keys with restrictive deletion so
+  lifecycle history cannot be erased by a later membership action.
 
 ## Models
 
@@ -93,12 +110,15 @@ The tenant root in `apps/api/prisma/schema.prisma`.
 | `memberCount` | `Int?` | Database check permits null or an integer of at least 1 |
 | `registeredAddress`, `contactEmail`, `contactPhone`, `website` | `String?` | |
 | `stripeCustomerId` | `String? @unique` | links to the organisation's metadata-verified Stripe customer |
+| `lifecycleStatus` | `OrganisationLifecycleStatus` | active by default; suspended/closed organisations cannot authenticate or accept invitations |
+| `lifecycleChangedAt`, `lifecycleVersion` | `DateTime`, `Int` | database-managed optimistic lifecycle evidence |
 | `createdAt` / `updatedAt` | `DateTime` | |
 
 Has-many relations to nearly every org-scoped model, including immutable
 `complianceApprovalSnapshots`, plus one-to-one optional
 `subscription` (`Subscription?`) and `billingCheckoutAttempt`
-(`BillingCheckoutAttempt?`) relations. Deleting an organisation cascades its
+(`BillingCheckoutAttempt?`) relations, plus billing-authority grants and
+append-only security events. Deleting an organisation cascades its
 Checkout-attempt lease; the subscription relation retains Prisma's default
 referential action.
 
@@ -119,10 +139,12 @@ causes dependent current generated deadlines to be superseded.
 | `role` | `UserRole` | `@default(MEMBER)` |
 | `organisationId` | `String` | FK → `Organisation` (no explicit `onDelete`, defaults to restrict) |
 | `emailVerified` | `Boolean` | `@default(false)` |
+| `lifecycleStatus` | `UserLifecycleStatus` | `ACTIVE` by default; suspension/removal denies every session-backed request |
+| `membershipChangedAt`, `membershipVersion` | `DateTime`, `Int` | database-managed version for role/lifecycle/tenant changes |
 | `resetToken`, `verifyToken` | `String? @unique` | password reset / email verification tokens |
 | `resetTokenExpiry`, `verifyTokenExpiry` | `DateTime?` | |
 
-Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `documentUploads`, `sentInvites`, plus `reminderLogs` and `authSessions`. Composite uniqueness on `(id, organisationId)` lets reminder recipients be constrained to the same tenant; `@@index([organisationId])` supports tenant-scoped user lookups.
+Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `documentUploads`, `sentInvites`, plus `reminderLogs`, `authSessions`, billing-authority grants, and security-audit actor/subject links. Composite uniqueness on `(id, organisationId)` constrains tenant-bound relations. A partial unique index plus deferred continuity trigger enforce exactly one active owner per organisation, and membership triggers increment the version and reject hard deletion.
 
 ### AuthSession
 `apps/api/prisma/schema.prisma:178-191` — refresh-token store for rotating JWT sessions.
@@ -132,10 +154,52 @@ Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `document
 | `id` | `String` | `@id @default(cuid())` |
 | `userId` | `String` | FK → `User`, `onDelete: Cascade` |
 | `refreshTokenHash` | `String @unique` | hashed refresh token |
+| `familyId`, `familyCreatedAt` | `UUID`, `DateTime` | one rotating refresh-token family, retained across successors |
+| `deviceLabel` | `String?` | bounded display hint for session management; never trusted as identity |
 | `expiresAt` | `DateTime` | |
 | `revokedAt` | `DateTime?` | |
+| `revocationReason` | `AuthSessionRevocationReason?` | immutable reason paired with revocation time |
 
-Indexes: `@@index([userId])` and `@@index([expiresAt])` (`apps/api/prisma/schema.prisma:189-190`) — the latter supports purging expired sessions. Deleting a `User` cascades its sessions.
+Composite uniqueness on `(id, userId)` lets billing authority prove that its session belongs to its actor. Indexes support active-session, expiry, and family lookups. Database triggers require an active principal at insert time and make session identity and revocation evidence one-way and immutable.
+
+### BillingAuthorityGrant
+
+An append-only authority ledger for provider-hosted Checkout and Billing Portal
+capabilities.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | `UUID` | primary key generated by PostgreSQL |
+| `organisationId` | `String` | restrictive FK to the tenant |
+| `kind`, `state` | `BillingAuthorityGrantKind`, `BillingAuthorityGrantState` | one unresolved grant per organisation |
+| `actorUserId`, `actorSessionId`, `actorMembershipVersion` | `String`, `String`, `Int` | composite tenant/session binding to the exact active owner principal |
+| `providerResourceId` | `String? @unique` | immutable Checkout/Portal provider resource once known |
+| `safeReleaseAfter` | `DateTime?` | Checkout only; never used to time-release Portal authority |
+| `claimedAt`, `providerStartedAt`, `capabilityIssuedAt` | `DateTime` / nullable | monotonic provider timeline evidence |
+| `releasedAt`, `releaseReason`, `releaseActor`, `releaseEvidence` | nullable terminal tuple | required together in `RELEASED`; immutable after release |
+
+Database checks constrain every state/evidence combination and transition.
+Triggers validate that a new grant belongs to the current active owner and live
+session, reject deletion or evidence rewrites, and interlock owner membership
+and organisation lifecycle changes while a grant is unresolved.
+
+### SecurityAuditEvent
+
+Immutable team-security and governance evidence.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `organisationId` | `String` | tenant root; included in composite actor/subject relations |
+| `type` | `SecurityAuditEventType` | invite, member, role, ownership, or session event |
+| `actorKind` | `SecurityAuditActorKind` | user, restricted support operator, or system |
+| `actorUserId`, `actorLabel` | nullable id plus bounded label | support/system events do not fabricate a user |
+| `subjectUserId`, `subjectSessionId` | nullable identifiers | affected membership or session family where applicable |
+| `subjectLabel` | bounded non-empty string | immutable human-readable subject snapshot retained even if a user or invitation later changes |
+| `reason`, `context`, `requestId`, `occurredAt` | evidence fields | bounded human reason and structured immutable context |
+
+Insert checks enforce actor-kind consistency and tenant-safe actor/subject
+relations. Update and delete triggers always reject; UI responses use a
+privacy-minimised projection rather than exposing raw evidence identifiers.
 
 ### GovernancePrinciple
 `apps/api/prisma/schema.prisma:193-201` — global reference data (the governance code's principles).
@@ -563,6 +627,9 @@ The schema declares explicit referential actions only where deletion semantics m
 | `TeamInvite.invitedBy` → `User` | `SetNull` | invite retained, `invitedById` nulled |
 | `DeadlineReminderLog.user` → `User` | `Restrict` | tenant-scoped reminder history blocks user deletion until an explicit retention/offboarding decision is applied |
 | `BillingCheckoutAttempt.organisation` → `Organisation` | `Cascade` | short-lived Checkout lease deleted with the organisation |
+| `BillingAuthorityGrant.organisation` → `Organisation` | `Restrict` | unresolved or historical provider authority must be explicitly retained/released |
+| `BillingAuthorityGrant.actorUser` / `.actorSession` | `Restrict` | principal evidence cannot be erased while the grant remains |
+| `SecurityAuditEvent.organisation` / actor / subject | `Restrict` | security history survives lifecycle changes and soft removal |
 
 ## Entity-relationship diagram — tenant root
 
@@ -586,7 +653,11 @@ erDiagram
     Organisation ||--o{ DeadlineReminderLog : "has"
     Organisation ||--o| Subscription : "has one"
     Organisation ||--o| BillingCheckoutAttempt : "has one current attempt"
+    Organisation ||--o{ BillingAuthorityGrant : "retains provider authority"
+    Organisation ||--o{ SecurityAuditEvent : "records security history"
     User ||--o{ AuthSession : "owns"
+    User ||--o{ BillingAuthorityGrant : "claims"
+    AuthSession ||--o{ BillingAuthorityGrant : "binds"
     BoardMember ||--o{ ConflictRecord : "named in"
     Deadline ||--o{ DeadlineReminderLog : "logs"
 ```
@@ -608,6 +679,7 @@ erDiagram
 - [Module & Dependency Graph](02-module-dependency-graph.md) — which services read and write each model.
 - [Governance Domain Model](08-governance-domain.md) — the semantics of the governance and register models.
 - [Billing & Subscription Flow](05-billing.md) — the Subscription,
-  BillingCheckoutAttempt, and StripeWebhookEvent models in context.
+  BillingCheckoutAttempt, BillingAuthorityGrant, and StripeWebhookEvent models in context.
 - [Request Lifecycle, Middleware & Auth](04-request-lifecycle.md) — the AuthSession model and how it is used.
+- [Team Lifecycle and Session Security](../team-lifecycle-security.md) — lifecycle, owner continuity, session revocation, and security audit invariants.
 - [System Overview](01-system-overview.md) — where PostgreSQL/Prisma sits in the topology.

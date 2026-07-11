@@ -20,7 +20,6 @@ const releaseImagePatterns = Object.freeze({
   webImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-web@sha256:[a-f0-9]{64}$/,
   migrationImage: /^ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:[a-f0-9]{64}$/,
 });
-const sampleSupabaseProjectRefPattern = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
 function usage() {
   return 'Usage: node scripts/production-launch-evidence-status.mjs [--json] [--evidence-file <path>]\n';
@@ -101,25 +100,15 @@ function evidenceText(entries) {
     : '';
 }
 
-function mergeEvidenceHints(areaId, checkId, storedHints) {
-  const merged = [];
-  const seen = new Set();
-  const defaultHints = defaultEvidenceHints(areaId, checkId);
-  const defaultHasRouteInventory = defaultHints.some((hint) =>
-    typeof hint === 'string' && hint.trim().startsWith('routes: '),
-  );
-  const effectiveStoredHints = defaultHasRouteInventory
-    ? storedHints.filter((hint) => !hint.trim().startsWith('routes: '))
-    : storedHints;
-
-  for (const hint of [...effectiveStoredHints, ...defaultHints]) {
-    if (typeof hint !== 'string') continue;
-    const trimmed = hint.trim();
-    if (trimmed.length === 0 || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    merged.push(trimmed);
-  }
-  return merged;
+function currentEvidenceHints(areaId, checkId, storedHints) {
+  const canonicalHints = defaultEvidenceHints(areaId, checkId);
+  const candidates = canonicalHints.length > 0 ? canonicalHints : storedHints;
+  return [...new Set(
+    candidates
+      .filter((hint) => typeof hint === 'string')
+      .map((hint) => hint.trim())
+      .filter((hint) => hint.length > 0),
+  )];
 }
 
 function finalApprovalProgressStatus(approval, releaseCommitSha) {
@@ -160,27 +149,6 @@ export function releaseBindingStatus(evidence) {
     if (typeof manifest.webBuildNextPublicApiUrl !== 'string' || manifest.webBuildNextPublicApiUrl !== 'https://api.charitypilot.ie') {
       missingFields.push('release.imageDigestManifest.webBuildNextPublicApiUrl');
     }
-    let supabaseUrlUsesSampleProjectRef = false;
-    if (typeof manifest.webBuildNextPublicSupabaseUrl === 'string') {
-      try {
-        const url = new URL(manifest.webBuildNextPublicSupabaseUrl);
-        const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
-        if (hostname.endsWith('.supabase.co')) {
-          supabaseUrlUsesSampleProjectRef = sampleSupabaseProjectRefPattern.test(
-            hostname.slice(0, -'.supabase.co'.length),
-          );
-        }
-      } catch {
-        // The existing shape check below reports the field path.
-      }
-    }
-    if (
-      typeof manifest.webBuildNextPublicSupabaseUrl !== 'string' ||
-      !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(manifest.webBuildNextPublicSupabaseUrl) ||
-      supabaseUrlUsesSampleProjectRef
-    ) {
-      missingFields.push('release.imageDigestManifest.webBuildNextPublicSupabaseUrl');
-    }
   }
 
   return {
@@ -219,7 +187,7 @@ export function summarizeEvidence(evidence) {
         const storedHints = Array.isArray(actualCheck?.requiredEvidenceHints)
           ? actualCheck.requiredEvidenceHints.filter((hint) => typeof hint === 'string' && hint.trim().length > 0)
           : [];
-        const hints = mergeEvidenceHints(area.id, check.id, storedHints);
+        const hints = currentEvidenceHints(area.id, check.id, storedHints);
         incompleteChecks.push(`${path} (${status})`);
         incompleteCheckDetails.push({
           path,

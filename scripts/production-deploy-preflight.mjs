@@ -31,10 +31,6 @@ const requiredWebBuildOrigins = [
     envName: 'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL',
     expectedEnvName: 'NEXT_PUBLIC_API_URL',
   },
-  {
-    envName: 'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
-    expectedEnvName: 'NEXT_PUBLIC_SUPABASE_URL',
-  },
 ];
 
 const cosignIdentityRegex = '^https://github.com/jasperfordesq-ai/charity-governance/\\.github/workflows/release-images\\.yml@refs/(heads/master|tags/v.*)$';

@@ -12,10 +12,12 @@ focused, source-grounded reference under [`docs/architecture/`](architecture/). 
 non-trivial claim in those documents carries a `file:line` citation and was
 independently fact-checked; the diagrams are GitHub-renderable Mermaid.
 
-> **Verification:** the map was written and fact-checked against commit `7fcd404` on
-> 2026-06-20. 638 code citations and all inter-document links were validated
-> mechanically (file exists, line in range, link resolves). If you change the code,
-> re-run the same checks before trusting a citation.
+> **Verification:** the base map was written and mechanically fact-checked against
+> commit `7fcd404` on 2026-06-20. Security-remediation sections have changed since
+> that snapshot; current behavior is described in the linked lifecycle, billing,
+> and storage references, but old line-number citations can drift. Re-run the
+> documentation checks for the final release ref before treating every citation as
+> release evidence.
 
 ## Component diagram
 
@@ -52,7 +54,7 @@ flowchart TD
 
     Routes --> Services
     Services -->|"SQL via Prisma client"| DB
-    Services -->|"upload / signed URLs / delete (REST)"| Supabase
+    Services -->|"upload / authenticated byte reads / delete (REST)"| Supabase
     Services -->|"subscriptions + webhooks (REST)"| Stripe
     Services -->|"transactional email (REST)"| Resend
 
@@ -77,11 +79,17 @@ path — is in [System Overview](architecture/01-system-overview.md)._
 | 3 | [Data Model Reference](architecture/03-data-model.md) | All 22 Prisma models, key fields, relations, enums, the `organisationId` tenant-isolation pattern, composite unique constraints, indexes and cascade behaviour. |
 | 4 | [Request Lifecycle, Middleware & Auth](architecture/04-request-lifecycle.md) | The Fastify plugin/middleware pipeline in order, and the auth/session model (cookie JWT access token + hashed rotating refresh sessions). |
 | 5 | [Billing & Subscription Flow](architecture/05-billing.md) | Stripe tiers and price IDs, checkout/portal, webhook handling and idempotency, the subscription status model, and feature gating. |
-| 6 | [Document Storage Flow](architecture/06-document-storage.md) | Supabase private bucket vs local filesystem driver, signed URLs, upload/download, and the deletion-reconciliation model. |
+| 6 | [Document Storage Flow](architecture/06-document-storage.md) | Supabase private bucket vs local filesystem driver, authenticated proxy downloads, and the deletion-reconciliation model. |
 | 7 | [Reminder Scheduler & Jobs](architecture/07-reminder-scheduler.md) | In-process cron vs standalone jobs, the reminder logic, catch-up on missed runs, dedup keying and at-least-once semantics. |
 | 8 | [Governance Domain Model](architecture/08-governance-domain.md) | Principles → standards → compliance records → sign-off, plus the conflict/risk/complaint/fundraising/annual-report/financial-control registers. |
 | 9 | [Frontend Architecture](architecture/09-frontend.md) | App-router route groups, the API client and same-origin proxy, auth/session handling and single-flight refresh, and client-side plan gating. |
 | 10 | [Configuration, Environment & the Two-Gate Model](architecture/10-config-and-env.md) | The full env-var surface, what `validateProductionEnv` enforces, and the code-gate vs launch-gate model. |
+
+Security-sensitive operator references:
+
+- [Team Lifecycle and Session Security](team-lifecycle-security.md)
+- [Restricted Team Ownership Recovery](team-ownership-recovery.md)
+- [Restricted Billing Authority Reconciliation](billing-authority-reconciliation.md)
 
 > **Dependency inventory:** [`docs/DEPENDENCIES.md`](DEPENDENCIES.md) lists the
 > production dependencies per workspace and the rationale behind each `overrides`

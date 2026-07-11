@@ -152,6 +152,30 @@ The detailed issue contract remains in
   `29136095002` and managed E2E run `29136095004`, with the latter reporting
   `97 / 97` ordinary passes in `3.2m` and no flaky tests. Professional rule
   review remains external launch evidence.
+- **P0-07 team lifecycle, session families, billing-authority interlocks, and
+  authenticated document delivery - `LOCALLY_VERIFIED`.** Team members now
+  have explicit lifecycle state, optimistic versions, suspend/remove/reactivate
+  operations, bounded session-family inventory and revocation, immutable audit
+  subject snapshots, exact-one-owner database protection, serializable ownership
+  transfer, and a restricted dry-run-first recovery job. Invitation acceptance
+  transactionally rechecks lifecycle and subscription access. Refresh/replay/
+  logout use ordered family locks so a successor cannot survive a logout race
+  and unrelated device families are not over-revoked. Durable Checkout/Portal
+  authority grants prevent ownership changes while provider capability is
+  unresolved, and provider-start ambiguity cannot be request-locally released.
+  Documents are delivered as authenticated API-proxied bytes with post-storage
+  session revalidation, bounded I/O, exact storage-path enforcement, and no
+  provider URL or object key in the browser. Local evidence is API `658 / 658`,
+  web `335 / 335`, shared `40 / 40`, production tooling `545 / 545`, local-Docker
+  tooling `44 / 44`, reliability `395 / 395` covered links across `415`
+  guarantees, web lint, Prisma validation, and security scans across `576`
+  files. The live PostgreSQL upgrade fixture passed lifecycle, owner,
+  session-family, tenant, immutable-audit, and fail-closed rollback probes.
+  Managed proof passed `113 / 113` isolation contracts, all `18`
+  migrations, the real logout-vs-refresh race, the Team/Billing scenarios, and
+  a fresh production-build document upload/download journey, with exact
+  zero-residue teardown. This checkpoint is not yet `CI_VERIFIED`: the pending
+  implementation commit must pass exact-SHA GitHub CI and managed E2E first.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -194,11 +218,11 @@ Local personal-use safety before heavy work:
 Known current state from `npm run launch:status -- --json` on 2026-07-10:
 
 - Phase: `ENV_INCOMPLETE`
-- `.env.production` exists but still has 20 values needing real production data.
-- Production values complete: `9 / 29`.
+- `.env.production` exists but still has 17 values needing real production data.
+- Production values complete: `9 / 26`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
-- Machine-readable launch evidence completion: `9 / 87`.
-- Strict counted launch gates: `18 / 121` complete (`14.9%`), counting only production values, launch evidence checks, and final signoff roles.
+- Machine-readable launch evidence completion: `9 / 86`.
+- Strict counted launch gates: `18 / 117` complete (`15.4%`), counting only production values, launch evidence checks, and final signoff roles.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
@@ -226,12 +250,11 @@ Known current state from `npm run launch:status -- --json` on 2026-07-10:
   production hosts unresolved from this workstation:
   `app.charitypilot.ie` and `api.charitypilot.ie`.
 - GitHub `production` environment variables currently include
-  `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`, but
-  `NEXT_PUBLIC_SUPABASE_URL` is still missing because the real Supabase project
-  ref has not been provided.
+  `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`. That is the only public
+  provider origin required by the web image; Supabase remains API/server-only.
 - `npm run check:production:github-env -- --environment=production` now verifies
-  the release-image GitHub environment without reading secret values; the latest
-  live run failed only because `NEXT_PUBLIC_SUPABASE_URL` is missing.
+  the release-image GitHub environment without reading secret values. Rerun it
+  before promotion; the obsolete public Supabase variable is no longer a gate.
 - `npm run check:production:github-secrets -- --environment=production` now
   verifies required GitHub `production` secret names without reading secret
   values when GitHub is the approved deployment secret store.
@@ -242,7 +265,7 @@ Known current state from `npm run launch:status -- --json` on 2026-07-10:
   `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
   `ERROR_ALERT_WEBHOOK_URL`.
 
-The 19 missing production values are:
+The 17 missing production values are:
 
 - `TRUSTED_PROXY_ADDRESSES`
 - `DATABASE_URL`
@@ -253,16 +276,14 @@ The 19 missing production values are:
 - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`
 - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`
 - `STRIPE_COMPLETE_YEARLY_PRICE_ID`
+- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`
 - `RESEND_API_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ERROR_ALERT_WEBHOOK_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`
 - `CHARITYPILOT_API_IMAGE`
 - `CHARITYPILOT_WEB_IMAGE`
 - `CHARITYPILOT_MIGRATION_IMAGE`
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`
 
 For release image promotion, `npm run launch:status` now also exposes the
 GitHub `production` environment variables required before `gh workflow run
@@ -270,7 +291,6 @@ release-images.yml --ref master` can produce the `release-image-digests.env`
 artifact:
 
 - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
-- `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co` (replace `<project-ref>` before running `release-images.yml`)
 
 Validate those non-secret GitHub `production` environment variables before
 running the image workflow:
@@ -391,7 +411,7 @@ Correct posture:
   is restricted to first purchase or provider-confirmed terminal restart;
   Stripe-managed changes are portal-only.
 - Document storage paths include UUIDs to avoid same-millisecond filename collisions.
-- Document file privacy is preserved through private storage and signed download URLs.
+- Document file privacy is preserved through private storage and authenticated API-proxy downloads with post-read session revalidation; storage capabilities never reach the browser.
 - Document metadata responses do not expose internal storage object keys.
 - Production error handling redacts sensitive values.
 - Alert webhook and production checker transcript redaction is in place.
@@ -467,7 +487,7 @@ The launch evidence model has been tightened substantially:
   - cross-browser coverage;
   - real iOS Safari or cloud-device proof;
   - full route inventory across desktop/mobile and light/dark.
-- Supabase evidence requires private bucket, signed URL behavior, backup/PITR evidence, restore-test owner/date/recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
+- Supabase evidence requires a private bucket, service-role upload/download and anonymous-denial proof, backup/PITR evidence, restore-test owner/date/recovery notes, an isolated restore target that is explicitly a non-production restore target, and confirmation that the production project was not overwritten.
 - Billing/email evidence requires Stripe webhook event proof, webhook-secret secret-store proof, Resend accepted-send proof, and production email-link origin proof.
 - Evidence chronology now allows the package to be prepared before evidence is collected, while requiring every checklist evidence entry to be captured no later than `finalSignoff.approvedAt`.
 - Deploy-smoke evidence hints now match the strict validator:
@@ -484,6 +504,20 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- P0-07 local verification (pending exact-SHA GitHub CI/E2E)
+  - Full suites passed on 2026-07-11: API `658 / 658`, web `335 / 335`, and
+    shared `40 / 40`.
+  - Production tooling passed `545 / 545`; local-Docker tooling passed
+    `44 / 44`; Prisma validation, web lint, and secret/SAST scans across `576`
+    files passed.
+  - The live P0-07 PostgreSQL upgrade fixture passed lifecycle, owner,
+    session-family, tenant, immutable-audit, and atomic rollback probes.
+  - The regenerated reliability ledger is green with `415` guarantees,
+    `395 / 395` covered links, and `20` explicit not-applicable rows.
+  - Focused managed proof passed the concurrent logout-vs-refresh invariant;
+    a fresh current-tree document run passed `113 / 113` isolation contracts,
+    the production build, all `18` migrations, and upload/download `1 / 1` in
+    Playwright. Both runs proved exact zero-residue teardown.
 - `npm run test:e2e`
   - Passed locally on 2026-07-10 for P0-06 with `113 / 113` isolation contracts
     and `97 / 97` live Playwright tests in `7.0m`; the cached production-image,
@@ -643,7 +677,7 @@ These require human/operator/provider access and must not be faked:
 1. Fill real production secrets/provider values in `.env.production` or an approved secret store.
 2. Configure production hosting, DNS, TLS, reverse proxy, and public HTTPS smoke evidence.
 3. Prove PostgreSQL production backup and restore before real charity data.
-4. Prove Supabase production private bucket, signed URL behavior, backup, and restore.
+4. Prove Supabase production private bucket, authenticated service-role read/anonymous-denial behavior, backup, and restore.
 5. Configure Stripe live products/prices/webhook.
 6. Configure Resend sender domain and live email evidence.
 7. Configure observability:
@@ -659,12 +693,12 @@ These require human/operator/provider access and must not be faked:
 9. Complete external penetration test.
 10. Remediate or formally accept pentest findings.
 11. Complete deployed browser QA and accessibility checks.
-12. Complete all 87 machine-readable launch evidence checks.
+12. Complete all 86 machine-readable launch evidence checks.
 13. Complete final engineering, operations, security, legal/compliance, and business signoffs.
 
 ### Launch Evidence Still Open
 
-The evidence ledger is currently `9 / 87`. Those completed checks are local/CI
+The evidence ledger is currently `9 / 86`. Those completed checks are local/CI
 release-gate basics only; they do not replace real production env validation,
 digest-pinned deployment, public HTTPS smoke, rollback, provider, backup/restore,
 deployed browser QA, legal, pentest, or final signoff evidence.
@@ -700,7 +734,7 @@ Required deployed QA must cover:
 - dashboard flow;
 - billing flow;
 - document upload;
-- signed download;
+- authenticated API download without a provider URL or object path;
 - logout;
 - error states;
 - accessibility;
@@ -779,15 +813,15 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 
 Strict launch evidence metric:
 
-- `78 / 87` machine-readable launch checks remain.
-- Strict counted launch gates are `18 / 121` complete, so `103 / 121`
+- `77 / 86` machine-readable launch checks remain.
+- Strict counted launch gates are `18 / 117` complete, so `99 / 117`
   counted gates remain. This is an operator progress metric only, not a legal,
   security, operations, or business readiness certification.
 - Strict launch evidence is still mostly incomplete because the remaining checks
   include the real production environment, deploy, rollback, provider,
   backup/restore, deployed QA, legal, pentest, and final signoff gates.
 - Final signoffs remain `0 / 5`.
-- Production values remain `9 / 29` complete, with 20 real provider/hosting/image-promotion values still missing.
+- Production values remain `9 / 26` complete, with 17 real provider/hosting/image-promotion values still missing.
 
 Whole-goal estimate:
 
@@ -801,4 +835,4 @@ Repo-side-only estimate:
 
 ## Final Rule For Future Agents
 
-Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 87 launch evidence checks, and all five final signoffs are complete and recorded.
+Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 86 launch evidence checks, and all five final signoffs are complete and recorded.

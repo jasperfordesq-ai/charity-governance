@@ -20,7 +20,7 @@ export function DocumentSummaryPanel({
             Keep board evidence close to the standard it supports.
           </h2>
           <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
-            Uploaded files are kept as private evidence until a signed download URL is requested.
+            Uploaded files stay private and are streamed only through an authenticated download.
             Link documents to standards with plain names, owners, review dates, and minute references.
           </p>
         </div>

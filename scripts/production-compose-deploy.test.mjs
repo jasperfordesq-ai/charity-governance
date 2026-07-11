@@ -84,10 +84,8 @@ function completeDeployEnv(overrides = {}) {
     ERROR_ALERT_WEBHOOK_URL:
       "https://alerts.charitypilot.ie/hooks/charitypilot",
     NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_configuredSecret",
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     CADDY_ACME_EMAIL: "ops@charitypilot.ie",
     CHARITYPILOT_WEB_DOMAIN: "app.charitypilot.ie",
     CHARITYPILOT_API_DOMAIN: "api.charitypilot.ie",
@@ -95,7 +93,6 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 

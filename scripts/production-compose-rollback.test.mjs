@@ -77,15 +77,12 @@ function productionEnv(overrides = {}) {
     ERROR_ALERT_WEBHOOK_URL:
       "https://alerts.charitypilot.ie/hooks/charitypilot",
     NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_configuredSecret",
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${currentDigest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${currentDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${currentDigest}`,
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 
@@ -101,7 +98,6 @@ function rollbackManifest(overrides = {}) {
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`,
     CHARITYPILOT_DATABASE_COMPATIBILITY: "p006-deadline-calendar-v1",
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 
@@ -181,7 +177,7 @@ function writeSchemaCompatibilityAttestation(
   return attestationPath;
 }
 
-test("production rollback dry-run delegates to deploy with rollback digests merged over production env", async () => {
+test("production rollback dry-run tolerates legacy Supabase metadata and delegates with rollback digests", async () => {
   const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
   const tempDir = mkdtempSync(
     join(tmpdir(), "charitypilot-production-rollback-dry-run-"),
@@ -191,7 +187,9 @@ test("production rollback dry-run delegates to deploy with rollback digests merg
   const deployCalls = [];
 
   writeFileSync(envPath, productionEnv());
-  writeFileSync(manifestPath, rollbackManifest());
+  writeFileSync(manifestPath, rollbackManifest({
+    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
+  }));
   const schemaAttestationPath = writeSchemaCompatibilityAttestation(
     tempDir,
     manifestPath,
@@ -264,7 +262,7 @@ test("production rollback dry-run delegates to deploy with rollback digests merg
       deployCalls[0].mergedEnv,
       /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/,
     );
-    assert.match(
+    assert.doesNotMatch(
       deployCalls[0].mergedEnv,
       /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/xjvdkmqbtczrnlqpswfa\.supabase\.co/,
     );

@@ -41,9 +41,8 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['node-env-production', 'NODE_ENV set for production runtimes'],
       ['jwt-secret-entropy', 'JWT_SECRET has production entropy'],
       ['frontend-api-origins', 'frontend and API origins are HTTPS'],
-      ['supabase-public-origin', 'Supabase public origins match'],
+      ['supabase-api-only', 'Supabase URL, service role, and bucket are available only to API/server runtimes'],
       ['web-compose-api-origin', 'web Compose API origin matches API URL'],
-      ['web-compose-supabase-origin', 'web Compose Supabase origin matches public Supabase URL'],
       ['auth-cookie-domain', 'auth cookie domain matches deployment scope'],
       ['stripe-live-keys', 'Stripe keys are live mode'],
       ['resend-domain', 'Resend sender domain is verified'],
@@ -85,7 +84,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['supabase-check', 'production Supabase storage checker completed'],
       ['readiness-storage-configured', 'readiness reports storageConfigured true'],
       ['readiness-storage-reachable', 'readiness reports storageBucketReachable true'],
-      ['document-upload-download', 'document upload and signed download verified through deployed app'],
+      ['document-upload-download', 'document upload and authenticated API byte download verified through deployed app'],
       ['supabase-backups-enabled', 'Supabase backup policy or PITR enabled'],
       ['supabase-restore-tested', 'Supabase restore test evidence exists and has an owner'],
     ],
@@ -443,12 +442,6 @@ function validateReleaseBinding(release, issues) {
     'release.imageDigestManifest.webBuildNextPublicApiUrl',
     issues,
     { hostSuffix: 'charitypilot.ie' },
-  );
-  validateHttpsOrigin(
-    release.imageDigestManifest.webBuildNextPublicSupabaseUrl,
-    'release.imageDigestManifest.webBuildNextPublicSupabaseUrl',
-    issues,
-    { hostSuffix: 'supabase.co' },
   );
 }
 
@@ -846,14 +839,6 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
         issues,
       );
     }
-    if (typeof release?.imageDigestManifest?.webBuildNextPublicSupabaseUrl === 'string') {
-      requireEvidenceText(
-        text,
-        release.imageDigestManifest.webBuildNextPublicSupabaseUrl,
-        `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicSupabaseUrl`,
-        issues,
-      );
-    }
   }
 
   if (checkId === 'release-run-api-verification') {
@@ -886,14 +871,6 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
         issues,
       );
     }
-    if (typeof release?.imageDigestManifest?.webBuildNextPublicSupabaseUrl === 'string') {
-      requireEvidenceText(
-        text,
-        release.imageDigestManifest.webBuildNextPublicSupabaseUrl,
-        `${checkPath}.evidence must include release.imageDigestManifest.webBuildNextPublicSupabaseUrl`,
-        issues,
-      );
-    }
   }
 }
 
@@ -918,9 +895,8 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'node-env-production': ['NODE_ENV=production'],
       'jwt-secret-entropy': ['JWT_SECRET', '32 characters', 'high entropy'],
       'frontend-api-origins': ['https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
-      'supabase-public-origin': ['SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'same HTTPS Supabase project'],
+      'supabase-api-only': ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_STORAGE_BUCKET', 'API/server runtimes only'],
       'web-compose-api-origin': ['CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_API_URL'],
-      'web-compose-supabase-origin': ['CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'],
       'auth-cookie-domain': ['AUTH_COOKIE_DOMAIN=.charitypilot.ie'],
       'stripe-live-keys': ['STRIPE_SECRET_KEY', 'Stripe live mode'],
       'resend-domain': ['Resend sender domain', 'verified'],
@@ -999,7 +975,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'bucket-private': ['private bucket'],
       'readiness-storage-configured': ['storageConfigured: true'],
       'readiness-storage-reachable': ['storageBucketReachable: true'],
-      'document-upload-download': ['document upload', 'signed download', 'deployed app'],
+      'document-upload-download': ['document upload', 'authenticated API download', 'deployed app'],
       'supabase-backups-enabled': [
         'Supabase backup policy',
         'managed backups or PITR',
@@ -1410,7 +1386,7 @@ function validateCheckSpecificEvidence(areaId, checkId, actualCheck, checkPath, 
       'dashboard flow',
       'billing flow',
       'document upload',
-      'signed download',
+      'authenticated API download',
       'logout',
       'error states',
       'pending-navigation confirmation',
@@ -1626,6 +1602,17 @@ function statusOf(value) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'missing';
 }
 
+function currentEvidenceHints(areaId, checkId, storedHints) {
+  const canonicalHints = defaultEvidenceHints(areaId, checkId);
+  const candidates = canonicalHints.length > 0 ? canonicalHints : storedHints;
+  return [...new Set(
+    candidates
+      .filter((hint) => typeof hint === 'string')
+      .map((hint) => hint.trim())
+      .filter((hint) => hint.length > 0),
+  )];
+}
+
 function nextIncompleteCheckSummary(evidence) {
   const incompleteChecks = [];
   const incompleteCheckDetails = [];
@@ -1641,7 +1628,7 @@ function nextIncompleteCheckSummary(evidence) {
       const storedHints = Array.isArray(actualCheck?.requiredEvidenceHints)
         ? actualCheck.requiredEvidenceHints.filter((hint) => typeof hint === 'string' && hint.trim().length > 0)
         : [];
-      const requiredEvidenceHints = storedHints.length > 0 ? storedHints : defaultEvidenceHints(area.id, check.id);
+      const requiredEvidenceHints = currentEvidenceHints(area.id, check.id, storedHints);
 
       incompleteChecks.push(`${path} (${status})`);
       incompleteCheckDetails.push({

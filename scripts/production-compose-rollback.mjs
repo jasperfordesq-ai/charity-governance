@@ -59,7 +59,6 @@ const requiredImages = [
 
 const requiredWebBuildOrigins = [
   "CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL",
-  "CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL",
 ];
 
 function usage() {

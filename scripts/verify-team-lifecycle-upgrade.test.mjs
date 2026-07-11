@@ -37,6 +37,12 @@ test('P0-07 upgrade fixture dry-run is explicit and never invokes Docker', async
   assert.match(output, /charitypilot_p007_upgrade_dual_invite/);
 });
 
+test('P0-07 upgrade fixture preserves migrations that own their transaction boundary', () => {
+  const source = readFileSync(new URL('./verify-team-lifecycle-upgrade.mjs', import.meta.url), 'utf8');
+  assert.match(source, /hasOwnTransaction/);
+  assert.match(source, /hasOwnTransaction \? sql : `BEGIN;/);
+});
+
 test('P0-07 upgrade fixture rejects unknown options before Docker access', async () => {
   let commandCalls = 0;
   await assert.rejects(

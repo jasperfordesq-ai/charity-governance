@@ -43,15 +43,15 @@ function response(status, body = {}) {
     ok: status >= 200 && status < 300,
     status,
     async json() {
-      return body;
+      return typeof body === 'string' ? JSON.parse(body) : body;
     },
     async text() {
-      return JSON.stringify(body);
+      return typeof body === 'string' ? body : JSON.stringify(body);
     },
   };
 }
 
-test('production Supabase checker verifies private bucket, signed URL, public denial, and cleanup', async () => {
+test('production Supabase checker verifies private bucket, authenticated download, public denial, and cleanup', async () => {
   const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());
   const calls = [];
@@ -63,10 +63,8 @@ test('production Supabase checker verifies private bucket, signed URL, public de
     }
     if (url.includes('/storage/v1/object/documents/charitypilot-production-check/')) {
       if (options.method === 'POST') return response(200, { Key: 'redacted' });
+      if (options.method === 'GET') return response(200, 'CharityPilot production storage probe\n');
       if (options.method === 'DELETE') return response(200, {});
-    }
-    if (url.includes('/storage/v1/object/sign/documents/charitypilot-production-check/')) {
-      return response(200, { signedURL: '/storage/v1/object/sign/documents/redacted?token=secret-token' });
     }
     if (url.includes('/storage/v1/object/public/documents/charitypilot-production-check/')) {
       return response(403, { message: 'private bucket' });
@@ -83,7 +81,7 @@ test('production Supabase checker verifies private bucket, signed URL, public de
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production Supabase storage check passed/);
     assert.equal(calls.length, 5);
-    assert.deepEqual(calls.map((call) => call.options.method ?? 'GET'), ['GET', 'POST', 'POST', 'GET', 'DELETE']);
+    assert.deepEqual(calls.map((call) => call.options.method ?? 'GET'), ['GET', 'POST', 'GET', 'GET', 'DELETE']);
     for (const call of calls.filter((entry) => !entry.url.includes('/object/public/'))) {
       assert.equal(call.options.headers.Authorization, 'Bearer configured-service-role-key');
       assert.equal(call.options.headers.apikey, 'configured-service-role-key');
@@ -143,7 +141,7 @@ test('production Supabase checker fails when the bucket is public', async () => 
   }
 });
 
-test('production Supabase checker cleans up the probe object when signed URL verification fails', async () => {
+test('production Supabase checker cleans up the probe object when authenticated download verification fails', async () => {
   const runProductionSupabaseCheckFromArgs = await loadSupabaseRunner();
   const { tempDir, envPath } = writeEnvFile(productionEnv());
   const methods = [];
@@ -153,9 +151,9 @@ test('production Supabase checker cleans up the probe object when signed URL ver
     if (url.endsWith('/storage/v1/bucket/documents')) return response(200, { public: false });
     if (url.includes('/storage/v1/object/documents/')) {
       if (options.method === 'POST') return response(200, {});
+      if (options.method === 'GET') return response(500, { error: 'download failed' });
       if (options.method === 'DELETE') return response(200, {});
     }
-    if (url.includes('/storage/v1/object/sign/documents/')) return response(500, { error: 'sign failed' });
     return response(404, {});
   };
 
@@ -166,8 +164,8 @@ test('production Supabase checker cleans up the probe object when signed URL ver
     );
 
     assert.equal(result.status, 1);
-    assert.deepEqual(methods, ['GET', 'POST', 'POST', 'DELETE']);
-    assert.match(result.stderr, /signed URL creation failed/);
+    assert.deepEqual(methods, ['GET', 'POST', 'GET', 'DELETE']);
+    assert.match(result.stderr, /service-role probe download failed/);
     assert.doesNotMatch(result.stderr, /charitypilot-production-check|configured-service-role-key/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

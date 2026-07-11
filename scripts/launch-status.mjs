@@ -126,11 +126,9 @@ const RELEASE_IMAGE_PROMOTION = Object.freeze({
   githubEnvironment: 'production',
   requiredGitHubEnvironmentVariables: Object.freeze([
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co (replace <project-ref> before running release-images.yml)',
   ]),
   configureCommands: Object.freeze([
     'gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first',
   ]),
   workflowCommand: 'gh workflow run release-images.yml --ref master',
   watchCommand: 'gh run watch RELEASE_RUN_ID --exit-status',
@@ -156,7 +154,7 @@ const FINAL_SIGNOFF_REQUIREMENTS = Object.freeze({
 });
 
 const EXTERNAL_LAUNCH_EVIDENCE_GATES = Object.freeze([
-  'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 87 machine-readable checks, including GitHub production environment, GitHub production secret-store verification, release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
+  'Complete .charitypilot-launch-evidence/production-launch-evidence.json with all 86 machine-readable checks, including GitHub production environment, GitHub production secret-store verification, release, deploy, rollback, smoke, provider, backup/restore, and final signoff references.',
   'Run deployed browser QA and accessibility with E2E_DEPLOYED_QA=true against https://app.charitypilot.ie and https://api.charitypilot.ie; first run npm run check:production:browser-qa-env and record Deployed browser QA environment preflight passed in browserQa.checks.browser-qa-completed; responsive QA can be one full npm run test:e2e:responsive run or all four focused route chunks, the Launch-Critical Route Inventory must prove every route in desktop, mobile, light-mode, and dark-mode evidence, critical-flow evidence must include pending-navigation confirmation, conditional obligations, and readiness blockers, and every browser QA evidence slot must bind to the exact promoted release.commitSha: browserQa.checks.browser-qa-completed, browserQa.checks.desktop-coverage, browserQa.checks.mobile-coverage, browserQa.checks.accessibility-coverage, browserQa.checks.cross-browser-coverage, browserQa.checks.ios-safari-device-coverage, and browserQa.checks.critical-flows-covered.',
   'Record production provider, hosting/DNS/TLS, PostgreSQL, Supabase, scheduler, observability, Stripe, and Resend evidence outside git.',
   'Complete solicitor/governance/privacy review and external penetration test before real charity data.',
@@ -202,8 +200,6 @@ const MISSING_VALUE_GROUPS = Object.freeze([
     keys: [
       'SUPABASE_URL',
       'SUPABASE_SERVICE_ROLE_KEY',
-      'NEXT_PUBLIC_SUPABASE_URL',
-      'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
     ],
   },
   {
@@ -217,14 +213,13 @@ const MISSING_VALUE_GROUPS = Object.freeze([
       'CHARITYPILOT_WEB_IMAGE',
       'CHARITYPILOT_MIGRATION_IMAGE',
       'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL',
-      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
     ],
   },
 ]);
 const OPERATOR_SUPPLIED_HINTS = new Map(OPERATOR_SUPPLIED_KEYS);
 const EXPECTED_PRODUCTION_VALUE_KEYS = Object.freeze(OPERATOR_SUPPLIED_KEYS.map(([key]) => key));
 const TOTAL_EXPECTED_PRODUCTION_VALUES = EXPECTED_PRODUCTION_VALUE_KEYS.length;
-const TOTAL_LAUNCH_EVIDENCE_CHECKS = 87;
+const TOTAL_LAUNCH_EVIDENCE_CHECKS = 86;
 const TOTAL_FINAL_SIGNOFF_ROLES = 5;
 const PLACEHOLDER_TOKENS = Object.freeze([
   'REPLACE_ME',
@@ -239,9 +234,6 @@ const PLACEHOLDER_TOKENS = Object.freeze([
 const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 const SUPABASE_URL_KEYS = Object.freeze([
   'SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
-  'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
 ]);
 const PROVIDER_VALUE_KEYS = Object.freeze([
   'SUPABASE_SERVICE_ROLE_KEY',
@@ -344,9 +336,11 @@ function placeholderIssueForValue(key, value) {
 
 function placeholderIssues(envContent) {
   const issues = [];
+  const expectedKeys = new Set(EXPECTED_PRODUCTION_VALUE_KEYS);
   for (const line of envContent.split('\n')) {
     const m = line.match(/^([A-Z0-9_]+)=(.*?)(\r?)$/);
     if (!m) continue;
+    if (!expectedKeys.has(m[1])) continue;
     const issue = placeholderIssueForValue(m[1], m[2]);
     if (issue) issues.push(issue);
   }

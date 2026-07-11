@@ -238,11 +238,21 @@ were exercised against the promoted production release.
 - [ ] Owner or administrator-only actions are not visible or fail safely for lower-privilege users.
 - [ ] API errors show user-safe messages.
 
+## Team Security
+
+- [ ] Ordinary members cannot see pending-invite metadata, active-session counts, or administrative security controls.
+- [ ] Owner/admin lifecycle controls have unique accessible names and require a meaningful reason.
+- [ ] Suspending or removing a test member immediately denies both a representative read and write from that member's existing session.
+- [ ] Per-device-family and all-session revocation update the inventory without exposing raw internal session identifiers.
+- [ ] Ownership transfer requires current versions and explicit confirmation, revokes both principals, leaves exactly one owner, and redirects the previous session to login without waiting on network logout.
+- [ ] A stale membership-version action refreshes the team state and does not offer an endless retry with the stale version.
+
 ## Documents
 
 - [ ] Upload a small non-sensitive test document.
 - [ ] Uploaded document appears in the relevant document list.
-- [ ] Download opens through the app route and a short-lived signed URL.
+- [ ] Download is fetched through the authenticated CharityPilot API route, returns attachment bytes with private/no-store caching, and never exposes or opens a provider URL.
+- [ ] The real Download control completes in desktop WebKit and real iOS Safari/cloud-device Safari without a popup, blank tab, or lost transient-user-activation failure.
 - [ ] Direct public access to the underlying storage path fails.
 - [ ] Delete or clean up the test document when the QA run is complete.
 

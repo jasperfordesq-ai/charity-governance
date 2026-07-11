@@ -31,12 +31,7 @@ export const OPERATOR_SUPPLIED_KEYS = [
   ['FRONTEND_URL', 'Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)'],
   ['NEXT_PUBLIC_API_URL', 'Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)'],
   ['CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL', 'Docker Compose web runtime API origin; must match NEXT_PUBLIC_API_URL (Step 4/6)'],
-  [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)',
-  ],
-  ['CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL', 'Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)'],
-  ['SUPABASE_URL', 'Same Supabase project URL (Step 2)'],
+  ['SUPABASE_URL', 'API-only Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)'],
   ['SUPABASE_SERVICE_ROLE_KEY', 'Supabase service role key - secret store only (Step 2)'],
   ['STRIPE_SECRET_KEY', 'Stripe live secret key from the Stripe secret store (Step 2)'],
   ['STRIPE_WEBHOOK_SECRET', 'Stripe live webhook signing secret from the Stripe dashboard (Step 2)'],
@@ -58,7 +53,6 @@ export const OPERATOR_SUPPLIED_KEYS = [
   ['CHARITYPILOT_WEB_IMAGE', 'Digest-pinned web image ref from release-image-digests.env (Step 6)'],
   ['CHARITYPILOT_MIGRATION_IMAGE', 'Digest-pinned migration image ref from release-image-digests.env (Step 6)'],
   ['CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL', 'Web image build API origin copied from release-image-digests.env (Step 6)'],
-  ['CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL', 'Web image build Supabase origin copied from release-image-digests.env (Step 6)'],
 ];
 
 export function generateSecret() {

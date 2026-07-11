@@ -3076,7 +3076,10 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     documentsSpec,
     /\.request\.(?:get|post|put|patch|delete)\(/,
   );
-  assert.match(documentsSpec, /ownerPage\.evaluate[\s\S]*fetch\(/);
+  assert.match(documentsSpec, /ownerPage\.waitForResponse\([\s\S]*\/api\\\/v1\\\/documents\\\/\[\^\/\]\+\\\/download\$/);
+  assert.match(documentsSpec, /ownerPage\.waitForEvent\(['"]download['"]\)/);
+  assert.match(documentsSpec, /await download\.path\(\)/);
+  assert.doesNotMatch(documentsSpec, /ownerPage\.evaluate[\s\S]*fetch\(/);
   assert.doesNotMatch(
     personalSpec,
     /from '\.\.\/fixtures'|from '\.\.\/helpers\/navigation'/,

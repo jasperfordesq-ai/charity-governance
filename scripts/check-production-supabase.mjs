@@ -6,12 +6,12 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DEFAULT_BUCKET = 'documents';
-const DEFAULT_SIGNED_URL_TTL_SECONDS = 60;
+const PROBE_BODY = 'CharityPilot production storage probe\n';
 const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 
 function usage() {
   return [
-    'Usage: node scripts/check-production-supabase.mjs --production-env-file <path> [--signed-url-ttl <seconds>]',
+    'Usage: node scripts/check-production-supabase.mjs --production-env-file <path>',
     '',
   ].join('\n');
 }
@@ -20,17 +20,9 @@ function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
 }
 
-function parsePositiveInteger(value, flagName) {
-  if (!/^[1-9]\d*$/.test(value ?? '')) {
-    throw new Error(`${flagName} must be a positive integer number of seconds`);
-  }
-  return Number(value);
-}
-
 function parseArgs(argv) {
   const options = {
     productionEnvFile: '.env.production',
-    signedUrlTtlSeconds: DEFAULT_SIGNED_URL_TTL_SECONDS,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -46,17 +38,6 @@ function parseArgs(argv) {
       const value = arg.slice('--production-env-file='.length);
       if (!value) throw new Error('--production-env-file requires a value');
       options.productionEnvFile = value;
-      continue;
-    }
-    if (arg === '--signed-url-ttl') {
-      const value = argv[index + 1];
-      if (!value) throw new Error('--signed-url-ttl requires a value');
-      options.signedUrlTtlSeconds = parsePositiveInteger(value, '--signed-url-ttl');
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith('--signed-url-ttl=')) {
-      options.signedUrlTtlSeconds = parsePositiveInteger(arg.slice('--signed-url-ttl='.length), '--signed-url-ttl');
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);
@@ -198,7 +179,6 @@ async function runSupabaseProbe({
   fetchImpl,
   now,
   randomBytes,
-  signedUrlTtlSeconds,
 }) {
   const issues = [];
   const origin = new URL(env.SUPABASE_URL).origin;
@@ -226,23 +206,23 @@ async function runSupabaseProbe({
         'content-type': 'text/plain',
         'x-upsert': 'false',
       }),
-      body: 'CharityPilot production storage probe\n',
+      body: PROBE_BODY,
     });
     await checkStatus('probe upload', uploadResponse, issues);
     if (issues.length > 0) return issues;
     uploaded = true;
 
-    const signedResponse = await fetchImpl(joinUrl(origin, `/storage/v1/object/sign/${bucket}/${encodedPath}`), {
-      method: 'POST',
-      headers: authHeaders(serviceRoleKey, {
-        'content-type': 'application/json',
-      }),
-      body: JSON.stringify({ expiresIn: signedUrlTtlSeconds }),
+    const authenticatedDownload = await fetchImpl(joinUrl(origin, `/storage/v1/object/${bucket}/${encodedPath}`), {
+      method: 'GET',
+      headers: authHeaders(serviceRoleKey, { 'cache-control': 'no-store' }),
     });
-    const signedBody = await checkStatus('signed URL creation', signedResponse, issues);
-    const signedUrl = signedBody?.signedURL ?? signedBody?.signedUrl;
-    if (issues.length === 0 && !isConfigured(signedUrl)) {
-      issues.push('signed URL creation did not return a signed URL');
+    if (!authenticatedDownload?.ok) {
+      issues.push(statusIssue('service-role probe download', authenticatedDownload ?? { status: 'unknown' }));
+    } else {
+      const downloadedBody = await authenticatedDownload.text();
+      if (downloadedBody !== PROBE_BODY) {
+        issues.push('service-role probe download returned unexpected bytes');
+      }
     }
     if (issues.length > 0) return issues;
 
@@ -316,7 +296,6 @@ export async function runProductionSupabaseCheckFromArgs(
       fetchImpl,
       now,
       randomBytes,
-      signedUrlTtlSeconds: options.signedUrlTtlSeconds,
     });
   } catch (error) {
     const message = redactSupabaseTranscript(error instanceof Error ? error.message : String(error));
@@ -337,7 +316,7 @@ export async function runProductionSupabaseCheckFromArgs(
 
   return result(
     0,
-    'Production Supabase storage check passed: private bucket, service-role probe upload, signed URL creation, anonymous access denial, and probe cleanup verified.\n',
+    'Production Supabase storage check passed: private bucket, service-role upload and download, anonymous access denial, and probe cleanup verified.\n',
   );
 }
 

@@ -26,7 +26,7 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 
 - **Database:** PostgreSQL via Prisma (`apps/api/prisma/schema.prisma`)
 - **Auth:** HTTP-only cookie sessions, hashed rotating refresh tokens, role guards
-- **Billing:** Stripe · **Email:** Resend · **Document storage:** Supabase (private bucket, signed URLs) or local filesystem for dev
+- **Billing:** Stripe · **Email:** Resend · **Document storage:** Supabase private bucket behind an authenticated API byte proxy, or local filesystem for dev
 - **Default ports:** API `3002` · Web `3003` · PostgreSQL `5434`
 
 > **Full architecture map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the complete,

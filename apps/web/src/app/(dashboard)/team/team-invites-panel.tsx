@@ -21,6 +21,7 @@ export function TeamInvitesPanel({
   inviteMember,
   inviteRoleHint,
   permissionDisabledReason,
+  managementDisabled,
   revokeInvite,
   revokeInviteId,
   role,
@@ -37,6 +38,7 @@ export function TeamInvitesPanel({
   inviteMember: (event: FormEvent) => void;
   inviteRoleHint: string;
   permissionDisabledReason: string;
+  managementDisabled: boolean;
   revokeInvite: (inviteId: string) => void;
   revokeInviteId: string | null;
   role: UserRole.ADMIN | UserRole.MEMBER;
@@ -61,12 +63,12 @@ export function TeamInvitesPanel({
             value={email}
             onValueChange={setEmail}
             isRequired
-            isDisabled={!canInvite}
+            isDisabled={!canInvite || managementDisabled}
           />
           <Select
             label="Role"
             selectedKeys={new Set([role])}
-            isDisabled={!canInvite}
+            isDisabled={!canInvite || managementDisabled}
             onSelectionChange={(keys) => {
               const next = Array.from(keys)[0] as UserRole.ADMIN | UserRole.MEMBER | undefined;
               if (next && allowedInviteRoles.includes(next)) setRole(next);
@@ -82,7 +84,7 @@ export function TeamInvitesPanel({
             type="submit"
             className={primaryActionButtonClasses('w-full')}
             isLoading={saving}
-            isDisabled={!canInvite || Boolean(inviteDisabledReason) || saving}
+            isDisabled={!canInvite || managementDisabled || Boolean(inviteDisabledReason) || saving}
             aria-describedby="team-invite-disabled-hint"
           >
             Send invite
@@ -122,7 +124,8 @@ export function TeamInvitesPanel({
                           color="danger"
                           onPress={() => revokeInvite(invite.id)}
                           isLoading={revokeInviteId === invite.id}
-                          isDisabled={Boolean(revokeInviteId) || saving}
+                          isDisabled={managementDisabled || Boolean(revokeInviteId) || saving}
+                          aria-label={`Revoke invitation for ${invite.email}`}
                         >
                           Revoke
                         </Button>

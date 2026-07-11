@@ -14,7 +14,7 @@ export function TeamRoleGuidancePanel() {
             Keep invite authority separate from owner-only role control.
           </h2>
           <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
-            Owners can manage billing and role changes. Admins can invite collaborators and help run governance workflows. Members can maintain records without team administration rights.
+            Owners can manage billing and role changes. Admins can invite collaborators and run governance workflows. Members have read-only access to governance records and available document downloads, without team administration rights.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3 lg:min-w-[34rem]">

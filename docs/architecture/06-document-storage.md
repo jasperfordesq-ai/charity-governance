@@ -11,7 +11,7 @@ CharityPilot stores governance documents (policies, minutes, certificates) as op
 | Backing store | Supabase Storage private bucket | Local filesystem directory |
 | Bucket / root | `SUPABASE_STORAGE_BUCKET` (default `documents`) `apps/api/src/services/storage.service.ts:13-15` | `LOCAL_FILE_STORAGE_DIR` (default `.charitypilot-local-storage/documents`) `apps/api/src/services/storage.service.ts:21-23` |
 | Client / credentials | `createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)` `apps/api/src/services/storage.service.ts:54-63` | `node:fs/promises` (`mkdir`/`writeFile`/`readFile`/`unlink`) |
-| Download mechanism | Short-lived signed URL `apps/api/src/services/storage.service.ts:177-185` | Internal API route streaming the bytes `apps/api/src/services/storage.service.ts:171-175` |
+| Download mechanism | Authenticated API proxy reads with the server-only service role and streams bytes | The same authenticated API proxy reads from the guarded local path and streams bytes |
 | `isConfigured()` | Requires URL, service-role key and bucket all set `apps/api/src/services/storage.service.ts:109-113` | Always `true` `apps/api/src/services/storage.service.ts:107` |
 | `verifyBucket()` | Bucket exists and is `public === false`, with a readiness timeout `apps/api/src/services/storage.service.ts:128-136` | `mkdir` the root recursively `apps/api/src/services/storage.service.ts:117-124` |
 
@@ -23,7 +23,7 @@ When the Supabase credentials are not configured, `getSupabaseClient()` raises a
 
 Every storage object is keyed by organisation. On upload the path is built as `<organisationId>/<epoch-ms>-<uuid>-<sanitised-filename>`, so same-millisecond uploads with the same original filename still produce distinct object keys (`apps/api/src/services/storage.service.ts`). `sanitiseFilename` lower-cases, replaces any character outside `[a-z0-9.\-_]` with `-`, collapses repeats and trims leading/trailing dashes.
 
-Read/sign/delete operations re-validate ownership through `assertOrganisationStoragePath`, which rejects (with `403 STORAGE_PATH_FORBIDDEN`) any path containing `..`, any path that does not begin with `<organisationId>/`, or one with no remainder after the prefix (`apps/api/src/services/storage.service.ts:73-87`). The local driver additionally resolves the absolute path and confirms it stays under the storage root before touching the filesystem (`apps/api/src/services/storage.service.ts:89-99`).
+Read/delete operations re-validate ownership through `assertOrganisationStoragePath`, which rejects (with `403 STORAGE_PATH_FORBIDDEN`) backslash-normalised input, empty or exact `.`/`..` path segments, any path that does not begin with `<organisationId>/`, or one with no remainder after the prefix. Consecutive dots inside a valid filename remain allowed. The local driver additionally resolves the absolute path and confirms it stays under the storage root before touching the filesystem.
 
 ## Upload
 
@@ -95,14 +95,14 @@ sequenceDiagram
 
 ## Download
 
-`GET /api/v1/documents/:id/download` resolves the document's storage path (`DocumentService.getStoragePath` reads `fileUrl`, scoped to the caller's organisation, `404 DOCUMENT_NOT_FOUND` if absent) and then asks the storage service for a URL (`apps/api/src/services/document.service.ts:285-296`, `apps/api/src/routes/documents/index.ts:140-148`). The response body is `{ url }`.
+`GET /api/v1/documents/:id/download` is an authenticated byte proxy. `DocumentService.getDownloadDescriptor` loads `fileUrl`, MIME type, and display name with the document id and caller organisation in the same predicate; a foreign or missing row returns `404 DOCUMENT_NOT_FOUND` (`apps/api/src/services/document.service.ts:285-304`). No object path, provider URL, signed query token, or storage capability is returned to the browser.
 
-`getSignedUrl` first re-applies the org-ownership guard, then branches by driver (`apps/api/src/services/storage.service.ts:168-186`):
+`StorageService.downloadFile` re-applies `assertOrganisationStoragePath` and then reads the bytes through the selected server-side driver (`apps/api/src/services/storage.service.ts:183-207`):
 
-- **Supabase**: calls `createSignedUrl(path, expiresIn)` against the private bucket, defaulting to `expiresIn = 3600` seconds (one hour). A signing failure or missing `signedUrl` becomes `500 STORAGE_SIGNED_URL_FAILED`. Because the bucket is private (asserted by `verifyBucket`), the time-limited signed URL is the only way to read the object.
-- **Local**: returns an internal API URL pointing at `/api/v1/documents/_local-download` with the storage path as a `path` query parameter, built against `API_URL`/`NEXT_PUBLIC_API_URL` (falling back to `http://localhost:<PORT>`) (`apps/api/src/services/storage.service.ts:25-34`, `apps/api/src/services/storage.service.ts:171-175`).
+- **Supabase**: the API uses its server-only service role to call `download(path)` on the private bucket. A 10-second default `STORAGE_DOWNLOAD_TIMEOUT_MS` bound (configurable from 100 to 60000 ms) applies an abort signal to the underlying fetch and bounds both provider download and response-body conversion. Provider errors and timeouts map to the generic `500 STORAGE_DOWNLOAD_FAILED`; the response never exposes the provider payload or credential.
+- **Local**: `readLocalFile` verifies that the local driver is enabled, resolves the path beneath the configured root, rejects files over 10 MB, maps a missing object to `404 STORAGE_FILE_NOT_FOUND`, and returns a `Buffer` (`apps/api/src/services/storage.service.ts:164-181`). There is no query-string `_local-download` endpoint.
 
-The `_local-download` route streams bytes via `storageService.readLocalFile`, which re-validates the org path, reads from the resolved local file, returns `404 STORAGE_FILE_NOT_FOUND` for a missing file (`ENOENT`), and sends the content as `application/octet-stream` with a sanitised `Content-Disposition` filename (`apps/api/src/routes/documents/index.ts:112-129`, `apps/api/src/services/storage.service.ts:188-202`). Outside the local driver, `readLocalFile` throws `503 STORAGE_NOT_CONFIGURED` (`apps/api/src/services/storage.service.ts:189-191`).
+The route revalidates the caller's exact session and active user/organisation membership after storage I/O, so a concurrent suspension, removal, ownership transfer, or session revocation wins before bytes are sent. Successful responses use `Cache-Control: private, no-store, max-age=0`, `Pragma: no-cache`, an allow-listed MIME type (or `application/octet-stream`), and a sanitised attachment filename (`apps/api/src/routes/documents/index.ts:64-108`). The web client fetches this API route through the authenticated Axios refresh path, creates a same-page object URL only after the response arrives, clicks a temporary download anchor, and revokes the object URL after a bounded 30-second WebKit-safe grace window. It never navigates to provider storage.
 
 ```mermaid
 sequenceDiagram
@@ -115,18 +115,18 @@ sequenceDiagram
     participant Supa as "Supabase Storage"
 
     User->>Route: GET /:id/download
-    Route->>Doc: getStoragePath(orgId, id)
-    Doc->>DB: SELECT fileUrl WHERE id, organisationId
-    DB-->>Doc: fileUrl (storage path)
-    Doc-->>Route: storagePath
-    Route->>Storage: getSignedUrl(orgId, storagePath)
+    Route->>Doc: getDownloadDescriptor(orgId, id)
+    Doc->>DB: SELECT fileUrl, mimeType, name WHERE id, organisationId
+    DB-->>Doc: tenant-scoped descriptor
+    Doc-->>Route: descriptor
+    Route->>Storage: downloadFile(orgId, storagePath)
     Storage->>Storage: assertOrganisationStoragePath
-    Storage->>Supa: createSignedUrl(path, 3600s)
-    Supa-->>Storage: signed URL (private bucket)
-    Storage-->>Route: url
-    Route-->>User: 200 { url }
-    User->>Supa: GET signed URL (within 1h)
-    Supa-->>User: file bytes
+    Storage->>Supa: download(path) with server-only service role
+    Supa-->>Storage: file bytes
+    Storage-->>Route: Buffer (max 10 MB)
+    Route->>DB: revalidate exact active session and membership
+    DB-->>Route: active session
+    Route-->>User: 200 attachment bytes, private/no-store
 ```
 
 ## Delete and the deletion-reconciliation model

@@ -92,7 +92,7 @@ test('storage operations throw 503 STORAGE_NOT_CONFIGURED when Supabase is uncon
       'STORAGE_NOT_CONFIGURED',
     );
     await assertAppError(
-      () => service.getSignedUrl('org-a', 'org-a/f.pdf'),
+      () => service.downloadFile('org-a', 'org-a/f.pdf'),
       503,
       'STORAGE_NOT_CONFIGURED',
     );
@@ -116,7 +116,7 @@ test('Supabase storage errors map to stable STORAGE_* AppErrors without leaking 
   ]);
 
   // Every storage REST call answers with a non-2xx + a secret-bearing message, which
-  // supabase-js surfaces as { error } on upload/createSignedUrl/remove.
+  // supabase-js surfaces as { error } on upload/download/remove.
   const server = createServer((_request, response) => {
     response.writeHead(500, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ error: 'raw secret', message: 'raw secret provider detail' }));
@@ -145,12 +145,12 @@ test('Supabase storage errors map to stable STORAGE_* AppErrors without leaking 
     );
 
     await assert.rejects(
-      () => service.getSignedUrl('org-a', 'org-a/f.pdf'),
+      () => service.downloadFile('org-a', 'org-a/f.pdf'),
       (err) => {
         const appError = err as InstanceType<typeof AppError>;
         assert.equal(appError instanceof AppError, true);
         assert.equal(appError.statusCode, 500);
-        assert.equal(appError.code, 'STORAGE_SIGNED_URL_FAILED');
+        assert.equal(appError.code, 'STORAGE_DOWNLOAD_FAILED');
         assert.equal(appError.message, STORAGE_OPERATION_FAILED_MESSAGE);
         assert.equal(appError.message.includes('raw secret'), false);
         return true;

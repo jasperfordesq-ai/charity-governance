@@ -8,7 +8,6 @@ import { test } from 'node:test';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const statusScriptPath = join(scriptsDir, 'production-launch-evidence-status.mjs');
 const templateScriptPath = join(scriptsDir, 'generate-production-launch-evidence-template.mjs');
-const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const releaseCommitSha = 'b'.repeat(40);
 const genericEvidence = {
   type: 'artifact',
@@ -48,7 +47,6 @@ function completeAllStatusFlagsWithGenericEvidence(evidence) {
       webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
       migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
       webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-      webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
     },
   };
   evidence.approvedForLaunch = true;
@@ -101,7 +99,7 @@ test('production launch evidence status reports pending template progress withou
     assert.equal(result.status, 0);
     assert.match(result.stdout, /CharityPilot production launch evidence status/);
     assert.match(result.stdout, /Evidence statuses complete: no/);
-    assert.match(result.stdout, /Checklist checks complete: 0 \/ 87 \(0% complete\)/);
+    assert.match(result.stdout, /Checklist checks complete: 0 \/ 86 \(0% complete\)/);
     assert.match(result.stdout, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(result.stdout, /releaseGate: 0 \/ 20 complete/);
     assert.match(result.stdout, /approvedForLaunch: false/);
@@ -136,7 +134,7 @@ test('production launch evidence status counts completed checks and keeps final 
     const result = runProductionLaunchEvidenceStatusFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /Checklist checks complete: 1 \/ 87 \(1\.1% complete\)/);
+    assert.match(result.stdout, /Checklist checks complete: 1 \/ 86 \(1\.2% complete\)/);
     assert.match(result.stdout, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(result.stdout, /releaseGate: 1 \/ 20 complete/);
     assert.match(result.stdout, /finalSignoff: pending/);
@@ -167,14 +165,14 @@ test('production launch evidence status renders non-secret JSON for automation',
     assert.ok(payload.releaseBinding.missingFields.includes('release.commitSha'));
     assert.ok(payload.releaseBinding.missingFields.includes('release.workflowRunUrl'));
     assert.ok(payload.releaseBinding.missingFields.includes('release.imageDigestManifest.apiImage'));
-    assert.equal(payload.totalChecks, 87);
+    assert.equal(payload.totalChecks, 86);
     assert.equal(payload.approvedFinalSignoffRoles, 0);
     assert.equal(payload.totalFinalSignoffRoles, 5);
     assert.deepEqual(payload.percentages, {
-      evidenceChecks: 1.1,
+      evidenceChecks: 1.2,
       finalSignoffs: 0,
     });
-    assert.equal(payload.incompleteCheckCount, 86);
+    assert.equal(payload.incompleteCheckCount, 85);
     assert.deepEqual(
       payload.pendingFinalSignoffRoles.map((role) => role.id),
       ['engineering', 'operations', 'security', 'legalCompliance', 'business'],
@@ -202,7 +200,7 @@ test('production launch evidence status refuses strict completion for generic ev
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.completedChecks, 87);
+    assert.equal(payload.completedChecks, 86);
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.releaseBinding.complete, true);
     assert.equal(payload.evidenceStatusesComplete, false);
@@ -298,7 +296,6 @@ test('production launch evidence status recognises the published migration image
         webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
         migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
         webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-        webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
       },
     },
   };
@@ -312,32 +309,6 @@ test('production launch evidence status recognises the published migration image
   const singularStatus = releaseBindingStatus(evidence);
   assert.equal(singularStatus.complete, false);
   assert.ok(singularStatus.missingFields.includes('release.imageDigestManifest.migrationImage'));
-});
-
-test('production launch evidence status rejects sample Supabase release bindings', async () => {
-  const { releaseBindingStatus } = await loadStatusRunner();
-  const digest = 'a'.repeat(64);
-  const evidence = {
-    release: {
-      commitSha: 'b'.repeat(40),
-      workflowRunUrl: 'https://github.com/jasperfordesq-ai/charity-governance/actions/runs/123456789',
-      workflowFile: '.github/workflows/release-images.yml',
-      gitRef: 'refs/heads/master',
-      imageDigestManifest: {
-        apiImage: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
-        webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
-        migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
-        webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-        webBuildNextPublicSupabaseUrl: 'https://configured-project.supabase.co',
-      },
-    },
-  };
-
-  const status = releaseBindingStatus(evidence);
-
-  assert.equal(status.complete, false);
-  assert.ok(status.missingFields.includes('release.imageDigestManifest.webBuildNextPublicSupabaseUrl'));
-  assert.doesNotMatch(status.headline, /configured-project/);
 });
 
 test('production launch evidence status falls back to current hints for older ledgers', async () => {
@@ -371,7 +342,7 @@ test('production launch evidence status falls back to current hints for older le
   }
 });
 
-test('production launch evidence status merges current hints into stale stored ledger hints', async () => {
+test('production launch evidence status replaces stale stored hints with current canonical guidance', async () => {
   const { runProductionLaunchEvidenceStatusFromArgs } = await loadStatusRunner();
   const evidence = {
     approvedForLaunch: false,
@@ -395,6 +366,7 @@ test('production launch evidence status merges current hints into stale stored l
             requiredEvidenceHints: [
               'docs/production-browser-qa.md',
               'routes: /, /features, /pricing, /blog, /blog/[slug], /privacy, /terms, /login, /register, /forgot-password, /reset-password, /verify-email, /accept-invite, /dashboard, /compliance, /compliance/[principleId], /documents, /deadlines, /board, /registers, /regulator, /organisation, /team, /billing, /export',
+              'collect a provider signed download',
               'zero critical or high-severity browser QA defects',
             ],
             evidence: [],
@@ -413,18 +385,18 @@ test('production launch evidence status merges current hints into stale stored l
     const browserQa = payload.workQueueByArea.find((area) => area.id === 'browserQa');
     const browserQaCompleted = browserQa.checks.find((check) => check.path === 'browserQa.browser-qa-completed');
     assert.deepEqual(browserQaCompleted.requiredEvidenceHints.slice(0, 4), [
+      'release.commitSha',
+      'npm run check:production:browser-qa-env',
+      'Deployed browser QA environment preflight passed',
       'E2E_DEPLOYED_QA=true',
-      'E2E_WEB_URL=https://app.charitypilot.ie',
-      'E2E_API_URL=https://api.charitypilot.ie',
-      'npm run test:e2e:responsive',
     ]);
     assert.ok(
       browserQaCompleted.requiredEvidenceHints.includes('npm run check:production:browser-qa-env'),
-      'stale stored browser QA hints must be enriched with the current deployed-env preflight command',
+      'current browser QA hints must include the deployed-env preflight command',
     );
     assert.ok(
       browserQaCompleted.requiredEvidenceHints.includes('Deployed browser QA environment preflight passed'),
-      'stale stored browser QA hints must be enriched with the current preflight success marker',
+      'current browser QA hints must include the preflight success marker',
     );
     const criticalFlows = browserQa.checks.find((check) => check.path === 'browserQa.critical-flows-covered');
     assert.ok(
@@ -438,6 +410,10 @@ test('production launch evidence status merges current hints into stale stored l
         hint.includes('routes: /, /features, /pricing'),
       ),
       'stale stored launch route inventory must be replaced by the current default route inventory',
+    );
+    assert.ok(
+      !criticalFlows.requiredEvidenceHints.some((hint) => /signed download/i.test(hint)),
+      'obsolete provider-signed-download guidance must not survive in current launch status',
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -477,7 +453,7 @@ test('production launch evidence status complete flag requires area statuses', a
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.completedChecks, 87);
+    assert.equal(payload.completedChecks, 86);
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.evidenceStatusesComplete, false);
     assert.equal(payload.areas.find((area) => area.id === 'releaseGate').status, 'pending');
@@ -518,7 +494,7 @@ test('production launch evidence status complete flag requires release binding',
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.completedChecks, 87);
+    assert.equal(payload.completedChecks, 86);
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.releaseBinding.complete, false);
     assert.equal(payload.evidenceStatusesComplete, false);

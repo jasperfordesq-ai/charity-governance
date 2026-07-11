@@ -98,6 +98,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "Organisation",
   "User",
   "AuthSession",
+  "BillingAuthorityGrant",
   "ComplianceRecord",
   "ComplianceSignoff",
   "ComplianceApprovalSnapshot",

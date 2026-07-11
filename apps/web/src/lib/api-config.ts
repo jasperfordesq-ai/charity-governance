@@ -1,17 +1,17 @@
 const DEFAULT_DEVELOPMENT_API_URL = 'http://localhost:3002';
 const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
-const ISOLATED_E2E_MODE = 'local-disposable';
-const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
+export const ISOLATED_E2E_MODE = 'local-disposable';
+export const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
 const ISOLATED_E2E_INTERNAL_API_ORIGIN = 'http://api:3302';
 
-type ApiEnv = {
+export type ApiEnv = {
   CHARITYPILOT_INTERNAL_API_URL?: string;
   NEXT_PUBLIC_API_URL?: string;
   NEXT_PUBLIC_CHARITYPILOT_E2E_MODE?: string;
   NODE_ENV?: string;
 };
 
-function isIsolatedE2eProduction(env: ApiEnv): boolean {
+export function isIsolatedE2eProduction(env: ApiEnv): boolean {
   return (
     env.NODE_ENV === 'production' &&
     env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE === ISOLATED_E2E_MODE

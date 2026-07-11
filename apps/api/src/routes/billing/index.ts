@@ -49,8 +49,10 @@ export async function billingRoutes(app: FastifyInstance) {
     const createCheckout = async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const data = createCheckoutSchema.parse(request.body);
-        const result = await service.createCheckoutSession(
+        const result = await service.createCheckoutSessionForCurrentOwner(
           request.user.organisationId,
+          request.user.userId,
+          request.user.sessionId,
           data.plan as SubscriptionPlan,
           data.interval,
         );
@@ -65,7 +67,11 @@ export async function billingRoutes(app: FastifyInstance) {
 
     const createPortal = async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        return await service.createPortalSession(request.user.organisationId);
+        return await service.createPortalSessionForCurrentOwner(
+          request.user.organisationId,
+          request.user.userId,
+          request.user.sessionId,
+        );
       } catch (err) {
         handleError(reply, err);
       }
@@ -78,7 +84,11 @@ export async function billingRoutes(app: FastifyInstance) {
 
     authedApp.get('/status', async (request, reply) => {
       try {
-        return await service.getStatus(request.user.organisationId);
+        return await service.getStatus(request.user.organisationId, {
+          id: request.user.userId,
+          sessionId: request.user.sessionId,
+          role: request.user.role,
+        });
       } catch (err) {
         handleError(reply, err);
       }

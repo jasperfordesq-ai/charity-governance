@@ -11,7 +11,6 @@ const DEFAULT_ENVIRONMENT = 'production';
 const DEFAULT_REPOSITORY = 'jasperfordesq-ai/charity-governance';
 const CANONICAL_API_ORIGIN = 'https://api.charitypilot.ie';
 const PLACEHOLDER_PATTERN = /(?:replace_me|real_|todo|tbd|pending|placeholder|change-me|your_|your-|project_ref)/i;
-const SAMPLE_SUPABASE_PROJECT_REF_PATTERN = /^(?:configured-project|example|ci-project|test-project|demo-project|sample-project)$/i;
 const USAGE_TEXT =
   'Usage: node scripts/check-production-github-env.mjs [--environment production] [--repo jasperfordesq-ai/charity-governance] [--json]';
 
@@ -22,30 +21,6 @@ export const REQUIRED_GITHUB_PRODUCTION_VARIABLES = Object.freeze([
       if (value !== CANONICAL_API_ORIGIN) {
         return `GitHub production variable NEXT_PUBLIC_API_URL must equal ${CANONICAL_API_ORIGIN}`;
       }
-      return null;
-    },
-  },
-  {
-    name: 'NEXT_PUBLIC_SUPABASE_URL',
-    validate(value) {
-      if (PLACEHOLDER_PATTERN.test(value)) {
-        return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must not contain placeholder text';
-      }
-
-      try {
-        const url = new URL(value);
-        const originOnly = url.origin === value.replace(/\/+$/, '');
-        if (url.protocol !== 'https:' || !originOnly || !url.hostname.toLowerCase().endsWith('.supabase.co')) {
-          return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL';
-        }
-        const projectRef = url.hostname.slice(0, -'.supabase.co'.length);
-        if (SAMPLE_SUPABASE_PROJECT_REF_PATTERN.test(projectRef)) {
-          return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref';
-        }
-      } catch {
-        return 'GitHub production variable NEXT_PUBLIC_SUPABASE_URL must be a valid HTTPS Supabase project URL';
-      }
-
       return null;
     },
   },
@@ -186,8 +161,6 @@ function remediationCommands(environment, repository) {
   return [
     'Safe remediation commands:',
     `- gh variable set NEXT_PUBLIC_API_URL --env ${environment} --repo ${repository} --body "${CANONICAL_API_ORIGIN}"`,
-    `- gh variable set NEXT_PUBLIC_SUPABASE_URL --env ${environment} --repo ${repository} --body "https://<project-ref>.supabase.co"`,
-    'Replace <project-ref> with the real production Supabase project ref before running the Supabase command.',
   ];
 }
 
@@ -268,7 +241,7 @@ export function runProductionGitHubEnvironmentCheckFromArgs(
 
   return result(
     0,
-    `Production GitHub environment check passed: ${options.environment} has the required release-image public variables; secret values were not read.\n`,
+    `Production GitHub environment check passed: ${options.environment} has the required release-image public API variable; secret values were not read.\n`,
     '',
   );
 }

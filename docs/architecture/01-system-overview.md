@@ -69,7 +69,7 @@ The API talks to four external systems. Each client is constructed lazily inside
 | Integration | Purpose | Where wired | Configuration |
 | --- | --- | --- | --- |
 | PostgreSQL (via Prisma) | Primary data store; all domain data | Prisma plugin registered on the Fastify instance (`apps/api/src/server.ts:66`); schema at `apps/api/prisma/schema.prisma` (`README.md:23`) | `DATABASE_URL` (`compose.local.yml:55`) |
-| Supabase Storage | Private document bucket with signed URLs (production); local filesystem driver in dev | `createClient(url, serviceRoleKey)` in `StorageService` (`apps/api/src/services/storage.service.ts:54-62`); driver selected by `DOCUMENT_STORAGE_DRIVER` (`apps/api/src/services/storage.service.ts:18`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`; or `local` + `LOCAL_FILE_STORAGE_DIR` (`compose.local.yml:61-73`) |
+| Supabase Storage | Private document bucket read only through the authenticated API byte proxy (production); local filesystem driver in dev | `createClient(url, serviceRoleKey)` remains server-only in `StorageService`; driver selected by `DOCUMENT_STORAGE_DRIVER` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`; or `local` + `LOCAL_FILE_STORAGE_DIR` (`compose.local.yml:61-73`) |
 | Stripe | Subscription billing (Essentials/Complete tiers), pinned customer portal, and webhooks | `new Stripe(secretKey)` in `BillingService.getStripe()` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, four distinct `STRIPE_*_PRICE_ID` values, and `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` |
 | Resend | Transactional/notification email (e.g. deadline reminders) | `new Resend(process.env.RESEND_API_KEY)` in `EmailService` (`apps/api/src/services/email.service.ts:95`) | `RESEND_API_KEY`, `EMAIL_FROM` (`compose.local.yml:69-70`) |
 
@@ -92,6 +92,14 @@ The standalone jobs live in `apps/api/src/jobs` and are exposed both as npm `job
 | `production-scheduler.ts` | `jobs:production-scheduler` | `production-scheduler` (long-running) | Runs both jobs on independent recurring timers; deadline reminders default 24h, document cleanup default 1h (`apps/api/src/jobs/production-scheduler.ts:14-15`, `apps/api/src/jobs/production-scheduler.ts:248-264`); `compose.production.yml:96-124` |
 | `send-deadline-reminders.ts` | `jobs:deadline-reminders` | `deadline-reminders` (one-shot, `jobs` profile) | Builds a `DeadlineRemindersService` and calls `sendDueReminders()` once, exiting non-zero on failure (`apps/api/src/jobs/send-deadline-reminders.ts:9-26`); `compose.production.yml:126-150` |
 | `cleanup-document-storage.ts` | `jobs:document-storage-cleanup` | `document-storage-cleanup` (one-shot, `jobs` profile) | Retries pending storage deletions via `DocumentService.retryPendingStorageDeletions()` using `StorageService.deleteFile()` (`apps/api/src/jobs/cleanup-document-storage.ts:18-23`); `compose.production.yml:152-177` |
+
+Two additional jobs are deliberately **not** scheduled or exposed as HTTP
+routes: `jobs:recover-team-ownership` and
+`jobs:reconcile-billing-authority`. They are restricted, one-off operator
+workflows requiring explicit authority, exact live-state evidence, dry runs,
+target-bound confirmations, and serializable database locks. See the
+[ownership recovery](../team-ownership-recovery.md) and [billing authority
+reconciliation](../billing-authority-reconciliation.md) runbooks.
 
 The deadline-reminders path reads/writes the database and sends email via Resend (its compose service requires `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM` — `compose.production.yml:135-141`). The document-storage-cleanup path reads the database and deletes from Supabase storage (it requires `DATABASE_URL` and the `SUPABASE_*` variables — `compose.production.yml:161-168`). Both report failures through `sendJobFailureAlert`, which posts to `ERROR_ALERT_WEBHOOK_URL` (`apps/api/src/jobs/production-scheduler.ts:167-186`). The `production-scheduler` service is the always-on production scheduler, while the two one-shot services sit behind the `jobs` Compose profile for ad-hoc/external-cron invocation (`compose.production.yml:128-129`, `compose.production.yml:154-155`).
 
@@ -130,7 +138,7 @@ flowchart TD
 
     Routes --> Services
     Services -->|"SQL via Prisma client"| DB
-    Services -->|"upload / signed URLs / delete (REST)"| Supabase
+    Services -->|"upload / authenticated byte reads / delete (REST)"| Supabase
     Services -->|"subscriptions + webhooks (REST)"| Stripe
     Services -->|"transactional email (REST)"| Resend
 

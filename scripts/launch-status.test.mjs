@@ -28,8 +28,6 @@ const VALID_PRODUCTION_VALUES = {
   FRONTEND_URL: 'https://app.charitypilot.ie',
   NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-  NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
-  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
   SUPABASE_URL: productionSupabaseUrl,
   SUPABASE_SERVICE_ROLE_KEY: supabaseServiceRoleFixture,
   STRIPE_SECRET_KEY: stripeSecretFixture,
@@ -52,7 +50,6 @@ const VALID_PRODUCTION_VALUES = {
   CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'b'.repeat(64)}`,
   CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'c'.repeat(64)}`,
   CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-  CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
 };
 
 function productionEnv(overrides = {}) {
@@ -71,7 +68,7 @@ function assertExternalLaunchEvidenceGates(state) {
   );
   const gates = state.externalEvidenceGates.join('\n');
   assert.match(gates, /production-launch-evidence\.json/);
-  assert.match(gates, /87 machine-readable checks/);
+  assert.match(gates, /86 machine-readable checks/);
   assert.match(gates, /GitHub production environment/);
   assert.match(gates, /GitHub production secret-store verification/);
   assert.match(gates, /browserQa\.checks\.accessibility-coverage/);
@@ -218,11 +215,9 @@ function assertReleaseImagePromotion(promotion) {
   assert.equal(promotion.githubEnvironment, 'production');
   assert.deepEqual(promotion.requiredGitHubEnvironmentVariables, [
     'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-    'NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co (replace <project-ref> before running release-images.yml)',
   ]);
   assert.deepEqual(promotion.configureCommands, [
     'gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"',
-    'gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first',
   ]);
   assert.doesNotMatch(promotion.requiredGitHubEnvironmentVariables.join('\n'), /REAL_SUPABASE_PROJECT_REF/);
   assert.doesNotMatch(promotion.configureCommands.join('\n'), /REAL_SUPABASE_PROJECT_REF/);
@@ -311,10 +306,10 @@ test('reports NO_ENV and points at the generator when .env.production is absent'
   const payload = JSON.parse(renderLaunchStatusJson(s));
   assert.equal(payload.phase, 'NO_ENV');
   assert.deepEqual(payload.expectedProductionValueGroups, s.expectedProductionValueGroups);
-  assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 29, remaining: 29 });
+  assert.deepEqual(payload.launchProgress.productionValues, { completed: 0, total: 26, remaining: 26 });
   assert.equal(payload.launchProgress.evidenceChecks, null);
   assert.equal(payload.launchProgress.finalSignoffs, null);
-  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 121, remaining: 121 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 0, total: 117, remaining: 117 });
   assert.deepEqual(payload.launchProgress.percentages, {
     productionValues: 0,
     evidenceChecks: 0,
@@ -358,7 +353,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
   assert.match(JSON.stringify(s.expectedProductionValueGroups), /https:\/\/<project-ref>\.supabase\.co \(replace <project-ref> before use\)/);
   assert.doesNotMatch(JSON.stringify(s.expectedProductionValueGroups), /Supabase project URL, https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.equal(s.evidenceLedger.exists, true);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 27, total: 29, remaining: 2 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 24, total: 26, remaining: 2 });
   assert.match(s.evidenceLedger.nextAction, /check:production:evidence:status/);
   assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
@@ -370,7 +365,7 @@ test('reports ENV_INCOMPLETE and lists the unfilled keys', () => {
 test('reports ENV_INCOMPLETE for non-REPLACE_ME production placeholders', () => {
   const env = productionEnv({
     STRIPE_SECRET_KEY: 'TODO_STRIPE_LIVE_SECRET_KEY',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
+    SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
     CHARITYPILOT_WEB_IMAGE: 'ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:placeholder',
   });
 
@@ -378,45 +373,36 @@ test('reports ENV_INCOMPLETE for non-REPLACE_ME production placeholders', () => 
 
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys, [
-    'NEXT_PUBLIC_SUPABASE_URL',
+    'SUPABASE_URL',
     'STRIPE_SECRET_KEY',
     'CHARITYPILOT_WEB_IMAGE',
   ]);
   assert.deepEqual(s.remainingKeyDetails, [
-    { key: 'NEXT_PUBLIC_SUPABASE_URL', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
+    { key: 'SUPABASE_URL', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
     { key: 'STRIPE_SECRET_KEY', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
     { key: 'CHARITYPILOT_WEB_IMAGE', reason: 'placeholder', detail: 'Value still contains placeholder text.' },
   ]);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 26, total: 29, remaining: 3 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 23, total: 26, remaining: 3 });
 });
 
 test('reports ENV_INCOMPLETE for sample Supabase project refs', () => {
   const env = productionEnv({
     SUPABASE_URL: 'https://configured-project.supabase.co',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
-    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
   });
 
   const s = assessLaunchState({ envExists: true, envContent: env, evidenceFileExists: true });
 
   assert.equal(s.phase, 'ENV_INCOMPLETE');
   assert.deepEqual(s.remainingKeys, [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL',
     'SUPABASE_URL',
-    'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL',
   ]);
   assert.deepEqual(
     s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })),
     [
-      { key: 'NEXT_PUBLIC_SUPABASE_URL', reason: 'sample-supabase-project-ref' },
-      { key: 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL', reason: 'sample-supabase-project-ref' },
       { key: 'SUPABASE_URL', reason: 'sample-supabase-project-ref' },
-      { key: 'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL', reason: 'sample-supabase-project-ref' },
     ],
   );
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 29, remaining: 4 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 26, remaining: 1 });
   assert.doesNotMatch(renderLaunchStatusText(s), /configured-project/);
 });
 
@@ -458,7 +444,7 @@ test('reports ENV_INCOMPLETE for copied provider placeholder values', () => {
       { key: 'RESEND_API_KEY', reason: 'provider-placeholder' },
     ],
   );
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 21, total: 29, remaining: 8 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 18, total: 26, remaining: 8 });
   assert.doesNotMatch(renderLaunchStatusText(s), /sk_live_configured|whsec_configured|pk_live_configured|re_configured|price_essentials/);
 });
 
@@ -475,7 +461,7 @@ test('reports ENV_INCOMPLETE for copied Supabase service-role placeholder values
     s.remainingKeyDetails.map((issue) => ({ key: issue.key, reason: issue.reason })),
     [{ key: 'SUPABASE_SERVICE_ROLE_KEY', reason: 'provider-placeholder' }],
   );
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 28, total: 29, remaining: 1 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 26, remaining: 1 });
   assert.doesNotMatch(renderLaunchStatusText(s), /supabase-service-role-key-from-secret-store/);
 });
 
@@ -559,7 +545,7 @@ test('reports structurally invalid production values before ENV_COMPLETE', () =>
   assert.match(details, /sslmode=require/);
   assert.match(details, /must use https:\/\//);
   assert.match(details, /origin-only URL/);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 25, total: 29, remaining: 4 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 22, total: 26, remaining: 4 });
 });
 
 test('keeps placeholder issue reasons ahead of canonical drift checks', () => {
@@ -594,7 +580,7 @@ test('reports launch evidence completion counts when the evidence ledger exists'
 
   assert.equal(s.evidenceLedger.exists, true);
   assert.equal(s.evidenceLedger.completedChecks, 0);
-  assert.equal(s.evidenceLedger.totalChecks, 87);
+  assert.equal(s.evidenceLedger.totalChecks, 86);
   assert.equal(s.evidenceLedger.approvedForLaunch, false);
   assert.equal(s.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(s.evidenceLedger.approvedFinalSignoffRoles, 0);
@@ -616,7 +602,7 @@ test('reports launch evidence completion counts when the evidence ledger exists'
       { path: 'releaseGate.db-generate', status: 'missing', hints: ['npm run db:generate -w @charitypilot/api', 'exit 0'] },
     ],
   );
-  assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 87/);
+  assert.match(s.evidenceLedger.headline, /Checklist checks complete: 0 \/ 86/);
   assert.match(s.evidenceLedger.validationCommand, /check:production:evidence -- --evidence-file/);
   assert.match(s.evidenceLedger.jsonValidationCommand, /check:production:evidence -- --json --evidence-file/);
   assert.equal(s.evidenceLedger.workQueueByArea[0].id, 'releaseGate');
@@ -637,7 +623,7 @@ test('reports missing operator-supplied production values instead of treating a 
   assert.ok(s.remainingKeys.includes('FRONTEND_URL'));
   assert.ok(s.remainingKeys.includes('STRIPE_SECRET_KEY'));
   assert.ok(s.remainingKeys.includes('CHARITYPILOT_WEB_IMAGE'));
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 1, total: 29, remaining: 28 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 1, total: 26, remaining: 25 });
   assert.deepEqual(s.remainingKeyDetails.find((issue) => issue.key === 'FRONTEND_URL'), {
     key: 'FRONTEND_URL',
     reason: 'missing',
@@ -673,7 +659,6 @@ test('reports whether launch evidence is bound to a concrete release identity', 
       webImage: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'c'.repeat(64)}`,
       migrationImage: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'d'.repeat(64)}`,
       webBuildNextPublicApiUrl: 'https://api.charitypilot.ie',
-      webBuildNextPublicSupabaseUrl: productionSupabaseUrl,
     },
   };
 
@@ -715,19 +700,19 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('EMAIL_FROM')));
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('DATABASE_URL')));
   assert.ok(payload.expectedProductionValueGroups.some((group) => group.keys.includes('AUTH_COOKIE_DOMAIN')));
-  assert.deepEqual(payload.launchProgress.productionValues, { completed: 27, total: 29, remaining: 2 });
-  assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 87, remaining: 87 });
+  assert.deepEqual(payload.launchProgress.productionValues, { completed: 24, total: 26, remaining: 2 });
+  assert.deepEqual(payload.launchProgress.evidenceChecks, { completed: 0, total: 86, remaining: 86 });
   assert.deepEqual(payload.launchProgress.finalSignoffs, { approved: 0, total: 5, remaining: 5 });
-  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 27, total: 121, remaining: 94 });
+  assert.deepEqual(payload.launchProgress.strictLaunchGates, { completed: 24, total: 117, remaining: 93 });
   assert.deepEqual(payload.launchProgress.percentages, {
-    productionValues: 93.1,
+    productionValues: 92.3,
     evidenceChecks: 0,
     finalSignoffs: 0,
-    strictLaunchGates: 22.3,
+    strictLaunchGates: 20.5,
   });
   assert.equal(payload.launchProgress.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.completedChecks, 0);
-  assert.equal(payload.evidenceLedger.totalChecks, 87);
+  assert.equal(payload.evidenceLedger.totalChecks, 86);
   assert.equal(payload.evidenceLedger.approvedForLaunch, false);
   assert.equal(payload.evidenceLedger.evidenceStatusesComplete, false);
   assert.equal(payload.evidenceLedger.approvedFinalSignoffRoles, 0);
@@ -740,7 +725,7 @@ test('renders machine-readable launch status for operator dashboards', () => {
   assert.equal(payload.evidenceLedger.workQueueByArea.find((area) => area.id === 'browserQa').remaining, 7);
   assert.equal(
     payload.evidenceLedger.workQueueByArea.reduce((total, area) => total + area.remaining, 0),
-    87,
+    86,
   );
   assert.match(payload.evidenceLedger.statusCommand, /check:production:evidence:status/);
   assert.match(payload.evidenceLedger.jsonStatusCommand, /--json/);
@@ -853,7 +838,7 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
   assert.match(s.headline, /no unresolved production value issues/);
   assert.equal(s.remainingKeys.length, 0);
   assert.deepEqual(s.expectedProductionValueGroups, []);
-  assert.deepEqual(s.launchProgress.productionValues, { completed: 29, total: 29, remaining: 0 });
+  assert.deepEqual(s.launchProgress.productionValues, { completed: 26, total: 26, remaining: 0 });
   assert.ok(s.nextActions.some((a) => a.includes('check:production')));
   assert.ok(s.nextActions.some((a) => a.includes('check:production:evidence:status')));
   assert.ok(s.nextActions.some((a) => a.includes('--json')));
@@ -862,4 +847,17 @@ test('reports ENV_COMPLETE and surfaces the remaining non-code gates', () => {
     s.nextActions.some((a) => /penetration test|sign-off|checklist/i.test(a)),
     'must remind the operator that external gates remain',
   );
+});
+
+test('ignores deprecated public Supabase placeholders left in older production env files', () => {
+  const env = [
+    productionEnv(),
+    'NEXT_PUBLIC_SUPABASE_URL=https://REPLACE_ME_SUPABASE_PROJECT_REF.supabase.co',
+    'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=https://REPLACE_ME_SUPABASE_PROJECT_REF.supabase.co',
+    'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://REPLACE_ME_SUPABASE_PROJECT_REF.supabase.co',
+  ].join('\n');
+
+  const state = assessLaunchState({ envExists: true, envContent: env });
+  assert.equal(state.phase, 'ENV_COMPLETE');
+  assert.deepEqual(state.remainingKeys, []);
 });

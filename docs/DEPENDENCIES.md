@@ -27,7 +27,7 @@ toolchain (`turbo`, `typescript`).
 | `@fastify/multipart` | `^9.0.0` | Multipart parsing for document uploads. |
 | `@fastify/rate-limit` | `^10.2.0` | Global + per-route rate limiting (e.g. auth routes 5/min). |
 | `@prisma/client` | `6.19.3` | Generated Prisma client / data access. Pinned exact to match the `prisma` CLI. |
-| `@supabase/supabase-js` | `^2.49.0` | Supabase Storage client (private document bucket, signed URLs). |
+| `@supabase/supabase-js` | `^2.49.0` | Server-side Supabase Storage client for a private document bucket; document bytes are proxied through authenticated API routes. |
 | `stripe` | `^17.7.0` | Stripe billing: checkout, customer portal, webhook verification. |
 | `resend` | `^4.5.0` | Transactional email (verification, invites, deadline reminders). |
 | `bcryptjs` | `^3.0.2` | Password hashing (cost 12). |

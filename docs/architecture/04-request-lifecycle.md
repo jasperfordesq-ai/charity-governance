@@ -95,7 +95,7 @@ app.post('/', { preHandler: [requireAdmin] }, handler);  // require OWNER/ADMIN
 | `subscriptionGuard` | `apps/api/src/middleware/subscription.ts:8-51` | `403 NO_SUBSCRIPTION` / `TRIAL_EXPIRED` / `PAST_DUE_GRACE_EXPIRED` / `SUBSCRIPTION_INACTIVE` |
 | `requireCompletePlan` | `apps/api/src/middleware/plan.ts:4-19` | `403 PLAN_FEATURE_UNAVAILABLE` |
 
-**`authGuard`** extracts a token preferring an `Authorization: Bearer` header, falling back to the access cookie (`apps/api/src/middleware/auth.ts:16-18`). It verifies the JWT (`apps/api/src/middleware/auth.ts:27`), then concurrently confirms the referenced `AuthSession` is live (not revoked, not expired) and loads the user (`apps/api/src/middleware/auth.ts:33-52`). Unless `allowUnverified` is set, an unverified email yields `403 EMAIL_NOT_VERIFIED` (`apps/api/src/middleware/auth.ts:59-65`). On success it attaches the canonical identity — `userId`, `organisationId`, `role`, `sessionId` — to `request.user` (`apps/api/src/middleware/auth.ts:67-72`). `authIdentityGuard` is the `allowUnverified: true` variant for endpoints reachable before verification (`apps/api/src/middleware/auth.ts:79-81`).
+**`authGuard`** extracts a token preferring an `Authorization: Bearer` header, falling back to the access cookie. It verifies the JWT, then concurrently confirms that the exact referenced `AuthSession` is unrevoked and unexpired and that both its live user and organisation are `ACTIVE`. The database user supplies the canonical organisation and current role; stale JWT role/tenant claims do not grant authority. Unless `allowUnverified` is set, an unverified email yields `403 EMAIL_NOT_VERIFIED`. On success it attaches `userId`, `organisationId`, `role`, and `sessionId` to `request.user`. `authIdentityGuard` is the `allowUnverified: true` variant for endpoints reachable before verification.
 
 **`requireRole`** checks `request.user.role` against an allow-list, replying `403 FORBIDDEN` otherwise; `requireAdmin = requireRole('OWNER','ADMIN')` and `requireOwner = requireRole('OWNER')` (`apps/api/src/middleware/roles.ts:6-18`).
 
@@ -127,14 +127,14 @@ Cookie names are centralised in `apps/api/src/utils/auth-cookie-names.ts:1-2`: `
 
 ### Refresh sessions (hashed, rotating)
 
-Refresh tokens are managed in `apps/api/src/services/session-tokens.ts` and persisted in the `AuthSession` model (`apps/api/prisma/schema.prisma:178-191`): `id`, `userId`, a **unique** `refreshTokenHash`, `expiresAt`, nullable `revokedAt`, and timestamps, indexed on `userId` and `expiresAt`.
+Refresh tokens are managed in `apps/api/src/services/session-tokens.ts` and persisted in `AuthSession`: `id`, `userId`, a **unique** `refreshTokenHash`, stable `familyId`/`familyCreatedAt`, optional bounded device label, expiry, and immutable revocation time/reason. Only the current successor in a family can remain active.
 
 - **Generation & hashing.** A refresh token is `48` random bytes (`REFRESH_TOKEN_BYTES`) encoded as `base64url` (`apps/api/src/services/session-tokens.ts:19`, `:65`). Only its SHA-256 hash (`hashOpaqueToken`) is stored — the plaintext never touches the database (`apps/api/src/services/session-tokens.ts:38-40`, `:66`).
 - **Expiry.** TTL is `REFRESH_TOKEN_TTL_DAYS` (default `7`, clamped to a maximum of `30`), driving both the row's `expiresAt` and the cookie max-age (`apps/api/src/services/session-tokens.ts:20-36`).
-- **Issuance.** `issueSessionTokens` creates the `AuthSession` row and mints a matching access token bound to the new `sessionId` (`apps/api/src/services/session-tokens.ts:64-72`, `:42-62`).
-- **Rotation.** `rotateSessionTokens` looks up the session by hash (`apps/api/src/services/session-tokens.ts:74-82`). It then atomically, inside a transaction, marks the old session `revokedAt = now` via a conditional `updateMany` (still un-revoked and unexpired) and inserts a fresh session with a new hash (`apps/api/src/services/session-tokens.ts:110-136`). The conditional update count must equal `1`, which serialises concurrent rotations and prevents double-spend (`apps/api/src/services/session-tokens.ts:123-125`). It returns a new access + refresh token pair (`apps/api/src/services/session-tokens.ts:138-141`).
-- **Reuse detection.** If a presented refresh token maps to a session that is **already revoked**, all of that user's sessions are revoked and the request fails `401 INVALID_REFRESH_TOKEN` (`apps/api/src/services/session-tokens.ts:88-91`), defending against stolen/replayed tokens. Expired sessions likewise fail `401` (`apps/api/src/services/session-tokens.ts:93-95`).
-- **Revocation.** `revokeSessionToken` revokes a single session by hash (used on logout — `apps/api/src/services/session-tokens.ts:144-151`); `revokeUserSessions` revokes every live session for a user (`apps/api/src/services/session-tokens.ts:153-160`).
+- **Issuance.** Organisation and user rows are share-locked in a stable order and must both still be active before a new family/session and matching access token are created. Lifecycle writers therefore cannot race a successful post-offboarding issue.
+- **Rotation.** The service locates the token, then locks organisation, user, and every row in the refresh family. A valid current row is marked `ROTATED` and exactly one successor with the same family identity is created in the same transaction. Concurrent use serialises on the family; only one request can succeed.
+- **Reuse detection.** Presenting a previously revoked family token marks every still-active successor in that family `REFRESH_REUSE`, commits the quarantine, and then returns generic `401 INVALID_REFRESH_TOKEN`. Other independent device families are not needlessly destroyed.
+- **Revocation.** Logout revokes the presented session with an explicit reason. Team security supports one-family and all-family revocation, and suspension/removal/ownership changes revoke all active sessions atomically with the membership transition.
 
 ### The refresh endpoint
 
@@ -186,3 +186,4 @@ sequenceDiagram
 - [Billing & Subscription Flow](05-billing.md) — the subscription and plan guards in detail.
 - [Frontend Architecture](09-frontend.md) — the web client's single-flight token refresh.
 - [Data Model Reference](03-data-model.md) — the AuthSession model backing refresh sessions.
+- [Team Lifecycle and Session Security](../team-lifecycle-security.md) — offboarding, administrative revocation, ownership continuity, and audit evidence.

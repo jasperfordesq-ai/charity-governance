@@ -766,7 +766,7 @@ test('team invites flatten database-enforced duplicate active invite races', asy
   assert.equal(emailCalled, false);
 });
 
-test('acceptInvite rejects stale invites when the Essentials member limit is already reached', async () => {
+test('acceptInvite does not disclose that the Essentials member limit is already reached', async () => {
   const { TeamService } = await import('../services/team.service.js');
   const { AppError } = await import('../utils/errors.js');
   const { hashOpaqueToken } = await import('../services/session-tokens.js');
@@ -830,8 +830,9 @@ test('acceptInvite rejects stale invites when the Essentials member limit is alr
       }),
     (error: unknown) =>
       error instanceof AppError &&
-      error.statusCode === 403 &&
-      error.code === 'TEAM_MEMBER_LIMIT_EXCEEDED',
+      error.statusCode === 400 &&
+      error.code === 'INVALID_INVITE' &&
+      error.message === 'This invite is invalid or has expired',
   );
 
   assert.equal(inviteConsumed, false);

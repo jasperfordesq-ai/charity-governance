@@ -20,7 +20,7 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 | Secrets and env | Passing preflight against real secret source | Open |
 | Hosting and DNS/TLS | Public web/API URLs with valid TLS | Open |
 | Database | Production migration and backup evidence | Open |
-| Supabase storage | Private bucket, signed URL, backup, and restore verification | Open |
+| Supabase storage | Private bucket, authenticated service-role read/anonymous-denial proof, backup, and restore verification | Open |
 | Jobs | Scheduler or explicit in-process job decision | Open |
 | Billing and email | Live Stripe webhook and Resend send evidence | Open |
 | Observability | Alert destination and test alert evidence | Open |
@@ -88,9 +88,8 @@ Evidence:
 - [ ] `NODE_ENV=production` is set for the API, web app, and scheduled job runtime.
 - [ ] `JWT_SECRET` is high entropy and at least 32 characters.
 - [ ] `FRONTEND_URL=https://app.charitypilot.ie` and `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`.
-- [ ] `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL` use the same HTTPS Supabase project origin.
+- [ ] `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` are available only to API/server runtimes and are absent from the web runtime and browser bundle.
 - [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` is set for Docker Compose and matches `NEXT_PUBLIC_API_URL`.
-- [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` is set for Docker Compose and matches `NEXT_PUBLIC_SUPABASE_URL`.
 - [ ] `AUTH_COOKIE_DOMAIN=.charitypilot.ie` covers the canonical web and API subdomains.
 - [ ] Stripe keys are live-mode production keys; the four price IDs are distinct, and `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` identifies the approved dedicated live portal configuration.
 - [ ] Resend sender domain is verified for production sending.
@@ -157,7 +156,7 @@ Evidence:
 - [ ] `npm run check:production:supabase -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence.
 - [ ] API readiness endpoint reports `storageConfigured: true` when called with `x-charitypilot-readiness-key`.
 - [ ] API readiness endpoint reports `storageBucketReachable: true` when called with `x-charitypilot-readiness-key`.
-- [ ] Document upload and signed download are verified through the deployed app.
+- [ ] Document upload and authenticated API byte download are verified through the deployed app without exposing a provider URL or object path.
 - [ ] Supabase backup policy or PITR evidence is recorded outside git with backup window, retention period, and backup owner.
 - [ ] Supabase restore test evidence exists with owner, restore date, recovery notes, isolated restore target, non-production restore target, and confirmation that the production project was not overwritten.
 - [ ] Machine-readable launch evidence names the separate production project, private bucket, readiness checks, deployed upload/download proof, `supabaseStorage.checks.supabase-backups-enabled`, and `supabaseStorage.checks.supabase-restore-tested` with owner/date/recovery details, isolated restore target, non-production restore target, and production-not-overwritten confirmation.
@@ -276,7 +275,7 @@ Evidence:
 - [ ] Machine-readable launch evidence includes real-device or cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
 - [ ] Desktop browser coverage is recorded with deployed responsive-smoke evidence for both the public/auth and dashboard desktop light/dark route matrices.
 - [ ] Mobile browser coverage is recorded with deployed responsive-smoke evidence for both the public/auth and dashboard mobile light/dark route matrices.
-- [ ] Auth, dashboard, billing, document upload, signed download, logout, and error states are covered in `docs/production-browser-qa.md` and the machine-readable launch evidence.
+- [ ] Auth, dashboard, billing, document upload, authenticated API download, logout, and error states are covered in `docs/production-browser-qa.md` and the machine-readable launch evidence.
 - [ ] Every browser QA evidence slot records the exact promoted `release.commitSha`: `browserQa.checks.browser-qa-completed`, `browserQa.checks.desktop-coverage`, `browserQa.checks.mobile-coverage`, `browserQa.checks.accessibility-coverage`, `browserQa.checks.cross-browser-coverage`, `browserQa.checks.ios-safari-device-coverage`, and `browserQa.checks.critical-flows-covered`.
 
 Evidence:

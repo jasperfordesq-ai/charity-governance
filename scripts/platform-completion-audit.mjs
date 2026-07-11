@@ -51,7 +51,7 @@ const launchBlockers = [
   'Real production secrets and provider values are not committed and must be supplied from the operator secret store.',
   'Production hosting, DNS, TLS, reverse proxy, and public HTTPS smoke evidence remain external launch gates.',
   'Production PostgreSQL backup and restore evidence is required before real charity data.',
-  'Production Supabase private bucket, signed URL, backup, and restore evidence is required.',
+  'Production Supabase private bucket, authenticated service-role storage probe, backup, and restore evidence is required.',
   'Stripe live products/prices/webhook and Resend sender-domain evidence are required.',
   'Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.',
   'Solicitor/governance/privacy review and external penetration test are required before real charity data.',
@@ -178,13 +178,13 @@ const fixedInThisAuditBranch = [
   'The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.',
   'The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.',
   'Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.',
-  'Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 87 checks.',
+  'Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 86 checks.',
   'Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.',
   'Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.',
   'Launch evidence status now includes strict evidence validation and refuses status-complete approval when generic status flags would fail the final evidence validator.',
   'Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.',
   'Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.',
-  'Launch status and production readiness TODO now name all 87 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
+  'Launch status and production readiness TODO now name all 86 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.',
   'Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.',
   'Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.',
   'Production launch evidence status now reports evidence-check and final-signoff completion percentages in both text and JSON output.',
@@ -265,7 +265,8 @@ const fixedInThisAuditBranch = [
   'The managed isolated E2E runner now owns bounded stack startup and reachability probes, so a half-started disposable web/API stack fails the browser gate cleanly instead of hanging operator evidence collection.',
   'The release readiness command delegates destructive Playwright to the managed runner and leaves unrelated Node/npm processes untouched; the runner owns the common bounded lifecycle and fail-closed cleanup policy.',
   'The release readiness command now resolves npm and npx gates through explicit Node CLI entrypoints on Windows instead of shell execution, keeping launch evidence transcripts free of shell-argument deprecation warnings.',
-  'The production readiness TODO now reflects the current 19-value launch blocker state without overclaiming unrun local smoke or external evidence.',
+  'The production readiness TODO now reflects the current 17-value launch blocker state without overclaiming unrun local smoke or external evidence.',
+  'Supabase URL, service-role, and bucket configuration is now server-only end to end; web builds and runtimes trust only the authenticated CharityPilot API document-download route.',
   'The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/87 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.',
   'The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.',
   'The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.',
@@ -646,7 +647,7 @@ function deriveFrontendAuditState(routes) {
   const decorativeRoutes = routes.filter((route) => route.risks.includes('decorative or pill-heavy'));
   const oversizedRouteSummary = oversizedRoutes.slice(0, 6).map((r) => `${r.route} (${r.lines})`).join(', ');
   const productUiNextAction = oversizedRoutes.length > 0
-    ? `Refactor and browser-QA the largest P0 workflows first: ${oversizedRouteSummary}.`
+    ? `Refactor the largest P0 workflows first: ${oversizedRouteSummary}; then complete deployed browser QA for every route across desktop/mobile and both themes.`
     : inlineSvgRoutes.length > 0
       ? 'Browser-QA flagged P0 workflows and clean remaining route-local inline SVG/decorative styling.'
       : decorativeRoutes.length > 0
@@ -664,9 +665,7 @@ function deriveFrontendAuditState(routes) {
     : decorativeRoutes.length > 0
       ? 'Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.'
       : 'Complete deployed browser QA across every route in desktop/mobile and light/dark mode, then attach production-only evidence.';
-  const stateUiFollowupStep = oversizedRoutes.length > 0 || inlineSvgRoutes.length > 0 || decorativeRoutes.length > 0
-    ? 'Convert remaining route-local state UI into shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.'
-    : 'Use deployed QA findings to fix route-specific state or visual regressions with shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.';
+  const stateUiFollowupStep = 'Use deployed QA findings to fix route-specific state or visual regressions with shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.';
 
   return {
     oversizedRoutes,
@@ -952,7 +951,7 @@ function render() {
     md += `### Launch Progress Summary\n\n`;
     md += `- Production values complete: ${launch.launchProgress.productionValues.completed} / ${launch.launchProgress.productionValues.total} (${launch.launchProgress.productionValues.remaining} remaining)\n`;
     if (launch.launchProgress.evidenceChecks) {
-      md += `- Launch evidence checks complete: ${launch.launchProgress.evidenceChecks.completed} / ${launch.launchProgress.evidenceChecks.total} (${launch.launchProgress.evidenceChecks.remaining} remaining)\n`;
+      md += `- Launch evidence checks complete: ${launch.launchProgress.evidenceChecks.completed}/${launch.launchProgress.evidenceChecks.total} evidence checks (${launch.launchProgress.evidenceChecks.remaining} remaining)\n`;
     }
     if (launch.launchProgress.finalSignoffs) {
       md += `- Final signoffs approved: ${launch.launchProgress.finalSignoffs.approved} / ${launch.launchProgress.finalSignoffs.total} (${launch.launchProgress.finalSignoffs.remaining} remaining)\n`;

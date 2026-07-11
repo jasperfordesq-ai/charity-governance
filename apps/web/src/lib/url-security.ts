@@ -1,11 +1,12 @@
+import {
+  ISOLATED_E2E_BROWSER_API_ORIGIN,
+  isIsolatedE2eProduction,
+} from './api-config';
+
 const STRIPE_REDIRECT_ORIGINS = new Set([
   'https://checkout.stripe.com',
   'https://billing.stripe.com',
 ]);
-
-type DownloadUrlOptions = {
-  allowedOrigins?: string[];
-};
 
 function parseUrl(value: unknown): URL | null {
   if (typeof value !== 'string' || value.trim() === '') return null;
@@ -46,24 +47,16 @@ function normaliseHttpsOrigins(origins: Array<string | undefined>): Set<string> 
 
 function defaultDocumentDownloadOrigins(): Set<string> {
   return normaliseHttpsOrigins([
-    process.env.NEXT_PUBLIC_DOCUMENT_DOWNLOAD_ORIGINS,
     process.env.NEXT_PUBLIC_API_URL,
     'https://api.charitypilot.ie',
   ]);
 }
 
-function configuredSupabaseStorageOrigin(): string | null {
-  const origins = normaliseHttpsOrigins([process.env.NEXT_PUBLIC_SUPABASE_URL]);
-  return origins.values().next().value ?? null;
-}
-
-function isSupabaseSignedStorageUrl(url: URL): boolean {
-  const configuredOrigin = configuredSupabaseStorageOrigin();
-  if (!configuredOrigin || url.origin !== configuredOrigin) return false;
-
+function isDocumentDownloadRoute(url: URL): boolean {
   return (
-    url.protocol === 'https:' &&
-    url.pathname.startsWith('/storage/v1/object/sign/')
+    /^\/api\/v1\/documents\/[^/]+\/download$/.test(url.pathname) &&
+    url.search === '' &&
+    url.hash === ''
   );
 }
 
@@ -73,11 +66,20 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 function isLocalApiDocumentDownloadUrl(url: URL): boolean {
-  return (
+  const isDevelopmentLoopback =
     process.env.NODE_ENV !== 'production' &&
     url.protocol === 'http:' &&
-    isLoopbackHostname(url.hostname) &&
-    url.pathname === '/api/v1/documents/_local-download'
+    isLoopbackHostname(url.hostname);
+  const isExactIsolatedProductionOrigin =
+    isIsolatedE2eProduction({
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE,
+    }) &&
+    url.origin === ISOLATED_E2E_BROWSER_API_ORIGIN;
+
+  return (
+    (isDevelopmentLoopback || isExactIsolatedProductionOrigin) &&
+    isDocumentDownloadRoute(url)
   );
 }
 
@@ -127,7 +129,6 @@ export function getTrustedStripeRedirectUrl(value: unknown): string | null {
 
 export function getTrustedDocumentDownloadUrl(
   value: unknown,
-  options: DownloadUrlOptions = {},
 ): string | null {
   const url = parseUrl(value);
   if (!url) return null;
@@ -136,13 +137,11 @@ export function getTrustedDocumentDownloadUrl(
     return url.toString();
   }
 
-  if (url.protocol !== 'https:') return null;
-
-  const allowedOrigins = options.allowedOrigins
-    ? normaliseHttpsOrigins(options.allowedOrigins)
-    : defaultDocumentDownloadOrigins();
-
-  if (allowedOrigins.has(url.origin) || isSupabaseSignedStorageUrl(url)) {
+  if (
+    url.protocol === 'https:' &&
+    isDocumentDownloadRoute(url) &&
+    defaultDocumentDownloadOrigins().has(url.origin)
+  ) {
     return url.toString();
   }
 

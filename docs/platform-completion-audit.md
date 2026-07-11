@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 55 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | .env.production exists but 20 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 62 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| Launch operations | .env.production exists but 17 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 29 web unit test files, 55 API test files, 14 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 32 web unit test files, 62 API test files, 16 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -140,13 +140,13 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
-- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 87 checks.
+- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 86 checks.
 - Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.
 - Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.
 - Launch evidence status now includes strict evidence validation and refuses status-complete approval when generic status flags would fail the final evidence validator.
 - Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.
 - Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.
-- Launch status and production readiness TODO now name all 87 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
+- Launch status and production readiness TODO now name all 86 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
 - Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.
 - Production launch evidence status now reports evidence-check and final-signoff completion percentages in both text and JSON output.
@@ -227,7 +227,8 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The managed isolated E2E runner now owns bounded stack startup and reachability probes, so a half-started disposable web/API stack fails the browser gate cleanly instead of hanging operator evidence collection.
 - The release readiness command delegates destructive Playwright to the managed runner and leaves unrelated Node/npm processes untouched; the runner owns the common bounded lifecycle and fail-closed cleanup policy.
 - The release readiness command now resolves npm and npx gates through explicit Node CLI entrypoints on Windows instead of shell execution, keeping launch evidence transcripts free of shell-argument deprecation warnings.
-- The production readiness TODO now reflects the current 19-value launch blocker state without overclaiming unrun local smoke or external evidence.
+- The production readiness TODO now reflects the current 17-value launch blocker state without overclaiming unrun local smoke or external evidence.
+- Supabase URL, service-role, and bucket configuration is now server-only end to end; web builds and runtimes trust only the authenticated CharityPilot API document-download route.
 - The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/87 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.
@@ -364,7 +365,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 183 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 185 | yes | no obvious static risk; verify in browser |
-| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 196 | yes | no obvious static risk; verify in browser |
+| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 436 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 264 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 
@@ -372,25 +373,25 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 263 | public/partial by design | 6 | preserve current guard and tenant boundary |
-| `billing` | `apps/api/src/routes/billing/index.ts` | 88 | auth, owner actions | 3 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 263 | public/partial by design | 10 | preserve current guard and tenant boundary |
+| `billing` | `apps/api/src/routes/billing/index.ts` | 98 | auth, owner actions | 7 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
 | `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 101 | auth, subscription | 1 | preserve current guard and tenant boundary |
 | `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 107 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
-| `documents` | `apps/api/src/routes/documents/index.ts` | 316 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `documents` | `apps/api/src/routes/documents/index.ts` | 347 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `health` | `apps/api/src/routes/health/index.ts` | 206 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `team` | `apps/api/src/routes/team/index.ts` | 113 | auth, subscription | 2 | preserve current guard and tenant boundary |
+| `team` | `apps/api/src/routes/team/index.ts` | 291 | auth, subscription | 5 | preserve current guard and tenant boundary |
 
 ## Launch Evidence Blockers
 
 - Real production secrets and provider values are not committed and must be supplied from the operator secret store.
 - Production hosting, DNS, TLS, reverse proxy, and public HTTPS smoke evidence remain external launch gates.
 - Production PostgreSQL backup and restore evidence is required before real charity data.
-- Production Supabase private bucket, signed URL, backup, and restore evidence is required.
+- Production Supabase private bucket, authenticated service-role storage probe, backup, and restore evidence is required.
 - Stripe live products/prices/webhook and Resend sender-domain evidence are required.
 - Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
 - Solicitor/governance/privacy review and external penetration test are required before real charity data.
@@ -399,11 +400,11 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 87.
+- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 86.
 - approvedForLaunch: false
 - finalSignoff: pending
 - Final approval roles approved: 0 / 5
-- Release binding: Launch evidence is not bound to a concrete release artifact identity (8 field(s) missing or placeholder).
+- Release binding: Launch evidence is not bound to a concrete release artifact identity (7 field(s) missing or placeholder).
 - Next incomplete checks:
   - releaseGate.check-production (pending)
   - releaseGate.github-environment (missing)
@@ -496,10 +497,8 @@ Local-state note: This generated section reflects the local non-committed `.env.
 - GitHub environment: `production`
 - Required GitHub environment variables:
   - `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`
-  - `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co (replace <project-ref> before running release-images.yml)`
 - Configure with:
   - `gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"`
-  - `gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first`
 - Workflow: `gh workflow run release-images.yml --ref master`
 - Watch: `gh run watch RELEASE_RUN_ID --exit-status`
 - Preflight GitHub environment: `npm run check:production:github-env -- --environment=production`
@@ -530,20 +529,20 @@ Local-state note: This generated section reflects the local non-committed `.env.
 ### Local Production Environment State
 
 - Phase: `ENV_INCOMPLETE`
-- .env.production exists but 20 production value issue(s) still need resolution.
+- .env.production exists but 17 production value issue(s) still need resolution.
 - This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Progress Summary
 
-- Production values complete: 9 / 29 (20 remaining)
-- Launch evidence checks complete: 9 / 87 (78 remaining)
+- Production values complete: 9 / 26 (17 remaining)
+- Launch evidence checks complete: 9/86 evidence checks (77 remaining)
 - Final signoffs approved: 0 / 5 (5 remaining)
-- Strict launch gates complete: 18 / 121 (103 remaining, 14.9% complete)
+- Strict launch gates complete: 18 / 117 (99 remaining, 15.4% complete)
 - approvedForLaunch: false
 
 ### Local Production Environment Issues
 
-The local non-committed production env still has 20 unresolved value issue(s):
+The local non-committed production env still has 17 unresolved value issue(s):
 
 - `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` (missing): Value is missing from .env.production or the approved production secret source.
 - `TRUSTED_PROXY_ADDRESSES` (placeholder): Value still contains a REPLACE_ME placeholder.
@@ -559,12 +558,9 @@ The local non-committed production env still has 20 unresolved value issue(s):
 - `SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `SUPABASE_SERVICE_ROLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `ERROR_ALERT_WEBHOOK_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `NEXT_PUBLIC_SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `CHARITYPILOT_API_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `CHARITYPILOT_WEB_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
 - `CHARITYPILOT_MIGRATION_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
 
 Grouped by source:
 
@@ -584,17 +580,14 @@ Grouped by source:
 - Resend email:
   - `RESEND_API_KEY`: Resend production API key from the secret store (Step 2)
 - Supabase storage:
-  - `SUPABASE_URL`: Same Supabase project URL (Step 2)
+  - `SUPABASE_URL`: API-only Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)
   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
-  - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)
-  - `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL`: Docker Compose web runtime Supabase origin; must match NEXT_PUBLIC_SUPABASE_URL (Step 2/6)
 - Observability:
   - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)
 - Release image promotion:
   - `CHARITYPILOT_API_IMAGE`: Digest-pinned API image ref from release-image-digests.env (Step 6)
   - `CHARITYPILOT_WEB_IMAGE`: Digest-pinned web image ref from release-image-digests.env (Step 6)
   - `CHARITYPILOT_MIGRATION_IMAGE`: Digest-pinned migration image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL`: Web image build Supabase origin copied from release-image-digests.env (Step 6)
 
 ## Irish Compliance Source Posture
 

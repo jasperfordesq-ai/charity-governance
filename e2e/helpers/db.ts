@@ -421,6 +421,65 @@ export async function createVerifiedMember(data: {
   });
 }
 
+/**
+ * Create a verified ADMIN directly inside one proven disposable organisation.
+ * Lifecycle security integration tests use an ADMIN because the session must
+ * be demonstrably authorised for both a representative read and write before
+ * an owner suspends or removes it.
+ */
+export async function createVerifiedAdmin(data: {
+  email: string;
+  name: string;
+  organisationId: string;
+}): Promise<{
+  userId: string;
+  organisationId: string;
+  role: "ADMIN";
+}> {
+  const normalizedEmail = data.email.trim().toLowerCase();
+  const passwordHash = await bcrypt.hash(randomToken(32), 12);
+  const userId = testId("usr");
+  const now = new Date();
+
+  return withDb(async (client) => {
+    const result = await client.query<{
+      id: string;
+      organisationId: string;
+      role: "ADMIN";
+    }>(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "role", "organisationId", "emailVerified", "updatedAt")
+       SELECT $1, $2, $3, $4, 'ADMIN', "id", true, $6
+         FROM "Organisation"
+        WHERE "id" = $5
+       RETURNING "id", "organisationId", "role"`,
+      [
+        userId,
+        normalizedEmail,
+        data.name,
+        passwordHash,
+        data.organisationId,
+        now,
+      ],
+    );
+    const row = result.rows[0];
+    if (
+      !row ||
+      row.id !== userId ||
+      row.organisationId !== data.organisationId ||
+      row.role !== "ADMIN"
+    ) {
+      throw new Error(
+        "createVerifiedAdmin: disposable organisation was absent or the inserted tenant/role did not match",
+      );
+    }
+    return {
+      userId: row.id,
+      organisationId: row.organisationId,
+      role: row.role,
+    };
+  });
+}
+
 export async function createAuthenticatedStorageState(data: {
   userId: string;
   organisationId: string;

@@ -115,7 +115,6 @@ jobs:
       - name: Build web
         env:
           NEXT_PUBLIC_API_URL: https://api.charitypilot.ie
-          NEXT_PUBLIC_SUPABASE_URL: https://ci-project.supabase.co
         run: npm run build -w @charitypilot/web
 
       - name: Build API Docker image
@@ -335,7 +334,6 @@ jobs:
         run: |
           docker build -f apps/web/Dockerfile \
             --build-arg NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
-            --build-arg NEXT_PUBLIC_SUPABASE_URL=https://ci-project.supabase.co \
             -t charitypilot-web-ci .
 
       - name: Verify web Docker runtime dependencies
@@ -352,7 +350,6 @@ jobs:
             -e PORT=3003 \
             -e HOST=0.0.0.0 \
             -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
-            -e NEXT_PUBLIC_SUPABASE_URL=https://ci-project.supabase.co \
             charitypilot-web-ci
           web_headers="$(mktemp)"
           until curl --fail --silent --dump-header "${web_headers}" http://127.0.0.1:3003/; do

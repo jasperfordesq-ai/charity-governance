@@ -35,10 +35,8 @@ function completeDeployEnv(overrides = {}) {
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     CADDY_ACME_EMAIL: 'ops@charitypilot.ie',
     CHARITYPILOT_WEB_DOMAIN: 'app.charitypilot.ie',
     CHARITYPILOT_API_DOMAIN: 'api.charitypilot.ie',
@@ -46,7 +44,6 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     ...overrides,
   };
 
@@ -130,13 +127,12 @@ test('deploy preflight rejects web image build origin drift before promotion', (
   }
 });
 
-test('deploy preflight requires web image build origin metadata from the release manifest', () => {
+test('deploy preflight requires web image API origin metadata from the release manifest', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-deploy-preflight-web-origin-missing-'));
   const envPath = join(tempDir, 'production.env');
 
   writeFileSync(envPath, completeDeployEnv({
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: '',
-    CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL: '',
   }));
 
   try {
@@ -146,10 +142,6 @@ test('deploy preflight requires web image build origin metadata from the release
     assert.match(
       result.stderr,
       /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL is required from the release image digest manifest/,
-    );
-    assert.match(
-      result.stderr,
-      /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL is required from the release image digest manifest/,
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

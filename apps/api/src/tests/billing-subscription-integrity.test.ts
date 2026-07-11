@@ -20,6 +20,16 @@ const [{ BillingService }, { SubscriptionPlan }] = await Promise.all([
   import('@charitypilot/shared'),
 ]);
 
+function testOnlyCheckout(service: InstanceType<typeof BillingService>) {
+  return (service as unknown as {
+    createCheckoutSession: (
+      organisationId: string,
+      plan: typeof SubscriptionPlan.ESSENTIALS | typeof SubscriptionPlan.COMPLETE,
+      interval: 'monthly' | 'yearly',
+    ) => Promise<{ url: string }>;
+  }).createCheckoutSession.bind(service);
+}
+
 type LocalSubscription = {
   stripeSubscriptionId: string | null;
   status: 'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELLED' | 'EXPIRED';
@@ -242,7 +252,7 @@ test('checkout is blocked when Stripe reports any nonterminal subscription for t
   });
 
   await assert.rejects(
-    () => service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly'),
+    () => testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly'),
     (error: unknown) => appErrorCode(error) === 'STRIPE_SUBSCRIPTION_ALREADY_EXISTS',
   );
 
@@ -253,7 +263,7 @@ test('checkout is blocked when Stripe reports any nonterminal subscription for t
 test('a local trial with no Stripe subscription can create one attempt-bound Checkout session', async () => {
   const { service, calls, currentAttempt } = checkoutHarness();
 
-  const result = await service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  const result = await testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
 
   assert.deepEqual(result, { url: 'https://checkout.stripe.test/integrity' });
   const attempt = currentAttempt();
@@ -283,7 +293,7 @@ test('a local trial with no Stripe subscription can create one attempt-bound Che
 test('Checkout creation accepts a matching webhook completion that wins the finalization race', async () => {
   const { service, calls, currentAttempt } = checkoutHarness({ completeDuringFinalization: true });
 
-  const result = await service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  const result = await testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
 
   assert.deepEqual(result, { url: 'https://checkout.stripe.test/integrity' });
   assert.equal(currentAttempt()?.status, 'COMPLETED');
@@ -297,7 +307,7 @@ test('a cancelled Stripe subscription can restart only when the saved subscripti
     remoteSubscriptions: [{ id: 'sub_cancelled', status: 'canceled' }],
   });
 
-  await reconciled.service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'yearly');
+  await testOnlyCheckout(reconciled.service)('org_1', SubscriptionPlan.COMPLETE, 'yearly');
   assert.equal(reconciled.currentAttempt()?.expectedPreviousStripeSubscriptionId, 'sub_cancelled');
   assert.equal(reconciled.calls.some((call) => call.name === 'stripe.checkout.sessions.create'), true);
 
@@ -307,7 +317,7 @@ test('a cancelled Stripe subscription can restart only when the saved subscripti
   });
 
   await assert.rejects(
-    () => unreconciled.service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'yearly'),
+    () => testOnlyCheckout(unreconciled.service)('org_1', SubscriptionPlan.COMPLETE, 'yearly'),
     (error: unknown) => appErrorCode(error) === 'BILLING_ACCOUNT_REVIEW_REQUIRED',
   );
   assert.equal(unreconciled.calls.some((call) => call.name === 'stripe.checkout.sessions.create'), false);
@@ -320,7 +330,7 @@ test('multiple Stripe customers for one organisation require review before check
   });
 
   await assert.rejects(
-    () => service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly'),
+    () => testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly'),
     (error: unknown) => appErrorCode(error) === 'BILLING_ACCOUNT_REVIEW_REQUIRED',
   );
 
@@ -336,7 +346,7 @@ test('a saved Stripe subscription recovers its verified customer before any new 
     remoteSubscriptions: [{ id: 'sub_cancelled', status: 'canceled' }],
   });
 
-  await service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  await testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
 
   assert.equal(calls.some((call) => call.name === 'stripe.subscriptions.retrieve'), true);
   assert.equal(calls.some((call) => call.name === 'stripe.customers.create'), false);
@@ -351,8 +361,8 @@ test('a saved Stripe subscription recovers its verified customer before any new 
 test('a live Checkout attempt reuses one Stripe session and rejects a conflicting plan', async () => {
   const { service, calls } = checkoutHarness();
 
-  const first = await service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
-  const retried = await service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  const first = await testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  const retried = await testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
 
   assert.deepEqual(retried, first);
   assert.equal(
@@ -362,7 +372,7 @@ test('a live Checkout attempt reuses one Stripe session and rejects a conflictin
   );
 
   await assert.rejects(
-    () => service.createCheckoutSession('org_1', SubscriptionPlan.ESSENTIALS, 'monthly'),
+    () => testOnlyCheckout(service)('org_1', SubscriptionPlan.ESSENTIALS, 'monthly'),
     (error: unknown) => appErrorCode(error) === 'CHECKOUT_ALREADY_PENDING',
   );
   assert.equal(calls.filter((call) => call.name === 'stripe.checkout.sessions.create').length, 1);
@@ -396,9 +406,9 @@ test('concurrent Checkout requests share one attempt-bound Stripe idempotency ke
     },
   });
 
-  const first = harness.service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  const first = testOnlyCheckout(harness.service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
   await stripeStartedPromise;
-  const second = harness.service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  const second = testOnlyCheckout(harness.service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
   await bothStripeCallsStartedPromise;
   releaseStripe();
 
@@ -436,7 +446,7 @@ test('an expired open Checkout is expired at Stripe before a replacement attempt
     },
   });
 
-  await service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly');
+  await testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly');
 
   const expireIndex = calls.findIndex((call) => call.name === 'stripe.checkout.sessions.expire');
   const deleteIndex = calls.findIndex((call) => call.name === 'billingCheckoutAttempt.delete');
@@ -472,7 +482,7 @@ test('an expired attempt whose Stripe Checkout completed blocks replacement pend
   });
 
   await assert.rejects(
-    () => service.createCheckoutSession('org_1', SubscriptionPlan.COMPLETE, 'monthly'),
+    () => testOnlyCheckout(service)('org_1', SubscriptionPlan.COMPLETE, 'monthly'),
     (error: unknown) => appErrorCode(error) === 'BILLING_ACCOUNT_REVIEW_REQUIRED',
   );
 
@@ -499,9 +509,12 @@ test('billing status offers Checkout only after the Stripe-managed subscription 
     subscription: {
       findUnique: async () => subscription,
     },
+    billingAuthorityGrant: {
+      findFirst: async () => null,
+    },
   } as never);
 
-  const activeStatus = await service.getStatus('org_1');
+  const activeStatus = await service.getStatus('org_1', { id: 'u1', sessionId: 'sess-1', role: 'OWNER' });
 
   assert.equal(activeStatus.billingConfigured, true);
   assert.equal(activeStatus.canStartCheckout, false);
@@ -513,7 +526,7 @@ test('billing status offers Checkout only after the Stripe-managed subscription 
     stripeStatus: null,
     currentPeriodEnd: new Date('2026-07-01T00:00:00.000Z'),
   };
-  const unverifiedTerminalStatus = await service.getStatus('org_1');
+  const unverifiedTerminalStatus = await service.getStatus('org_1', { id: 'u1', sessionId: 'sess-1', role: 'OWNER' });
   assert.equal(
     unverifiedTerminalStatus.canStartCheckout,
     false,
@@ -524,7 +537,7 @@ test('billing status offers Checkout only after the Stripe-managed subscription 
     ...subscription,
     stripeStatus: 'canceled',
   };
-  const terminalStatus = await service.getStatus('org_1');
+  const terminalStatus = await service.getStatus('org_1', { id: 'u1', sessionId: 'sess-1', role: 'OWNER' });
 
   assert.equal(terminalStatus.canStartCheckout, true);
   assert.equal(terminalStatus.canOpenPortal, true);

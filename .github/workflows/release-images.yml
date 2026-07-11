@@ -27,7 +27,6 @@ jobs:
     timeout-minutes: 45
     env:
       NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
-      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
 
     steps:
       - name: Checkout
@@ -60,11 +59,7 @@ jobs:
             echo "NEXT_PUBLIC_API_URL production variable is required." >&2
             exit 1
           fi
-          if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ]; then
-            echo "NEXT_PUBLIC_SUPABASE_URL production variable is required." >&2
-            exit 1
-          fi
-          for var_name in NEXT_PUBLIC_API_URL NEXT_PUBLIC_SUPABASE_URL; do
+          for var_name in NEXT_PUBLIC_API_URL; do
             value="${!var_name}"
             normalized="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
             case "${normalized}" in
@@ -75,7 +70,6 @@ jobs:
             esac
           done
           node -e "const canonicalApiOrigin = 'https://api.charitypilot.ie'; const value = process.env.NEXT_PUBLIC_API_URL; const url = new URL(value); if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '') || url.origin !== canonicalApiOrigin) { console.error('NEXT_PUBLIC_API_URL must be the canonical production API origin https://api.charitypilot.ie.'); process.exit(1); }"
-          node -e "const value = process.env.NEXT_PUBLIC_SUPABASE_URL; const url = new URL(value); if (url.protocol !== 'https:' || url.origin !== value.replace(/\/+$/, '') || !url.hostname.toLowerCase().endsWith('.supabase.co')) { console.error('NEXT_PUBLIC_SUPABASE_URL must be an origin-only HTTPS Supabase project URL.'); process.exit(1); }"
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -419,7 +413,6 @@ jobs:
         run: |
           docker build -f apps/web/Dockerfile \
             --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
-            --build-arg NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
             -t charitypilot-web-ci .
 
       - name: Verify web Docker runtime dependencies
@@ -436,7 +429,6 @@ jobs:
             -e PORT=3003 \
             -e HOST=0.0.0.0 \
             -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
-            -e NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
             charitypilot-web-ci
           web_headers="$(mktemp)"
           until curl --fail --silent --dump-header "${web_headers}" http://127.0.0.1:3003/; do
@@ -558,7 +550,6 @@ jobs:
           CHARITYPILOT_MIGRATION_IMAGE="${migration_repository}@${migration_digest}"
           CHARITYPILOT_DATABASE_COMPATIBILITY="p006-deadline-calendar-v1"
           CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}"
-          CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}"
           EOF
           echo "### Release image digest manifest" >> "${GITHUB_STEP_SUMMARY}"
           echo '```env' >> "${GITHUB_STEP_SUMMARY}"
@@ -587,15 +578,13 @@ jobs:
           STRIPE_BILLING_PORTAL_CONFIGURATION_ID=bpc_ci_portal
           RESEND_API_KEY=re_ci_configured_secret
           EMAIL_FROM=noreply@charitypilot.ie
-          SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+          SUPABASE_URL=https://ci-project.supabase.co
           SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key
           SUPABASE_STORAGE_BUCKET=documents
           ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot
           NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-          NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_ci_configured_secret
           CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-          CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
           EOF
           cat release-image-digests.env >> .env.production.ci
           npm run deploy:preflight -- --production-env-file=.env.production.ci

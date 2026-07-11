@@ -174,12 +174,12 @@ test('GET /:id returns 404 for a document belonging to another organisation', as
   }
 });
 
-test('GET /:id/download returns 404 and never signs a URL for a foreign-org document', { concurrency: false }, async () => {
-  const originalGetSignedUrl = StorageService.prototype.getSignedUrl;
-  let signedCalled = false;
-  StorageService.prototype.getSignedUrl = async () => {
-    signedCalled = true;
-    return 'https://example.org/signed';
+test('GET /:id/download returns 404 and never reads storage for a foreign-org document', { concurrency: false }, async () => {
+  const originalDownloadFile = StorageService.prototype.downloadFile;
+  let storageCalled = false;
+  StorageService.prototype.downloadFile = async () => {
+    storageCalled = true;
+    return Buffer.from('foreign');
   };
 
   const app = await buildDocumentsApp({
@@ -198,9 +198,80 @@ test('GET /:id/download returns 404 and never signs a URL for a foreign-org docu
 
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().code, 'DOCUMENT_NOT_FOUND');
-    assert.equal(signedCalled, false);
+    assert.equal(storageCalled, false);
   } finally {
-    StorageService.prototype.getSignedUrl = originalGetSignedUrl;
+    StorageService.prototype.downloadFile = originalDownloadFile;
+    await app.close();
+  }
+});
+
+test('GET /:id/download streams private bytes without returning a reusable storage URL', { concurrency: false }, async () => {
+  const originalDownloadFile = StorageService.prototype.downloadFile;
+  StorageService.prototype.downloadFile = async () => Buffer.from('%PDF-1.7\nprivate evidence');
+  const app = await buildDocumentsApp({
+    subscription: activeSubscription(),
+    document: {
+      findFirst: async () => ({
+        fileUrl: 'org-1/private-policy.pdf',
+        mimeType: 'application/pdf',
+        name: 'Private policy',
+      }),
+    },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/doc-1/download',
+      headers: { authorization: authHeader },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['content-type'], 'application/pdf');
+    assert.equal(response.headers['cache-control'], 'private, no-store, max-age=0');
+    assert.match(response.headers['content-disposition'] ?? '', /attachment; filename="Private policy\.pdf"/);
+    assert.equal(response.body, '%PDF-1.7\nprivate evidence');
+    assert.equal(response.body.includes('signedUrl'), false);
+  } finally {
+    StorageService.prototype.downloadFile = originalDownloadFile;
+    await app.close();
+  }
+});
+
+test('a session revoked during storage I/O receives no document bytes', { concurrency: false }, async () => {
+  const originalDownloadFile = StorageService.prototype.downloadFile;
+  StorageService.prototype.downloadFile = async () => Buffer.from('must not escape');
+  let sessionRead = 0;
+  const app = await buildDocumentsApp({
+    authSession: {
+      findFirst: async () => {
+        sessionRead += 1;
+        return sessionRead === 1 ? { id: 'session-1' } : null;
+      },
+    },
+    subscription: activeSubscription(),
+    document: {
+      findFirst: async () => ({
+        fileUrl: 'org-1/private-policy.pdf',
+        mimeType: 'application/pdf',
+        name: 'Private policy',
+      }),
+    },
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/doc-1/download',
+      headers: { authorization: authHeader },
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.json().code, 'UNAUTHORIZED');
+    assert.equal(response.body.includes('must not escape'), false);
+    assert.equal(sessionRead, 2);
+  } finally {
+    StorageService.prototype.downloadFile = originalDownloadFile;
     await app.close();
   }
 });
@@ -633,62 +704,6 @@ test('POST /:id/standards rejects a missing standardId with VALIDATION_ERROR', a
   }
 });
 
-test('GET /_local-download requires a path query parameter', async () => {
-  const app = await buildDocumentsApp({
-    subscription: activeSubscription(),
-    document: {},
-  });
-
-  try {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/_local-download',
-      headers: { authorization: authHeader },
-    });
-
-    assert.equal(response.statusCode, 400);
-    assert.equal(response.json().code, 'LOCAL_STORAGE_PATH_REQUIRED');
-  } finally {
-    await app.close();
-  }
-});
-
-test('GET /_local-download requires the local storage path to belong to a live document row', { concurrency: false }, async () => {
-  const originalDriver = process.env.DOCUMENT_STORAGE_DRIVER;
-  const originalReadLocalFile = StorageService.prototype.readLocalFile;
-  process.env.DOCUMENT_STORAGE_DRIVER = 'local';
-  let readCalled = false;
-
-  StorageService.prototype.readLocalFile = async () => {
-    readCalled = true;
-    return Buffer.from('orphaned file');
-  };
-
-  const app = await buildDocumentsApp({
-    subscription: activeSubscription(),
-    document: {
-      findFirst: async () => null,
-    },
-  });
-
-  try {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/_local-download?path=org-1/orphaned-policy.pdf',
-      headers: { authorization: authHeader },
-    });
-
-    assert.equal(response.statusCode, 404);
-    assert.equal(response.json().code, 'DOCUMENT_NOT_FOUND');
-    assert.equal(readCalled, false);
-  } finally {
-    StorageService.prototype.readLocalFile = originalReadLocalFile;
-    if (originalDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
-    else process.env.DOCUMENT_STORAGE_DRIVER = originalDriver;
-    await app.close();
-  }
-});
-
 // ---------------------------------------------------------------------------
 // Graceful degradation
 // ---------------------------------------------------------------------------
@@ -724,31 +739,6 @@ test('GET /:id/download returns 503 STORAGE_NOT_CONFIGURED when Supabase is unco
     else process.env.SUPABASE_URL = originalUrl;
     if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
-    await app.close();
-  }
-});
-
-test('GET /_local-download returns 503 when the local storage driver is disabled', { concurrency: false }, async () => {
-  const originalDriver = process.env.DOCUMENT_STORAGE_DRIVER;
-  delete process.env.DOCUMENT_STORAGE_DRIVER;
-
-  const app = await buildDocumentsApp({
-    subscription: activeSubscription(),
-    document: {},
-  });
-
-  try {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/_local-download?path=org-1/policy.pdf',
-      headers: { authorization: authHeader },
-    });
-
-    assert.equal(response.statusCode, 503);
-    assert.equal(response.json().code, 'STORAGE_NOT_CONFIGURED');
-  } finally {
-    if (originalDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
-    else process.env.DOCUMENT_STORAGE_DRIVER = originalDriver;
     await app.close();
   }
 });

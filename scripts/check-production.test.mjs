@@ -14,7 +14,6 @@ const repoRoot = resolve(scriptsDir, '..');
 const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const validRuntimeWebApiUrlEnv = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-  CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
 };
 const forbiddenApiRuntimePackages = [
   'typescript',
@@ -228,11 +227,6 @@ function runPreflight(args, envOverrides = {}) {
       : {
           CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL,
         }),
-    ...(Object.hasOwn(envOverrides, 'CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL')
-      ? {}
-      : {
-          CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: validRuntimeWebApiUrlEnv.CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL,
-        }),
   };
 
   return runProductionPreflightFromArgs(args, {
@@ -266,7 +260,6 @@ function completeProductionEnv(overrides = {}) {
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-    NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_live_configuredSecret',
     ...overrides,
   };
@@ -350,7 +343,6 @@ test('passes when the selected env file contains complete production values', ()
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      `NEXT_PUBLIC_SUPABASE_URL=${productionSupabaseUrl}`,
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -359,7 +351,6 @@ test('passes when the selected env file contains complete production values', ()
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -370,7 +361,7 @@ test('passes when the selected env file contains complete production values', ()
   }
 });
 
-test('fails when production Supabase URLs still contain project-ref placeholder text', () => {
+test('fails when the API Supabase URL still contains project-ref placeholder text', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-project-ref-'));
   const envPath = join(tempDir, 'production.env');
 
@@ -378,28 +369,20 @@ test('fails when production Supabase URLs still contain project-ref placeholder 
     envPath,
     completeProductionEnv({
       SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
-      NEXT_PUBLIC_SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
     }),
   );
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`], {
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://REAL_SUPABASE_PROJECT_REF.supabase.co',
-    });
+    const result = runPreflight([`--production-env-file=${envPath}`]);
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /SUPABASE_URL is missing or still contains a placeholder value/);
-    assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/);
-    assert.match(
-      result.stderr,
-      /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/,
-    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test('fails when production Supabase URLs use sample project refs', () => {
+test('fails when the API Supabase URL uses a sample project ref', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-sample-supabase-'));
   const envPath = join(tempDir, 'production.env');
 
@@ -407,19 +390,14 @@ test('fails when production Supabase URLs use sample project refs', () => {
     envPath,
     completeProductionEnv({
       SUPABASE_URL: 'https://configured-project.supabase.co',
-      NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     }),
   );
 
   try {
-    const result = runPreflight([`--production-env-file=${envPath}`], {
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
-    });
+    const result = runPreflight([`--production-env-file=${envPath}`]);
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /SUPABASE_URL must not use a sample Supabase project ref/);
-    assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref/);
-    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL must not use a sample Supabase project ref/);
     assert.doesNotMatch(result.stderr, /configured-project/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -674,68 +652,6 @@ test('fails when the compose runtime web API URL is not origin-only', () => {
   }
 });
 
-test('fails when the compose runtime web Supabase URL is missing', () => {
-  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-supabase-missing-'));
-  const envPath = join(tempDir, 'production.env');
-
-  writeFileSync(envPath, completeProductionEnv());
-
-  try {
-    const result = runPreflight([`--production-env-file=${envPath}`], {
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: '',
-    });
-
-    assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL is missing or still contains a placeholder value/,
-    );
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
-
-test('fails when the compose runtime web Supabase URL drifts from the production Supabase URL', () => {
-  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-supabase-drift-'));
-  const envPath = join(tempDir, 'production.env');
-
-  writeFileSync(envPath, completeProductionEnv());
-
-  try {
-    const result = runPreflight([`--production-env-file=${envPath}`], {
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://attacker.supabase.co',
-    });
-
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL must match NEXT_PUBLIC_SUPABASE_URL/);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
-
-test('fails when the public Supabase URL drifts from the API Supabase URL', () => {
-  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-public-supabase-drift-'));
-  const envPath = join(tempDir, 'production.env');
-
-  writeFileSync(
-    envPath,
-    completeProductionEnv({
-      NEXT_PUBLIC_SUPABASE_URL: 'https://different-project.supabase.co',
-    }),
-  );
-
-  try {
-    const result = runPreflight([`--production-env-file=${envPath}`], {
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://different-project.supabase.co',
-    });
-
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /NEXT_PUBLIC_SUPABASE_URL must match SUPABASE_URL/);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
-
 test('fails when the compose runtime web API URL uses a non-canonical production origin', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-api-drift-'));
   const envPath = join(tempDir, 'production.env');
@@ -783,14 +699,12 @@ test('passes when the compose runtime web API URL is supplied by the selected en
     envPath,
     completeProductionEnv({
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: productionSupabaseUrl,
     }),
   );
 
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: '',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: '',
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -827,7 +741,6 @@ test('fails when a required production value is absent from the selected env fil
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -880,7 +793,6 @@ test('fails when the production error alert webhook is missing', () => {
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     });
 
     assert.equal(result.status, 1);
@@ -1370,7 +1282,6 @@ test('fails when production frontend origins include non-canonical additional or
       'SUPABASE_STORAGE_BUCKET=documents',
       'ERROR_ALERT_WEBHOOK_URL=https://alerts.charitypilot.ie/hooks/charitypilot',
       'NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
-      'NEXT_PUBLIC_SUPABASE_URL=https://configured-project.supabase.co',
       'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_configuredSecret',
       '',
     ].join('\n'),
@@ -1379,7 +1290,6 @@ test('fails when production frontend origins include non-canonical additional or
   try {
     const result = runPreflight([`--production-env-file=${envPath}`], {
       CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
-      CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL: 'https://configured-project.supabase.co',
     });
 
     assert.equal(result.status, 1);
@@ -1880,15 +1790,15 @@ test('production todo reflects current launch blockers without overclaiming loca
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(productionTodo, /Current local status checked 2026-07-09/);
-  assert.match(productionTodo, /9 of 28 production values are complete/);
+  assert.match(productionTodo, /Current local status checked 2026-07-11/);
+  assert.match(productionTodo, /9 of 26 production values are complete/);
   assert.match(
     productionTodo,
-    /9 of 28 production values are complete[\s\S]*19[\s\S]*production values still require real data/,
+    /9 of 26 production values are complete[\s\S]*17[\s\S]*production values still require real data/,
   );
   assert.match(
     productionTodo,
-    /launch evidence ledger is now 9 of 87 checks\s+>\s+complete from local\/CI release-gate evidence/s,
+    /launch evidence ledger is now 9 of 86 checks\s+>\s+complete from local\/CI release-gate evidence/s,
   );
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
@@ -1908,7 +1818,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.browser-qa-completed/);
   assert.match(productionTodo, /npm run check:production:browser-qa-env/);
   assert.match(productionTodo, /Deployed browser QA environment preflight passed/);
-  assert.match(productionTodo, /87 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /86 machine-readable launch evidence checks/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
   assert.match(productionTodo, /release\s+image promotion/i);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
@@ -1963,9 +1873,9 @@ test('agent continuation handoff reflects current launch evidence progress witho
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.match(handoff, /Known current state from `npm run launch:status -- --json` on 2026-07-10/);
-  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 87`/);
-  assert.match(handoff, /The evidence ledger is currently `9 \/ 87`/);
-  assert.match(handoff, /78 \/ 87` machine-readable launch checks remain/);
+  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 86`/);
+  assert.match(handoff, /The evidence ledger is currently `9 \/ 86`/);
+  assert.match(handoff, /77 \/ 86` machine-readable launch checks remain/);
   assert.match(handoff, /releaseGate\.check-production/);
   assert.match(handoff, /releaseGate\.github-environment/);
   assert.match(handoff, /releaseGate\.github-secret-store/);
@@ -2024,9 +1934,9 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.doesNotMatch(handoff, /317\/317 production-tooling checks/);
   assert.doesNotMatch(handoff, /316\/316 production-tooling checks/);
   assert.doesNotMatch(handoff, /315\/315 production-tooling checks/);
-  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 87`/);
-  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 87`/);
-  assert.doesNotMatch(handoff, /87 \/ 87` machine-readable launch checks remain/);
+  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 86`/);
+  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 86`/);
+  assert.doesNotMatch(handoff, /86 \/ 86` machine-readable launch checks remain/);
   assert.doesNotMatch(handoff, /313\/313 production-tooling checks/);
   assert.doesNotMatch(handoff, /restore-test ownership/);
 });
@@ -2048,19 +1958,15 @@ test('production secret env files are ignored by git without hiding the template
   );
 });
 
-test('production env template documents the compose runtime web public origins', () => {
+test('production env template exposes only the API origin to the web runtime', () => {
   const template = readRepoFile('.env.production.example');
   const generator = readRepoFile('scripts/generate-production-env.mjs');
 
   assert.match(template, /NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
-  assert.match(template, /NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
-  assert.match(
-    template,
-    /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/,
-  );
+  assert.match(template, /SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/);
   assert.match(template, /must match `NEXT_PUBLIC_API_URL`/);
-  assert.match(template, /must match `NEXT_PUBLIC_SUPABASE_URL`/);
+  assert.doesNotMatch(template, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(
     template,
     /CHARITYPILOT_API_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-api@sha256:REPLACE_ME_API_IMAGE_DIGEST/,
@@ -2075,13 +1981,9 @@ test('production env template documents the compose runtime web public origins',
   );
   assert.match(template, /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/);
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
-  assert.match(
-    template,
-    /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REPLACE_ME_SUPABASE_PROJECT_REF\.supabase\.co/,
-  );
   assert.match(template, /Docker Compose/);
   assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
-  assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
+  assert.doesNotMatch(generator, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(generator, /CHARITYPILOT_API_IMAGE/);
   assert.match(generator, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL/);
 });
@@ -2353,10 +2255,7 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
     web,
     /NEXT_PUBLIC_API_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL\}/,
   );
-  assert.match(
-    web,
-    /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL:\?Set CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL\}/,
-  );
+  assert.doesNotMatch(web, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(web, /depends_on:[\s\S]*api:[\s\S]*condition:\s+service_healthy/);
   assert.match(web, /fetch\('http:\/\/127\.0\.0\.1:3003\/'\)/);
   assert.match(web, /ports:[\s\S]*127\.0\.0\.1:\$\{CHARITYPILOT_WEB_PORT:-3003\}:3003/);
@@ -2689,22 +2588,20 @@ test('production operations docs keep detailed readiness checks behind the inter
   assert.doesNotMatch(supabaseSetup, /curl -i https:\/\/api\.charitypilot\.ie\/api\/v1\/health\/readiness/);
 });
 
-test('production operations docs explain the compose runtime web public origins', () => {
+test('production operations docs keep Supabase credentials API-only', () => {
   const runbook = readRepoFile('docs/production-runbook.md');
   const launchChecklist = readRepoFile('docs/production-launch-checklist.md');
 
   assert.match(runbook, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
   assert.match(runbook, /must match `NEXT_PUBLIC_API_URL`/);
-  assert.match(runbook, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
-  assert.match(runbook, /must match `NEXT_PUBLIC_SUPABASE_URL`/);
+  assert.doesNotMatch(runbook, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(
     runbook,
     /docker compose --env-file \.env\.production -f compose\.production\.yml -f compose\.production-tls\.yml config --quiet/,
   );
   assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
   assert.match(launchChecklist, /matches `NEXT_PUBLIC_API_URL`/);
-  assert.match(launchChecklist, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL/);
-  assert.match(launchChecklist, /matches `NEXT_PUBLIC_SUPABASE_URL`/);
+  assert.doesNotMatch(launchChecklist, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(launchChecklist, /npm run check:production:github-secrets -- --environment=production/);
   assert.match(launchChecklist, /required production secret names exist without reading secret values/);
 });
@@ -2807,9 +2704,9 @@ test('plain English launch guide names every final approval role', () => {
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
   assert.match(launchGuide, /Last updated: 2026-07-10/);
-  assert.match(launchGuide, /20 production values needing real data/);
-  assert.match(launchGuide, /production values are `9 \/ 29` complete/);
-  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 87` complete/);
+  assert.match(launchGuide, /17 production values needing real data/);
+  assert.match(launchGuide, /production values are `9 \/ 26` complete/);
+  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
   assert.match(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 512\/512/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 488\/488/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
@@ -2857,31 +2754,26 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
   assert.doesNotMatch(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
-  assert.match(launchGuide, /87 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /86 machine-readable launch evidence checks/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(launchGuide, /Launch-Critical Route Inventory/);
   assert.match(launchGuide, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
-  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 87` complete/);
+  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 86` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
   assert.match(
     launchGuide,
     /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/,
   );
-  assert.match(
-    launchGuide,
-    /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/,
-  );
+  assert.doesNotMatch(launchGuide, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.doesNotMatch(launchGuide, /REAL_SUPABASE_PROJECT_REF first/);
   assert.match(launchGuide, /gh workflow run release-images\.yml --ref master/);
   assert.match(launchGuide, /Current known GitHub environment blocker/);
   assert.match(launchGuide, /check:production:github-env -- --environment=production/);
   assert.match(launchGuide, /check:production:github-secrets -- --environment=production/);
   assert.match(launchGuide, /required production secret names exist without reading or\s+printing secret values/);
-  assert.match(launchGuide, /NEXT_PUBLIC_SUPABASE_URL` is still missing/);
-  assert.match(launchGuide, /Do not run\s+`release-images\.yml` until the real Supabase project origin is configured/);
   assert.match(launchGuide, /release-image-digests\.env/);
   assert.match(launchGuide, /CHARITYPILOT_WEB_BUILD_\*/);
   assert.doesNotMatch(launchGuide, /optional reverse proxy/);
@@ -3041,8 +2933,8 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /Fresh production dependency audit on 2026-07-05/);
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
-  assert.match(backendAudit, /19 production values still require real data/);
-  assert.match(backendAudit, /87 machine-readable launch evidence checks/);
+  assert.match(backendAudit, /17 production values require real data/);
+  assert.match(backendAudit, /86 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
@@ -3235,10 +3127,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
     runbook,
     /gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/api\.charitypilot\.ie"/,
   );
-  assert.match(
-    runbook,
-    /gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai\/charity-governance --body "https:\/\/<project-ref>\.supabase\.co"\s+# replace <project-ref> first/,
-  );
+  assert.doesNotMatch(runbook, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(runbook, /npm run check:production:github-env -- --environment=production --json/);
   assert.match(runbook, /npm run check:production:github-secrets -- --environment=production/);
   assert.match(runbook, /npm run check:production:github-secrets -- --environment=production --json/);
@@ -3325,12 +3214,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /CHARITYPILOT_WEB_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_MIGRATION_IMAGE=.*@sha256:/);
   assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL/);
-  assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL/);
-  assert.match(runbook, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/<project-ref>\.supabase\.co/);
-  assert.doesNotMatch(
-    runbook,
-    /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https:\/\/REAL_SUPABASE_PROJECT_REF\.supabase\.co/,
-  );
+  assert.doesNotMatch(runbook, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(runbook, /cosign verify/);
   assert.match(runbook, /Do not deploy mutable image tags/);
 
@@ -3403,21 +3287,18 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(launchChecklist, /cosign signature verification/);
 });
 
-test('web Docker build requires production HTTPS public origins before Next build', () => {
+test('web Docker build requires only the production HTTPS API origin before Next build', () => {
   const dockerfile = readRepoFile('apps/web/Dockerfile');
 
   assertDockerfileUsesDigestPinnedNodeBase(dockerfile, 'apps/web/Dockerfile');
   assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_API_URL/);
-  assert.match(dockerfile, /ARG\s+NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_API_URL=\$NEXT_PUBLIC_API_URL/);
-  assert.match(dockerfile, /ENV\s+NEXT_PUBLIC_SUPABASE_URL=\$NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_API_URL'/);
-  assert.match(dockerfile, /requireOrigin\('NEXT_PUBLIC_SUPABASE_URL'/);
+  assert.doesNotMatch(dockerfile, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(dockerfile, /api\.charitypilot\.ie/);
   assert.match(dockerfile, /host\)=>host==='api\.charitypilot\.ie'/);
   assert.doesNotMatch(dockerfile, /host\.endsWith\('\.charitypilot\.ie'\)/);
   assert.match(dockerfile, /origin-only CharityPilot production URL/);
-  assert.match(dockerfile, /origin-only HTTPS Supabase project URL/);
   assert.match(dockerfile, /RUN\s+npm run build -w @charitypilot\/web/);
   assert.match(dockerfile, /FROM\s+node:22-alpine@sha256:[a-f0-9]{64}\s+AS runtime-deps/);
   assert.match(
@@ -3942,13 +3823,13 @@ test('sensitive URL token helper prefers fragment tokens over query tokens', () 
   );
 });
 
-test('document download trust only permits the configured Supabase storage project', () => {
+test('document download trust permits only the exact CharityPilot API download route', () => {
   const urlSecurity = readRepoFile('apps/web/src/lib/url-security.ts');
 
-  assert.match(urlSecurity, /function configuredSupabaseStorageOrigin/);
-  assert.match(urlSecurity, /url\.origin !== configuredOrigin/);
-  assert.doesNotMatch(urlSecurity, /hostname\.endsWith\('\.supabase\.co'\)[\s\S]*pathname\.startsWith/);
-  assert.match(urlSecurity, /NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(urlSecurity, /function isDocumentDownloadRoute/);
+  assert.match(urlSecurity, /NEXT_PUBLIC_API_URL/);
+  assert.match(urlSecurity, /https:\/\/api\.charitypilot\.ie/);
+  assert.doesNotMatch(urlSecurity, /SUPABASE|storage\/v1\/object\/sign/i);
 });
 
 test('document metadata responses do not expose internal storage object keys', () => {
@@ -3963,9 +3844,13 @@ test('document metadata responses do not expose internal storage object keys', (
   assert.match(documentService, /function publicDocument/);
   assert.match(documentService, /data\.map\(publicDocument\)/);
   assert.match(documentService, /return publicDocument\(doc\)/);
-  assert.match(documentService, /async getStoragePath/);
+  assert.match(documentService, /async getDownloadDescriptor/);
   assert.doesNotMatch(documentService, /return doc;\s*$/m);
-  assert.match(documentRoutes, /service\.getStoragePath\(request\.user\.organisationId, request\.params\.id\)/);
+  assert.match(
+    documentRoutes,
+    /service\.getDownloadDescriptor\(\s*request\.user\.organisationId,\s*request\.params\.id,?\s*\)/,
+  );
+  assert.match(documentRoutes, /storageService\.downloadFile\(/);
   assert.doesNotMatch(documentRoutes, /doc\.fileUrl/);
 });
 
@@ -3987,7 +3872,7 @@ test('storage provider failures are sanitized before logs and retry state', () =
   assert.doesNotMatch(documentRoutes, /request\.log\.error\(cleanupError/);
   assert.doesNotMatch(documentRoutes, /request\.log\.error\(outboxError/);
   assert.doesNotMatch(storageService, /Failed to upload file: \$\{error\.message\}/);
-  assert.doesNotMatch(storageService, /Failed to generate signed URL: \$\{error\?\.message/);
+  assert.doesNotMatch(storageService, /Failed to download file: \$\{error\?\.message/);
   assert.doesNotMatch(storageService, /Failed to delete file: \$\{error\.message\}/);
 });
 
@@ -4482,11 +4367,11 @@ test('CI builds API and web production Docker images', () => {
     workflow,
     /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./,
   );
-  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+https:\/\/ci-project\.supabase\.co/);
   assert.match(
     workflow,
-    /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*-t charitypilot-web-ci \./,
+    /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*-t charitypilot-web-ci \./,
   );
+  assert.doesNotMatch(workflow, /NEXT_PUBLIC_SUPABASE_URL/);
 });
 
 test('CI smoke-runs API and web Docker images after building them', () => {
@@ -4538,10 +4423,6 @@ test('CI smoke-runs API and web Docker images after building them', () => {
   assert.match(
     workflow,
     /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie[\s\S]*charitypilot-web-ci/,
-  );
-  assert.match(
-    workflow,
-    /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL=https:\/\/ci-project\.supabase\.co[\s\S]*charitypilot-web-ci/,
   );
   assert.match(workflow, /docker ps --filter name=charitypilot-web-smoke --filter status=running --quiet/);
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
@@ -4766,9 +4647,8 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   assert.match(workflow, /if:\s+always\(\)/);
   assert.match(workflow, /name:\s+Validate release ref/);
   assert.match(workflow, /NEXT_PUBLIC_API_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_API_URL\s*\}\}/);
-  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL:\s+\$\{\{\s*vars\.NEXT_PUBLIC_SUPABASE_URL\s*\}\}/);
   assert.match(workflow, /NEXT_PUBLIC_API_URL production variable is required/);
-  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_URL production variable is required/);
+  assert.doesNotMatch(workflow, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(workflow, /production variable must not contain placeholder text/);
   assert.match(workflow, /project_ref/);
   assert.match(workflow, /your-/);
@@ -4849,16 +4729,12 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   );
   assert.match(
     workflow,
-    /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*--build-arg NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*-t charitypilot-web-ci \./,
+    /docker build -f apps\/web\/Dockerfile[\s\S]*--build-arg NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*-t charitypilot-web-ci \./,
   );
   assert.match(workflow, /web_headers="\$\(mktemp\)"/);
   assert.match(
     workflow,
     /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"[\s\S]*charitypilot-web-ci/,
-  );
-  assert.match(
-    workflow,
-    /name:\s+Smoke web Docker image[\s\S]*-e NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"[\s\S]*charitypilot-web-ci/,
   );
   assert.match(workflow, /curl --fail --silent --dump-header "\$\{web_headers\}" http:\/\/127\.0\.0\.1:3003\//);
   assert.match(workflow, /grep -qi "\^x-content-type-options: nosniff" "\$\{web_headers\}"/);
@@ -4983,7 +4859,7 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(manifestStep, /CHARITYPILOT_MIGRATION_IMAGE="\$\{migration_repository\}@\$\{migration_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_DATABASE_COMPATIBILITY="p006-deadline-calendar-v1"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
-  assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL="\$\{NEXT_PUBLIC_SUPABASE_URL\}"/);
+  assert.doesNotMatch(manifestStep, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.doesNotMatch(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_image\}@\$\{api_digest\}"/);
   assert.match(manifestStep, /cat release-image-digests\.env >> "\$\{GITHUB_STEP_SUMMARY\}"/);
   assert.match(uploadStep, /uses:\s+actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02\s+# v4\.6\.2/);
@@ -5022,8 +4898,7 @@ test('release workflow rehearses deploy preflight against generated digest manif
   );
   assert.match(rehearsalStep, /NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
   assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=\$\{NEXT_PUBLIC_API_URL\}/);
-  assert.match(rehearsalStep, /NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
-  assert.match(rehearsalStep, /CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL=\$\{NEXT_PUBLIC_SUPABASE_URL\}/);
+  assert.doesNotMatch(rehearsalStep, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(rehearsalStep, /cat release-image-digests\.env >> \.env\.production\.ci/);
   assert.match(rehearsalStep, /npm run deploy:preflight -- --production-env-file=\.env\.production\.ci/);
   assert.ok(

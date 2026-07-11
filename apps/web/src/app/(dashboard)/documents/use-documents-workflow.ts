@@ -8,6 +8,7 @@ import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { useToast } from '@/components/toast';
 import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-guidance';
 import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
+import { documentDownloadFilename } from '@/lib/document-download-filename';
 import { buildDocumentProfilePrompts } from './document-profile-prompts';
 import { MAX_FILE_SIZE } from './document-upload-modal';
 import type {
@@ -19,6 +20,8 @@ import {
   DocumentCategory,
   DOCUMENT_CATEGORY_LABELS,
 } from '@charitypilot/shared';
+
+const DOCUMENT_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
 
 export function useDocumentsWorkflow() {
   const [documents, setDocuments] = useState<DocumentResponse[]>([]);
@@ -279,13 +282,33 @@ export function useDocumentsWorkflow() {
   const handleDownload = async (doc: DocumentResponse) => {
     setDownloadDocId(doc.id);
     try {
-      const { data } = await api.get(`/documents/${doc.id}/download`);
-      const downloadUrl = getTrustedDocumentDownloadUrl(data?.url);
-      if (downloadUrl) {
-        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      const downloadUrl = getTrustedDocumentDownloadUrl(
+        api.getUri({ url: `/documents/${encodeURIComponent(doc.id)}/download` }),
+      );
+      if (!downloadUrl) {
+        toast('Could not prepare this document download', 'error');
         return;
       }
-      toast('Could not prepare this document download', 'error');
+
+      const { data } = await api.get<Blob>(downloadUrl, { responseType: 'blob' });
+      if (!(data instanceof Blob)) {
+        throw new Error('Document download did not return a file');
+      }
+
+      const objectUrl = URL.createObjectURL(data);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = documentDownloadFilename(doc);
+      anchor.rel = 'noopener noreferrer';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      // WebKit can defer consuming a programmatically clicked blob URL. Keep it
+      // alive for one bounded grace window, then release the browser memory.
+      window.setTimeout(
+        () => URL.revokeObjectURL(objectUrl),
+        DOCUMENT_OBJECT_URL_REVOKE_DELAY_MS,
+      );
     } catch (err) {
       logClientError('Download failed', err);
       toast(apiErrorMessage(err, 'Could not prepare this document download'), 'error');

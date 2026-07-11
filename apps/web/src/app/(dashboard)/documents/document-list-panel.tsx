@@ -165,6 +165,7 @@ export function DocumentListPanel({
                       <Button
                         size="sm"
                         variant="flat"
+                        aria-label={`Download ${doc.name}`}
                         onPress={() => handleDownload(doc)}
                         isLoading={downloadDocId === doc.id}
                         isDisabled={Boolean(downloadDocId) || deleting}
@@ -174,6 +175,7 @@ export function DocumentListPanel({
                       <Button
                         size="sm"
                         variant="flat"
+                        aria-label={`Link ${doc.name} to a standard`}
                         onPress={() => openLinkModal(doc.id)}
                         isDisabled={linkingStandard || Boolean(unlinkingStandard)}
                       >
@@ -183,6 +185,7 @@ export function DocumentListPanel({
                         size="sm"
                         variant="flat"
                         color="danger"
+                        aria-label={`Delete ${doc.name}`}
                         onPress={() => confirmDelete(doc.id)}
                         isDisabled={deleting || Boolean(downloadDocId)}
                       >

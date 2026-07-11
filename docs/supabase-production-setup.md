@@ -1,6 +1,6 @@
 # Supabase Production Setup
 
-CharityPilot stores document files in a private Supabase Storage bucket. The API uses the Supabase service role key server-side and returns short-lived signed download URLs from `/api/v1/documents/:id/download`.
+CharityPilot stores document files in a private Supabase Storage bucket. The API keeps the Supabase service role key server-side and proxies authenticated downloads from `/api/v1/documents/:id/download`; provider URLs, object paths, and storage capabilities are never returned to the browser.
 
 Do not commit Supabase project URLs, service role keys, screenshots containing keys, or private bucket contents.
 
@@ -31,7 +31,7 @@ Evidence:
 - [ ] Create the bucket named by `SUPABASE_STORAGE_BUCKET`.
 - [ ] Set the bucket to private.
 - [ ] Do not create public read policies for document files.
-- [ ] Confirm the API service role key can upload, delete, and create signed URLs.
+- [ ] Confirm the API service role key can upload, download, and delete a non-sensitive probe object.
 - [ ] Confirm anonymous public requests cannot fetch stored document paths directly.
 - [ ] Run `npm run check:production:supabase -- --production-env-file=.env.production` from a trusted shell and record only redacted output.
 
@@ -93,23 +93,22 @@ If the production API uses a different hostname, run the same path on that hostn
 - [ ] Upload a small non-sensitive test document.
 - [ ] Confirm the upload succeeds without exposing the raw bucket path publicly.
 - [ ] Download the document through the app.
-- [ ] Confirm the downloaded URL is a signed URL and expires after the storage service default of about 1 hour / 3600 seconds.
+- [ ] Confirm the browser requests only the expected CharityPilot API origin and receives an attachment response with `Cache-Control: private, no-store`.
+- [ ] Confirm the app does not receive or navigate to a Supabase URL, object path, or token-bearing query string.
+- [ ] Suspend or revoke the test user's session during a deliberately delayed storage read in an isolated test environment and confirm the post-read session check denies the response. Use the automated reliability/E2E proof for launch evidence if a safe production delay cannot be introduced.
 - [ ] Delete the test document if the flow creates production data that should not remain.
 
-Executable expiry check:
+Executable private-bucket capability check:
 
 ```bash
-SIGNED_URL="<redacted signed URL>"
-curl -I "$SIGNED_URL"
-sleep 3700
-curl -I "$SIGNED_URL"
+npm run check:production:supabase -- --production-env-file=.env.production
 ```
 
-Expected: the first request succeeds, and the second request fails because the signed URL has expired.
+Expected: the checker verifies a private bucket, service-role upload and authenticated download, anonymous direct-read denial, and probe cleanup. A failed cleanup or anonymous read success fails the check.
 
 Evidence safety:
 
-Do not store full signed URLs, signed query tokens, raw bucket object paths, or private document contents in evidence systems. Record only redacted evidence such as the route tested, timestamp, expiry result, cleanup status, and non-sensitive test document metadata.
+Do not store service-role keys, raw bucket object paths, private document contents, or token-bearing URLs in evidence systems. Record only redacted evidence such as the API route tested, timestamp, authenticated download result, anonymous-denial result, cleanup status, and non-sensitive test document metadata.
 
 Evidence:
 

@@ -12,6 +12,8 @@ import type {
   RiskCategory,
   AnnualReportFilingStatus,
   UserRole,
+  UserLifecycleStatus,
+  AuthSessionRevocationReason,
   DeadlineReminderStatus,
   DeadlineReminderReconciliationOutcome,
   GeneratedDeadlineKind,
@@ -104,7 +106,34 @@ export interface TeamMemberResponse {
   name: string;
   role: UserRole;
   emailVerified: boolean;
+  lifecycleStatus: UserLifecycleStatus;
+  membershipVersion: number;
+  membershipChangedAt: string;
+  /** Present only for OWNER/ADMIN team-list responses. */
+  activeSessionCount?: number;
   createdAt: string;
+}
+
+export interface TeamSessionResponse {
+  familyId: string;
+  /** Non-reversible display discriminator; never a session or family identifier. */
+  displaySuffix: string;
+  familyCreatedAt: string;
+  latestCreatedAt: string;
+  expiresAt: string;
+  deviceLabel: string | null;
+  active: boolean;
+  current: boolean;
+  revokedAt: string | null;
+  revocationReason: AuthSessionRevocationReason | null;
+}
+
+export interface SecurityAuditEventResponse {
+  type: string;
+  actorLabel: string;
+  subjectLabel: string;
+  reason: string;
+  occurredAt: string;
 }
 
 export interface TeamInviteResponse {
@@ -129,7 +158,27 @@ export interface InviteTeamMemberRequest {
 }
 
 export interface UpdateTeamMemberRoleRequest {
-  role: UserRole;
+  role: UserRole.ADMIN | UserRole.MEMBER;
+  expectedMembershipVersion: number;
+  reason: string;
+}
+
+export interface TeamMemberLifecycleActionRequest {
+  expectedMembershipVersion: number;
+  reason: string;
+}
+
+export interface TransferTeamOwnershipRequest {
+  targetMemberId: string;
+  expectedCurrentOwnerVersion: number;
+  expectedTargetVersion: number;
+  confirmation: 'TRANSFER OWNERSHIP';
+  reason: string;
+}
+
+export interface RevokeTeamSessionRequest {
+  expectedMembershipVersion: number;
+  reason: string;
 }
 
 export interface DeadlineReminderLogResponse {

@@ -109,6 +109,7 @@ export class DeadlineRemindersService {
             email: input.email,
             role: 'OWNER',
             emailVerified: true,
+            lifecycleStatus: 'ACTIVE',
           },
           select: { id: true },
         }),
@@ -286,6 +287,7 @@ export class DeadlineRemindersService {
             lte: prismaDateFromCivil(candidateEnd),
           },
           organisation: {
+            lifecycleStatus: 'ACTIVE',
             subscription: {
               is: {
                 OR: [
@@ -302,7 +304,7 @@ export class DeadlineRemindersService {
             include: {
               subscription: true,
               users: {
-                where: { role: 'OWNER', emailVerified: true },
+                where: { role: 'OWNER', emailVerified: true, lifecycleStatus: 'ACTIVE' },
                 orderBy: { id: 'asc' },
                 select: { id: true, email: true, role: true, emailVerified: true },
               },
@@ -397,6 +399,7 @@ export class DeadlineRemindersService {
               email: owner.email,
               role: 'OWNER',
               emailVerified: true,
+              lifecycleStatus: 'ACTIVE',
             },
             select: { id: true },
           }),
@@ -406,13 +409,14 @@ export class DeadlineRemindersService {
           }),
           this.prisma.organisation.findUnique({
             where: { id: deadline.organisationId },
-            select: { name: true },
+            select: { name: true, lifecycleStatus: true },
           }),
         ]);
       if (
         !currentOccurrence ||
         !currentRecipient ||
         !currentOrganisation ||
+        (currentOrganisation.lifecycleStatus !== undefined && currentOrganisation.lifecycleStatus !== 'ACTIVE') ||
         !hasReminderEntitlement(currentSubscription, now)
       ) {
         await this.prisma.deadlineReminderLog.updateMany({

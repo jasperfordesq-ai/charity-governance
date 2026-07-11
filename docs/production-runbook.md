@@ -58,7 +58,6 @@ Production Docker promotion must use digest-pinned GHCR image references from th
 
 ```bash
 gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"
-gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first
 npm run check:production:github-env -- --environment=production
 npm run check:production:github-env -- --environment=production --json
 gh workflow run release-images.yml --ref master
@@ -80,12 +79,11 @@ CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<w
 CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
 CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1
 CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
-CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 npm run deploy:preflight -- --production-env-file=.env.production
 npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
 ```
 
-The deploy preflight validates the selected production env file, confirms the promoted web image build origins match `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SUPABASE_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
+The deploy preflight validates the selected production env file, confirms the promoted web image build origin matches `NEXT_PUBLIC_API_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
 
 Before booking the production cutover, restore a recent production backup into an isolated non-production PostgreSQL target and run the exact promoted migration image followed by the exact promoted API reconciliation tool. Record clone age/source and destruction, prove the migration found no out-of-range civil dates, tenant mismatches, renamed/duplicate generated occurrences, legacy AGM reminder evidence, or generated-id collision, and inventory the legacy reminder rows that will require downtime reconciliation. Never point this rehearsal at live production. Resolve anomalies through an approved data plan, take a newer clone, and repeat; discovering a known fail-closed blocker only after production shutdown is not acceptable launch evidence.
 
@@ -163,7 +161,7 @@ The API requires configured production values for database, Stripe, Resend, Supa
 
 The canonical production web origin is `https://app.charitypilot.ie` and the canonical production API origin is `https://api.charitypilot.ie`. The API runtime, deploy preflight, hosting check, provider check, and post-deploy smoke all reject apex-domain or arbitrary-subdomain drift for these public origins.
 
-The web app requires `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie` and `NEXT_PUBLIC_SUPABASE_URL` pointing to the same Supabase project origin as `SUPABASE_URL`. Docker Compose also requires `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie` and `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` for the web runtime. `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` must match `NEXT_PUBLIC_API_URL`, and `CHARITYPILOT_WEB_NEXT_PUBLIC_SUPABASE_URL` must match `NEXT_PUBLIC_SUPABASE_URL`. Keep all four public origin values in the selected production env file, export them before running Compose, or pass the env file with `docker compose --env-file .env.production`.
+The web app requires only `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`; Docker Compose maps it through `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL`, which must match `NEXT_PUBLIC_API_URL`, and deploy preflight requires the promoted image metadata to match it. `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` remain in the API/server secret source only. Never expose a Supabase origin or storage capability to the web runtime or browser. Pass the selected production env file with `docker compose --env-file .env.production`.
 
 Configure the API `FRONTEND_URL=https://app.charitypilot.ie` and `AUTH_COOKIE_DOMAIN=.charitypilot.ie` so auth cookies cover the canonical web and API subdomains. Do not use a single-host or apex-host production deployment unless the validators and launch evidence model are deliberately changed first.
 
@@ -203,11 +201,11 @@ Record scheduler ownership, command coverage for all three job entrypoints, log 
 
 ## Storage
 
-Use a private Supabase Storage bucket. Documents are saved as storage paths and are opened through short-lived signed URLs from `/api/v1/documents/:id/download`.
+Use a private Supabase Storage bucket. Documents are saved as tenant-scoped storage paths and downloaded only through the authenticated `/api/v1/documents/:id/download` byte proxy. The service role remains server-only; the API never returns storage paths, provider URLs, or bearer capabilities to the browser.
 
 Follow `docs/supabase-production-setup.md` before launch. Public monitoring can check `/api/v1/health`; detailed dependency readiness at `/api/v1/health/readiness` must include the internal `x-charitypilot-readiness-key` header. Confirm the keyed readiness response reports `storageConfigured: true` and `storageBucketReachable: true`.
 
-Run `npm run check:production:supabase -- --production-env-file=.env.production` from a trusted shell that can read the production Supabase service role key. The checker verifies the configured bucket is private, uploads a tiny non-sensitive probe object, creates a short signed URL, confirms anonymous direct access to the object is denied, and deletes the probe. Output is redacted and must not be used to store service role keys, object paths, or signed URL tokens.
+Run `npm run check:production:supabase -- --production-env-file=.env.production` from a trusted shell that can read the production Supabase service role key. The checker verifies the configured bucket is private, uploads a tiny non-sensitive probe object, downloads it through the authenticated service-role path, confirms anonymous direct access is denied, and deletes the probe. Output is redacted and must not be used to store service role keys, object paths, or provider payloads.
 
 ## Browser QA
 

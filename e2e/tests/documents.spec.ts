@@ -1,22 +1,22 @@
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { test, expect } from '../fixtures';
-import { withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /**
  * Journey: upload a document, then download it back and verify the bytes.
  *
- * Local storage driver streams downloads via GET /documents/:id/download (which
- * returns a /documents/_local-download?path=... URL). The download control opens
- * that URL in a new tab (window.open), so we assert the download deterministically
- * with authenticated in-page fetches. Those requests remain inside the mandatory
- * BrowserContext origin fence; APIRequestContext would bypass it.
+ * The real Download control fetches authenticated bytes from
+ * GET /documents/:id/download, builds a short-lived browser object URL, and
+ * triggers an attachment without opening a popup or exposing provider storage.
+ * This click journey runs in every configured deployed-QA browser, including
+ * WebKit/Desktop Safari.
  */
 const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 const SAMPLE_MARKER = 'CharityPilot E2E sample document';
 
 test.describe('Documents', () => {
-  test('upload a document then download it', async ({ ownerPage, owner, browserOriginFence }) => {
+  test('upload a document then download it', async ({ ownerPage, browserOriginFence }) => {
     const docName = `E2E Upload ${Date.now()}`;
 
     await gotoWithDevServerRetry(ownerPage, '/documents');
@@ -36,44 +36,28 @@ test.describe('Documents', () => {
     // The new document appears in the vault list.
     await expect(ownerPage.getByText(docName)).toBeVisible();
 
-    // Resolve the document id and exercise the download path with the session.
-    const docId = await withDb(async (client) => {
-      const res = await client.query(
-        `SELECT "id" FROM "Document" WHERE "organisationId" = $1 AND "name" = $2`,
-        [owner.organisationId, docName],
-      );
-      return res.rows[0]?.id as string | undefined;
-    });
-    expect(docId, 'uploaded document should exist in the DB').toBeTruthy();
+    const documentRow = ownerPage.getByRole('article').filter({ hasText: docName });
+    const pageCountBefore = ownerPage.context().pages().length;
+    const responsePromise = ownerPage.waitForResponse(
+      (response) =>
+        /\/api\/v1\/documents\/[^/]+\/download$/.test(response.url()) &&
+        response.request().method() === 'GET' &&
+        response.status() === 200,
+    );
+    const downloadPromise = ownerPage.waitForEvent('download');
 
-    const linkResp = await ownerPage.evaluate(async ({ apiOrigin, documentId }) => {
-      const response = await fetch(`${apiOrigin}/api/v1/documents/${documentId}/download`, {
-        credentials: 'include',
-      });
-      return {
-        ok: response.ok,
-        status: response.status,
-        responseUrl: response.url,
-        body: (await response.json()) as { url?: string },
-      };
-    }, { apiOrigin: browserOriginFence.apiOrigin, documentId: docId });
-    expect(linkResp.ok, `download link returned HTTP ${linkResp.status}`).toBeTruthy();
-    expect(new URL(linkResp.responseUrl).origin).toBe(browserOriginFence.apiOrigin);
-    const { url } = linkResp.body;
-    expect(url).toBeTruthy();
-    expect(url).toContain('/documents/_local-download');
+    await documentRow.getByRole('button', { name: `Download ${docName}`, exact: true }).click();
+    const [downloadResponse, download] = await Promise.all([responsePromise, downloadPromise]);
 
-    const fileResp = await ownerPage.evaluate(async ({ apiOrigin, downloadUrl }) => {
-      const response = await fetch(new URL(downloadUrl, apiOrigin), { credentials: 'include' });
-      return {
-        ok: response.ok,
-        status: response.status,
-        responseUrl: response.url,
-        body: await response.text(),
-      };
-    }, { apiOrigin: browserOriginFence.apiOrigin, downloadUrl: url! });
-    expect(fileResp.ok, `document download returned HTTP ${fileResp.status}`).toBeTruthy();
-    expect(new URL(fileResp.responseUrl).origin).toBe(browserOriginFence.apiOrigin);
-    expect(fileResp.body).toContain(SAMPLE_MARKER);
+    expect(downloadResponse.status()).toBe(200);
+    expect(new URL(downloadResponse.url()).origin).toBe(browserOriginFence.apiOrigin);
+    expect(downloadResponse.headers()['cache-control']).toBe('private, no-store, max-age=0');
+    expect(ownerPage.context().pages()).toHaveLength(pageCountBefore);
+    expect(download.suggestedFilename()).toBe(`${docName}.txt`);
+
+    const downloadedPath = await download.path();
+    expect(downloadedPath, 'browser download should have a local artifact').toBeTruthy();
+    const downloadedBytes = await readFile(downloadedPath!);
+    expect(downloadedBytes.toString('utf8')).toContain(SAMPLE_MARKER);
   });
 });

@@ -59,18 +59,14 @@ test('trusts only hosted Stripe https redirect origins', () => {
   assert.equal(getTrustedStripeRedirectUrl('javascript:alert(1)'), null);
 });
 
-test('trusts document downloads only from https expected origins or Supabase storage', () => {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://configured-project.supabase.co';
-
+test('trusts only the exact authenticated download route on the expected CharityPilot API origin', () => {
   assert.equal(
-    getTrustedDocumentDownloadUrl('https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf'),
-    'https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf',
+    getTrustedDocumentDownloadUrl('https://api.charitypilot.ie/api/v1/documents/doc-1/download'),
+    'https://api.charitypilot.ie/api/v1/documents/doc-1/download',
   );
   assert.equal(
-    getTrustedDocumentDownloadUrl('https://files.charitypilot.ie/download/a.pdf', {
-      allowedOrigins: ['https://files.charitypilot.ie'],
-    }),
-    'https://files.charitypilot.ie/download/a.pdf',
+    getTrustedDocumentDownloadUrl('https://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf?token=secret'),
+    null,
   );
   assert.equal(
     getTrustedDocumentDownloadUrl('http://configured-project.supabase.co/storage/v1/object/sign/documents/a.pdf'),
@@ -81,23 +77,75 @@ test('trusts document downloads only from https expected origins or Supabase sto
     getTrustedDocumentDownloadUrl('https://attacker.supabase.co/storage/v1/object/sign/documents/a.pdf'),
     null,
   );
-});
-
-test('trusts local API document downloads only on loopback in development', () => {
   assert.equal(
-    getTrustedDocumentDownloadUrl('http://localhost:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
-    'http://localhost:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf',
+    getTrustedDocumentDownloadUrl('https://files.charitypilot.ie/api/v1/documents/doc-1/download'),
+    null,
   );
   assert.equal(
-    getTrustedDocumentDownloadUrl('http://127.0.0.1:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
-    'http://127.0.0.1:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf',
+    getTrustedDocumentDownloadUrl('https://api.charitypilot.ie/api/v1/documents/doc-1/download?token=secret'),
+    null,
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('https://api.charitypilot.ie/api/v1/billing/checkout'),
+    null,
+  );
+});
+
+test('trusts authenticated local API document downloads only on loopback in development', () => {
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://localhost:3002/api/v1/documents/doc-1/download'),
+    'http://localhost:3002/api/v1/documents/doc-1/download',
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://127.0.0.1:3002/api/v1/documents/doc-1/download'),
+    'http://127.0.0.1:3002/api/v1/documents/doc-1/download',
+  );
+  assert.equal(
+    getTrustedDocumentDownloadUrl('http://localhost:3002/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
+    null,
   );
   assert.equal(
     getTrustedDocumentDownloadUrl('http://localhost:3002/api/v1/billing/checkout'),
     null,
   );
   assert.equal(
-    getTrustedDocumentDownloadUrl('http://evil.test/api/v1/documents/_local-download?path=org-1%2Fpolicy.pdf'),
+    getTrustedDocumentDownloadUrl('http://evil.test/api/v1/documents/doc-1/download'),
     null,
   );
+});
+
+test('isolated production trusts only the exact managed-runner document origin and marker', () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousE2eMode = process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE;
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = 'local-disposable';
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://127.0.0.1:3302/api/v1/documents/doc-1/download'),
+      'http://127.0.0.1:3302/api/v1/documents/doc-1/download',
+    );
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://localhost:3302/api/v1/documents/doc-1/download'),
+      null,
+    );
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://127.0.0.1:3002/api/v1/documents/doc-1/download'),
+      null,
+    );
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://127.0.0.1:3302/api/v1/documents/doc-1/download?token=secret'),
+      null,
+    );
+
+    process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = 'local-disposable-lookalike';
+    assert.equal(
+      getTrustedDocumentDownloadUrl('http://127.0.0.1:3302/api/v1/documents/doc-1/download'),
+      null,
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousE2eMode === undefined) delete process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE;
+    else process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = previousE2eMode;
+  }
 });

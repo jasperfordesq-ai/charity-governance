@@ -10,17 +10,17 @@ Status marks reflect completed repository hardening work. Open items require rea
 > local confidence gate. Do not run the default full E2E suite against a
 > personal database you care about because it can reset tenant/app tables.
 
-> **Current local status checked 2026-07-09:** `npm run launch:status -- --json`
-> still reports `ENV_INCOMPLETE`: 9 of 28 production values are complete and 19
+> **Current local status checked 2026-07-11:** `npm run launch:status -- --json`
+> still reports `ENV_INCOMPLETE`: 9 of 26 production values are complete and 17
 > production values still require real data in `.env.production` or the approved
-> production secret store. The launch evidence ledger is now 9 of 87 checks
+> production secret store. The launch evidence ledger is now 9 of 86 checks
 > complete from local/CI release-gate evidence, final signoffs remain 0 of 5
-> approved, and the strict counted launch gates are 18 of 120 complete
-> (15%). This strict percentage counts only production values, evidence checks,
+> approved, and the strict counted launch gates are 18 of 117 complete
+> (15.4%). This strict percentage counts only production values, evidence checks,
 > and final signoff roles; it is not a legal or business readiness claim.
 > `approvedForLaunch` is false. Do not put real charity data into CharityPilot until those values,
 > provider checks, deployed QA, legal/privacy review, external security review,
-> backup/restore evidence, all 87 machine-readable launch evidence checks, and
+> backup/restore evidence, all 86 machine-readable launch evidence checks, and
 > final signoffs are complete.
 > `npm run launch:status` also surfaces the current launch evidence ledger count,
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
@@ -31,7 +31,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 > Missing production values are grouped by provider/source in that output:
 > hosting/proxy, PostgreSQL, Stripe, Resend, Supabase, observability, and release image promotion.
 > Release image promotion also requires GitHub `production` environment
-> variables for `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SUPABASE_URL` before
+> variable `NEXT_PUBLIC_API_URL` before
 > `gh workflow run release-images.yml --ref master` can produce the
 > `release-image-digests.env` artifact used by deploy preflight.
 > If GitHub `production` is used as the deployment secret store, run
@@ -93,7 +93,7 @@ Status marks reflect completed repository hardening work. Open items require rea
 
 ## Data and Documents
 
-- [x] Keep document files private and retrieve them through signed download URLs.
+- [x] Keep document files private and retrieve them through the authenticated API byte-download proxy.
 - [x] Validate linked governance standards before creating document evidence links.
 - [x] Restrict document mutations to owners/admins.
 - [ ] Configure production Supabase project, private bucket, backups, restore testing, and retention policy using `docs/supabase-production-setup.md`.

@@ -28,6 +28,17 @@ const [{ default: Fastify }, { billingRoutes }, { BillingService }, { signAccess
   import('@charitypilot/shared'),
 ]);
 
+function testOnlyBillingInternals(service: InstanceType<typeof BillingService>) {
+  return service as unknown as {
+    createCheckoutSession: (
+      organisationId: string,
+      plan: typeof SubscriptionPlan.ESSENTIALS | typeof SubscriptionPlan.COMPLETE,
+      interval: 'monthly' | 'yearly',
+    ) => Promise<{ url: string }>;
+    createPortalSession: (organisationId: string) => Promise<{ url: string }>;
+  };
+}
+
 type Role = 'OWNER' | 'ADMIN' | 'MEMBER';
 
 function tokenFor(role: Role) {
@@ -44,6 +55,7 @@ function authModels(role: Role, subscription: unknown) {
     user: { findUnique: async () => ({ id: 'u1', organisationId: 'org-1', role, emailVerified: true }) },
     organisation: { findUnique: async () => ({ stripeCustomerId: 'cus_org_1' }) },
     subscription: { findUnique: async () => subscription },
+    billingAuthorityGrant: { findFirst: async () => null },
   };
 }
 
@@ -436,7 +448,11 @@ test('createCheckoutSession uses an organisation-scoped Stripe idempotency key w
     },
   });
 
-  const result = await service.createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
+  const result = await testOnlyBillingInternals(service).createCheckoutSession(
+    'org-1',
+    SubscriptionPlan.COMPLETE,
+    'monthly',
+  );
 
   assert.deepEqual(result, { url: 'https://checkout.stripe.test/session' });
   const customerCall = calls.find((call) => call.name === 'stripe.customers.create');
@@ -490,7 +506,7 @@ test('createCheckoutSession reconciles an existing Stripe customer by organisati
     },
   });
 
-  await service.createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
+  await testOnlyBillingInternals(service).createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
 
   assert.ok(calls.some((call) => call.name === 'stripe.customers.search'), 'expected Stripe customer search first');
   assert.equal(calls.some((call) => call.name === 'stripe.customers.create'), false, 'must not create a duplicate customer');
@@ -550,7 +566,7 @@ test('createCheckoutSession repairs a stale stored Stripe customer id before che
     },
   });
 
-  await service.createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
+  await testOnlyBillingInternals(service).createCheckoutSession('org-1', SubscriptionPlan.COMPLETE, 'monthly');
 
   assert.ok(calls.some((call) => call.name === 'stripe.customers.retrieve'), 'expected stored Stripe customer verification');
   assert.ok(calls.some((call) => call.name === 'stripe.customers.search'), 'expected metadata reconciliation after mismatch');
@@ -598,7 +614,7 @@ test('createPortalSession reconciles an existing Stripe customer by organisation
     },
   });
 
-  const result = await service.createPortalSession('org-1');
+  const result = await testOnlyBillingInternals(service).createPortalSession('org-1');
 
   assert.deepEqual(result, { url: 'https://billing.stripe.test/session' });
   assert.ok(calls.some((call) => call.name === 'stripe.customers.search'), 'expected Stripe customer search first');
@@ -615,6 +631,272 @@ test('createPortalSession reconciles an existing Stripe customer by organisation
   );
 });
 
+test('billing routes pass the authenticated principal to the locked current-owner operations', async () => {
+  const prototype = BillingService.prototype as unknown as {
+    createCheckoutSessionForCurrentOwner: (...args: unknown[]) => Promise<{ url: string }>;
+    createPortalSessionForCurrentOwner: (...args: unknown[]) => Promise<{ url: string }>;
+  };
+  const originalCheckout = prototype.createCheckoutSessionForCurrentOwner;
+  const originalPortal = prototype.createPortalSessionForCurrentOwner;
+  const calls: Array<{ operation: string; args: unknown[] }> = [];
+  prototype.createCheckoutSessionForCurrentOwner = async (...args: unknown[]) => {
+    calls.push({ operation: 'checkout', args });
+    return { url: 'https://checkout.stripe.test/authority' };
+  };
+  prototype.createPortalSessionForCurrentOwner = async (...args: unknown[]) => {
+    calls.push({ operation: 'portal', args });
+    return { url: 'https://billing.stripe.test/authority' };
+  };
+
+  const app = await buildApp({});
+  try {
+    const checkout = await app.inject({
+      method: 'POST',
+      url: '/billing/checkout',
+      headers: { authorization: tokenFor('OWNER') },
+      payload: { plan: 'COMPLETE', interval: 'monthly' },
+    });
+    const portal = await app.inject({
+      method: 'POST',
+      url: '/billing/portal',
+      headers: { authorization: tokenFor('OWNER') },
+      payload: {},
+    });
+
+    assert.equal(checkout.statusCode, 200);
+    assert.equal(portal.statusCode, 200);
+    assert.deepEqual(calls, [
+      {
+        operation: 'checkout',
+        args: ['org-1', 'u1', 'sess-1', SubscriptionPlan.COMPLETE, 'monthly'],
+      },
+      { operation: 'portal', args: ['org-1', 'u1', 'sess-1'] },
+    ]);
+  } finally {
+    prototype.createCheckoutSessionForCurrentOwner = originalCheckout;
+    prototype.createPortalSessionForCurrentOwner = originalPortal;
+    await app.close();
+  }
+});
+
+test('billing status masks OWNER-only capabilities for MEMBER and ADMIN callers', async () => {
+  for (const role of ['MEMBER', 'ADMIN'] as const) {
+    const app = await buildApp({}, role);
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/billing/status',
+        headers: { authorization: tokenFor(role) },
+      });
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(response.json().canStartCheckout, false);
+      assert.equal(response.json().canOpenPortal, false);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test('billing status offers Checkout resumption only to the exact bound owner session', async () => {
+  for (const [actorSessionId, expected] of [
+    ['session-owner-1', false],
+    ['sess-1', true],
+  ] as const) {
+    const app = await buildApp(
+      {
+        billingAuthorityGrant: {
+          findFirst: async () => ({
+            kind: 'CHECKOUT',
+            actorUserId: 'u1',
+            actorSessionId,
+          }),
+        },
+      },
+      'OWNER',
+      null,
+    );
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/billing/status',
+        headers: { authorization: tokenFor('OWNER') },
+      });
+      assert.equal(response.statusCode, 200);
+      assert.equal(response.json().canStartCheckout, expected);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test('portal authority is claimed during preflight and provider-started before capability creation', async () => {
+  let rawCall = 0;
+  let transactionOpen = false;
+  let transactionOptions: Record<string, unknown> | undefined;
+  let grant: Record<string, unknown> | null = null;
+  const providerStates: string[] = [];
+  const assertProviderPreflight = () => {
+    assert.equal(transactionOpen, false, 'provider I/O must not hold database authority locks');
+    assert.equal(grant?.state, 'CLAIMED', 'non-capability provider preflight must retain releasable claimed state');
+    providerStates.push(String(grant?.state));
+  };
+  const assertCapabilityCreateReady = () => {
+    assert.equal(transactionOpen, false, 'capability creation must not hold database authority locks');
+    assert.equal(
+      grant?.state,
+      'PROVIDER_STARTED',
+      'a durable provider-start record must precede capability creation',
+    );
+    providerStates.push(String(grant?.state));
+  };
+  const billingAuthorityGrant = {
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      grant = {
+        id: '11111111-1111-4111-8111-111111111111',
+        ...data,
+        state: 'CLAIMED',
+        providerResourceId: null,
+        safeReleaseAfter: null,
+        claimedAt: new Date(),
+        providerStartedAt: null,
+        capabilityIssuedAt: null,
+        releasedAt: null,
+      };
+      return grant;
+    },
+    updateMany: async ({ where, data }: { where: { state?: string }; data: Record<string, unknown> }) => {
+      if (!grant || (where.state && grant.state !== where.state)) return { count: 0 };
+      grant = { ...grant, ...data };
+      return { count: 1 };
+    },
+    findUnique: async () => grant,
+  };
+  const tx = {
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }];
+      if (rawCall === 2) {
+        return grant && grant.state !== 'RELEASED' ? [grant] : [];
+      }
+      if (rawCall === 3) {
+        return [{
+          id: 'u1',
+          organisationId: 'org-1',
+          role: 'OWNER',
+          lifecycleStatus: 'ACTIVE',
+          membershipVersion: 7,
+        }];
+      }
+      return [{ id: 'sess-1' }];
+    },
+    billingAuthorityGrant,
+    organisation: {
+      findUniqueOrThrow: async () => ({
+        id: 'org-1',
+        name: 'Authority Charity',
+        contactEmail: 'owner@example.org',
+        stripeCustomerId: 'cus_authority',
+        subscription: null,
+      }),
+      update: async () => ({}),
+    },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: async (
+      callback: (transaction: typeof tx) => Promise<unknown>,
+      options: Record<string, unknown>,
+    ) => {
+      rawCall = 0;
+      transactionOptions = options;
+      transactionOpen = true;
+      try {
+        return await callback(tx);
+      } finally {
+        transactionOpen = false;
+      }
+    },
+  };
+  const service = new BillingService(prisma as never);
+  (service as unknown as { getStripe: () => unknown }).getStripe = () => ({
+    customers: {
+      retrieve: async () => {
+        assertProviderPreflight();
+        return { id: 'cus_authority', metadata: { organisationId: 'org-1' } };
+      },
+      search: async () => {
+        assertProviderPreflight();
+        return { data: [{ id: 'cus_authority' }], has_more: false };
+      },
+    },
+    billingPortal: {
+      sessions: {
+        create: async (_params: unknown, options: unknown) => {
+          assertCapabilityCreateReady();
+          assert.deepEqual(options, {
+            idempotencyKey: 'charitypilot-portal-11111111-1111-4111-8111-111111111111',
+          });
+          return { id: 'bps_authority', url: 'https://billing.stripe.test/locked' };
+        },
+      },
+    },
+  });
+
+  const result = await service.createPortalSessionForCurrentOwner('org-1', 'u1', 'sess-1');
+
+  assert.deepEqual(result, { url: 'https://billing.stripe.test/locked' });
+  assert.equal(rawCall, 4, 'organisation, active grant, actor, and session must each be locked before provider I/O');
+  assert.equal(transactionOptions?.isolationLevel, 'Serializable');
+  assert.equal(transactionOpen, false);
+  assert.ok(providerStates.length >= 2);
+  assert.equal(providerStates[0], 'CLAIMED');
+  assert.equal(providerStates.at(-1), 'PROVIDER_STARTED');
+  const finalGrant = grant as Record<string, unknown> | null;
+  assert.equal(finalGrant?.state, 'CAPABILITY_ISSUED');
+  assert.equal(finalGrant?.providerResourceId, 'bps_authority');
+});
+
+test('a demoted or inactive actor is rejected under lock before any Stripe call', async () => {
+  let rawCall = 0;
+  let stripeReached = false;
+  const tx = {
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }];
+      if (rawCall === 2) return [];
+      return [{
+        id: 'u1',
+        organisationId: 'org-1',
+        role: 'ADMIN',
+        lifecycleStatus: 'ACTIVE',
+        membershipVersion: 1,
+      }];
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new BillingService(prisma as never);
+  (service as unknown as { getStripe: () => unknown }).getStripe = () => {
+    stripeReached = true;
+    return {};
+  };
+
+  await assert.rejects(
+    () => service.createPortalSessionForCurrentOwner('org-1', 'u1', 'sess-1'),
+    (error: unknown) => Boolean(
+      error &&
+      typeof error === 'object' &&
+      (error as { code?: unknown }).code === 'FORBIDDEN',
+    ),
+  );
+  assert.equal(rawCall, 3);
+  assert.equal(stripeReached, false);
+});
+
 test('billing status reports billingConfigured:false without erroring when Stripe is unconfigured', async () => {
   const previousPrice = process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
   delete process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID;
@@ -626,11 +908,14 @@ test('billing status reports billingConfigured:false without erroring when Strip
     subscription: {
       findUnique: async () => null,
     },
+    billingAuthorityGrant: {
+      findFirst: async () => null,
+    },
   };
   const service = new BillingService(prisma as never);
 
   try {
-    const status = await service.getStatus('org_1');
+    const status = await service.getStatus('org_1', { id: 'u1', sessionId: 'sess-1', role: 'OWNER' });
 
     assert.deepEqual(status, {
       plan: null,

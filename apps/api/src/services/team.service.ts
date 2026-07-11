@@ -5,6 +5,7 @@ import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
 import { hashOpaqueToken, issueSessionTokensInTransaction } from './session-tokens.js';
 import { publicOrganisationSelect, type PublicOrganisationSource } from '../utils/public-dtos.js';
+import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 
 interface InviteTeamMemberData {
   email: string;
@@ -30,15 +31,26 @@ type UserRole = 'OWNER' | 'ADMIN' | 'MEMBER';
 type SubscriptionPlanValue = keyof typeof TEAM_MEMBER_LIMITS;
 type QueryRaw = <T = unknown>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
 
+type LockedTeamListActor = {
+  id: string;
+  role: UserRole;
+  lifecycleStatus: string;
+};
+
 type TeamCapacityClient = {
   subscription: {
     findUnique(args: {
       where: { organisationId: string };
-      select: { plan: true };
-    }): Promise<{ plan: string } | null>;
+      select: { plan: true; status: true; trialEndsAt: true; currentPeriodEnd: true };
+    }): Promise<{
+      plan: string;
+      status?: string;
+      trialEndsAt?: Date | null;
+      currentPeriodEnd?: Date | null;
+    } | null>;
   };
   user: {
-    count(args: { where: { organisationId: string } }): Promise<number>;
+    count(args: { where: { organisationId: string; lifecycleStatus: 'ACTIVE' } }): Promise<number>;
   };
   teamInvite: {
     count(args: {
@@ -58,7 +70,13 @@ type TeamInviteClient = TeamCapacityClient & {
     findUnique(args: { where: { id: string } }): Promise<{ name: string } | null>;
   };
   user: TeamCapacityClient['user'] & {
-    findUnique(args: { where: { id?: string; email?: string } }): Promise<{ id: string; name: string | null } | null>;
+    findUnique(args: { where: { id?: string; email?: string } }): Promise<{
+      id: string;
+      name: string | null;
+      role?: UserRole;
+      organisationId?: string;
+      lifecycleStatus?: string;
+    } | null>;
   };
   teamInvite: TeamCapacityClient['teamInvite'] & {
     updateMany(args: {
@@ -113,12 +131,6 @@ function ensureCanInvite(role: UserRole, invitedRole?: InviteTeamMemberData['rol
   }
 }
 
-function ensureOwner(role: UserRole) {
-  if (role !== 'OWNER') {
-    throw new AppError(403, 'FORBIDDEN', 'Only the account owner can change team member roles');
-  }
-}
-
 function invalidInviteError() {
   return new AppError(400, 'INVALID_INVITE', INVALID_INVITE_MESSAGE);
 }
@@ -148,21 +160,42 @@ export class TeamService {
     includePendingInvites: boolean,
   ): Promise<void> {
     if (client.$queryRaw) {
-      await client.$queryRaw`
-        SELECT "id"
+      const organisations = await client.$queryRaw<Array<{ id: string; lifecycleStatus?: string }>>`
+        SELECT "id", "lifecycleStatus"
         FROM "Organisation"
         WHERE "id" = ${organisationId}
         FOR UPDATE
       `;
+      if (organisations.length === 0) {
+        throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
+      }
+      if (
+        organisations[0].lifecycleStatus !== undefined &&
+        organisations[0].lifecycleStatus !== 'ACTIVE'
+      ) {
+        throw new AppError(409, 'ORGANISATION_INACTIVE', 'This organisation is not active');
+      }
     }
 
     const subscription = await client.subscription.findUnique({
       where: { organisationId },
-      select: { plan: true },
+      select: { plan: true, status: true, trialEndsAt: true, currentPeriodEnd: true },
     });
 
     if (!subscription) {
       throw new AppError(403, 'NO_SUBSCRIPTION', 'No active subscription. Please subscribe to continue.');
+    }
+
+    const subscriptionStatus = subscription.status;
+    if (
+      subscriptionStatus !== undefined &&
+      !hasSubscriptionAccess({
+        status: subscriptionStatus,
+        trialEndsAt: subscription.trialEndsAt,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+      }, now)
+    ) {
+      throw new AppError(403, 'SUBSCRIPTION_INACTIVE', 'The subscription is not active');
     }
 
     const limit = TEAM_MEMBER_LIMITS[subscription.plan as SubscriptionPlanValue];
@@ -175,7 +208,7 @@ export class TeamService {
     }
 
     const [memberCount, pendingInviteCount] = await Promise.all([
-      client.user.count({ where: { organisationId } }),
+      client.user.count({ where: { organisationId, lifecycleStatus: 'ACTIVE' } }),
       includePendingInvites
         ? client.teamInvite.count({
             where: {
@@ -202,9 +235,35 @@ export class TeamService {
     }
   }
 
-  async list(organisationId: string) {
-    const [members, invites] = await Promise.all([
-      this.prisma.user.findMany({
+  async list(organisationId: string, actorId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const organisations = await tx.$queryRaw<Array<{ id: string; lifecycleStatus: string }>>`
+        SELECT "id", "lifecycleStatus"
+        FROM "Organisation"
+        WHERE "id" = ${organisationId}
+        FOR UPDATE
+      `;
+      const organisation = organisations[0];
+      if (!organisation) {
+        throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
+      }
+      if (organisation.lifecycleStatus !== 'ACTIVE') {
+        throw new AppError(409, 'ORGANISATION_INACTIVE', 'This organisation is not active');
+      }
+
+      const actors = await tx.$queryRaw<LockedTeamListActor[]>`
+        SELECT "id", "role", "lifecycleStatus"
+        FROM "User"
+        WHERE "id" = ${actorId}
+          AND "organisationId" = ${organisationId}
+        FOR UPDATE
+      `;
+      const actor = actors[0];
+      if (!actor || actor.lifecycleStatus !== 'ACTIVE') {
+        throw new AppError(403, 'FORBIDDEN', 'Your membership cannot view this team');
+      }
+
+      const members = await tx.user.findMany({
         where: { organisationId },
         orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
         select: {
@@ -213,34 +272,71 @@ export class TeamService {
           name: true,
           role: true,
           emailVerified: true,
+          lifecycleStatus: true,
+          membershipVersion: true,
+          membershipChangedAt: true,
           createdAt: true,
         },
-      }),
-      this.prisma.teamInvite.findMany({
-        where: { organisationId },
-        include: {
-          invitedBy: { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
+      });
 
-    return {
-      members: members.map((member) => ({
-        ...member,
-        createdAt: member.createdAt.toISOString(),
-      })),
-      invites: invites.map((invite) => ({
-        id: invite.id,
-        email: invite.email,
-        role: invite.role,
-        invitedByName: invite.invitedBy?.name ?? null,
-        acceptedAt: invite.acceptedAt?.toISOString() ?? null,
-        revokedAt: invite.revokedAt?.toISOString() ?? null,
-        expiresAt: invite.expiresAt.toISOString(),
-        createdAt: invite.createdAt.toISOString(),
-      })),
-    };
+      const permittedSessionTargets = members.filter((member) => {
+        if (actor.role === 'MEMBER') return false;
+        if (actor.id === member.id) return true;
+        if (actor.role === 'OWNER') return member.role !== 'OWNER';
+        return member.role === 'MEMBER';
+      });
+      const sessionCounts = permittedSessionTargets.length === 0
+        ? []
+        : await tx.authSession.groupBy({
+            by: ['userId'],
+            where: {
+              userId: { in: permittedSessionTargets.map((member) => member.id) },
+              revokedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+            _count: { _all: true },
+          });
+      const sessionCountByUser = new Map(
+        sessionCounts.map((entry) => [entry.userId, entry._count._all]),
+      );
+
+      const includeInvites = actor.role === 'OWNER' || actor.role === 'ADMIN';
+      const invites = includeInvites
+        ? await tx.teamInvite.findMany({
+            where: { organisationId },
+            include: {
+              invitedBy: { select: { name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [];
+
+      const permittedSessionTargetIds = new Set(permittedSessionTargets.map((member) => member.id));
+      return {
+        members: members.map((member) => {
+          const response = {
+            ...member,
+            lifecycleStatus: member.lifecycleStatus ?? 'ACTIVE',
+            membershipVersion: member.membershipVersion ?? 1,
+            membershipChangedAt: (member.membershipChangedAt ?? member.createdAt).toISOString(),
+            createdAt: member.createdAt.toISOString(),
+          };
+          return permittedSessionTargetIds.has(member.id)
+            ? { ...response, activeSessionCount: sessionCountByUser.get(member.id) ?? 0 }
+            : response;
+        }),
+        invites: invites.map((invite) => ({
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          invitedByName: invite.invitedBy?.name ?? null,
+          acceptedAt: invite.acceptedAt?.toISOString() ?? null,
+          revokedAt: invite.revokedAt?.toISOString() ?? null,
+          expiresAt: invite.expiresAt.toISOString(),
+          createdAt: invite.createdAt.toISOString(),
+        })),
+      };
+    });
   }
 
   async invite(
@@ -252,12 +348,29 @@ export class TeamService {
     ensureCanInvite(invitedByRole, data.role);
 
     const email = normalizeEmail(data.email);
-    const now = new Date();
     const inviteToken = crypto.randomBytes(32).toString('base64url');
     const client = this.prisma as unknown as TeamInviteClient;
     let inviteEmailPayload: { organisationName: string; inviterName: string } | null;
     try {
       const runInvite = async (tx: TeamInviteClient) => {
+        if (tx.$queryRaw) {
+          const organisations = await tx.$queryRaw<Array<{ id: string; lifecycleStatus?: string }>>`
+            SELECT "id", "lifecycleStatus"
+            FROM "Organisation"
+            WHERE "id" = ${organisationId}
+            FOR UPDATE
+          `;
+          if (organisations.length === 0) {
+            throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
+          }
+          if (
+            organisations[0].lifecycleStatus !== undefined &&
+            organisations[0].lifecycleStatus !== 'ACTIVE'
+          ) {
+            throw new AppError(409, 'ORGANISATION_INACTIVE', 'This organisation is not active');
+          }
+        }
+        const now = new Date();
         const [foundOrganisation, foundInviter, foundExistingUser, , existingInvite] = await Promise.all([
           tx.organisation.findUnique({ where: { id: organisationId } }),
           tx.user.findUnique({ where: { id: invitedById } }),
@@ -287,13 +400,22 @@ export class TeamService {
           throw new AppError(404, 'ORGANISATION_NOT_FOUND', 'Organisation not found');
         }
 
+        if (
+          !foundInviter ||
+          (foundInviter.organisationId !== undefined && foundInviter.organisationId !== organisationId) ||
+          (foundInviter.lifecycleStatus !== undefined && foundInviter.lifecycleStatus !== 'ACTIVE')
+        ) {
+          throw new AppError(403, 'FORBIDDEN', 'Your membership cannot create invitations');
+        }
+        ensureCanInvite(foundInviter.role ?? invitedByRole, data.role);
+
         if (foundExistingUser || existingInvite) {
           return null;
         }
 
         await this.assertCanAddTeamMember(tx, organisationId, now, true);
 
-        const expiresAt = new Date();
+        const expiresAt = new Date(now);
         expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
 
         await tx.teamInvite.create({
@@ -338,72 +460,103 @@ export class TeamService {
     return inviteAccepted();
   }
 
-  async revoke(organisationId: string, inviteId: string, actorRole: UserRole) {
-    ensureCanInvite(actorRole);
-
-    const invite = await this.prisma.teamInvite.findFirst({
-      where: { id: inviteId, organisationId },
-    });
-
-    if (!invite) {
-      throw new AppError(404, 'INVITE_NOT_FOUND', 'Invite not found');
-    }
-
-    if (invite.acceptedAt) {
-      throw new AppError(400, 'INVITE_ACCEPTED', 'Accepted invites cannot be revoked');
-    }
-
-    const revoked = await this.prisma.teamInvite.update({
-      where: { id: inviteId },
-      data: { revokedAt: new Date() },
-    });
-
-    return { id: revoked.id, revokedAt: revoked.revokedAt?.toISOString() ?? null };
-  }
-
-  async updateMemberRole(
+  async revoke(
     organisationId: string,
+    inviteId: string,
     actorId: string,
     actorRole: UserRole,
-    memberId: string,
-    role: UserRole,
+    reason: string,
+    requestId?: string,
   ) {
-    ensureOwner(actorRole);
+    ensureCanInvite(actorRole);
 
-    if (role === 'OWNER') {
-      throw new AppError(400, 'OWNER_TRANSFER_UNSUPPORTED', 'Owner transfer is not supported yet');
-    }
+    return this.prisma.$transaction(async (tx) => {
+      const organisations = await tx.$queryRaw<Array<{ id: string; lifecycleStatus: string }>>`
+        SELECT "id", "lifecycleStatus"
+        FROM "Organisation"
+        WHERE "id" = ${organisationId}
+        FOR UPDATE
+      `;
+      if (!organisations[0] || organisations[0].lifecycleStatus !== 'ACTIVE') {
+        throw new AppError(409, 'ORGANISATION_INACTIVE', 'This organisation is not active');
+      }
 
-    if (memberId === actorId) {
-      throw new AppError(400, 'CANNOT_CHANGE_OWN_ROLE', 'You cannot change your own role');
-    }
+      const actors = await tx.$queryRaw<Array<{
+        id: string;
+        name: string;
+        role: UserRole;
+        lifecycleStatus: string;
+      }>>`
+        SELECT "id", "name", "role", "lifecycleStatus"
+        FROM "User"
+        WHERE "id" = ${actorId}
+          AND "organisationId" = ${organisationId}
+        FOR UPDATE
+      `;
+      const actor = actors[0];
+      if (!actor || actor.lifecycleStatus !== 'ACTIVE') {
+        throw new AppError(403, 'FORBIDDEN', 'Your membership cannot revoke invitations');
+      }
+      ensureCanInvite(actor.role);
 
-    const member = await this.prisma.user.findFirst({
-      where: { id: memberId, organisationId },
+      const invites = await tx.$queryRaw<Array<{
+        id: string;
+        email: string;
+        role: UserRole;
+        acceptedAt: Date | null;
+        revokedAt: Date | null;
+      }>>`
+        SELECT "id", "email", "role", "acceptedAt", "revokedAt"
+        FROM "TeamInvite"
+        WHERE "id" = ${inviteId}
+          AND "organisationId" = ${organisationId}
+        FOR UPDATE
+      `;
+      const invite = invites[0];
+      if (!invite) throw new AppError(404, 'INVITE_NOT_FOUND', 'Invite not found');
+      if (invite.acceptedAt) {
+        throw new AppError(400, 'INVITE_ACCEPTED', 'Accepted invites cannot be revoked');
+      }
+      if (invite.revokedAt) {
+        throw new AppError(409, 'INVITE_ALREADY_REVOKED', 'This invite has already been revoked');
+      }
+
+      const now = new Date();
+      const revoked = await tx.teamInvite.updateMany({
+        where: {
+          id: invite.id,
+          organisationId,
+          acceptedAt: null,
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
+      });
+      if (revoked.count !== 1) {
+        throw new AppError(409, 'INVITE_STATE_CONFLICT', 'This invite changed while it was being revoked');
+      }
+      await tx.securityAuditEvent.create({
+        data: {
+          organisationId,
+          type: 'INVITE_REVOKED',
+          actorKind: 'USER',
+          actorUserId: actor.id,
+          actorLabel: actor.name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 160).trim() || 'CharityPilot user',
+          subjectLabel: `Invitation for ${invite.email}`
+            .replace(/[\u0000-\u001f\u007f]/g, ' ')
+            .trim()
+            .slice(0, 160)
+            .trim(),
+          reason,
+          requestId: requestId?.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 128).trim() || undefined,
+          context: {
+            inviteId: invite.id,
+            invitedRole: invite.role,
+          },
+        },
+      });
+
+      return { id: invite.id, revokedAt: now.toISOString() };
     });
-
-    if (!member) {
-      throw new AppError(404, 'MEMBER_NOT_FOUND', 'Team member not found');
-    }
-
-    if (member.role === 'OWNER') {
-      throw new AppError(400, 'CANNOT_DEMOTE_OWNER', 'The account owner cannot be demoted here');
-    }
-
-    const updated = await this.prisma.user.update({
-      where: { id: member.id },
-      data: { role },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        emailVerified: true,
-        createdAt: true,
-      },
-    });
-
-    return { ...updated, createdAt: updated.createdAt.toISOString() };
   }
 
   async acceptInvite(data: AcceptTeamInviteData) {
@@ -444,8 +597,9 @@ export class TeamService {
       accepted = await client.$transaction(async (tx) => {
         // Bcrypt intentionally happens before this authoritative clock read so
         // an invitation expiring during hashing cannot still be consumed.
+        const capacityNow = new Date();
+        await this.assertCanAddTeamMember(tx, invite.organisationId, capacityNow, false);
         const acceptanceNow = new Date();
-        await this.assertCanAddTeamMember(tx, invite.organisationId, acceptanceNow, false);
 
         const consumed = await tx.teamInvite.updateMany({
           where: {
@@ -491,6 +645,19 @@ export class TeamService {
       });
     } catch (err) {
       if (isUniqueConstraintError(err)) {
+        throw invalidInviteError();
+      }
+
+      if (
+        err instanceof AppError &&
+        [
+          'ORGANISATION_NOT_FOUND',
+          'ORGANISATION_INACTIVE',
+          'NO_SUBSCRIPTION',
+          'SUBSCRIPTION_INACTIVE',
+          'TEAM_MEMBER_LIMIT_EXCEEDED',
+        ].includes(err.code)
+      ) {
         throw invalidInviteError();
       }
 

@@ -57,10 +57,10 @@ test.describe('Authorization (UI)', () => {
     await test.step('verify MEMBER admin controls are disabled or absent', async () => {
       await expect(
         memberPage.getByRole('button', { name: 'Send Invite' }),
-      ).toBeDisabled();
+      ).toHaveCount(0);
       await expect(
         memberPage
-          .getByText(/only owners and admins can send or revoke invites/i)
+          .getByText(/members have read-only access to governance records/i)
           .first(),
       ).toBeVisible();
       await expect(

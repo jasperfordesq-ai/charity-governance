@@ -30,10 +30,10 @@ be rerun against the final production configuration:
 a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`;
 on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
-configured handoff still had 20 production values needing real data.
-On the latest checked workstation, production values are `9 / 29` complete,
-machine-readable launch evidence is `9 / 87` complete, final signoffs are
-`0 / 5`, the strict counted launch gates are `18 / 121` complete (`14.9%`),
+configured handoff still had 17 production values needing real data.
+On the latest checked workstation, production values are `9 / 26` complete,
+machine-readable launch evidence is `9 / 86` complete, final signoffs are
+`0 / 5`, the strict counted launch gates are `18 / 117` complete (`15.4%`),
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.
@@ -41,7 +41,7 @@ Local browser QA has current 2026-07-09 evidence from focused responsive route c
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all
-87 machine-readable launch evidence checks, including the GitHub production environment and secret-store preflights and deployed accessibility
+86 machine-readable launch evidence checks, including the GitHub production environment and secret-store preflights and deployed accessibility
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
@@ -76,7 +76,8 @@ not as production launch approval.
 
 The core security model is already in place: HTTP-only cookie auth,
 hashed rotating refresh sessions, role guards, private document storage with
-signed URLs, security headers + CSP, rate limiting, browser-origin protection,
+authenticated API-proxy downloads and post-read session revalidation, security
+headers + CSP, rate limiting, browser-origin protection,
 and strict production environment validation that refuses to start with
 placeholder secrets.
 
@@ -214,22 +215,25 @@ You need four external services. Create the **production/live** versions
 - **What:** Rehearse the exact signed images against a recent isolated production restore, then let the fail-closed deploy command stop the old runtime, create and restore-verify a protected backup, run migration alone, probe migration history, prepare/reconcile reminder cutover state, and only then start the signed runtime.
   ```bash
 gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://api.charitypilot.ie"
-gh variable set NEXT_PUBLIC_SUPABASE_URL --env production --repo jasperfordesq-ai/charity-governance --body "https://<project-ref>.supabase.co"  # replace <project-ref> first
   npm run check:production:github-env -- --environment=production
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
   npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
   ```
-- **Current known GitHub environment blocker:** the latest live
-  `npm run check:production:github-env -- --environment=production` check
-  failed because `NEXT_PUBLIC_SUPABASE_URL` is still missing. Do not run
-  `release-images.yml` until the real Supabase project origin is configured in
-  the GitHub `production` environment.
-- **Why:** The GitHub `production` environment variables let the release workflow
-  build the web image for the real API and Supabase origins. The workflow then
+- **Current known GitHub environment blocker:** the protected secret store still
+  needs its real provider/operator secret names. Rerun
+  `npm run check:production:github-secrets -- --environment=production`, then
+  rerun `npm run check:production:github-env -- --environment=production`; only
+  the canonical public API origin is required for the web image. Supabase
+  remains in the API secret source and must not be added as a public web
+  variable.
+- **Why:** The GitHub `production` environment variable lets the release workflow
+  build the web image for the real API origin. The workflow then
   uploads `release-image-digests.env`; copy its digest-pinned image values and
-  `CHARITYPILOT_WEB_BUILD_*` origins into `.env.production` before preflight.
+  `CHARITYPILOT_WEB_BUILD_*` metadata (currently
+  `CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL`) into `.env.production` before
+  preflight.
   The preflight verifies signed, digest-pinned images and renders the compose
   file. Do not run the standalone migration command against production and do
   not use raw `docker compose up`: the deploy command must take the old API,
