@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const compose = readFileSync(join(repoRoot, 'compose.personal-server.yml'), 'utf8');
-const caddy = readFileSync(join(repoRoot, 'caddy', 'Caddyfile.personal-server'), 'utf8');
-const exampleEnv = readFileSync(join(repoRoot, '.env.personal-server.example'), 'utf8');
-const turbo = readFileSync(join(repoRoot, 'turbo.json'), 'utf8');
+const readFixture = (...pathParts) =>
+  readFileSync(join(repoRoot, ...pathParts), 'utf8').replace(/\r\n?/g, '\n');
+const compose = readFixture('compose.personal-server.yml');
+const caddy = readFixture('caddy', 'Caddyfile.personal-server');
+const exampleEnv = readFixture('.env.personal-server.example');
+const turbo = readFixture('turbo.json');
 
 function serviceSection(name) {
   const marker = `\n  ${name}:\n`;
