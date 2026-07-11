@@ -1004,10 +1004,20 @@ Repository progress on 2026-07-11:
   report executed API `660 / 660` and web `351 / 351`, found all `31` expected
   Playwright titles, and reported `395 / 395` covered-guarantee linkage complete
   without claiming that Playwright executed.
-- This repository-only sub-slice is `LOCALLY_VERIFIED`. Overall P0-09 remains
-  open for exact-SHA CI/E2E proof of this change, repository-owner-approved live
-  branch/ruleset and Production-environment protections, and a controlled
-  release-promotion run. No protection setting was silently enabled.
+- Implementation SHA `62170e55ac3bafe6f7cdd105eace11faaeba5d2c` passed
+  exact-SHA CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29151170819`
+  and E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29151170810`.
+  CI passed web `351 / 351`, API `662 / 662`, shared `40 / 40`, production
+  tooling `548 / 548`, local-Docker tooling `44 / 44`, and the corrected
+  reliability output (`660 / 660` API, `351 / 351` web, `395 / 395` linkage,
+  `EXECUTED E2E: NOT VERIFIED BY THIS COMMAND`). Managed E2E passed `113 / 113`
+  contracts and `105 / 105` browser scenarios in `3.5m`.
+- This repository-only sub-slice is `CI_VERIFIED`. Overall P0-09 remains open
+  for repository-owner-approved live branch/ruleset and Production-environment
+  protections plus a controlled release-promotion run. No protection setting
+  was silently enabled and no publishing workflow was triggered for test proof.
 
 Required result:
 

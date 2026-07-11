@@ -207,7 +207,7 @@ The detailed issue contract remains in
   treatment, controller/legal-basis/rights/provider/contact decisions,
   operational mailboxes, and professional legal, privacy, and accounting approval.
 - **P0-09 executed browser assurance and release protections - overall
-  `IN_PROGRESS`; repository-only gate/truth sub-slice `LOCALLY_VERIFIED`.** The
+  `IN_PROGRESS`; repository-only gate/truth sub-slice `CI_VERIFIED`.** The
   Release Images workflow now calls the reusable managed E2E workflow and makes
   publication depend on its success. The called browser job is read-only;
   package and OIDC write authority is scoped only to the dependent publish job.
@@ -215,9 +215,13 @@ The detailed issue contract remains in
   linkage from execution, print `EXECUTED E2E: NOT VERIFIED BY THIS COMMAND`, and
   use `LINKAGE CHECK: COMPLETE` instead of an overall browser `GREEN`. Local
   proof passed production tooling `548 / 548`, API reliability `660 / 660`, web
-  reliability `351 / 351`, and `395 / 395` covered-guarantee linkage. Live
-  branch/ruleset and Production-environment protections plus a controlled release
-  run remain repository-owner/external work; no GitHub setting was changed.
+  reliability `351 / 351`, and `395 / 395` covered-guarantee linkage. Exact-SHA
+  CI run `29151170819` and E2E run `29151170810` passed implementation commit
+  `62170e55ac3bafe6f7cdd105eace11faaeba5d2c`; E2E passed `113 / 113` contracts
+  and `105 / 105` scenarios in `3.5m`. Live branch/ruleset and
+  Production-environment protections plus a controlled release run remain
+  repository-owner/external work; no GitHub setting was changed and no release
+  was triggered merely to test the workflow.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -546,15 +550,20 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
-- P0-09 local release-gate and reliability-truth verification
+- P0-09 exact-SHA release-gate and reliability-truth verification
   - Release promotion structurally requires the reusable read-only managed E2E
     job before the write-enabled publishing job can start.
   - Production tooling passed `548 / 548`. The reliability command executed API
     `660 / 660` and web `351 / 351`, found `31` linked Playwright titles, and
     reported `395 / 395` linkage complete while explicitly declining to certify
     E2E execution.
-  - Exact-SHA CI/E2E and a controlled release run are still pending for this
-    sub-slice; repository protections remain a repository-owner decision.
+  - Implementation SHA `62170e55ac3bafe6f7cdd105eace11faaeba5d2c` passed CI
+    run `29151170819` and E2E run `29151170810`. CI passed root web `351 / 351`,
+    API `662 / 662`, shared `40 / 40`, production tooling `548 / 548`, and
+    local-Docker tooling `44 / 44`; E2E passed `113 / 113` contracts and
+    `105 / 105` scenarios in `3.5m`.
+  - A controlled release run and live repository protections remain
+    repository-owner/external work.
 - P0-08 role/privacy exact-SHA verification
   - Web `351 / 351`, API `662 / 662`, shared `40 / 40`, production tooling
     `546 / 546`, local-Docker tooling `44 / 44`, web lint/build, E2E typecheck,
