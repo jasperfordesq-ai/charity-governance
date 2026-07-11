@@ -957,6 +957,14 @@ Repository progress on 2026-07-11:
   The latter passed `113 / 113` runner contracts and `105 / 105` browser
   scenarios in `3.5m`, with the final disposable-database binding/reset proof
   succeeding after all browser traffic.
+- Follow-up deterministic test-discovery and evidence SHA
+  `2734dc167777765ceec297917940615f05770590` passed exact-SHA CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29150668596`
+  and E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29150668600`.
+  The main CI `Test` step itself discovered and passed web `351 / 351`, API
+  `662 / 662`, and shared `40 / 40`; E2E passed `113 / 113` runner contracts and
+  `105 / 105` browser scenarios in `3.7m`.
 
 P0-08 remains `IN_PROGRESS`. Trial entitlement and selected-plan propagation,
 expired-trial and account-closure deletion, the approved retention and rights
@@ -968,7 +976,7 @@ repository tests.
 
 ### P0-09 - Executed browser assurance and repository/release protections
 
-Status: `CONFIRMED`
+Status: `IN_PROGRESS`
 
 Evidence:
 
@@ -977,13 +985,29 @@ Evidence:
   pushes; GitHub E2E run
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29116192729`
   executed successfully for that exact SHA with `96 / 96` Playwright tests.
-- A fresh 2026-07-10 GitHub audit still found no `master` branch protection or
+- Fresh 2026-07-10 and 2026-07-11 GitHub audits found no `master` branch protection or
   repository ruleset. The `Production` environment exists but allows admin
   bypass, has no protection rules/reviewers, and has no deployment branch
   policy.
-- `scripts/reliability-report.mjs` treats linked E2E titles as covered even when
-  no browser run executed for the SHA.
-- Release-image promotion does not run Playwright.
+
+Repository progress on 2026-07-11:
+
+- Release-image promotion now calls the same reusable managed E2E workflow used
+  on direct `master` pushes, and the publish job cannot start until that browser
+  gate succeeds. The called gate has read-only repository permission; package
+  and OIDC write authority is scoped only to the dependent publish job.
+- `scripts/reliability-report.mjs` now reports `E2E linkage` and explicitly says
+  `EXECUTED E2E: NOT VERIFIED BY THIS COMMAND`. Successful static linkage is
+  `LINKAGE CHECK: COMPLETE`, never an overall browser `GREEN` result. The
+  generated reliability ledger carries the same distinction.
+- Local proof passed production tooling `548 / 548`; the regenerated linkage
+  report executed API `660 / 660` and web `351 / 351`, found all `31` expected
+  Playwright titles, and reported `395 / 395` covered-guarantee linkage complete
+  without claiming that Playwright executed.
+- This repository-only sub-slice is `LOCALLY_VERIFIED`. Overall P0-09 remains
+  open for exact-SHA CI/E2E proof of this change, repository-owner-approved live
+  branch/ruleset and Production-environment protections, and a controlled
+  release-promotion run. No protection setting was silently enabled.
 
 Required result:
 

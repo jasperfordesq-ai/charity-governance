@@ -4,6 +4,7 @@ name: E2E
 # This workflow never layers compose.e2e.yml over the persistent local compose
 # files and never supplies reset authority or database credentials itself.
 on:
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:

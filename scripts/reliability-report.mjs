@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-// CharityPilot reliability report - the unified "trust ledger" verifier (API + Web).
+// CharityPilot reliability report - the unified "trust ledger" linkage verifier (API + Web).
 //
 // Reads the curated guarantee matrix (docs/reliability/guarantees.json), runs the
-// proving suites, and proves that every guarantee marked `covered` is linked to a
-// test that actually exists and passes:
+// API and Web unit proving suites, and verifies that every guarantee marked
+// `covered` is linked to a test that exists:
 //   - surface "api"            -> apps/api  node:test unit suite (dist/tests/*.test.js)
 //   - surface "web", unit      -> apps/web  node:test unit suite (.test-dist/**/*.test.js)
 //   - surface "web", e2e       -> e2e/tests/*.spec.ts  (Playwright; linked statically by
 //                                 title, executed by `npm run test:e2e` / the CI E2E gate)
 //
-// Prints guarantee counts (split by surface) and an overall PASS/FAIL, and exits
+// This command never claims that the linked Playwright tests executed. It prints
+// guarantee/linkage counts and exits
 // non-zero if any executed suite has a failure or any covered guarantee's linked test
 // is missing/failing (a broken link).
 //
@@ -258,11 +259,12 @@ function buildMarkdown(guars, res) {
   md += '# CharityPilot Reliability Ledger\n\n';
   md += '> **The trust ledger - API + Web.** Every behaviour here is one whose failure would\n';
   md += '> lose customer trust or generate support tickets. Each row is a concrete, falsifiable\n';
-  md += '> guarantee linked to the automated test that proves it holds today and will keep holding.\n\n';
+  md += '> guarantee linked to an automated test. This document records linkage, not an executed\n';
+  md += '> browser result for the generated date or a release SHA.\n\n';
   md += 'This is **evidence, not an audit**. An audit asks "can I find a problem?" - an unbounded\n';
   md += 'question that always finds *something*. This ledger asks the bounded question: "is every\n';
-  md += 'reliability-critical behaviour pinned by a test that is green?" When every row is covered (or a\n';
-  md += 'documented n/a), the job is finished and stays finished.\n\n';
+  md += 'reliability-critical behaviour linked to an existing test?" Unit suites execute in this command;\n';
+  md += 'Playwright rows require a separate managed E2E result bound to the relevant SHA.\n\n';
 
   md += '## At a glance\n\n';
   md += `Generated: ${date} - Source of truth: [\`docs/reliability/guarantees.json\`](reliability/guarantees.json)\n\n`;
@@ -276,22 +278,25 @@ function buildMarkdown(guars, res) {
     const ok = res.failN === 0 && res.brokenLinks.length === 0;
     md += `**API suite:** ${res.api ? `${res.api.passN} passing, ${res.api.failN} failing` : 'not run'}. `;
     md += `**Web suite:** ${res.web ? `${res.web.passN} passing, ${res.web.failN} failing` : 'not run'}. `;
-    md += `**E2E:** ${res.e2eCount} Playwright titles linked (executed by the CI E2E gate).\n\n`;
+    md += `**E2E linkage:** ${res.e2eCount} Playwright titles found; not executed by this command.\n\n`;
+    md += '**Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E ';
+    md += 'workflow or `npm run test:e2e` result bound to the relevant SHA.\n\n';
     md += `**Linkage:** ${res.proven}/${counts.covered || 0} covered guarantees verified against a passing/linked test`;
     md += res.brokenLinks.length ? `, ${res.brokenLinks.length} broken link(s).` : '.';
-    md += `\n\n**Overall: ${ok ? 'GREEN' : 'NOT GREEN'}**\n\n`;
+    md += `\n\n**Linkage check: ${ok ? 'COMPLETE' : 'INCOMPLETE'}**\n\n`;
   }
 
   md += '## How to verify\n\n';
   md += '```bash\n';
-  md += '# Compile + run the API and Web unit suites and check every covered guarantee\n';
-  md += '# links to a passing test (E2E rows are linked by title and run by the E2E gate).\n';
+  md += '# Compile + run the API and Web unit suites and check every covered guarantee.\n';
+  md += '# E2E rows are linked by title only; this command does not execute Playwright.\n';
   md += 'npm run reliability:report\n';
   md += '\n# Prove the WHOLE platform green in one command (every gate + this report):\n';
   md += 'npm run release:ready\n';
   md += '```\n\n';
-  md += 'The report exits non-zero if any executed suite fails or any covered guarantee\'s linked test\n';
-  md += 'is missing. Regenerate this document with `npm run reliability:report -- --write`.\n\n';
+  md += 'The report exits non-zero if an executed unit suite fails or any covered guarantee\'s linked\n';
+  md += 'test is missing. It does not certify E2E execution. Regenerate this document with\n';
+  md += '`npm run reliability:report -- --write`.\n\n';
 
   md += '## The reliability concerns\n\n';
   md += '**API surface (8):** tenant isolation / authorization boundary / subscription/plan gating /\n';
@@ -329,7 +334,8 @@ function buildMarkdown(guars, res) {
   md += '---\n\n';
   md += '<sub>Legend: covered = a passing automated test proves the guarantee / partial = part proven /\n';
   md += 'gap = not yet proven / n/a = concern considered and documented as not applicable to this group.\n';
-  md += '<sup>e2e</sup> = proven by a Playwright journey, executed by the CI E2E gate.</sub>\n';
+  md += '<sup>e2e</sup> = linked to a Playwright journey; execution must be verified separately by the\n';
+  md += 'managed CI E2E or release gate for the relevant SHA.</sub>\n';
   return md;
 }
 
@@ -379,16 +385,17 @@ console.log(`  n/a     : ${counts.na || 0}`);
 if (res) {
   if (res.api) console.log(`\nAPI suite: ${res.api.passN} passing, ${res.api.failN} failing`);
   if (res.web) console.log(`Web suite: ${res.web.passN} passing, ${res.web.failN} failing`);
-  console.log(`E2E: ${res.e2eCount} Playwright titles linked (run by the E2E gate)`);
+  console.log(`E2E linkage: ${res.e2eCount} Playwright titles found (not executed by this command)`);
+  console.log('EXECUTED E2E: NOT VERIFIED BY THIS COMMAND');
   const coveredChecked = (res.api ? apiCovered.length : 0) + (res.web ? webUnitCovered.length : 0) + e2eCovered.length;
   console.log(`Covered-guarantee linkage: ${res.proven}/${coveredChecked} verified against a passing/linked test`);
   if (res.brokenLinks.length) {
     console.log(`\nFAIL ${res.brokenLinks.length} BROKEN LINK(S) - covered guarantee with no passing/linked test of that title:`);
     for (const b of res.brokenLinks.slice(0, 60)) console.log(`   - [${b.surface}/${b.testType}] [${b.id}] expected: "${b.testTitle}"`);
   }
-  const green = res.failN === 0 && res.brokenLinks.length === 0;
-  console.log(`\nOVERALL: ${green ? 'GREEN' : 'NOT GREEN'}`);
-  process.exit(green ? 0 : 1);
+  const complete = res.failN === 0 && res.brokenLinks.length === 0;
+  console.log(`\nLINKAGE CHECK: ${complete ? 'COMPLETE' : 'INCOMPLETE'}`);
+  process.exit(complete ? 0 : 1);
 } else {
   console.log('\n(--no-run: skipped executing the suites)');
 }

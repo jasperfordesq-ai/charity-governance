@@ -206,6 +206,18 @@ The detailed issue contract remains in
   remains open for trial/plan behavior, deletion and retention workflows, VAT
   treatment, controller/legal-basis/rights/provider/contact decisions,
   operational mailboxes, and professional legal, privacy, and accounting approval.
+- **P0-09 executed browser assurance and release protections - overall
+  `IN_PROGRESS`; repository-only gate/truth sub-slice `LOCALLY_VERIFIED`.** The
+  Release Images workflow now calls the reusable managed E2E workflow and makes
+  publication depend on its success. The called browser job is read-only;
+  package and OIDC write authority is scoped only to the dependent publish job.
+  The reliability report and generated ledger now distinguish static E2E-title
+  linkage from execution, print `EXECUTED E2E: NOT VERIFIED BY THIS COMMAND`, and
+  use `LINKAGE CHECK: COMPLETE` instead of an overall browser `GREEN`. Local
+  proof passed production tooling `548 / 548`, API reliability `660 / 660`, web
+  reliability `351 / 351`, and `395 / 395` covered-guarantee linkage. Live
+  branch/ruleset and Production-environment protections plus a controlled release
+  run remain repository-owner/external work; no GitHub setting was changed.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -266,8 +278,8 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `546 / 546` checks on
-  2026-07-11. Older `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
+  `npm run test:production-check` passed with `548 / 548` checks on
+  2026-07-11. Older `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
@@ -534,6 +546,15 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
+- P0-09 local release-gate and reliability-truth verification
+  - Release promotion structurally requires the reusable read-only managed E2E
+    job before the write-enabled publishing job can start.
+  - Production tooling passed `548 / 548`. The reliability command executed API
+    `660 / 660` and web `351 / 351`, found `31` linked Playwright titles, and
+    reported `395 / 395` linkage complete while explicitly declining to certify
+    E2E execution.
+  - Exact-SHA CI/E2E and a controlled release run are still pending for this
+    sub-slice; repository protections remain a repository-owner decision.
 - P0-08 role/privacy exact-SHA verification
   - Web `351 / 351`, API `662 / 662`, shared `40 / 40`, production tooling
     `546 / 546`, local-Docker tooling `44 / 44`, web lint/build, E2E typecheck,
@@ -549,6 +570,11 @@ Recently successful checks in this workstream:
     `42888a41e86bd7235891e82a18623208b921d773` passed exact-SHA CI run
     `29150323690` and E2E run `29150323669`; the latter passed `113 / 113`
     contracts and `105 / 105` scenarios in `3.5m`.
+  - Deterministic discovery/evidence SHA
+    `2734dc167777765ceec297917940615f05770590` passed exact-SHA CI run
+    `29150668596` and E2E run `29150668600`. The main CI `Test` step ran all web
+    `351 / 351`, API `662 / 662`, and shared `40 / 40`; E2E passed `105 / 105`
+    scenarios in `3.7m`.
 - P0-07 exact-SHA verification
   - Full suites passed on 2026-07-11: API `658 / 658`, web `335 / 335`, and
     shared `40 / 40`.
@@ -557,8 +583,9 @@ Recently successful checks in this workstream:
     files passed.
   - The live P0-07 PostgreSQL upgrade fixture passed lifecycle, owner,
     session-family, tenant, immutable-audit, and atomic rollback probes.
-  - The regenerated reliability ledger is green with `415` guarantees,
-    `395 / 395` covered links, and `20` explicit not-applicable rows.
+  - The regenerated reliability ledger has `415` guarantees, `395 / 395`
+    complete links, and `20` explicit not-applicable rows; exact-SHA E2E is the
+    separate browser-execution evidence.
   - Focused managed proof passed the concurrent logout-vs-refresh invariant;
     a fresh current-tree document run passed `113 / 113` isolation contracts,
     the production build, all `18` migrations, and upload/download `1 / 1` in

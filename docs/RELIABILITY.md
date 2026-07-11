@@ -2,12 +2,13 @@
 
 > **The trust ledger - API + Web.** Every behaviour here is one whose failure would
 > lose customer trust or generate support tickets. Each row is a concrete, falsifiable
-> guarantee linked to the automated test that proves it holds today and will keep holding.
+> guarantee linked to an automated test. This document records linkage, not an executed
+> browser result for the generated date or a release SHA.
 
 This is **evidence, not an audit**. An audit asks "can I find a problem?" - an unbounded
 question that always finds *something*. This ledger asks the bounded question: "is every
-reliability-critical behaviour pinned by a test that is green?" When every row is covered (or a
-documented n/a), the job is finished and stays finished.
+reliability-critical behaviour linked to an existing test?" Unit suites execute in this command;
+Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
@@ -19,25 +20,28 @@ Generated: 2026-07-11 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 104 | 0 | 0 | 6 | 110 |
 | **Total** | **395** | **0** | **0** | **20** | **415** |
 
-**API suite:** 660 passing, 0 failing. **Web suite:** 351 passing, 0 failing. **E2E:** 31 Playwright titles linked (executed by the CI E2E gate).
+**API suite:** 660 passing, 0 failing. **Web suite:** 351 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+
+**Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
 **Linkage:** 395/395 covered guarantees verified against a passing/linked test.
 
-**Overall: GREEN**
+**Linkage check: COMPLETE**
 
 ## How to verify
 
 ```bash
-# Compile + run the API and Web unit suites and check every covered guarantee
-# links to a passing test (E2E rows are linked by title and run by the E2E gate).
+# Compile + run the API and Web unit suites and check every covered guarantee.
+# E2E rows are linked by title only; this command does not execute Playwright.
 npm run reliability:report
 
 # Prove the WHOLE platform green in one command (every gate + this report):
 npm run release:ready
 ```
 
-The report exits non-zero if any executed suite fails or any covered guarantee's linked test
-is missing. Regenerate this document with `npm run reliability:report -- --write`.
+The report exits non-zero if an executed unit suite fails or any covered guarantee's linked
+test is missing. It does not certify E2E execution. Regenerate this document with
+`npm run reliability:report -- --write`.
 
 ## The reliability concerns
 
@@ -697,4 +701,5 @@ Real defects found *by a test written here*, fixed minimally, and locked in:
 
 <sub>Legend: covered = a passing automated test proves the guarantee / partial = part proven /
 gap = not yet proven / n/a = concern considered and documented as not applicable to this group.
-<sup>e2e</sup> = proven by a Playwright journey, executed by the CI E2E gate.</sub>
+<sup>e2e</sup> = linked to a Playwright journey; execution must be verified separately by the
+managed CI E2E or release gate for the relevant SHA.</sub>

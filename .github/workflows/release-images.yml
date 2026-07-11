@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
 
 concurrency:
   group: release-images-${{ github.ref }}
@@ -20,11 +18,22 @@ env:
   DATABASE_URL: postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci
 
 jobs:
+  e2e:
+    name: Managed browser release gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/e2e.yml
+
   publish:
     name: Build, smoke, and publish Docker images
+    needs: e2e
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     env:
       NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
 

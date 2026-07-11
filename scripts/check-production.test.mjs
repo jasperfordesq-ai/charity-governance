@@ -1770,7 +1770,36 @@ test('reliability report emits ASCII-safe operator output', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /[^\x00-\x7F]/);
   assert.match(result.stdout, /covered : \d+/);
-  assert.match(result.stdout, /OVERALL|--no-run/);
+  assert.match(result.stdout, /--no-run/);
+});
+
+test('reliability report distinguishes static E2E linkage from executed evidence', () => {
+  const source = readRepoFile('scripts/reliability-report.mjs');
+
+  assert.match(source, /EXECUTED E2E: NOT VERIFIED BY THIS COMMAND/);
+  assert.match(source, /LINKAGE CHECK:.*COMPLETE.*INCOMPLETE/);
+  assert.match(source, /not executed by this command/);
+  assert.doesNotMatch(source, /OVERALL:\s*\$\{[^}]*GREEN/);
+  assert.doesNotMatch(source, /Overall:\s*\$\{[^}]*GREEN/);
+});
+
+test('release image promotion requires the reusable managed E2E gate before write authority', () => {
+  const e2e = readRepoFile('.github/workflows/e2e.yml');
+  const release = readRepoFile('.github/workflows/release-images.yml');
+  const workflowPermissions = release.slice(
+    release.indexOf('permissions:'),
+    release.indexOf('concurrency:'),
+  );
+  const e2eJob = release.slice(release.indexOf('  e2e:'), release.indexOf('  publish:'));
+  const publishJob = release.slice(release.indexOf('  publish:'));
+
+  assert.match(e2e, /on:\s*[\s\S]*workflow_call:/);
+  assert.match(e2eJob, /uses:\s+\.\/\.github\/workflows\/e2e\.yml/);
+  assert.match(e2eJob, /permissions:\s*[\s\S]*contents:\s+read/);
+  assert.doesNotMatch(e2eJob, /packages:\s+write|id-token:\s+write/);
+  assert.match(publishJob, /needs:\s+e2e/);
+  assert.match(publishJob, /permissions:\s*[\s\S]*packages:\s+write[\s\S]*id-token:\s+write/);
+  assert.doesNotMatch(workflowPermissions, /packages:\s+write|id-token:\s+write/);
 });
 
 test('reliability report rejects unknown options before reporting', () => {
@@ -1894,14 +1923,14 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}546\s*\/\s*546`? checks/);
+  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}548\s*\/\s*548`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
   assert.match(
     handoff,
-    /Older `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
+    /Older `546 \/ 546`, `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
   );
   assert.match(
     handoff,
