@@ -4,8 +4,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
-import { healthRoutes } from '../routes/health/index.js';
+import {
+  E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE,
+  healthRoutes,
+} from '../routes/health/index.js';
 
 const INSTANCE_ID = '9d9899dc-9bea-45ca-a916-c9a2e023e46e';
 const READINESS_KEY = 'e2e-readiness-key-with-enough-entropy';
@@ -28,9 +32,18 @@ function restoreEnv(snapshot: Record<string, string | undefined>): void {
   }
 }
 
-async function buildApp(queryRaw: () => Promise<unknown>) {
+async function buildApp(
+  queryRaw: () => Promise<unknown>,
+  options: { globalRateLimitMax?: number } = {},
+) {
   const app = Fastify({ logger: false });
   app.decorate('prisma', { $queryRaw: queryRaw } as never);
+  if (options.globalRateLimitMax !== undefined) {
+    await app.register(rateLimit, {
+      max: options.globalRateLimitMax,
+      timeWindow: '1 minute',
+    });
+  }
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
   return app;
 }
@@ -147,6 +160,50 @@ test('E2E database identity probe returns only the exact bound instance with no-
     assert.equal(response.headers['cache-control'], 'no-store');
     assert.deepEqual(response.json(), { status: 'bound', instanceId: INSTANCE_ID });
     assert.equal(queryCount, 1);
+  } finally {
+    await app.close();
+    restoreEnv(snapshot);
+  }
+});
+
+test('E2E database identity probe has a bounded bucket independent of ordinary API traffic', { concurrency: false }, async () => {
+  const snapshot = snapshotEnv();
+  let queryCount = 0;
+  const app = await buildApp(
+    async () => {
+      queryCount += 1;
+      return [validIdentity()];
+    },
+    { globalRateLimitMax: 1 },
+  );
+  enableProbe();
+
+  try {
+    const firstHealth = await app.inject({ method: 'GET', url: '/api/v1/health' });
+    assert.equal(firstHealth.statusCode, 200);
+    const globallyLimitedHealth = await app.inject({ method: 'GET', url: '/api/v1/health' });
+    assert.equal(globallyLimitedHealth.statusCode, 429);
+
+    for (let attempt = 0; attempt < E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE; attempt += 1) {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/health/e2e-database-identity',
+        headers: { 'x-charitypilot-readiness-key': READINESS_KEY },
+      });
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(response.json(), { status: 'bound', instanceId: INSTANCE_ID });
+    }
+
+    const probeLimitedByItsOwnBucket = await app.inject({
+      method: 'GET',
+      url: '/api/v1/health/e2e-database-identity',
+      headers: { 'x-charitypilot-readiness-key': READINESS_KEY },
+    });
+    assert.equal(probeLimitedByItsOwnBucket.statusCode, 429);
+    assert.equal(queryCount, E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE);
+
+    const healthStillUsesGlobalBucket = await app.inject({ method: 'GET', url: '/api/v1/health' });
+    assert.equal(healthStillUsesGlobalBucket.statusCode, 429);
   } finally {
     await app.close();
     restoreEnv(snapshot);

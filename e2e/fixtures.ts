@@ -223,6 +223,10 @@ export async function selectHeroUiOption(
 export async function sendInviteViaUi(page: Page, email: string, roleLabel = 'Member'): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Team & Permissions' })).toBeVisible({ timeout: 60_000 });
   const inviteForm = page.getByRole('group', { name: 'Invite someone' });
+  await expect(
+    inviteForm,
+    'Team data and the owner invite form must load before invite interaction begins',
+  ).toBeVisible({ timeout: 30_000 });
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await reliableFill(inviteForm.getByLabel('Email'), email);
     await selectHeroUiOption(inviteForm, 'Role', roleLabel);

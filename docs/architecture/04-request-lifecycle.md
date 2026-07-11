@@ -57,7 +57,7 @@ The allowed-origin set is built in `server.ts` from `FRONTEND_URL` (comma-separa
 
 ### 5. Rate limiting
 
-`@fastify/rate-limit` is registered globally with `max: 100` per `1 minute` window (`apps/api/src/server.ts:57-60`). Breaches surface as `429` and are mapped to code `RATE_LIMITED` by the error handler (`apps/api/src/plugins/error-handler.ts:25-30`).
+`@fastify/rate-limit` is registered globally with `max: 100` per `1 minute` window for production and ordinary runtimes (`apps/api/src/server.ts:58-61`). Breaches surface as `429` and are mapped to code `RATE_LIMITED` by the error handler (`apps/api/src/plugins/error-handler.ts:25-30`). The UUID-bound, non-production disposable-E2E runtime raises only this coarse shared-gateway ceiling to `10,000`; all route-specific limits still override it. Its database identity probe uses its own `10`-per-minute route bucket, so ordinary synthetic browser traffic cannot consume the binding proof required before or after destructive reset; the probe still requires its explicit enable flag, UUID-marked database instance, and timing-safe readiness key.
 
 Sensitive auth routes also use identifier-aware per-route buckets from `apps/api/src/utils/identifier-rate-limit.ts`, always combined with `request.ip` so production trusted-proxy configuration still matters:
 

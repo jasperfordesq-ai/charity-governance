@@ -9,6 +9,7 @@ const READINESS_HEADER = 'x-charitypilot-readiness-key';
 const E2E_MARKER_VERSION = 1;
 const E2E_MARKER_PURPOSE = 'charitypilot-e2e-disposable';
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export const E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE = 10;
 
 interface E2eDatabaseIdentityRow {
   singleton: boolean;
@@ -58,24 +59,37 @@ function readinessDependencyTimeoutMs(): number {
 export async function healthRoutes(app: FastifyInstance) {
   app.get('/', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  app.get('/e2e-database-identity', async (request, reply) => {
-    reply.header('Cache-Control', 'no-store');
-    const configuredInstanceId = process.env.E2E_DATABASE_INSTANCE_ID;
-    const enabled =
-      process.env.NODE_ENV !== 'production' &&
-      process.env.E2E_DATABASE_IDENTITY_PROBE_ENABLED === 'true' &&
-      typeof configuredInstanceId === 'string' &&
-      UUID_V4_PATTERN.test(configuredInstanceId);
+  app.get(
+    '/e2e-database-identity',
+    {
+      // The managed suite shares one fixed TCP-gateway IP. Keep this safety
+      // probe independently bounded so ordinary browser traffic cannot consume
+      // the exact binding check needed before and after destructive reset.
+      config: {
+        rateLimit: {
+          max: E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      const configuredInstanceId = process.env.E2E_DATABASE_INSTANCE_ID;
+      const enabled =
+        process.env.NODE_ENV !== 'production' &&
+        process.env.E2E_DATABASE_IDENTITY_PROBE_ENABLED === 'true' &&
+        typeof configuredInstanceId === 'string' &&
+        UUID_V4_PATTERN.test(configuredInstanceId);
 
-    if (!enabled) {
-      return reply.status(404).send({ error: 'Not found', code: 'NOT_FOUND' });
-    }
-    if (!hasReadinessAccess(request)) {
-      return reply.status(401).send({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
-    }
+      if (!enabled) {
+        return reply.status(404).send({ error: 'Not found', code: 'NOT_FOUND' });
+      }
+      if (!hasReadinessAccess(request)) {
+        return reply.status(401).send({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+      }
 
-    try {
-      const rows = await app.prisma.$queryRaw<E2eDatabaseIdentityRow[]>`
+      try {
+        const rows = await app.prisma.$queryRaw<E2eDatabaseIdentityRow[]>`
         SELECT
           marker.singleton,
           marker.marker_version,
@@ -119,41 +133,42 @@ export async function healthRoutes(app: FastifyInstance) {
          AND marker_table.relname = 'database_identity'
          AND marker_table.relkind IN ('r', 'p')
         LIMIT 2
-      `;
-      const marker = rows[0];
-      const bound =
-        rows.length === 1 &&
-        marker?.singleton === true &&
-        Number(marker?.marker_version) === E2E_MARKER_VERSION &&
-        marker?.purpose === E2E_MARKER_PURPOSE &&
-        marker?.instance_id === configuredInstanceId &&
-        marker?.database_name === 'charitypilot_e2e_disposable' &&
-        marker?.session_user === 'charitypilot_e2e_runner' &&
-        marker?.current_user === 'charitypilot_e2e_runner' &&
-        marker?.current_schema === 'public' &&
-        marker?.database_comment === 'CHARITYPILOT_DISPOSABLE_E2E_DATABASE_V1' &&
-        marker?.role_superuser === false &&
-        marker?.role_create_role === false &&
-        marker?.role_create_database === false &&
-        marker?.role_replication === false &&
-        marker?.role_bypass_rls === false &&
-        marker?.role_inherit === false &&
-        Number(marker?.role_membership_count) === 0 &&
-        marker?.database_owner !== 'charitypilot_e2e_runner' &&
-        marker?.marker_schema_owner !== 'charitypilot_e2e_runner' &&
-        marker?.marker_table_owner !== 'charitypilot_e2e_runner' &&
-        marker?.marker_schema_create === false &&
-        marker?.marker_table_mutation === false;
-      if (!bound) {
+        `;
+        const marker = rows[0];
+        const bound =
+          rows.length === 1 &&
+          marker?.singleton === true &&
+          Number(marker?.marker_version) === E2E_MARKER_VERSION &&
+          marker?.purpose === E2E_MARKER_PURPOSE &&
+          marker?.instance_id === configuredInstanceId &&
+          marker?.database_name === 'charitypilot_e2e_disposable' &&
+          marker?.session_user === 'charitypilot_e2e_runner' &&
+          marker?.current_user === 'charitypilot_e2e_runner' &&
+          marker?.current_schema === 'public' &&
+          marker?.database_comment === 'CHARITYPILOT_DISPOSABLE_E2E_DATABASE_V1' &&
+          marker?.role_superuser === false &&
+          marker?.role_create_role === false &&
+          marker?.role_create_database === false &&
+          marker?.role_replication === false &&
+          marker?.role_bypass_rls === false &&
+          marker?.role_inherit === false &&
+          Number(marker?.role_membership_count) === 0 &&
+          marker?.database_owner !== 'charitypilot_e2e_runner' &&
+          marker?.marker_schema_owner !== 'charitypilot_e2e_runner' &&
+          marker?.marker_table_owner !== 'charitypilot_e2e_runner' &&
+          marker?.marker_schema_create === false &&
+          marker?.marker_table_mutation === false;
+        if (!bound) {
+          return reply.status(503).send({ error: 'Database binding unavailable', code: 'DATABASE_BINDING_UNAVAILABLE' });
+        }
+
+        return reply.status(200).send({ status: 'bound', instanceId: configuredInstanceId });
+      } catch {
+        request.log.error('E2E database identity probe failed');
         return reply.status(503).send({ error: 'Database binding unavailable', code: 'DATABASE_BINDING_UNAVAILABLE' });
       }
-
-      return reply.status(200).send({ status: 'bound', instanceId: configuredInstanceId });
-    } catch {
-      request.log.error('E2E database identity probe failed');
-      return reply.status(503).send({ error: 'Database binding unavailable', code: 'DATABASE_BINDING_UNAVAILABLE' });
-    }
-  });
+    },
+  );
 
   app.get('/readiness', async (request, reply) => {
     if (!hasReadinessAccess(request)) {

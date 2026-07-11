@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 62 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 63 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | .env.production exists but 17 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 36 web unit test files, 62 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 36 web unit test files, 63 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -382,7 +382,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `documents` | `apps/api/src/routes/documents/index.ts` | 347 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `health` | `apps/api/src/routes/health/index.ts` | 206 | public/partial by design | 2 | preserve current guard and tenant boundary |
+| `health` | `apps/api/src/routes/health/index.ts` | 221 | public/partial by design | 2 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `team` | `apps/api/src/routes/team/index.ts` | 291 | auth, subscription | 5 | preserve current guard and tenant boundary |
 

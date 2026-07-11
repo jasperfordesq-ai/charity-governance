@@ -24,6 +24,7 @@ import { validateProductionEnv } from './utils/env.js';
 import { apiLoggerOptionsForEnvironment } from './utils/logger.js';
 import { parsePort } from './utils/port.js';
 import { normaliseOrigin } from './utils/request-origin.js';
+import { globalApiRateLimitMax } from './utils/global-rate-limit.js';
 
 const environment = process.env.NODE_ENV ?? 'development';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
@@ -55,7 +56,7 @@ await app.register(cookie);
 await registerBrowserOriginProtection(app, allowedOrigins);
 
 await app.register(rateLimit, {
-  max: 100,
+  max: globalApiRateLimitMax(),
   timeWindow: '1 minute',
 });
 
