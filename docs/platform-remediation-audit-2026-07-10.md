@@ -1265,7 +1265,7 @@ Acceptance:
 
 ### P1-09 - Domain invariants and referential safety
 
-Status: `LOCALLY_VERIFIED`; exact-SHA CI and managed E2E are pending
+Status: `CI_VERIFIED`
 
 Implemented:
 
@@ -1322,8 +1322,16 @@ Local verification:
   redeploy, and final migration status returned zero. The complete before/after
   logical fingerprint was identical, all recovered assertions passed, and final
   database/container inventory was empty.
-- This status remains local until the coherent implementation commit is pushed
-  and both exact-SHA GitHub CI and managed E2E complete successfully.
+- Implementation commit `c71481791b6716a06818c341d130fe25d7f32b7b`, the
+  adjacent Windows personal-server fixture parser repair
+  `3aba948962cbacf075d018564385acf972cb7dc5`, and the rebased evidence refresh
+  produced exact verification SHA `812b9ff83e0407146e50a2dd0e87fea05561addb`.
+  GitHub CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29168177797`
+  and managed E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29168177757`
+  both passed for that SHA. E2E passed `113 / 113` runner contracts and
+  `105 / 105` browser scenarios in `3.6m`.
 
 ## P2: Release Engineering and Production Operations
 

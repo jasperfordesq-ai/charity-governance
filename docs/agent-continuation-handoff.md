@@ -247,8 +247,8 @@ The detailed issue contract remains in
   `0c5b795ec2cbc906a119f7ffd52bd552519d232c`. The expanded scheduled-cleanup
   smoke assertion and isolated live-migration test phase passed CI run
   `29163982047`; managed E2E run `29163982033` also passed.
-- **P1-09 domain invariants and referential safety - `LOCALLY_VERIFIED`; CI/E2E
-  pending.** Shared/API/web complete-state validation now prevents reversed
+- **P1-09 domain invariants and referential safety - `CI_VERIFIED`.**
+  Shared/API/web complete-state validation now prevents reversed
   board terms, contradictory trustee evidence, reversed closed fundraising
   periods, and filed reports without filing dates. Organisation-first locks,
   tenant-scoped composite conflict pointers, transactional history-preserving
@@ -264,9 +264,13 @@ The detailed issue contract remains in
   personal-server `21 / 21`, local-Docker `44 / 44`,
   lint/build/Prisma/security gates, and a real built-image
   tamper-negative/pristine-positive recovery with an identical before/after
-  database fingerprint and zero residue. Do not promote this bullet to
-  `CI_VERIFIED` until the implementation SHA's GitHub CI and managed E2E are both
-  terminal green.
+  database fingerprint and zero residue. Implementation commit
+  `c71481791b6716a06818c341d130fe25d7f32b7b`, the adjacent Windows fixture
+  repair `3aba948962cbacf075d018564385acf972cb7dc5`, and the evidence refresh form
+  exact verification SHA `812b9ff83e0407146e50a2dd0e87fea05561addb`.
+  GitHub CI run `29168177797` and managed E2E run `29168177757` passed for that
+  SHA; E2E passed `113 / 113` runner contracts and `105 / 105` browser scenarios
+  in `3.6m`.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
