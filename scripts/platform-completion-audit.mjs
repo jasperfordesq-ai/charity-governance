@@ -267,7 +267,7 @@ const fixedInThisAuditBranch = [
   'The release readiness command now resolves npm and npx gates through explicit Node CLI entrypoints on Windows instead of shell execution, keeping launch evidence transcripts free of shell-argument deprecation warnings.',
   'The production readiness TODO now reflects the current 17-value launch blocker state without overclaiming unrun local smoke or external evidence.',
   'Supabase URL, service-role, and bucket configuration is now server-only end to end; web builds and runtimes trust only the authenticated CharityPilot API document-download route.',
-  'The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/87 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.',
+  'The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/86 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.',
   'The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.',
   'The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.',
   'The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.',

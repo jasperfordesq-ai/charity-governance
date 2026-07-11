@@ -4,9 +4,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const dashboard = (...parts: string[]) =>
-  readFileSync(join(process.cwd(), 'src', 'app', '(dashboard)', ...parts), 'utf8');
+  readFileSync(join(process.cwd(), 'src', 'app', '(dashboard)', ...parts), 'utf8')
+    .replace(/\r\n/g, '\n');
 const component = (...parts: string[]) =>
-  readFileSync(join(process.cwd(), 'src', 'components', ...parts), 'utf8');
+  readFileSync(join(process.cwd(), 'src', 'components', ...parts), 'utf8')
+    .replace(/\r\n/g, '\n');
 
 test('principle autosave is revision-aware and delegates ordering to the serialized queue', () => {
   const workflow = dashboard('compliance', '[principleId]', 'use-principle-detail-workflow.ts');

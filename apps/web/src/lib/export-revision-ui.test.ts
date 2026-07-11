@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const exportSource = (file: string) =>
-  readFileSync(join(process.cwd(), 'src', 'app', '(dashboard)', 'export', file), 'utf8');
+  readFileSync(join(process.cwd(), 'src', 'app', '(dashboard)', 'export', file), 'utf8')
+    .replace(/\r\n/g, '\n');
 
 test('export workflow loads each year sequence-safely and fails approval closed without readiness', () => {
   const workflow = exportSource('use-export-workflow.ts');

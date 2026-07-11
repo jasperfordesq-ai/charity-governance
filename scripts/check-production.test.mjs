@@ -1928,8 +1928,13 @@ test('package test scripts stay compatible with the Node 22 production runtime',
   const apiPackage = JSON.parse(readRepoFile('apps/api/package.json'));
   assert.match(
     apiPackage.scripts.test,
-    /node --test --test-concurrency=4 dist\/tests\/\*\.test\.js/,
-    'API tests must cap file concurrency so the real Docker migration proof is not starved on high-core runners',
+    /node --test --test-concurrency=4 --test-skip-pattern="real PostgreSQL 16 migration" dist\/tests\/\*\.test\.js/,
+    'Ordinary API tests must cap file concurrency and exclude the real Docker migration proof',
+  );
+  assert.match(
+    apiPackage.scripts.test,
+    /node --test --test-concurrency=1 --test-name-pattern="real PostgreSQL 16 migration" dist\/tests\/document-storage-deletion-lifecycle-migration\.test\.js/,
+    'The real Docker migration proof must run in a separate single-concurrency phase',
   );
 });
 

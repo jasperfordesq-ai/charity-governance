@@ -80,6 +80,26 @@ async function waitForPostgres(container: string): Promise<void> {
   assert.fail('Disposable PostgreSQL 16 fixture did not become ready');
 }
 
+async function removeDisposableContainer(container: string): Promise<void> {
+  const removal = docker(['rm', '--force', container], undefined, 20_000);
+  let lastResidue = '';
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const residue = docker(
+      ['ps', '--all', '--filter', `name=^/${container}$`, '--format', '{{.ID}}'],
+      undefined,
+      10_000,
+    );
+    assertDockerSuccess(residue, 'Disposable PostgreSQL residue check');
+    lastResidue = residue.stdout.trim();
+    if (!lastResidue) return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.fail(
+    `Disposable PostgreSQL cleanup left container residue ${lastResidue}; ` +
+    `docker rm status=${removal.status ?? 'none'} error=${removal.error?.message ?? 'none'}`,
+  );
+}
+
 test('document storage deletion retry migration is atomic and backfills legacy rows safely', () => {
   assert.match(migration, /^BEGIN;/);
   assert.match(migration, /COMMIT;\s*$/);
@@ -132,7 +152,7 @@ test('real migration proof uses the repository-approved digest-pinned PostgreSQL
   );
 });
 
-test('real PostgreSQL 16 migration enforces nonce-bound recovery, dispositions, concurrency, and dirty-row backfill', { timeout: 180_000 }, async () => {
+test('real PostgreSQL 16 migration enforces nonce-bound recovery, dispositions, concurrency, and dirty-row backfill', { timeout: 300_000 }, async () => {
   // Docker Desktop can serialize engine requests while the full API suite is
   // running. Keep this availability probe bounded, but do not misclassify a
   // temporarily busy local engine as an absent engine.
@@ -575,10 +595,7 @@ test('real PostgreSQL 16 migration enforces nonce-bound recovery, dispositions, 
       'PENDING|concurrent-winner',
     );
   } finally {
-    docker(['rm', '--force', container], undefined, 20_000);
-    const residue = docker(['ps', '--all', '--filter', `name=^/${container}$`, '--format', '{{.ID}}']);
-    assertDockerSuccess(residue, 'Disposable PostgreSQL residue check');
-    assert.equal(residue.stdout.trim(), '');
+    await removeDisposableContainer(container);
   }
 });
 

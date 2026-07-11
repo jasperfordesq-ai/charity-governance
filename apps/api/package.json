@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --env-file=.env --import tsx --watch src/server.ts",
     "build": "tsc",
-    "test": "tsc -p tsconfig.json && node --test --test-concurrency=4 dist/tests/*.test.js",
+    "test": "tsc -p tsconfig.json && node --test --test-concurrency=4 --test-skip-pattern=\"real PostgreSQL 16 migration\" dist/tests/*.test.js && node --test --test-concurrency=1 --test-name-pattern=\"real PostgreSQL 16 migration\" dist/tests/document-storage-deletion-lifecycle-migration.test.js",
     "start": "node dist/start.js",
     "clean": "rm -rf dist",
     "db:generate": "prisma generate",

@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dashboard = (...parts: string[]) =>
-  readFileSync(join(process.cwd(), 'src', 'app', '(dashboard)', ...parts), 'utf8');
+  readFileSync(join(process.cwd(), 'src', 'app', '(dashboard)', ...parts), 'utf8')
+    .replace(/\r\n/g, '\n');
 
 test('Board hides member mutations and reconciles a stale role without leaving the route', () => {
   const page = dashboard('board', 'page.tsx');
