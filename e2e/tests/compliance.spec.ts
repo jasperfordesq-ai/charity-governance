@@ -18,11 +18,15 @@ async function chooseApprovalStatus(page: Page, status: string) {
   await trigger.scrollIntoViewIfNeeded();
   const option = page.getByRole('option', { name: status, exact: true });
   await expect(async () => {
-    await trigger.click();
-    await expect(option).toBeVisible({ timeout: 1500 });
+    if (!(await option.isVisible().catch(() => false))) {
+      await trigger.click();
+    }
+    // HeroUI may replace the listbox during its opening animation. Keep the
+    // click inside the retry boundary so a detached option is re-resolved from
+    // a freshly opened listbox instead of becoming a reported flaky retry.
+    await option.click({ timeout: 2000 });
+    await expect(trigger).toContainText(status, { timeout: 2000 });
   }).toPass({ timeout: 30_000 });
-  await expect(option).toBeVisible();
-  await option.click();
 }
 
 test.describe('Compliance', () => {
