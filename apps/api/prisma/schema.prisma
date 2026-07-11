@@ -126,6 +126,53 @@ enum UserRole {
   MEMBER
 }
 
+enum OrganisationLifecycleStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum UserLifecycleStatus {
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum AuthSessionRevocationReason {
+  LOGOUT
+  ROTATED
+  REFRESH_REUSE
+  PASSWORD_RESET
+  MEMBER_SUSPENDED
+  MEMBER_REMOVED
+  ADMIN_SESSION_REVOKED
+  ADMIN_ALL_SESSIONS_REVOKED
+  OWNERSHIP_CHANGED
+  ORGANISATION_INACTIVE
+  LEGACY_UNSPECIFIED
+}
+
+enum SecurityAuditActorKind {
+  USER
+  SUPPORT
+  SYSTEM
+}
+
+enum SecurityAuditEventType {
+  MEMBER_SUSPENDED
+  MEMBER_REACTIVATED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  OWNERSHIP_TRANSFERRED
+  OWNERSHIP_RECOVERED
+  SESSION_REVOKED
+  ALL_SESSIONS_REVOKED
+  ORGANISATION_SUSPENDED
+  ORGANISATION_REACTIVATED
+  ORGANISATION_CLOSED
+  INVITE_REVOKED
+}
+
 enum DeadlineReminderStatus {
   RESERVED
   SENDING
@@ -158,27 +205,30 @@ enum DeadlineSupersessionReason {
 }
 
 model Organisation {
-  id                                      String                 @id @default(cuid())
+  id                                      String                      @id @default(cuid())
   name                                    String
   rcnNumber                               String?
   croNumber                               String?
   legalForm                               LegalForm?
   legalFormConfirmedAt                    DateTime?
-  complexity                              OrganisationComplexity @default(SIMPLE)
+  complexity                              OrganisationComplexity      @default(SIMPLE)
   charitablePurpose                       CharitablePurpose[]
-  financialYearEnd                        DateTime?              @db.Date
+  financialYearEnd                        DateTime?                   @db.Date
   registeredAddress                       String?
   contactEmail                            String?
   contactPhone                            String?
   website                                 String?
-  dateRegistered                          DateTime?              @db.Date
-  incorporationDate                       DateTime?              @db.Date
-  croAnnualReturnDate                     DateTime?              @db.Date
+  dateRegistered                          DateTime?                   @db.Date
+  incorporationDate                       DateTime?                   @db.Date
+  croAnnualReturnDate                     DateTime?                   @db.Date
   croAnnualReturnDateConfirmedAt          DateTime?
-  lastActualAgmDate                       DateTime?              @db.Date
-  lastUnanimousAnnualMemberResolutionDate DateTime?              @db.Date
+  lastActualAgmDate                       DateTime?                   @db.Date
+  lastUnanimousAnnualMemberResolutionDate DateTime?                   @db.Date
   memberCount                             Int?
   conditionalObligationProfile            Json?
+  lifecycleStatus                         OrganisationLifecycleStatus @default(ACTIVE)
+  lifecycleChangedAt                      DateTime                    @default(now())
+  lifecycleVersion                        Int                         @default(1)
 
   stripeCustomerId String? @unique
 
@@ -199,53 +249,89 @@ model Organisation {
   deadlineReminderLogs        DeadlineReminderLog[]
   subscription                Subscription?
   billingCheckoutAttempt      BillingCheckoutAttempt?
+  securityAuditEvents         SecurityAuditEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
-  name           String
-  passwordHash   String
-  role           UserRole     @default(MEMBER)
-  organisationId String
-  organisation   Organisation @relation(fields: [organisationId], references: [id])
-  emailVerified  Boolean      @default(false)
+  id                  String              @id @default(cuid())
+  email               String              @unique
+  name                String
+  passwordHash        String
+  role                UserRole            @default(MEMBER)
+  organisationId      String
+  organisation        Organisation        @relation(fields: [organisationId], references: [id])
+  emailVerified       Boolean             @default(false)
+  lifecycleStatus     UserLifecycleStatus @default(ACTIVE)
+  membershipChangedAt DateTime            @default(now())
+  membershipVersion   Int                 @default(1)
 
   resetToken        String?   @unique
   resetTokenExpiry  DateTime?
   verifyToken       String?   @unique
   verifyTokenExpiry DateTime?
 
-  complianceUpdates ComplianceRecord[]    @relation("UpdatedBy")
-  signoffUpdates    ComplianceSignoff[]   @relation("SignoffUpdatedBy")
-  documentUploads   Document[]            @relation("UploadedBy")
-  sentInvites       TeamInvite[]          @relation("InvitedBy")
-  reminderLogs      DeadlineReminderLog[]
-  authSessions      AuthSession[]
+  complianceUpdates            ComplianceRecord[]    @relation("UpdatedBy")
+  signoffUpdates               ComplianceSignoff[]   @relation("SignoffUpdatedBy")
+  documentUploads              Document[]            @relation("UploadedBy")
+  sentInvites                  TeamInvite[]          @relation("InvitedBy")
+  reminderLogs                 DeadlineReminderLog[]
+  authSessions                 AuthSession[]
+  securityAuditEventsAsActor   SecurityAuditEvent[]  @relation("SecurityAuditActor")
+  securityAuditEventsAsSubject SecurityAuditEvent[]  @relation("SecurityAuditSubject")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([id, organisationId])
   @@index([organisationId])
+  @@index([organisationId, lifecycleStatus, role, id])
 }
 
 model AuthSession {
-  id               String    @id @default(cuid())
+  id               String                       @id @default(cuid())
   userId           String
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshTokenHash String    @unique
+  user             User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String                       @unique
+  familyId         String                       @default(uuid()) @db.Uuid
+  familyCreatedAt  DateTime                     @default(now())
+  deviceLabel      String?
   expiresAt        DateTime
   revokedAt        DateTime?
+  revocationReason AuthSessionRevocationReason?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([userId, revokedAt, expiresAt, id])
+  @@index([userId, familyCreatedAt, familyId])
   @@index([expiresAt])
+}
+
+model SecurityAuditEvent {
+  id               String                 @id @default(cuid())
+  organisationId   String
+  organisation     Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  type             SecurityAuditEventType
+  actorKind        SecurityAuditActorKind
+  actorUserId      String?
+  actorUser        User?                  @relation("SecurityAuditActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  actorLabel       String
+  subjectUserId    String?
+  subjectUser      User?                  @relation("SecurityAuditSubject", fields: [subjectUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  subjectSessionId String?
+  reason           String
+  context          Json?
+  requestId        String?
+  eventVersion     Int                    @default(1)
+  occurredAt       DateTime               @default(now())
+
+  @@index([organisationId, occurredAt, id])
+  @@index([organisationId, subjectUserId, occurredAt, id])
+  @@index([organisationId, actorUserId, occurredAt, id])
 }
 
 model GovernancePrinciple {

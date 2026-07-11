@@ -102,6 +102,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "ComplianceSignoff",
   "ComplianceApprovalSnapshot",
   "ComplianceAuditEvent",
+  "SecurityAuditEvent",
   "BoardMember",
   "Document",
   "DocumentStandardLink",

@@ -87,10 +87,11 @@ function resetPrisma(opts: { found: boolean; consumeCount: number; revoked?: Cal
   const revoked = opts.revoked ?? [];
   return {
     user: {
-      findFirst: async () => (opts.found ? { id: 'u1' } : null),
+      findFirst: async () => (opts.found ? { id: 'u1', organisationId: 'org1' } : null),
     },
     $transaction: async (cb: (tx: unknown) => Promise<unknown>) =>
       cb({
+        $queryRaw: async () => [{ id: 'locked-row' }],
         user: { updateMany: async () => ({ count: opts.consumeCount }) },
         authSession: { updateMany: async (args: unknown) => { revoked.push({ name: 'revoke', args }); return { count: 3 }; } },
       }),
@@ -117,6 +118,8 @@ test('resetPassword consumes the token, sets the password, and revokes all sessi
   const where = (revoked[0].args as { where: { userId: string; revokedAt: null } }).where;
   assert.equal(where.userId, 'u1');
   assert.equal(where.revokedAt, null);
+  const data = (revoked[0].args as { data: { revocationReason: string } }).data;
+  assert.equal(data.revocationReason, 'PASSWORD_RESET');
 });
 
 test('resetPassword rejects when the token was already consumed concurrently', async () => {

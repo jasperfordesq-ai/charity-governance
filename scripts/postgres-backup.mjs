@@ -17,6 +17,7 @@ const CRITICAL_RESTORE_TABLES = [
   '_prisma_migrations',
   'Organisation',
   'User',
+  'SecurityAuditEvent',
   'Document',
   'DocumentStorageDeletion',
   'StripeWebhookEvent',

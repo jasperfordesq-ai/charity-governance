@@ -42,6 +42,14 @@ async function authenticateRequest(
         userId: payload.userId,
         revokedAt: null,
         expiresAt: { gt: new Date() },
+        user: {
+          is: {
+            lifecycleStatus: "ACTIVE",
+            organisation: {
+              is: { lifecycleStatus: "ACTIVE" },
+            },
+          },
+        },
       },
       select: { id: true },
     }),
@@ -52,11 +60,19 @@ async function authenticateRequest(
         organisationId: true,
         role: true,
         emailVerified: true,
+        lifecycleStatus: true,
+        organisation: { select: { lifecycleStatus: true } },
       },
     }),
   ]);
 
-  if (!session || !user) {
+  if (
+    !session ||
+    !user ||
+    (user.lifecycleStatus !== undefined && user.lifecycleStatus !== "ACTIVE") ||
+    (user.organisation?.lifecycleStatus !== undefined &&
+      user.organisation.lifecycleStatus !== "ACTIVE")
+  ) {
     reply
       .status(401)
       .send({ error: "Invalid or expired token", code: "UNAUTHORIZED" });

@@ -306,6 +306,7 @@ test('postgres backup CLI renders restore verification commands in dry-run mode'
     assert.match(result.stdout, /'StripeWebhookEvent'/);
     assert.match(result.stdout, /'Deadline'/);
     assert.match(result.stdout, /'DeadlineReminderLog'/);
+    assert.match(result.stdout, /'SecurityAuditEvent'/);
     assert.match(result.stdout, /from \\"GovernancePrinciple\\"/);
     assert.match(result.stdout, /from \\"GovernanceStandard\\"/);
     assert.match(result.stdout, /core_standards/);

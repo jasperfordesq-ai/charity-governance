@@ -72,6 +72,7 @@ function publicOrganisation() {
     lastUnanimousAnnualMemberResolutionDate: null,
     memberCount: null,
     conditionalObligationProfile: null,
+    lifecycleStatus: 'ACTIVE',
     updatedAt: new Date('2026-07-10T00:00:00.000Z'),
   };
 }
@@ -92,16 +93,26 @@ test('login route issues auth cookies and returns the public user without secret
         passwordHash,
         role: 'OWNER',
         emailVerified: true,
+        lifecycleStatus: 'ACTIVE',
         organisationId: 'org-1',
         organisation: publicOrganisation(),
       }),
     },
-    authSession: {
-      create: async () => {
-        sessionCreated = true;
-        return { id: 's1' };
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      $queryRaw: async () => [{
+        id: 'u1',
+        organisationId: 'org-1',
+        role: 'OWNER',
+        userLifecycleStatus: 'ACTIVE',
+        organisationLifecycleStatus: 'ACTIVE',
+      }],
+      authSession: {
+        create: async () => {
+          sessionCreated = true;
+          return { id: 's1' };
+        },
       },
-    },
+    }),
   } as never);
   await app.register(authRoutes, { prefix: '/auth' });
 
@@ -211,25 +222,43 @@ test('authGuard authenticates from the access-token cookie when no bearer header
 
 test('refresh token rotation revokes the old session and issues a new session with a fresh hash', async () => {
   const future = new Date(Date.now() + 60_000);
+  const familyCreatedAt = new Date(Date.now() - 60_000);
+  const familyId = '00000000-0000-4000-8000-000000000010';
   let revokeWhere: Record<string, unknown> | undefined;
+  let revokeData: Record<string, unknown> | undefined;
+  let createdFamilyId = '';
+  let createdFamilyAt: Date | undefined;
   let createdHash = '';
   const tx = {
+    $queryRaw: async () => [{
+      id: 'u1',
+      organisationId: 'org-1',
+      role: 'OWNER',
+      userLifecycleStatus: 'ACTIVE',
+      organisationLifecycleStatus: 'ACTIVE',
+      sessionId: 's1',
+      refreshTokenHash: hashOpaqueToken('old-token'),
+      familyId,
+      familyCreatedAt,
+      expiresAt: future,
+      revokedAt: null,
+    }],
     authSession: {
-      updateMany: async ({ where }: { where: Record<string, unknown> }) => {
+      update: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         revokeWhere = where;
-        return { count: 1 };
+        revokeData = data;
+        return { id: 's1' };
       },
-      create: async ({ data }: { data: { refreshTokenHash: string } }) => {
+      create: async ({ data }: { data: { refreshTokenHash: string; familyId: string; familyCreatedAt: Date } }) => {
         createdHash = data.refreshTokenHash;
+        createdFamilyId = data.familyId;
+        createdFamilyAt = data.familyCreatedAt;
         return { id: 'session-2' };
       },
     },
   };
   const prisma = {
-    $queryRaw: async () => [{ id: 's1', userId: 'u1', expiresAt: future, revokedAt: null }],
-    user: {
-      findUnique: async () => ({ id: 'u1', organisationId: 'org-1', role: 'OWNER' }),
-    },
+    $queryRaw: async () => [{ id: 's1', userId: 'u1', familyId }],
     $transaction: async (cb: (t: unknown) => Promise<unknown>) => cb(tx),
   };
 
@@ -242,7 +271,10 @@ test('refresh token rotation revokes the old session and issues a new session wi
   assert.notEqual(createdHash, hashOpaqueToken('old-token'));
   // The old session row is the one revoked (scoped to id + not-yet-revoked).
   assert.equal(revokeWhere?.id, 's1');
-  assert.equal(revokeWhere?.revokedAt, null);
+  assert.equal(revokeData?.revocationReason, 'ROTATED');
+  assert.ok(revokeData?.revokedAt instanceof Date);
+  assert.equal(createdFamilyId, familyId);
+  assert.equal(createdFamilyAt, familyCreatedAt);
   // The fresh access token is bound to the newly created session id.
   assert.equal(verifyAccessToken(result.accessToken).sessionId, 'session-2');
 });
@@ -279,20 +311,29 @@ test('refresh rotation rejects unknown and expired refresh tokens without mintin
     $queryRaw: async () => [{
       id: 's1',
       userId: 'u1',
-      expiresAt: new Date(Date.now() - 1000),
-      revokedAt: null,
+      familyId: '00000000-0000-4000-8000-000000000011',
     }],
-    user: {
-      findUnique: async () => {
-        throw new Error('user lookup must not run for an expired refresh token');
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      $queryRaw: async () => [{
+        id: 'u1',
+        organisationId: 'org-1',
+        role: 'OWNER',
+        userLifecycleStatus: 'ACTIVE',
+        organisationLifecycleStatus: 'ACTIVE',
+        sessionId: 's1',
+        refreshTokenHash: hashOpaqueToken('expired-token'),
+        familyId: '00000000-0000-4000-8000-000000000011',
+        familyCreatedAt: new Date(Date.now() - 60_000),
+        expiresAt: new Date(Date.now() - 1000),
+        revokedAt: null,
+      }],
+      authSession: {
+        create: async () => {
+          createCalledExpired = true;
+          return { id: 'should-not-happen' };
+        },
       },
-    },
-    authSession: {
-      create: async () => {
-        createCalledExpired = true;
-        return { id: 'should-not-happen' };
-      },
-    },
+    }),
   };
   await assert.rejects(
     () => rotateSessionTokens(expiredPrisma as never, 'expired-token'),
@@ -316,16 +357,26 @@ test('login issues tokens and persists a session with the hashed refresh token o
         passwordHash,
         role: 'OWNER',
         emailVerified: true,
+        lifecycleStatus: 'ACTIVE',
         organisationId: 'org-1',
         organisation: publicOrganisation(),
       }),
     },
-    authSession: {
-      create: async ({ data }: { data: { refreshTokenHash: string } }) => {
-        storedHash = data.refreshTokenHash;
-        return { id: 's1' };
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      $queryRaw: async () => [{
+        id: 'u1',
+        organisationId: 'org-1',
+        role: 'OWNER',
+        userLifecycleStatus: 'ACTIVE',
+        organisationLifecycleStatus: 'ACTIVE',
+      }],
+      authSession: {
+        create: async ({ data }: { data: { refreshTokenHash: string } }) => {
+          storedHash = data.refreshTokenHash;
+          return { id: 's1' };
+        },
       },
-    },
+    }),
   };
   const service = new AuthService(prisma as never, {} as never);
 

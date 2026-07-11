@@ -616,6 +616,7 @@ test("TypeScript database helpers retain P0-04 tables and route every direct con
     DISPOSABLE_DATABASE_RESET_TABLES.includes("ComplianceApprovalSnapshot"),
   );
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("ComplianceAuditEvent"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("SecurityAuditEvent"));
   assert.ok(
     DISPOSABLE_DATABASE_RESET_TABLES.includes("BillingCheckoutAttempt"),
   );

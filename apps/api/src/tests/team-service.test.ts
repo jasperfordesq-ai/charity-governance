@@ -112,7 +112,17 @@ function buildAcceptService(opts: {
     },
     $transaction: async (cb: (tx: unknown) => Promise<unknown>) =>
       cb({
+        $queryRaw: async () => [{
+          id: 'u_new',
+          organisationId: String(opts.invite?.organisationId ?? 'org_1'),
+          role: String(opts.invite?.role ?? 'MEMBER'),
+          userLifecycleStatus: 'ACTIVE',
+          organisationLifecycleStatus: 'ACTIVE',
+        }],
         subscription: { findUnique: async () => ({ plan: 'COMPLETE' }) },
+        authSession: {
+          create: async () => ({ id: 'sess_1' }),
+        },
         user: {
           count: async () => 0,
           create: async (args: { data: Record<string, unknown> }) => {

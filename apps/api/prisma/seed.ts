@@ -209,94 +209,85 @@ async function seedDemoWorkspace(config: EnabledLocalAdminSeedConfig) {
   const financialYearEnd = dateFromIso('2025-12-31');
   const currentPeriodStart = new Date();
   const currentPeriodEnd = dateFromIso('2099-12-31');
-
-  let organisation = await prisma.organisation.findFirst({ where: { name: config.organisationName } });
-
-  if (!organisation) {
-    organisation = await prisma.organisation.create({
-      data: {
-        name: config.organisationName,
-        rcnNumber: '20000000',
-        croNumber: '700000',
-        legalForm: 'CLG',
-        legalFormConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
-        complexity: 'COMPLEX',
-        charitablePurpose: ['COMMUNITY_BENEFIT', 'EDUCATION'],
-        financialYearEnd,
-        registeredAddress: '1 Governance Square, Dublin 2',
-        contactEmail: 'governance@example.org',
-        contactPhone: '+353 1 555 0100',
-        website: 'https://example.org',
-        dateRegistered: dateFromIso('2018-05-15'),
-        incorporationDate: dateFromIso('2018-02-01'),
-        croAnnualReturnDate: dateFromIso('2026-09-30'),
-        croAnnualReturnDateConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
-        lastActualAgmDate: dateFromIso('2026-03-12'),
-        memberCount: 3,
-      },
-    });
-  } else {
-    organisation = await prisma.organisation.update({
-      where: { id: organisation.id },
-      data: {
-        rcnNumber: '20000000',
-        croNumber: '700000',
-        legalForm: 'CLG',
-        legalFormConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
-        complexity: 'COMPLEX',
-        charitablePurpose: ['COMMUNITY_BENEFIT', 'EDUCATION'],
-        financialYearEnd,
-        registeredAddress: '1 Governance Square, Dublin 2',
-        contactEmail: 'governance@example.org',
-        contactPhone: '+353 1 555 0100',
-        website: 'https://example.org',
-        dateRegistered: dateFromIso('2018-05-15'),
-        incorporationDate: dateFromIso('2018-02-01'),
-        croAnnualReturnDate: dateFromIso('2026-09-30'),
-        croAnnualReturnDateConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
-        lastActualAgmDate: dateFromIso('2026-03-12'),
-        memberCount: 3,
-      },
-    });
-  }
-
   const passwordHash = await bcrypt.hash(config.password, 12);
-  const user = await prisma.user.upsert({
-    where: { email: config.email },
-    update: {
-      name: config.name,
-      passwordHash,
-      role: 'OWNER',
-      organisationId: organisation.id,
-      emailVerified: true,
-    },
-    create: {
-      email: config.email,
-      name: config.name,
-      passwordHash,
-      role: 'OWNER',
-      organisationId: organisation.id,
-      emailVerified: true,
-    },
-  });
+  const organisationData = {
+    rcnNumber: '20000000',
+    croNumber: '700000',
+    legalForm: 'CLG' as const,
+    legalFormConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
+    complexity: 'COMPLEX' as const,
+    charitablePurpose: ['COMMUNITY_BENEFIT', 'EDUCATION'] as const,
+    financialYearEnd,
+    registeredAddress: '1 Governance Square, Dublin 2',
+    contactEmail: 'governance@example.org',
+    contactPhone: '+353 1 555 0100',
+    website: 'https://example.org',
+    dateRegistered: dateFromIso('2018-05-15'),
+    incorporationDate: dateFromIso('2018-02-01'),
+    croAnnualReturnDate: dateFromIso('2026-09-30'),
+    croAnnualReturnDateConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
+    lastActualAgmDate: dateFromIso('2026-03-12'),
+    memberCount: 3,
+  };
 
-  await prisma.subscription.upsert({
-    where: { organisationId: organisation.id },
-    update: {
-      plan: config.subscriptionPlan,
-      status: config.subscriptionStatus,
-      trialEndsAt: null,
-      currentPeriodStart,
-      currentPeriodEnd,
-    },
-    create: {
-      organisationId: organisation.id,
-      plan: config.subscriptionPlan,
-      status: config.subscriptionStatus,
-      trialEndsAt: null,
-      currentPeriodStart,
-      currentPeriodEnd,
-    },
+  // The database defers its exactly-one-owner check until commit. Keep a new
+  // organisation, its accountable owner, and its entitlement in one atomic
+  // transaction so a seed can never commit an ownerless workspace.
+  const { organisation, user } = await prisma.$transaction(async (tx) => {
+    const existingOrganisation = await tx.organisation.findFirst({
+      where: { name: config.organisationName },
+    });
+    const seededOrganisation = existingOrganisation
+      ? await tx.organisation.update({
+          where: { id: existingOrganisation.id },
+          data: organisationData,
+        })
+      : await tx.organisation.create({
+          data: {
+            name: config.organisationName,
+            ...organisationData,
+          },
+        });
+
+    const seededUser = await tx.user.upsert({
+      where: { email: config.email },
+      update: {
+        name: config.name,
+        passwordHash,
+        role: 'OWNER',
+        organisationId: seededOrganisation.id,
+        emailVerified: true,
+      },
+      create: {
+        email: config.email,
+        name: config.name,
+        passwordHash,
+        role: 'OWNER',
+        organisationId: seededOrganisation.id,
+        emailVerified: true,
+      },
+    });
+
+    await tx.subscription.upsert({
+      where: { organisationId: seededOrganisation.id },
+      update: {
+        plan: config.subscriptionPlan,
+        status: config.subscriptionStatus,
+        trialEndsAt: null,
+        currentPeriodStart,
+        currentPeriodEnd,
+      },
+      create: {
+        organisationId: seededOrganisation.id,
+        plan: config.subscriptionPlan,
+        status: config.subscriptionStatus,
+        trialEndsAt: null,
+        currentPeriodStart,
+        currentPeriodEnd,
+      },
+    });
+
+    return { organisation: seededOrganisation, user: seededUser };
   });
 
   await upsertBoardMember(organisation.id, {

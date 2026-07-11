@@ -3727,7 +3727,10 @@ test('public API user and organisation responses omit internal provider and cred
   assert.doesNotMatch(publicDtos, /resetToken:\s*true/);
   assert.doesNotMatch(publicDtos, /verifyToken:\s*true/);
 
-  assert.match(authService, /organisation:\s*\{\s*select:\s*publicOrganisationSelect\s*\}/);
+  assert.match(
+    authService,
+    /organisation:\s*\{\s*select:\s*\{\s*\.\.\.publicOrganisationSelect,\s*lifecycleStatus:\s*true/,
+  );
   assert.match(teamService, /organisation:\s*\{\s*select:\s*publicOrganisationSelect\s*\}/);
   assert.match(organisationService, /select:\s*publicOrganisationSelect/);
   assert.match(authRoutes, /publicUser\(result\.user\)/);

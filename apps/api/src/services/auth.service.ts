@@ -48,6 +48,20 @@ function registrationAccepted() {
   return { message: REGISTRATION_ACCEPTED_MESSAGE };
 }
 
+function hasActiveLifecycle(principal: {
+  lifecycleStatus?: string;
+  organisation?: { lifecycleStatus?: string };
+}): boolean {
+  // Prisma always returns both selected lifecycle fields. Optionality keeps
+  // narrow service adapters and older test doubles source-compatible without
+  // weakening the database query and transaction guards used in production.
+  return (
+    (principal.lifecycleStatus === undefined || principal.lifecycleStatus === 'ACTIVE') &&
+    (principal.organisation?.lifecycleStatus === undefined ||
+      principal.organisation.lifecycleStatus === 'ACTIVE')
+  );
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
@@ -149,8 +163,14 @@ export class AuthService {
         passwordHash: true,
         role: true,
         emailVerified: true,
+        lifecycleStatus: true,
         organisationId: true,
-        organisation: { select: publicOrganisationSelect },
+        organisation: {
+          select: {
+            ...publicOrganisationSelect,
+            lifecycleStatus: true,
+          },
+        },
       },
     });
 
@@ -163,7 +183,10 @@ export class AuthService {
 
     const valid = await bcrypt.compare(data.password, user.passwordHash);
 
-    if (!valid) {
+    if (
+      !valid ||
+      !hasActiveLifecycle(user)
+    ) {
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
@@ -177,7 +200,7 @@ export class AuthService {
   }
 
   async logout(refreshToken: string) {
-    await revokeSessionToken(this.prisma, refreshToken);
+    await revokeSessionToken(this.prisma, refreshToken, 'LOGOUT');
     return { message: 'Signed out successfully.' };
   }
 
@@ -191,11 +214,17 @@ export class AuthService {
         role: true,
         emailVerified: true,
         organisationId: true,
-        organisation: { select: publicOrganisationSelect },
+        lifecycleStatus: true,
+        organisation: {
+          select: {
+            ...publicOrganisationSelect,
+            lifecycleStatus: true,
+          },
+        },
       },
     });
 
-    if (!user) {
+    if (!user || !hasActiveLifecycle(user)) {
       throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
@@ -205,9 +234,16 @@ export class AuthService {
   async forgotPassword(email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizeEmail(email) },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        lifecycleStatus: true,
+        organisation: { select: { lifecycleStatus: true } },
+      },
     });
 
-    if (user) {
+    if (user && hasActiveLifecycle(user)) {
       const reset = createOneTimeToken();
       const resetTokenExpiry = new Date();
       resetTokenExpiry.setHours(resetTokenExpiry.getHours() + RESET_TOKEN_EXPIRY_HOURS);
@@ -226,9 +262,17 @@ export class AuthService {
   async resendEmailVerification(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        emailVerified: true,
+        lifecycleStatus: true,
+        organisation: { select: { lifecycleStatus: true } },
+      },
     });
 
-    if (!user) {
+    if (!user || !hasActiveLifecycle(user)) {
       throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
@@ -255,13 +299,13 @@ export class AuthService {
 
   async resetPassword(token: string, password: string) {
     const resetToken = hashOpaqueToken(token);
-    const now = new Date();
     const user = await this.prisma.user.findFirst({
       where: {
         resetToken,
-        resetTokenExpiry: { gt: now },
+        lifecycleStatus: 'ACTIVE',
+        organisation: { lifecycleStatus: 'ACTIVE' },
       },
-      select: { id: true },
+      select: { id: true, organisationId: true },
     });
 
     if (!user) {
@@ -271,9 +315,36 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     await this.prisma.$transaction(async (tx) => {
+      const lockedOrganisations = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Organisation"
+        WHERE "id" = ${user.organisationId}
+          AND "lifecycleStatus" = 'ACTIVE'::"OrganisationLifecycleStatus"
+        FOR UPDATE
+      `;
+      const lockedUsers = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "User"
+        WHERE "id" = ${user.id}
+          AND "organisationId" = ${user.organisationId}
+          AND "lifecycleStatus" = 'ACTIVE'::"UserLifecycleStatus"
+        FOR UPDATE
+      `;
+      const now = new Date();
+
+      if (lockedOrganisations.length !== 1 || lockedUsers.length !== 1) {
+        throw new AppError(
+          400,
+          'INVALID_RESET_TOKEN',
+          'This reset link is invalid or has expired. Please request a new one.',
+        );
+      }
+
       const consumed = await tx.user.updateMany({
         where: {
           id: user.id,
+          organisationId: user.organisationId,
+          lifecycleStatus: 'ACTIVE',
           resetToken,
           resetTokenExpiry: { gt: now },
         },
@@ -299,6 +370,7 @@ export class AuthService {
         },
         data: {
           revokedAt: now,
+          revocationReason: 'PASSWORD_RESET',
         },
       });
     });
@@ -313,6 +385,8 @@ export class AuthService {
       where: {
         verifyToken,
         verifyTokenExpiry: { gt: now },
+        lifecycleStatus: 'ACTIVE',
+        organisation: { lifecycleStatus: 'ACTIVE' },
       },
       select: { id: true },
     });
@@ -326,6 +400,7 @@ export class AuthService {
         id: user.id,
         verifyToken,
         verifyTokenExpiry: { gt: now },
+        lifecycleStatus: 'ACTIVE',
       },
       data: {
         emailVerified: true,

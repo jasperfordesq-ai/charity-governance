@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
-import { hashOpaqueToken, issueSessionTokens } from './session-tokens.js';
+import { hashOpaqueToken, issueSessionTokensInTransaction } from './session-tokens.js';
 import { publicOrganisationSelect, type PublicOrganisationSource } from '../utils/public-dtos.js';
 
 interface InviteTeamMemberData {
@@ -408,12 +408,12 @@ export class TeamService {
 
   async acceptInvite(data: AcceptTeamInviteData) {
     const token = hashOpaqueToken(data.token);
-    const now = new Date();
+    const preflightNow = new Date();
     const invite = await this.prisma.teamInvite.findUnique({
       where: { token },
     });
 
-    if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) {
+    if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= preflightNow) {
       throw invalidInviteError();
     }
 
@@ -428,7 +428,9 @@ export class TeamService {
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
     const client = this.prisma as unknown as TeamAcceptClient;
 
-    let user: {
+    let accepted: {
+      tokens: { accessToken: string; refreshToken: string };
+      user: {
       id: string;
       email: string;
       name: string;
@@ -436,10 +438,14 @@ export class TeamService {
       emailVerified: boolean;
       organisationId: string;
       organisation: PublicOrganisationSource;
+      };
     };
     try {
-      user = await client.$transaction(async (tx) => {
-        await this.assertCanAddTeamMember(tx, invite.organisationId, now, false);
+      accepted = await client.$transaction(async (tx) => {
+        // Bcrypt intentionally happens before this authoritative clock read so
+        // an invitation expiring during hashing cannot still be consumed.
+        const acceptanceNow = new Date();
+        await this.assertCanAddTeamMember(tx, invite.organisationId, acceptanceNow, false);
 
         const consumed = await tx.teamInvite.updateMany({
           where: {
@@ -447,9 +453,9 @@ export class TeamService {
             token,
             acceptedAt: null,
             revokedAt: null,
-            expiresAt: { gt: now },
+            expiresAt: { gt: acceptanceNow },
           },
-          data: { acceptedAt: now },
+          data: { acceptedAt: acceptanceNow },
         });
 
         if (consumed.count !== 1) {
@@ -476,7 +482,12 @@ export class TeamService {
           },
         });
 
-        return created;
+        const tokens = await issueSessionTokensInTransaction(
+          tx as unknown as Prisma.TransactionClient,
+          created,
+        );
+
+        return { user: created, tokens };
       });
     } catch (err) {
       if (isUniqueConstraintError(err)) {
@@ -486,8 +497,6 @@ export class TeamService {
       throw err;
     }
 
-    const tokens = await issueSessionTokens(this.prisma, user);
-
-    return { user, ...tokens };
+    return { user: accepted.user, ...accepted.tokens };
   }
 }

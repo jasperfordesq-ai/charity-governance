@@ -171,6 +171,9 @@ jobs:
       - name: Verify P0-06 upgrade from legacy PostgreSQL data
         run: npm run db:verify:p006-upgrade
 
+      - name: Verify P0-07 team lifecycle upgrade from legacy PostgreSQL data
+        run: npm run db:verify:p007-upgrade
+
       - name: Run migration runner against CI PostgreSQL
         run: |
           set -euo pipefail

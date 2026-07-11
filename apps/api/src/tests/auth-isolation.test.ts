@@ -810,6 +810,13 @@ test('acceptInvite rejects stale invites when the Essentials member limit is alr
     authSession: {
       create: async () => ({ id: 'session-1' }),
     },
+    $queryRaw: async () => [{
+      id: 'user-1',
+      organisationId: 'org-1',
+      role: 'MEMBER',
+      userLifecycleStatus: 'ACTIVE',
+      organisationLifecycleStatus: 'ACTIVE',
+    }],
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
   };
   const service = new TeamService(prisma as never, {} as never);
@@ -884,6 +891,13 @@ test('acceptInvite consumes the invite atomically before issuing a session', asy
     authSession: {
       create: async () => ({ id: 'session-1' }),
     },
+    $queryRaw: async () => [{
+      id: 'user-1',
+      organisationId: 'org-1',
+      role: 'MEMBER',
+      userLifecycleStatus: 'ACTIVE',
+      organisationLifecycleStatus: 'ACTIVE',
+    }],
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
   };
   const service = new TeamService(prisma as never, {} as never);
@@ -1123,11 +1137,9 @@ test('refresh token rotation fails without creating a replacement session when r
   const { rotateSessionTokens } = await import('../services/session-tokens.js');
   const { AppError } = await import('../utils/errors.js');
   const createdSessions: string[] = [];
-  let rawExecuteCount = 0;
-  const future = new Date(Date.now() + 60_000);
   const tx = {
+    $queryRaw: async () => [],
     authSession: {
-      updateMany: async () => ({ count: 0 }),
       create: async ({ data }: { data: { refreshTokenHash: string } }) => {
         createdSessions.push(data.refreshTokenHash);
         return {};
@@ -1135,19 +1147,13 @@ test('refresh token rotation fails without creating a replacement session when r
     },
   };
   const prisma = {
-    $queryRaw: async () => [{ id: 'session-1', userId: 'user-1', expiresAt: future, revokedAt: null }],
-    $executeRaw: async () => {
-      rawExecuteCount += 1;
-      if (rawExecuteCount === 2) {
-        createdSessions.push('raw-insert');
-      }
-      return rawExecuteCount === 1 ? 0 : 1;
-    },
+    $queryRaw: async () => [{
+      id: 'session-1',
+      userId: 'user-1',
+      familyId: '00000000-0000-4000-8000-000000000020',
+    }],
     $transaction: async (operation: unknown) =>
       typeof operation === 'function' ? operation(tx) : Promise.all(operation as Promise<unknown>[]),
-    user: {
-      findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'OWNER' }),
-    },
   };
 
   await assert.rejects(
@@ -1158,30 +1164,48 @@ test('refresh token rotation fails without creating a replacement session when r
 });
 
 test('refresh token replay revokes active sessions for the affected user', async () => {
-  const { rotateSessionTokens } = await import('../services/session-tokens.js');
+  const { rotateSessionTokens, hashOpaqueToken } = await import('../services/session-tokens.js');
   const { AppError } = await import('../utils/errors.js');
-  let userSessionsRevoked = false;
+  let transactionCommitted = false;
+  let revokedWhere: Record<string, unknown> | undefined;
+  let revokedData: Record<string, unknown> | undefined;
   const future = new Date(Date.now() + 60_000);
+  const familyId = '00000000-0000-4000-8000-000000000021';
+  const tx = {
+    $queryRaw: async () => [{
+      id: 'user-1',
+      organisationId: 'org-1',
+      role: 'OWNER',
+      userLifecycleStatus: 'ACTIVE',
+      organisationLifecycleStatus: 'ACTIVE',
+      sessionId: 'old-session',
+      refreshTokenHash: hashOpaqueToken('replayed-refresh-token'),
+      familyId,
+      familyCreatedAt: new Date(Date.now() - 60_000),
+      expiresAt: future,
+      revokedAt: new Date(Date.now() - 1000),
+    }],
+    authSession: {
+      updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        revokedWhere = where;
+        revokedData = data;
+        return { count: 1 };
+      },
+      create: async () => {
+        throw new Error('replacement session should not be created for replayed refresh tokens');
+      },
+    },
+  };
   const prisma = {
     $queryRaw: async () => [{
       id: 'old-session',
       userId: 'user-1',
-      expiresAt: future,
-      revokedAt: new Date(Date.now() - 1000),
+      familyId,
     }],
-    $executeRaw: async () => {
-      userSessionsRevoked = true;
-      return 1;
-    },
-    user: {
-      findUnique: async () => {
-        throw new Error('user lookup should not run for replayed refresh tokens');
-      },
-    },
-    authSession: {
-      create: async () => {
-        throw new Error('replacement session should not be created for replayed refresh tokens');
-      },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+      const result = await callback(tx);
+      transactionCommitted = true;
+      return result;
     },
   };
 
@@ -1189,7 +1213,11 @@ test('refresh token replay revokes active sessions for the affected user', async
     () => rotateSessionTokens(prisma as never, 'replayed-refresh-token'),
     (error: unknown) => error instanceof AppError && error.statusCode === 401 && error.code === 'INVALID_REFRESH_TOKEN',
   );
-  assert.equal(userSessionsRevoked, true);
+  assert.equal(transactionCommitted, true);
+  assert.equal(revokedWhere?.userId, 'user-1');
+  assert.equal(revokedWhere?.familyId, familyId);
+  assert.equal(revokedWhere?.revokedAt, null);
+  assert.equal(revokedData?.revocationReason, 'REFRESH_REUSE');
 });
 
 test('resetPassword consumes the reset token atomically before revoking sessions', async () => {
@@ -1200,7 +1228,7 @@ test('resetPassword consumes the reset token atomically before revoking sessions
   const sessionUpdates: unknown[] = [];
   const prisma = {
     user: {
-      findFirst: async () => ({ id: 'user-1' }),
+      findFirst: async () => ({ id: 'user-1', organisationId: 'org-1' }),
       updateMany: async ({
         where,
         data,
@@ -1226,6 +1254,7 @@ test('resetPassword consumes the reset token atomically before revoking sessions
         return { count: 2 };
       },
     },
+    $queryRaw: async () => [{ id: 'locked-row' }],
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
   };
   const service = new AuthService(prisma as never, {} as never);
@@ -1244,7 +1273,7 @@ test('resetPassword rejects token reuse when another request already consumed it
   let sessionRevoked = false;
   const prisma = {
     user: {
-      findFirst: async () => ({ id: 'user-1' }),
+      findFirst: async () => ({ id: 'user-1', organisationId: 'org-1' }),
       updateMany: async () => ({ count: 0 }),
     },
     authSession: {
@@ -1253,6 +1282,7 @@ test('resetPassword rejects token reuse when another request already consumed it
         return { count: 1 };
       },
     },
+    $queryRaw: async () => [{ id: 'locked-row' }],
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
   };
   const service = new AuthService(prisma as never, {} as never);
