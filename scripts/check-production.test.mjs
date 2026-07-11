@@ -1973,7 +1973,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}512\s*\/\s*512`? checks/);
+  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}544\s*\/\s*544`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);

@@ -226,7 +226,7 @@ test('postgres backup CLI supports host networking for database URL dumps in CI'
     ]);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /docker run --rm --network host/);
+    assert.match(result.stdout, /docker run --rm(?: --user \d+:\d+)? --network host/);
     assert.match(result.stdout, /CHARITYPILOT_BACKUP_DATABASE_URL/);
     assert.doesNotMatch(result.stdout, /backup-user:secret/);
     assert.equal(existsSync(join(tempDir, 'remote.dump')), false);
@@ -244,7 +244,7 @@ test('postgres backup CLI renders operational restore sentinel seeding without e
   ]);
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /docker run --rm --network host/);
+  assert.match(result.stdout, /docker run --rm(?: --user \d+:\d+)? --network host/);
   assert.match(result.stdout, /CHARITYPILOT_RESTORE_SENTINEL_DATABASE_URL/);
   assert.match(result.stdout, /charitypilot-restore-sentinel-org/);
   assert.match(result.stdout, /charitypilot-restore-sentinel-user/);
