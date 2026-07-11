@@ -34,8 +34,6 @@ export async function billingRoutes(app: FastifyInstance) {
       } catch (err) {
         if (err instanceof AppError && err.statusCode < 500) {
           app.log.warn({ code: err.code, statusCode: err.statusCode }, err.message);
-        } else {
-          app.log.error(err);
         }
         handleError(reply, err);
       }

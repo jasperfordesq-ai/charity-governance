@@ -1,5 +1,6 @@
 import type { FastifyReply } from 'fastify';
 import { buildErrorAlertPayload, sendErrorAlert, shouldSendErrorAlert } from '../services/error-alerts.service.js';
+import { serializeErrorForLog } from './logger.js';
 
 export class AppError extends Error {
   constructor(
@@ -17,17 +18,31 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-function alertForHandledError(reply: FastifyReply, error: Error & { code?: string }, statusCode: number): void {
+function reportHandledServerError(
+  reply: FastifyReply,
+  error: Error & { code?: string },
+  statusCode: number,
+): void {
+  if (statusCode < 500) return;
+
+  reply.request.log.error(
+    { safeError: serializeErrorForLog(error), statusCode },
+    'Route-caught request failed',
+  );
+
   if (!shouldSendErrorAlert(statusCode)) return;
 
   const payload = buildErrorAlertPayload(error, reply.request, statusCode);
   void sendErrorAlert(payload).catch((alertError) => {
-    reply.request.log.error(alertError, 'Failed to send error alert webhook');
+    reply.request.log.error(
+      { safeError: serializeErrorForLog(alertError), statusCode },
+      'Failed to send error alert webhook',
+    );
   });
 }
 
 export function sendError(reply: FastifyReply, error: AppError): void {
-  alertForHandledError(reply, error, error.statusCode);
+  reportHandledServerError(reply, error, error.statusCode);
 
   const exposeMessage = error.statusCode < 500 || !isProduction();
   const payload: {
@@ -53,7 +68,7 @@ export function handleError(reply: FastifyReply, err: unknown): void {
   }
 
   const error = err instanceof Error ? err : new Error('Unexpected non-error exception');
-  alertForHandledError(reply, error, 500);
+  reportHandledServerError(reply, error, 500);
 
   reply.status(500).send({
     error: 'Internal server error',

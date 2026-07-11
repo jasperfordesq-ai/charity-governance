@@ -1,5 +1,5 @@
 import type { FastifyServerOptions } from 'fastify';
-import { formatProviderError } from './provider-errors.js';
+import { formatProviderError, sanitizeProviderDiagnosticText } from './provider-errors.js';
 
 export const LOG_REDACT_CENSOR = '[redacted]';
 
@@ -51,7 +51,14 @@ export const API_LOG_REDACT_PATHS = [
 function errorField(error: unknown, field: string): string | number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const value = (error as Record<string, unknown>)[field];
-  return typeof value === 'string' || typeof value === 'number' ? value : undefined;
+  if (typeof value === 'number') return value;
+  return typeof value === 'string' ? sanitizeProviderDiagnosticText(value) : undefined;
+}
+
+function errorCause(error: unknown): unknown {
+  if (!error || typeof error !== 'object' || !Object.hasOwn(error, 'cause')) return undefined;
+  const cause = (error as { cause?: unknown }).cause;
+  return cause === error ? undefined : cause;
 }
 
 export function serializeErrorForLog(error: unknown): Record<string, unknown> & {
@@ -63,6 +70,7 @@ export function serializeErrorForLog(error: unknown): Record<string, unknown> & 
   const code = errorField(error, 'code');
   const statusCode = errorField(error, 'statusCode') ?? errorField(error, 'status');
   const providerError = formatProviderError(error);
+  const cause = errorCause(error);
 
   return {
     type: name,
@@ -72,6 +80,7 @@ export function serializeErrorForLog(error: unknown): Record<string, unknown> & 
     ...(code ? { code } : {}),
     ...(statusCode ? { statusCode } : {}),
     providerError,
+    ...(cause !== undefined ? { cause: formatProviderError(cause) } : {}),
   };
 }
 

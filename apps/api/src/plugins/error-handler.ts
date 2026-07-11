@@ -33,7 +33,10 @@ export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
     if (shouldSendErrorAlert(statusCode)) {
       const payload = buildErrorAlertPayload(error, request, statusCode);
       void sendErrorAlert(payload).catch((alertError) => {
-        app.log.error(alertError, 'Failed to send error alert webhook');
+        app.log.error(
+          { safeError: serializeErrorForLog(alertError), statusCode },
+          'Failed to send error alert webhook',
+        );
       });
     }
 
