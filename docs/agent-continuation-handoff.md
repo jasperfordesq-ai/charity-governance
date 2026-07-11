@@ -106,7 +106,7 @@ The detailed issue contract remains in
   `29116192729` both completed successfully for that exact SHA, with the latter
   passing `96 / 96` Playwright tests in `3.2m`. Release-promotion and deployed
   browser proof remain separate P0-09/launch gates.
-- **P0-06 deadline calendar and recurrence integrity - `LOCALLY_VERIFIED`.**
+- **P0-06 deadline calendar and recurrence integrity - `CI_VERIFIED`.**
   Strict civil-date helpers replace JavaScript month overflow and cover every
   month-end class, leap years, Europe/Dublin DST boundaries, Irish public
   holidays, and Companies Act working-day adjustment. Generated deadlines now
@@ -146,10 +146,12 @@ The detailed issue contract remains in
   reliability linkage `396 / 396` is green. A focused managed browser run
   passed the Organisation contrast and migrated-profile save regressions, then
   the complete managed gate passed `113 / 113` isolation contracts and `97 / 97`
-  Playwright tests with verified teardown. This is local working-tree proof;
-  publish the implementation and obtain exact-SHA CI/E2E
-  before changing this item to `CI_VERIFIED`; professional rule review remains
-  external launch evidence.
+  Playwright tests with verified teardown. The complete implementation landed in
+  `8474ab1d8b44e016f4782bf5c99302509cbd692f`; final verification SHA
+  `096619cf3ee84ae7d3f62826b3510af388defd85` passed GitHub CI run
+  `29136095002` and managed E2E run `29136095004`, with the latter reporting
+  `97 / 97` ordinary passes in `3.2m` and no flaky tests. Professional rule
+  review remains external launch evidence.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -487,17 +489,21 @@ Recently successful checks in this workstream:
     and `97 / 97` live Playwright tests in `7.0m`; the cached production-image,
     attestation, readiness, test, and verified-teardown command took `11.6m`
     against the UUID-marked disposable PostgreSQL instance. A preceding focused
-    managed run also passed the Organisation contrast and migrated-profile save
-    regressions. Exact teardown left no runner Docker/private-state residue or
-    personal-stack drift. Exact-SHA GitHub evidence remains pending for P0-06.
+    managed run also passed the Organisation contrast, migrated-profile save,
+    generated-completion, and repeated compliance-select regressions. Exact
+    teardown left no runner Docker/private-state residue or personal-stack
+    drift. Final SHA `096619cf3ee84ae7d3f62826b3510af388defd85`
+    passed CI run `29136095002` and E2E run `29136095004`; the latter reported
+    `97 / 97` ordinary passes in `3.2m` with no flaky tests.
 - `npm test`
-  - Passed on 2026-07-10 with API `520 / 520`, web `311 / 311`, shared
-    `35 / 35`, production tooling `512 / 512`, and local-Docker tooling
+  - Passed on 2026-07-11 with API `545 / 545`, web `313 / 313`, shared
+    `35 / 35`, production tooling `544 / 544`, and local-Docker tooling
     `44 / 44`.
 - `npm run reliability:report -- --write`
-  - Passed on 2026-07-10 with `383 / 383` covered guarantees linked to passing
-    test titles. Static linkage alone is not browser execution; separate E2E run
-    `29116192729` supplies exact-SHA execution for P0-05. P0-09 remains open for
+  - Passed on 2026-07-11 with `396 / 396` covered guarantees linked to passing
+    test titles. Static linkage alone is not browser execution; E2E runs
+    `29116192729` and `29136095004` supply exact-SHA execution for P0-05 and
+    P0-06 respectively. P0-09 remains open for
     release-promotion, deployed-browser, and live repository-protection proof.
 - `npm run build`, `npm run security:scan`, and both dependency audits
   - Passed on 2026-07-10; all workspaces built, `545` staged files passed secret/SAST

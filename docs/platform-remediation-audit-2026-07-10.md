@@ -634,7 +634,7 @@ Acceptance:
 
 ### P0-06 - Incorrect derived deadline dates and recurrence state
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Evidence:
 
@@ -769,6 +769,22 @@ Current local verification:
 - The unified reliability report is green with `396 / 396` covered guarantees
   linked to passing tests, and the generated platform audit is current.
 
+Published exact-SHA verification:
+
+- Commit `8474ab1d8b44e016f4782bf5c99302509cbd692f` contains the complete
+  deadline-calendar, lifecycle, reminder, migration, cutover, UI, and evidence
+  implementation. Follow-up test-contract corrections are included in final
+  verification SHA `096619cf3ee84ae7d3f62826b3510af388defd85`.
+- GitHub CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29136095002`
+  completed successfully for that final SHA, including the historical
+  PostgreSQL upgrade fixture, fresh migration, root tests, reliability,
+  local-Docker, production builds/images/smokes, security, and dependency audit.
+- GitHub E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29136095004`
+  completed successfully for the same SHA with `97 / 97` ordinary Playwright
+  passes in `3.2m`, no flaky tests, and the managed runner's verified teardown.
+
 Primary-source basis:
 
 - Charities Act 2009, section 52:
@@ -782,10 +798,8 @@ Primary-source basis:
   `https://www.irishstatutebook.ie/eli/1997/act/20/schedule/2/enacted/en/html`
   and `https://www.irishstatutebook.ie/eli/2022/si/50/made/en/print`.
 
-Pending verification:
+External production verification:
 
-- Publish the implementation commit and record green exact-SHA CI and managed
-  E2E runs before advancing this item to `CI_VERIFIED`.
 - Named Irish legal/governance and accounting reviewers must approve the rule
   interpretation and user-facing framing before production launch; that is
   professional launch evidence, not repository work.
