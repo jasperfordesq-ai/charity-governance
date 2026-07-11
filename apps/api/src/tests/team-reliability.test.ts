@@ -489,7 +489,7 @@ test('acceptInvite returns the generic failure when the organisation became inac
 
 // ── team-input-validation-15 ──
 
-test('accept-invite rejects weak and bcrypt-overlong passwords with VALIDATION_ERROR', async () => {
+test('accept-invite rejects a weak password with VALIDATION_ERROR', async () => {
   let lookupCalled = false;
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
