@@ -489,7 +489,7 @@ test('acceptInvite returns the generic failure when the organisation became inac
 
 // ── team-input-validation-15 ──
 
-test('accept-invite rejects a weak password with VALIDATION_ERROR', async () => {
+test('accept-invite rejects weak and bcrypt-overlong passwords with VALIDATION_ERROR', async () => {
   let lookupCalled = false;
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
@@ -506,13 +506,15 @@ test('accept-invite rejects a weak password with VALIDATION_ERROR', async () => 
   await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
   await app.register(teamRoutes);
   try {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/accept-invite',
-      payload: { token: 't', name: 'New User', password: 'short' },
-    });
-    assert.equal(res.statusCode, 400);
-    assert.equal(res.json().code, 'VALIDATION_ERROR');
+    for (const password of ['short', `A1a${'b'.repeat(70)}`]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/accept-invite',
+        payload: { token: 't', name: 'New User', password },
+      });
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.json().code, 'VALIDATION_ERROR');
+    }
     assert.equal(lookupCalled, false, 'a malformed body must be rejected before any invite lookup');
   } finally {
     await app.close();

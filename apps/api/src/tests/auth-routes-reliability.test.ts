@@ -42,11 +42,15 @@ test('auth endpoints reject malformed bodies with a 400 VALIDATION_ERROR and nev
   } as never);
   await app.register(authRoutes, { prefix: '/auth' });
 
+  const bcryptOverlongPassword = `A1a${'b'.repeat(70)}`;
   const cases: Array<{ name: string; url: string; payload: Record<string, unknown> }> = [
     { name: 'register missing password', url: '/auth/register', payload: { email: 'owner@example.org', name: 'Owner', organisationName: 'Org' } },
+    { name: 'register bcrypt-overlong password', url: '/auth/register', payload: { email: 'owner@example.org', password: bcryptOverlongPassword, name: 'Owner', organisationName: 'Org' } },
     { name: 'login bad email', url: '/auth/login', payload: { email: 'not-an-email', password: 'NewPassword1' } },
+    { name: 'login bcrypt-overlong password', url: '/auth/login', payload: { email: 'owner@example.org', password: bcryptOverlongPassword } },
     { name: 'forgot-password empty', url: '/auth/forgot-password', payload: {} },
     { name: 'reset-password empty token', url: '/auth/reset-password', payload: { token: '', password: 'NewPassword1' } },
+    { name: 'reset-password bcrypt-overlong password', url: '/auth/reset-password', payload: { token: 'reset-token', password: bcryptOverlongPassword } },
     { name: 'verify-email empty', url: '/auth/verify-email', payload: {} },
   ];
 
