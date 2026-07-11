@@ -353,6 +353,17 @@ Current repository evidence:
 - the full production-tooling gate passed `746`, failed `0`, with `2`
   Windows-only symbolic-link privilege skips (`748` total).
 
+The first exact push, `0587f637d3b8511127f16e9a0184f05c7291b39b`, reached
+CI run `29165538508`. Security, schema, legacy upgrades, migrations,
+backup/restore and lint passed, then the API test process exposed that two new
+test files had relied on an ambient local `JWT_SECRET` at module import time.
+No application assertion failed. The tests were changed to set a test-only
+secret before dynamically importing the JWT-dependent modules, matching the
+existing route-reliability pattern. A full API rerun with `JWT_SECRET`
+deliberately removed then passed `725 / 725` ordinary tests plus the isolated
+real-PostgreSQL migration test (`726 / 726` total). The follow-up push/CI result
+must be treated as the exact-commit publication proof.
+
 Both public and personal-server native optimized web builds passed. Docker
 exported the personal migration and API runner images. A separate web-only
 Docker build returned no compile error but did not export its image within a

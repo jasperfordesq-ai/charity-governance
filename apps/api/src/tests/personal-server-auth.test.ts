@@ -2,13 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
-import { authRoutes } from '../routes/auth/index.js';
-import { TeamService } from '../services/team.service.js';
-import {
-  ACCESS_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE,
-  setAuthCookies,
-} from '../utils/auth-cookies.js';
+
+// Auth routes/services reach utils/jwt, which intentionally reads JWT_SECRET
+// at module construction time. Keep this test self-contained like the existing
+// route reliability suites instead of depending on a developer shell secret.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'personal-server-auth-test-secret';
+
+const [
+  { authRoutes },
+  { TeamService },
+  {
+    ACCESS_TOKEN_COOKIE,
+    REFRESH_TOKEN_COOKIE,
+    setAuthCookies,
+  },
+] = await Promise.all([
+  import('../routes/auth/index.js'),
+  import('../services/team.service.js'),
+  import('../utils/auth-cookies.js'),
+]);
 
 const ENV_KEYS = [
   'NODE_ENV',

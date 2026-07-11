@@ -2,17 +2,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import bcrypt from 'bcryptjs';
 import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
-import {
-  getPersonalServerInitializerConfig,
-  initializePersonalServer,
-} from '../jobs/initialize-personal-server.js';
-import {
-  getPersonalServerPasswordReset,
-  getPersonalServerResetLinkRequest,
-  issuePersonalServerResetLink,
-  resetPersonalServerPassword,
-} from '../jobs/personal-server-account.js';
-import { hashOpaqueToken } from '../services/session-tokens.js';
+
+// personal-server-account reaches session-tokens/utils/jwt. Set the required
+// import-time secret explicitly so CI never depends on an ambient developer env.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'personal-server-initializer-test-secret';
+
+const [
+  {
+    getPersonalServerInitializerConfig,
+    initializePersonalServer,
+  },
+  {
+    getPersonalServerPasswordReset,
+    getPersonalServerResetLinkRequest,
+    issuePersonalServerResetLink,
+    resetPersonalServerPassword,
+  },
+  { hashOpaqueToken },
+] = await Promise.all([
+  import('../jobs/initialize-personal-server.js'),
+  import('../jobs/personal-server-account.js'),
+  import('../services/session-tokens.js'),
+]);
 
 const VALID_INITIALIZER_ENV = {
   NODE_ENV: 'production',
