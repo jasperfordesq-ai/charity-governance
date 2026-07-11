@@ -153,7 +153,7 @@ The detailed issue contract remains in
   `97 / 97` ordinary passes in `3.2m` and no flaky tests. Professional rule
   review remains external launch evidence.
 - **P0-07 team lifecycle, session families, billing-authority interlocks, and
-  authenticated document delivery - `LOCALLY_VERIFIED`.** Team members now
+  authenticated document delivery - `CI_VERIFIED`.** Team members now
   have explicit lifecycle state, optimistic versions, suspend/remove/reactivate
   operations, bounded session-family inventory and revocation, immutable audit
   subject snapshots, exact-one-owner database protection, serializable ownership
@@ -174,8 +174,14 @@ The detailed issue contract remains in
   Managed proof passed `113 / 113` isolation contracts, all `18`
   migrations, the real logout-vs-refresh race, the Team/Billing scenarios, and
   a fresh production-build document upload/download journey, with exact
-  zero-residue teardown. This checkpoint is not yet `CI_VERIFIED`: the pending
-  implementation commit must pass exact-SHA GitHub CI and managed E2E first.
+  zero-residue teardown. Implementation commit
+  `6fb1bdd29bb862dd43558d4fc09bc7c03f5d68a8` plus CI-repair commit
+  `1970995d00d8981f0a0d352ac535f092b4e3b51e` passed exact-SHA CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29146063800`
+  and managed E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29146063808`;
+  E2E passed `113 / 113` isolation contracts and `103 / 103` Playwright
+  scenarios in `3.4m`.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -504,7 +510,7 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
-- P0-07 local verification (pending exact-SHA GitHub CI/E2E)
+- P0-07 exact-SHA verification
   - Full suites passed on 2026-07-11: API `658 / 658`, web `335 / 335`, and
     shared `40 / 40`.
   - Production tooling passed `545 / 545`; local-Docker tooling passed
@@ -518,6 +524,10 @@ Recently successful checks in this workstream:
     a fresh current-tree document run passed `113 / 113` isolation contracts,
     the production build, all `18` migrations, and upload/download `1 / 1` in
     Playwright. Both runs proved exact zero-residue teardown.
+  - Implementation commit `6fb1bdd29bb862dd43558d4fc09bc7c03f5d68a8`
+    plus verification/fix commit `1970995d00d8981f0a0d352ac535f092b4e3b51e`
+    passed exact-SHA CI run `29146063800` and E2E run `29146063808`; the
+    latter passed `103 / 103` Playwright scenarios in `3.4m`.
 - `npm run test:e2e`
   - Passed locally on 2026-07-10 for P0-06 with `113 / 113` isolation contracts
     and `97 / 97` live Playwright tests in `7.0m`; the cached production-image,

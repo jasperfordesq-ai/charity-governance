@@ -806,7 +806,7 @@ External production verification:
 
 ### P0-07 - Team offboarding, session revocation, and ownership continuity
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 Implemented:
 
@@ -857,11 +857,18 @@ Local verification:
   authenticated-download journey `1 / 1`; post-run proof found zero processes,
   containers, volumes, networks, runner images, or recovery directories.
 
-Remaining gate:
+CI evidence:
 
-- Do not promote this item to `CI_VERIFIED` until the implementation commit's
-  exact SHA passes both GitHub CI and managed E2E. Production/provider evidence
-  remains governed by the separate launch ledger and must not be fabricated.
+- Implementation commit `6fb1bdd29bb862dd43558d4fc09bc7c03f5d68a8`
+  plus CI-repair commit `1970995d00d8981f0a0d352ac535f092b4e3b51e`
+  passed exact-SHA GitHub CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29146063800`
+  and managed E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29146063808`.
+  The latter passed `113 / 113` isolation contracts and `103 / 103` Playwright
+  scenarios in `3.4m`.
+- Production/provider evidence remains governed by the separate launch ledger
+  and must not be fabricated.
 
 ### P0-08 - Product, legal, pricing, role, reminder, retention, and privacy truth
 
@@ -990,7 +997,7 @@ Acceptance:
 
 ### P1-02 - Refresh-token race and token-family revocation
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 - Refresh, replay, and logout use ordered organisation -> user -> token-family
   row locks. Successful rotation creates one same-family successor; replay or
@@ -999,11 +1006,14 @@ Status: `LOCALLY_VERIFIED`
 - API race/replay/family tests pass, and the managed concurrent
   logout-vs-refresh browser scenario passed with all `18` migrations and
   verified zero-residue teardown.
-- Exact-SHA GitHub CI/E2E remains required before `CI_VERIFIED`.
+- Exact verification SHA `1970995d00d8981f0a0d352ac535f092b4e3b51e`
+  passed CI run `29146063800` and all `103 / 103` scenarios in managed E2E run
+  `29146063808`, including browser-origin logout plus original and returned
+  successor access/refresh rejection.
 
 ### P1-03 - Inactive invitation acceptance
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 - Invite consumption now transactionally rechecks lifecycle and subscription
   access after locking the invitation and organisation.
@@ -1011,7 +1021,8 @@ Status: `LOCALLY_VERIFIED`
   active, and past-due inside grace. Every rejected state proves the invitation
   remains unconsumed and no user is created; suspension is covered by the
   concurrent inactive-organisation regression.
-- Exact-SHA GitHub CI/E2E remains required before `CI_VERIFIED`.
+- Exact verification SHA `1970995d00d8981f0a0d352ac535f092b4e3b51e`
+  passed CI run `29146063800` and managed E2E run `29146063808`.
 
 ### P1-04 - Document deletion retry lifecycle
 
@@ -1156,7 +1167,7 @@ Status: `LOCALLY_VERIFIED`
 
 ### P3-02 - Reliable authenticated downloads
 
-Status: `LOCALLY_VERIFIED`
+Status: `CI_VERIFIED`
 
 - The browser now fetches the exact authenticated CharityPilot API document
   route as bytes; it does not wait for or navigate to a provider-signed URL.
@@ -1171,7 +1182,9 @@ Status: `LOCALLY_VERIFIED`
 - API `658 / 658` and web `335 / 335` pass. The fresh managed document journey
   passed `113 / 113` isolation contracts, the production build, all `18`
   migrations, and upload/download `1 / 1`, followed by zero-residue teardown.
-- Exact-SHA GitHub CI/E2E remains required before `CI_VERIFIED`.
+- Exact verification SHA `1970995d00d8981f0a0d352ac535f092b4e3b51e`
+  passed CI run `29146063800` and managed E2E run `29146063808`; the latter
+  completed `103 / 103` scenarios in `3.4m`.
 - Deployed WebKit/Safari click-journey evidence remains part of the external
   browser QA gate.
 
