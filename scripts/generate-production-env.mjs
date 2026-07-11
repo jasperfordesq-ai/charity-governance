@@ -21,7 +21,7 @@ export const AUTO_GENERATED_KEYS = ['JWT_SECRET', 'READINESS_API_KEY'];
 // Keys forced to a fixed correct production value.
 const FIXED_VALUES = {
   NODE_ENV: 'production',
-  CHARITYPILOT_DATABASE_COMPATIBILITY: 'p006-deadline-calendar-v1',
+  CHARITYPILOT_DATABASE_COMPATIBILITY: 'p109-governance-integrity-v1',
 };
 
 // External values the operator must supply (with where to get each). Used only

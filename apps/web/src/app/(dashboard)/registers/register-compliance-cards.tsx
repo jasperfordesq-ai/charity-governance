@@ -2,7 +2,7 @@
 
 import { Button, Checkbox, Input, Progress, Select, SelectItem, Textarea } from '@heroui/react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
-import { FieldGroup } from '@/components/ui/forms';
+import { FieldGroup, FormHint } from '@/components/ui/forms';
 import { EvidenceChip, ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   AnnualReportFilingStatus,
@@ -25,6 +25,7 @@ export function AnnualReportCard({
   onSave,
   saving,
   saveDisabled,
+  saveDisabledReason,
   canManage,
 }: {
   annual: AnnualReportReadinessResponse;
@@ -32,6 +33,7 @@ export function AnnualReportCard({
   onSave: () => void;
   saving: boolean;
   saveDisabled: boolean;
+  saveDisabledReason: string;
   canManage: boolean;
 }) {
   const checks = [
@@ -91,12 +93,30 @@ export function AnnualReportCard({
             }}>
               {Object.entries(filingLabels).map(([value, label]) => <SelectItem key={value}>{label}</SelectItem>)}
             </Select>
-            <Input type="date" label="Filed date" value={dateInput(annual.filedDate)} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })} />
+            <Input
+              type="date"
+              label="Filed date"
+              value={dateInput(annual.filedDate)}
+              isReadOnly={!canManage}
+              isRequired={annual.filingStatus === AnnualReportFilingStatus.FILED}
+              isInvalid={Boolean(saveDisabledReason)}
+              aria-describedby="annual-filing-evidence-hint"
+              onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })}
+            />
             <Input label="Notes" value={annual.notes ?? ''} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
           </div>
+          <FormHint id="annual-filing-evidence-hint" tone={saveDisabledReason ? 'warning' : 'neutral'}>
+            {saveDisabledReason || 'A filed date is required only when the filing status is Filed.'}
+          </FormHint>
         </FieldGroup>
         {canManage ? (
-          <Button className={primaryActionButtonClassName} onPress={onSave} isLoading={saving} isDisabled={saving || saveDisabled}>
+          <Button
+            className={primaryActionButtonClassName}
+            onPress={onSave}
+            isLoading={saving}
+            isDisabled={saving || saveDisabled}
+            aria-describedby="annual-filing-evidence-hint"
+          >
             Save Annual Report readiness
           </Button>
         ) : null}

@@ -2377,7 +2377,7 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     requireEvidenceText(text, 'release-image-digests', `${checkPath}.evidence must include release-image-digests artifact`, issues);
     requireEvidenceText(
       text,
-      'CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1',
+      'CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1',
       `${checkPath}.evidence must include the reviewed database compatibility marker`,
       issues,
     );

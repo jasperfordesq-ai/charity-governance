@@ -32,7 +32,7 @@ npm run check:production:github-secrets -- --environment=production
 npm run check:production:github-secrets -- --environment=production --json
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml config --quiet
-npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
 npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA
 npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json
@@ -78,17 +78,17 @@ Download the release-image-digests artifact from the release workflow run and co
 CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<api-digest>
 CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<web-digest>
 CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
-CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1
+CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1
 CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
 npm run deploy:preflight -- --production-env-file=.env.production
-npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
 ```
 
-The deploy preflight validates the selected production env file, confirms the promoted web image build origin matches `NEXT_PUBLIC_API_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
+The deploy preflight validates the selected production env file, requires the exact reviewed `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` line, confirms the promoted web image build origin matches `NEXT_PUBLIC_API_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. The ordinary CLI rejects stale, absent, or arbitrary compatibility markers. Only the controlled rollback wrapper can supply the internal `p006-deadline-calendar-v1` or `pre-p006-restored` expectation after its manifest-and-restore attestation has passed; those paths cannot be selected by a normal deploy or recovery command. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, any matching `npm run deploy:rollback` rehearsal, and `npm run deploy:recover:p109`. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
 
 Before booking the production cutover, restore a recent production backup into an isolated non-production PostgreSQL target and run the exact promoted migration image followed by the exact promoted API reconciliation tool. Record clone age/source and destruction, prove the migration found no out-of-range civil dates, tenant mismatches, renamed/duplicate generated occurrences, legacy AGM reminder evidence, or generated-id collision, and inventory the legacy reminder rows that will require downtime reconciliation. Never point this rehearsal at live production. Resolve anomalies through an approved data plan, take a newer clone, and repeat; discovering a known fail-closed blocker only after production shutdown is not acceptable launch evidence.
 
-The production deploy command is the only supported Compose migration path for this release. It runs the same preflight and pulls every promoted image before downtime. It then enters fail-closed maintenance mode with `docker compose ... --profile maintenance --profile jobs down --remove-orphans`, which stops and removes the old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change. The scheduler waits up to 45 seconds for active work and Compose grants 60 seconds before forced termination. With the runtime down, deploy creates and restore-verifies a retained PostgreSQL backup, runs the migration image alone, probes live Prisma history, then runs the digest-pinned API reconciliation tool with `--prepare-quiesced-cutover --confirm-schedulers-quiesced`. That step safely releases residual pre-provider reservations, quarantines residual provider-I/O rows, and refuses startup while any unresolved reminder outcome remains. Only then does it start the promoted runtime and run the public HTTPS smoke.
+The production deploy command is the only supported ordinary Compose migration path for this release; after a recorded P1-09 failure, only the locked recovery wrapper documented below is supported. Deploy runs the same preflight and pulls every promoted image before downtime. It then enters fail-closed maintenance mode with `docker compose ... --profile maintenance --profile jobs down --remove-orphans`, which stops and removes the old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change. The scheduler waits up to 45 seconds for active work and Compose grants 60 seconds before forced termination. With the runtime down, deploy creates and restore-verifies a retained PostgreSQL backup, runs the migration image alone, probes live Prisma history, then runs the digest-pinned API reconciliation tool with `--prepare-quiesced-cutover --confirm-schedulers-quiesced`. That step safely releases residual pre-provider reservations, quarantines residual provider-I/O rows, and refuses startup while any unresolved reminder outcome remains. Only then does it start the promoted runtime and run the public HTTPS smoke.
 
 For transcript verification, the isolated migration step owned by that deploy is equivalent to the following command. Do not invoke it independently against production:
 
@@ -100,22 +100,98 @@ Pass `--backup-output-dir` pointing at an approved encrypted filesystem with suf
 
 If image pull fails, the old compatible runtime remains untouched and no migration is attempted. After maintenance mode begins, the runtime remains stopped after any backup, migration, compatibility probe, reminder-reconciliation gate, startup, or smoke failure and never silently restarts an older image. If the reminder gate reports unresolved rows, keep every scheduler stopped, follow the restricted `--list` and one-time reconciliation procedure in `docs/architecture/07-reminder-scheduler.md`, then rerun deploy. Do not manually run `compose up`, restart old containers, or use a previous application image against the migrated database. Use `--dry-run` to review ordered commands without changing runtime state.
 
-Deploy and rollback acquire one host-wide production cutover lock before preflight or rollback-attestation validation. Rollback passes that exact lock handle reentrantly into the delegated deploy, so two deploys, two rollbacks, or a deploy and rollback cannot interleave shutdown, backup, migration, probe, or startup. Contention fails before Docker or database work. Nested deploy entry and lock release both re-read the on-disk token and fail closed if the lock disappeared or ownership changed. A release failure preserves the preceding deploy/rollback result but changes the command status to failure with explicit operator guidance; do not begin another cutover until the lock owner and runtime state are reconciled. After a process or host crash, treat a remaining lock as an incident artefact and remove it only after an operator has proved no deploy or rollback process is running. Never bypass the lock with raw Compose commands.
+P1-09 deliberately fails closed when legacy governance facts contradict its five
+database invariants, a conflict record points across organisations, or an
+unexpected writer prevents the quiesced migration from acquiring its bounded
+locks. A failed `prisma migrate deploy` is recorded in `_prisma_migrations`, so
+plainly rerunning deploy is not a recovery procedure: Prisma will reject the
+failed history with P3009. Keep the runtime and every scheduler stopped, retain
+the pre-migration backup and redacted failure counts, and use only the locked
+P1-09 recovery command below.
 
-For a bad digest promotion, prefer a corrected forward release. Image-only rollback remains exceptional: it requires both the same `CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1` marker and a fresh (no more than 30 minutes old) operator attestation bound to the SHA-256 of the exact previous digest manifest. The marker is not trusted by itself. Create a non-committed attestation like this:
+First, review the failure through the approved database-operations channel. If
+the preflight reported contradictory rows, correct them only under an approved
+governance-data remediation plan with named ownership and retained evidence. If
+it reported a lock timeout, identify and stop the unexpected writer. Rehearse
+the exact correction on an isolated recent restore first. Do not continue if the
+failed transaction or catalog state is uncertain; restore the retained backup
+instead.
+
+Create a non-committed recovery attestation no more than 30 minutes before the
+command. Bind it to the SHA-256 of the exact production env file bytes and the
+exact digest-pinned migration image selected in that file:
+
+```json
+{
+  "kind": "charitypilot-p109-failed-migration-recovery-attestation",
+  "schemaVersion": 1,
+  "environment": "production",
+  "migrationName": "20260711230000_add_domain_invariants_referential_safety",
+  "assessedAt": "2026-07-11T20:00:00.000Z",
+  "productionEnvFile": ".env.production",
+  "productionEnvSha256": "<sha256-of-exact-production-env-bytes>",
+  "migrationImage": "ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<64-lowercase-hex-digest>",
+  "operator": "named-operations-owner",
+  "evidenceReference": "incident://approved-p109-recovery-evidence",
+  "runtimeQuiesced": true,
+  "failedMigrationTransactionRolledBack": true,
+  "targetCatalogRollbackVerified": true,
+  "remediationOrUnexpectedWriterResolutionCompleted": true,
+  "acknowledgement": "I confirm the production runtime is quiesced, the failed P1-09 transaction rolled back without target catalog residue, the documented governance-data remediation or unexpected-writer resolution is complete, and only migration 20260711230000_add_domain_invariants_referential_safety may be marked rolled back before immediate controlled redeployment."
+}
+```
+
+Review the non-mutating ordered plan with `--dry-run`, then deliberately run the
+same command without that flag:
+
+```bash
+npm run deploy:recover:p109 -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-recovery --recovery-attestation-file=/secure/p109-recovery-attestation.json --dry-run
+npm run deploy:recover:p109 -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-recovery --recovery-attestation-file=/secure/p109-recovery-attestation.json
+```
+
+The wrapper acquires the same host-wide cutover lock before reading the env or
+attestation and holds it throughout recovery. It freezes the attested bytes in
+an owner-only temporary env copy, removes that copy before releasing the lock,
+and runs standard deploy preflight against those exact bytes. It then pulls the
+pinned migration image and hashes all 20 reviewed `migration.sql` files inside
+that selected image before re-quiescing the full runtime/jobs/TLS stack. The
+repository-owned SQL preflight opens a repeatable-read, read-only transaction
+and makes its invariant `DO` block the terminal statement. It deliberately has
+no trailing `COMMIT` or `ROLLBACK`: on success the short-lived Prisma process
+closes its connection and PostgreSQL rolls back the read-only transaction; on
+failure the raised exception remains the terminal result and therefore cannot
+be masked by a later successful statement. The preflight requires every
+`_prisma_migrations.checksum` to equal the corresponding selected-image SHA-256,
+the exact 19-migration applied predecessor chain followed only by one unresolved
+failed P1-09 attempt, with no later or unknown migration history; zero target
+constraint/index/FK residue; the exact legacy
+`ConflictRecord_boardMemberId_fkey` and index, and zero board chronology,
+conduct evidence, induction evidence, fundraising chronology, filing evidence,
+or conflict-scope blockers. Unknown, partial, or mixed history/catalog state
+fails before resolution. Only after those checks does the wrapper mark the exact
+transactionally rolled-back migration as rolled back and immediately delegate
+the normal production deploy with the same lock. That nested path creates a new
+unique restore-verified backup, applies migrations, checks status and reminder
+reconciliation, starts the runtime, and completes public smoke. Never invoke a
+raw Compose migration-resolution command, never use `--applied` for this failure
+path, and never edit `_prisma_migrations` by hand.
+
+Deploy, rollback, and P1-09 recovery acquire one host-wide production cutover lock before validation. Rollback and recovery pass that exact lock handle reentrantly into the delegated deploy, so no two cutover operations can interleave shutdown, backup, migration, probe, resolution, startup, or smoke. Contention fails before Docker or database work. Nested deploy entry and lock release both re-read the on-disk token and fail closed if the lock disappeared or ownership changed. A release or recovery failure preserves the preceding result but changes the command status to failure with explicit operator guidance; do not begin another cutover until the lock owner and runtime state are reconciled. After a process or host crash, treat a remaining lock as an incident artefact and remove it only after an operator has proved no deploy, rollback, or recovery process is running. Never bypass the lock with raw Compose commands.
+
+For a bad digest promotion, prefer a corrected forward release. Image-only rollback remains exceptional: it requires both the same `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` marker and a fresh (no more than 30 minutes old) operator attestation bound to the SHA-256 of the exact previous digest manifest. The marker is not trusted by itself. P1-09 introduced database-enforced governance invariants and a composite, restrictive conflict-record relation, so an image on the earlier `p006-deadline-calendar-v1` line is not compatible with the live P1-09 schema. Create a non-committed attestation like this:
 
 ```json
 {
   "kind": "charitypilot-schema-compatibility-attestation",
   "schemaVersion": 1,
   "environment": "production",
-  "databaseCompatibility": "p006-deadline-calendar-v1",
-  "assessedAt": "2026-07-10T20:00:00.000Z",
+  "databaseCompatibility": "p109-governance-integrity-v1",
+  "assessedAt": "2026-07-11T20:00:00.000Z",
   "rollbackDigestManifest": "release-image-digests.previous.env",
   "rollbackDigestManifestSha256": "<sha256-of-exact-manifest-bytes>",
   "evidenceReference": "change://approved-schema-compatibility-review",
   "operator": "named-operations-owner",
-  "acknowledgement": "I confirm the selected application images are compatible with the live P0-06 database schema and migration history."
+  "acknowledgement": "I confirm the selected application images are compatible with the live P1-09 database schema and migration history."
 }
 ```
 
@@ -125,9 +201,9 @@ Then run:
 npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/mnt/encrypted/charitypilot/rollback-cutovers
 ```
 
-Rollback reuses the same maintenance-mode deploy path, including a unique new retained backup, migration isolation, fail-closed startup, and public smoke. It copies the production env file byte-for-byte into an owner-only temporary file and appends only validated rollback image/build-origin/compatibility overrides. After the selected migration image runs, deploy probes live Prisma history and, for P0-06-compatible schemas, runs the same reminder cutover/reconciliation gate before any runtime starts. A cross-boundary rollback is different: only a freshly validated, exact-manifest-and-backup-hash-bound restore attestation can propagate the internal `pre-p006-restored` state, and only that trusted path skips the unavailable P0-06 job/schema gate. The env marker alone can never authorise the skip.
+Rollback reuses the same maintenance-mode deploy path, including a unique new retained backup, migration isolation, fail-closed startup, and public smoke. It copies the production env file byte-for-byte into an owner-only temporary file and appends only validated rollback image/build-origin/compatibility overrides. After the selected migration image runs, deploy probes live Prisma history and, for P0-06-compatible schemas, runs the same reminder cutover/reconciliation gate before any runtime starts. Rolling back across the P1-09 boundary to a `p006-deadline-calendar-v1` manifest requires a freshly validated, exact-manifest-and-backup-hash-bound restore attestation and a backup captured before the incompatible P1-09 migration; the restored P0-06-compatible database retains the P0-06 reconciliation gate. A genuinely pre-P0-06 or markerless legacy rollback is different: only the same bounded restore proof can propagate the internal `pre-p006-restored` state, and only that trusted historical path skips the unavailable P0-06 job/schema gate. The env marker alone can never authorise either path or the skip.
 
-Crossing that boundary is restore-and-redeploy, not image rollback. Keep the runtime stopped, restore the production database from the protected pre-migration backup, complete restore checks, and create a non-committed JSON attestation like this:
+Crossing either incompatible boundary is restore-and-redeploy, not image rollback. Keep the runtime stopped, restore the production database from the protected pre-migration backup that matches the rollback manifest's schema line, complete restore checks, and create a non-committed JSON attestation like this:
 
 ```json
 {
@@ -151,10 +227,10 @@ Crossing that boundary is restore-and-redeploy, not image rollback. Keep the run
 Then deliberately run:
 
 ```bash
-npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --database-restore-attestation-file=/secure/database-restore-attestation.json --restored-backup-file=/mnt/encrypted/charitypilot/pre-p006/production-check.dump --backup-output-dir=/mnt/encrypted/charitypilot/restored-cutovers
+npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --database-restore-attestation-file=/secure/database-restore-attestation.json --restored-backup-file=/mnt/encrypted/charitypilot/pre-incompatible-migration/production-check.dump --backup-output-dir=/mnt/encrypted/charitypilot/restored-cutovers
 ```
 
-The tool rejects future or more-than-30-minute-old attestations, hashes the exact rollback manifest and restored backup file, verifies both hashes, probes the restored live migration history, and passes the trusted pre-P0-06 compatibility result directly to the nested deploy. It cannot prove the external restore itself occurred, so the named operator and restore evidence remain mandatory. Never commit the attestation, backup, database URL, or provider credentials.
+The tool rejects future or more-than-30-minute-old attestations, hashes the exact rollback manifest and restored backup file, verifies both hashes, and probes the restored live migration history. A restored `p006-deadline-calendar-v1` manifest keeps that marker and the P0-06 reconciliation gate; only a genuinely legacy manifest with an absent or empty compatibility marker propagates the trusted internal `pre-p006-restored` result to the nested deploy. Any unknown non-empty marker fails closed even when restore evidence is supplied. The tool cannot prove the external restore itself occurred, so the named operator and restore evidence remain mandatory. Never commit the attestation, backup, database URL, or provider credentials.
 
 ## Environment
 

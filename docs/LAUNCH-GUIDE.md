@@ -171,7 +171,7 @@ You need four external services. Create the **production/live** versions
      `TRUSTED_PROXY_ADDRESSES` (so the API trusts the proxy's forwarded client IPs).
   3. Bring up the stack with the proxy overlay:
      ```bash
-     npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
+     npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
      ```
   Caddy terminates HTTPS for both domains and proxies to the internal containers;
   certificates are issued and renewed with no further action. You still need the
@@ -255,7 +255,7 @@ gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/cha
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
-  npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p006-cutover
+  npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
   ```
 - **Current known GitHub environment blocker:** the protected secret store still
   needs its real provider/operator secret names. Rerun

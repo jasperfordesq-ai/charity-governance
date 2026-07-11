@@ -12,6 +12,10 @@ import { buildRegisterPriorities, buildRegisterSearchText } from './register-pri
 import { normalizeRegisterForm, type RegisterType } from './register-record-forms';
 import { riskScore } from './register-record-lists';
 import {
+  annualReportFilingInvariantReason,
+  fundraisingFormInvariantReason,
+} from '@/lib/governance-form-invariants';
+import {
   AnnualReportFilingStatus,
   ConflictStatus,
   RegisterStatus,
@@ -204,7 +208,8 @@ export function useRegistersWorkflow() {
   }, [fetchOrganisationProfile, fetchRegisters, year]);
 
   const hasLoadedSelectedYear = loadedRegistersYear === year && !loadError;
-  const canSaveAnnual = hasLoadedSelectedYear && annual.reportingYear === year;
+  const annualFilingDisabledReason = annualReportFilingInvariantReason(annual.filingStatus, annual.filedDate);
+  const canSaveAnnual = hasLoadedSelectedYear && annual.reportingYear === year && !annualFilingDisabledReason;
   const canSaveFinancial = hasLoadedSelectedYear && financial.reportingYear === year;
 
   const openModal = (type: RegisterType) => {
@@ -299,6 +304,8 @@ export function useRegistersWorkflow() {
     if (modalType === 'fundraising') {
       if (!String(form.name ?? '').trim()) return 'Add the fundraising activity name before saving.';
       if (!String(form.activityType ?? '').trim()) return 'Add the activity type before saving.';
+      const fundraisingInvariantReason = fundraisingFormInvariantReason(form.startDate, form.endDate);
+      if (fundraisingInvariantReason) return fundraisingInvariantReason;
     }
     return '';
   }, [canManage, form, modalType]);
@@ -325,9 +332,10 @@ export function useRegistersWorkflow() {
       toast('Register record added');
     } catch (err) {
       if (await reconcileForbidden(err)) return;
+      const message = apiErrorMessage(err, 'Register record could not be saved. Please review the fields and try again.');
       logClientError('Failed to save register record', err);
-      setFormError('Register record could not be saved. Please review the fields and try again.');
-      toast('Failed to save register record', 'error');
+      setFormError(message);
+      toast(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -359,7 +367,10 @@ export function useRegistersWorkflow() {
   const saveAnnual = async () => {
     if (!canManage) return;
     if (!canSaveAnnual) {
-      toast('Refresh this reporting year before saving Annual Report readiness.', 'error');
+      toast(
+        annualFilingDisabledReason || 'Refresh this reporting year before saving Annual Report readiness.',
+        'error',
+      );
       return;
     }
     setSaving(true);
@@ -372,8 +383,9 @@ export function useRegistersWorkflow() {
       toast('Annual Report readiness saved');
     } catch (err) {
       if (await reconcileForbidden(err)) return;
+      const message = apiErrorMessage(err, 'Annual Report readiness could not be saved. Please try again.');
       logClientError('Failed to save Annual Report readiness', err);
-      toast('Failed to save Annual Report readiness', 'error');
+      toast(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -457,6 +469,7 @@ export function useRegistersWorkflow() {
 
   return {
     annual,
+    annualFilingDisabledReason,
     canManage,
     canSaveAnnual,
     canSaveFinancial,

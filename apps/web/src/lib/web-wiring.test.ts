@@ -2297,7 +2297,7 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   assert.match(src, /setFinancial\(financialRes\.data \?\? emptyFinancial\(requestedYear\)\)/);
   assert.match(src, /const \[loadedRegistersYear, setLoadedRegistersYear\] = useState<number \| null>\(null\)/);
   assert.match(src, /const hasLoadedSelectedYear = loadedRegistersYear === year && !loadError;/);
-  assert.match(src, /const canSaveAnnual = hasLoadedSelectedYear && annual\.reportingYear === year;/);
+  assert.match(src, /const canSaveAnnual = hasLoadedSelectedYear && annual\.reportingYear === year && !annualFilingDisabledReason;/);
   assert.match(src, /const canSaveFinancial = hasLoadedSelectedYear && financial\.reportingYear === year;/);
   assert.match(src, /setFinancial\(financialRes\.data \?\? emptyFinancial\(requestedYear\)\);[\r\n\s]*setLoadedRegistersYear\(requestedYear\);/);
   assert.match(src, /\]\);[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setSummary\(summaryRes\.data\)/);

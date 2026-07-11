@@ -7,7 +7,12 @@ const { GovernanceRegisterService } = await import('../services/governance-regis
 
 type Call = { name: string; args: unknown };
 
-function registerModel(name: string, calls: Call[], found: boolean) {
+function registerModel(
+  name: string,
+  calls: Call[],
+  found: boolean,
+  errors: { create?: unknown; update?: unknown; delete?: unknown } = {},
+) {
   return {
     findFirst: async (args: { where: { id: string; organisationId: string } }) => {
       calls.push({ name: `${name}.findFirst`, args });
@@ -23,14 +28,17 @@ function registerModel(name: string, calls: Call[], found: boolean) {
     },
     create: async (args: { data: Record<string, unknown> }) => {
       calls.push({ name: `${name}.create`, args });
+      if (errors.create) throw errors.create;
       return { id: 'new_id', ...args.data };
     },
     update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
       calls.push({ name: `${name}.update`, args });
+      if (errors.update) throw errors.update;
       return { id: args.where.id, ...args.data };
     },
     delete: async (args: unknown) => {
       calls.push({ name: `${name}.delete`, args });
+      if (errors.delete) throw errors.delete;
       return {};
     },
   };
@@ -41,14 +49,16 @@ function buildService(opts: {
   boardMemberFound?: boolean;
   annual?: Record<string, unknown> | null;
   financial?: Record<string, unknown> | null;
+  conflictErrors?: { create?: unknown; update?: unknown; delete?: unknown };
+  fundraisingErrors?: { create?: unknown; update?: unknown; delete?: unknown };
 } = {}) {
   const calls: Call[] = [];
   const found = opts.recordFound ?? true;
-  const prisma = {
-    conflictRecord: registerModel('conflictRecord', calls, found),
+  const transaction = {
+    conflictRecord: registerModel('conflictRecord', calls, found, opts.conflictErrors),
     riskRecord: registerModel('riskRecord', calls, found),
     complaintRecord: registerModel('complaintRecord', calls, found),
-    fundraisingRecord: registerModel('fundraisingRecord', calls, found),
+    fundraisingRecord: registerModel('fundraisingRecord', calls, found, opts.fundraisingErrors),
     boardMember: {
       findFirst: async (args: { where: { id: string; organisationId: string } }) => {
         calls.push({ name: 'boardMember.findFirst', args });
@@ -66,6 +76,17 @@ function buildService(opts: {
         calls.push({ name: 'financialControlReview.findUnique', args });
         return opts.financial ?? null;
       },
+    },
+    $queryRaw: async (...args: unknown[]) => {
+      calls.push({ name: '$queryRaw', args });
+      return [{ id: 'org_1' }];
+    },
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => {
+      calls.push({ name: 'prisma.$transaction', args: {} });
+      return callback(transaction);
     },
   };
   return { service: new GovernanceRegisterService(prisma as never), calls };
@@ -243,4 +264,191 @@ test('getAnnualReportReadiness returns a safe default shape when no record exist
   assert.equal(result.reportingYear, 2026);
   assert.equal(result.financialStatementsApproved, false);
   assert.equal(result.filingStatus, 'NOT_STARTED');
+});
+
+test('conflict references lock the organisation before scoped record or board-member reads', async () => {
+  const { service, calls } = buildService();
+  await service.updateConflict('org_1', 'conflict_1', { boardMemberId: 'bm_1' });
+
+  const lockIndex = calls.findIndex((call) => call.name === '$queryRaw');
+  assert.ok(lockIndex >= 0);
+  assert.ok(lockIndex < calls.findIndex((call) => call.name === 'conflictRecord.findFirst'));
+  assert.ok(lockIndex < calls.findIndex((call) => call.name === 'boardMember.findFirst'));
+});
+
+test('a raced composite conflict reference maps to BOARD_MEMBER_NOT_FOUND without leaking the constraint', async () => {
+  const compositeRace = {
+    code: 'P2003',
+    meta: { field_name: 'ConflictRecord_boardMemberId_organisationId_fkey (index)' },
+  };
+  const { service } = buildService({ conflictErrors: { create: compositeRace } });
+
+  await assert.rejects(
+    () => service.createConflict('org_1', {
+      boardMemberId: 'bm_1',
+      trusteeName: 'Trustee',
+      matter: 'Matter',
+      nature: 'Nature',
+      dateDeclared: '2026-01-01',
+      actionTaken: 'Recused',
+    } as never),
+    (error: unknown) =>
+      (error as { code?: string; statusCode?: number }).code === 'BOARD_MEMBER_NOT_FOUND' &&
+      (error as { statusCode?: number }).statusCode === 404 &&
+      !JSON.stringify(error).includes('ConflictRecord_boardMemberId_organisationId_fkey'),
+  );
+});
+
+test('conflict update and delete races map P2025 to CONFLICT_NOT_FOUND', async () => {
+  for (const scenario of [
+    { method: 'update', service: buildService({ conflictErrors: { update: { code: 'P2025' } } }).service },
+    { method: 'delete', service: buildService({ conflictErrors: { delete: { code: 'P2025' } } }).service },
+  ]) {
+    const operation = scenario.method === 'update'
+      ? scenario.service.updateConflict('org_1', 'conflict_1', { matter: 'Changed' })
+      : scenario.service.removeConflict('org_1', 'conflict_1');
+    await assert.rejects(
+      () => operation,
+      (error: unknown) => (error as { code?: string }).code === 'CONFLICT_NOT_FOUND',
+    );
+  }
+});
+
+test('fundraising update-vs-delete maps P2025 to FUNDRAISING_NOT_FOUND', async () => {
+  for (const scenario of [
+    { method: 'update', service: buildService({ fundraisingErrors: { update: { code: 'P2025' } } }).service },
+    { method: 'delete', service: buildService({ fundraisingErrors: { delete: { code: 'P2025' } } }).service },
+  ]) {
+    const operation = scenario.method === 'update'
+      ? scenario.service.updateFundraising('org_1', 'fundraising_1', { name: 'Changed' })
+      : scenario.service.removeFundraising('org_1', 'fundraising_1');
+    await assert.rejects(
+      () => operation,
+      (error: unknown) => (error as { code?: string }).code === 'FUNDRAISING_NOT_FOUND',
+    );
+  }
+});
+
+test('fundraising creation rejects an end date before its start date before writing', async () => {
+  const { service, calls } = buildService();
+  await assert.rejects(
+    () => service.createFundraising('org_1', {
+      name: 'Spring appeal',
+      activityType: 'Direct mail',
+      startDate: '2026-04-02',
+      endDate: '2026-04-01',
+    } as never),
+    (error: unknown) =>
+      (error as { code?: string; statusCode?: number }).code === 'VALIDATION_ERROR' &&
+      (error as { statusCode?: number }).statusCode === 400,
+  );
+  assert.equal(calls.some((call) => call.name === 'fundraisingRecord.create'), false);
+});
+
+test('fundraising updates validate the effective persisted and patch state', async () => {
+  const calls: Call[] = [];
+  const transaction = {
+    fundraisingRecord: {
+      findFirst: async () => ({
+        id: 'fundraising_1',
+        organisationId: 'org_1',
+        startDate: new Date('2026-04-02'),
+        endDate: null,
+      }),
+      update: async (args: unknown) => {
+        calls.push({ name: 'fundraisingRecord.update', args });
+        return {};
+      },
+    },
+    $queryRaw: async () => [{ id: 'org_1' }],
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
+  };
+  const service = new GovernanceRegisterService(prisma as never);
+
+  await assert.rejects(
+    () => service.updateFundraising('org_1', 'fundraising_1', { endDate: '2026-04-01' }),
+    (error: unknown) => (error as { code?: string }).code === 'VALIDATION_ERROR',
+  );
+  assert.equal(calls.some((call) => call.name === 'fundraisingRecord.update'), false);
+});
+
+test('annual report updates merge stored facts before requiring a filed date', async () => {
+  let upsertCalled = false;
+  const transaction = {
+    annualReportReadiness: {
+      findUnique: async () => ({
+        organisationId: 'org_1',
+        reportingYear: 2026,
+        filingStatus: 'IN_PROGRESS',
+        filedDate: null,
+      }),
+      upsert: async () => {
+        upsertCalled = true;
+        return { organisationId: 'org_1', reportingYear: 2026 };
+      },
+    },
+    $queryRaw: async () => [{ id: 'org_1' }],
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
+  };
+  const service = new GovernanceRegisterService(prisma as never);
+
+  await assert.rejects(
+    () => service.upsertAnnualReportReadiness('org_1', {
+      reportingYear: 2026,
+      filingStatus: 'FILED',
+    } as never),
+    (error: unknown) => (error as { code?: string }).code === 'VALIDATION_ERROR',
+  );
+  assert.equal(upsertCalled, false);
+});
+
+test('annual report upsert returns the exact atomic saved row without rereading another writer', async () => {
+  let reads = 0;
+  const saved = {
+    id: 'annual_saved',
+    organisationId: 'org_1',
+    reportingYear: 2026,
+    activitiesNarrative: 'Atomic result',
+    publicBenefitStatement: null,
+    beneficiariesSummary: null,
+    financialStatementsApproved: false,
+    annualReportUploaded: false,
+    trusteeDetailsReviewed: false,
+    fundraisingReviewed: false,
+    complaintsReviewed: false,
+    boardApprovalDate: null,
+    filingStatus: 'IN_PROGRESS',
+    filedDate: null,
+    notes: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-02-01T00:00:00.000Z'),
+  };
+  const transaction = {
+    annualReportReadiness: {
+      findUnique: async () => {
+        reads += 1;
+        return null;
+      },
+      upsert: async () => saved,
+    },
+    $queryRaw: async () => [{ id: 'org_1' }],
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
+  };
+
+  const result = await new GovernanceRegisterService(prisma as never)
+    .upsertAnnualReportReadiness('org_1', { reportingYear: 2026, activitiesNarrative: 'Atomic result' });
+
+  assert.equal(reads, 1, 'only the pre-write effective-state read may run');
+  assert.equal(result.id, 'annual_saved');
+  assert.equal(result.activitiesNarrative, 'Atomic result');
+  assert.equal(result.updatedAt, '2026-02-01T00:00:00.000Z');
 });

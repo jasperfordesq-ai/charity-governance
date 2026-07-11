@@ -91,7 +91,7 @@ const evidenceHintsByCheck = new Map([
   ['releaseGate.cosign', ['cosign verify', 'GHCR image digest signatures', 'api image', 'web image', 'migration image']],
   ['releaseGate.release-workflow-identity', ['.github/workflows/release-images.yml', 'refs/heads/master or refs/tags/v*', 'release workflow run URL']],
   ['releaseGate.release-run-api-verification', ['npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json', 'GitHub API verification passed']],
-  ['releaseGate.digest-manifest', ['release-image-digests.env', 'CHARITYPILOT_API_IMAGE', 'CHARITYPILOT_WEB_IMAGE', 'CHARITYPILOT_MIGRATION_IMAGE', 'CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1']],
+  ['releaseGate.digest-manifest', ['release-image-digests.env', 'CHARITYPILOT_API_IMAGE', 'CHARITYPILOT_WEB_IMAGE', 'CHARITYPILOT_MIGRATION_IMAGE', 'CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1']],
   ['secretsAndEnv.real-production-values', ['.env.production', 'real production values']],
   ['secretsAndEnv.secret-source-excluded-from-git', ['secret store', 'excluded from git']],
   ['secretsAndEnv.node-env-production', ['NODE_ENV=production']],

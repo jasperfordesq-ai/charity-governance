@@ -119,6 +119,7 @@ export function BoardMemberModal({
                     type="date"
                     value={formTermEnd}
                     onValueChange={setFormTermEnd}
+                    aria-describedby="board-disabled-hint"
                     isReadOnly={accessDisabled}
                   />
                 </div>
@@ -149,6 +150,8 @@ export function BoardMemberModal({
                         value={formConductDate}
                         onValueChange={setFormConductDate}
                         className="mt-3"
+                        isRequired={formConductSigned}
+                        aria-describedby="board-disabled-hint"
                         isReadOnly={accessDisabled}
                       />
                     ) : (
@@ -175,6 +178,8 @@ export function BoardMemberModal({
                         value={formInductionDate}
                         onValueChange={setFormInductionDate}
                         className="mt-3"
+                        isRequired={formInduction}
+                        aria-describedby="board-disabled-hint"
                         isReadOnly={accessDisabled}
                       />
                     ) : (

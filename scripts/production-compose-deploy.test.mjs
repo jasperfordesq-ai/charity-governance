@@ -93,6 +93,7 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+    CHARITYPILOT_DATABASE_COMPATIBILITY: "p109-governance-integrity-v1",
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
     ...overrides,
   };
@@ -379,12 +380,16 @@ test("production deploy keeps runtime stopped when reminder cutover preparation 
 test("attested pre-P0-06 restore skips only the unavailable P0-06 reminder gate", async () => {
   const runProductionComposeDeployFromArgs = await loadDeployRunner();
   const calls = [];
+  let preflightOptions;
   const result = runProductionComposeDeployFromArgs(
     ["--production-env-file", "production.env", ...backupArgs],
     {
       processEnv: cleanEnv(),
       attestedDatabaseCompatibility: "pre-p006-restored",
-      runPreflight: () => ({ status: 0, stdout: "preflight ok\n", stderr: "" }),
+      runPreflight: (_args, _env, options) => {
+        preflightOptions = options;
+        return { status: 0, stdout: "preflight ok\n", stderr: "" };
+      },
       runCommand: (command) => calls.push(command),
       runBackup: successfulBackup(),
       runSmoke: () => ({ status: 0, stdout: "smoke ok\n", stderr: "" }),
@@ -392,12 +397,46 @@ test("attested pre-P0-06 restore skips only the unavailable P0-06 reminder gate"
   );
 
   assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(preflightOptions, {
+    expectedDatabaseCompatibility: "pre-p006-restored",
+  });
   assert.equal(
     calls.some((command) => command.includes("reconcile-deadline-reminder.js")),
     false,
   );
   assert.ok(calls.some((command) => command.includes("up")));
   assert.doesNotMatch(result.stdout, /quiesced reminder cutover preparation/);
+});
+
+test("attested restored P0-06 line uses its exact preflight marker without skipping reconciliation", async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  const calls = [];
+  let preflightOptions;
+  const result = runProductionComposeDeployFromArgs(
+    ["--production-env-file", "production.env", ...backupArgs],
+    {
+      processEnv: cleanEnv(),
+      attestedDatabaseCompatibility: "p006-restored",
+      runPreflight: (_args, _env, options) => {
+        preflightOptions = options;
+        return { status: 0, stdout: "preflight ok\n", stderr: "" };
+      },
+      runCommand: (command) => calls.push(command),
+      runBackup: successfulBackup(),
+      runSmoke: () => ({ status: 0, stdout: "smoke ok\n", stderr: "" }),
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(preflightOptions, {
+    expectedDatabaseCompatibility: "p006-deadline-calendar-v1",
+  });
+  assert.equal(
+    calls.some((command) =>
+      command.includes("--prepare-quiesced-cutover"),
+    ),
+    true,
+  );
 });
 
 test("production deploy fails after compose up when public smoke fails", async () => {

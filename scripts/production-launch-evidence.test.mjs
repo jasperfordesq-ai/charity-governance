@@ -965,7 +965,7 @@ function evidenceEntry(areaId, checkId) {
       apiImage,
       webImage,
       migrationImage,
-      'CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1',
+      'CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1',
       'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
     ].join(' ');
   }

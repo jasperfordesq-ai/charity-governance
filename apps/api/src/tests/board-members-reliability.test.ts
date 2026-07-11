@@ -57,21 +57,55 @@ test('board member list scopes findMany and count to the organisation', async ()
 
 // ── route-level harness for ids 7, 8, 9, 10 ──
 
-type WriteFlags = { createCalled: boolean; updateCalled: boolean; findFirstCalled: boolean; deleteCalled: boolean };
+type WriteFlags = {
+  createCalled: boolean;
+  updateCalled: boolean;
+  findFirstCalled: boolean;
+  conflictDetachCalled: boolean;
+  deleteCalled: boolean;
+};
 
 async function buildBoardApp(role: Role, subscription: unknown = activeSubscription()) {
-  const flags: WriteFlags = { createCalled: false, updateCalled: false, findFirstCalled: false, deleteCalled: false };
+  const flags: WriteFlags = {
+    createCalled: false,
+    updateCalled: false,
+    findFirstCalled: false,
+    conflictDetachCalled: false,
+    deleteCalled: false,
+  };
   const app = Fastify({ logger: false });
+  const boardMember = {
+    findMany: async () => [],
+    count: async () => 0,
+    create: async (a: { data: Record<string, unknown> }) => { flags.createCalled = true; return { id: 'bm-1', ...a.data }; },
+    findFirst: async () => {
+      flags.findFirstCalled = true;
+      return {
+        id: 'bm-1',
+        organisationId: 'org-1',
+        appointedDate: new Date('2026-01-01'),
+        termEndDate: null,
+        conductSigned: false,
+        conductSignedDate: null,
+        inductionCompleted: false,
+        inductionDate: null,
+      };
+    },
+    update: async () => { flags.updateCalled = true; return { id: 'bm-1' }; },
+    delete: async () => { flags.deleteCalled = true; return {}; },
+  };
+  const conflictRecord = {
+    updateMany: async () => { flags.conflictDetachCalled = true; return { count: 1 }; },
+  };
+  const transaction = {
+    boardMember,
+    conflictRecord,
+    $queryRaw: async () => [{ id: 'org-1' }],
+  };
   app.decorate('prisma', {
     ...authModels(role, subscription),
-    boardMember: {
-      findMany: async () => [],
-      count: async () => 0,
-      create: async (a: { data: Record<string, unknown> }) => { flags.createCalled = true; return { id: 'bm-1', ...a.data }; },
-      findFirst: async () => { flags.findFirstCalled = true; return { id: 'bm-1', organisationId: 'org-1' }; },
-      update: async () => { flags.updateCalled = true; return { id: 'bm-1' }; },
-      delete: async () => { flags.deleteCalled = true; return {}; },
-    },
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
   } as never);
   await app.register(boardMemberRoutes);
   return { app, flags };
@@ -164,6 +198,28 @@ test('PATCH /board-members/:id rejects an invalid email with VALIDATION_ERROR an
     // Validation happens before the service, so neither the foreign lookup nor the write runs.
     assert.equal(flags.findFirstCalled, false, 'findFirst must not run on invalid input');
     assert.equal(flags.updateCalled, false, 'update must not run on invalid input');
+  } finally {
+    await app.close();
+  }
+});
+
+test('PATCH /board-members/:id returns the stable validation contract for a merged-state contradiction', async () => {
+  const { app, flags } = await buildBoardApp('ADMIN');
+  try {
+    const res = await app.inject({
+      method: 'PATCH', url: '/bm-1',
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { termEndDate: '2025-12-31' },
+    });
+
+    assert.equal(res.statusCode, 400);
+    const body = res.json();
+    assert.equal(body.error, 'Validation failed');
+    assert.equal(body.code, 'VALIDATION_ERROR');
+    assert.ok(Array.isArray(body.details));
+    assert.equal(body.details[0]?.path?.[0], 'termEndDate');
+    assert.equal(flags.findFirstCalled, true, 'the service must load persisted state before validating the patch');
+    assert.equal(flags.updateCalled, false, 'the contradictory effective state must not be written');
   } finally {
     await app.close();
   }

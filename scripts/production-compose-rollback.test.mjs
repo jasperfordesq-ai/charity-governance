@@ -97,7 +97,7 @@ function rollbackManifest(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${rollbackDigest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${rollbackDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`,
-    CHARITYPILOT_DATABASE_COMPATIBILITY: "p006-deadline-calendar-v1",
+    CHARITYPILOT_DATABASE_COMPATIBILITY: "p109-governance-integrity-v1",
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
     ...overrides,
   };
@@ -120,14 +120,14 @@ function schemaCompatibilityAttestation(
     kind: "charitypilot-schema-compatibility-attestation",
     schemaVersion: 1,
     environment: "production",
-    databaseCompatibility: "p006-deadline-calendar-v1",
+    databaseCompatibility: "p109-governance-integrity-v1",
     assessedAt: "2026-07-10T20:00:00.000Z",
     rollbackDigestManifest,
     rollbackDigestManifestSha256: sha256(manifestContent),
     evidenceReference: "change://CHG-2026-0710/schema-compatibility",
     operator: "operations-owner",
     acknowledgement:
-      "I confirm the selected application images are compatible with the live P0-06 database schema and migration history.",
+      "I confirm the selected application images are compatible with the live P1-09 database schema and migration history.",
     ...overrides,
   });
 }
@@ -146,7 +146,7 @@ function databaseRestoreAttestation(
     runtimeStoppedDuringRestore: true,
     backupCapturedBeforeIncompatibleMigration: true,
     databaseRestoreCompletedAt: "2026-07-10T20:00:00.000Z",
-    backupReference: "encrypted-backup://operations/p006-pre-migration",
+    backupReference: "encrypted-backup://operations/pre-incompatible-migration",
     restoreEvidenceReference: "incident://INC-2026-0710/restore-checks",
     operator: "operations-owner",
     rollbackDigestManifest,
@@ -269,7 +269,7 @@ test("production rollback dry-run tolerates legacy Supabase metadata and delegat
     );
     assert.match(
       deployCalls[0].mergedEnv,
-      /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/,
+      /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/,
     );
     assert.match(
       deployCalls[0].mergedEnv,
@@ -824,6 +824,191 @@ test("production rollback refuses a legacy image manifest without a pre-migratio
       /restore the production database from a backup captured before the incompatible migration/,
     );
     assert.match(result.stderr, /--database-restore-attestation-file/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production rollback rejects a P0-06-line image-only rollback after the P1-09 compatibility bump", async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(
+    join(tmpdir(), "charitypilot-production-rollback-p006-image-only-"),
+  );
+  const envPath = join(tempDir, "production.env");
+  const manifestPath = join(tempDir, "release-image-digests.previous.env");
+  let deployCalled = false;
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(
+    manifestPath,
+    rollbackManifest({
+      CHARITYPILOT_DATABASE_COMPATIBILITY: "p006-deadline-calendar-v1",
+    }),
+  );
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      [
+        "--production-env-file",
+        envPath,
+        "--rollback-digest-file",
+        manifestPath,
+        ...backupArgs,
+      ],
+      {
+        processEnv: cleanEnv(),
+        runDeploy: () => {
+          deployCalled = true;
+          return { status: 0, stdout: "", stderr: "" };
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(deployCalled, false);
+    assert.match(result.stderr, /image-only rollback is forbidden/);
+    assert.match(
+      result.stderr,
+      /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/,
+    );
+    assert.match(result.stderr, /--database-restore-attestation-file/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production rollback restores a P0-06-line manifest without skipping the P0-06 reconciliation gate", async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(
+    join(tmpdir(), "charitypilot-production-rollback-p006-restored-"),
+  );
+  const envPath = join(tempDir, "production.env");
+  const manifestPath = join(tempDir, "release-image-digests.previous.env");
+  const attestationPath = join(tempDir, "database-restore-attestation.json");
+  const restoredBackupPath = join(tempDir, "pre-p109-production.dump");
+  const restoredBackupContent =
+    "representative pre-p109 P0-06-compatible custom-format backup bytes";
+  const deployCalls = [];
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(
+    manifestPath,
+    rollbackManifest({
+      CHARITYPILOT_DATABASE_COMPATIBILITY: "p006-deadline-calendar-v1",
+    }),
+  );
+  writeFileSync(restoredBackupPath, restoredBackupContent);
+  writeFileSync(
+    attestationPath,
+    databaseRestoreAttestation(
+      "release-image-digests.previous.env",
+      readFileSync(manifestPath),
+      restoredBackupContent,
+    ),
+  );
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      [
+        "--production-env-file",
+        envPath,
+        "--rollback-digest-file",
+        manifestPath,
+        "--database-restore-attestation-file",
+        attestationPath,
+        "--restored-backup-file",
+        restoredBackupPath,
+        ...backupArgs,
+      ],
+      {
+        processEnv: cleanEnv(),
+        now: () => new Date("2026-07-10T20:05:00.000Z"),
+        runDeploy: (args, dependencies) => {
+          deployCalls.push({
+            dependencies,
+            mergedEnv: readFileSync(args[1], "utf8"),
+          });
+          return { status: 0, stdout: "deploy ok\n", stderr: "" };
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(deployCalls.length, 1);
+    assert.equal(
+      deployCalls[0].dependencies.attestedDatabaseCompatibility,
+      "p006-restored",
+    );
+    assert.match(
+      deployCalls[0].mergedEnv,
+      /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/,
+    );
+    assert.match(result.stdout, /P1-09 boundary rollback authorised/);
+    assert.match(result.stdout, /reminder reconciliation gate/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production rollback rejects an unknown non-empty compatibility line even with restore evidence", async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(
+    join(tmpdir(), "charitypilot-production-rollback-unknown-line-"),
+  );
+  const envPath = join(tempDir, "production.env");
+  const manifestPath = join(tempDir, "release-image-digests.previous.env");
+  const attestationPath = join(tempDir, "database-restore-attestation.json");
+  const restoredBackupPath = join(tempDir, "unknown-line-production.dump");
+  const restoredBackupContent = "unknown compatibility backup bytes";
+  let deployCalled = false;
+
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(
+    manifestPath,
+    rollbackManifest({
+      CHARITYPILOT_DATABASE_COMPATIBILITY: "unreviewed-schema-line-v1",
+    }),
+  );
+  writeFileSync(restoredBackupPath, restoredBackupContent);
+  writeFileSync(
+    attestationPath,
+    databaseRestoreAttestation(
+      "release-image-digests.previous.env",
+      readFileSync(manifestPath),
+      restoredBackupContent,
+    ),
+  );
+
+  try {
+    const result = runProductionComposeRollbackFromArgs(
+      [
+        "--production-env-file",
+        envPath,
+        "--rollback-digest-file",
+        manifestPath,
+        "--database-restore-attestation-file",
+        attestationPath,
+        "--restored-backup-file",
+        restoredBackupPath,
+        ...backupArgs,
+      ],
+      {
+        processEnv: cleanEnv(),
+        now: () => new Date("2026-07-10T20:05:00.000Z"),
+        runDeploy: () => {
+          deployCalled = true;
+          return { status: 0, stdout: "", stderr: "" };
+        },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(deployCalled, false);
+    assert.match(
+      result.stderr,
+      /unsupported CHARITYPILOT_DATABASE_COMPATIBILITY=unreviewed-schema-line-v1/,
+    );
+    assert.match(result.stderr, /only p109-governance-integrity-v1/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

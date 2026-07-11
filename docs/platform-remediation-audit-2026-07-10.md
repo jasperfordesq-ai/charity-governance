@@ -1265,10 +1265,65 @@ Acceptance:
 
 ### P1-09 - Domain invariants and referential safety
 
-- Prevent board term end before appointment, fundraising end before start,
-  contradictory induction/conduct booleans and dates, and `FILED` states without
-  filing dates.
-- Add database constraints where safe and shared/API validation everywhere.
+Status: `LOCALLY_VERIFIED`; exact-SHA CI and managed E2E are pending
+
+Implemented:
+
+- Shared create, patch, and complete-state validators now reject reversed board
+  terms, contradictory conduct/induction completion evidence, reversed closed
+  fundraising periods, and `FILED` annual-report states without a filing date.
+  One-sided patches deliberately defer the final decision until the API merges
+  them with the persisted row. Board and register forms apply the same rules,
+  expose accessible conditional date requirements, preserve valid open-ended
+  fundraising periods, and show safe API errors without discarding the draft.
+- Board, conflict, fundraising, and annual-readiness writes now acquire the
+  organisation row before reading or changing dependent state. Services merge
+  and validate the complete state inside the transaction, map only the exact
+  known constraint/race contracts, and leave unrelated database failures
+  visible to the existing root-cause handling. Board deletion transactionally
+  detaches same-tenant conflict pointers so immutable conflict history survives;
+  the composite relation prevents cross-tenant pointers.
+- Migration `20260711230000_add_domain_invariants_referential_safety` is one
+  atomic, no-row-rewrite change. It preflights all six invalid-data categories,
+  installs five named `CHECK` constraints, adds the board-member composite key,
+  and replaces the conflict pointer with a restrictive tenant-scoped composite
+  foreign key and index. The migration locks writers in application-compatible
+  order and fails with exact remediation counts rather than inventing repairs.
+- CI and release publication run a historical 19-migration upgrade verifier.
+  It proves invalid legacy data fails atomically, Prisma records one unresolved
+  target attempt, a plain retry fails with `P3009`, deliberate fixture
+  remediation leaves no target residue, exact resolution/redeploy succeeds, and
+  catalog, history, tenant relation, data, and edge behavior are correct. Every
+  disposable database is uniquely named, bounded, force-cleaned, and checked for
+  residue.
+- Ordinary deploy and recovery require
+  `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1`; only the
+  separately attested historical rollback paths can select the older modelled
+  compatibility lines. The owner-only recovery wrapper binds a fresh attestation
+  to the exact env bytes and digest-pinned migration image, hashes all 20
+  migration SQL files inside that image, compares every Prisma history checksum,
+  requires the exact failed-history/catalog/data state, and holds the cutover
+  lock through exact resolution and immediate full redeploy. Its repeatable-read,
+  read-only SQL ends at the invariant `DO` block so Prisma cannot mask an error
+  with a later successful transaction statement.
+
+Local verification:
+
+- Shared `54 / 54`, API `730 / 730` plus isolated two-client PostgreSQL `2 / 2`,
+  and web `357 / 357` pass. The production build, lint, Prisma validation,
+  secret scan, and SAST scan pass.
+- Production tooling passes `791` checks with `0` failures and `2` expected
+  Windows symbolic-link privilege skips (`793` total); local-Docker contracts
+  pass `44 / 44`.
+- The exact built migration image proof captured all 20 checksums. The failed
+  target deploy and `P3009` retry returned nonzero; a deliberately tampered
+  target checksum made image `db execute --stdin` return nonzero with the exact
+  selected-image invariant; the pristine preflight, exact rolled-back resolve,
+  redeploy, and final migration status returned zero. The complete before/after
+  logical fingerprint was identical, all recovered assertions passed, and final
+  database/container inventory was empty.
+- This status remains local until the coherent implementation commit is pushed
+  and both exact-SHA GitHub CI and managed E2E complete successfully.
 
 ## P2: Release Engineering and Production Operations
 

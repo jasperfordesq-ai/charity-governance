@@ -247,6 +247,25 @@ The detailed issue contract remains in
   `0c5b795ec2cbc906a119f7ffd52bd552519d232c`. The expanded scheduled-cleanup
   smoke assertion and isolated live-migration test phase passed CI run
   `29163982047`; managed E2E run `29163982033` also passed.
+- **P1-09 domain invariants and referential safety - `LOCALLY_VERIFIED`; CI/E2E
+  pending.** Shared/API/web complete-state validation now prevents reversed
+  board terms, contradictory trustee evidence, reversed closed fundraising
+  periods, and filed reports without filing dates. Organisation-first locks,
+  tenant-scoped composite conflict pointers, transactional history-preserving
+  board deletion, five database checks, and narrow Prisma race mapping make the
+  same invariants durable. The atomic migration never rewrites governance data
+  and ships with a historical failure/remediation/recovery verifier. Production
+  recovery requires the P1-09 compatibility line, an exact env/image-bound
+  attestation, all 20 checksums captured inside the selected digest-pinned image,
+  exact failed history/catalog/data state, terminal read-only SQL whose errors
+  cannot be masked, exact resolution, and immediate full redeploy. Local proof
+  is shared `54 / 54`, API `730 / 730` plus live concurrency `2 / 2`, web
+  `357 / 357`, production tooling `791` pass / `0` fail / `2` platform skips,
+  local-Docker `44 / 44`, lint/build/Prisma/security gates, and a real built-image
+  tamper-negative/pristine-positive recovery with an identical before/after
+  database fingerprint and zero residue. Do not promote this bullet to
+  `CI_VERIFIED` until the implementation SHA's GitHub CI and managed E2E are both
+  terminal green.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,

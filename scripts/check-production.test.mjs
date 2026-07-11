@@ -2357,7 +2357,7 @@ test('production env template exposes only the API origin to the web runtime', (
     template,
     /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/,
   );
-  assert.match(template, /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/);
+  assert.match(template, /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/);
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /Docker Compose/);
   assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
@@ -3390,6 +3390,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-deploy-preflight.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-deploy.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-rollback.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'production-recover-p109-migration.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-cutover-lock.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'init-production-launch-evidence.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence.mjs')));
@@ -3440,9 +3441,17 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.equal(packageJson.scripts['deploy:preflight'], 'node scripts/production-deploy-preflight.mjs');
   assert.equal(packageJson.scripts['deploy:production'], 'node scripts/production-compose-deploy.mjs');
   assert.equal(packageJson.scripts['deploy:rollback'], 'node scripts/production-compose-rollback.mjs');
+  assert.equal(
+    packageJson.scripts['deploy:recover:p109'],
+    'node scripts/production-recover-p109-migration.mjs',
+  );
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-deploy-preflight\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-deploy\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-rollback\.test\.mjs/);
+  assert.match(
+    packageJson.scripts['test:production-check'],
+    /scripts\/production-recover-p109-migration\.test\.mjs/,
+  );
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-cutover-lock\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/init-production-launch-evidence\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-launch-evidence\.test\.mjs/);
@@ -3462,10 +3471,24 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
     'node scripts/check-deployed-browser-qa-env.mjs',
   );
   assert.match(readRepoFile('scripts/production-deploy-preflight.mjs'), /runProductionPreflight/);
+  assert.match(
+    readRepoFile('scripts/production-deploy-preflight.mjs'),
+    /REQUIRED_DATABASE_COMPATIBILITY = 'p109-governance-integrity-v1'/,
+  );
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /runProductionDeployPreflightFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /runProductionComposeDeployFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /--no-tls-proxy/);
+  const p109Recovery = readRepoFile('scripts/production-recover-p109-migration.mjs');
+  assert.match(p109Recovery, /runProductionComposeDeployFromArgs/);
+  assert.match(p109Recovery, /runProductionDeployPreflightFromArgs/);
+  assert.match(p109Recovery, /acquireProductionCutoverLock/);
+  assert.match(p109Recovery, /BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY/);
+  assert.match(p109Recovery, /CHARITYPILOT_P109_MIGRATION_CHECKSUMS_V1/);
+  assert.match(p109Recovery, /migration_history\.checksum IS DISTINCT FROM selected_image\.checksum/);
+  assert.match(p109Recovery, /--entrypoint/);
+  assert.match(p109Recovery, /--rolled-back/);
+  assert.doesNotMatch(p109Recovery, /"--applied"/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /acquireProductionCutoverLock/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /cutoverLock/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /REQUIRED_LAUNCH_AREAS/);
@@ -3528,7 +3551,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /gh run watch RELEASE_RUN_ID --exit-status/);
   assert.match(
     runbook,
-    /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, and any matching `npm run deploy:rollback` rehearsal/,
+    /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, any matching `npm run deploy:rollback` rehearsal, and `npm run deploy:recover:p109`/,
   );
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
@@ -3628,11 +3651,53 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.doesNotMatch(runbook, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(runbook, /cosign verify/);
   assert.match(runbook, /Do not deploy mutable image tags/);
+  assert.match(runbook, /P1-09 deliberately fails closed/);
+  assert.match(
+    runbook,
+    /requires the exact reviewed `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` line/,
+  );
+  assert.match(runbook, /all 20 reviewed `migration\.sql` files inside\s+that selected image/);
+  assert.match(runbook, /`_prisma_migrations\.checksum` to equal the corresponding selected-image SHA-256/);
+  assert.match(runbook, /Prisma will reject the\s+failed history with P3009/);
+  assert.match(
+    runbook,
+    /npm run deploy:recover:p109 -- --production-env-file=\.env\.production --backup-output-dir=\/mnt\/encrypted\/charitypilot\/p109-recovery --recovery-attestation-file=\/secure\/p109-recovery-attestation\.json --dry-run/,
+  );
+  assert.match(
+    runbook,
+    /npm run deploy:recover:p109 -- --production-env-file=\.env\.production --backup-output-dir=\/mnt\/encrypted\/charitypilot\/p109-recovery --recovery-attestation-file=\/secure\/p109-recovery-attestation\.json\n/,
+  );
+  assert.match(runbook, /productionEnvSha256/);
+  assert.match(runbook, /targetCatalogRollbackVerified/);
+  assert.match(runbook, /remediationOrUnexpectedWriterResolutionCompleted/);
+  assert.match(runbook, /zero target\s+constraint\/index\/FK residue/);
+  assert.match(runbook, /Never invoke a\s+raw Compose migration-resolution command/);
+  assert.doesNotMatch(
+    runbook,
+    /docker compose[^\n]*migrate[^\n]*resolve[^\n]*--rolled-back/,
+  );
+  assert.match(runbook, /never use `--applied`/);
+  assert.doesNotMatch(runbook, /P1-09[^\n]*failed[^\n]*plainly rerun/i);
 
   assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:production -- --production-env-file=\.env\.production/);
-  assert.match(launchChecklist, /CHARITYPILOT_DATABASE_COMPATIBILITY=p006-deadline-calendar-v1/);
-  assert.match(launchChecklist, /legacy manifest fails closed without.*`--database-restore-attestation-file`/);
+  assert.match(launchChecklist, /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/);
+  assert.match(
+    launchChecklist,
+    /`p006-deadline-calendar-v1` manifest fails closed without.*`--database-restore-attestation-file`.*retains the P0-06 reconciliation gate/,
+  );
+  assert.match(
+    launchChecklist,
+    /pre-P0-06 or markerless legacy manifest requires the same restore proof.*`pre-p006-restored`/,
+  );
+  assert.match(
+    launchChecklist,
+    /P1-09 migration image was rehearsed.*npm run deploy:recover:p109.*all 20 migration SHA-256 values.*exact 19-migration applied predecessor chain.*checksum-divergent history\/catalog state.*failed before resolution/,
+  );
+  assert.doesNotMatch(
+    launchChecklist,
+    /docker compose[^\n]*migrate[^\n]*resolve[^\n]*--rolled-back/,
+  );
   assert.match(launchChecklist, /approved encrypted storage/);
   assert.doesNotMatch(launchChecklist, /dry-run evidence capture/);
   assert.match(launchChecklist, /web image build origins match the promoted production public origins/);
@@ -4390,8 +4455,15 @@ test('CI deploys Prisma migrations against PostgreSQL before release gates', () 
   assert.doesNotMatch(workflow, /^\s+services:\s*$/m);
   assert.match(workflow, /DATABASE_URL:\s+postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci/);
   assert.match(workflow, /node scripts\/start-ci-postgres\.mjs/);
+  assert.match(workflow, /name:\s+Verify P1-09 domain invariants upgrade from legacy PostgreSQL data/);
+  assert.match(workflow, /npm run db:verify:p109-upgrade/);
   assert.match(workflow, /prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
   assert.match(workflow, /prisma migrate status --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.ok(
+    workflow.indexOf('name: Verify P1-09 domain invariants upgrade from legacy PostgreSQL data') <
+      workflow.indexOf('name: Deploy Prisma migrations'),
+    'P1-09 legacy-data upgrade proof must run before the ordinary migration deploy',
+  );
 });
 
 test('CI starts PostgreSQL after checkout with repo-owned retry logic', () => {
@@ -5249,6 +5321,17 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
       workflow.indexOf('name: Run migration runner against CI PostgreSQL'),
     'migration runner image dependencies must be audited before its smoke run',
   );
+  assert.match(
+    workflow,
+    /name:\s+Verify P1-09 domain invariants upgrade from legacy PostgreSQL data[\s\S]*npm run db:verify:p109-upgrade/,
+  );
+  assert.ok(
+    workflow.indexOf('name: Verify P0-07 team lifecycle upgrade from legacy PostgreSQL data') <
+      workflow.indexOf('name: Verify P1-09 domain invariants upgrade from legacy PostgreSQL data') &&
+      workflow.indexOf('name: Verify P1-09 domain invariants upgrade from legacy PostgreSQL data') <
+        workflow.indexOf('name: Run migration runner against CI PostgreSQL'),
+    'P1-09 legacy-data upgrade proof must run after P0-07 and before the release migration runner',
+  );
   assert.ok(
     workflow.indexOf('name: Smoke web Docker image') < workflow.indexOf('name: Push image tags'),
     'images must be smoke-tested before publishing',
@@ -5300,7 +5383,7 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_repository\}@\$\{api_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_IMAGE="\$\{web_repository\}@\$\{web_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_MIGRATION_IMAGE="\$\{migration_repository\}@\$\{migration_digest\}"/);
-  assert.match(manifestStep, /CHARITYPILOT_DATABASE_COMPATIBILITY="p006-deadline-calendar-v1"/);
+  assert.match(manifestStep, /CHARITYPILOT_DATABASE_COMPATIBILITY="p109-governance-integrity-v1"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
   assert.doesNotMatch(manifestStep, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.doesNotMatch(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_image\}@\$\{api_digest\}"/);

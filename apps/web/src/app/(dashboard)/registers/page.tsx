@@ -21,6 +21,7 @@ export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
   const {
     annual,
+    annualFilingDisabledReason,
     canManage,
     canSaveAnnual,
     canSaveFinancial,
@@ -164,7 +165,15 @@ export default function RegistersPage() {
             description="Use these source/review flags as prompts for the board pack. They do not replace trustee judgement or professional review where needed."
           >
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <AnnualReportCard annual={annual} setAnnual={setAnnual} onSave={saveAnnual} saving={saving} saveDisabled={!canSaveAnnual} canManage={canManage} />
+              <AnnualReportCard
+                annual={annual}
+                setAnnual={setAnnual}
+                onSave={saveAnnual}
+                saving={saving}
+                saveDisabled={!canSaveAnnual}
+                saveDisabledReason={annualFilingDisabledReason}
+                canManage={canManage}
+              />
               <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} saveDisabled={!canSaveFinancial} canManage={canManage} />
             </div>
           </AppSection>

@@ -32,7 +32,9 @@ import {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, "..");
 const DATABASE_COMPATIBILITY_ENV = "CHARITYPILOT_DATABASE_COMPATIBILITY";
+const CURRENT_DATABASE_COMPATIBILITY = "p109-governance-integrity-v1";
 const P006_DATABASE_COMPATIBILITY = "p006-deadline-calendar-v1";
+const PRE_P006_RESTORED_COMPATIBILITY = "pre-p006-restored";
 const RESTORE_ATTESTATION_KIND = "charitypilot-database-restore-attestation";
 const COMPATIBILITY_ATTESTATION_KIND =
   "charitypilot-schema-compatibility-attestation";
@@ -40,7 +42,7 @@ const MAX_ATTESTATION_AGE_MS = 30 * 60 * 1000;
 const RESTORE_ACKNOWLEDGEMENT =
   "I confirm the production runtime was stopped and the database was restored from a backup captured before the incompatible migration.";
 const COMPATIBILITY_ACKNOWLEDGEMENT =
-  "I confirm the selected application images are compatible with the live P0-06 database schema and migration history.";
+  "I confirm the selected application images are compatible with the live P1-09 database schema and migration history.";
 
 const requiredImages = [
   {
@@ -393,8 +395,8 @@ function validateSchemaCompatibilityAttestation(path, rollbackDigestPath, now) {
   if (attestation.schemaVersion !== 1) issues.push("schemaVersion must be 1");
   if (attestation.environment !== "production")
     issues.push("environment must be production");
-  if (attestation.databaseCompatibility !== P006_DATABASE_COMPATIBILITY) {
-    issues.push(`databaseCompatibility must be ${P006_DATABASE_COMPATIBILITY}`);
+  if (attestation.databaseCompatibility !== CURRENT_DATABASE_COMPATIBILITY) {
+    issues.push(`databaseCompatibility must be ${CURRENT_DATABASE_COMPATIBILITY}`);
   }
   validateFreshTimestamp(attestation, "assessedAt", issues, now);
   validateManifestBinding(attestation, rollbackDigestPath, issues);
@@ -492,8 +494,8 @@ function validateRollbackCompatibility(
   rollbackDigestPath,
   now,
 ) {
-  const compatibility = rollbackEnv[DATABASE_COMPATIBILITY_ENV]?.trim();
-  if (compatibility === P006_DATABASE_COMPATIBILITY) {
+  const compatibility = rollbackEnv[DATABASE_COMPATIBILITY_ENV]?.trim() ?? "";
+  if (compatibility === CURRENT_DATABASE_COMPATIBILITY) {
     if (!options.schemaCompatibilityAttestationFile) {
       throw new Error(
         `image-only rollback requires --schema-compatibility-attestation-file bound to the exact rollback manifest; ${DATABASE_COMPATIBILITY_ENV} is necessary but is not trusted by itself.`,
@@ -506,13 +508,23 @@ function validateRollbackCompatibility(
     );
     return {
       compatibility,
-      posture: `Image rollback authorised by a fresh, manifest-bound schema compatibility attestation for ${P006_DATABASE_COMPATIBILITY}.`,
+      attestedDatabaseCompatibility: null,
+      posture: `Image rollback authorised by a fresh, manifest-bound schema compatibility attestation for ${CURRENT_DATABASE_COMPATIBILITY}.`,
     };
+  }
+
+  if (
+    compatibility !== "" &&
+    compatibility !== P006_DATABASE_COMPATIBILITY
+  ) {
+    throw new Error(
+      `rollback digest manifest declares unsupported ${DATABASE_COMPATIBILITY_ENV}=${compatibility}; only ${CURRENT_DATABASE_COMPATIBILITY}, ${P006_DATABASE_COMPATIBILITY}, or an absent legacy marker is modelled.`,
+    );
   }
 
   if (!options.databaseRestoreAttestationFile) {
     throw new Error(
-      `image-only rollback is forbidden because the rollback digest manifest does not declare ${DATABASE_COMPATIBILITY_ENV}=${P006_DATABASE_COMPATIBILITY}. ` +
+      `image-only rollback is forbidden because the rollback digest manifest does not declare ${DATABASE_COMPATIBILITY_ENV}=${CURRENT_DATABASE_COMPATIBILITY}. ` +
         "Keep the runtime stopped, restore the production database from a backup captured before the incompatible migration, then provide --database-restore-attestation-file.",
     );
   }
@@ -533,8 +545,17 @@ function validateRollbackCompatibility(
     restoredBackupPath,
     now,
   );
+  if (compatibility === P006_DATABASE_COMPATIBILITY) {
+    return {
+      compatibility,
+      attestedDatabaseCompatibility: "p006-restored",
+      posture:
+        "P1-09 boundary rollback authorised by a fresh exact-manifest-and-backup-hash-bound database restore attestation. The restored P0-06-compatible database remains subject to the reminder reconciliation gate.",
+    };
+  }
   return {
-    compatibility: "pre-p006-restored",
+    compatibility: PRE_P006_RESTORED_COMPATIBILITY,
+    attestedDatabaseCompatibility: PRE_P006_RESTORED_COMPATIBILITY,
     posture:
       "Cross-boundary rollback authorised by a fresh exact-manifest-and-backup-hash-bound database restore attestation (path omitted).",
   };
@@ -691,9 +712,7 @@ export function runProductionComposeRollbackFromArgs(
         processEnv,
         cutoverLock,
         attestedDatabaseCompatibility:
-          rollbackCompatibility.compatibility === "pre-p006-restored"
-            ? "pre-p006-restored"
-            : null,
+          rollbackCompatibility.attestedDatabaseCompatibility,
       });
       const stdoutPrefix = [
         `Production compose rollback${options.dryRun ? " dry-run" : ""}:`,

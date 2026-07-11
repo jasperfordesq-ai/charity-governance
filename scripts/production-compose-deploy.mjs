@@ -374,7 +374,8 @@ export function runProductionComposeDeployFromArgs(
   }
   if (
     attestedDatabaseCompatibility !== null &&
-    attestedDatabaseCompatibility !== "pre-p006-restored"
+    attestedDatabaseCompatibility !== "pre-p006-restored" &&
+    attestedDatabaseCompatibility !== "p006-restored"
   ) {
     return result(
       1,
@@ -405,7 +406,15 @@ export function runProductionComposeDeployFromArgs(
       ...(options.dryRun ? ["--dry-run"] : []),
       ...(options.tlsProxy ? [] : ["--no-tls-proxy"]),
     ];
-    const preflightResult = runPreflight(preflightArgs, processEnv);
+    const expectedDatabaseCompatibility =
+      attestedDatabaseCompatibility === "pre-p006-restored"
+        ? "pre-p006-restored"
+        : attestedDatabaseCompatibility === "p006-restored"
+          ? "p006-deadline-calendar-v1"
+          : "p109-governance-integrity-v1";
+    const preflightResult = runPreflight(preflightArgs, processEnv, {
+      expectedDatabaseCompatibility,
+    });
     if (preflightResult.status !== 0) {
       return result(
         1,

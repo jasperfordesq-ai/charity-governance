@@ -2,6 +2,8 @@ import {
   AnnualReportFilingStatus,
   ConflictStatus,
   RegisterStatus,
+  validateAnnualReportReadinessCompleteState,
+  validateFundraisingRecordCompleteState,
   type AnnualReportReadinessResponse,
   type CreateComplaintRecordRequest,
   type CreateConflictRecordRequest,
@@ -12,10 +14,38 @@ import {
   type UpsertAnnualReportReadinessRequest,
   type UpsertFinancialControlReviewRequest,
 } from '@charitypilot/shared';
-import type { PrismaClient } from '@prisma/client';
+import type { AnnualReportReadiness, Prisma, PrismaClient } from '@prisma/client';
+import {
+  runDomainInvariantWrite,
+  validateDomainCompleteState,
+} from '../utils/domain-validation.js';
 import { AppError } from '../utils/errors.js';
+import { lockOrganisationForUpdate } from './organisation-lock.js';
 
 const toDate = (value?: string | null) => (value ? new Date(value) : null);
+
+function annualReportReadinessResponse(
+  record: AnnualReportReadiness,
+): AnnualReportReadinessResponse {
+  return {
+    id: record.id,
+    organisationId: record.organisationId,
+    reportingYear: record.reportingYear,
+    activitiesNarrative: record.activitiesNarrative,
+    publicBenefitStatement: record.publicBenefitStatement,
+    beneficiariesSummary: record.beneficiariesSummary,
+    financialStatementsApproved: record.financialStatementsApproved,
+    annualReportUploaded: record.annualReportUploaded,
+    trusteeDetailsReviewed: record.trusteeDetailsReviewed,
+    fundraisingReviewed: record.fundraisingReviewed,
+    complaintsReviewed: record.complaintsReviewed,
+    boardApprovalDate: record.boardApprovalDate?.toISOString() ?? null,
+    filingStatus: record.filingStatus as AnnualReportFilingStatus,
+    filedDate: record.filedDate?.toISOString() ?? null,
+    notes: record.notes,
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
 
 export class GovernanceRegisterService {
   constructor(private prisma: PrismaClient) {}
@@ -48,53 +78,94 @@ export class GovernanceRegisterService {
   }
 
   async createConflict(organisationId: string, data: CreateConflictRecordRequest) {
-    await this.ensureBoardMember(organisationId, data.boardMemberId);
+    return runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        await this.ensureBoardMember(transaction, organisationId, data.boardMemberId);
 
-    return this.prisma.conflictRecord.create({
-      data: {
-        organisationId,
-        boardMemberId: data.boardMemberId || null,
-        trusteeName: data.trusteeName,
-        matter: data.matter,
-        nature: data.nature,
-        dateDeclared: new Date(data.dateDeclared),
-        meetingDate: toDate(data.meetingDate),
-        actionTaken: data.actionTaken,
-        decision: data.decision,
-        status: data.status ?? ConflictStatus.DECLARED,
-        minuteReference: data.minuteReference,
-        nextReviewDate: toDate(data.nextReviewDate),
-      },
-    });
+        return transaction.conflictRecord.create({
+          data: {
+            organisationId,
+            boardMemberId: data.boardMemberId || null,
+            trusteeName: data.trusteeName,
+            matter: data.matter,
+            nature: data.nature,
+            dateDeclared: new Date(data.dateDeclared),
+            meetingDate: toDate(data.meetingDate),
+            actionTaken: data.actionTaken,
+            decision: data.decision,
+            status: data.status ?? ConflictStatus.DECLARED,
+            minuteReference: data.minuteReference,
+            nextReviewDate: toDate(data.nextReviewDate),
+          },
+        });
+      }),
+      { boardMemberForeignKeyFailure: 'target-not-found' },
+    );
   }
 
   async updateConflict(organisationId: string, id: string, data: Partial<CreateConflictRecordRequest>) {
-    await this.ensureRecord('conflictRecord', organisationId, id, 'CONFLICT_NOT_FOUND');
-    if (data.boardMemberId !== undefined) {
-      await this.ensureBoardMember(organisationId, data.boardMemberId);
-    }
+    return runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        const record = await transaction.conflictRecord.findFirst({
+          where: { id, organisationId },
+          select: { id: true },
+        });
+        if (!record) {
+          throw new AppError(404, 'CONFLICT_NOT_FOUND', 'Governance register record not found');
+        }
+        if (data.boardMemberId !== undefined) {
+          await this.ensureBoardMember(transaction, organisationId, data.boardMemberId);
+        }
 
-    return this.prisma.conflictRecord.update({
-      where: { id },
-      data: {
-        boardMemberId: data.boardMemberId === undefined ? undefined : data.boardMemberId || null,
-        trusteeName: data.trusteeName,
-        matter: data.matter,
-        nature: data.nature,
-        dateDeclared: data.dateDeclared ? new Date(data.dateDeclared) : undefined,
-        meetingDate: data.meetingDate === undefined ? undefined : toDate(data.meetingDate),
-        actionTaken: data.actionTaken,
-        decision: data.decision,
-        status: data.status,
-        minuteReference: data.minuteReference,
-        nextReviewDate: data.nextReviewDate === undefined ? undefined : toDate(data.nextReviewDate),
+        return transaction.conflictRecord.update({
+          where: { id },
+          data: {
+            boardMemberId: data.boardMemberId === undefined ? undefined : data.boardMemberId || null,
+            trusteeName: data.trusteeName,
+            matter: data.matter,
+            nature: data.nature,
+            dateDeclared: data.dateDeclared ? new Date(data.dateDeclared) : undefined,
+            meetingDate: data.meetingDate === undefined ? undefined : toDate(data.meetingDate),
+            actionTaken: data.actionTaken,
+            decision: data.decision,
+            status: data.status,
+            minuteReference: data.minuteReference,
+            nextReviewDate: data.nextReviewDate === undefined ? undefined : toDate(data.nextReviewDate),
+          },
+        });
+      }),
+      {
+        boardMemberForeignKeyFailure: data.boardMemberId === undefined ? undefined : 'target-not-found',
+        recordNotFound: {
+          code: 'CONFLICT_NOT_FOUND',
+          message: 'Governance register record not found',
+        },
       },
-    });
+    );
   }
 
   async removeConflict(organisationId: string, id: string) {
-    await this.ensureRecord('conflictRecord', organisationId, id, 'CONFLICT_NOT_FOUND');
-    await this.prisma.conflictRecord.delete({ where: { id } });
+    await runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        const record = await transaction.conflictRecord.findFirst({
+          where: { id, organisationId },
+          select: { id: true },
+        });
+        if (!record) {
+          throw new AppError(404, 'CONFLICT_NOT_FOUND', 'Governance register record not found');
+        }
+        await transaction.conflictRecord.delete({ where: { id } });
+      }),
+      {
+        recordNotFound: {
+          code: 'CONFLICT_NOT_FOUND',
+          message: 'Governance register record not found',
+        },
+      },
+    );
   }
 
   listRisks(organisationId: string) {
@@ -198,48 +269,89 @@ export class GovernanceRegisterService {
     });
   }
 
-  createFundraising(organisationId: string, data: CreateFundraisingRecordRequest) {
-    return this.prisma.fundraisingRecord.create({
-      data: {
-        organisationId,
-        name: data.name,
-        activityType: data.activityType,
-        startDate: toDate(data.startDate),
-        endDate: toDate(data.endDate),
-        publicFacing: data.publicFacing ?? true,
-        thirdPartyFundraiser: data.thirdPartyFundraiser,
-        controls: data.controls,
-        complaintsReceived: data.complaintsReceived ?? false,
-        reviewOutcome: data.reviewOutcome,
-        status: data.status ?? RegisterStatus.OPEN,
-        boardMinuteReference: data.boardMinuteReference,
-      },
-    });
+  async createFundraising(organisationId: string, data: CreateFundraisingRecordRequest) {
+    const createData = {
+      organisationId,
+      name: data.name,
+      activityType: data.activityType,
+      startDate: toDate(data.startDate),
+      endDate: toDate(data.endDate),
+      publicFacing: data.publicFacing ?? true,
+      thirdPartyFundraiser: data.thirdPartyFundraiser,
+      controls: data.controls,
+      complaintsReceived: data.complaintsReceived ?? false,
+      reviewOutcome: data.reviewOutcome,
+      status: data.status ?? RegisterStatus.OPEN,
+      boardMinuteReference: data.boardMinuteReference,
+    };
+
+    validateDomainCompleteState(validateFundraisingRecordCompleteState, createData);
+    return runDomainInvariantWrite(() => this.prisma.fundraisingRecord.create({ data: createData }));
   }
 
   async updateFundraising(organisationId: string, id: string, data: Partial<CreateFundraisingRecordRequest>) {
-    await this.ensureRecord('fundraisingRecord', organisationId, id, 'FUNDRAISING_NOT_FOUND');
-    return this.prisma.fundraisingRecord.update({
-      where: { id },
-      data: {
-        name: data.name,
-        activityType: data.activityType,
-        startDate: data.startDate === undefined ? undefined : toDate(data.startDate),
-        endDate: data.endDate === undefined ? undefined : toDate(data.endDate),
-        publicFacing: data.publicFacing,
-        thirdPartyFundraiser: data.thirdPartyFundraiser,
-        controls: data.controls,
-        complaintsReceived: data.complaintsReceived,
-        reviewOutcome: data.reviewOutcome,
-        status: data.status,
-        boardMinuteReference: data.boardMinuteReference,
+    return runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        const record = await transaction.fundraisingRecord.findFirst({
+          where: { id, organisationId },
+        });
+        if (!record) {
+          throw new AppError(404, 'FUNDRAISING_NOT_FOUND', 'Governance register record not found');
+        }
+
+        const updateData = {
+          name: data.name,
+          activityType: data.activityType,
+          startDate: data.startDate === undefined ? undefined : toDate(data.startDate),
+          endDate: data.endDate === undefined ? undefined : toDate(data.endDate),
+          publicFacing: data.publicFacing,
+          thirdPartyFundraiser: data.thirdPartyFundraiser,
+          controls: data.controls,
+          complaintsReceived: data.complaintsReceived,
+          reviewOutcome: data.reviewOutcome,
+          status: data.status,
+          boardMinuteReference: data.boardMinuteReference,
+        };
+        validateDomainCompleteState(validateFundraisingRecordCompleteState, {
+          startDate: updateData.startDate === undefined ? record.startDate : updateData.startDate,
+          endDate: updateData.endDate === undefined ? record.endDate : updateData.endDate,
+        });
+
+        return transaction.fundraisingRecord.update({
+          where: { id },
+          data: updateData,
+        });
+      }),
+      {
+        recordNotFound: {
+          code: 'FUNDRAISING_NOT_FOUND',
+          message: 'Governance register record not found',
+        },
       },
-    });
+    );
   }
 
   async removeFundraising(organisationId: string, id: string) {
-    await this.ensureRecord('fundraisingRecord', organisationId, id, 'FUNDRAISING_NOT_FOUND');
-    await this.prisma.fundraisingRecord.delete({ where: { id } });
+    await runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        const record = await transaction.fundraisingRecord.findFirst({
+          where: { id, organisationId },
+          select: { id: true },
+        });
+        if (!record) {
+          throw new AppError(404, 'FUNDRAISING_NOT_FOUND', 'Governance register record not found');
+        }
+        await transaction.fundraisingRecord.delete({ where: { id } });
+      }),
+      {
+        recordNotFound: {
+          code: 'FUNDRAISING_NOT_FOUND',
+          message: 'Governance register record not found',
+        },
+      },
+    );
   }
 
   async getAnnualReportReadiness(
@@ -269,64 +381,58 @@ export class GovernanceRegisterService {
         updatedAt: null,
       };
     }
-    return {
-      id: record.id,
-      organisationId: record.organisationId,
-      reportingYear: record.reportingYear,
-      activitiesNarrative: record.activitiesNarrative,
-      publicBenefitStatement: record.publicBenefitStatement,
-      beneficiariesSummary: record.beneficiariesSummary,
-      financialStatementsApproved: record.financialStatementsApproved,
-      annualReportUploaded: record.annualReportUploaded,
-      trusteeDetailsReviewed: record.trusteeDetailsReviewed,
-      fundraisingReviewed: record.fundraisingReviewed,
-      complaintsReviewed: record.complaintsReviewed,
-      boardApprovalDate: record.boardApprovalDate?.toISOString() ?? null,
-      filingStatus: record.filingStatus as AnnualReportFilingStatus,
-      filedDate: record.filedDate?.toISOString() ?? null,
-      notes: record.notes,
-      updatedAt: record.updatedAt.toISOString(),
-    };
+    return annualReportReadinessResponse(record);
   }
 
   async upsertAnnualReportReadiness(
     organisationId: string,
     data: UpsertAnnualReportReadinessRequest,
   ): Promise<AnnualReportReadinessResponse> {
-    const saved = await this.prisma.annualReportReadiness.upsert({
-      where: { organisationId_reportingYear: { organisationId, reportingYear: data.reportingYear } },
-      create: {
-        organisationId,
-        reportingYear: data.reportingYear,
-        activitiesNarrative: data.activitiesNarrative,
-        publicBenefitStatement: data.publicBenefitStatement,
-        beneficiariesSummary: data.beneficiariesSummary,
-        financialStatementsApproved: data.financialStatementsApproved ?? false,
-        annualReportUploaded: data.annualReportUploaded ?? false,
-        trusteeDetailsReviewed: data.trusteeDetailsReviewed ?? false,
-        fundraisingReviewed: data.fundraisingReviewed ?? false,
-        complaintsReviewed: data.complaintsReviewed ?? false,
-        boardApprovalDate: toDate(data.boardApprovalDate),
-        filingStatus: data.filingStatus ?? AnnualReportFilingStatus.NOT_STARTED,
-        filedDate: toDate(data.filedDate),
-        notes: data.notes,
-      },
-      update: {
-        activitiesNarrative: data.activitiesNarrative,
-        publicBenefitStatement: data.publicBenefitStatement,
-        beneficiariesSummary: data.beneficiariesSummary,
-        financialStatementsApproved: data.financialStatementsApproved,
-        annualReportUploaded: data.annualReportUploaded,
-        trusteeDetailsReviewed: data.trusteeDetailsReviewed,
-        fundraisingReviewed: data.fundraisingReviewed,
-        complaintsReviewed: data.complaintsReviewed,
-        boardApprovalDate: data.boardApprovalDate === undefined ? undefined : toDate(data.boardApprovalDate),
-        filingStatus: data.filingStatus,
-        filedDate: data.filedDate === undefined ? undefined : toDate(data.filedDate),
-        notes: data.notes,
-      },
-    });
-    return this.getAnnualReportReadiness(saved.organisationId, saved.reportingYear);
+    return runDomainInvariantWrite(() => this.prisma.$transaction(async (transaction) => {
+      await lockOrganisationForUpdate(transaction, organisationId);
+      const existing = await transaction.annualReportReadiness.findUnique({
+        where: { organisationId_reportingYear: { organisationId, reportingYear: data.reportingYear } },
+      });
+      validateDomainCompleteState(validateAnnualReportReadinessCompleteState, {
+        filingStatus: data.filingStatus ?? existing?.filingStatus ?? AnnualReportFilingStatus.NOT_STARTED,
+        filedDate: data.filedDate === undefined ? existing?.filedDate ?? null : toDate(data.filedDate),
+      });
+
+      const saved = await transaction.annualReportReadiness.upsert({
+        where: { organisationId_reportingYear: { organisationId, reportingYear: data.reportingYear } },
+        create: {
+          organisationId,
+          reportingYear: data.reportingYear,
+          activitiesNarrative: data.activitiesNarrative,
+          publicBenefitStatement: data.publicBenefitStatement,
+          beneficiariesSummary: data.beneficiariesSummary,
+          financialStatementsApproved: data.financialStatementsApproved ?? false,
+          annualReportUploaded: data.annualReportUploaded ?? false,
+          trusteeDetailsReviewed: data.trusteeDetailsReviewed ?? false,
+          fundraisingReviewed: data.fundraisingReviewed ?? false,
+          complaintsReviewed: data.complaintsReviewed ?? false,
+          boardApprovalDate: toDate(data.boardApprovalDate),
+          filingStatus: data.filingStatus ?? AnnualReportFilingStatus.NOT_STARTED,
+          filedDate: toDate(data.filedDate),
+          notes: data.notes,
+        },
+        update: {
+          activitiesNarrative: data.activitiesNarrative,
+          publicBenefitStatement: data.publicBenefitStatement,
+          beneficiariesSummary: data.beneficiariesSummary,
+          financialStatementsApproved: data.financialStatementsApproved,
+          annualReportUploaded: data.annualReportUploaded,
+          trusteeDetailsReviewed: data.trusteeDetailsReviewed,
+          fundraisingReviewed: data.fundraisingReviewed,
+          complaintsReviewed: data.complaintsReviewed,
+          boardApprovalDate: data.boardApprovalDate === undefined ? undefined : toDate(data.boardApprovalDate),
+          filingStatus: data.filingStatus,
+          filedDate: data.filedDate === undefined ? undefined : toDate(data.filedDate),
+          notes: data.notes,
+        },
+      });
+      return annualReportReadinessResponse(saved);
+    }));
   }
 
   async getFinancialControlReview(
@@ -439,12 +545,16 @@ export class GovernanceRegisterService {
     }
   }
 
-  private async ensureBoardMember(organisationId: string, boardMemberId?: string | null) {
+  private async ensureBoardMember(
+    client: PrismaClient | Prisma.TransactionClient,
+    organisationId: string,
+    boardMemberId?: string | null,
+  ) {
     if (!boardMemberId) {
       return;
     }
 
-    const boardMember = await this.prisma.boardMember.findFirst({
+    const boardMember = await client.boardMember.findFirst({
       where: { id: boardMemberId, organisationId },
       select: { id: true },
     });

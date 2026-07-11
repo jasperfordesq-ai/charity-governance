@@ -89,19 +89,46 @@ function buildService() {
     },
     upsert: async (args: unknown) => {
       calls.push({ name: `${name}.upsert`, args });
-      // upsert returns the saved row; the service re-reads via getXxx using the
-      // returned organisationId/reportingYear, so echo them back.
       const a = args as { create: { organisationId: string; reportingYear: number } };
+      if (name === 'annualReportReadiness') {
+        return {
+          id: 'annual-1',
+          organisationId: a.create.organisationId,
+          reportingYear: a.create.reportingYear,
+          activitiesNarrative: null,
+          publicBenefitStatement: null,
+          beneficiariesSummary: null,
+          financialStatementsApproved: false,
+          annualReportUploaded: false,
+          trusteeDetailsReviewed: false,
+          fundraisingReviewed: false,
+          complaintsReviewed: false,
+          boardApprovalDate: null,
+          filingStatus: 'NOT_STARTED',
+          filedDate: null,
+          notes: null,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        };
+      }
       return { organisationId: a.create.organisationId, reportingYear: a.create.reportingYear };
     },
   });
-  const prisma = {
+  const transaction = {
     conflictRecord: registerModel('conflictRecord'),
     riskRecord: registerModel('riskRecord'),
     complaintRecord: registerModel('complaintRecord'),
     fundraisingRecord: registerModel('fundraisingRecord'),
     annualReportReadiness: upsertModel('annualReportReadiness'),
     financialControlReview: upsertModel('financialControlReview'),
+    $queryRaw: async (...args: unknown[]) => {
+      calls.push({ name: '$queryRaw', args });
+      return [{ id: 'org_1' }];
+    },
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
   };
   return { service: new GovernanceRegisterService(prisma as never), calls };
 }

@@ -1,6 +1,15 @@
 import type { PrismaClient } from '@prisma/client';
-import type { CreateBoardMemberRequest, UpdateBoardMemberRequest } from '@charitypilot/shared';
+import {
+  validateBoardMemberCompleteState,
+  type CreateBoardMemberRequest,
+  type UpdateBoardMemberRequest,
+} from '@charitypilot/shared';
+import {
+  runDomainInvariantWrite,
+  validateDomainCompleteState,
+} from '../utils/domain-validation.js';
 import { AppError } from '../utils/errors.js';
+import { lockOrganisationForUpdate } from './organisation-lock.js';
 
 export class BoardMemberService {
   constructor(private prisma: PrismaClient) {}
@@ -20,52 +29,95 @@ export class BoardMemberService {
   }
 
   async create(organisationId: string, data: CreateBoardMemberRequest) {
-    return this.prisma.boardMember.create({
-      data: {
-        organisationId,
-        name: data.name,
-        role: data.role,
-        email: data.email,
-        appointedDate: new Date(data.appointedDate),
-        termEndDate: data.termEndDate ? new Date(data.termEndDate) : undefined,
-        conductSigned: data.conductSigned ?? false,
-        conductSignedDate: data.conductSignedDate ? new Date(data.conductSignedDate) : undefined,
-        inductionCompleted: data.inductionCompleted ?? false,
-        inductionDate: data.inductionDate ? new Date(data.inductionDate) : undefined,
-      },
-    });
+    const createData = {
+      organisationId,
+      name: data.name,
+      role: data.role,
+      email: data.email,
+      appointedDate: new Date(data.appointedDate),
+      termEndDate: data.termEndDate ? new Date(data.termEndDate) : undefined,
+      conductSigned: data.conductSigned ?? false,
+      conductSignedDate: data.conductSignedDate ? new Date(data.conductSignedDate) : undefined,
+      inductionCompleted: data.inductionCompleted ?? false,
+      inductionDate: data.inductionDate ? new Date(data.inductionDate) : undefined,
+    };
+
+    validateDomainCompleteState(validateBoardMemberCompleteState, createData);
+    return runDomainInvariantWrite(() => this.prisma.boardMember.create({ data: createData }));
   }
 
   async update(organisationId: string, id: string, data: UpdateBoardMemberRequest) {
-    const member = await this.prisma.boardMember.findFirst({
-      where: { id, organisationId },
-    });
+    return runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        const member = await transaction.boardMember.findFirst({
+          where: { id, organisationId },
+        });
 
-    if (!member) {
-      throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
-    }
+        if (!member) {
+          throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
+        }
 
-    return this.prisma.boardMember.update({
-      where: { id },
-      data: {
-        ...data,
-        appointedDate: data.appointedDate ? new Date(data.appointedDate) : undefined,
-        termEndDate: data.termEndDate !== undefined ? (data.termEndDate ? new Date(data.termEndDate) : null) : undefined,
-        conductSignedDate: data.conductSignedDate !== undefined ? (data.conductSignedDate ? new Date(data.conductSignedDate) : null) : undefined,
-        inductionDate: data.inductionDate !== undefined ? (data.inductionDate ? new Date(data.inductionDate) : null) : undefined,
+        const updateData = {
+          ...data,
+          appointedDate: data.appointedDate ? new Date(data.appointedDate) : undefined,
+          termEndDate: data.termEndDate !== undefined ? (data.termEndDate ? new Date(data.termEndDate) : null) : undefined,
+          conductSignedDate: data.conductSignedDate !== undefined ? (data.conductSignedDate ? new Date(data.conductSignedDate) : null) : undefined,
+          inductionDate: data.inductionDate !== undefined ? (data.inductionDate ? new Date(data.inductionDate) : null) : undefined,
+        };
+        validateDomainCompleteState(validateBoardMemberCompleteState, {
+          appointedDate: updateData.appointedDate ?? member.appointedDate,
+          termEndDate: updateData.termEndDate === undefined ? member.termEndDate : updateData.termEndDate,
+          conductSigned: data.conductSigned === undefined ? member.conductSigned : data.conductSigned,
+          conductSignedDate: updateData.conductSignedDate === undefined
+            ? member.conductSignedDate
+            : updateData.conductSignedDate,
+          inductionCompleted: data.inductionCompleted === undefined
+            ? member.inductionCompleted
+            : data.inductionCompleted,
+          inductionDate: updateData.inductionDate === undefined ? member.inductionDate : updateData.inductionDate,
+        });
+
+        return transaction.boardMember.update({
+          where: { id },
+          data: updateData,
+        });
+      }),
+      {
+        recordNotFound: {
+          code: 'BOARD_MEMBER_NOT_FOUND',
+          message: 'Board member not found',
+        },
       },
-    });
+    );
   }
 
   async remove(organisationId: string, id: string) {
-    const member = await this.prisma.boardMember.findFirst({
-      where: { id, organisationId },
-    });
+    await runDomainInvariantWrite(
+      () => this.prisma.$transaction(async (transaction) => {
+        await lockOrganisationForUpdate(transaction, organisationId);
+        const member = await transaction.boardMember.findFirst({
+          where: { id, organisationId },
+          select: { id: true },
+        });
 
-    if (!member) {
-      throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
-    }
+        if (!member) {
+          throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
+        }
 
-    await this.prisma.boardMember.delete({ where: { id } });
+        await transaction.conflictRecord.updateMany({
+          where: { organisationId, boardMemberId: id },
+          data: { boardMemberId: null },
+        });
+        await transaction.boardMember.delete({ where: { id } });
+      }),
+      {
+        boardMemberForeignKeyFailure: 'delete-conflict',
+        recordNotFound: {
+          code: 'BOARD_MEMBER_NOT_FOUND',
+          message: 'Board member not found',
+        },
+      },
+    );
   }
 }

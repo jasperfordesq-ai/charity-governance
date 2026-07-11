@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 67 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 72 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | You have not created a production environment file yet. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 36 web unit test files, 67 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 38 web unit test files, 72 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -357,15 +357,15 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 159 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 253 | no | no obvious static risk; verify in browser |
 | P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
-| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 137 | yes | no obvious static risk; verify in browser |
+| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 148 | yes | no obvious static risk; verify in browser |
 | P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 178 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 256 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 245 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 267 | yes | no obvious static risk; verify in browser |
-| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 188 | yes | no obvious static risk; verify in browser |
+| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 185 | yes | no obvious static risk; verify in browser |
-| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 436 | yes | no obvious static risk; verify in browser |
+| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 448 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 264 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 
@@ -373,7 +373,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 263 | public/partial by design | 10 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 280 | public/partial by design | 11 | preserve current guard and tenant boundary |
 | `billing` | `apps/api/src/routes/billing/index.ts` | 96 | auth, owner actions | 7 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
@@ -382,7 +382,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `documents` | `apps/api/src/routes/documents/index.ts` | 406 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `health` | `apps/api/src/routes/health/index.ts` | 221 | public/partial by design | 2 | preserve current guard and tenant boundary |
+| `health` | `apps/api/src/routes/health/index.ts` | 224 | public/partial by design | 3 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `team` | `apps/api/src/routes/team/index.ts` | 291 | auth, subscription | 5 | preserve current guard and tenant boundary |
 

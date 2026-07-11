@@ -10,6 +10,7 @@ import { useDisclosure } from '@heroui/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getTrusteeEvidence } from './board-evidence';
 import type { BoardSummary } from './board-summary-panel';
+import { boardMemberFormInvariantReason } from '@/lib/governance-form-invariants';
 import type {
   BoardMemberResponse,
   CreateBoardMemberRequest,
@@ -86,8 +87,25 @@ export function useBoardWorkflow() {
     if (!formName.trim()) return 'Add the trustee name before saving.';
     if (!formRole.trim()) return 'Add the trustee role before saving.';
     if (!formAppointed) return 'Add the appointment date before saving.';
-    return '';
-  }, [canManage, formAppointed, formName, formRole]);
+    return boardMemberFormInvariantReason({
+      appointedDate: formAppointed,
+      termEndDate: formTermEnd,
+      conductSigned: formConductSigned,
+      conductSignedDate: formConductDate,
+      inductionCompleted: formInduction,
+      inductionDate: formInductionDate,
+    });
+  }, [
+    canManage,
+    formAppointed,
+    formConductDate,
+    formConductSigned,
+    formInduction,
+    formInductionDate,
+    formName,
+    formRole,
+    formTermEnd,
+  ]);
 
   const boardDataReady = !loading && !loadError;
 

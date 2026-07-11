@@ -44,6 +44,7 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
+    CHARITYPILOT_DATABASE_COMPATIBILITY: 'p109-governance-integrity-v1',
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     ...overrides,
   };
@@ -51,7 +52,7 @@ function completeDeployEnv(overrides = {}) {
   return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
 }
 
-function runPreflight(args, env = {}) {
+function runPreflight(args, env = {}, internalOptions = undefined) {
   return runProductionDeployPreflightFromArgs(args, {
     PATH: process.env.PATH ?? '',
     Path: process.env.Path ?? '',
@@ -60,7 +61,7 @@ function runPreflight(args, env = {}) {
     TEMP: process.env.TEMP ?? tmpdir(),
     TMP: process.env.TMP ?? tmpdir(),
     ...env,
-  });
+  }, internalOptions);
 }
 
 test('deploy transcript redaction removes production secret fragments', () => {
@@ -86,6 +87,99 @@ test('deploy transcript redaction removes production secret fragments', () => {
   assert.match(redacted, /Bearer \[redacted\]/);
   assert.match(redacted, /apikey=\[redacted\]/);
   assert.doesNotMatch(redacted, /user:secret|sk_live_superSecret|whsec_superSecret|re_superSecret|secret-token|configured-service-role-key/);
+});
+
+test('deploy preflight requires the exact reviewed P1-09 database compatibility line', async (context) => {
+  for (const [label, compatibility] of [
+    ['missing', ''],
+    ['stale P0-06', 'p006-deadline-calendar-v1'],
+    ['arbitrary', 'unreviewed-schema-line-v1'],
+  ]) {
+    await context.test(label, () => {
+      const tempDir = mkdtempSync(
+        join(tmpdir(), 'charitypilot-deploy-preflight-compatibility-'),
+      );
+      const envPath = join(tempDir, 'production.env');
+      writeFileSync(
+        envPath,
+        completeDeployEnv({
+          CHARITYPILOT_DATABASE_COMPATIBILITY: compatibility,
+        }),
+      );
+      try {
+        const result = runPreflight([
+          '--production-env-file',
+          envPath,
+          '--dry-run',
+        ]);
+        assert.equal(result.status, 1);
+        assert.match(
+          result.stderr,
+          /CHARITYPILOT_DATABASE_COMPATIBILITY must equal p109-governance-integrity-v1/,
+        );
+        assert.doesNotMatch(result.stdout, /cosign verify/);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test('deploy preflight accepts the exact reviewed P1-09 database compatibility line', () => {
+  const tempDir = mkdtempSync(
+    join(tmpdir(), 'charitypilot-deploy-preflight-current-compatibility-'),
+  );
+  const envPath = join(tempDir, 'production.env');
+  writeFileSync(envPath, completeDeployEnv());
+  try {
+    const result = runPreflight([
+      '--production-env-file',
+      envPath,
+      '--dry-run',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /cosign verify/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('deploy preflight permits only the two exact internal attested rollback compatibility expectations', async (context) => {
+  for (const compatibility of [
+    'p006-deadline-calendar-v1',
+    'pre-p006-restored',
+  ]) {
+    await context.test(compatibility, () => {
+      const tempDir = mkdtempSync(
+        join(tmpdir(), 'charitypilot-deploy-preflight-internal-compatibility-'),
+      );
+      const envPath = join(tempDir, 'production.env');
+      writeFileSync(
+        envPath,
+        completeDeployEnv({
+          CHARITYPILOT_DATABASE_COMPATIBILITY: compatibility,
+        }),
+      );
+      try {
+        const result = runPreflight(
+          ['--production-env-file', envPath, '--dry-run'],
+          {},
+          { expectedDatabaseCompatibility: compatibility },
+        );
+        assert.equal(result.status, 0, result.stderr);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  }
+
+  const rejected = runPreflight(
+    ['--production-env-file', '.env.production', '--dry-run'],
+    {},
+    { expectedDatabaseCompatibility: 'arbitrary-internal-line' },
+  );
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /unsupported internal database compatibility expectation/);
 });
 
 test('deploy preflight rejects mutable tag images before promotion', () => {

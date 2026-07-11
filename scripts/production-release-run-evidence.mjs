@@ -336,9 +336,9 @@ function parseEnvManifest(text) {
 
 function validateArtifactManifest(manifestText, release, issues) {
   const manifest = parseEnvManifest(manifestText);
-  if (manifest.get('CHARITYPILOT_DATABASE_COMPATIBILITY') !== 'p006-deadline-calendar-v1') {
+  if (manifest.get('CHARITYPILOT_DATABASE_COMPATIBILITY') !== 'p109-governance-integrity-v1') {
     issues.push(
-      'release-image-digests artifact CHARITYPILOT_DATABASE_COMPATIBILITY must equal p006-deadline-calendar-v1',
+      'release-image-digests artifact CHARITYPILOT_DATABASE_COMPATIBILITY must equal p109-governance-integrity-v1',
     );
   }
   const expectedBindings = [

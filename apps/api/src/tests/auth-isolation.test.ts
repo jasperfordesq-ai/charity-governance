@@ -1083,7 +1083,7 @@ test('conflict records reject board members from another organisation on create'
   const { GovernanceRegisterService } = await import('../services/governance-register.service.js');
   const { AppError } = await import('../utils/errors.js');
   let createCalled = false;
-  const prisma = {
+  const transaction = {
     boardMember: {
       findFirst: async (query: { where: { id: string; organisationId: string } }) => {
         assert.deepEqual(query.where, { id: 'board-other-org', organisationId: 'org-1' });
@@ -1096,6 +1096,11 @@ test('conflict records reject board members from another organisation on create'
         return {};
       },
     },
+    $queryRaw: async () => [{ id: 'org-1' }],
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
   };
   const service = new GovernanceRegisterService(prisma as never);
 
@@ -1110,7 +1115,7 @@ test('conflict records reject board members from another organisation on update'
   const { GovernanceRegisterService } = await import('../services/governance-register.service.js');
   const { AppError } = await import('../utils/errors.js');
   let updateCalled = false;
-  const prisma = {
+  const transaction = {
     boardMember: {
       findFirst: async (query: { where: { id: string; organisationId: string } }) => {
         assert.deepEqual(query.where, { id: 'board-other-org', organisationId: 'org-1' });
@@ -1124,6 +1129,11 @@ test('conflict records reject board members from another organisation on update'
         return {};
       },
     },
+    $queryRaw: async () => [{ id: 'org-1' }],
+  };
+  const prisma = {
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
   };
   const service = new GovernanceRegisterService(prisma as never);
 

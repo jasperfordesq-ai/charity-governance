@@ -66,6 +66,9 @@ jobs:
       - name: Verify P0-07 team lifecycle upgrade from legacy PostgreSQL data
         run: npm run db:verify:p007-upgrade
 
+      - name: Verify P1-09 domain invariants upgrade from legacy PostgreSQL data
+        run: npm run db:verify:p109-upgrade
+
       - name: Deploy Prisma migrations
         run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 

@@ -565,6 +565,7 @@ model BoardMember {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([id, organisationId])
   @@index([organisationId])
 }
 
@@ -664,7 +665,7 @@ model ConflictRecord {
   organisationId  String
   organisation    Organisation   @relation(fields: [organisationId], references: [id])
   boardMemberId   String?
-  boardMember     BoardMember?   @relation(fields: [boardMemberId], references: [id], onDelete: SetNull)
+  boardMember     BoardMember?   @relation(fields: [boardMemberId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
   trusteeName     String
   matter          String
   nature          String
@@ -680,7 +681,7 @@ model ConflictRecord {
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
-  @@index([boardMemberId])
+  @@index([boardMemberId, organisationId])
 }
 
 model RiskRecord {

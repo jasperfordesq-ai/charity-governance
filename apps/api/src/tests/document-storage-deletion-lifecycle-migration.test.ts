@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { runDomainInvariantsPrismaConcurrencyProof } from './domain-invariants-live.js';
 
 const migration = readFileSync(
   new URL(
@@ -597,6 +598,10 @@ test('real PostgreSQL 16 migration enforces nonce-bound recovery, dispositions, 
   } finally {
     await removeDisposableContainer(container);
   }
+});
+
+test('real PostgreSQL 16 migration serializes board references and exposes safe Prisma domain metadata', { timeout: 300_000 }, async () => {
+  await runDomainInvariantsPrismaConcurrencyProof(POSTGRES_IMAGE);
 });
 
 test('disposable E2E reset inventory includes recovery evidence exactly once', () => {

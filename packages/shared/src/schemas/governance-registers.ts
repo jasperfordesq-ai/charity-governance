@@ -15,6 +15,79 @@ const riskCategoryValues = [
   'OTHER',
 ] as const;
 const annualReportFilingStatusValues = ['NOT_STARTED', 'IN_PROGRESS', 'BOARD_APPROVED', 'FILED'] as const;
+type CompleteDateInput = string | Date;
+
+type FundraisingInvariantState = {
+  startDate?: CompleteDateInput | null;
+  endDate?: CompleteDateInput | null;
+};
+
+type AnnualReportReadinessInvariantState = {
+  filingStatus: (typeof annualReportFilingStatusValues)[number];
+  filedDate?: CompleteDateInput | null;
+};
+
+const completeDateInputSchema = z.union([dateInputSchema, z.date()]);
+
+function hasOwn(value: object, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function dateInputTime(value: CompleteDateInput) {
+  return value instanceof Date ? value.getTime() : Date.parse(value);
+}
+
+function refineFundraisingCompleteState(
+  value: FundraisingInvariantState,
+  ctx: z.RefinementCtx,
+) {
+  if (
+    value.startDate != null &&
+    value.endDate != null &&
+    dateInputTime(value.endDate) < dateInputTime(value.startDate)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['endDate'],
+      message: 'Fundraising end date must be on or after the start date',
+    });
+  }
+}
+
+function refineAnnualReportReadinessCompleteState(
+  value: AnnualReportReadinessInvariantState,
+  ctx: z.RefinementCtx,
+) {
+  if (value.filingStatus === 'FILED' && value.filedDate == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['filedDate'],
+      message: 'Filed date is required when the filing status is FILED',
+    });
+  }
+}
+
+export const fundraisingRecordCompleteStateSchema = z
+  .object({
+    startDate: completeDateInputSchema.nullable().optional(),
+    endDate: completeDateInputSchema.nullable().optional(),
+  })
+  .superRefine(refineFundraisingCompleteState);
+
+export function validateFundraisingRecordCompleteState(value: unknown) {
+  return fundraisingRecordCompleteStateSchema.parse(value);
+}
+
+export const annualReportReadinessCompleteStateSchema = z
+  .object({
+    filingStatus: z.enum(annualReportFilingStatusValues).default('NOT_STARTED'),
+    filedDate: completeDateInputSchema.nullable().optional(),
+  })
+  .superRefine(refineAnnualReportReadinessCompleteState);
+
+export function validateAnnualReportReadinessCompleteState(value: unknown) {
+  return annualReportReadinessCompleteStateSchema.parse(value);
+}
 
 const nullableText = (max: number) =>
   z
@@ -69,7 +142,7 @@ export const createComplaintRecordSchema = z.object({
 
 export const updateComplaintRecordSchema = createComplaintRecordSchema.partial();
 
-export const createFundraisingRecordSchema = z.object({
+const fundraisingRecordInputSchema = z.object({
   name: z.string().trim().min(1).max(300),
   activityType: z.string().trim().min(1).max(200),
   startDate: nullableDateInputSchema,
@@ -83,9 +156,19 @@ export const createFundraisingRecordSchema = z.object({
   boardMinuteReference: nullableText(200),
 });
 
-export const updateFundraisingRecordSchema = createFundraisingRecordSchema.partial();
+export const createFundraisingRecordSchema = fundraisingRecordInputSchema.superRefine(
+  refineFundraisingCompleteState,
+);
 
-export const upsertAnnualReportReadinessSchema = z.object({
+export const updateFundraisingRecordSchema = fundraisingRecordInputSchema
+  .partial()
+  .superRefine((value, ctx) => {
+    if (hasOwn(value, 'startDate') && hasOwn(value, 'endDate')) {
+      refineFundraisingCompleteState(value, ctx);
+    }
+  });
+
+const annualReportReadinessInputSchema = z.object({
   reportingYear: z.number().int().min(2018).max(2100),
   activitiesNarrative: nullableText(5000),
   publicBenefitStatement: nullableText(5000),
@@ -100,6 +183,20 @@ export const upsertAnnualReportReadinessSchema = z.object({
   filedDate: nullableDateInputSchema,
   notes: nullableText(5000),
 });
+
+export const upsertAnnualReportReadinessSchema = annualReportReadinessInputSchema.superRefine(
+  (value, ctx) => {
+    if (hasOwn(value, 'filingStatus') && hasOwn(value, 'filedDate')) {
+      refineAnnualReportReadinessCompleteState(
+        {
+          filingStatus: value.filingStatus ?? 'NOT_STARTED',
+          filedDate: value.filedDate,
+        },
+        ctx,
+      );
+    }
+  },
+);
 
 export const upsertFinancialControlReviewSchema = z.object({
   reportingYear: z.number().int().min(2018).max(2100),

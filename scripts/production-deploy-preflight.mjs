@@ -32,6 +32,13 @@ const requiredWebBuildOrigins = [
     expectedEnvName: 'NEXT_PUBLIC_API_URL',
   },
 ];
+const DATABASE_COMPATIBILITY_ENV = 'CHARITYPILOT_DATABASE_COMPATIBILITY';
+const REQUIRED_DATABASE_COMPATIBILITY = 'p109-governance-integrity-v1';
+const INTERNAL_DATABASE_COMPATIBILITIES = new Set([
+  REQUIRED_DATABASE_COMPATIBILITY,
+  'p006-deadline-calendar-v1',
+  'pre-p006-restored',
+]);
 
 const cosignIdentityRegex = '^https://github.com/jasperfordesq-ai/charity-governance/\\.github/workflows/release-images\\.yml@refs/(heads/master|tags/v.*)$';
 const cosignIssuer = 'https://token.actions.githubusercontent.com';
@@ -131,6 +138,14 @@ function webBuildOriginIssue({ envName, expectedEnvName }, deploymentEnv) {
   return null;
 }
 
+function databaseCompatibilityIssue(deploymentEnv, expectedCompatibility) {
+  const compatibility = deploymentEnv[DATABASE_COMPATIBILITY_ENV]?.trim() ?? '';
+  if (compatibility !== expectedCompatibility) {
+    return `${DATABASE_COMPATIBILITY_ENV} must equal ${expectedCompatibility}`;
+  }
+  return null;
+}
+
 function tlsProxyIssues(deploymentEnv) {
   const issues = [];
   const caddyEmail = deploymentEnv.CADDY_ACME_EMAIL?.trim() ?? '';
@@ -227,12 +242,23 @@ function result(status, stdout = '', stderr = '') {
   return { status, stdout, stderr };
 }
 
-export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2), processEnv = process.env) {
+export function runProductionDeployPreflightFromArgs(
+  args = process.argv.slice(2),
+  processEnv = process.env,
+  { expectedDatabaseCompatibility = REQUIRED_DATABASE_COMPATIBILITY } = {},
+) {
   let options;
   try {
     options = parseArgs(args);
   } catch (error) {
     return result(2, '', `${usage()}${error.message}\n`);
+  }
+  if (!INTERNAL_DATABASE_COMPATIBILITIES.has(expectedDatabaseCompatibility)) {
+    return result(
+      1,
+      '',
+      'Production deploy preflight rejected an unsupported internal database compatibility expectation.\n',
+    );
   }
 
   const envPath = resolve(repoRoot, options.productionEnvFile);
@@ -278,6 +304,11 @@ export function runProductionDeployPreflightFromArgs(args = process.argv.slice(2
     const issue = webBuildOriginIssue(buildOrigin, deploymentEnv);
     if (issue) issues.push(issue);
   }
+  const compatibilityIssue = databaseCompatibilityIssue(
+    deploymentEnv,
+    expectedDatabaseCompatibility,
+  );
+  if (compatibilityIssue) issues.push(compatibilityIssue);
   issues.push(...tlsIssues);
 
   if (issues.length > 0) {
