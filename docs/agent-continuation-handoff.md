@@ -259,9 +259,10 @@ The detailed issue contract remains in
   attestation, all 20 checksums captured inside the selected digest-pinned image,
   exact failed history/catalog/data state, terminal read-only SQL whose errors
   cannot be masked, exact resolution, and immediate full redeploy. Local proof
-  is shared `54 / 54`, API `730 / 730` plus live concurrency `2 / 2`, web
-  `357 / 357`, production tooling `791` pass / `0` fail / `2` platform skips,
-  local-Docker `44 / 44`, lint/build/Prisma/security gates, and a real built-image
+  is shared `54 / 54`, API `749 / 749` plus live concurrency `2 / 2`, web
+  `369 / 369`, production tooling `791` pass / `0` fail / `2` platform skips,
+  personal-server `21 / 21`, local-Docker `44 / 44`,
+  lint/build/Prisma/security gates, and a real built-image
   tamper-negative/pristine-positive recovery with an identical before/after
   database fingerprint and zero residue. Do not promote this bullet to
   `CI_VERIFIED` until the implementation SHA's GitHub CI and managed E2E are both

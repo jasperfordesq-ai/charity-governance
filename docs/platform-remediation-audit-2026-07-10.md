@@ -1309,12 +1309,12 @@ Implemented:
 
 Local verification:
 
-- Shared `54 / 54`, API `730 / 730` plus isolated two-client PostgreSQL `2 / 2`,
-  and web `357 / 357` pass. The production build, lint, Prisma validation,
+- Shared `54 / 54`, API `749 / 749` plus isolated two-client PostgreSQL `2 / 2`,
+  and web `369 / 369` pass. The production build, lint, Prisma validation,
   secret scan, and SAST scan pass.
 - Production tooling passes `791` checks with `0` failures and `2` expected
   Windows symbolic-link privilege skips (`793` total); local-Docker contracts
-  pass `44 / 44`.
+  pass `44 / 44`, and the rebased personal-server contracts pass `21 / 21`.
 - The exact built migration image proof captured all 20 checksums. The failed
   target deploy and `P3009` retry returned nonzero; a deliberately tampered
   target checksum made image `db execute --stdin` return nonzero with the exact
