@@ -36,9 +36,15 @@ function pendingRecord(overrides: Record<string, unknown> = {}) {
 
 function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
   let row = { ...initial };
+  const finds: Array<{
+    where: Record<string, unknown>;
+    orderBy?: unknown;
+    take?: number;
+  }> = [];
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const delegate = {
-    findMany: async (args: { where: Record<string, unknown> }) => {
+    findMany: async (args: { where: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
+      finds.push(args);
       if (args.where.state === 'PENDING') return row.state === 'PENDING' ? [{ ...row }] : [];
       if (args.where.state === 'DEAD_LETTER') return row.state === 'DEAD_LETTER' ? [{ ...row }] : [];
       return [];
@@ -70,6 +76,7 @@ function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
       documentStorageDeletion: delegate,
       documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
     },
+    finds,
     updates,
     row: () => row,
   };
@@ -96,6 +103,43 @@ test('retryPendingStorageDeletions claims, deletes, and idempotently finalizes a
   assert.equal(mock.row().processedAt, NOW);
   assert.equal(mock.row().nextAttemptAt, null);
   assert.equal(mock.row().claimedAt, null);
+  assert.deepEqual(mock.finds[0], {
+    where: {
+      state: 'PENDING',
+      processedAt: null,
+      attempts: { lt: DOCUMENT_STORAGE_DELETION_MAX_ATTEMPTS },
+      nextAttemptAt: { lte: NOW },
+      OR: [
+        { claimedAt: null },
+        { claimedAt: { lt: new Date(NOW.getTime() - 10 * 60 * 1000) } },
+      ],
+    },
+    orderBy: [{ nextAttemptAt: 'asc' }, { createdAt: 'asc' }],
+    take: 25,
+  });
+  assert.deepEqual(mock.updates[0].where, {
+    id: 'deletion-1',
+    state: 'PENDING',
+    processedAt: null,
+    attempts: 0,
+    nextAttemptAt: { lte: NOW },
+    OR: [
+      { claimedAt: null },
+      { claimedAt: { lt: new Date(NOW.getTime() - 10 * 60 * 1000) } },
+    ],
+  });
+
+  const secondResult = await service.retryPendingStorageDeletions(async (organisationId, storagePath) => {
+    deleted.push({ organisationId, storagePath });
+  });
+  assert.deepEqual(secondResult, {
+    processed: 0,
+    failed: 0,
+    retryScheduled: 0,
+    newlyDeadLettered: 0,
+    deadLetterAlert: null,
+  });
+  assert.deepEqual(deleted, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
 });
 
 test('Postgres claim query selects only due bounded pending rows with skip-locked ownership', async () => {
