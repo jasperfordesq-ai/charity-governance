@@ -222,6 +222,31 @@ The detailed issue contract remains in
   Production-environment protections plus a controlled release run remain
   repository-owner/external work; no GitHub setting was changed and no release
   was triggered merely to test the workflow.
+- **P0-10 metadata plus document-byte recovery - overall `IN_PROGRESS`;
+  repository proof tooling `CI_VERIFIED`.** The repository now captures a
+  source-bound PostgreSQL identity and proves an unchanged dump in an isolated,
+  source-environment-matched restore target. A separate owner-only manifest
+  generator/verifier reconciles complete document metadata, deletion/recovery
+  history, and object bytes by exact key, size, and SHA-256, with bounded
+  inventories and no sampling. Launch evidence requires the database and object
+  proofs to share the recovery set and dump digest without equating their
+  different identity domains. Local proof passed the root gate, API `706 / 706`
+  plus isolated live migration `1 / 1`, web `351 / 351`, production tooling
+  `746` passed / `0` failed / `2` Windows skips (`748` total), local-Docker
+  `44 / 44`, and secret/SAST scans across `597` files. Final SHA
+  `0c5b795ec2cbc906a119f7ffd52bd552519d232c` passed exact-SHA CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29163982047`
+  and managed E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29163982033`.
+  Real production database/object backups, RPO/RTO, retention, monitoring,
+  operator evidence, and a non-production joint provider restore remain genuine
+  external launch gates.
+- **P1-04 document-deletion retry lifecycle - `CI_VERIFIED`.** The bounded
+  retry/dead-letter/operator-recovery implementation through
+  `8c573e3d0ea3729293201b32e14bafc7d4365ae0` is now reverified by final SHA
+  `0c5b795ec2cbc906a119f7ffd52bd552519d232c`. The expanded scheduled-cleanup
+  smoke assertion and isolated live-migration test phase passed CI run
+  `29163982047`; managed E2E run `29163982033` also passed.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -673,9 +698,9 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 352/352 production-tooling checks during the
     latest handoff refresh.
-  - Historical count; the 2026-07-11 local production-tooling gate passed 745
-    checks with 0 failures and 2 Windows-only symbolic-link privilege skips
-    (747 total).
+  - Historical count; the latest 2026-07-11 local production-tooling gate passed
+    746 checks with 0 failures and 2 Windows-only symbolic-link privilege skips
+    (748 total).
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
 - `node scripts/platform-completion-audit.mjs --json`
