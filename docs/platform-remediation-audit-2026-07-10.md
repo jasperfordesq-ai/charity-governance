@@ -920,7 +920,7 @@ Acceptance:
 
 Repository progress on 2026-07-11:
 
-- Role/member authorization sub-slice: `LOCALLY_VERIFIED`. `OWNER` and `ADMIN`
+- Role/member authorization sub-slice: `CI_VERIFIED`. `OWNER` and `ADMIN`
   remain the governance mutation roles. `MEMBER` retains legitimate reads,
   navigation, authenticated document downloads, and export access while mutation
   controls are hidden or read-only across Team, Board, Documents, Compliance,
@@ -929,7 +929,7 @@ Repository progress on 2026-07-11:
   privileged modals, drafts, queues, and timers are cleared; persisted or
   canonical state is restored where required; authentication is refreshed; and
   the user is not redirected away from the current route.
-- Privacy/cookie processing-truth sub-slice: `LOCALLY_VERIFIED`. The draft notice
+- Privacy/cookie processing-truth sub-slice: `CI_VERIFIED`. The draft notice
   now reflects PostgreSQL through Prisma, custom authentication, private Supabase
   document storage only, the Stripe identifiers and subscription state actually
   stored, and the implemented Resend transactional-email purposes. It explicitly
@@ -938,14 +938,25 @@ Repository progress on 2026-07-11:
 - The cookie UI is now an informational necessary-authentication-cookie notice,
   not invented analytics consent. Dismissal stores only a local acknowledgement
   and migrates the legacy accepted/declined values.
-- Local proof passed web `351 / 351`, API `658 / 658`, shared `40 / 40`,
-  production tooling `545 / 545`, local-Docker tooling `44 / 44`, web lint and
+- Local proof passed web `351 / 351`, API `662 / 662`, shared `40 / 40`,
+  production tooling `546 / 546`, local-Docker tooling `44 / 44`, web lint and
   production build, E2E typecheck, `113 / 113` isolation contracts, and `3 / 3`
   focused managed Playwright scenarios. The browser proof uses a real disposable
   `MEMBER`, real seeded trustee and document records, authenticated byte download,
   absence of privileged mutation requests, a live `ADMIN` to `MEMBER` demotion
   producing the real API denial, and rendered privacy/cookie assertions. Teardown
   left no managed E2E container residue.
+- The complete managed gate then passed `113 / 113` isolation contracts and
+  `105 / 105` Playwright scenarios locally without a flaky retry. Implementation
+  commit `44ff57b596b0ac6b527a3f338bddc71a095ca2cc` plus final rate-limit and
+  teardown repair SHA `42888a41e86bd7235891e82a18623208b921d773` passed exact-SHA
+  GitHub CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29150323690`
+  and E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29150323669`.
+  The latter passed `113 / 113` runner contracts and `105 / 105` browser
+  scenarios in `3.5m`, with the final disposable-database binding/reset proof
+  succeeding after all browser traffic.
 
 P0-08 remains `IN_PROGRESS`. Trial entitlement and selected-plan propagation,
 expired-trial and account-closure deletion, the approved retention and rights

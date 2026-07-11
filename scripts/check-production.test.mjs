@@ -1655,6 +1655,17 @@ test('package test scripts stay compatible with the Node 22 production runtime',
   );
 });
 
+test('web test discovery cannot be shell-expanded from stale compiled output', () => {
+  const webPackage = JSON.parse(readRepoFile('apps/web/package.json'));
+  const testScript = webPackage.scripts?.test;
+
+  assert.equal(typeof testScript, 'string');
+  assert.match(testScript, /rmSync\('\.test-dist'/);
+  assert.match(testScript, /tsc -p tsconfig\.test\.json/);
+  assert.match(testScript, /--test ["']\.test-dist\/\*\*\/\*\.test\.js["']/);
+  assert.doesNotMatch(testScript, /--test \.test-dist\/\*\*\/\*\.test\.js(?:\s|$)/);
+});
+
 test('release readiness command uses ASCII-safe operator output', () => {
   const releaseReady = readRepoFile('scripts/release-ready.mjs');
 
@@ -1883,14 +1894,14 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /GitHub production environment/);
   assert.match(handoff, /check:production:github-secrets -- --environment=production/);
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
-  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}545\s*\/\s*545`? checks/);
+  assert.match(handoff, /Most recent local production-tooling gate[\s\S]{0,180}546\s*\/\s*546`? checks/);
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
   assert.doesNotMatch(handoff, /346\s*\/\s*346`? checks/);
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
   assert.match(
     handoff,
-    /Older `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
+    /Older `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
   );
   assert.match(
     handoff,

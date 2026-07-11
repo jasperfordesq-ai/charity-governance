@@ -183,7 +183,7 @@ The detailed issue contract remains in
   E2E passed `113 / 113` isolation contracts and `103 / 103` Playwright
   scenarios in `3.4m`.
 - **P0-08 role authorization and current processing/cookie truth - overall
-  `IN_PROGRESS`; completed repository sub-slices `LOCALLY_VERIFIED`.** Members now
+  `IN_PROGRESS`; completed repository sub-slices `CI_VERIFIED`.** Members now
   have truthful read-only governance affordances across Team, Board, Documents,
   Compliance, Dashboard, Registers, Deadlines, Organisation, and Export while
   retaining legitimate reads, navigation, authenticated document download, and
@@ -192,13 +192,20 @@ The detailed issue contract remains in
   draft now matches PostgreSQL/Prisma, custom authentication, private Supabase
   object storage, stored Stripe state, and implemented Resend messages; the cookie
   UI is a necessary-cookie information notice backed only by local
-  acknowledgement. Local proof passed web `351 / 351`, API `658 / 658`, shared
-  `40 / 40`, production tooling `545 / 545`, local-Docker tooling `44 / 44`,
+  acknowledgement. Local proof passed web `351 / 351`, API `662 / 662`, shared
+  `40 / 40`, production tooling `546 / 546`, local-Docker tooling `44 / 44`,
   production web build, lint, E2E typecheck, `113 / 113` isolation contracts, and
-  `3 / 3` focused managed browser scenarios with verified teardown. P0-08 remains
-  open for trial/plan behavior, deletion and retention workflows, VAT treatment,
-  controller/legal-basis/rights/provider/contact decisions, operational
-  mailboxes, and professional legal, privacy, and accounting approval.
+  `3 / 3` focused plus `105 / 105` complete managed browser scenarios with
+  verified teardown and no flaky retry. Implementation commit
+  `44ff57b596b0ac6b527a3f338bddc71a095ca2cc` plus final verification/repair SHA
+  `42888a41e86bd7235891e82a18623208b921d773` passed exact-SHA CI run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29150323690`
+  and E2E run
+  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29150323669`;
+  E2E passed `113 / 113` contracts and `105 / 105` scenarios in `3.5m`. P0-08
+  remains open for trial/plan behavior, deletion and retention workflows, VAT
+  treatment, controller/legal-basis/rights/provider/contact decisions,
+  operational mailboxes, and professional legal, privacy, and accounting approval.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -259,8 +266,8 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
 - Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed with `545 / 545` checks on
-  2026-07-11. Older `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
+  `npm run test:production-check` passed with `546 / 546` checks on
+  2026-07-11. Older `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
@@ -527,17 +534,21 @@ https://api.charitypilot.ie
 
 Recently successful checks in this workstream:
 
-- P0-08 role/privacy local verification
-  - Web `351 / 351`, API `658 / 658`, shared `40 / 40`, production tooling
-    `545 / 545`, local-Docker tooling `44 / 44`, web lint/build, E2E typecheck,
+- P0-08 role/privacy exact-SHA verification
+  - Web `351 / 351`, API `662 / 662`, shared `40 / 40`, production tooling
+    `546 / 546`, local-Docker tooling `44 / 44`, web lint/build, E2E typecheck,
     and security checks passed.
   - The focused managed run passed `113 / 113` isolation contracts and `3 / 3`
     Playwright scenarios in `54.5s`: real-member route traversal and authenticated
     document-byte download, live Admin-to-Member demotion with an exact API
     denial, and rendered privacy/cookie truth. Teardown left no managed E2E
     container residue.
-  - This is local repository evidence only. Add the implementation SHA and exact
-    CI/E2E run links after the pushed SHA reaches terminal success.
+  - The complete local managed gate passed `113 / 113` contracts and `105 / 105`
+    browser scenarios without a flaky retry. Implementation SHA
+    `44ff57b596b0ac6b527a3f338bddc71a095ca2cc` plus final repair/verification SHA
+    `42888a41e86bd7235891e82a18623208b921d773` passed exact-SHA CI run
+    `29150323690` and E2E run `29150323669`; the latter passed `113 / 113`
+    contracts and `105 / 105` scenarios in `3.5m`.
 - P0-07 exact-SHA verification
   - Full suites passed on 2026-07-11: API `658 / 658`, web `335 / 335`, and
     shared `40 / 40`.
