@@ -27,7 +27,8 @@ const FIXED_VALUES = {
 // External values the operator must supply (with where to get each). Used only
 // for the human-facing summary - they are left as placeholders in the file.
 export const OPERATOR_SUPPLIED_KEYS = [
-  ['DATABASE_URL', 'Managed production PostgreSQL URL with sslmode=require (Step 3)'],
+  ['DATABASE_URL', 'Managed production PostgreSQL URL with sslmode=verify-full and target_session_attrs=read-write (Step 3)'],
+  ['DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', 'Exact managed PostgreSQL hostname authorized for audited document-deletion recovery (Step 3)'],
   ['FRONTEND_URL', 'Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)'],
   ['NEXT_PUBLIC_API_URL', 'Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)'],
   ['CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL', 'Docker Compose web runtime API origin; must match NEXT_PUBLIC_API_URL (Step 4/6)'],
