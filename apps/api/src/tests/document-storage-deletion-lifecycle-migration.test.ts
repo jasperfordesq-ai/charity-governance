@@ -42,7 +42,7 @@ function assertDockerSuccess(result: ReturnType<typeof docker>, operation: strin
 
 function psql(container: string, sql: string, expectedSuccess = true) {
   const result = docker(
-    ['exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'],
+    ['exec', '-i', container, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'],
     sql,
     30_000,
   );
@@ -55,7 +55,7 @@ function psqlAsync(container: string, sql: string): Promise<{ status: number | n
   return new Promise((resolve, reject) => {
     const child = spawn(
       'docker',
-      ['exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'],
+      ['exec', '-i', container, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'],
       { stdio: ['pipe', 'pipe', 'pipe'] },
     );
     let stdout = '';
@@ -70,7 +70,10 @@ function psqlAsync(container: string, sql: string): Promise<{ status: number | n
 
 async function waitForPostgres(container: string): Promise<void> {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const ready = docker(['exec', container, 'pg_isready', '-U', 'postgres'], undefined, 5_000);
+    // The official image briefly starts an init-only Unix-socket server before
+    // launching the final TCP listener. Waiting on TCP avoids a false-ready
+    // window where pg_isready succeeds and the next psql command sees no socket.
+    const ready = docker(['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], undefined, 5_000);
     if (ready.status === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
