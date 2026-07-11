@@ -188,6 +188,13 @@ test('local Docker smoke script boots the stack and checks API plus web over loo
   assert.match(smokeScript, /LocalAdmin123!/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/auth\/login/);
   assert.match(smokeScript, /http:\/\/127\.0\.0\.1:3002\/api\/v1\/documents/);
+  assert.match(smokeScript, /api\/v1\/documents\/\$\{documentId\}\/download/);
+  assert.match(smokeScript, /const fileBody = await downloadResponse\.text\(\)/);
+  assert.match(smokeScript, /content-disposition/);
+  assert.match(smokeScript, /const localAdminCookieHeader = await smokeLocalAdminLogin\(\)/);
+  assert.match(smokeScript, /await smokeLocalAdminDocumentStorage\(localAdminCookieHeader\)/);
+  assert.doesNotMatch(smokeScript, /downloadBody\.url|_local-download\?path=/);
+  assert.doesNotMatch(smokeScript, /waitForCheck\('local admin document storage'/);
   assert.match(smokeScript, /Seeded starter documents downloaded through local filesystem storage/);
   assert.match(smokeScript, /Document uploaded and downloaded through local filesystem storage/);
   assert.match(smokeScript, /set-cookie/i);

@@ -15,6 +15,11 @@ type ApiResult = {
   body: unknown;
 };
 
+type RawAuthResult = ApiResult & {
+  accessToken?: string;
+  refreshToken?: string;
+};
+
 type TeamMemberContract = {
   id: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
@@ -60,6 +65,52 @@ async function callApi(
       body: options.body,
     },
   );
+}
+
+function responseCookie(response: Response, name: string): string | undefined {
+  const prefix = `${name}=`;
+  const header = response.headers.getSetCookie().find((value) => value.startsWith(prefix));
+  const encodedValue = header?.slice(prefix.length).split(';', 1)[0];
+  return encodedValue ? decodeURIComponent(encodedValue) : undefined;
+}
+
+async function callRawRefreshEndpoint(
+  apiOrigin: string,
+  webOrigin: string,
+  path: '/api/v1/auth/refresh' | '/api/v1/auth/logout',
+  refreshToken: string,
+): Promise<RawAuthResult> {
+  const response = await fetch(`${apiOrigin}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: webOrigin,
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+  const text = await response.text();
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch {
+      body = text;
+    }
+  }
+  return {
+    status: response.status,
+    body,
+    accessToken: responseCookie(response, 'charitypilot_access'),
+    refreshToken: responseCookie(response, 'charitypilot_refresh'),
+  };
+}
+
+async function probeRawAccessToken(apiOrigin: string, accessToken: string): Promise<number> {
+  const response = await fetch(`${apiOrigin}/api/v1/auth/me`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  await response.arrayBuffer();
+  return response.status;
 }
 
 function teamMembers(body: unknown): TeamMemberContract[] {
@@ -222,25 +273,30 @@ test.describe('Team lifecycle security on real PostgreSQL and API infrastructure
     const originalRefreshToken = storageState.cookies.find(
       (cookie) => cookie.name === 'charitypilot_refresh',
     )?.value;
+    const originalAccessToken = storageState.cookies.find(
+      (cookie) => cookie.name === 'charitypilot_access',
+    )?.value;
     if (!originalRefreshToken) {
       throw new Error('Disposable authenticated state did not contain a refresh cookie');
     }
+    if (!originalAccessToken) {
+      throw new Error('Disposable authenticated state did not contain an access cookie');
+    }
 
-    // Independent jars present the exact same original token. Whichever
-    // request obtains the ordered family lock first, logout must leave no
-    // usable original or rotated session behind.
-    const refreshContext = await newFencedContext({ storageState });
+    // Keep logout as a real browser-origin HttpOnly-cookie request. The racing
+    // refresh uses raw loopback HTTP solely so the test can retain and replay
+    // the real Set-Cookie credentials even though Chromium refuses production
+    // Secure response cookies on this HTTP disposable transport.
     const logoutContext = await newFencedContext({ storageState });
     try {
-      const [refreshPage, logoutPage] = await Promise.all([
-        openOriginPage(refreshContext),
-        openOriginPage(logoutContext),
-      ]);
+      const logoutPage = await openOriginPage(logoutContext);
       const [refreshResult, logoutResult] = await Promise.all([
-        callApi(refreshPage, browserOriginFence.apiOrigin, '/api/v1/auth/refresh', {
-          method: 'POST',
-          body: {},
-        }),
+        callRawRefreshEndpoint(
+          browserOriginFence.apiOrigin,
+          browserOriginFence.webOrigin,
+          '/api/v1/auth/refresh',
+          originalRefreshToken,
+        ),
         callApi(logoutPage, browserOriginFence.apiOrigin, '/api/v1/auth/logout', {
           method: 'POST',
           body: {},
@@ -255,37 +311,42 @@ test.describe('Team lifecycle security on real PostgreSQL and API infrastructure
 
       const family = await authFamilyState(originalRefreshToken);
       expect(family.revocationReasons).toContain('LOGOUT');
+      expect(await probeRawAccessToken(browserOriginFence.apiOrigin, originalAccessToken)).toBe(401);
+
+      const originalRefreshProbe = await callRawRefreshEndpoint(
+        browserOriginFence.apiOrigin,
+        browserOriginFence.webOrigin,
+        '/api/v1/auth/refresh',
+        originalRefreshToken,
+      );
+      expect(originalRefreshProbe.status).toBe(401);
+
       if (refreshResult.status === 200) {
         expect(family.totalCount).toBe(2);
         expect(family.revocationReasons).toContain('ROTATED');
-        const returnedRefreshCookie = (await refreshContext.cookies()).find(
-          (cookie) => cookie.name === 'charitypilot_refresh',
+        const returnedAccessToken = refreshResult.accessToken;
+        const returnedRefreshToken = refreshResult.refreshToken;
+        expect(Boolean(
+          returnedAccessToken &&
+          returnedRefreshToken &&
+          returnedRefreshToken !== originalRefreshToken
+        )).toBe(true);
+        if (!returnedAccessToken || !returnedRefreshToken) {
+          throw new Error('Successful refresh did not return both rotated auth cookies');
+        }
+        expect(await probeRawAccessToken(browserOriginFence.apiOrigin, returnedAccessToken)).toBe(401);
+        const successorRefreshProbe = await callRawRefreshEndpoint(
+          browserOriginFence.apiOrigin,
+          browserOriginFence.webOrigin,
+          '/api/v1/auth/refresh',
+          returnedRefreshToken,
         );
-        expect(returnedRefreshCookie?.value).toBeTruthy();
+        expect(successorRefreshProbe.status).toBe(401);
       }
 
-      // A successful racing refresh may have returned both cookies before
-      // logout completed. Its access session and refresh successor must both
-      // be rejected once the two racing requests have settled.
-      const accessProbe = await callApi(
-        refreshPage,
-        browserOriginFence.apiOrigin,
-        '/api/v1/auth/me',
-      );
-      expect(accessProbe.status).toBe(401);
-      const refreshProbe = await callApi(
-        refreshPage,
-        browserOriginFence.apiOrigin,
-        '/api/v1/auth/refresh',
-        { method: 'POST', body: {} },
-      );
-      expect(refreshProbe.status).toBe(401);
       expect((await authFamilyState(originalRefreshToken)).activeCount).toBe(0);
     } finally {
-      await Promise.all([
-        refreshContext.close().catch(() => undefined),
-        logoutContext.close().catch(() => undefined),
-      ]);
+      await logoutContext.close().catch(() => undefined);
     }
   });
 

@@ -132,26 +132,15 @@ async function assertLocalDocumentDownload(cookieHeader, documentId, expectedTex
       origin: 'http://localhost:3003',
     },
   });
-  const downloadBody = await downloadResponse.json();
+  const fileBody = await downloadResponse.text();
+  const disposition = downloadResponse.headers.get('content-disposition') ?? '';
 
   if (
     downloadResponse.status !== 200 ||
-    typeof downloadBody.url !== 'string' ||
-    !downloadBody.url.startsWith('http://localhost:3002/api/v1/documents/_local-download?path=')
+    !disposition.toLowerCase().startsWith('attachment;') ||
+    !fileBody.includes(expectedText)
   ) {
-    throw new Error(`local document download URL returned ${downloadResponse.status}: ${JSON.stringify(downloadBody)}`);
-  }
-
-  const fileResponse = await fetchWithTimeout(downloadBody.url, {
-    headers: {
-      cookie: cookieHeader,
-      origin: 'http://localhost:3003',
-    },
-  });
-  const fileBody = await fileResponse.text();
-
-  if (fileResponse.status !== 200 || !fileBody.includes(expectedText)) {
-    throw new Error(`local document file returned ${fileResponse.status}: ${fileBody}`);
+    throw new Error(`local authenticated document bytes returned ${downloadResponse.status}`);
   }
 }
 
@@ -214,7 +203,7 @@ async function smokeApiRegistration() {
   }
 }
 
-async function smokeLocalAdminLoginAndDocumentStorage() {
+async function smokeLocalAdminLogin() {
   const loginResponse = await fetchWithTimeout('http://127.0.0.1:3002/api/v1/auth/login', {
     method: 'POST',
     headers: {
@@ -241,6 +230,10 @@ async function smokeLocalAdminLoginAndDocumentStorage() {
     throw new Error('local admin login did not issue auth cookies');
   }
 
+  return cookieHeader;
+}
+
+async function smokeLocalAdminDocumentStorage(cookieHeader) {
   const documentsResponse = await fetchWithTimeout('http://127.0.0.1:3002/api/v1/documents', {
     headers: {
       cookie: cookieHeader,
@@ -335,7 +328,8 @@ try {
   console.log('Checking public registration path...');
   await waitForCheck('API registration', smokeApiRegistration);
   console.log('Checking local admin login and document storage...');
-  await waitForCheck('local admin document storage', smokeLocalAdminLoginAndDocumentStorage);
+  const localAdminCookieHeader = await smokeLocalAdminLogin();
+  await smokeLocalAdminDocumentStorage(localAdminCookieHeader);
   console.log('Checking web root...');
   await waitForCheck('web root', smokeWeb, 600_000);
 
