@@ -21,6 +21,29 @@ function requireStrongSecret(name: string, issues: string[]): string | undefined
   return value;
 }
 
+function requireRecoverySecret(issues: string[]): string | undefined {
+  const value = requireStrongSecret('AUTH_RECOVERY_SECRET', issues);
+  if (!value) return undefined;
+  let decoded: Buffer;
+  if (/^[0-9a-f]+$/i.test(value) && value.length % 2 === 0) {
+    decoded = Buffer.from(value, 'hex');
+  } else if (/^[A-Za-z0-9_-]+$/.test(value)) {
+    decoded = Buffer.from(value, 'base64url');
+  } else {
+    issues.push('AUTH_RECOVERY_SECRET must be canonical hex or base64url');
+    return undefined;
+  }
+  if (
+    decoded.length < 32 ||
+    decoded.length > 64 ||
+    (value.toLowerCase() !== decoded.toString('hex') && value !== decoded.toString('base64url'))
+  ) {
+    issues.push('AUTH_RECOVERY_SECRET must canonically encode 32 to 64 high-entropy bytes');
+    return undefined;
+  }
+  return value;
+}
+
 function requirePersonalDatabaseUrl(issues: string[]): void {
   const value = process.env.DATABASE_URL;
   if (!isConfiguredSecret(value)) {
@@ -92,8 +115,12 @@ export function validatePersonalServerEnv(): void {
 
   const jwtSecret = requireStrongSecret('JWT_SECRET', issues);
   const readinessSecret = requireStrongSecret('READINESS_API_KEY', issues);
-  if (jwtSecret && readinessSecret && jwtSecret === readinessSecret) {
-    issues.push('JWT_SECRET and READINESS_API_KEY must be distinct secrets');
+  const recoverySecret = requireRecoverySecret(issues);
+  const configuredSecrets = [jwtSecret, readinessSecret, recoverySecret].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (new Set(configuredSecrets).size !== configuredSecrets.length) {
+    issues.push('JWT_SECRET, READINESS_API_KEY, and AUTH_RECOVERY_SECRET must be distinct secrets');
   }
 
   requirePersonalDatabaseUrl(issues);

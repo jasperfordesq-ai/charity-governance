@@ -6,6 +6,7 @@ import { GOVERNANCE_PRINCIPLES } from '@charitypilot/shared';
 // personal-server-account reaches session-tokens/utils/jwt. Set the required
 // import-time secret explicitly so CI never depends on an ambient developer env.
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'personal-server-initializer-test-secret';
+process.env.AUTH_RECOVERY_SECRET = 'ab'.repeat(32);
 
 const [
   {
@@ -19,11 +20,21 @@ const [
     resetPersonalServerPassword,
   },
   { hashOpaqueToken },
+  { authRecoverySecretFingerprint },
 ] = await Promise.all([
   import('../jobs/initialize-personal-server.js'),
   import('../jobs/personal-server-account.js'),
   import('../services/session-tokens.js'),
+  import('../services/password-recovery-crypto.js'),
 ]);
+
+const AUTH_RECOVERY_CONTROL = {
+  id: 1,
+  blocked: false,
+  generation: 1,
+  activeSecretFingerprint: authRecoverySecretFingerprint(),
+  retiredSecretFingerprint: null,
+};
 
 const VALID_INITIALIZER_ENV = {
   NODE_ENV: 'production',
@@ -205,25 +216,49 @@ test('compiled account reset validates transient credentials, changes one active
 
   let passwordHash = '';
   let sessionUpdate: Record<string, unknown> | undefined;
+  let recoveryTermination: Record<string, unknown> | undefined;
+  let auditData: Record<string, unknown> | undefined;
+  const mutationOrder: string[] = [];
+  let rawCall = 0;
   const tx = {
-    $queryRaw: async () => [{ pg_advisory_xact_lock: null }],
-    organisation: { count: async () => 1 },
-    user: {
-      findUnique: async () => ({
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [AUTH_RECOVERY_CONTROL];
+      if (rawCall === 2) return [{ pg_advisory_xact_lock: null }];
+      if (rawCall === 3) return [{
         id: 'owner-1',
         email: 'owner@charity.local',
+        name: 'Personal Owner',
         lifecycleStatus: 'ACTIVE',
         organisationId: 'org-1',
-      }),
+      }];
+      return [];
+    },
+    organisation: { count: async () => 1 },
+    user: {
       updateMany: async ({ data }: { data: { passwordHash: string } }) => {
+        mutationOrder.push('password');
         passwordHash = data.passwordHash;
         return { count: 1 };
+      },
+    },
+    passwordRecoveryRequest: {
+      updateMany: async (query: Record<string, unknown>) => {
+        mutationOrder.push('recovery');
+        recoveryTermination = query;
+        return { count: 2 };
       },
     },
     authSession: {
       updateMany: async (query: Record<string, unknown>) => {
         sessionUpdate = query;
         return { count: 3 };
+      },
+    },
+    securityAuditEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        auditData = data;
+        return { id: 'audit-1' };
       },
     },
   };
@@ -239,6 +274,23 @@ test('compiled account reset validates transient credentials, changes one active
     where: { userId: 'owner-1', revokedAt: null },
     data: { revokedAt: now, revocationReason: 'PASSWORD_RESET' },
   });
+  assert.deepEqual((recoveryTermination as { where: unknown }).where, {
+    userId: 'owner-1',
+    organisationId: 'org-1',
+    terminatedAt: null,
+  });
+  assert.equal((recoveryTermination as { data: { terminationReason: string } }).data.terminationReason, 'PASSWORD_RESET_COMPLETED');
+  assert.deepEqual(mutationOrder, ['recovery', 'password']);
+  assert.equal(auditData?.type, 'ALL_SESSIONS_REVOKED');
+  assert.equal(
+    ((auditData?.context ?? {}) as Record<string, unknown>).eventKind,
+    'PASSWORD_RESET_COMPLETED',
+  );
+  assert.equal(auditData?.actorKind, 'SUPPORT');
+  assert.equal(
+    ((auditData?.context ?? {}) as Record<string, unknown>).terminatedRequestCount,
+    2,
+  );
 
   assert.throws(() => getPersonalServerPasswordReset({
     NODE_ENV: 'production',
@@ -261,15 +313,20 @@ test('compiled reset-link stores only a one-hour token hash and returns the exac
     origin: 'http://127.0.0.1:3003',
   });
 
-  let updateData: { resetToken: string; resetTokenExpiry: Date } | undefined;
+  let requestData: Record<string, unknown> | undefined;
+  let rawCall = 0;
   const tx = {
-    $queryRaw: async () => [{ pg_advisory_xact_lock: null }],
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [AUTH_RECOVERY_CONTROL];
+      if (rawCall === 2) return [{ pg_advisory_xact_lock: null }];
+      return [{ id: 'owner-1', organisationId: 'org-1', lifecycleStatus: 'ACTIVE' }];
+    },
     organisation: { count: async () => 1 },
-    user: {
-      findUnique: async () => ({ id: 'owner-1', organisationId: 'org-1', lifecycleStatus: 'ACTIVE' }),
-      updateMany: async ({ data }: { data: { resetToken: string; resetTokenExpiry: Date } }) => {
-        updateData = data;
-        return { count: 1 };
+    passwordRecoveryRequest: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        requestData = data;
+        return data;
       },
     },
   };
@@ -285,10 +342,12 @@ test('compiled reset-link stores only a one-hour token hash and returns the exac
   assert.equal(resetUrl.pathname, '/reset-password');
   assert.equal(resetUrl.search, '');
   assert.ok(plaintextToken);
-  assert.ok(updateData);
-  assert.equal(updateData.resetToken, hashOpaqueToken(plaintextToken));
-  assert.notEqual(updateData.resetToken, plaintextToken);
-  assert.equal(updateData.resetTokenExpiry.toISOString(), '2026-07-11T15:00:00.000Z');
+  assert.ok(requestData);
+  assert.equal(requestData.source, 'PERSONAL_SERVER_OPERATOR');
+  assert.equal(requestData.deliveryState, 'ACCEPTED');
+  assert.equal(requestData.tokenHash, hashOpaqueToken(plaintextToken));
+  assert.notEqual(requestData.tokenHash, plaintextToken);
+  assert.equal((requestData.expiresAt as Date).toISOString(), '2026-07-11T15:00:00.000Z');
   assert.deepEqual(result, {
     resetLinkCreated: true,
     resetUrl: resetUrl.toString(),

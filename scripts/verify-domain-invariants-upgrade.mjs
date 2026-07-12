@@ -19,6 +19,11 @@ import {
   buildP109RecoveryPreflightSql,
   parseP109MigrationChecksumOutput,
 } from './production-recover-p109-migration.mjs';
+import {
+  P109_RESTORED_MIGRATION_HEAD,
+  P109_RESTORED_MIGRATIONS,
+  buildP109RestoredHistoryProbeSql,
+} from './production-p109-restored-database-probe.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = dirname(SCRIPT_DIR);
@@ -412,6 +417,19 @@ DECLARE
   check_name TEXT;
   tenant_fk RECORD;
 BEGIN
+  IF (
+    SELECT COUNT(*) FROM "_prisma_migrations"
+    WHERE migration_name = '20260711230000_add_domain_invariants_referential_safety'
+      AND finished_at IS NOT NULL
+      AND rolled_back_at IS NULL
+      AND applied_steps_count = 1
+  ) <> 1 OR EXISTS (
+    SELECT 1 FROM "_prisma_migrations"
+    WHERE migration_name > '20260711230000_add_domain_invariants_referential_safety'
+  ) THEN
+    RAISE EXCEPTION 'P1-09 proof workspace did not stop at its exact target migration';
+  END IF;
+
   FOREACH check_name IN ARRAY required_checks LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_catalog.pg_constraint
@@ -582,15 +600,15 @@ function validatePostgresPort(value) {
   return String(port);
 }
 
-function createPreviousMigrationWorkspace(plan, migrationsRoot) {
-  const temporaryRoot = mkdtempSync(join(tmpdir(), 'charitypilot-p109-prisma-'));
+function createMigrationWorkspace(migrationNames, migrationsRoot, prefix) {
+  const temporaryRoot = mkdtempSync(join(tmpdir(), prefix));
   const temporaryPrismaRoot = join(temporaryRoot, 'prisma');
   const temporaryMigrationsRoot = join(temporaryPrismaRoot, 'migrations');
   mkdirSync(temporaryMigrationsRoot, { recursive: true });
 
   cpSync(join(dirname(migrationsRoot), 'schema.prisma'), join(temporaryPrismaRoot, 'schema.prisma'));
   cpSync(join(migrationsRoot, 'migration_lock.toml'), join(temporaryMigrationsRoot, 'migration_lock.toml'));
-  for (const migrationName of plan.previous) {
+  for (const migrationName of migrationNames) {
     cpSync(
       join(migrationsRoot, migrationName),
       join(temporaryMigrationsRoot, migrationName),
@@ -602,6 +620,22 @@ function createPreviousMigrationWorkspace(plan, migrationsRoot) {
     root: temporaryRoot,
     schemaPath: join(temporaryPrismaRoot, 'schema.prisma'),
   };
+}
+
+function createPreviousMigrationWorkspace(plan, migrationsRoot) {
+  return createMigrationWorkspace(
+    plan.previous,
+    migrationsRoot,
+    'charitypilot-p109-previous-prisma-',
+  );
+}
+
+function createTargetMigrationWorkspace(plan, migrationsRoot) {
+  return createMigrationWorkspace(
+    [...plan.previous, plan.target],
+    migrationsRoot,
+    'charitypilot-p109-target-prisma-',
+  );
 }
 
 function repositoryMigrationChecksums(migrationsRoot) {
@@ -746,7 +780,8 @@ export async function verifyDomainInvariantUpgrade({
   };
   const allDatabases = Object.values(databases);
   const plan = discoverDomainInvariantUpgradeMigrations(migrationsRoot);
-  let selectedMigrationChecksums = repositoryMigrationChecksums(migrationsRoot);
+  const checkoutMigrationChecksums = repositoryMigrationChecksums(migrationsRoot);
+  let selectedMigrationChecksums = checkoutMigrationChecksums;
   let recoveryPreflightSql = buildP109RecoveryPreflightSql(selectedMigrationChecksums);
   const prismaVersion = JSON.parse(readFileSync(PRISMA_PACKAGE_PATH, 'utf8')).version;
   if (prismaVersion !== REQUIRED_PRISMA_VERSION) {
@@ -767,6 +802,12 @@ export async function verifyDomainInvariantUpgrade({
     stdout.write(`Disposable databases: ${allDatabases.join(', ')}\n`);
     return;
   }
+
+  // Keep the P1-09 verifier target-bound even after later migrations are added.
+  // In built-image mode the selected image's exact migration checksums must
+  // match this mounted target-only workspace before any artifact command runs.
+  const previousMigrationWorkspace = createPreviousMigrationWorkspace(plan, migrationsRoot);
+  const targetMigrationWorkspace = createTargetMigrationWorkspace(plan, migrationsRoot);
 
   const runDocker = (dockerArgs, description, options = {}) => {
     const result = commandRunner(dockerBin, dockerArgs, {
@@ -875,6 +916,7 @@ export async function verifyDomainInvariantUpgrade({
     const result = commandRunner(dockerBin, [
       'run', '--rm',
       ...(options.input === undefined ? [] : ['--interactive']),
+      '--mount', `type=bind,source=${targetMigrationWorkspace.root},target=/p109-proof,readonly`,
       '--network', 'host', '--env', 'DATABASE_URL',
       migrationImage,
       ...prismaArgs,
@@ -894,7 +936,9 @@ export async function verifyDomainInvariantUpgrade({
     return result;
   };
   const runTargetPrisma = migrationImage ? runMigrationImagePrisma : runPrisma;
-  const targetSchemaPath = migrationImage ? 'prisma/schema.prisma' : schemaPath;
+  const targetSchemaPath = migrationImage
+    ? '/p109-proof/prisma/schema.prisma'
+    : targetMigrationWorkspace.schemaPath;
   const captureMigrationImageChecksums = () => {
     if (!migrationImage) return selectedMigrationChecksums;
     const result = commandRunner(dockerBin, [
@@ -923,7 +967,7 @@ export async function verifyDomainInvariantUpgrade({
   const executeProductionRecoveryPreflight = (database) => migrationImage
     ? runTargetPrisma(
       database,
-      ['db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'],
+      ['db', 'execute', '--stdin', '--schema', targetSchemaPath],
       'execute exact production P1-09 recovery preflight through the built migration image',
       { input: recoveryPreflightSql },
     )
@@ -933,7 +977,6 @@ export async function verifyDomainInvariantUpgrade({
       'execute the exact read-only production P1-09 recovery preflight before resolution',
     );
 
-  const previousMigrationWorkspace = createPreviousMigrationWorkspace(plan, migrationsRoot);
   let verificationFailure;
   try {
     await cleanupDatabases({
@@ -947,9 +990,17 @@ export async function verifyDomainInvariantUpgrade({
     });
     if (migrationImage) {
       selectedMigrationChecksums = captureMigrationImageChecksums();
+      for (const migrationName of P109_RECOVERY_MIGRATIONS) {
+        if (selectedMigrationChecksums[migrationName] !== checkoutMigrationChecksums[migrationName]) {
+          throw new Error(
+            `Selected migration image bytes differ from the target-only P1-09 proof workspace at ${migrationName}`,
+          );
+        }
+      }
       recoveryPreflightSql = buildP109RecoveryPreflightSql(selectedMigrationChecksums);
       stdout.write(
-        `Captured and bound ${P109_RECOVERY_MIGRATIONS.length} migration checksums from ${migrationImage}.\n`,
+        `Captured and bound ${P109_RECOVERY_MIGRATIONS.length} migration checksums from ${migrationImage}; ` +
+        'the mounted proof workspace matches those exact bytes and stops at P1-09.\n',
       );
     }
     createDatabase(databases.base);
@@ -1213,6 +1264,123 @@ export async function verifyDomainInvariantUpgrade({
       VALID_DATA_UNCHANGED_ASSERTIONS_SQL,
       'assert valid P1-09 legacy data was unchanged',
     );
+    if (
+      JSON.stringify(P109_RESTORED_MIGRATIONS) !==
+      JSON.stringify(P109_RECOVERY_MIGRATIONS)
+    ) {
+      throw new Error(
+        'P1-09 restore-only rollback migration history drifted from the recovery boundary',
+      );
+    }
+    psql(
+      databases.success,
+      buildP109RestoredHistoryProbeSql(selectedMigrationChecksums),
+      'prove the exact P1-09 restore-only rollback boundary before any P1-07A migration',
+    );
+    stdout.write(
+      'Exact P1-09 restored-history checksum and P1-07A-absence probe passed against live PostgreSQL.\n',
+    );
+
+    const restoredHistoryFailure = /requires exactly 20 selected-image-checksum-bound applied migrations through P1-09/u;
+    const firstRestoredMigration = P109_RESTORED_MIGRATIONS[0];
+    const firstRestoredChecksum = selectedMigrationChecksums[firstRestoredMigration];
+
+    psql(databases.success, String.raw`
+      UPDATE "_prisma_migrations"
+      SET checksum = '${'0'.repeat(64)}'
+      WHERE migration_name = '${firstRestoredMigration}';
+    `, 'tamper one P1-09 restored-history checksum');
+    assertSqlFailure(
+      databases.success,
+      buildP109RestoredHistoryProbeSql(selectedMigrationChecksums),
+      restoredHistoryFailure,
+      'reject a tampered P1-09 restored-history checksum before migration',
+    );
+    psql(databases.success, String.raw`
+      UPDATE "_prisma_migrations"
+      SET checksum = '${firstRestoredChecksum}'
+      WHERE migration_name = '${firstRestoredMigration}';
+    `, 'restore the selected-image P1-09 checksum after the negative probe');
+
+    psql(databases.success, String.raw`
+      UPDATE "_prisma_migrations"
+      SET finished_at = NULL, applied_steps_count = 0
+      WHERE migration_name = '${P109_RESTORED_MIGRATION_HEAD}';
+    `, 'make the P1-09 head unresolved for the negative probe');
+    assertSqlFailure(
+      databases.success,
+      buildP109RestoredHistoryProbeSql(selectedMigrationChecksums),
+      restoredHistoryFailure,
+      'reject unresolved P1-09 history before migration',
+    );
+    psql(databases.success, String.raw`
+      UPDATE "_prisma_migrations"
+      SET finished_at = CURRENT_TIMESTAMP, applied_steps_count = 1
+      WHERE migration_name = '${P109_RESTORED_MIGRATION_HEAD}';
+    `, 'restore the applied P1-09 head after the negative probe');
+
+    psql(databases.success, String.raw`
+      UPDATE "_prisma_migrations"
+      SET migration_name = '${P109_RESTORED_MIGRATION_HEAD}_missing'
+      WHERE migration_name = '${P109_RESTORED_MIGRATION_HEAD}';
+    `, 'make the restored database stop before the exact P1-09 head');
+    assertSqlFailure(
+      databases.success,
+      buildP109RestoredHistoryProbeSql(selectedMigrationChecksums),
+      restoredHistoryFailure,
+      'reject pre-P1-09 restored history before migration',
+    );
+    psql(databases.success, String.raw`
+      UPDATE "_prisma_migrations"
+      SET migration_name = '${P109_RESTORED_MIGRATION_HEAD}'
+      WHERE migration_name = '${P109_RESTORED_MIGRATION_HEAD}_missing';
+    `, 'restore the exact P1-09 history head after the negative probe');
+
+    psql(databases.success, String.raw`
+      INSERT INTO "_prisma_migrations" (
+        id, checksum, finished_at, migration_name, logs,
+        rolled_back_at, started_at, applied_steps_count
+      ) VALUES (
+        '00000000-0000-4000-8000-000000000107',
+        '${'1'.repeat(64)}',
+        CURRENT_TIMESTAMP,
+        '20260712013000_add_password_recovery_integrity',
+        NULL,
+        NULL,
+        CURRENT_TIMESTAMP,
+        1
+      );
+    `, 'add forbidden P1-07A history for the negative probe');
+    assertSqlFailure(
+      databases.success,
+      buildP109RestoredHistoryProbeSql(selectedMigrationChecksums),
+      restoredHistoryFailure,
+      'reject P1-07A history before cross-boundary rollback migration',
+    );
+    psql(databases.success, String.raw`
+      DELETE FROM "_prisma_migrations"
+      WHERE id = '00000000-0000-4000-8000-000000000107';
+    `, 'remove the forbidden P1-07A history after the negative probe');
+
+    psql(
+      databases.success,
+      'CREATE TABLE "AuthRecoveryControl" ("id" integer PRIMARY KEY);',
+      'add forbidden P1-07A catalog residue for the negative probe',
+    );
+    assertSqlFailure(
+      databases.success,
+      buildP109RestoredHistoryProbeSql(selectedMigrationChecksums),
+      /refused P1-07A catalog residue/u,
+      'reject P1-07A catalog residue before cross-boundary rollback migration',
+    );
+    psql(
+      databases.success,
+      'DROP TABLE "AuthRecoveryControl";',
+      'remove forbidden P1-07A catalog residue after the negative probe',
+    );
+    stdout.write(
+      'P1-09 restore-only probe rejected tampered, unresolved, pre-P1-09, P1-07A-history, and P1-07A-catalog fixtures before migration.\n',
+    );
 
     const failureCases = [
       {
@@ -1317,6 +1485,11 @@ export async function verifyDomainInvariantUpgrade({
   const cleanupFailures = [];
   try {
     rmSync(previousMigrationWorkspace.root, { recursive: true, force: true });
+  } catch (error) {
+    cleanupFailures.push(error);
+  }
+  try {
+    rmSync(targetMigrationWorkspace.root, { recursive: true, force: true });
   } catch (error) {
     cleanupFailures.push(error);
   }

@@ -32,7 +32,7 @@ npm run check:production:github-secrets -- --environment=production
 npm run check:production:github-secrets -- --environment=production --json
 npm run deploy:preflight -- --production-env-file=.env.production
 docker compose --env-file .env.production -f compose.production.yml -f compose.production-tls.yml config --quiet
-npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p107a-cutover
 npm run check:production:hosting -- --production-env-file=.env.production
 npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA
 npm run check:production:database -- --production-env-file=.env.production --recovery-set-id=RECOVERY_SET_ID --expected-source-database-identity-sha256=EXTERNAL_SHA256 --expected-release-commit-sha=PROMOTED_RELEASE_COMMIT_SHA --backup-output-dir=/mnt/encrypted/charitypilot/recovery/RECOVERY_SET_ID --keep-backup --json
@@ -78,17 +78,17 @@ Download the release-image-digests artifact from the release workflow run and co
 CHARITYPILOT_API_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:<api-digest>
 CHARITYPILOT_WEB_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:<web-digest>
 CHARITYPILOT_MIGRATION_IMAGE=ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<migration-digest>
-CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1
+CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1
 CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie
 npm run deploy:preflight -- --production-env-file=.env.production
-npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
+npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p107a-cutover
 ```
 
-The deploy preflight validates the selected production env file, requires the exact reviewed `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` line, confirms the promoted web image build origin matches `NEXT_PUBLIC_API_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. The ordinary CLI rejects stale, absent, or arbitrary compatibility markers. Only the controlled rollback wrapper can supply the internal `p006-deadline-calendar-v1` or `pre-p006-restored` expectation after its manifest-and-restore attestation has passed; those paths cannot be selected by a normal deploy or recovery command. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, any matching `npm run deploy:rollback` rehearsal, and `npm run deploy:recover:p109`. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
+The deploy preflight validates the selected production env file, requires the exact reviewed `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1` line, confirms the promoted web image build origin matches `NEXT_PUBLIC_API_URL`, renders `compose.production.yml` with `compose.production-tls.yml` by default, and runs `cosign verify` against the API, web, and migration image digests. The ordinary CLI rejects stale, absent, or arbitrary compatibility markers. Only the controlled rollback wrapper can supply the internal `p109-restored`, `p006-restored`, or `pre-p006-restored` posture after its manifest-and-restore attestation has passed; those paths cannot be selected by a normal deploy or recovery command. If a managed load balancer or hosting platform terminates HTTPS instead of the repo Caddy overlay, pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, any matching `npm run deploy:rollback` rehearsal, `npm run deploy:recover:p109`, and `npm run deploy:recover:p107a`. Do not deploy mutable image tags such as `:latest`, `:sha-*`, or semantic version tags; promote only `@sha256:` image references that pass signature verification.
 
 Before booking the production cutover, restore a recent production backup into an isolated non-production PostgreSQL target and run the exact promoted migration image followed by the exact promoted API reconciliation tool. Record clone age/source and destruction, prove the migration found no out-of-range civil dates, tenant mismatches, renamed/duplicate generated occurrences, legacy AGM reminder evidence, or generated-id collision, and inventory the legacy reminder rows that will require downtime reconciliation. Never point this rehearsal at live production. Resolve anomalies through an approved data plan, take a newer clone, and repeat; discovering a known fail-closed blocker only after production shutdown is not acceptable launch evidence.
 
-The production deploy command is the only supported ordinary Compose migration path for this release; after a recorded P1-09 failure, only the locked recovery wrapper documented below is supported. Deploy runs the same preflight and pulls every promoted image before downtime. It then enters fail-closed maintenance mode with `docker compose ... --profile maintenance --profile jobs down --remove-orphans`, which stops and removes the old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change. The scheduler waits up to 45 seconds for active work and Compose grants 60 seconds before forced termination. With the runtime down, deploy creates and restore-verifies a retained PostgreSQL backup, runs the migration image alone, probes live Prisma history, then runs the digest-pinned API reconciliation tool with `--prepare-quiesced-cutover --confirm-schedulers-quiesced`. That step safely releases residual pre-provider reservations, quarantines residual provider-I/O rows, and refuses startup while any unresolved reminder outcome remains. Only then does it start the promoted runtime and run the public HTTPS smoke.
+The production deploy command is the only supported ordinary Compose migration path for this release; after a recorded P1-09 or P1-07A failure, only the matching locked recovery wrapper documented below is supported. Deploy runs the same preflight and pulls every promoted image before downtime. It then enters fail-closed maintenance mode with `docker compose ... --profile maintenance --profile jobs down --remove-orphans`, which stops and removes the old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change. The scheduler waits up to 45 seconds for active work and Compose grants 60 seconds before forced termination. With the runtime down, deploy creates and restore-verifies a retained PostgreSQL backup, runs the migration image alone, probes live Prisma history, then runs the digest-pinned API reconciliation tool with `--prepare-quiesced-cutover --confirm-schedulers-quiesced`. That step safely releases residual pre-provider reservations, quarantines residual provider-I/O rows, and refuses startup while any unresolved reminder outcome remains. Only then does it start the promoted runtime and run the public HTTPS smoke.
 
 For transcript verification, the isolated migration step owned by that deploy is equivalent to the following command. Do not invoke it independently against production:
 
@@ -176,22 +176,81 @@ reconciliation, starts the runtime, and completes public smoke. Never invoke a
 raw Compose migration-resolution command, never use `--applied` for this failure
 path, and never edit `_prisma_migrations` by hand.
 
-Deploy, rollback, and P1-09 recovery acquire one host-wide production cutover lock before validation. Rollback and recovery pass that exact lock handle reentrantly into the delegated deploy, so no two cutover operations can interleave shutdown, backup, migration, probe, resolution, startup, or smoke. Contention fails before Docker or database work. Nested deploy entry and lock release both re-read the on-disk token and fail closed if the lock disappeared or ownership changed. A release or recovery failure preserves the preceding result but changes the command status to failure with explicit operator guidance; do not begin another cutover until the lock owner and runtime state are reconciled. After a process or host crash, treat a remaining lock as an incident artefact and remove it only after an operator has proved no deploy, rollback, or recovery process is running. Never bypass the lock with raw Compose commands.
+P1-07A applies the same fail-closed recovery discipline to migration
+`20260712013000_add_password_recovery_integrity`. Its preflight counts legacy
+half-pairs, malformed token hashes, expiries more than one hour beyond the
+database clock, and account emails longer than 254 characters only for active
+users in active organisations. The exact
+migration deterministically clears either legacy reset field for inactive
+principals and does not create recovery evidence for them. Do not manually
+rewrite inactive rows merely to make a count zero. If any active-principal
+category blocks migration, keep all runtimes and schedulers stopped, remediate
+only the reviewed active rows, retain redacted counts, and expect a plain retry
+to fail with P3009.
 
-For a bad digest promotion, prefer a corrected forward release. Image-only rollback remains exceptional: it requires both the same `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` marker and a fresh (no more than 30 minutes old) operator attestation bound to the SHA-256 of the exact previous digest manifest. The marker is not trusted by itself. P1-09 introduced database-enforced governance invariants and a composite, restrictive conflict-record relation, so an image on the earlier `p006-deadline-calendar-v1` line is not compatible with the live P1-09 schema. Create a non-committed attestation like this:
+Create a fresh non-committed attestation, no more than 30 minutes old, bound to
+the exact production env bytes and digest-pinned migration image:
+
+```json
+{
+  "kind": "charitypilot-p107a-failed-migration-recovery-attestation",
+  "schemaVersion": 1,
+  "environment": "production",
+  "migrationName": "20260712013000_add_password_recovery_integrity",
+  "assessedAt": "2026-07-11T22:00:00.000Z",
+  "productionEnvFile": ".env.production",
+  "productionEnvSha256": "<sha256-of-exact-production-env-bytes>",
+  "migrationImage": "ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:<64-lowercase-hex-digest>",
+  "operator": "named-operations-owner",
+  "evidenceReference": "incident://approved-p107a-recovery-evidence",
+  "runtimeQuiesced": true,
+  "failedMigrationTransactionRolledBack": true,
+  "targetCatalogRollbackVerified": true,
+  "remediationOrUnexpectedWriterResolutionCompleted": true,
+  "acknowledgement": "I confirm the production runtime is quiesced, the failed P1-07A transaction rolled back without target catalog residue, every active-principal legacy reset-token half-pair, malformed hash, unsafe future expiry, and overlong account email has been deliberately remediated, each valid active pre-cutover slot may be backfilled exactly once into the P107A ledger before both User fields are atomically retired, inactive-principal reset fields are accepted only for deterministic clearing without recovery evidence, and only migration 20260712013000_add_password_recovery_integrity may be marked rolled back before immediate controlled redeployment."
+}
+```
+
+Review the ordered non-mutating plan, then deliberately execute it:
+
+```bash
+npm run deploy:recover:p107a -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p107a-recovery --recovery-attestation-file=/secure/p107a-recovery-attestation.json --dry-run
+npm run deploy:recover:p107a -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p107a-recovery --recovery-attestation-file=/secure/p107a-recovery-attestation.json
+```
+
+The wrapper shares the P1-09 orchestration and host-wide cutover lock. It
+revalidates immutable env bytes, pulls the attested image, hashes all 21 exact
+`migration.sql` files inside it, re-quiesces, and runs a terminal
+repeatable-read/read-only invariant block through that image. Resolution is
+refused unless history is exactly 20 distinct applied predecessors plus one
+sole unresolved failed P1-07A target with matching selected-image checksums,
+there is no target table/type/function/trigger/index residue, the P1-09
+predecessor catalog and unchanged `SecurityAuditEventType` remain intact, and
+all four active-principal legacy blocker counts are zero. Inactive-principal
+rows are inventoried but are allowed only because those exact selected
+migration bytes clear both legacy fields. The wrapper marks only the target
+`--rolled-back`, then immediately delegates the complete locked production
+deploy, including a new retained restore-verified backup, migration, status,
+reminder reconciliation, startup, and public smoke. Any failure re-quiesces and
+leaves runtime stopped; never use raw Compose, `--applied`, or direct
+`_prisma_migrations` edits.
+
+Deploy, rollback, P1-09 recovery, and P1-07A recovery acquire one host-wide production cutover lock before validation. Rollback and recovery pass that exact lock handle reentrantly into the delegated deploy, so no two cutover operations can interleave shutdown, backup, migration, probe, resolution, startup, or smoke. Contention fails before Docker or database work. Nested deploy entry and lock release both re-read the on-disk token and fail closed if the lock disappeared or ownership changed. A release or recovery failure preserves the preceding result but changes the command status to failure with explicit operator guidance; do not begin another cutover until the lock owner and runtime state are reconciled. After a process or host crash, treat a remaining lock as an incident artefact and remove it only after an operator has proved no deploy, rollback, or recovery process is running. Never bypass the lock with raw Compose commands.
+
+For a bad digest promotion, prefer a corrected forward release. Image-only rollback remains exceptional and is limited to P107A-capable images: it requires the same `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1` marker and a fresh (no more than 30 minutes old) operator attestation bound to the SHA-256 of the exact previous digest manifest. The marker is not trusted by itself. P1-07A retires the legacy `User` recovery slot, so a P1-09 image is behaviorally incompatible with a P107A database even though the old binary can parse much of the schema. Create a non-committed same-line attestation like this:
 
 ```json
 {
   "kind": "charitypilot-schema-compatibility-attestation",
   "schemaVersion": 1,
   "environment": "production",
-  "databaseCompatibility": "p109-governance-integrity-v1",
+  "databaseCompatibility": "p107a-password-recovery-v1",
   "assessedAt": "2026-07-11T20:00:00.000Z",
   "rollbackDigestManifest": "release-image-digests.previous.env",
   "rollbackDigestManifestSha256": "<sha256-of-exact-manifest-bytes>",
   "evidenceReference": "change://approved-schema-compatibility-review",
   "operator": "named-operations-owner",
-  "acknowledgement": "I confirm the selected application images are compatible with the live P1-09 database schema and migration history."
+  "acknowledgement": "I confirm the selected application images are compatible with the live P1-07A database schema and migration history."
 }
 ```
 
@@ -201,9 +260,9 @@ Then run:
 npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --schema-compatibility-attestation-file=/secure/schema-compatibility-attestation.json --backup-output-dir=/mnt/encrypted/charitypilot/rollback-cutovers
 ```
 
-Rollback reuses the same maintenance-mode deploy path, including a unique new retained backup, migration isolation, fail-closed startup, and public smoke. It copies the production env file byte-for-byte into an owner-only temporary file and appends only validated rollback image/build-origin/compatibility overrides. After the selected migration image runs, deploy probes live Prisma history and, for P0-06-compatible schemas, runs the same reminder cutover/reconciliation gate before any runtime starts. Rolling back across the P1-09 boundary to a `p006-deadline-calendar-v1` manifest requires a freshly validated, exact-manifest-and-backup-hash-bound restore attestation and a backup captured before the incompatible P1-09 migration; the restored P0-06-compatible database retains the P0-06 reconciliation gate. A genuinely pre-P0-06 or markerless legacy rollback is different: only the same bounded restore proof can propagate the internal `pre-p006-restored` state, and only that trusted historical path skips the unavailable P0-06 job/schema gate. The env marker alone can never authorise either path or the skip.
+Rollback reuses the same maintenance-mode deploy path, including a unique new retained backup, migration isolation, fail-closed startup, and public smoke. It copies the production env file byte-for-byte into an owner-only temporary file and appends only validated rollback image/build-origin/compatibility overrides. After the selected migration image runs, deploy probes live Prisma history and, for P0-06-compatible schemas, runs the same reminder cutover/reconciliation gate before any runtime starts. P1-09 requires an exact pre-P107A restored backup and the internal `p109-restored` posture; it is never a same-line image rollback. Rolling farther back to `p006-deadline-calendar-v1` still requires the existing exact-manifest-and-backup-hash-bound pre-P1-09 restore attestation and retains the P0-06 reconciliation gate. A genuinely pre-P0-06 or markerless legacy rollback still requires the existing bounded restore proof before `pre-p006-restored` may skip the unavailable P0-06 job/schema gate. An env marker alone never authorises any path or skip.
 
-Crossing either incompatible boundary is restore-and-redeploy, not image rollback. Keep the runtime stopped, restore the production database from the protected pre-migration backup that matches the rollback manifest's schema line, complete restore checks, and create a non-committed JSON attestation like this:
+Crossing an incompatible boundary is restore-and-redeploy, not image rollback. For P1-09, keep the runtime stopped and restore the exact protected backup captured before P1-07A. Bind the P1-09 compatibility line, exact P1-09 migration head, and absent P1-07A target migration in the non-committed JSON attestation:
 
 ```json
 {
@@ -220,7 +279,12 @@ Crossing either incompatible boundary is restore-and-redeploy, not image rollbac
   "rollbackDigestManifest": "release-image-digests.previous.env",
   "rollbackDigestManifestSha256": "<sha256-of-exact-manifest-bytes>",
   "restoredBackupSha256": "<sha256-of-exact-restored-backup-bytes>",
-  "acknowledgement": "I confirm the production runtime was stopped and the database was restored from a backup captured before the incompatible migration."
+  "acknowledgement": "I confirm the production runtime was stopped and the database was restored from a backup captured before the incompatible migration.",
+  "restoredDatabaseCompatibility": "p109-governance-integrity-v1",
+  "restoredMigrationHead": "20260711230000_add_domain_invariants_referential_safety",
+  "incompatibleMigration": "20260712013000_add_password_recovery_integrity",
+  "p107aMigrationAbsent": true,
+  "p109RestoreAcknowledgement": "I confirm the production runtime was stopped and the exact restored database backup ends at P1-09 before the P1-07A password recovery migration."
 }
 ```
 
@@ -230,11 +294,20 @@ Then deliberately run:
 npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --database-restore-attestation-file=/secure/database-restore-attestation.json --restored-backup-file=/mnt/encrypted/charitypilot/pre-incompatible-migration/production-check.dump --backup-output-dir=/mnt/encrypted/charitypilot/restored-cutovers
 ```
 
-The tool rejects future or more-than-30-minute-old attestations, hashes the exact rollback manifest and restored backup file, verifies both hashes, and probes the restored live migration history. A restored `p006-deadline-calendar-v1` manifest keeps that marker and the P0-06 reconciliation gate; only a genuinely legacy manifest with an absent or empty compatibility marker propagates the trusted internal `pre-p006-restored` result to the nested deploy. Any unknown non-empty marker fails closed even when restore evidence is supplied. The tool cannot prove the external restore itself occurred, so the named operator and restore evidence remain mandatory. Never commit the attestation, backup, database URL, or provider credentials.
+The tool rejects future or more-than-30-minute-old attestations, hashes the exact rollback manifest and restored backup file, verifies both hashes, and probes the restored live migration history. The P1-09 path additionally requires every exact field above before it can propagate `p109-restored`. The older `p006-deadline-calendar-v1` and markerless/pre-P0-06 paths preserve their existing generic restore-attestation contract and reconciliation behavior; do not add P1-09 claims to an older restore. Any unknown non-empty marker fails closed even when restore evidence is supplied. The tool cannot prove the external restore itself occurred, so the named operator and restore evidence remain mandatory. Never commit the attestation, backup, database URL, or provider credentials.
 
 ## Environment
 
-The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
+The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. `AUTH_RECOVERY_SECRET` must independently and canonically encode 32-64 random bytes as hex or unpadded base64url, must not be reused as `JWT_SECRET` or `READINESS_API_KEY`, and must be present in every API and scheduler runtime. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
+
+Fresh `npm run setup:production-env` output generates `JWT_SECRET`,
+`READINESS_API_KEY`, and `AUTH_RECOVERY_SECRET` independently and sets the
+current P1-07A compatibility marker. If an operator env file or secret source
+predates P1-07A, do not rerun the generator with `--force`: it would replace the
+whole file. Add a newly generated independent recovery secret through the
+approved secret-store process, set
+`CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1` separately,
+and let preflight validate both without printing the secret.
 
 The canonical production web origin is `https://app.charitypilot.ie` and the canonical production API origin is `https://api.charitypilot.ie`. The API runtime, deploy preflight, hosting check, provider check, and post-deploy smoke all reject apex-domain or arbitrary-subdomain drift for these public origins.
 
@@ -330,17 +403,55 @@ Run `npm run check:production:document-recovery` only with the complete 30-flag 
 
 ## Jobs
 
-In production, the API container does not run scheduled jobs in-process. The default Docker Compose stack runs a separate `production-scheduler` service, and the `jobs` profile exposes one-shot reminder and cleanup commands for rehearsal or platform scheduler integrations. The scheduler stops future timers on SIGTERM, waits up to `PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS` (45 seconds by default) for active runs, and has a 60-second Compose grace period:
+In production, the API container does not run scheduled jobs in-process. The default Docker Compose stack runs a separate `production-scheduler` service, and the `jobs` profile exposes one-shot reminder and cleanup commands for rehearsal or platform scheduler integrations. Authentication delivery also has a standalone one-shot entrypoint in the selected API image for isolated rehearsal or an approved platform-scheduler replacement. The scheduler stops future timers on SIGTERM, waits up to `PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS` (45 seconds by default) for active runs, and has a 60-second Compose grace period:
 
 ```bash
 node dist/jobs/production-scheduler.js
 node dist/jobs/send-deadline-reminders.js
 node dist/jobs/cleanup-document-storage.js
+node dist/jobs/process-auth-email-delivery.js
 ```
 
 The scheduled job runtime must receive the same production secret source that passed preflight. For Docker Compose, `production-scheduler` must be running after deploy, and the profile jobs must have successful test-run evidence. A platform scheduler that replaces Compose must implement the same technical quiescence contract: stop new invocations, await/cancel in-flight runs, prove no provider I/O remains active, and run the P0-06 cutover preparation/reconciliation gate before starting the promoted scheduler. Merely disabling a cron expression is insufficient.
 
-Record scheduler ownership, command coverage for all three job entrypoints, log capture, and failure-alert evidence in `docs/production-launch-checklist.md`.
+Record scheduler ownership, command coverage for all four job entrypoints, an
+isolated authentication-worker run, log capture, the two existing job-failure
+alerts, and separate authentication-delivery anomaly alert plus incident-system
+confirmation in `docs/production-launch-checklist.md`.
+
+### Password-recovery delivery and security notices
+
+Password-recovery links and post-reset notices are durable database work, not
+fire-and-forget request side effects. Monitor `PasswordRecoveryRequest` and
+`AuthSecurityEmailOutbox` for due `PENDING`, stale `SENDING`, and `UNCERTAIN`
+rows. The worker may retry only the immutable row inputs through their recorded
+delivery-template version and version-bound idempotency key; it must not mint a
+replacement token, change a recipient, or mark an ambiguous provider outcome
+accepted merely to clear a backlog. The provider payload is deterministically
+rendered, not serialized in the row. Never edit the v1 security-email renderer
+or its pinned HTML/plain-text hashes: introduce v2, write v2 on new rows, and
+retain v1 until all v1 evidence has aged out. Keep `EMAIL_FROM` stable while any row can be retried,
+because sender configuration is part of the provider payload but not row data.
+
+An API or worker restart must leave the database-backed identifier/network
+budgets and queued work intact. Ordinary recovery and dummy request rows become
+cleanup-eligible after seven days, rate buckets after no more than 48 hours, and
+cleanup is bounded to 500 rows per transaction. An unalerted rejected,
+uncertain, key-unavailable, or stale-quarantined row is retained beyond that
+ordinary window until operator-alert delivery is confirmed. The scheduler
+claims those persisted rows with one count-only token, sends one aggregate
+sanitized alert, acknowledges only a confirmed webhook response, and releases a
+failed or ambiguous send for the next run. A crashed claim is reclaimable after
+the bounded stale interval; concurrent schedulers cannot claim the same row.
+Never purge an unexpired unterminated request, active provider claim, or
+unacknowledged review row.
+
+If the recovery store or queue is unavailable, the public route returns generic
+temporary unavailability; it must not fall back to a process-local token. A
+successful password reset remains successful if its already-enqueued notice is
+later delayed or rejected. Do not repair recovery state with ad-hoc SQL. Restore
+the worker, preserve the exact rows, and follow the incident owner’s reviewed
+provider evidence.
 
 ### Document-deletion dead letters
 
@@ -409,13 +520,133 @@ The launch evidence validator requires the redacted deployed browser QA environm
 
 ## Incident Basics
 
-Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys after any suspected secret exposure. Password reset invalidates all active sessions for that user.
+Rotate `JWT_SECRET`, Supabase service role keys, Stripe secrets, and Resend keys
+after suspected exposure under their owned incident procedures. Never replace
+`AUTH_RECOVERY_SECRET` in place. That key can reconstruct queued tokens, while
+already accepted, uncertain, legacy-slot and personal-operator links remain
+usable from their stored hashes. Changing only the environment value does not
+invalidate those capabilities.
+
+Use the restricted `auth-recovery-secret-rotation` maintenance command before
+changing `AUTH_RECOVERY_SECRET`. It terminates every non-suppressed,
+unterminated recovery capability as `KEY_ROTATED`, quarantines any residual
+`SENDING` claim as `UNCERTAIN`, clears both halves of every legacy `User` reset
+slot, deletes the keyed recovery-rate buckets, one-way redacts every retained
+identifier/IP/network keyed digest, and deliberately preserves the post-reset
+`AuthSecurityEmailOutbox`. The same transaction advances the singleton recovery
+generation and leaves recovery blocked with no active key fingerprint. Every
+request, reset, worker, cleanup, and review-alert transaction locks that control
+row first and refuses a blocked or non-active key, closing the replace/restart
+window. All mutations and postcondition checks run in one serializable,
+table-locked transaction.
+
+1. Open an approved incident/change record with a named operator and choose
+   exactly `PLANNED_KEY_ROTATION` or `SUSPECTED_KEY_COMPROMISE`.
+2. Stop the public API, web runtime and production scheduler. Confirm shutdown
+   completed and no authentication-email provider call remains in flight. Do
+   not use the command's quiescence flag as a substitute for this evidence.
+3. Capture and restore-verify a protected encrypted database backup using the
+   database procedure above. Label it as a pre-invalidation credential-bearing
+   snapshot. A runtime must never be started against that restore until this
+   invalidation command has been run again on the isolated restored database.
+4. Run the read-only review below with the still-current secret source. It
+   prints only counts, the exact deployment profile, a redacted canonical
+   database-identity SHA-256, a case-reference SHA-256, and the exact execution
+   acknowledgement. It prints no user, request, recipient, token, database URL
+   or secret value.
+
+```bash
+docker compose --env-file .env.production -f compose.production.yml --profile maintenance run --rm --no-deps auth-recovery-secret-rotation \
+  node dist/jobs/rotate-auth-recovery-secret.js \
+  --dry-run \
+  --reason SUSPECTED_KEY_COMPROMISE \
+  --operator "NAMED OPERATOR" \
+  --case-reference "APPROVED-CASE-REFERENCE" \
+  --confirm-api-and-scheduler-quiesced
+```
+
+5. Independently confirm the database-identity digest and `production` profile,
+   review all five counts and the current generation, then copy them and the emitted acknowledgement into
+   the execute command. Equal counts are insufficient: execution refuses a
+   changed database fingerprint or deployment profile.
+
+```bash
+docker compose --env-file .env.production -f compose.production.yml --profile maintenance run --rm --no-deps auth-recovery-secret-rotation \
+  node dist/jobs/rotate-auth-recovery-secret.js \
+  --execute \
+  --reason SUSPECTED_KEY_COMPROMISE \
+  --operator "NAMED OPERATOR" \
+  --case-reference "APPROVED-CASE-REFERENCE" \
+  --confirm-api-and-scheduler-quiesced \
+  --confirm-outbox-preservation-understood \
+  --expected-generation REVIEWED_GENERATION \
+  --expected-capabilities REVIEWED_COUNT \
+  --expected-request-evidence-rows REVIEWED_COUNT \
+  --expected-legacy-slots REVIEWED_COUNT \
+  --expected-rate-buckets REVIEWED_COUNT \
+  --expected-security-notices REVIEWED_COUNT \
+  --expected-database-identity-sha256 REVIEWED_SHA256 \
+  --expected-deployment-profile production \
+  --confirm-execute "COPY THE EXACT DRY-RUN ACKNOWLEDGEMENT"
+```
+
+6. `EXECUTED` must report `recoveryBlocked: true`, the reviewed and blocked
+   generations, and zero `remainingCapabilities`,
+   `remainingRequestEvidenceRows`, `remainingLegacySlots`, and
+   `remainingRateBuckets`. Create a new independent canonical 32-64-byte secret
+   in the approved secret store and update every API/scheduler secret source
+   without printing either value. Do not start those runtimes yet.
+7. With the replacement secret injected only into the restricted maintenance
+   container, activate the exact blocked generation. The command rejects any
+   key present in the append-only retired-fingerprint history, a changed
+   database/profile/generation, or any non-zero rotation
+   postcondition:
+
+```bash
+docker compose --env-file .env.production -f compose.production.yml --profile maintenance run --rm --no-deps auth-recovery-secret-rotation \
+  node dist/jobs/rotate-auth-recovery-secret.js \
+  --activate-after-replacement \
+  --reason SUSPECTED_KEY_COMPROMISE \
+  --operator "NAMED OPERATOR" \
+  --case-reference "APPROVED-CASE-REFERENCE" \
+  --confirm-api-and-scheduler-quiesced \
+  --expected-generation BLOCKED_GENERATION \
+  --expected-database-identity-sha256 REVIEWED_SHA256 \
+  --expected-deployment-profile production \
+  --confirm-activate "COPY THE EXACT ACTIVATION ACKNOWLEDGEMENT"
+```
+
+8. Only after `ACTIVATED` reports the exact generation and
+   `recoveryBlocked: false` may production preflight and runtime startup proceed.
+   Prove login, a new recovery request, reset consumption, and the preserved
+   completion-notice worker. An old-key process must fail the database fence.
+
+Retain the named operator, reason, case digest/reference in the restricted
+incident system, protected backup reference and digest, selected image/commit,
+dry-run and execution count-only outputs, database/profile binding, new
+secret-store version reference (never the value), preflight, restart and smoke
+evidence. Do not record raw secrets, recipient addresses, tokens, request IDs or
+account IDs. A normal worker-side timing-safe mismatch remains a
+`KEY_UNAVAILABLE` fail-closed guard, but it is not a substitute for this bulk
+rotation procedure.
+
+Password reset invalidates all active sessions and outstanding recovery links for that user, records an immutable event, and queues a registered-address security notice.
 
 Run `npm run check:production:observability -- --production-env-file=.env.production` before launch from a trusted shell. The checker verifies `ERROR_ALERT_WEBHOOK_URL` is an HTTPS public destination, resolves through public DNS, accepts the same sanitized JSON payload shape used by API and job error alerts, and keeps the secret webhook URL out of output. Confirm the received alert in the external incident system and record the redacted evidence reference in the launch ledger.
 
 ## Billing And Email
 
 Run `npm run check:production:providers -- --production-env-file=.env.production` from a trusted shell before launch. The checker verifies the four configured Stripe price IDs exist as active live recurring prices, confirms an enabled live Stripe webhook endpoint targets `/api/v1/billing/webhooks` on the configured production API origin, and confirms the Resend sender domain from `EMAIL_FROM` is verified. Output is redacted and must not be used to store Stripe or Resend secrets.
+
+Before launch, prove through the deployed application that one recovery-link
+email and one post-reset security notice are accepted from the verified sender,
+include deterministic HTML and plain-text alternatives, point only to the
+canonical frontend origin where applicable, and carry no raw token in provider
+logs or repository evidence. The recovery text alternative must contain the
+complete fragment link for clients that do not render HTML. Separately prove that known,
+unknown, inactive, suppressed, rejected, and uncertain forgot-password outcomes
+remain response-equivalent and that the durable abuse budgets survive an API
+restart or second replica.
 
 ## Release Gate
 

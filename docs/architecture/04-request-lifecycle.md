@@ -144,6 +144,50 @@ Refresh tokens are managed in `apps/api/src/services/session-tokens.ts` and pers
 
 The Next.js web client performs **single-flight refresh** — concurrent `401`s coalesce into one refresh call and then retry — so the API never sees a refresh stampede. The API side simply guarantees rotation is atomic and reuse is detected (above); the client-side queue/de-duplication is documented in [09-frontend.md](09-frontend.md) and is intentionally not detailed here.
 
+Public login, registration, forgot-password, and reset-password calls opt out of
+that refresh/redirect path. A public credential flow therefore cannot rotate an
+unrelated cookie session or turn a recovery failure into a protected-route
+redirect.
+
+In local development the API starts a bounded five-second authentication-delivery
+loop so a real configured Resend sender advances durable recovery and completion
+notice rows. Public production keeps that work in the dedicated scheduler
+container, while the personal-server profile intentionally uses operator-issued
+links and starts no provider delivery loop.
+
+### Password recovery request lifecycle
+
+`POST /api/v1/auth/forgot-password` is a neutral asynchronous boundary. The
+route keeps a short process-local caller/identifier bucket as a burst guard,
+then the service applies database-backed, domain-separated keyed-HMAC budgets
+for the normalized identifier, exact caller address, and canonical network.
+Known, unknown, inactive, account-suppressed, provider-rejected, and
+provider-uncertain requests return the same `202` body with `Cache-Control:
+no-store`. A database/queue-wide failure returns the same-for-all `503
+PASSWORD_RECOVERY_UNAVAILABLE`; it never falls back to an untracked token.
+
+Accepted work is a hashed `PasswordRecoveryRequest`. Delivery moves from
+`PENDING` to `SENDING`, then to `ACCEPTED`, `REJECTED`, or `UNCERTAIN`. A stale
+`SENDING` row is quarantined by the worker, never repaired in the public request
+path. Retries reuse the immutable row inputs, recorded delivery-template version,
+and version-bound idempotency key. The database does not store a serialized
+provider payload. The immutable v1 renderer deterministically reconstructs it;
+future template changes must create v2 rows and retain the v1 renderer for queued
+v1 work. Its pinned regression covers both HTML and plain-text bytes; the
+plain-text recovery alternative contains the complete fragment link without
+placing that capability in application or provider-error logs. Only unexpired,
+unterminated `SENDING`, `ACCEPTED`, or `UNCERTAIN` requests are consumable.
+
+`POST /api/v1/auth/reset-password` locks the presented request and its live
+organisation/user/session set. A successful transaction changes the password,
+terminates all outstanding requests, revokes all sessions, appends one
+predecessor-compatible `ALL_SESSIONS_REVOKED` event with the trusted immutable
+`PASSWORD_RESET_COMPLETED` context marker (projected under that virtual API
+label), and enqueues one
+`PASSWORD_RESET_COMPLETED_NOTICE`. Invalid, expired, rejected, terminated, and
+concurrently consumed tokens all return `400 INVALID_RESET_TOKEN`. Notification
+delivery is out of band and cannot reverse a successful reset.
+
 ## Sequence: authenticated request with token refresh
 
 ```mermaid

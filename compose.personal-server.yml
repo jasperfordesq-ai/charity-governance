@@ -38,6 +38,7 @@ x-api-environment: &api-environment
   HOST: 0.0.0.0
   DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env.personal-server}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.personal-server}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env.personal-server}
   JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.personal-server}
+  AUTH_RECOVERY_SECRET: ${AUTH_RECOVERY_SECRET:?Set AUTH_RECOVERY_SECRET in .env.personal-server}
   JWT_EXPIRY: ${JWT_EXPIRY:-15m}
   REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
   READINESS_API_KEY: ${READINESS_API_KEY:?Set READINESS_API_KEY in .env.personal-server}
@@ -274,6 +275,33 @@ services:
     mem_limit: 768m
     cpus: 1.0
     pids_limit: 256
+    logging: *json-logging
+    <<: *service-security
+
+  auth-recovery-secret-rotation:
+    profiles:
+      - maintenance
+    image: charitypilot-personal-server-api:local
+    pull_policy: never
+    command: ["node", "dist/jobs/rotate-auth-recovery-secret.js"]
+    restart: "no"
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      CHARITYPILOT_DEPLOYMENT_MODE: personal-server
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env.personal-server}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.personal-server}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env.personal-server}
+      AUTH_RECOVERY_SECRET: ${AUTH_RECOVERY_SECRET:?Set AUTH_RECOVERY_SECRET in .env.personal-server}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    networks:
+      - personal-server-internal
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
     logging: *json-logging
     <<: *service-security
 

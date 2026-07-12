@@ -101,7 +101,7 @@ test('production launch evidence status reports pending template progress withou
     assert.equal(result.status, 0);
     assert.match(result.stdout, /CharityPilot production launch evidence status/);
     assert.match(result.stdout, /Evidence statuses complete: no/);
-    assert.match(result.stdout, /Checklist checks complete: 0 \/ 86 \(0% complete\)/);
+    assert.match(result.stdout, /Checklist checks complete: 0 \/ 89 \(0% complete\)/);
     assert.match(result.stdout, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(result.stdout, /releaseGate: 0 \/ 20 complete/);
     assert.match(result.stdout, /approvedForLaunch: false/);
@@ -136,7 +136,7 @@ test('production launch evidence status counts completed checks and keeps final 
     const result = runProductionLaunchEvidenceStatusFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /Checklist checks complete: 1 \/ 86 \(1\.2% complete\)/);
+    assert.match(result.stdout, /Checklist checks complete: 1 \/ 89 \(1\.1% complete\)/);
     assert.match(result.stdout, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(result.stdout, /releaseGate: 1 \/ 20 complete/);
     assert.match(result.stdout, /finalSignoff: pending/);
@@ -167,14 +167,14 @@ test('production launch evidence status renders non-secret JSON for automation',
     assert.ok(payload.releaseBinding.missingFields.includes('release.commitSha'));
     assert.ok(payload.releaseBinding.missingFields.includes('release.workflowRunUrl'));
     assert.ok(payload.releaseBinding.missingFields.includes('release.imageDigestManifest.apiImage'));
-    assert.equal(payload.totalChecks, 86);
+    assert.equal(payload.totalChecks, 89);
     assert.equal(payload.approvedFinalSignoffRoles, 0);
     assert.equal(payload.totalFinalSignoffRoles, 5);
     assert.deepEqual(payload.percentages, {
-      evidenceChecks: 1.2,
+      evidenceChecks: 1.1,
       finalSignoffs: 0,
     });
-    assert.equal(payload.incompleteCheckCount, 85);
+    assert.equal(payload.incompleteCheckCount, 88);
     assert.deepEqual(
       payload.pendingFinalSignoffRoles.map((role) => role.id),
       ['engineering', 'operations', 'security', 'legalCompliance', 'business'],
@@ -202,7 +202,7 @@ test('production launch evidence status refuses strict completion for generic ev
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.completedChecks, 86);
+    assert.equal(payload.completedChecks, 89);
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.releaseBinding.complete, true);
     assert.equal(payload.evidenceStatusesComplete, false);
@@ -524,7 +524,7 @@ test('production launch evidence status complete flag requires area statuses', a
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.completedChecks, 86);
+    assert.equal(payload.completedChecks, 89);
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.evidenceStatusesComplete, false);
     assert.equal(payload.areas.find((area) => area.id === 'releaseGate').status, 'pending');
@@ -565,7 +565,7 @@ test('production launch evidence status complete flag requires release binding',
 
     assert.equal(result.status, 0);
     const payload = JSON.parse(result.stdout);
-    assert.equal(payload.completedChecks, 86);
+    assert.equal(payload.completedChecks, 89);
     assert.equal(payload.approvedFinalSignoffRoles, 5);
     assert.equal(payload.releaseBinding.complete, false);
     assert.equal(payload.evidenceStatusesComplete, false);

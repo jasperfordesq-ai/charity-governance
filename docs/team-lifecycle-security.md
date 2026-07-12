@@ -86,6 +86,32 @@ hashing and immediately before consumption. Failures use the same generic
 invalid-invite response so tenant, account, and capacity state are not disclosed
 through a public token endpoint.
 
+## Password recovery integrity
+
+Public password recovery is enumeration-neutral and asynchronous. Syntactically
+valid requests consume durable, keyed-HMAC identifier and network budgets even
+when the account is unknown, inactive, or suppressed. The browser receives the
+same accepted response for every account and delivery outcome; only a
+system-wide recovery-store failure is surfaced as temporary unavailability.
+No raw unknown-account email, IP/network value, or reset token is stored.
+
+Recovery links are represented by bounded, hashed `PasswordRecoveryRequest`
+rows rather than one replaceable token slot. Up to three unexpired usable links
+may coexist, so a second request cannot silently invalidate an email already in
+flight. Only unexpired, unterminated `SENDING`, `ACCEPTED`, or `UNCERTAIN` rows
+can be consumed. One successful reset locks the request, organisation, user and
+sessions; changes the password; terminates every outstanding request; revokes
+every active session; appends one immutable, predecessor-compatible
+`ALL_SESSIONS_REVOKED` event with a trusted `PASSWORD_RESET_COMPLETED` context
+marker (projected as that virtual API label); and queues one registered-address
+security notice in the same transaction.
+
+The organisation-wide security audit remains restricted to active Owners and
+Admins. The reset subject receives the separate durable email notice. A future
+MFA/account-security slice may add a dedicated subject-only activity surface;
+the team-wide audit endpoint must not be broadened or filtered implicitly by
+role.
+
 ## Evidence and verification
 
 Security events are append-only database records. Browser DTOs deliberately

@@ -1,6 +1,6 @@
 # CharityPilot - Plain-English Launch Guide
 
-*Last updated: 2026-07-10. This is the human-friendly companion to the dense
+*Last updated: 2026-07-12. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
@@ -30,10 +30,12 @@ be rerun against the final production configuration:
 a fresh clone it reports `NO_ENV` until you run `npm run setup:production-env`;
 on a partially configured production workstation it reports `ENV_INCOMPLETE`
 and lists the remaining real provider/hosting values. The last partially
-  configured handoff still had 18 production values needing real data.
+  configured handoff still had 18 counted production values needing real data,
+  and its older env file additionally lacks the new `AUTH_RECOVERY_SECRET` and
+  P1-07A database-compatibility marker.
   On the latest checked workstation, production values are `9 / 27` complete,
-machine-readable launch evidence is `9 / 86` complete, final signoffs are
-  `0 / 5`, the strict counted launch gates are `18 / 118` complete (`15.3%`),
+machine-readable launch evidence is `9 / 89` complete, final signoffs are
+  `0 / 5`, the strict counted launch gates are `18 / 121` complete (`14.9%`),
 and `approvedForLaunch` is `false`. That strict percentage only counts
 production values, launch evidence checks, and final signoff roles; it is not a
 legal, security, operations, or business readiness certification.
@@ -41,10 +43,19 @@ Local browser QA has current 2026-07-09 evidence from focused responsive route c
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all
-86 machine-readable launch evidence checks, including the GitHub production environment and secret-store preflights and deployed accessibility
+89 machine-readable launch evidence checks, including the GitHub production
+environment and secret-store preflights, recovery-key rotation, isolated
+authentication-email worker/anomaly-alert rehearsal, distinct deployed recovery
+and post-reset Resend delivery, and deployed accessibility
 transcript in `browserQa.checks.accessibility-coverage`, cross-browser
 transcripts in `browserQa.checks.cross-browser-coverage`, and real-device or
 cloud-device iOS Safari proof in `browserQa.checks.ios-safari-device-coverage`.
+The new recovery proofs belong in
+`secretsAndEnv.auth-recovery-secret-rotation-rehearsal`,
+`jobs.auth-email-delivery-runtime`, `jobs.auth-delivery-anomaly-alert`, and
+`billingAndEmail.password-recovery-resend-delivery`; each entry must satisfy the
+distinct transcript requirements in the machine validator rather than relying
+on one generic status note.
 The deployed browser QA preflight transcript must be recorded in
 `browserQa.checks.browser-qa-completed`, including
 `npm run check:production:browser-qa-env` and
@@ -67,7 +78,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | Local `npm run test:production-check` passed 745 checks with 0 failures and 2 Windows-only symbolic-link privilege skips (747 total) on 2026-07-11; rerun for the final release ref |
+| Production-tooling tests | The final P1-07A local gate passed 827 checks with 0 failures and 2 expected Windows symbolic-link privilege skips (829 total) on 2026-07-12; the final local managed disposable E2E gate also passed 113/113 runner contracts and 105/105 browser scenarios in 7.6m with clean isolated teardown; exact-pushed-SHA GitHub CI and managed E2E runs remain separate pending publication gates |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |
@@ -171,7 +182,7 @@ You need four external services. Create the **production/live** versions
      `TRUSTED_PROXY_ADDRESSES` (so the API trusts the proxy's forwarded client IPs).
   3. Bring up the stack with the proxy overlay:
      ```bash
-     npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
+     npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p107a-cutover
      ```
   Caddy terminates HTTPS for both domains and proxies to the internal containers;
   certificates are issued and renewed with no further action. You still need the
@@ -182,12 +193,19 @@ You need four external services. Create the **production/live** versions
 ### Step 5 - Fill in the real secrets
 - **Start with one command** - it creates `.env.production` for you and
   auto-generates the random secrets you'd otherwise have to craft by hand
-  (`JWT_SECRET`, `READINESS_API_KEY`), leaving clearly-marked placeholders for
+  (`JWT_SECRET`, `READINESS_API_KEY`, `AUTH_RECOVERY_SECRET`), setting the current
+  `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`, and leaving clearly-marked placeholders for
   the values only you can provide:
   ```bash
   npm run setup:production-env
   ```
   It prints exactly which values you still need and where each comes from.
+  If `.env.production` already exists, this command correctly refuses to
+  overwrite it. Do not use `--force` on a file containing reviewed values.
+  Instead, add a newly generated independent canonical 32-64-byte
+  `AUTH_RECOVERY_SECRET` through the approved secret-store procedure and update
+  the non-secret compatibility marker separately; never paste the secret into
+  chat, logs, source control, or launch evidence.
 - **Then** open `.env.production` and resolve every value reported by
   `npm run launch:status`: replace remaining `REPLACE_ME` placeholders, fill
   the real provider values from Steps 1-4, and correct any drifted TLS/cookie
@@ -255,10 +273,12 @@ gh variable set NEXT_PUBLIC_API_URL --env production --repo jasperfordesq-ai/cha
   gh workflow run release-images.yml --ref master
   gh run watch RELEASE_RUN_ID --exit-status
   npm run deploy:preflight -- --production-env-file=.env.production
-  npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p109-cutover
+  npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/mnt/encrypted/charitypilot/p107a-cutover
   ```
-- **Current known GitHub environment blocker:** the protected secret store still
-  needs its real provider/operator secret names. Rerun
+- **Current known GitHub environment blocker (refreshed 2026-07-12):** only
+  `JWT_SECRET` and `READINESS_API_KEY` are present. The protected secret store
+  still lacks `AUTH_RECOVERY_SECRET` plus the six provider/operator secret
+  names. Rerun
   `npm run check:production:github-secrets -- --environment=production`, then
   set the non-secret `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` variable
   after selecting the real managed database hostname, and rerun

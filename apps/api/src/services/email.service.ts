@@ -2,10 +2,17 @@ import { Resend, type CreateEmailRequestOptions } from 'resend';
 import { isConfiguredSecret } from '../utils/env.js';
 import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
 import { formatProviderError } from '../utils/provider-errors.js';
+import {
+  renderPasswordRecoverySecurityEmail,
+  renderPasswordResetCompletedNotice,
+} from './security-email-templates.js';
 
 const BRAND_TEAL = '#0D7377';
 const BRAND_TEAL_LIGHT = '#e6f4f5';
 const DEADLINE_REMINDER_PROVIDER_TIMEOUT_MS = 30 * 1000;
+export const DEFAULT_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS = 8 * 1000;
+export const MIN_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS = 1 * 1000;
+export const MAX_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS = 15 * 1000;
 
 function escapeHtml(value: string): string {
   return value
@@ -55,7 +62,7 @@ function emailLayout(title: string, bodyHtml: string): string {
             <td style="background-color:${BRAND_TEAL_LIGHT};padding:24px 40px;border-top:1px solid #d1e9ea;">
               <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6;">
                 You received this email because you have an account with CharityPilot.<br />
-                &copy; ${new Date().getFullYear()} CharityPilot. All rights reserved.
+                &copy; CharityPilot. All rights reserved.
               </p>
             </td>
           </tr>
@@ -97,6 +104,28 @@ export type DeadlineReminderDeliveryResult =
   | { outcome: 'REJECTED' }
   | { outcome: 'UNCERTAIN' };
 
+export type SecurityEmailDeliveryResult =
+  | { outcome: 'ACCEPTED'; providerMessageId: string }
+  | { outcome: 'REJECTED'; retryable: boolean }
+  | { outcome: 'UNCERTAIN' };
+
+export type SecurityEmailDeliveryOptions = {
+  idempotencyKey: string;
+  templateVersion: number;
+  frontendOrigin?: string;
+};
+
+export function securityEmailProviderTimeoutMs(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const configured = Number(env.SECURITY_EMAIL_PROVIDER_TIMEOUT_MS);
+  return Number.isInteger(configured) &&
+    configured >= MIN_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS &&
+    configured <= MAX_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS
+    ? configured
+    : DEFAULT_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS;
+}
+
 function providerErrorStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const candidate = error as { statusCode?: unknown; status?: unknown };
@@ -124,15 +153,27 @@ export class EmailService {
   private from: string;
   private frontendUrl: string;
   private deadlineReminderProviderTimeoutMs: number;
+  private securityEmailProviderTimeoutMs: number;
 
   constructor(
     private logger: EmailLogger = defaultEmailLogger(),
     deadlineReminderProviderTimeoutMs = DEADLINE_REMINDER_PROVIDER_TIMEOUT_MS,
+    securityProviderTimeoutMs = securityEmailProviderTimeoutMs(),
   ) {
     if (!Number.isInteger(deadlineReminderProviderTimeoutMs) || deadlineReminderProviderTimeoutMs <= 0) {
       throw new TypeError('Deadline reminder provider timeout must be a positive integer');
     }
+    if (
+      !Number.isInteger(securityProviderTimeoutMs) ||
+      securityProviderTimeoutMs <= 0 ||
+      securityProviderTimeoutMs > MAX_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS
+    ) {
+      throw new TypeError(
+        `Security email provider timeout must be a positive integer no greater than ${MAX_SECURITY_EMAIL_PROVIDER_TIMEOUT_MS} milliseconds`,
+      );
+    }
     this.deadlineReminderProviderTimeoutMs = deadlineReminderProviderTimeoutMs;
+    this.securityEmailProviderTimeoutMs = securityProviderTimeoutMs;
     this.resend = this.hasConfiguredResendKey() ? new Resend(process.env.RESEND_API_KEY) : undefined;
     this.from = process.env.EMAIL_FROM ?? 'noreply@charitypilot.ie';
     this.frontendUrl = getPrimaryFrontendOrigin();
@@ -191,20 +232,47 @@ export class EmailService {
     return this._send(to, subject, emailLayout(subject, body));
   }
 
-  async sendPasswordReset(to: string, name: string, token: string): Promise<boolean> {
-    const resetUrl = buildTokenUrl(this.frontendUrl, '/reset-password', token);
-    const subject = 'Reset your CharityPilot password';
+  async sendPasswordRecoveryEmail(
+    to: string,
+    name: string,
+    token: string,
+    options: SecurityEmailDeliveryOptions,
+  ): Promise<SecurityEmailDeliveryResult> {
+    const rendered = renderPasswordRecoverySecurityEmail(options.templateVersion, {
+      recipientName: name,
+      token,
+      frontendOrigin: options.frontendOrigin ?? this.frontendUrl,
+    });
 
-    const body = `
-      ${h2(`Password reset request`)}
-      ${paragraph(`Hi ${escapeHtml(name)}, we received a request to reset the password for your CharityPilot account.`)}
-      <div style="text-align:center;margin:32px 0;">
-        ${primaryButton(resetUrl, 'Reset Password')}
-      </div>
-      ${smallNote(`This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email — your password will not change.`)}
-    `;
+    return this._sendSecurityEmail(
+      to,
+      rendered.subject,
+      rendered.html,
+      rendered.text,
+      options,
+      'password recovery',
+    );
+  }
 
-    return this._send(to, subject, emailLayout(subject, body));
+  async sendPasswordResetCompletedNotice(
+    to: string,
+    name: string,
+    changedAt: Date,
+    options: SecurityEmailDeliveryOptions,
+  ): Promise<SecurityEmailDeliveryResult> {
+    const rendered = renderPasswordResetCompletedNotice(options.templateVersion, {
+      recipientName: name,
+      changedAt,
+    });
+
+    return this._sendSecurityEmail(
+      to,
+      rendered.subject,
+      rendered.html,
+      rendered.text,
+      options,
+      'password reset notice',
+    );
   }
 
   async sendTeamInvite(
@@ -356,6 +424,93 @@ export class EmailService {
       return { outcome: 'UNCERTAIN' };
     } finally {
       clearTimeout(providerTimeout);
+    }
+  }
+
+  private async _sendSecurityEmail(
+    to: string,
+    subject: string,
+    html: string,
+    text: string,
+    options: SecurityEmailDeliveryOptions,
+    messageKind: string,
+  ): Promise<SecurityEmailDeliveryResult> {
+    if (!options.idempotencyKey || options.idempotencyKey.length > 256) {
+      throw new TypeError('Security email idempotency key must contain between 1 and 256 characters');
+    }
+    if (!this.isConfigured() || this.resend === undefined) {
+      this.logger.warn(`[EmailService] ${messageKind} email not sent because delivery is not configured`);
+      return { outcome: 'REJECTED', retryable: false };
+    }
+
+    const providerAbortController = new AbortController();
+    let providerTimeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutOutcome = new Promise<never>((_resolve, reject) => {
+      providerTimeout = setTimeout(() => {
+        const timeoutError = new Error(
+          'Security email provider request exceeded its bounded timeout',
+        );
+        providerAbortController.abort(timeoutError);
+        reject(timeoutError);
+      }, this.securityEmailProviderTimeoutMs);
+    });
+
+    try {
+      const requestOptions: CreateEmailRequestOptions & { signal: AbortSignal } = {
+        idempotencyKey: options.idempotencyKey,
+        signal: providerAbortController.signal,
+      };
+      const response = await Promise.race([
+        this.resend.emails.send(
+          { from: this.from, to, subject, html, text },
+          requestOptions,
+        ),
+        timeoutOutcome,
+      ]);
+      if (response.error !== null) {
+        this.logger.error(
+          `[EmailService] Failed to send ${messageKind} email: ${formatEmailDeliveryError(response.error)}`,
+        );
+        const status = providerErrorStatus(response.error);
+        const name = providerErrorName(response.error)?.toLowerCase();
+        if (
+          status === 408 ||
+          status === 409 ||
+          (status !== undefined && status >= 500) ||
+          name === 'invalid_idempotent_request' ||
+          name === 'concurrent_idempotent_requests'
+        ) {
+          return { outcome: 'UNCERTAIN' };
+        }
+        if (status !== undefined && status >= 400 && status < 500) {
+          return { outcome: 'REJECTED', retryable: status === 429 };
+        }
+        return { outcome: 'UNCERTAIN' };
+      }
+
+      const acceptanceId = response.data?.id;
+      if (
+        typeof acceptanceId !== 'string' ||
+        acceptanceId.trim() === '' ||
+        acceptanceId.length > 256
+      ) {
+        this.logger.error(
+          `[EmailService] Failed to send ${messageKind} email: ${formatEmailDeliveryError({
+            name: 'InvalidProviderResponse',
+            message: 'Email provider did not return an acceptance id',
+          })}`,
+        );
+        return { outcome: 'UNCERTAIN' };
+      }
+
+      return { outcome: 'ACCEPTED', providerMessageId: acceptanceId };
+    } catch (err) {
+      this.logger.error(
+        `[EmailService] Failed to send ${messageKind} email: ${formatEmailDeliveryError(err)}`,
+      );
+      return { outcome: 'UNCERTAIN' };
+    } finally {
+      if (providerTimeout !== undefined) clearTimeout(providerTimeout);
     }
   }
 

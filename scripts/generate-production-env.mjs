@@ -17,11 +17,15 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 
 // Keys this tool can safely auto-generate: opaque random secrets only.
-export const AUTO_GENERATED_KEYS = ['JWT_SECRET', 'READINESS_API_KEY'];
+export const AUTO_GENERATED_KEYS = [
+  'JWT_SECRET',
+  'READINESS_API_KEY',
+  'AUTH_RECOVERY_SECRET',
+];
 // Keys forced to a fixed correct production value.
 const FIXED_VALUES = {
   NODE_ENV: 'production',
-  CHARITYPILOT_DATABASE_COMPATIBILITY: 'p109-governance-integrity-v1',
+  CHARITYPILOT_DATABASE_COMPATIBILITY: 'p107a-password-recovery-v1',
 };
 
 // External values the operator must supply (with where to get each). Used only

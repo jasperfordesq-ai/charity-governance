@@ -53,6 +53,7 @@ const FIXED_IDENTITY = createLocalRunIdentity({
   bootstrapPassword: "bootstrap-password-unique-value",
   runnerPassword: "runner-password-unique-value",
   jwtSecret: "jwt-secret-unique-value-with-enough-entropy",
+  authRecoverySecret: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
   readinessKey: "readiness-key-unique-value-with-entropy",
 });
 
@@ -289,6 +290,11 @@ test("local run identity pins the disposable contract and creates no reusable cr
     identity.readinessKey,
   );
   assert.equal(identity.playwrightEnv.E2E_JWT_SECRET, identity.jwtSecret);
+  assert.equal(
+    identity.playwrightEnv.E2E_AUTH_RECOVERY_SECRET,
+    identity.authRecoverySecret,
+  );
+  assert.notEqual(identity.authRecoverySecret, identity.jwtSecret);
   assert.equal(identity.appImage, `${identity.projectName}-app:local`);
   assert.equal(
     identity.databaseImage,
@@ -472,9 +478,10 @@ test("env serialization rejects injection and secret redaction covers DSNs and r
     /not env-file safe/,
   );
 
-  const text = `password=${FIXED_IDENTITY.runnerPassword} dsn=${FIXED_IDENTITY.databaseUrl}`;
+  const text = `password=${FIXED_IDENTITY.runnerPassword} recovery=${FIXED_IDENTITY.authRecoverySecret} dsn=${FIXED_IDENTITY.databaseUrl}`;
   const redacted = redactSecrets(text, FIXED_IDENTITY.secrets);
   assert.doesNotMatch(redacted, /runner-password-unique-value/);
+  assert.doesNotMatch(redacted, /AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8/);
   assert.doesNotMatch(redacted, /postgresql:\/\/charitypilot_e2e_runner:[^[]/);
   assert.match(redacted, /\[REDACTED\]/);
 
@@ -483,10 +490,12 @@ test("env serialization rejects injection and secret redaction covers DSNs and r
       "postgresql://runner:encoded%2Dpassword@qa.example.test:5432/db",
     E2E_OWNER_EMAIL: "qa-owner@example.test",
     E2E_OWNER_PASSWORD: "owner-password-secret",
+    E2E_AUTH_RECOVERY_SECRET: FIXED_IDENTITY.authRecoverySecret,
   });
   assert.ok(ambient.includes("encoded-password"));
   assert.ok(ambient.includes("qa-owner@example.test"));
   assert.ok(ambient.includes("owner-password-secret"));
+  assert.ok(ambient.includes(FIXED_IDENTITY.authRecoverySecret));
 });
 
 test("rendered compose validation accepts only loopback, tmpfs and project-scoped writable paths", () => {
@@ -2199,6 +2208,7 @@ test("remote, deployed, and local Playwright boundaries reject an abort-before-s
       E2E_EXECUTION_MODE: "remote-disposable",
       E2E_READINESS_API_KEY: "remote-readiness-key-with-enough-entropy",
       E2E_JWT_SECRET: "remote-jwt-secret-with-enough-entropy-value",
+      E2E_AUTH_RECOVERY_SECRET: "remote-recovery-secret-with-enough-entropy-value",
       E2E_DATABASE_INSTANCE_ID: FIXED_IDENTITY.instanceId,
       E2E_API_URL: "https://api.qa-disposable.example.test",
       E2E_WEB_URL: "https://app.qa-disposable.example.test",
@@ -2340,6 +2350,7 @@ test("native Windows rejects remote-disposable before database or API authority"
     E2E_EXECUTION_MODE: "remote-disposable",
     E2E_READINESS_API_KEY: "remote-readiness-key-with-enough-entropy",
     E2E_JWT_SECRET: "remote-jwt-secret-with-enough-entropy-value",
+    E2E_AUTH_RECOVERY_SECRET: "remote-recovery-secret-with-enough-entropy-value",
   };
   let preflightCalls = 0;
   let commandCalls = 0;
@@ -2372,6 +2383,7 @@ test("remote-disposable mode requires both independent preflights and never invo
     E2E_EXECUTION_MODE: "remote-disposable",
     E2E_READINESS_API_KEY: "remote-readiness-key-with-enough-entropy",
     E2E_JWT_SECRET: "remote-jwt-secret-with-enough-entropy-value",
+    E2E_AUTH_RECOVERY_SECRET: "remote-recovery-secret-with-enough-entropy-value",
     E2E_DATABASE_INSTANCE_ID: FIXED_IDENTITY.instanceId,
     E2E_API_URL: "https://api.qa-disposable.example.test",
     E2E_WEB_URL: "https://app.qa-disposable.example.test",
@@ -2452,6 +2464,7 @@ test("outer remote janitor acquires the suite lease before reset and always rele
     E2E_DATABASE_URL: config.databaseUrl,
     E2E_READINESS_API_KEY: "remote-readiness-key-with-enough-entropy",
     E2E_JWT_SECRET: "remote-jwt-secret-with-enough-entropy-value",
+    E2E_AUTH_RECOVERY_SECRET: "remote-recovery-secret-with-enough-entropy-value",
   };
   const calls = [];
   let receivedResetTables;
@@ -2545,6 +2558,7 @@ test("remote runner invokes the outer janitor after a Playwright failure and mak
     E2E_EXECUTION_MODE: "remote-disposable",
     E2E_READINESS_API_KEY: "remote-readiness-key-with-enough-entropy",
     E2E_JWT_SECRET: "remote-jwt-secret-with-enough-entropy-value",
+    E2E_AUTH_RECOVERY_SECRET: "remote-recovery-secret-with-enough-entropy-value",
     E2E_DATABASE_INSTANCE_ID: FIXED_IDENTITY.instanceId,
     E2E_API_URL: "https://api.qa-disposable.example.test",
     E2E_WEB_URL: "https://app.qa-disposable.example.test",
@@ -2605,6 +2619,7 @@ test("unproven remote child-tree shutdown skips the destructive janitor and requ
     E2E_EXECUTION_MODE: "remote-disposable",
     E2E_READINESS_API_KEY: "remote-readiness-key-with-enough-entropy",
     E2E_JWT_SECRET: "remote-jwt-secret-with-enough-entropy-value",
+    E2E_AUTH_RECOVERY_SECRET: "remote-recovery-secret-with-enough-entropy-value",
     E2E_DATABASE_INSTANCE_ID: FIXED_IDENTITY.instanceId,
     E2E_API_URL: "https://api.qa-disposable.example.test",
     E2E_WEB_URL: "https://app.qa-disposable.example.test",
@@ -3140,7 +3155,9 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   );
   assert.match(globalSetup, /Object\.keys\(record\)\.sort\(\)/);
   assert.match(globalSetup, /x-charitypilot-readiness-key/);
-  assert.match(globalSetup, /value\.length < 32/);
+  assert.match(globalSetup, /E2E_AUTH_RECOVERY_SECRET/);
+  assert.match(globalSetup, /value\.length < minimumLength/);
+  assert.match(globalSetup, /E2E_AUTH_RECOVERY_SECRET must be distinct/);
 
   const releaseReady = readFileSync(
     join(ROOT, "scripts", "release-ready.mjs"),

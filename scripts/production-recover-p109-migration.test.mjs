@@ -46,7 +46,7 @@ function productionEnv() {
   return [
     "NODE_ENV=production",
     `CHARITYPILOT_MIGRATION_IMAGE=${MIGRATION_IMAGE}`,
-    "CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1",
+    "CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1",
     "DATABASE_URL=postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full",
     "",
   ].join("\n");

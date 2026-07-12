@@ -20,6 +20,7 @@ function completeDeployEnv(overrides = {}) {
     DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
     DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: 'db.charitypilot.ie',
     JWT_SECRET: 'J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
+    AUTH_RECOVERY_SECRET: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
     STRIPE_SECRET_KEY: 'sk_live_configuredSecret',
@@ -44,7 +45,7 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
-    CHARITYPILOT_DATABASE_COMPATIBILITY: 'p109-governance-integrity-v1',
+    CHARITYPILOT_DATABASE_COMPATIBILITY: 'p107a-password-recovery-v1',
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     ...overrides,
   };
@@ -89,7 +90,7 @@ test('deploy transcript redaction removes production secret fragments', () => {
   assert.doesNotMatch(redacted, /user:secret|sk_live_superSecret|whsec_superSecret|re_superSecret|secret-token|configured-service-role-key/);
 });
 
-test('deploy preflight requires the exact reviewed P1-09 database compatibility line', async (context) => {
+test('deploy preflight requires the exact reviewed P1-07A database compatibility line', async (context) => {
   for (const [label, compatibility] of [
     ['missing', ''],
     ['stale P0-06', 'p006-deadline-calendar-v1'],
@@ -115,7 +116,7 @@ test('deploy preflight requires the exact reviewed P1-09 database compatibility 
         assert.equal(result.status, 1);
         assert.match(
           result.stderr,
-          /CHARITYPILOT_DATABASE_COMPATIBILITY must equal p109-governance-integrity-v1/,
+          /CHARITYPILOT_DATABASE_COMPATIBILITY must equal p107a-password-recovery-v1/,
         );
         assert.doesNotMatch(result.stdout, /cosign verify/);
       } finally {
@@ -125,7 +126,7 @@ test('deploy preflight requires the exact reviewed P1-09 database compatibility 
   }
 });
 
-test('deploy preflight accepts the exact reviewed P1-09 database compatibility line', () => {
+test('deploy preflight accepts the exact reviewed P1-07A database compatibility line', () => {
   const tempDir = mkdtempSync(
     join(tmpdir(), 'charitypilot-deploy-preflight-current-compatibility-'),
   );
@@ -144,8 +145,9 @@ test('deploy preflight accepts the exact reviewed P1-09 database compatibility l
   }
 });
 
-test('deploy preflight permits only the two exact internal attested rollback compatibility expectations', async (context) => {
+test('deploy preflight permits only the exact internal attested rollback compatibility expectations', async (context) => {
   for (const compatibility of [
+    'p109-governance-integrity-v1',
     'p006-deadline-calendar-v1',
     'pre-p006-restored',
   ]) {

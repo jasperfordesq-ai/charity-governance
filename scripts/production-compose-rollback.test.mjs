@@ -11,6 +11,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
+import {
+  P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT,
+  P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE,
+  P109_RESTORED_HISTORY_PROBE_SUCCESS,
+  P109_RESTORED_MIGRATIONS,
+  assertP109RestoredHistoryProbeSql,
+  buildP109RestoredHistoryProbeSql,
+} from "./production-p109-restored-database-probe.mjs";
+import { P109_RECOVERY_MIGRATIONS } from "./production-recover-p109-migration.mjs";
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const rollbackScriptPath = join(scriptsDir, "production-compose-rollback.mjs");
@@ -22,6 +31,64 @@ const backupOutputDir = join(
   "charitypilot-approved-encrypted-rollback-cutover",
 );
 const backupArgs = ["--backup-output-dir", backupOutputDir];
+
+test("P1-09 restore-only probe is exact, terminal, read-only, and selected-image bound", () => {
+  assert.deepEqual(P109_RESTORED_MIGRATIONS, P109_RECOVERY_MIGRATIONS);
+  assert.equal(P109_RESTORED_MIGRATIONS.length, 20);
+  assert.match(
+    P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE,
+    /^BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;/,
+  );
+  assert.doesNotMatch(
+    P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE,
+    /^\s*(?:INSERT|UPDATE|DELETE|TRUNCATE|COMMIT|ROLLBACK)\b/im,
+  );
+  assert.match(P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE, /\$p109_restored\$;$/);
+  assert.equal(
+    assertP109RestoredHistoryProbeSql(P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE),
+    P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE,
+  );
+
+  const checksums = Object.fromEntries(
+    P109_RESTORED_MIGRATIONS.map((migration, index) => [
+      migration,
+      index.toString(16).padStart(64, "0"),
+    ]),
+  );
+  const boundSql = buildP109RestoredHistoryProbeSql(checksums);
+  for (const migration of P109_RESTORED_MIGRATIONS) {
+    assert.match(boundSql, new RegExp(`\\('${migration}', '[a-f0-9]{64}'\\)`));
+  }
+  assert.doesNotMatch(
+    boundSql,
+    /__CHARITYPILOT_P109_RESTORED_SELECTED_IMAGE_CHECKSUM_VALUES__/,
+  );
+  assert.match(boundSql, /20260712013000_add_password_recovery_integrity/);
+  assert.match(boundSql, /P1-07A catalog residue/);
+  for (const targetResidueArtifact of [
+    "AuthRecoveryRetiredSecret",
+    "guard_auth_recovery_retired_secret",
+    "reject_auth_recovery_retired_secret_truncate",
+    "guard_auth_recovery_control",
+    "AuthRecoveryRetiredSecret_guard_integrity",
+    "AuthRecoveryRetiredSecret_reject_truncate",
+    "AuthRecoveryControl_guard_integrity",
+  ]) {
+    assert.match(boundSql, new RegExp(targetResidueArtifact));
+  }
+
+  assert.match(
+    P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT,
+    /must contain exactly the 20 reviewed migrations through P1-09/,
+  );
+  assert.doesNotThrow(() => new Function(P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT));
+  assert.match(P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT, /createHash\(\"sha256\"\)/);
+  assert.match(
+    P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT,
+    /node_modules\/prisma\/build\/index\.js/,
+  );
+  assert.match(P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT, new RegExp(P109_RESTORED_HISTORY_PROBE_SUCCESS.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
 
 function cleanEnv() {
   return {
@@ -61,6 +128,7 @@ function productionEnv(overrides = {}) {
       "postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write",
     DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: "db.charitypilot.ie",
     JWT_SECRET: "J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5",
+    AUTH_RECOVERY_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     FRONTEND_URL: "https://app.charitypilot.ie",
     AUTH_COOKIE_DOMAIN: ".charitypilot.ie",
     STRIPE_SECRET_KEY: "sk_live_configuredSecret",
@@ -97,7 +165,7 @@ function rollbackManifest(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${rollbackDigest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${rollbackDigest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${rollbackDigest}`,
-    CHARITYPILOT_DATABASE_COMPATIBILITY: "p109-governance-integrity-v1",
+    CHARITYPILOT_DATABASE_COMPATIBILITY: "p107a-password-recovery-v1",
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
     ...overrides,
   };
@@ -120,14 +188,14 @@ function schemaCompatibilityAttestation(
     kind: "charitypilot-schema-compatibility-attestation",
     schemaVersion: 1,
     environment: "production",
-    databaseCompatibility: "p109-governance-integrity-v1",
+    databaseCompatibility: "p107a-password-recovery-v1",
     assessedAt: "2026-07-10T20:00:00.000Z",
     rollbackDigestManifest,
     rollbackDigestManifestSha256: sha256(manifestContent),
     evidenceReference: "change://CHG-2026-0710/schema-compatibility",
     operator: "operations-owner",
     acknowledgement:
-      "I confirm the selected application images are compatible with the live P1-09 database schema and migration history.",
+      "I confirm the selected application images are compatible with the live P1-07A database schema and migration history.",
     ...overrides,
   });
 }
@@ -269,7 +337,7 @@ test("production rollback dry-run tolerates legacy Supabase metadata and delegat
     );
     assert.match(
       deployCalls[0].mergedEnv,
-      /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/,
+      /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/,
     );
     assert.match(
       deployCalls[0].mergedEnv,
@@ -829,7 +897,131 @@ test("production rollback refuses a legacy image manifest without a pre-migratio
   }
 });
 
-test("production rollback rejects a P0-06-line image-only rollback after the P1-09 compatibility bump", async () => {
+test("production rollback rejects a P1-09 image-only rollback across the P1-07A boundary", async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), "charitypilot-production-rollback-p109-image-only-"));
+  const envPath = join(tempDir, "production.env");
+  const manifestPath = join(tempDir, "release-image-digests.previous.env");
+  let deployCalled = false;
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(manifestPath, rollbackManifest({
+    CHARITYPILOT_DATABASE_COMPATIBILITY: "p109-governance-integrity-v1",
+  }));
+
+  try {
+    const result = runProductionComposeRollbackFromArgs([
+      "--production-env-file", envPath,
+      "--rollback-digest-file", manifestPath,
+      ...backupArgs,
+    ], {
+      processEnv: cleanEnv(),
+      runDeploy: () => {
+        deployCalled = true;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    assert.equal(result.status, 1);
+    assert.equal(deployCalled, false);
+    assert.match(result.stderr, /image-only rollback is forbidden/);
+    assert.match(result.stderr, /p107a-password-recovery-v1/);
+    assert.match(result.stderr, /--database-restore-attestation-file/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production rollback accepts P1-09 only with exact pre-P1-07A restore evidence", async () => {
+  const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
+  const tempDir = mkdtempSync(join(tmpdir(), "charitypilot-production-rollback-p109-restored-"));
+  const envPath = join(tempDir, "production.env");
+  const manifestPath = join(tempDir, "release-image-digests.previous.env");
+  const attestationPath = join(tempDir, "database-restore-attestation.json");
+  const restoredBackupPath = join(tempDir, "pre-p107a-production.dump");
+  const restoredBackupContent = "exact pre-P107A P1-09 custom-format backup bytes";
+  const deployCalls = [];
+  writeFileSync(envPath, productionEnv());
+  writeFileSync(manifestPath, rollbackManifest({
+    CHARITYPILOT_DATABASE_COMPATIBILITY: "p109-governance-integrity-v1",
+  }));
+  writeFileSync(restoredBackupPath, restoredBackupContent);
+  const exactP109Evidence = {
+    restoredDatabaseCompatibility: "p109-governance-integrity-v1",
+    restoredMigrationHead: "20260711230000_add_domain_invariants_referential_safety",
+    incompatibleMigration: "20260712013000_add_password_recovery_integrity",
+    p107aMigrationAbsent: true,
+    p109RestoreAcknowledgement:
+      "I confirm the production runtime was stopped and the exact restored database backup ends at P1-09 before the P1-07A password recovery migration.",
+  };
+
+  try {
+    writeFileSync(attestationPath, databaseRestoreAttestation(
+      "release-image-digests.previous.env",
+      readFileSync(manifestPath),
+      restoredBackupContent,
+      { ...exactP109Evidence, restoredMigrationHead: "wrong-head" },
+    ));
+    const rejected = runProductionComposeRollbackFromArgs([
+      "--production-env-file", envPath,
+      "--rollback-digest-file", manifestPath,
+      "--database-restore-attestation-file", attestationPath,
+      "--restored-backup-file", restoredBackupPath,
+      ...backupArgs,
+    ], {
+      processEnv: cleanEnv(),
+      now: () => new Date("2026-07-10T20:05:00.000Z"),
+      runDeploy: () => {
+        throw new Error("invalid restore evidence must not reach deploy");
+      },
+    });
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /restoredMigrationHead must be 20260711230000_add_domain_invariants_referential_safety/);
+
+    writeFileSync(attestationPath, databaseRestoreAttestation(
+      "release-image-digests.previous.env",
+      readFileSync(manifestPath),
+      restoredBackupContent,
+      exactP109Evidence,
+    ));
+    const accepted = runProductionComposeRollbackFromArgs([
+      "--production-env-file", envPath,
+      "--rollback-digest-file", manifestPath,
+      "--database-restore-attestation-file", attestationPath,
+      "--restored-backup-file", restoredBackupPath,
+      ...backupArgs,
+    ], {
+      processEnv: cleanEnv(),
+      now: () => new Date("2026-07-10T20:05:00.000Z"),
+      runDeploy: (args, dependencies) => {
+        deployCalls.push({ args, dependencies, mergedEnv: readFileSync(args[1], "utf8") });
+        return { status: 0, stdout: "deploy ok\n", stderr: "" };
+      },
+    });
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(deployCalls[0].dependencies.attestedDatabaseCompatibility, "p109-restored");
+    const probeCommand = deployCalls[0].dependencies.preMigrationDatabaseProbeCommand;
+    assert.ok(Array.isArray(probeCommand));
+    assert.deepEqual(probeCommand.slice(0, 4), [
+      "docker",
+      "compose",
+      "--env-file",
+      deployCalls[0].args[1],
+    ]);
+    assert.deepEqual(
+      probeCommand.slice(-8, -2),
+      ["run", "--rm", "--no-deps", "--entrypoint", "node", "migrate"],
+    );
+    assert.equal(probeCommand.at(-2), "-e");
+    assert.equal(probeCommand.at(-1), P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT);
+    assert.match(probeCommand.at(-1), /exactly the 20 reviewed migrations through P1-09/);
+    assert.match(probeCommand.at(-1), /P1-07A-absence probe passed before any migration/);
+    assert.match(deployCalls[0].mergedEnv, /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/);
+    assert.match(accepted.stdout, /exact pre-P107A database restored at the P1-09 migration head/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production rollback rejects a P0-06-line image-only rollback after the P1-07A compatibility bump", async () => {
   const runProductionComposeRollbackFromArgs = await loadRollbackRunner();
   const tempDir = mkdtempSync(
     join(tmpdir(), "charitypilot-production-rollback-p006-image-only-"),
@@ -869,7 +1061,7 @@ test("production rollback rejects a P0-06-line image-only rollback after the P1-
     assert.match(result.stderr, /image-only rollback is forbidden/);
     assert.match(
       result.stderr,
-      /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/,
+      /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/,
     );
     assert.match(result.stderr, /--database-restore-attestation-file/);
   } finally {
@@ -1008,7 +1200,7 @@ test("production rollback rejects an unknown non-empty compatibility line even w
       result.stderr,
       /unsupported CHARITYPILOT_DATABASE_COMPATIBILITY=unreviewed-schema-line-v1/,
     );
-    assert.match(result.stderr, /only p109-governance-integrity-v1/);
+    assert.match(result.stderr, /only p107a-password-recovery-v1/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

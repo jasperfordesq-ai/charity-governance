@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TeamLifecycleService } from '../services/team-lifecycle.service.js';
 import { AppError } from '../utils/errors.js';
+import { authRecoverySecretFingerprint } from '../services/password-recovery-crypto.js';
+
+process.env.AUTH_RECOVERY_SECRET = 'ab'.repeat(32);
+const AUTH_RECOVERY_CONTROL = {
+  id: 1,
+  blocked: false,
+  generation: 1,
+  activeSecretFingerprint: authRecoverySecretFingerprint(),
+  retiredSecretFingerprint: null,
+};
 
 type LockedUserFixture = {
   id: string;
@@ -49,10 +59,19 @@ test('suspension locks organisation then users and atomically revokes sessions, 
   const tx = {
     $queryRaw: async () => {
       rawCall += 1;
-      events.push({ name: rawCall === 1 ? 'lock-organisation' : 'lock-users' });
-      return rawCall === 1
-        ? [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }]
-        : [target, actor].sort((left, right) => left.id.localeCompare(right.id));
+      events.push({
+        name: rawCall === 1
+          ? 'lock-recovery-control'
+          : rawCall === 2
+            ? 'lock-organisation'
+            : rawCall === 3
+              ? 'lock-users'
+              : 'lock-recovery',
+      });
+      if (rawCall === 1) return [AUTH_RECOVERY_CONTROL];
+      if (rawCall === 2) return [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }];
+      if (rawCall === 3) return [target, actor].sort((left, right) => left.id.localeCompare(right.id));
+      return [{ id: 'recovery-1' }, { id: 'recovery-2' }];
     },
     user: {
       update: async (args: { data: Record<string, unknown> }) => {
@@ -63,6 +82,12 @@ test('suspension locks organisation then users and atomically revokes sessions, 
           membershipVersion: 5,
           membershipChangedAt: new Date('2026-07-11T01:00:00.000Z'),
         };
+      },
+    },
+    passwordRecoveryRequest: {
+      updateMany: async (args: unknown) => {
+        events.push({ name: 'terminate-recovery', args });
+        return { count: 2 };
       },
     },
     authSession: {
@@ -98,9 +123,12 @@ test('suspension locks organisation then users and atomically revokes sessions, 
   });
 
   assert.deepEqual(events.map((event) => event.name), [
+    'lock-recovery-control',
     'lock-organisation',
     'lock-users',
+    'lock-recovery',
     'update-user',
+    'terminate-recovery',
     'revoke-sessions',
     'skip-reminders',
     'append-audit',
@@ -109,6 +137,17 @@ test('suspension locks organisation then users and atomically revokes sessions, 
     data: { revocationReason: string; revokedAt: Date };
   }).data;
   assert.equal(sessionData.revocationReason, 'MEMBER_SUSPENDED');
+  const recoveryData = (events.find((event) => event.name === 'terminate-recovery')?.args as {
+    where: { userId: string; organisationId: string; terminatedAt: null };
+    data: { terminationReason: string; terminatedAt: Date };
+  });
+  assert.deepEqual(recoveryData.where, {
+    userId: target.id,
+    organisationId: 'org-1',
+    terminatedAt: null,
+  });
+  assert.equal(recoveryData.data.terminationReason, 'ACCOUNT_INACTIVE');
+  assert.ok(recoveryData.data.terminatedAt instanceof Date);
   assert.ok(sessionData.revokedAt instanceof Date);
   const reminderWhere = (events.find((event) => event.name === 'skip-reminders')?.args as {
     where: { organisationId: string; userId: string; status: string };
@@ -681,6 +720,28 @@ test('browser security audit returns the immutable subject snapshot after a memb
           context: { internalGrantId: 'grant-secret' },
           requestId: 'internal-request-id',
           occurredAt: new Date('2026-07-11T02:03:04.000Z'),
+        }, {
+          type: 'ALL_SESSIONS_REVOKED',
+          actorKind: 'SYSTEM',
+          actorLabel: 'Self-service recovery',
+          subjectLabel: 'Owner One',
+          reason: 'Password reset completed using a one-time recovery link.',
+          context: {
+            eventKind: 'PASSWORD_RESET_COMPLETED',
+            method: 'PASSWORD_RECOVERY_LINK',
+          },
+          occurredAt: new Date('2026-07-11T02:02:00.000Z'),
+        }, {
+          type: 'ALL_SESSIONS_REVOKED',
+          actorKind: 'USER',
+          actorLabel: 'Untrusted marker',
+          subjectLabel: 'Owner One',
+          reason: 'Ordinary session revocation.',
+          context: {
+            eventKind: 'PASSWORD_RESET_COMPLETED',
+            method: 'PASSWORD_RECOVERY_LINK',
+          },
+          occurredAt: new Date('2026-07-11T02:01:00.000Z'),
         }];
       },
     },
@@ -697,9 +758,11 @@ test('browser security audit returns the immutable subject snapshot after a memb
   assert.equal(findArgs?.take, 20);
   assert.deepEqual(findArgs?.select, {
     type: true,
+    actorKind: true,
     actorLabel: true,
     subjectLabel: true,
     reason: true,
+    context: true,
     occurredAt: true,
   });
   assert.deepEqual(Object.keys(result[0]).sort(), [
@@ -710,6 +773,8 @@ test('browser security audit returns the immutable subject snapshot after a memb
     'type',
   ]);
   assert.equal(result[0].subjectLabel, 'Member One at event time');
+  assert.equal(result[1].type, 'PASSWORD_RESET_COMPLETED');
+  assert.equal(result[2].type, 'ALL_SESSIONS_REVOKED');
   assert.doesNotMatch(
     JSON.stringify(result),
     /internal-event-id|member-1|internal-family-id|grant-secret|internal-request-id|Renamed Member|renamed@example/,

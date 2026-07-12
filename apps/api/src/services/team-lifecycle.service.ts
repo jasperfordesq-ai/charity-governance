@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { AppError } from '../utils/errors.js';
 import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 import { assertBillingAuthorityAllowsOwnershipChange } from './billing-authority-interlock.js';
+import { assertAuthRecoveryControlForCurrentSecret } from './auth-recovery-control.js';
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -89,6 +90,31 @@ function stableIds(...ids: string[]): string[] {
 
 function cleanEvidence(value: string, maxLength: number): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, maxLength).trim();
+}
+
+function publicSecurityAuditType(event: {
+  type: SecurityAuditEventType;
+  actorKind: string;
+  context: Prisma.JsonValue | null;
+}): SecurityAuditEventType | 'PASSWORD_RESET_COMPLETED' {
+  const context = event.context;
+  if (
+    event.type !== 'ALL_SESSIONS_REVOKED' ||
+    !context ||
+    Array.isArray(context) ||
+    typeof context !== 'object' ||
+    context.eventKind !== 'PASSWORD_RESET_COMPLETED'
+  ) {
+    return event.type;
+  }
+
+  const trustedSelfService =
+    event.actorKind === 'SYSTEM' && context.method === 'PASSWORD_RECOVERY_LINK';
+  const trustedPersonalServer =
+    event.actorKind === 'SUPPORT' && context.method === 'PERSONAL_SERVER_OPERATOR';
+  return trustedSelfService || trustedPersonalServer
+    ? 'PASSWORD_RESET_COMPLETED'
+    : event.type;
 }
 
 function actorLabel(actor: LockedUser): string {
@@ -288,6 +314,7 @@ export class TeamLifecycleService {
     nextStatus: 'SUSPENDED' | 'REMOVED',
   ) {
     return this.prisma.$transaction(async (tx) => {
+      await assertAuthRecoveryControlForCurrentSecret(tx);
       await lockOrganisation(tx, input.organisationId);
       const users = await lockUsers(tx, input.organisationId, [input.actorId, input.targetUserId]);
       const { actor, target } = requireActorAndTarget(users, input.actorId, input.targetUserId);
@@ -302,14 +329,33 @@ export class TeamLifecycleService {
       }
 
       const now = new Date();
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "PasswordRecoveryRequest"
+        WHERE "userId" = ${target.id}
+          AND "organisationId" = ${input.organisationId}
+          AND "terminatedAt" IS NULL
+        ORDER BY "id"
+        FOR UPDATE
+      `;
       const updated = await tx.user.update({
         where: { id: target.id },
         data: {
           lifecycleStatus: nextStatus,
-          resetToken: null,
-          resetTokenExpiry: null,
           verifyToken: null,
           verifyTokenExpiry: null,
+        },
+      });
+      const terminatedRecoveryRequests = await tx.passwordRecoveryRequest.updateMany({
+        where: {
+          userId: target.id,
+          organisationId: input.organisationId,
+          terminatedAt: null,
+        },
+        data: {
+          terminatedAt: now,
+          terminationReason: 'ACCOUNT_INACTIVE',
+          nextDeliveryAttemptAt: null,
         },
       });
       const sessionCount = await revokeActiveSessions(
@@ -338,6 +384,7 @@ export class TeamLifecycleService {
           previousLifecycleStatus: target.lifecycleStatus,
           lifecycleStatus: nextStatus,
           previousMembershipVersion: target.membershipVersion,
+          terminatedRecoveryRequestCount: terminatedRecoveryRequests.count,
           revokedSessionCount: sessionCount,
           skippedReminderCount: reminderCount,
         },
@@ -784,14 +831,16 @@ export class TeamLifecycleService {
         take: 20,
         select: {
           type: true,
+          actorKind: true,
           actorLabel: true,
           subjectLabel: true,
           reason: true,
+          context: true,
           occurredAt: true,
         },
       });
       return events.map((event) => ({
-        type: event.type,
+        type: publicSecurityAuditType(event),
         actorLabel: event.actorLabel,
         subjectLabel: event.subjectLabel,
         reason: event.reason,

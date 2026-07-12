@@ -1,6 +1,6 @@
 # CharityPilot Platform Completion Audit
 
-Generated: 2026-07-11
+Generated: 2026-07-12
 
 Branch: `unknown`
 
@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 72 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 80 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
 | Launch operations | You have not created a production environment file yet. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 38 web unit test files, 72 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 39 web unit test files, 80 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -140,13 +140,13 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The platform audit now distinguishes decorative pill styling from functional switches and status dots so visual QA findings stay actionable.
 - The platform audit now scans route-local extracted UI components when assessing static route-level visual and dark-mode signals.
 - Launch status now separates missing production env values from external launch evidence gates, including deployed QA, provider/backups/observability evidence, legal review, pentest, and final signoffs.
-- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 86 checks.
+- Platform audit now records launch evidence ledger status so operators know whether the ignored external evidence file has been initialized before filling the 89 checks.
 - Platform audit now surfaces launch evidence approval state, final signoff state, and the next incomplete checks from the ignored evidence ledger.
 - Launch evidence status now reports final approval role progress separately from checklist completion so signoff gaps stay visible.
 - Launch evidence status now includes strict evidence validation and refuses status-complete approval when generic status flags would fail the final evidence validator.
 - Launch status and platform audit now group missing production values by provider/source so operator handoff is clearer.
 - Launch status and platform audit now report strict launch-gate completion percentages based only on production values, launch evidence checks, and final signoff roles.
-- Launch status and production readiness TODO now name all 86 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
+- Launch status and production readiness TODO now name all 89 machine-readable launch evidence checks and the browserQa accessibility, cross-browser, and iOS Safari evidence slots.
 - Production launch evidence now has a read-only status command that summarizes area-by-area completion without weakening the final validator.
 - Production launch evidence status now surfaces required evidence hints for the next incomplete checks in both text and JSON output.
 - Production launch evidence status now reports evidence-check and final-signoff completion percentages in both text and JSON output.
@@ -227,9 +227,9 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - The managed isolated E2E runner now owns bounded stack startup and reachability probes, so a half-started disposable web/API stack fails the browser gate cleanly instead of hanging operator evidence collection.
 - The release readiness command delegates destructive Playwright to the managed runner and leaves unrelated Node/npm processes untouched; the runner owns the common bounded lifecycle and fail-closed cleanup policy.
 - The release readiness command now resolves npm and npx gates through explicit Node CLI entrypoints on Windows instead of shell execution, keeping launch evidence transcripts free of shell-argument deprecation warnings.
-- The production readiness TODO now reflects the current 17-value launch blocker state without overclaiming unrun local smoke or external evidence.
+- The production readiness TODO now reflects the current 18-value launch blocker state without overclaiming unrun local smoke or external evidence.
 - Supabase URL, service-role, and bucket configuration is now server-only end to end; web builds and runtimes trust only the authenticated CharityPilot API document-download route.
-- The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-09 launch counters: 9/28 production values, 9/86 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
+- The launch guide, production readiness TODO, and agent continuation handoff now reflect the 2026-07-12 launch counters: 9/27 production values, 9/89 evidence checks, 0/5 final signoffs, and the remaining external launch blockers.
 - The plain-English launch guide now uses ASCII-safe operator text for cleaner Windows terminals, CI logs, and launch evidence transcripts.
 - The production readiness TODO and launch guide record local responsive and accessibility QA evidence while keeping deployed QA open.
 - The 2026-07-08 local Docker browser QA rerun completed all four responsive route chunks and the accessibility suite cleanly after stabilizing the local QA stack.
@@ -297,9 +297,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
+- P1-07A final local verification on 2026-07-12: shared 55/55, API 810/810 plus four isolated real-PostgreSQL proofs 4/4, web 371/371, production tooling 827 passed / 0 failed / 2 expected Windows symbolic-link privilege skips (829 total), personal-server 24/24, local-Docker 45/45, reliability 395/395, and the final local managed disposable E2E gate with 113/113 runner contracts plus 105/105 browser scenarios in 7.6m followed by clean isolated teardown. Exact-pushed-SHA GitHub CI and managed E2E runs remain pending publication gates; this is not deployed-browser or production-launch evidence.
 - Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This may be stale for the current checkout; rerun the selected gate on the final release ref and verify `npm run launch:status -- --json` reports the intended `repositoryState.headSha` before treating it as current release evidence.
 - P0-05 published evidence on 2026-07-10: local isolation contracts passed 113/113, the managed disposable browser gate passed 96/96, API/web/shared tests passed 488/295/23, and production/local-Docker tooling passed 512/44. Commit `e9f63038a5e8fe0c0680dcc015566dff2525a56b` then passed exact-SHA CI run `29116192805` and direct-`master` E2E run `29116192729`, where the isolated browser gate again passed 96/96. Static reliability-title linkage remains distinct from execution, and release-promotion plus deployed-browser evidence remain open under P0-09.
-- `npm run test:production-check` passed locally on 2026-07-09 with 352/352 production-tooling checks passing, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, deployed browser QA environment preflight, launch evidence work queue JSON, and CI/release workflow guards.
+- Historical 2026-07-09 checkpoint: `npm run test:production-check` passed 352/352 production-tooling checks, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, deployed browser QA environment preflight, launch evidence work queue JSON, and CI/release workflow guards.
 - `node --test scripts\check-production-providers.test.mjs scripts\production-launch-evidence.test.mjs` passed locally for provider and launch-evidence hardening.
 - `npm test` passed locally across workspace tests, production-check scripts, and local Docker guard checks.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-08 across launch-critical public/auth and dashboard routes in light and dark themes, with no serious/critical violations.
@@ -307,7 +308,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Local responsive browser QA revalidated cleanly on 2026-07-09 with focused `npm run test:e2e:responsive:*` chunk commands: public desktop 14/14, public mobile 14/14, dashboard desktop 12/12, and dashboard mobile 12/12.
 - `npm run test:e2e -- tests/accessibility.spec.ts` passed locally on 2026-07-09 with 26/26 accessibility checks across launch-critical public/auth and dashboard routes in light and dark themes.
 - `npm run test:local-docker`, `npm run test:production-check`, and `npm run build -w @charitypilot/api` passed locally after the launch-status JSON and log-redaction hardening.
-- `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed locally after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, launch-evidence hardening, GitHub secret-store checker hardening, release-ready stack probe/repo-scoped child-process cleanup/no-shell gate execution hardening, deployed browser QA env preflight hardening, and launch evidence work-queue JSON hardening; production-tooling checks passed 352/352.
+- Historical 2026-07-09 UI and launch-tooling checkpoint: `npm run lint -w @charitypilot/web`, `npm run build -w @charitypilot/web`, `node --check scripts\platform-completion-audit.mjs`, and `npm run test:production-check` passed after shared board/deadline/team/document/export mutation-status, billing action/status and price-band cleanup, team permission-hint cleanup, launch-evidence hardening, GitHub secret-store checker hardening, release-ready stack probe/repo-scoped child-process cleanup/no-shell gate execution hardening, deployed browser QA env preflight hardening, and launch evidence work-queue JSON hardening; production-tooling checks passed 352/352.
 - `node --check scripts\clean-next-export.cjs`, `node --test scripts\check-production.test.mjs`, and `npm run test:production-check` passed locally after the Next cleanup transcript hardening.
 - `node --check scripts\postgres-backup.mjs`, `node --test scripts\postgres-backup.test.mjs`, and `npm run test:production-check` passed locally after the PostgreSQL backup transcript-redaction hardening.
 - `node --check scripts\check-production-supabase.mjs`, `node --test scripts\check-production-supabase.test.mjs`, and `npm run test:production-check` passed locally after the Supabase request-failure transcript hardening.
@@ -356,7 +357,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
 | P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 159 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 253 | no | no obvious static risk; verify in browser |
-| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 108 | yes | no obvious static risk; verify in browser |
+| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 138 | yes | no obvious static risk; verify in browser |
 | P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 148 | yes | no obvious static risk; verify in browser |
 | P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 178 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 256 | no | no obvious static risk; verify in browser |
@@ -364,7 +365,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 267 | yes | no obvious static risk; verify in browser |
 | P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
-| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 185 | yes | no obvious static risk; verify in browser |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 230 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 448 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 264 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
@@ -373,7 +374,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 280 | public/partial by design | 11 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 287 | public/partial by design | 15 | preserve current guard and tenant boundary |
 | `billing` | `apps/api/src/routes/billing/index.ts` | 96 | auth, owner actions | 7 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
@@ -382,7 +383,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | `documents` | `apps/api/src/routes/documents/index.ts` | 406 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
 | `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
 | `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `health` | `apps/api/src/routes/health/index.ts` | 224 | public/partial by design | 3 | preserve current guard and tenant boundary |
+| `health` | `apps/api/src/routes/health/index.ts` | 237 | public/partial by design | 3 | preserve current guard and tenant boundary |
 | `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
 | `team` | `apps/api/src/routes/team/index.ts` | 291 | auth, subscription | 5 | preserve current guard and tenant boundary |
 
@@ -529,7 +530,7 @@ Local-state note: This generated section reflects local non-committed files. Thi
 ### Launch Progress Summary
 
 - Production values complete: 0 / 27 (27 remaining)
-- Strict launch gates complete: 0 / 118 (118 remaining, 0% complete)
+- Strict launch gates complete: 0 / 121 (121 remaining, 0% complete)
 - approvedForLaunch: false
 
 ## Irish Compliance Source Posture

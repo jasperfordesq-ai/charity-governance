@@ -444,9 +444,9 @@ export function buildP109RecoveryPreflightSql(migrations) {
   return assertP109RecoveryPreflightTerminalAssertion(sql);
 }
 
-function usage() {
+function usage(config) {
   return [
-    "Usage: node scripts/production-recover-p109-migration.mjs --production-env-file <path> --backup-output-dir <approved-encrypted-base> --recovery-attestation-file <path> [--dry-run] [--wait-timeout <seconds>] [--no-tls-proxy]",
+    `Usage: node scripts/${config.scriptName} --production-env-file <path> --backup-output-dir <approved-encrypted-base> --recovery-attestation-file <path> [--dry-run] [--wait-timeout <seconds>] [--no-tls-proxy]`,
     "",
   ].join("\n");
 }
@@ -598,32 +598,33 @@ function validateRecoveryAttestation(
   productionEnvHash,
   migrationImage,
   now,
+  config,
 ) {
   const bytes = readBoundedRegularFile(
     path,
-    "P1-09 recovery attestation",
+    `${config.taskLabel} recovery attestation`,
     MAX_ATTESTATION_BYTES,
   );
   let attestation;
   try {
     attestation = JSON.parse(bytes.toString("utf8"));
   } catch {
-    throw new Error("P1-09 recovery attestation must contain valid JSON");
+    throw new Error(`${config.taskLabel} recovery attestation must contain valid JSON`);
   }
   if (!attestation || Array.isArray(attestation) || typeof attestation !== "object") {
-    throw new Error("P1-09 recovery attestation must be a JSON object");
+    throw new Error(`${config.taskLabel} recovery attestation must be a JSON object`);
   }
 
   const issues = [];
-  if (attestation.kind !== RECOVERY_ATTESTATION_KIND) {
-    issues.push(`kind must be ${RECOVERY_ATTESTATION_KIND}`);
+  if (attestation.kind !== config.attestationKind) {
+    issues.push(`kind must be ${config.attestationKind}`);
   }
   if (attestation.schemaVersion !== 1) issues.push("schemaVersion must be 1");
   if (attestation.environment !== "production") {
     issues.push("environment must be production");
   }
-  if (attestation.migrationName !== P109_RECOVERY_MIGRATION) {
-    issues.push(`migrationName must be ${P109_RECOVERY_MIGRATION}`);
+  if (attestation.migrationName !== config.migrationName) {
+    issues.push(`migrationName must be ${config.migrationName}`);
   }
   if (attestation.productionEnvFile !== basename(productionEnvPath)) {
     issues.push(`productionEnvFile must be ${basename(productionEnvPath)}`);
@@ -662,16 +663,16 @@ function validateRecoveryAttestation(
   if (attestation.remediationOrUnexpectedWriterResolutionCompleted !== true) {
     issues.push("remediationOrUnexpectedWriterResolutionCompleted must be true");
   }
-  if (attestation.acknowledgement !== P109_RECOVERY_ACKNOWLEDGEMENT) {
+  if (attestation.acknowledgement !== config.acknowledgement) {
     issues.push(
-      `acknowledgement must exactly equal: ${P109_RECOVERY_ACKNOWLEDGEMENT}`,
+      `acknowledgement must exactly equal: ${config.acknowledgement}`,
     );
   }
 
   if (issues.length > 0) {
     throw new Error(
       [
-        `P1-09 recovery attestation failed validation (${issues.length} issue${issues.length === 1 ? "" : "s"}):`,
+        `${config.taskLabel} recovery attestation failed validation (${issues.length} issue${issues.length === 1 ? "" : "s"}):`,
         ...issues.map((issue) => `- ${issue}`),
       ].join("\n"),
     );
@@ -721,7 +722,7 @@ function composeQuiesceCommand(options) {
   ];
 }
 
-function composeImageChecksumCommand(options) {
+function composeImageChecksumCommand(options, config) {
   return [
     ...composePrefix(options),
     "--profile",
@@ -734,7 +735,7 @@ function composeImageChecksumCommand(options) {
     "node",
     "migrate",
     "-e",
-    P109_RECOVERY_IMAGE_CHECKSUM_SCRIPT,
+    config.imageChecksumScript,
   ];
 }
 
@@ -756,7 +757,7 @@ function composeSqlPreflightCommand(options) {
   ];
 }
 
-function composeResolveCommand(options) {
+function composeResolveCommand(options, config) {
   return [
     ...composePrefix(options),
     "--profile",
@@ -769,7 +770,7 @@ function composeResolveCommand(options) {
     "migrate",
     "resolve",
     "--rolled-back",
-    P109_RECOVERY_MIGRATION,
+    config.migrationName,
     "--schema",
     "prisma/schema.prisma",
   ];
@@ -838,10 +839,10 @@ function displayCommand(command, options) {
   );
 }
 
-function displayChecksumCommand(command, options) {
+function displayChecksumCommand(command, options, config) {
   return displayCommand(
     command.map((part) =>
-      part === P109_RECOVERY_IMAGE_CHECKSUM_SCRIPT
+      part === config.imageChecksumScript
         ? "<repository-owned-checksum-script>"
         : part,
     ),
@@ -863,7 +864,8 @@ function sanitizeTranscript(value, options) {
   );
 }
 
-export function runProductionP109RecoveryFromArgs(
+export function runProductionFailedMigrationRecoveryFromArgs(
+  config,
   args = process.argv.slice(2),
   {
     processEnv = process.env,
@@ -880,7 +882,7 @@ export function runProductionP109RecoveryFromArgs(
   try {
     options = parseArgs(args);
   } catch (error) {
-    return result(2, "", `${usage()}${error.message}\n`);
+    return result(2, "", `${usage(config)}${error.message}\n`);
   }
 
   let cutoverLock;
@@ -890,7 +892,7 @@ export function runProductionP109RecoveryFromArgs(
     return result(
       1,
       "",
-      `P1-09 production recovery failed before validation: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`,
+      `${config.taskLabel} production recovery failed before validation: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`,
     );
   }
 
@@ -930,10 +932,11 @@ export function runProductionP109RecoveryFromArgs(
         productionEnvHash,
         migrationImage,
         now(),
+        config,
       );
       if (!options.dryRun) {
         verifiedEnvTempDir = mkdtempSync(
-          join(tmpdir(), "charitypilot-p109-recovery-env-"),
+          join(tmpdir(), config.tempEnvPrefix),
         );
         const verifiedProductionEnvPath = join(
           verifiedEnvTempDir,
@@ -952,7 +955,7 @@ export function runProductionP109RecoveryFromArgs(
       return result(
         1,
         "",
-        `P1-09 production recovery failed validation: ${sanitizeTranscript(error instanceof Error ? error.message : String(error), options)}\n`,
+        `${config.taskLabel} production recovery failed validation: ${sanitizeTranscript(error instanceof Error ? error.message : String(error), options)}\n`,
       );
     }
 
@@ -967,7 +970,7 @@ export function runProductionP109RecoveryFromArgs(
       return result(
         1,
         sanitizeTranscript(preflightResult.stdout ?? "", options),
-        `P1-09 production recovery failed: standard deploy preflight failed.\n${sanitizeTranscript(preflightResult.stderr ?? "", options)}`,
+        `${config.taskLabel} production recovery failed: standard deploy preflight failed.\n${sanitizeTranscript(preflightResult.stderr ?? "", options)}`,
       );
     }
 
@@ -976,10 +979,10 @@ export function runProductionP109RecoveryFromArgs(
       CHARITYPILOT_PRODUCTION_ENV_FILE: options.productionEnvFile,
     };
     const pullCommand = composePullMigrationCommand(options);
-    const checksumCommand = composeImageChecksumCommand(options);
+    const checksumCommand = composeImageChecksumCommand(options, config);
     const quiesceCommand = composeQuiesceCommand(options);
     const sqlPreflightCommand = composeSqlPreflightCommand(options);
-    const resolveCommand = composeResolveCommand(options);
+    const resolveCommand = composeResolveCommand(options, config);
     const deployArgs = [
       "--production-env-file",
       options.productionEnvFile,
@@ -1000,26 +1003,26 @@ export function runProductionP109RecoveryFromArgs(
         return result(
           deployResult.status,
           sanitizeTranscript(deployResult.stdout ?? "", options),
-          `P1-09 production recovery dry-run failed in the delegated deploy plan.\n${sanitizeTranscript(deployResult.stderr ?? "", options)}`,
+          `${config.taskLabel} production recovery dry-run failed in the delegated deploy plan.\n${sanitizeTranscript(deployResult.stderr ?? "", options)}`,
         );
       }
       return result(
         0,
         [
-          "P1-09 production recovery dry-run:",
-          `Validated a fresh exact-env-and-image-bound recovery attestation for ${P109_RECOVERY_MIGRATION}.`,
+          `${config.taskLabel} production recovery dry-run:`,
+          `Validated a fresh exact-env-and-image-bound recovery attestation for ${config.migrationName}.`,
           "Standard deploy preflight:",
           sanitizeTranscript(preflightResult.stdout ?? "", options).trimEnd(),
           "1. Pull the pinned migration image before maintenance mode:",
           displayCommand(pullCommand, options),
-          "2. Hash all 20 reviewed migration files inside that selected image:",
-          displayChecksumCommand(checksumCommand, options),
+          `2. Hash all ${config.migrationCount} reviewed migration files inside that selected image:`,
+          displayChecksumCommand(checksumCommand, options, config),
           "3. Re-quiesce the complete production runtime and jobs stack:",
           displayCommand(quiesceCommand, options),
-          "4. Run the checksum-bound, read-only failed-history, catalog, legacy-object, and six-category data preflight through the pinned image:",
+          `4. Run the checksum-bound, read-only ${config.preflightDescription} through the pinned image:`,
           displayCommand(sqlPreflightCommand, options),
-          "   stdin: bounded repository-owned P1-09 recovery SQL (not printed)",
-          "5. Mark only the exact failed P1-09 migration rolled back through the pinned image:",
+          `   stdin: bounded repository-owned ${config.taskLabel} recovery SQL (not printed)`,
+          `5. Mark only the exact failed ${config.taskLabel} migration rolled back through the pinned image:`,
           displayCommand(resolveCommand, options),
           "6. Immediately run the normal locked deploy path with a new retained backup, migration, status, reconciliation, startup, and smoke:",
           sanitizeTranscript(deployResult.stdout ?? "", options).trimEnd(),
@@ -1045,10 +1048,10 @@ export function runProductionP109RecoveryFromArgs(
         commandEnv,
         "selected migration image checksum capture",
       );
-      const selectedImageChecksums = parseP109MigrationChecksumOutput(
+      const selectedImageChecksums = config.parseMigrationChecksumOutput(
         checksumResult.stdout,
       );
-      const recoveryPreflightSql = buildP109RecoveryPreflightSql(
+      const recoveryPreflightSql = config.buildRecoveryPreflightSql(
         selectedImageChecksums,
       );
       quiesceAttempted = true;
@@ -1062,7 +1065,7 @@ export function runProductionP109RecoveryFromArgs(
         runCommand,
         sqlPreflightCommand,
         commandEnv,
-        "read-only P1-09 recovery preflight",
+        `read-only ${config.taskLabel} recovery preflight`,
         recoveryPreflightSql,
       );
 
@@ -1083,7 +1086,7 @@ export function runProductionP109RecoveryFromArgs(
         runCommand,
         resolveCommand,
         commandEnv,
-        `exact ${P109_RECOVERY_MIGRATION} rolled-back resolution`,
+        `exact ${config.migrationName} rolled-back resolution`,
       );
       migrationResolved = true;
 
@@ -1100,12 +1103,12 @@ export function runProductionP109RecoveryFromArgs(
         return result(
           deployResult.status,
           sanitizeTranscript(deployResult.stdout ?? "", options),
-          `P1-09 production recovery failed after exact rolled-back resolution: the delegated production deploy did not complete, and the runtime remains stopped.\n${sanitizeTranscript(deployResult.stderr ?? "", options)}${cleanupError}`,
+          `${config.taskLabel} production recovery failed after exact rolled-back resolution: the delegated production deploy did not complete, and the runtime remains stopped.\n${sanitizeTranscript(deployResult.stderr ?? "", options)}${cleanupError}`,
         );
       }
       return result(
         0,
-        `${sanitizeTranscript(preflightResult.stdout ?? "", options)}${sanitizeTranscript(deployResult.stdout ?? "", options)}P1-09 failed migration was resolved as rolled back and immediately recovered through the complete production deploy path.\n`,
+        `${sanitizeTranscript(preflightResult.stdout ?? "", options)}${sanitizeTranscript(deployResult.stdout ?? "", options)}${config.taskLabel} failed migration was resolved as rolled back and immediately recovered through the complete production deploy path.\n`,
       );
     } catch (error) {
       const cleanupError = quiesceAttempted
@@ -1117,7 +1120,7 @@ export function runProductionP109RecoveryFromArgs(
       return result(
         1,
         sanitizeTranscript(preflightResult.stdout ?? "", options),
-        `P1-09 production recovery failed: ${sanitizeTranscript(error instanceof Error ? error.message : String(error), options)}.${resolutionPosture}\n${cleanupError}`,
+        `${config.taskLabel} production recovery failed: ${sanitizeTranscript(error instanceof Error ? error.message : String(error), options)}.${resolutionPosture}\n${cleanupError}`,
       );
     }
   };
@@ -1143,7 +1146,7 @@ export function runProductionP109RecoveryFromArgs(
       recoveryResult = result(
         1,
         recoveryResult?.stdout ?? "",
-        `${priorError}P1-09 production recovery could not remove its owner-only validated env copy: ${cleanupMessage}. Do not start another cutover until the temporary-file state is reconciled.\n`,
+        `${priorError}${config.taskLabel} production recovery could not remove its owner-only validated env copy: ${cleanupMessage}. Do not start another cutover until the temporary-file state is reconciled.\n`,
       );
     }
   }
@@ -1154,7 +1157,7 @@ export function runProductionP109RecoveryFromArgs(
     const priorError = recoveryResult?.stderr
       ? `${recoveryResult.stderr.trimEnd()}\n`
       : operationError
-        ? `P1-09 production recovery failed unexpectedly: ${redactProductionDeployTranscript(operationError instanceof Error ? operationError.message : String(operationError))}\n`
+        ? `${config.taskLabel} production recovery failed unexpectedly: ${redactProductionDeployTranscript(operationError instanceof Error ? operationError.message : String(operationError))}\n`
         : "";
     const releaseError = redactProductionDeployTranscript(
       error instanceof Error ? error.message : String(error),
@@ -1162,7 +1165,7 @@ export function runProductionP109RecoveryFromArgs(
     return result(
       1,
       recoveryResult?.stdout ?? "",
-      `${priorError}P1-09 production recovery could not release the host cutover lock: ${releaseError}. The prior recovery result is preserved above; do not start another deploy, rollback, or recovery until the lock owner and runtime state are reconciled.\n`,
+      `${priorError}${config.taskLabel} production recovery could not release the host cutover lock: ${releaseError}. The prior recovery result is preserved above; do not start another deploy, rollback, or recovery until the lock owner and runtime state are reconciled.\n`,
     );
   }
 
@@ -1170,10 +1173,36 @@ export function runProductionP109RecoveryFromArgs(
     return result(
       1,
       recoveryResult?.stdout ?? "",
-      `P1-09 production recovery failed unexpectedly: ${redactProductionDeployTranscript(operationError instanceof Error ? operationError.message : String(operationError))}\n`,
+      `${config.taskLabel} production recovery failed unexpectedly: ${redactProductionDeployTranscript(operationError instanceof Error ? operationError.message : String(operationError))}\n`,
     );
   }
   return recoveryResult;
+}
+
+const P109_RECOVERY_CONFIG = Object.freeze({
+  taskLabel: "P1-09",
+  scriptName: "production-recover-p109-migration.mjs",
+  migrationName: P109_RECOVERY_MIGRATION,
+  acknowledgement: P109_RECOVERY_ACKNOWLEDGEMENT,
+  attestationKind: RECOVERY_ATTESTATION_KIND,
+  imageChecksumScript: P109_RECOVERY_IMAGE_CHECKSUM_SCRIPT,
+  migrationCount: P109_RECOVERY_MIGRATIONS.length,
+  parseMigrationChecksumOutput: parseP109MigrationChecksumOutput,
+  buildRecoveryPreflightSql: buildP109RecoveryPreflightSql,
+  preflightDescription:
+    "failed-history, catalog, legacy-object, and six-category data preflight",
+  tempEnvPrefix: "charitypilot-p109-recovery-env-",
+});
+
+export function runProductionP109RecoveryFromArgs(
+  args = process.argv.slice(2),
+  dependencies = {},
+) {
+  return runProductionFailedMigrationRecoveryFromArgs(
+    P109_RECOVERY_CONFIG,
+    args,
+    dependencies,
+  );
 }
 
 function main() {

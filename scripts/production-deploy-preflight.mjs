@@ -33,9 +33,10 @@ const requiredWebBuildOrigins = [
   },
 ];
 const DATABASE_COMPATIBILITY_ENV = 'CHARITYPILOT_DATABASE_COMPATIBILITY';
-const REQUIRED_DATABASE_COMPATIBILITY = 'p109-governance-integrity-v1';
+const REQUIRED_DATABASE_COMPATIBILITY = 'p107a-password-recovery-v1';
 const INTERNAL_DATABASE_COMPATIBILITIES = new Set([
   REQUIRED_DATABASE_COMPATIBILITY,
+  'p109-governance-integrity-v1',
   'p006-deadline-calendar-v1',
   'pre-p006-restored',
 ]);
@@ -186,7 +187,7 @@ export function redactProductionDeployTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')

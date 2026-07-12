@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { authRecoverySecretFingerprint } from "../services/password-recovery-crypto.js";
 
 process.env.JWT_SECRET =
   process.env.JWT_SECRET ?? "auth-throttling-test-secret";
 process.env.RESEND_API_KEY =
   process.env.RESEND_API_KEY ?? "re_auth_throttling_test_key";
 process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? "noreply@example.org";
+process.env.AUTH_RECOVERY_SECRET =
+  process.env.AUTH_RECOVERY_SECRET ?? Buffer.alloc(48, 0x7a).toString("base64url");
+process.env.FRONTEND_URL =
+  process.env.FRONTEND_URL ?? "https://app.charitypilot.example";
 
 const [
   { default: Fastify },
@@ -40,7 +45,7 @@ const sensitiveAuthCases: SensitiveAuthCase[] = [
     url: "/auth/forgot-password",
     payload: { email: "missing@example.org" },
     alternatePayload: { email: "other-missing@example.org" },
-    expectedStatusCode: 200,
+    expectedStatusCode: 202,
   },
   {
     name: "reset-password",
@@ -98,18 +103,44 @@ async function buildSensitiveRoutesApp(
   prismaOverrides: Record<string, unknown> = {},
 ) {
   const app = Fastify({ logger: false });
-  app.decorate("prisma", {
+  let prisma: Record<string, unknown>;
+  prisma = {
     user: {
       findUnique: async () => null,
       findFirst: async () => null,
+      updateMany: async () => ({ count: 0 }),
+    },
+    passwordRecoveryRequest: {
+      count: async () => 0,
+      create: async ({ data }: { data: Record<string, unknown> }) => data,
     },
     teamInvite: {
       findUnique: async () => null,
     },
-    $queryRaw: async () => [],
+    // Recovery deliberately performs the same SQL operation shape for known
+    // and unknown identifiers. A composite row is harmless to the ignored
+    // advisory-lock query, keeps each rate bucket below its threshold, and
+    // supplies the database clock while sentinel principal locks remain
+    // ineligible because they have no lifecycle status.
+    $queryRaw: async (query: unknown) => {
+      const sql = Array.isArray(query) ? query.join("") : String(query);
+      if (sql.includes('"AuthRecoveryControl"')) {
+        return [{
+          id: 1,
+          blocked: false,
+          generation: 1,
+          activeSecretFingerprint: authRecoverySecretFingerprint(),
+          retiredSecretFingerprint: null,
+        }];
+      }
+      return [{ count: 1, now: new Date("2026-07-10T12:00:00.000Z") }];
+    },
     $executeRaw: async () => 0,
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) =>
+      callback(prisma),
     ...prismaOverrides,
-  } as never);
+  };
+  app.decorate("prisma", prisma as never);
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
   await app.register(cookie);
   await app.register(authRoutes, { prefix: "/auth" });

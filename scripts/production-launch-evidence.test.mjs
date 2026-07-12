@@ -528,7 +528,18 @@ function evidenceEntry(areaId, checkId) {
   }
 
   if (areaId === 'secretsAndEnv' && checkId === 'jwt-secret-entropy') {
-    entry.description = 'JWT_SECRET is high entropy and at least 32 characters in the production secret store.';
+    entry.description = 'JWT_SECRET is high entropy. AUTH_RECOVERY_SECRET is an independent high entropy secret canonically encoding 32 to 64 bytes in the production secret store.';
+  }
+
+  if (areaId === 'secretsAndEnv' && checkId === 'auth-recovery-secret-rotation-rehearsal') {
+    entry.type = 'command-output';
+    entry.description = [
+      'Rotation rehearsal used an isolated recent restore and the selected digest-pinned API image.',
+      `Promoted release commit: ${commitSha}. Promoted API image: ${apiImage}.`,
+      'node dist/jobs/rotate-auth-recovery-secret.js --dry-run',
+      '--confirm-api-and-scheduler-quiesced',
+      'DRY_RUN mutationApplied: false databaseIdentitySha256 recorded deploymentProfile: production.',
+    ].join(' ');
   }
 
   if (areaId === 'secretsAndEnv' && checkId === 'frontend-api-origins') {
@@ -580,7 +591,7 @@ function evidenceEntry(areaId, checkId) {
     entry.type = 'command-output';
     entry.description = [
       'npm run check:production:github-secrets -- --environment=production',
-      'Production GitHub secret-store check passed: production has 8 required secret name(s); secret values were not read.',
+      'Production GitHub secret-store check passed: production has 9 required secret name(s), including AUTH_RECOVERY_SECRET; secret values were not read.',
     ].join(' ');
   }
 
@@ -760,11 +771,13 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
-  if (areaId === 'billingAndEmail' && checkId === 'resend-send') {
+  if (areaId === 'billingAndEmail' && checkId === 'password-recovery-resend-delivery') {
     entry.description = [
-      'Resend test send completed from EMAIL_FROM using the production sender domain.',
-      'The verified Resend sender domain matches the production EMAIL_FROM address.',
-      'Operator recorded the accepted message id and delivery log reference without raw API keys.',
+      'Resend accepted the deployed recovery-link email from EMAIL_FROM on the verified production sender domain.',
+      `Promoted release commit: ${commitSha}.`,
+      'The accepted message id or equivalent provider delivery reference is retained as a redacted provider reference.',
+      'The deployed message used deterministic HTML and plain-text alternatives, and the text contained the complete fragment link to https://app.charitypilot.ie.',
+      'Repository evidence contains no raw token.',
     ].join(' ');
   }
 
@@ -965,7 +978,7 @@ function evidenceEntry(areaId, checkId) {
       apiImage,
       webImage,
       migrationImage,
-      'CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1',
+      'CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1',
       'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https://api.charitypilot.ie',
     ].join(' ');
   }
@@ -994,6 +1007,25 @@ function evidenceEntry(areaId, checkId) {
       'scheduler logs are captured by the production platform log sink.',
       'deadline-reminders failure alert evidence recorded.',
       'document-storage-cleanup failure alert evidence recorded.',
+    ].join(' ');
+  }
+
+  if (areaId === 'jobs' && checkId === 'auth-email-delivery-runtime') {
+    entry.type = 'command-output';
+    entry.description = [
+      'deployed authentication email delivery runtime verified in production-scheduler.',
+      `Promoted release commit: ${commitSha}. Promoted API image: ${apiImage}.`,
+      'The digest-pinned API image runs node dist/jobs/process-auth-email-delivery.js with the same production secret source.',
+    ].join(' ');
+  }
+
+  if (areaId === 'jobs' && checkId === 'auth-delivery-anomaly-alert') {
+    entry.type = 'command-output';
+    entry.description = [
+      'authentication-delivery anomaly alert rehearsal used isolated non-production data.',
+      `Promoted release commit: ${commitSha}.`,
+      'Persisted REJECTED, UNCERTAIN, KEY_UNAVAILABLE, and STALE_QUARANTINED rows produced one count-only sanitized alert.',
+      'A webhook failure released the claim for retry, a stale claim was reclaimed, a confirmed webhook response acknowledged the exact claim, and unacknowledged rows survived cleanup.',
     ].join(' ');
   }
 
@@ -1093,6 +1125,129 @@ function evidenceEntries(areaId, checkId) {
     return databaseEvidenceEntries();
   }
   const entries = [evidenceEntry(areaId, checkId)];
+  if (areaId === 'secretsAndEnv' && checkId === 'auth-recovery-secret-rotation-rehearsal') {
+    entries.push(
+      {
+        type: 'command-output',
+        reference: 'https://evidence.charitypilot.ie/launch/secrets/auth-recovery-rotation-execute',
+        description: [
+          'Rotation rehearsal used an isolated recent restore.',
+          `Promoted release commit: ${commitSha}. Promoted API image: ${apiImage}.`,
+          'node dist/jobs/rotate-auth-recovery-secret.js --execute',
+          '--confirm-api-and-scheduler-quiesced --confirm-outbox-preservation-understood',
+          '--expected-database-identity-sha256 REVIEWED_SHA256 --expected-deployment-profile production',
+          'EXECUTED recoveryBlocked: true terminationReason: KEY_ROTATED.',
+          'remainingCapabilities: 0 remainingRequestEvidenceRows: 0 remainingLegacySlots: 0 remainingRateBuckets: 0.',
+        ].join(' '),
+        capturedAt,
+      },
+      {
+        type: 'command-output',
+        reference: 'https://evidence.charitypilot.ie/launch/secrets/auth-recovery-rotation-activation',
+        description: [
+          'Rotation rehearsal used an isolated recent restore and a different replacement secret without recording its value.',
+          `Promoted release commit: ${commitSha}. Promoted API image: ${apiImage}.`,
+          'node dist/jobs/rotate-auth-recovery-secret.js --activate-after-replacement',
+          '--confirm-api-and-scheduler-quiesced',
+          '--expected-database-identity-sha256 REVIEWED_SHA256 --expected-deployment-profile production',
+          'ACTIVATED recoveryBlocked: false credentialsIssued: false.',
+        ].join(' '),
+        capturedAt,
+      },
+      {
+        type: 'command-output',
+        reference: 'https://evidence.charitypilot.ie/launch/secrets/auth-recovery-rotation-post-activation',
+        description: [
+          'post-activation recovery rehearsal completed on the isolated recent restore.',
+          `Promoted release commit: ${commitSha}. Promoted API image: ${apiImage}.`,
+          'The old-key process rejected by database fence.',
+          'A new recovery request, reset consumption, and preserved completion-notice worker all passed.',
+        ].join(' '),
+        capturedAt,
+      },
+    );
+  }
+  if (areaId === 'billingAndEmail' && checkId === 'password-recovery-resend-delivery') {
+    entries.push({
+      type: 'artifact',
+      reference: 'https://evidence.charitypilot.ie/launch/billingAndEmail/post-reset-notice',
+      description: [
+        'Resend accepted the deployed post-reset registered-address notice from EMAIL_FROM on the verified production sender domain.',
+        `Promoted release commit: ${commitSha}.`,
+        'The accepted message id or equivalent provider delivery reference is retained as a redacted provider reference.',
+        'The deployed message used deterministic HTML and plain-text alternatives and contained no raw token.',
+      ].join(' '),
+      capturedAt,
+    });
+  }
+  if (areaId === 'jobs' && checkId === 'auth-email-delivery-runtime') {
+    entries.push({
+      type: 'command-output',
+      reference: 'https://evidence.charitypilot.ie/launch/jobs/auth-email-delivery-rehearsal',
+      description: [
+        'node dist/jobs/process-auth-email-delivery.js ran against isolated non-production data with recovery control ready.',
+        `Promoted release commit: ${commitSha}. Promoted API image: ${apiImage}.`,
+        '[AuthEmailDelivery] completed processed=2 accepted=2 retryScheduled=0 rejected=0 uncertain=0 keyUnavailable=0 staleQuarantined=0 cleaned=0.',
+        'The rehearsal completed with exit 0.',
+      ].join(' '),
+      capturedAt,
+    });
+  }
+  if (areaId === 'jobs' && checkId === 'auth-delivery-anomaly-alert') {
+    entries.push({
+      type: 'artifact',
+      reference: 'https://evidence.charitypilot.ie/launch/jobs/auth-delivery-anomaly-incident-confirmation',
+      description: [
+        'authentication-delivery anomaly alert incident system confirmation recorded as a redacted alert reference.',
+        `Promoted release commit: ${commitSha}.`,
+        'The accountable incident owner confirmed routing with no recipient, token, request, account, or secret value.',
+      ].join(' '),
+      capturedAt,
+    });
+  }
+  if (areaId === 'releaseGate' && checkId === 'deploy-rollback') {
+    entries.push(
+      {
+        type: 'command-output',
+        reference: 'https://evidence.charitypilot.ie/launch/releaseGate/p109-failed-migration-recovery',
+        description: [
+          'npm run deploy:recover:p109 -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/p109-recovery --recovery-attestation-file=/secure/p109-recovery-attestation.json',
+          'The P1-09 recovery attestation matched the exact production env bytes and selected migration image.',
+          'All 20 selected-image migration SHA-256 values matched the database history.',
+          'The exact 19-migration applied predecessor chain plus one unresolved failed P1-09 target was proven before resolution.',
+          'P1-09 failed migration was resolved as rolled back and immediately recovered through the complete production deploy path.',
+        ].join(' '),
+        capturedAt,
+      },
+      {
+        type: 'command-output',
+        reference: 'https://evidence.charitypilot.ie/launch/releaseGate/p107a-failed-migration-recovery',
+        description: [
+          'npm run deploy:recover:p107a -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/p107a-recovery --recovery-attestation-file=/secure/p107a-recovery-attestation.json',
+          'The P1-07A recovery attestation matched the exact production env bytes and selected migration image.',
+          'All 21 selected-image migration SHA-256 values matched the database history.',
+          'The exact 20-migration applied predecessor chain plus one unresolved failed P1-07A target was proven before resolution.',
+          'P1-07A failed migration was resolved as rolled back and immediately recovered through the complete production deploy path.',
+        ].join(' '),
+        capturedAt,
+      },
+      {
+        type: 'command-output',
+        reference: 'https://evidence.charitypilot.ie/launch/releaseGate/p109-restore-only-rollback',
+        description: [
+          'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env --database-restore-attestation-file=/secure/p109-database-restore-attestation.json --restored-backup-file=/secure/backups/pre-p107a-production.dump --backup-output-dir=/secure/charitypilot/restored-cutovers',
+          'The internal p109-restored posture was granted only after the exact backup and manifest bindings passed.',
+          'Restored migration head: 20260711230000_add_domain_invariants_referential_safety.',
+          'Incompatible migration: 20260712013000_add_password_recovery_integrity.',
+          'P1-07A migration absent from restored history and catalog.',
+          'Exact P1-09 restored-history checksum and P1-07A-absence probe passed before any migration.',
+          'Production compose rollback completed.',
+          'Production deploy smoke passed after rollback.',
+        ].join(' '),
+        capturedAt,
+      },
+    );
+  }
   if (areaId === 'supabaseStorage' && checkId === 'supabase-restore-tested') {
     const reconciliation = jointRecoveryReconciliation();
     entries.push({
@@ -1290,7 +1445,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /86 check\(s\)/);
+    assert.match(result.stdout, /89 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1355,9 +1510,9 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.equal(failurePayload.incompleteCheckCount, 1);
     assert.deepEqual(failurePayload.progress, {
       checklistChecks: {
-        completed: 85,
-        total: 86,
-        percentage: 98.8,
+        completed: 88,
+        total: 89,
+        percentage: 98.9,
       },
       finalSignoffRoles: {
         approved: 4,
@@ -1376,8 +1531,8 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.deepEqual(successPayload.issues, []);
     assert.deepEqual(successPayload.progress, {
       checklistChecks: {
-        completed: 86,
-        total: 86,
+        completed: 89,
+        total: 89,
         percentage: 100,
       },
       finalSignoffRoles: {
@@ -1976,6 +2131,7 @@ test('production launch evidence validator requires executable checker command t
     assert.match(result.stderr, /areas\.releaseGate\.checks\.github-environment\.evidence must include Production GitHub environment check passed/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.github-secret-store\.evidence must include the check:production:github-secrets command/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.github-secret-store\.evidence must include Production GitHub secret-store check passed/);
+    assert.match(result.stderr, /areas\.releaseGate\.checks\.github-secret-store\.evidence must include AUTH_RECOVERY_SECRET/);
     assert.match(result.stderr, /areas\.hostingDnsTls\.checks\.hosting-check\.evidence must include Production hosting check passed/);
     assert.match(result.stderr, /areas\.supabaseStorage\.checks\.supabase-check\.evidence must include the check:production:supabase command/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.providers-check\.evidence must include Production provider check passed/);
@@ -2047,6 +2203,10 @@ test('production launch evidence validator requires concrete secrets and environ
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.secret-source-excluded-from-git\.evidence must include secret store/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.node-env-production\.evidence must include NODE_ENV=production/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.jwt-secret-entropy\.evidence must include high entropy/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.auth-recovery-secret-rotation-rehearsal\.evidence must include separate command-output evidence for the auth-recovery secret rotation dry-run rehearsal/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.auth-recovery-secret-rotation-rehearsal\.evidence must include separate command-output evidence for the auth-recovery secret rotation execution rehearsal/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.auth-recovery-secret-rotation-rehearsal\.evidence must include separate command-output evidence for the auth-recovery replacement-secret activation rehearsal/);
+    assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.auth-recovery-secret-rotation-rehearsal\.evidence must include separate command-output evidence for the auth-recovery post-activation smoke rehearsal/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.frontend-api-origins\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-api-only\.evidence must include API\/server runtimes only/);
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.web-compose-api-origin\.evidence must include CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
@@ -2056,6 +2216,45 @@ test('production launch evidence validator requires concrete secrets and environ
     assert.match(result.stderr, /areas\.secretsAndEnv\.checks\.supabase-service-role-secret-store\.evidence must include API secret store/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence requires four independent auth-recovery rotation rehearsal transcripts', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const combinedEvidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const combinedCheck = combinedEvidence.areas.secretsAndEnv.checks['auth-recovery-secret-rotation-rehearsal'];
+  combinedCheck.evidence = [{
+    type: 'command-output',
+    reference: 'https://evidence.charitypilot.ie/launch/secrets/combined-rotation-transcript',
+    description: combinedCheck.evidence.map((entry) => entry.description).join(' '),
+    capturedAt,
+  }];
+  const combinedFile = writeEvidenceFile(combinedEvidence);
+
+  const incompleteEvidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const activationEntry = incompleteEvidence.areas.secretsAndEnv
+    .checks['auth-recovery-secret-rotation-rehearsal'].evidence
+    .find((entry) => entry.description.includes('--activate-after-replacement'));
+  activationEntry.description = activationEntry.description.replace('different replacement secret', 'replacement material');
+  const incompleteFile = writeEvidenceFile(incompleteEvidence);
+
+  try {
+    const combinedResult = runProductionLaunchEvidenceFromArgs(['--evidence-file', combinedFile.evidencePath]);
+    assert.equal(combinedResult.status, 1);
+    assert.match(
+      combinedResult.stderr,
+      /must keep dry-run, execute, replacement activation, and post-activation smoke in four distinct command-output entries/,
+    );
+
+    const incompleteResult = runProductionLaunchEvidenceFromArgs(['--evidence-file', incompleteFile.evidencePath]);
+    assert.equal(incompleteResult.status, 1);
+    assert.match(
+      incompleteResult.stderr,
+      /auth-recovery replacement-secret activation rehearsal transcript must include different replacement secret/,
+    );
+  } finally {
+    rmSync(combinedFile.tempDir, { recursive: true, force: true });
+    rmSync(incompleteFile.tempDir, { recursive: true, force: true });
   }
 });
 
@@ -2543,7 +2742,7 @@ test('production launch evidence validator requires concrete billing and email p
   evidence.areas.billingAndEmail.checks['stripe-products-prices'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['stripe-webhook-endpoint'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['stripe-webhook-secret'].evidence = [genericEvidence];
-  evidence.areas.billingAndEmail.checks['resend-send'].evidence = [genericEvidence];
+  evidence.areas.billingAndEmail.checks['password-recovery-resend-delivery'].evidence = [genericEvidence];
   evidence.areas.billingAndEmail.checks['email-links-production-origin'].evidence = [genericEvidence];
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
@@ -2561,13 +2760,35 @@ test('production launch evidence validator requires concrete billing and email p
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-endpoint\.evidence must include https:\/\/api\.charitypilot\.ie\/api\/v1\/billing\/webhooks/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-secret\.evidence must include STRIPE_WEBHOOK_SECRET/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.stripe-webhook-secret\.evidence must include Stripe signing secret/);
-    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include Resend test send/);
-    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include accepted message id/);
-    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include production sender domain/);
-    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.resend-send\.evidence must include verified Resend sender domain/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.password-recovery-resend-delivery\.evidence must include separate evidence for the deployed Resend recovery-link email/);
+    assert.match(result.stderr, /areas\.billingAndEmail\.checks\.password-recovery-resend-delivery\.evidence must include separate evidence for the deployed Resend post-reset registered-address notice/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include https:\/\/app\.charitypilot\.ie/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include password reset/);
     assert.match(result.stderr, /areas\.billingAndEmail\.checks\.email-links-production-origin\.evidence must include email verification/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence requires independent deployed recovery-link and post-reset Resend proof', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const check = evidence.areas.billingAndEmail.checks['password-recovery-resend-delivery'];
+  check.evidence = [{
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/billingAndEmail/combined-password-recovery-email',
+    description: check.evidence.map((entry) => entry.description).join(' '),
+    capturedAt,
+  }];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /must keep the deployed recovery-link email and post-reset registered-address notice in two distinct evidence entries/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -2847,6 +3068,41 @@ test('production launch evidence validator requires concrete observability and s
   }
 });
 
+test('production launch evidence keeps auth-email runtime rehearsal and anomaly confirmation independent', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const runtimeCheck = evidence.areas.jobs.checks['auth-email-delivery-runtime'];
+  runtimeCheck.evidence = [{
+    type: 'command-output',
+    reference: 'https://evidence.charitypilot.ie/launch/jobs/combined-auth-email-runtime',
+    description: runtimeCheck.evidence.map((entry) => entry.description).join(' '),
+    capturedAt,
+  }];
+  const anomalyCheck = evidence.areas.jobs.checks['auth-delivery-anomaly-alert'];
+  anomalyCheck.evidence = [{
+    type: 'command-output',
+    reference: 'https://evidence.charitypilot.ie/launch/jobs/combined-auth-delivery-anomaly',
+    description: anomalyCheck.evidence.map((entry) => entry.description).join(' '),
+    capturedAt,
+  }];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /must keep deployed runtime proof and isolated worker rehearsal in two distinct command-output entries/,
+    );
+    assert.match(
+      result.stderr,
+      /must keep the anomaly rehearsal transcript and external incident-system confirmation in two distinct entries/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('production launch evidence validator requires every production job command surface', async () => {
   const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
   const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
@@ -2976,9 +3232,12 @@ test('production launch evidence validator requires production deploy and rollba
   evidence.areas.releaseGate.checks['deploy-production'].evidence[0].type = 'artifact';
   evidence.areas.releaseGate.checks['deploy-production'].evidence[0].description =
     'Production deployment was noted in the release log';
-  evidence.areas.releaseGate.checks['deploy-rollback'].evidence[0].type = 'artifact';
-  evidence.areas.releaseGate.checks['deploy-rollback'].evidence[0].description =
-    'Rollback rehearsal was noted in the release log';
+  evidence.areas.releaseGate.checks['deploy-rollback'].evidence = [{
+    type: 'artifact',
+    reference: 'https://evidence.charitypilot.ie/launch/releaseGate/incomplete-rollback',
+    description: 'Rollback rehearsal was noted in the release log',
+    capturedAt,
+  }];
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
 
   try {
@@ -3000,6 +3259,88 @@ test('production launch evidence validator requires production deploy and rollba
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include previous signed digest manifest/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include release-image-digests\.previous\.env/);
     assert.match(result.stderr, /areas\.releaseGate\.checks\.deploy-rollback\.evidence must include Production deploy smoke passed/);
+    assert.match(result.stderr, /must include separate command-output evidence for the same-line P1-07A-compatible rollback rehearsal/);
+    assert.match(result.stderr, /must include separate command-output evidence for the failed P1-09 recovery rehearsal/);
+    assert.match(result.stderr, /must include separate command-output evidence for the failed P1-07A recovery rehearsal/);
+    assert.match(result.stderr, /must include separate command-output evidence for the P1-09 restore-only cross-boundary rollback rehearsal/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence independently requires both recovery rehearsals and restore-only rollback proof', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const missingTranscriptCases = [
+    {
+      referenceSuffix: '/p109-failed-migration-recovery',
+      expected: /must include separate command-output evidence for the failed P1-09 recovery rehearsal/,
+    },
+    {
+      referenceSuffix: '/p107a-failed-migration-recovery',
+      expected: /must include separate command-output evidence for the failed P1-07A recovery rehearsal/,
+    },
+    {
+      referenceSuffix: '/p109-restore-only-rollback',
+      expected: /must include separate command-output evidence for the P1-09 restore-only cross-boundary rollback rehearsal/,
+    },
+  ];
+
+  for (const testCase of missingTranscriptCases) {
+    const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+    const rollbackEvidence = evidence.areas.releaseGate.checks['deploy-rollback'].evidence;
+    evidence.areas.releaseGate.checks['deploy-rollback'].evidence = rollbackEvidence.filter(
+      (entry) => !entry.reference.endsWith(testCase.referenceSuffix),
+    );
+    const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+    try {
+      const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, testCase.expected);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  const incompleteRestoreEvidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const restoreEntry = incompleteRestoreEvidence.areas.releaseGate.checks['deploy-rollback'].evidence.find(
+    (entry) => entry.reference.endsWith('/p109-restore-only-rollback'),
+  );
+  restoreEntry.description = restoreEntry.description.replace(
+    'P1-07A migration absent',
+    'Migration inventory was reviewed',
+  );
+  const { tempDir, evidencePath } = writeEvidenceFile(incompleteRestoreEvidence);
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /P1-09 restore-only cross-boundary rollback rehearsal transcript must include P1-07A migration absent/,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence rejects one combined rollback transcript in place of four independent command outputs', async () => {
+  const { runProductionLaunchEvidenceFromArgs, REQUIRED_LAUNCH_AREAS } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const rollbackCheck = evidence.areas.releaseGate.checks['deploy-rollback'];
+  const [firstEntry, ...remainingEntries] = rollbackCheck.evidence;
+  firstEntry.description = [
+    firstEntry.description,
+    ...remainingEntries.map((entry) => entry.description),
+  ].join(' ');
+  rollbackCheck.evidence = [firstEntry];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /must keep the same-line rollback, P1-09 recovery, P1-07A recovery, and P1-09 restore-only rollback in four distinct command-output entries/,
+    );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -3491,6 +3832,7 @@ test('production launch evidence template covers every required area and final s
         'npm run check:production:github-secrets -- --environment=production',
         'Production GitHub secret-store check passed',
         'required secret name(s)',
+        'AUTH_RECOVERY_SECRET',
         'secret values were not read',
       ],
     );
@@ -3526,6 +3868,24 @@ test('production launch evidence template covers every required area and final s
         'post-deploy smoke',
       ],
     );
+    const rollbackHints = template.areas.releaseGate.checks['deploy-rollback'].requiredEvidenceHints;
+    assert.equal(
+      rollbackHints.filter((hint) => hint.startsWith('separate command-output evidence:')).length,
+      4,
+    );
+    for (const requiredHint of [
+      'npm run deploy:recover:p109 -- --production-env-file=.env.production --backup-output-dir=<approved-encrypted-path> --recovery-attestation-file=<protected-attestation>',
+      '20 selected-image migration SHA-256 values',
+      'npm run deploy:recover:p107a -- --production-env-file=.env.production --backup-output-dir=<approved-encrypted-path> --recovery-attestation-file=<protected-attestation>',
+      '21 selected-image migration SHA-256 values',
+      'p109-restored',
+      '20260711230000_add_domain_invariants_referential_safety',
+      '20260712013000_add_password_recovery_integrity',
+      'P1-07A migration absent',
+      'Exact P1-09 restored-history checksum and P1-07A-absence probe passed before any migration',
+    ]) {
+      assert.ok(rollbackHints.includes(requiredHint), `deploy-rollback hint missing: ${requiredHint}`);
+    }
     assert.ok(
       template.areas.database.checks['database-check'].requiredEvidenceHints.includes(
         'npm run check:production:database -- --production-env-file=.env.production --capture-source-identity --json',
@@ -3649,6 +4009,26 @@ test('production launch evidence template covers every required area and final s
       ),
     );
     assert.ok(
+      template.areas.secretsAndEnv.checks['auth-recovery-secret-rotation-rehearsal'].requiredEvidenceHints.includes(
+        'node dist/jobs/rotate-auth-recovery-secret.js --activate-after-replacement',
+      ),
+    );
+    assert.ok(
+      template.areas.jobs.checks['auth-email-delivery-runtime'].requiredEvidenceHints.includes(
+        'node dist/jobs/process-auth-email-delivery.js',
+      ),
+    );
+    assert.ok(
+      template.areas.jobs.checks['auth-delivery-anomaly-alert'].requiredEvidenceHints.includes(
+        'separate external incident system confirmation with a redacted alert reference',
+      ),
+    );
+    assert.ok(
+      template.areas.billingAndEmail.checks['password-recovery-resend-delivery'].requiredEvidenceHints.includes(
+        'Resend accepted deployed post-reset registered-address notice',
+      ),
+    );
+    assert.ok(
       template.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].requiredEvidenceHints.includes(
         'not a substitute for legal advice',
       ),
@@ -3740,7 +4120,7 @@ test('production launch evidence template covers every required area and final s
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Checklist checks complete: 0 \/ 86 \(0% complete\)/);
+    assert.match(result.stderr, /Checklist checks complete: 0 \/ 89 \(0% complete\)/);
     assert.match(result.stderr, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(
       result.stderr,

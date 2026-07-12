@@ -10,17 +10,21 @@ Status marks reflect completed repository hardening work. Open items require rea
 > local confidence gate. Do not run the default full E2E suite against a
 > personal database you care about because it can reset tenant/app tables.
 
-> **Current local status checked 2026-07-11:** `npm run launch:status -- --json`
+> **Current local status refreshed 2026-07-12:** `npm run launch:status -- --json`
 > still reports `ENV_INCOMPLETE`: 9 of 27 production values are complete and 18
 > production values still require real data in `.env.production` or the approved
-> production secret store. The launch evidence ledger is now 9 of 86 checks
+> production secret store. The existing env file also lacks the new independent
+> `AUTH_RECOVERY_SECRET` and
+> `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`; those are
+> separate prerequisites, not part of the 18-value count. The launch evidence
+> ledger is now 9 of 89 checks
 > complete from local/CI release-gate evidence, final signoffs remain 0 of 5
-> approved, and the strict counted launch gates are 18 of 118 complete
-> (15.3%). This strict percentage counts only production values, evidence checks,
+> approved, and the strict counted launch gates are 18 of 121 complete
+> (14.9%). This strict percentage counts only production values, evidence checks,
 > and final signoff roles; it is not a legal or business readiness claim.
 > `approvedForLaunch` is false. Do not put real charity data into CharityPilot until those values,
 > provider checks, deployed QA, legal/privacy review, external security review,
-> backup/restore evidence, all 86 machine-readable launch evidence checks, and
+> backup/restore evidence, all 89 machine-readable launch evidence checks, and
 > final signoffs are complete.
 > `npm run launch:status` also surfaces the current launch evidence ledger count,
 > `approvedForLaunch`, `finalSignoff`, and the next incomplete evidence checks so
@@ -37,6 +41,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 > If GitHub `production` is used as the deployment secret store, run
 > `npm run check:production:github-secrets -- --environment=production` to
 > prove the required secret names exist without reading their values.
+> The live 2026-07-12 metadata contains only `JWT_SECRET` and
+> `READINESS_API_KEY`; the checker still needs `AUTH_RECOVERY_SECRET` and the six
+> provider/operator secret names before promotion.
 > The JSON output also keeps the full source-grouped production value checklist
 > visible after `.env.production` exists, while separately listing only the
 > currently missing values. This is the handoff order for filling the real secret store.
@@ -85,6 +92,9 @@ Status marks reflect completed repository hardening work. Open items require rea
 - [x] Move browser authentication away from `localStorage` and into HTTP-only cookies.
 - [x] Replace stateless refresh JWTs with hashed, revocable, rotating refresh sessions.
 - [x] Hash password reset and email verification tokens before storage.
+- [ ] Publish and exact-SHA verify the locally completed P1-07A durable recovery
+      ledger, multi-instance abuse budgets, atomic session/audit/outbox reset,
+      recovery-key rotation, and P107A migration/rollback evidence slice.
 - [x] Add logout and server-side refresh token revocation.
 - [x] Add role guards for administrator and owner-only mutations.
 - [x] Stop leaking unexpected server error messages in production.
@@ -119,7 +129,12 @@ Status marks reflect completed repository hardening work. Open items require rea
 
 - [x] `npm run lint`
 - [x] `npm run test`
-- [x] `npm run test:production-check` - passed locally on 2026-07-11 with 745 checks passed, 0 failed, and 2 Windows-only symbolic-link privilege skips (747 total).
+- [x] `npm run test:production-check` - the final P1-07A local gate passed on
+      2026-07-12 with 827 checks passed, 0 failed, and 2 expected Windows
+      symbolic-link privilege skips (829 total). The final local managed
+      disposable E2E gate also passed 113/113 runner contracts and 105/105
+      browser scenarios in 7.6m with clean isolated teardown. Exact-pushed-SHA
+      GitHub CI and managed E2E runs remain separate pending publication gates.
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`

@@ -103,6 +103,7 @@ test('login route issues auth cookies and returns the public user without secret
         id: 'u1',
         organisationId: 'org-1',
         role: 'OWNER',
+        passwordHash,
         userLifecycleStatus: 'ACTIVE',
         organisationLifecycleStatus: 'ACTIVE',
       }],
@@ -368,6 +369,7 @@ test('login issues tokens and persists a session with the hashed refresh token o
         id: 'u1',
         organisationId: 'org-1',
         role: 'OWNER',
+        passwordHash,
         userLifecycleStatus: 'ACTIVE',
         organisationLifecycleStatus: 'ACTIVE',
       }],
@@ -395,6 +397,54 @@ test('login issues tokens and persists a session with the hashed refresh token o
   // CURRENT_TIMESTAMP; only rotations explicitly carry the persisted family start.
   assert.equal('familyCreatedAt' in (createData ?? {}), false);
   assert.ok(createData?.expiresAt instanceof Date);
+});
+
+test('login rejects neutrally when the verified password hash changes before locked session issuance', async () => {
+  const verifiedPasswordHash = bcrypt.hashSync('GoodPass1', 12);
+  const replacementPasswordHash = bcrypt.hashSync('ReplacementPass1', 12);
+  let sessionCreated = false;
+  const prisma = {
+    user: {
+      findUnique: async () => ({
+        id: 'u1',
+        email: 'owner@example.org',
+        name: 'Owner One',
+        passwordHash: verifiedPasswordHash,
+        role: 'OWNER',
+        emailVerified: true,
+        lifecycleStatus: 'ACTIVE',
+        organisationId: 'org-1',
+        organisation: publicOrganisation(),
+      }),
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      $queryRaw: async () => [{
+        id: 'u1',
+        organisationId: 'org-1',
+        role: 'OWNER',
+        passwordHash: replacementPasswordHash,
+        userLifecycleStatus: 'ACTIVE',
+        organisationLifecycleStatus: 'ACTIVE',
+      }],
+      authSession: {
+        create: async () => {
+          sessionCreated = true;
+          return { id: 'must-not-exist' };
+        },
+      },
+    }),
+  };
+  const service = new AuthService(prisma as never, {} as never);
+
+  await assert.rejects(
+    () => service.login({ email: 'owner@example.org', password: 'GoodPass1' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.statusCode === 401 &&
+      error.code === 'INVALID_CREDENTIALS' &&
+      error.message === 'Invalid email or password',
+  );
+  assert.equal(sessionCreated, false);
 });
 
 // ── x-auth-session-auth-session-12: logout revokes the locked token family ──
@@ -618,5 +668,6 @@ test('production logger redacts the JWT signing secret env path', () => {
   const loggerOptions = apiLoggerOptionsForEnvironment('production');
   const redact = (loggerOptions as { redact?: { paths?: string[] } }).redact;
   assert.ok(redact?.paths?.includes('env.JWT_SECRET'));
+  assert.ok(redact?.paths?.includes('env.AUTH_RECOVERY_SECRET'));
   assert.ok(redact?.paths?.includes('refreshTokenHash'));
 });

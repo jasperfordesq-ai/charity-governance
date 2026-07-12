@@ -91,6 +91,8 @@ const TARGET_OVERRIDE_QUERY_PARAMETERS = Object.freeze([
 const PRESERVED_PUBLIC_TABLES = Object.freeze([
   "GovernancePrinciple",
   "GovernanceStandard",
+  "AuthRecoveryControl",
+  "AuthRecoveryRetiredSecret",
   "_prisma_migrations",
 ]);
 
@@ -98,6 +100,9 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "Organisation",
   "User",
   "AuthSession",
+  "PasswordRecoveryRequest",
+  "AuthRecoveryRateLimitBucket",
+  "AuthSecurityEmailOutbox",
   "BillingAuthorityGrant",
   "ComplianceRecord",
   "ComplianceSignoff",
@@ -513,6 +518,29 @@ function requireStrongRemoteSecret(env, name) {
   return assertStrongRemoteSecretValue(env[name], name);
 }
 
+function requireCanonicalRecoverySecret(env) {
+  const value = requireStrongRemoteSecret(env, "E2E_AUTH_RECOVERY_SECRET");
+  let decoded;
+  if (/^[0-9a-f]+$/i.test(value) && value.length % 2 === 0) {
+    decoded = Buffer.from(value, "hex");
+  } else if (/^[A-Za-z0-9_-]+$/.test(value)) {
+    decoded = Buffer.from(value, "base64url");
+  } else {
+    fail("E2E_AUTH_RECOVERY_SECRET must be canonical hex or base64url (value redacted).");
+  }
+  if (
+    decoded.length < 32 ||
+    decoded.length > 64 ||
+    (value.toLowerCase() !== decoded.toString("hex") &&
+      value !== decoded.toString("base64url"))
+  ) {
+    fail(
+      "E2E_AUTH_RECOVERY_SECRET must canonically encode 32 to 64 high-entropy bytes (value redacted).",
+    );
+  }
+  return value;
+}
+
 function remoteCookieDomain(env, apiUrl, webUrl) {
   const raw = env.E2E_AUTH_COOKIE_DOMAIN;
   if (
@@ -605,8 +633,14 @@ function loadDisposableDatabaseConfig(env = process.env) {
         "remote-disposable reset mode cannot be combined with non-destructive deployed QA mode.",
       );
     }
-    requireStrongRemoteSecret(env, "E2E_READINESS_API_KEY");
-    requireStrongRemoteSecret(env, "E2E_JWT_SECRET");
+    const readinessSecret = requireStrongRemoteSecret(env, "E2E_READINESS_API_KEY");
+    const jwtSecret = requireStrongRemoteSecret(env, "E2E_JWT_SECRET");
+    const recoverySecret = requireCanonicalRecoverySecret(env);
+    if (recoverySecret === readinessSecret || recoverySecret === jwtSecret) {
+      fail(
+        "E2E_AUTH_RECOVERY_SECRET must be distinct from E2E_READINESS_API_KEY and E2E_JWT_SECRET.",
+      );
+    }
     apiUrl = assertRemoteHttpsEndpoint(env, "E2E_API_URL");
     webUrl = assertRemoteHttpsEndpoint(env, "E2E_WEB_URL");
     cookieDomain = remoteCookieDomain(env, apiUrl, webUrl);

@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { runDomainInvariantsPrismaConcurrencyProof } from './domain-invariants-live.js';
+import { runLoginPasswordResetRaceProof } from './auth-login-reset-race-live.js';
+import { runPasswordRecoveryConcurrencyProof } from './password-recovery-live.js';
 
 const migration = readFileSync(
   new URL(
@@ -602,6 +604,14 @@ test('real PostgreSQL 16 migration enforces nonce-bound recovery, dispositions, 
 
 test('real PostgreSQL 16 migration serializes board references and exposes safe Prisma domain metadata', { timeout: 300_000 }, async () => {
   await runDomainInvariantsPrismaConcurrencyProof(POSTGRES_IMAGE);
+});
+
+test('real PostgreSQL 16 migration serializes password recovery requests and reset consumption', { timeout: 300_000 }, async () => {
+  await runPasswordRecoveryConcurrencyProof(POSTGRES_IMAGE);
+});
+
+test('real PostgreSQL 16 migration serializes login issuance against password reset', { timeout: 300_000 }, async () => {
+  await runLoginPasswordResetRaceProof(POSTGRES_IMAGE);
 });
 
 test('disposable E2E reset inventory includes recovery evidence exactly once', () => {

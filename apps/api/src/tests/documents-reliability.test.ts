@@ -761,7 +761,10 @@ test('readiness reports not_ready when the document storage bucket is unreachabl
   };
 
   const app = Fastify({ logger: false });
-  app.decorate('prisma', { $queryRaw: async () => [{ result: 1 }] } as never);
+  app.decorate('prisma', {
+    $queryRaw: async () => [{ result: 1 }],
+    $transaction: async () => ({ id: 1 }),
+  } as never);
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
 
   try {

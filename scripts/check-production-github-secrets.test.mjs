@@ -53,6 +53,7 @@ test('production GitHub secret-store check passes with every required secret nam
   assert.deepEqual(REQUIRED_GITHUB_PRODUCTION_SECRETS.map((item) => item.name), [
     'DATABASE_URL',
     'JWT_SECRET',
+    'AUTH_RECOVERY_SECRET',
     'READINESS_API_KEY',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
@@ -78,7 +79,8 @@ test('production GitHub secret-store check fails for missing required secret nam
 
   assert.equal(result.status, 1);
   assert.equal(result.stdout, '');
-  assert.match(result.stderr, /Production GitHub secret-store check failed \(6 issues\)/);
+  assert.match(result.stderr, /Production GitHub secret-store check failed \(7 issues\)/);
+  assert.match(result.stderr, /GitHub production secret AUTH_RECOVERY_SECRET is missing/);
   assert.match(result.stderr, /GitHub production secret STRIPE_SECRET_KEY is missing/);
   assert.match(result.stderr, /GitHub production secret SUPABASE_SERVICE_ROLE_KEY is missing/);
   assert.match(
@@ -106,13 +108,14 @@ test('production GitHub secret-store check renders name-only JSON for automation
   assert.deepEqual(payload.presentRequiredSecretNames, ['JWT_SECRET', 'READINESS_API_KEY']);
   assert.deepEqual(payload.missingSecretNames, [
     'DATABASE_URL',
+    'AUTH_RECOVERY_SECRET',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'RESEND_API_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
     'ERROR_ALERT_WEBHOOK_URL',
   ]);
-  assert.equal(payload.issueCount, 6);
+  assert.equal(payload.issueCount, 7);
   assert.match(payload.issues.join('\n'), /GitHub production secret DATABASE_URL is missing/);
   assert.equal(payload.secretValuesRead, false);
   assert.doesNotMatch(result.stdout, /postgresql:\/\//);

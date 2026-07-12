@@ -4,6 +4,10 @@ import { Client } from "pg";
 
 import { IS_DEPLOYED_QA } from "../env";
 import {
+  createPasswordRecoveryTokenMaterial,
+  derivePasswordRecoveryRateDigest,
+} from "../../apps/api/src/services/password-recovery-crypto.js";
+import {
   type DisposableDatabaseConfig,
   DatabaseSafetyError,
   DISPOSABLE_DATABASE_RESET_TABLES,
@@ -57,8 +61,10 @@ function assertDirectDatabaseSeamAllowed(): DisposableDatabaseConfig {
 
 /**
  * Tenant/app tables truncated on reset. The seeded governance reference data
- * (GovernancePrinciple, GovernanceStandard) is deliberately PRESERVED so the
- * compliance journeys have standards to work against without re-seeding.
+ * (GovernancePrinciple, GovernanceStandard), migration-owned singleton
+ * AuthRecoveryControl, and its append-only AuthRecoveryRetiredSecret history
+ * are deliberately PRESERVED so compliance journeys retain their standards and
+ * recovery remains bound to the isolated stack's secret and key history.
  * (Confirmed against apps/api/prisma/seed.ts + schema.prisma — see e2e/README.md.)
  */
 const DATABASE_CONNECTION_TIMEOUT_MS = 10_000;
@@ -593,28 +599,182 @@ export async function injectVerifyToken(email: string): Promise<string> {
 }
 
 /**
- * Inject a known password-reset token for a user. The API stores
- * User.resetToken as sha256(token) with a 1h expiry, so we set the hash of a
- * token we control and then drive /reset-password#token=<plaintext>.
- * Returns the plaintext token to navigate with.
+ * Insert an accepted self-service recovery request with a controlled token.
+ * All timeline values come from one database timestamp: PostgreSQL stores these
+ * columns without a zone, so serialising the Windows host clock would introduce
+ * a DST offset and could manufacture an impossible recovery timeline.
  */
 export async function injectResetToken(email: string): Promise<string> {
-  const token = randomToken();
+  const config = assertDirectDatabaseSeamAllowed();
+  const recoverySecret = process.env.E2E_AUTH_RECOVERY_SECRET?.trim();
+  if (!recoverySecret) {
+    throw new Error(
+      "injectResetToken requires E2E_AUTH_RECOVERY_SECRET to match the isolated API runtime.",
+    );
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const requestId = crypto.randomUUID();
+  const material = createPasswordRecoveryTokenMaterial(requestId, recoverySecret);
+  const identifierDigest = derivePasswordRecoveryRateDigest(
+    "forgot-identifier",
+    normalizedEmail,
+    recoverySecret,
+  );
+  const requestIpDigest = derivePasswordRecoveryRateDigest(
+    "forgot-ip",
+    "127.0.0.1",
+    recoverySecret,
+  );
+  const requestNetworkDigest = derivePasswordRecoveryRateDigest(
+    "forgot-network",
+    "127.0.0.1",
+    recoverySecret,
+  );
   const n = await withDb(async (client) => {
     const res = await client.query(
-      `UPDATE "User"
-         SET "resetToken" = $1,
-             "resetTokenExpiry" = NOW() + INTERVAL '1 hour'
-       WHERE "email" = $2`,
-      [sha256Hex(token), email.trim().toLowerCase()],
+      `WITH locked_account AS MATERIALIZED (
+         SELECT account."id", account."organisationId", account."email", account."name"
+           FROM "User" AS account
+           JOIN "Organisation" AS organisation
+             ON organisation."id" = account."organisationId"
+          WHERE account."email" = $10
+            AND account."lifecycleStatus" = 'ACTIVE'
+            AND organisation."lifecycleStatus" = 'ACTIVE'
+          FOR UPDATE OF account
+       ),
+       database_clock AS MATERIALIZED (
+         SELECT clock_timestamp()::timestamp(3) AS "now"
+       )
+       INSERT INTO "PasswordRecoveryRequest" (
+         "id", "source", "organisationId", "userId",
+         "identifierDigest", "requestIpDigest", "requestNetworkDigest", "rateKeyVersion",
+         "tokenHash", "tokenNonce", "tokenKeyVersion",
+         "recipientEmail", "recipientName", "frontendOrigin", "deliveryTemplateVersion",
+         "deliveryState", "claimedAt", "deliveryAttemptedAt", "deliveryFinalizedAt",
+         "deliveryAttemptCount", "providerMessageId", "expiresAt", "createdAt", "updatedAt"
+       )
+       SELECT $1, 'SELF_SERVICE_EMAIL', locked_account."organisationId", locked_account."id",
+              $2, $3, $4, 1,
+              $5, $6, $7,
+              locked_account."email", locked_account."name", $8, 1,
+              'ACCEPTED', database_clock."now", database_clock."now", database_clock."now",
+              1, $9, database_clock."now" + INTERVAL '1 hour',
+              database_clock."now", database_clock."now"
+         FROM locked_account
+         CROSS JOIN database_clock`,
+      [
+        requestId,
+        identifierDigest,
+        requestIpDigest,
+        requestNetworkDigest,
+        material.tokenHash,
+        material.tokenNonceHex,
+        material.tokenKeyVersion,
+        config.webUrl,
+        `e2e-password-recovery-${requestId}`,
+        normalizedEmail,
+      ],
     );
     return res.rowCount ?? 0;
   });
   if (n !== 1)
     throw new Error(
-      `injectResetToken: expected 1 row for ${email}, updated ${n}`,
+      `injectResetToken: expected 1 active account for ${email}, inserted ${n} recovery requests`,
     );
-  return token;
+  return material.token;
+}
+
+export type PasswordRecoveryResetEvidence = {
+  activeSessionCount: number;
+  passwordResetSessionCount: number;
+  outstandingRecoveryCount: number;
+  completedRecoveryCount: number;
+  resetAuditCount: number;
+  completionOutboxCount: number;
+  legacyResetSlotCleared: boolean;
+  plaintextArtifactCount: number;
+};
+
+/** Read the atomic reset effects without exposing any stored credential material. */
+export async function getPasswordRecoveryResetEvidence(
+  email: string,
+  plaintextToken: string,
+): Promise<PasswordRecoveryResetEvidence> {
+  return withDb(async (client) => {
+    const result = await client.query<PasswordRecoveryResetEvidence>(
+      `SELECT
+         (SELECT COUNT(*)::INTEGER FROM "AuthSession" session
+           WHERE session."userId" = account."id" AND session."revokedAt" IS NULL) AS "activeSessionCount",
+         (SELECT COUNT(*)::INTEGER FROM "AuthSession" session
+           WHERE session."userId" = account."id" AND session."revocationReason" = 'PASSWORD_RESET') AS "passwordResetSessionCount",
+         (SELECT COUNT(*)::INTEGER FROM "PasswordRecoveryRequest" recovery
+           WHERE recovery."userId" = account."id" AND recovery."terminatedAt" IS NULL
+             AND recovery."expiresAt" > NOW()) AS "outstandingRecoveryCount",
+         (SELECT COUNT(*)::INTEGER FROM "PasswordRecoveryRequest" recovery
+           WHERE recovery."userId" = account."id"
+             AND recovery."terminationReason" = 'PASSWORD_RESET_COMPLETED') AS "completedRecoveryCount",
+         (SELECT COUNT(*)::INTEGER FROM "SecurityAuditEvent" event
+           WHERE event."subjectUserId" = account."id"
+             AND event."type" = 'ALL_SESSIONS_REVOKED'
+             AND event."context" ->> 'eventKind' = 'PASSWORD_RESET_COMPLETED'
+             AND event."context" ->> 'method' = 'PASSWORD_RECOVERY_LINK') AS "resetAuditCount",
+         (SELECT COUNT(*)::INTEGER FROM "AuthSecurityEmailOutbox" outbox
+           WHERE outbox."userId" = account."id"
+             AND outbox."kind" = 'PASSWORD_RESET_COMPLETED_NOTICE') AS "completionOutboxCount",
+         (account."resetToken" IS NULL AND account."resetTokenExpiry" IS NULL) AS "legacyResetSlotCleared",
+          (
+            SELECT COALESCE(SUM(artifact."matches"), 0)::INTEGER
+            FROM (
+              SELECT COUNT(*)::BIGINT AS "matches"
+              FROM "PasswordRecoveryRequest" recovery
+              WHERE recovery."userId" = account."id"
+                AND (
+                  recovery."tokenHash" = $2
+                  OR recovery."tokenNonce" = $2
+                  OR recovery."recipientEmail" = $2
+                  OR recovery."recipientName" = $2
+                  OR recovery."providerMessageId" = $2
+                  OR recovery."identifierDigest" = $2
+                  OR recovery."requestIpDigest" = $2
+                  OR recovery."requestNetworkDigest" = $2
+                )
+              UNION ALL
+              SELECT COUNT(*)::BIGINT
+              FROM "SecurityAuditEvent" event
+              WHERE event."subjectUserId" = account."id"
+                AND (
+                  event."reason" = $2
+                  OR event."subjectLabel" = $2
+                  OR POSITION($2 IN event."context"::text) > 0
+                )
+              UNION ALL
+              SELECT COUNT(*)::BIGINT
+              FROM "AuthSecurityEmailOutbox" outbox
+              WHERE outbox."userId" = account."id"
+                AND (
+                  outbox."recipientEmail" = $2
+                  OR outbox."recipientName" = $2
+                  OR outbox."providerMessageId" = $2
+                )
+              UNION ALL
+              SELECT COUNT(*)::BIGINT
+              FROM "User" credential_owner
+              WHERE credential_owner."id" = account."id"
+                AND credential_owner."resetToken" = $2
+              UNION ALL
+              SELECT COUNT(*)::BIGINT
+              FROM "AuthRecoveryRateLimitBucket" bucket
+              WHERE bucket."subjectDigest" = $2
+            ) artifact
+          ) AS "plaintextArtifactCount"
+       FROM "User" AS account
+       WHERE account."email" = $1`,
+      [email.trim().toLowerCase(), plaintextToken],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error(`getPasswordRecoveryResetEvidence: account not found for ${email}`);
+    return row;
+  });
 }
 
 /** Read whether a user's email is verified (for assertions). */

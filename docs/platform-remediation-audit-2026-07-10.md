@@ -1,6 +1,6 @@
 # CharityPilot Full-Platform Remediation Audit
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 This is the authoritative, human-maintained remediation ledger for the full
 CharityPilot audit completed on 2026-07-10. It is intentionally separate from
@@ -19,15 +19,15 @@ provider, legal, security-review, and human-signoff work explicit.
 - Frontend, accessibility, UX, and product truth: **218 / 300**.
 - QA, release engineering, operations, and documentation: **188 / 300**.
 - Legal/compliance assurance: **35 / 100**.
-- Current strict production launch score: **18 / 118 gates, or 153 / 1000**.
+- Current strict production launch score: **18 / 121 gates, or 149 / 1000**.
 - Launch phase: `ENV_INCOMPLETE`.
 - Production values: `9 / 27` complete.
-- Launch-evidence checks: `9 / 86` complete.
+- Launch-evidence checks: `9 / 89` complete.
 - Final signoffs: `0 / 5` complete.
 - `approvedForLaunch`: `false`.
 
 The `669 / 1000` manual score is the historical 2026-07-10 audit baseline; the
-strict launch figures are the live 2026-07-11 workstation snapshot. Refresh them with
+strict launch figures are the refreshed 2026-07-12 workstation/schema snapshot. Refresh them with
 the live commands below at the start and end of every remediation session.
 
 ## Completion Definitions
@@ -54,8 +54,8 @@ an external penetration test, remediation or formal human risk acceptance, and
 all five named final signoffs.
 
 Passing local tests is not launch completion. A `1000 / 1000` claim is prohibited
-until production values are `27 / 27`, evidence checks are `86 / 86`, strict
-gates are `118 / 118`, final signoffs are `5 / 5`, and all evidence is genuine
+until production values are `27 / 27`, evidence checks are `89 / 89`, strict
+gates are `121 / 121`, final signoffs are `5 / 5`, and all evidence is genuine
 and bound to the promoted release.
 
 ## Live Baseline Commands
@@ -986,9 +986,10 @@ Evidence:
   pushes; GitHub E2E run
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29116192729`
   executed successfully for that exact SHA with `96 / 96` Playwright tests.
-- Fresh 2026-07-10 and 2026-07-11 GitHub audits found no `master` branch protection or
-  repository ruleset. The `Production` environment exists but allows admin
-  bypass, has no protection rules/reviewers, and has no deployment branch
+- The latest read-only GitHub refresh on 2026-07-12 found no `master` branch
+  protection. One active ruleset protects immutable personal-release tags, but
+  it does not govern `master`. The `Production` environment exists but allows
+  admin bypass, has no protection rules/reviewers, and has no deployment branch
   policy.
 
 Repository progress on 2026-07-11:
@@ -1237,11 +1238,67 @@ Acceptance:
 
 ### P1-07 - MFA, session management, and recovery
 
+Status: `IN_PROGRESS` overall; P1-07A password-recovery integrity is
+`LOCALLY_VERIFIED`, with exact-pushed-SHA GitHub CI and managed E2E publication
+still pending
+
 - Add MFA suitable for privileged users, session inventory, per-session and
   all-session revocation, breached-password controls, ownership recovery, and
   appropriate audit events.
 - Treat recovery as a security-sensitive workflow with rate limits and explicit
   human/business policy.
+
+P1-07A repository remediation on 2026-07-12:
+
+- Replaced the mutable `User` reset slot and process-local-only recovery limit
+  with a bounded `PasswordRecoveryRequest` ledger, database-backed
+  domain-separated keyed identifier/network budgets, and up to three concurrent
+  usable one-hour links. Unknown, inactive, suppressed, provider-rejected, and
+  provider-uncertain requests keep the same neutral public response and do not retain the
+  submitted unknown-account address or raw caller/network/token values.
+- Added a durable versioned Resend worker and separate reset-completion outbox.
+  Provider timeouts and ambiguous acceptance quarantine work as `UNCERTAIN`;
+  retries reuse immutable row inputs and a version-bound idempotency key rather
+  than minting a new capability. Review-worthy anomalies have durable count-only
+  claims and cannot age out before alert acknowledgement.
+- A successful reset now changes the password, terminates every outstanding
+  link, revokes every active session, appends predecessor-compatible immutable
+  audit evidence, and queues the registered-address notice in one ordered
+  transaction. Live two-client proofs cover concurrent reset and login/reset
+  races.
+- `AUTH_RECOVERY_SECRET` is bound to a singleton database generation fence and
+  append-only retired-fingerprint history. The quiesced operator workflow
+  invalidates capabilities and keyed evidence before replacement, blocks
+  recovery between phases, and rejects every historically retired secret.
+- Migration `20260712013000_add_password_recovery_integrity` preserves each
+  valid active legacy slot exactly once, clears inactive legacy slots without
+  creating recovery evidence, fails closed on active account emails longer than
+  254 characters, retires both legacy `User` fields, and installs the durable
+  transition/retention/authority guards. Ordinary deploys now use
+  `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`; P1-09 is a
+  restore-only rollback boundary requiring an exact pre-P1-07A backup plus the
+  checksum-bound read-only restored-history/P1-07A-absence probe before backup
+  or migration.
+- Final local verification passed shared `55 / 55`, API `810 / 810` plus four isolated
+  real-PostgreSQL proofs `4 / 4`, web `371 / 371`, production tooling `827`
+  passed / `0` failed / `2` expected Windows symbolic-link privilege skips
+  (`829` total), personal-server `24 / 24`, local-Docker `45 / 45`, and the final
+  local managed disposable E2E gate: runner contracts `113 / 113` plus browser
+  scenarios `105 / 105` in `7.6m`, followed by clean isolated teardown. Lint,
+  E2E typecheck, Prisma validation,
+  shared/API/web optimized builds, secret/SAST scans, the production image
+  dependency audit, reliability `395 / 395`, historical migration verifiers,
+  built-image recovery/rollback probes, and launch-evidence contracts passed.
+- The local managed browser rerun is complete. No exact pushed implementation
+  SHA, GitHub Actions CI run, or GitHub-managed E2E run is recorded until the
+  final pushed SHA supplies that publication evidence.
+
+Remaining under the parent P1-07 item:
+
+- MFA policy and implementation suitable for privileged users;
+- breached-password source and outage/fail-open/fail-closed policy; and
+- the remaining reviewed account/ownership-recovery policy and human authority
+  decisions. P1-07A must not be used to claim those product decisions are closed.
 
 ### P1-08 - Immutable governance audit history
 
@@ -1296,7 +1353,7 @@ Implemented:
   catalog, history, tenant relation, data, and edge behavior are correct. Every
   disposable database is uniquely named, bounded, force-cleaned, and checked for
   residue.
-- Ordinary deploy and recovery require
+- At the P1-09 exact verification SHA, ordinary deploy and recovery required
   `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1`; only the
   separately attested historical rollback paths can select the older modelled
   compatibility lines. The owner-only recovery wrapper binds a fresh attestation
@@ -1586,10 +1643,15 @@ audit's public-production gates independently.
 These must remain visible and must not cause an autonomous session to stop while
 other safe repo work exists.
 
-Audit-time blockers, to refresh live:
+Live blocker refresh from the checked workstation and GitHub on 2026-07-12:
 
-- 17 unresolved production values.
+- The ignored `.env.production` still has 18 counted provider/hosting/image
+  values needing real data. It also predates P1-07A and lacks the separately
+  required `AUTH_RECOVERY_SECRET` and
+  `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`; those two
+  prerequisites are not included in the 18-value launch-status count.
 - Missing GitHub production secret names:
+  - `AUTH_RECOVERY_SECRET`;
   - `DATABASE_URL`;
   - `STRIPE_SECRET_KEY`;
   - `STRIPE_WEBHOOK_SECRET`;
@@ -1598,7 +1660,10 @@ Audit-time blockers, to refresh live:
   - `ERROR_ALERT_WEBHOOK_URL`.
 - Unresolved `app.charitypilot.ie` and `api.charitypilot.ie` DNS/HTTPS.
 - No complete release binding or current promoted image set.
-- Missing branch/status-check and production-environment protections.
+- `master` has no branch protection. The GitHub `production` environment still
+  permits administrator bypass and has no protection rules or deployment branch
+  policy. The separate immutable personal-release tag ruleset does not close
+  those public-production gates.
 - Live PostgreSQL, Supabase, Stripe, Resend, hosting, DNS/TLS, and observability
   setup/evidence.
 - Digest-pinned production deployment and rollback rehearsal.

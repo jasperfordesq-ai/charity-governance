@@ -32,6 +32,7 @@ function validConfig() {
     postgresUser: 'charitypilot_personal_server',
     postgresPassword: 'a'.repeat(64),
     jwtSecret: 'J'.repeat(64),
+    authRecoverySecret: 'A'.repeat(64),
     readinessApiKey: 'R'.repeat(64),
     ownerEmail: 'owner@example.org',
     ownerName: 'Example Owner',
@@ -106,6 +107,29 @@ test('generated environment contains strong distinct secrets but never an owner 
   assert.match(password, /[a-z]/u);
   assert.match(password, /[0-9]/u);
   assert.match(password, /[^A-Za-z0-9]/u);
+});
+
+test('existing personal-server upgrade guidance adds a canonical independent recovery secret without disclosing it', () => {
+  const deploymentGuide = readFileSync(join(process.cwd(), 'docs', 'personal-server-deployment.md'), 'utf8');
+  const envExample = readFileSync(join(process.cwd(), '.env.personal-server.example'), 'utf8');
+
+  assert.match(envExample, /canonical even-length hex or unpadded base64url encoding of 32-64 random bytes/u);
+  assert.match(envExample, /Do not reuse JWT_SECRET or READINESS_API_KEY/u);
+  assert.match(deploymentGuide, /created before the password-recovery integrity upgrade/u);
+  assert.match(deploymentGuide, /leave it\s+unchanged: do not rotate it as an ordinary update step/u);
+  assert.match(deploymentGuide, /RandomNumberGenerator/u);
+  assert.match(deploymentGuide, /New-Object byte\[\] 48/u);
+  assert.match(deploymentGuide, /Do not print the generated value/u);
+  assert.match(deploymentGuide, /Record only that the prerequisite was\s+completed/u);
+  assert.match(deploymentGuide, /never edit\s+the environment value first/u);
+  assert.match(deploymentGuide, /auth-recovery-secret-rotation/u);
+  assert.match(deploymentGuide, /terminates every\s+non-suppressed recovery capability as `KEY_ROTATED`/u);
+  assert.match(deploymentGuide, /clears both halves of every\s+legacy `User` reset slot/u);
+  assert.match(deploymentGuide, /--expected-deployment-profile personal-server/u);
+  assert.match(deploymentGuide, /`EXECUTED` reports `recoveryBlocked: true`/u);
+  assert.match(deploymentGuide, /--activate-after-replacement/u);
+  assert.match(deploymentGuide, /Only after it\s+reports `ACTIVATED` and `recoveryBlocked: false`/u);
+  assert.doesNotMatch(deploymentGuide, /Write-Host\s+['"]?\$secret/u);
 });
 
 test('init dry-run plans build, migration, initializer, and start without writing or revealing a password', () => {
@@ -197,11 +221,19 @@ test('routine start cannot build, migrate, or seed and stop cannot delete volume
     const startExecutor = fakeExecutor();
     runAt(root, ['start'], startExecutor, []);
     const startCalls = startExecutor.calls.map((call) => call.command);
-    assert.equal(startCalls.length, 2);
+    assert.equal(startCalls.length, 4);
     assert.deepEqual(startCalls[0].slice(-2), ['config', '--quiet']);
+    assert.deepEqual(startCalls[1].slice(-1), ['db']);
     assert.ok(startCalls[1].includes('--no-build'));
-    assert.equal(startCalls[1].includes('migrate'), false);
-    assert.equal(startCalls[1].includes('personal-init'), false);
+    assert.deepEqual(
+      startCalls[2].slice(-6),
+      ['-T', 'migrate', 'migrate', 'status', '--schema', 'prisma/schema.prisma'],
+    );
+    assert.ok(startCalls[2].includes('--no-deps'));
+    assert.ok(startCalls[3].includes('--no-build'));
+    assert.equal(startCalls.some((call) => call.includes('deploy')), false);
+    assert.equal(startCalls.some((call) => call.includes('personal-init')), false);
+    assert.equal(startCalls.some((call) => call.includes('seed')), false);
 
     const stopExecutor = fakeExecutor();
     runAt(root, ['stop'], stopExecutor, []);
@@ -210,6 +242,27 @@ test('routine start cannot build, migrate, or seed and stop cannot delete volume
     assert.equal(stopCommand.includes('down'), false);
     assert.equal(stopCommand.includes('-v'), false);
     assert.equal(stopCommand.includes('--volumes'), false);
+  });
+});
+
+test('routine start fails closed on incompatible migration history before application runtime starts', () => {
+  withWorkspace((root) => {
+    const executor = fakeExecutor((call) => (
+      call.command.includes('status')
+        ? { status: 1, stdout: '', stderr: 'Database schema is not up to date' }
+        : null
+    ));
+    assert.throws(
+      () => runAt(root, ['start'], executor, []),
+      /migrate status.*failed/u,
+    );
+    const commands = commandText(executor.calls);
+    assert.match(commands, /up -d --no-build --wait --wait-timeout 180 db/u);
+    assert.match(commands, /migrate migrate status --schema prisma\/schema\.prisma/u);
+    assert.equal(executor.calls.some((call) => (
+      call.command.includes('up') && !call.command.includes('db')
+    )), false);
+    assert.equal(executor.calls.some((call) => call.command.includes('deploy')), false);
   });
 });
 

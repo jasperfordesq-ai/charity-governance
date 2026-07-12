@@ -191,6 +191,7 @@ export function renderPersonalServerEnv(config) {
     ['POSTGRES_USER', config.postgresUser],
     ['POSTGRES_PASSWORD', config.postgresPassword],
     ['JWT_SECRET', config.jwtSecret],
+    ['AUTH_RECOVERY_SECRET', config.authRecoverySecret],
     ['JWT_EXPIRY', '15m'],
     ['REFRESH_TOKEN_TTL_DAYS', '7'],
     ['READINESS_API_KEY', config.readinessApiKey],
@@ -246,12 +247,37 @@ function validateStoredEnvironment(values) {
   if (!/^[A-Fa-f0-9]{64}$/u.test(values.POSTGRES_PASSWORD ?? '')) {
     throw new Error('POSTGRES_PASSWORD must be a 64-character hexadecimal secret');
   }
-  for (const name of ['JWT_SECRET', 'READINESS_API_KEY']) {
+  for (const name of ['JWT_SECRET', 'READINESS_API_KEY', 'AUTH_RECOVERY_SECRET']) {
     if (!values[name] || values[name].length < 32 || /CHANGE_ME|REPLACE_ME/iu.test(values[name])) {
       throw new Error(`${name} must be a configured secret of at least 32 characters`);
     }
   }
-  if (values.JWT_SECRET === values.READINESS_API_KEY) throw new Error('JWT_SECRET and READINESS_API_KEY must be distinct');
+  if (new Set([
+    values.JWT_SECRET,
+    values.READINESS_API_KEY,
+    values.AUTH_RECOVERY_SECRET,
+  ]).size !== 3) {
+    throw new Error('JWT_SECRET, READINESS_API_KEY, and AUTH_RECOVERY_SECRET must be distinct');
+  }
+  const recoverySecret = values.AUTH_RECOVERY_SECRET;
+  let decodedRecoverySecret;
+  if (/^[0-9a-f]+$/iu.test(recoverySecret) && recoverySecret.length % 2 === 0) {
+    decodedRecoverySecret = Buffer.from(recoverySecret, 'hex');
+  } else if (/^[A-Za-z0-9_-]+$/u.test(recoverySecret)) {
+    decodedRecoverySecret = Buffer.from(recoverySecret, 'base64url');
+  } else {
+    throw new Error('AUTH_RECOVERY_SECRET must be canonical hex or base64url');
+  }
+  if (
+    decodedRecoverySecret.length < 32 ||
+    decodedRecoverySecret.length > 64 ||
+    (
+      recoverySecret.toLowerCase() !== decodedRecoverySecret.toString('hex') &&
+      recoverySecret !== decodedRecoverySecret.toString('base64url')
+    )
+  ) {
+    throw new Error('AUTH_RECOVERY_SECRET must canonically encode 32 to 64 high-entropy bytes');
+  }
   canonicalEmail(values.PERSONAL_SERVER_OWNER_EMAIL, 'PERSONAL_SERVER_OWNER_EMAIL');
   canonicalText(values.PERSONAL_SERVER_OWNER_NAME, 'PERSONAL_SERVER_OWNER_NAME', 200);
   canonicalText(values.PERSONAL_SERVER_ORGANISATION_NAME, 'PERSONAL_SERVER_ORGANISATION_NAME', 300);
@@ -399,6 +425,7 @@ function environmentForNewInstall(options, context) {
     postgresUser: 'charitypilot_personal_server',
     postgresPassword: randomHex(32, context.randomBytesImpl),
     jwtSecret: `jwt_${randomBase64Url(48, context.randomBytesImpl)}`,
+    authRecoverySecret: randomBase64Url(48, context.randomBytesImpl),
     readinessApiKey: `readiness_${randomBase64Url(48, context.randomBytesImpl)}`,
     ownerEmail,
     ownerName,
@@ -434,6 +461,37 @@ function startRuntime(context) {
     '--wait',
     '--wait-timeout',
     String(DEFAULT_WAIT_SECONDS),
+  ], context);
+}
+
+function verifyRuntimeMigrationHistory(context) {
+  // Routine startup must remain read-only with respect to application data. Bring
+  // up only PostgreSQL, then ask the already-built migration image to compare its
+  // exact migration catalog with the live history before any application runtime
+  // is allowed to start. `migrate status` never deploys or resolves migrations.
+  runCommand([
+    ...composePrefix(),
+    'up',
+    '-d',
+    '--no-build',
+    '--wait',
+    '--wait-timeout',
+    String(DEFAULT_WAIT_SECONDS),
+    'db',
+  ], context);
+  runCommand([
+    ...composePrefix(),
+    '--profile',
+    'maintenance',
+    'run',
+    '--rm',
+    '--no-deps',
+    '-T',
+    'migrate',
+    'migrate',
+    'status',
+    '--schema',
+    'prisma/schema.prisma',
   ], context);
 }
 
@@ -486,6 +544,7 @@ function initialize(options, context) {
 function start(options, context) {
   loadEnvironmentFile(join(context.repoRoot, ENV_FILE_NAME));
   validateCompose(context);
+  verifyRuntimeMigrationHistory(context);
   startRuntime(context);
   if (!context.dryRun) context.writeOutput('Personal server is healthy.\n');
 }

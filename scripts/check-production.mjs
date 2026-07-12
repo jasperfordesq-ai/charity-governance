@@ -36,6 +36,7 @@ const REQUIRED = [
   'DATABASE_URL',
   'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
   'JWT_SECRET',
+  'AUTH_RECOVERY_SECRET',
   'FRONTEND_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
@@ -547,15 +548,36 @@ function looksLikeLowEntropyProductionSecret(value) {
   return /(?:configured|example|sample|dummy|placeholder|change[-_]?me|already[-_]?generated|jwt[-_]?secret|readiness[-_]?key[-_]?32[-_]?chars)/i.test(normalized);
 }
 
-function requireProductionSecretStrength(env, key, issues) {
+function requireProductionSecretStrength(env, key, issues, minimumLength = 32) {
   const value = envValue(env, key);
   if (!isConfigured(value)) return;
-  if (value.length < 32) {
-    issues.push(`${key} must be at least 32 characters`);
+  if (value.length < minimumLength) {
+    issues.push(`${key} must be at least ${minimumLength} characters`);
     return;
   }
   if (looksLikeLowEntropyProductionSecret(value)) {
     issues.push(`${key} must not be a repeated-character or sample value`);
+  }
+}
+
+function requireCanonicalAuthRecoverySecret(env, issues) {
+  const value = envValue(env, 'AUTH_RECOVERY_SECRET');
+  if (!isConfigured(value)) return;
+  let decoded;
+  if (/^[0-9a-f]+$/i.test(value) && value.length % 2 === 0) {
+    decoded = Buffer.from(value, 'hex');
+  } else if (/^[A-Za-z0-9_-]+$/.test(value)) {
+    decoded = Buffer.from(value, 'base64url');
+  } else {
+    issues.push('AUTH_RECOVERY_SECRET must be canonical hex or base64url');
+    return;
+  }
+  if (
+    decoded.length < 32 ||
+    decoded.length > 64 ||
+    (value.toLowerCase() !== decoded.toString('hex') && value !== decoded.toString('base64url'))
+  ) {
+    issues.push('AUTH_RECOVERY_SECRET must canonically encode 32 to 64 high-entropy bytes');
   }
 }
 
@@ -631,7 +653,7 @@ function redactPreflightTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
@@ -688,6 +710,11 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   requireDatabaseUrl(env, 'DATABASE_URL', issues);
   requireDocumentStorageRecoveryDatabaseHostAllowlist(env, issues);
   requireOptionalCanonicalIntegerRange(env, 'STORAGE_DELETE_TIMEOUT_MS', 100, 8000, issues);
+  requireOptionalCanonicalIntegerRange(env, 'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS', 1000, 15000, issues);
+  requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_INTERVAL_MS', 1000, 60000, issues);
+  requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_BATCH_SIZE', 1, 100, issues);
+  requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_CLEANUP_BATCH_SIZE', 3, 1000, issues);
+  requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_STALE_SENDING_MS', 16000, 300000, issues);
   requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requirePrefix(env, 'STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
   for (const key of [
@@ -722,6 +749,28 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
 
   requireProductionSecretStrength(env, 'JWT_SECRET', issues);
   requireProductionSecretStrength(env, 'READINESS_API_KEY', issues);
+  requireProductionSecretStrength(env, 'AUTH_RECOVERY_SECRET', issues, 43);
+  requireCanonicalAuthRecoverySecret(env, issues);
+  const authRecoverySecret = envValue(env, 'AUTH_RECOVERY_SECRET');
+  if (
+    authRecoverySecret &&
+    [envValue(env, 'JWT_SECRET'), envValue(env, 'READINESS_API_KEY')].includes(authRecoverySecret)
+  ) {
+    issues.push('AUTH_RECOVERY_SECRET must be distinct from JWT_SECRET and READINESS_API_KEY');
+  }
+  const securityEmailTimeoutRaw = envValue(env, 'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS');
+  const staleAuthDeliveryRaw = envValue(env, 'AUTH_DELIVERY_STALE_SENDING_MS');
+  const securityEmailTimeout = Number(securityEmailTimeoutRaw);
+  const staleAuthDelivery = Number(staleAuthDeliveryRaw);
+  if (
+    securityEmailTimeoutRaw !== '' &&
+    staleAuthDeliveryRaw !== '' &&
+    Number.isFinite(securityEmailTimeout) &&
+    Number.isFinite(staleAuthDelivery) &&
+    staleAuthDelivery <= securityEmailTimeout
+  ) {
+    issues.push('AUTH_DELIVERY_STALE_SENDING_MS must exceed SECURITY_EMAIL_PROVIDER_TIMEOUT_MS');
+  }
 
   requireUrl(env, 'FRONTEND_URL', issues, {
     allowCommaSeparated: true,

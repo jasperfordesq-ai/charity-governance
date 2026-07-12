@@ -203,9 +203,12 @@ export async function authRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const body = forgotPasswordSchema.parse(request.body);
-        const result = await authService.forgotPassword(body.email);
+        const result = await authService.forgotPassword(body.email, {
+          ipAddress: request.ip,
+          requestId: request.id,
+        });
 
-        reply.send(result);
+        reply.status(202).send(result);
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));
@@ -244,6 +247,10 @@ export async function authRoutes(app: FastifyInstance) {
         const result = await authService.resetPassword(
           body.token,
           body.password,
+          {
+            ipAddress: request.ip,
+            requestId: request.id,
+          },
         );
 
         clearAuthCookies(reply);

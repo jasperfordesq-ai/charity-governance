@@ -127,6 +127,17 @@ function commandLine(command) {
   return command.map(shellQuote).join(" ");
 }
 
+function displayPreMigrationDatabaseProbeCommand(command) {
+  const scriptIndex = command.indexOf("-e");
+  if (scriptIndex < 0 || scriptIndex === command.length - 1) {
+    return commandLine(command);
+  }
+  return commandLine([
+    ...command.slice(0, scriptIndex + 1),
+    "<embedded-exact-read-only-restored-history-probe>",
+  ]);
+}
+
 function result(status, stdout = "", stderr = "") {
   return { status, stdout, stderr };
 }
@@ -361,6 +372,7 @@ export function runProductionComposeDeployFromArgs(
     randomId = randomUUID,
     cutoverLock = null,
     attestedDatabaseCompatibility = null,
+    preMigrationDatabaseProbeCommand = null,
     cutoverLockPath = undefined,
     acquireCutoverLock = acquireProductionCutoverLock,
     releaseCutoverLock = releaseProductionCutoverLock,
@@ -374,6 +386,7 @@ export function runProductionComposeDeployFromArgs(
   }
   if (
     attestedDatabaseCompatibility !== null &&
+    attestedDatabaseCompatibility !== "p109-restored" &&
     attestedDatabaseCompatibility !== "pre-p006-restored" &&
     attestedDatabaseCompatibility !== "p006-restored"
   ) {
@@ -381,6 +394,23 @@ export function runProductionComposeDeployFromArgs(
       1,
       "",
       "Production compose deploy rejected an unsupported internal database-compatibility attestation.\n",
+    );
+  }
+  const requiresP109RestoredProbe =
+    attestedDatabaseCompatibility === "p109-restored";
+  const hasPreMigrationDatabaseProbe =
+    Array.isArray(preMigrationDatabaseProbeCommand) &&
+    preMigrationDatabaseProbeCommand.length > 0 &&
+    preMigrationDatabaseProbeCommand.every(
+      (part) => typeof part === "string" && part.length > 0,
+    );
+  if (requiresP109RestoredProbe !== hasPreMigrationDatabaseProbe) {
+    return result(
+      1,
+      "",
+      requiresP109RestoredProbe
+        ? "Production compose deploy requires the internal exact P1-09 restored-history probe before a p109-restored cutover.\n"
+        : "Production compose deploy rejected an unexpected internal pre-migration database probe.\n",
     );
   }
 
@@ -407,11 +437,13 @@ export function runProductionComposeDeployFromArgs(
       ...(options.tlsProxy ? [] : ["--no-tls-proxy"]),
     ];
     const expectedDatabaseCompatibility =
-      attestedDatabaseCompatibility === "pre-p006-restored"
+      attestedDatabaseCompatibility === "p109-restored"
+        ? "p109-governance-integrity-v1"
+        : attestedDatabaseCompatibility === "pre-p006-restored"
         ? "pre-p006-restored"
         : attestedDatabaseCompatibility === "p006-restored"
           ? "p006-deadline-calendar-v1"
-          : "p109-governance-integrity-v1";
+          : "p107a-password-recovery-v1";
     const preflightResult = runPreflight(preflightArgs, processEnv, {
       expectedDatabaseCompatibility,
     });
@@ -483,6 +515,14 @@ export function runProductionComposeDeployFromArgs(
           commandLine(pullCommand),
           "Enter fail-closed maintenance mode (stops and removes API, web, scheduler, jobs, and proxy):",
           commandLine(quiesceCommand),
+          ...(hasPreMigrationDatabaseProbe
+            ? [
+                "Prove the exact checksum-bound P1-09 restored history and P1-07A absence before any backup or migration:",
+                displayPreMigrationDatabaseProbeCommand(
+                  preMigrationDatabaseProbeCommand,
+                ),
+              ]
+            : []),
           "Create and restore-verify the retained pre-migration PostgreSQL backup:",
           commandLine(
             backupCommand.map((part) =>
@@ -516,6 +556,10 @@ export function runProductionComposeDeployFromArgs(
       runCommand(pullCommand, commandEnv);
       runCommand(quiesceCommand, commandEnv);
       runtimeQuiesced = true;
+
+      if (hasPreMigrationDatabaseProbe) {
+        runCommand(preMigrationDatabaseProbeCommand, commandEnv);
+      }
 
       backupResult = runBackup(backupArgs, commandEnv);
       if (backupResult.status !== 0) {
@@ -570,7 +614,7 @@ export function runProductionComposeDeployFromArgs(
 
     return result(
       0,
-      `${preflightResult.stdout}${backupResult.stdout}${smokeResult.stdout}${skipReminderReconciliationGate ? '' : 'P0-06 quiesced reminder cutover preparation completed with zero unresolved reminder outcomes.\n'}Retained pre-migration PostgreSQL backup created with owner-only permissions (path omitted from transcript).\nProduction compose deploy completed.\n`,
+      `${preflightResult.stdout}${backupResult.stdout}${smokeResult.stdout}${hasPreMigrationDatabaseProbe ? 'Exact restored-database history was proven read-only before any backup or migration.\n' : ''}${skipReminderReconciliationGate ? '' : 'P0-06 quiesced reminder cutover preparation completed with zero unresolved reminder outcomes.\n'}Retained pre-migration PostgreSQL backup created with owner-only permissions (path omitted from transcript).\nProduction compose deploy completed.\n`,
     );
   };
 

@@ -74,6 +74,7 @@
     "src/lib/team-lifecycle-ui.test.ts",
     "src/lib/tenant-isolation.test.ts",
     "src/lib/form-schema-parity.test.ts",
+    "src/lib/password-recovery-ui.test.ts",
     "src/lib/web-wiring.test.ts",
     "src/components/ui/app-page.tsx",
     "src/components/ui/status.tsx",

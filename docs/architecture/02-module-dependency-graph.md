@@ -42,6 +42,7 @@ flowchart LR
     S_gov["GovernanceRegisterService"]
     S_team["TeamService"]
     S_email["EmailService"]
+    S_authdel["AuthEmailDeliveryService"]
     S_sess["session-tokens"]
     S_remind["DeadlineRemindersService"]
   end
@@ -49,6 +50,10 @@ flowchart LR
   subgraph Models["Prisma models"]
     M_user["User"]
     M_authsess["AuthSession"]
+    M_recovery["PasswordRecoveryRequest"]
+    M_rate["AuthRecoveryRateLimitBucket"]
+    M_secemail["AuthSecurityEmailOutbox"]
+    M_secaudit["SecurityAuditEvent"]
     M_org["Organisation"]
     M_sub["Subscription"]
     M_prin["GovernancePrinciple"]
@@ -69,6 +74,10 @@ flowchart LR
   S_auth --> S_email
   S_auth --> S_sess
   S_auth --> M_user
+  S_auth --> M_recovery
+  S_auth --> M_rate
+  S_auth --> M_secaudit
+  S_auth --> M_secemail
   S_sess --> M_authsess
   S_sess --> M_user
 
@@ -121,6 +130,10 @@ flowchart LR
   R_health --> S_email
   R_health --> S_store
   R_remind["cron"] --> S_remind
+  R_remind --> S_authdel
+  S_authdel --> S_email
+  S_authdel --> M_recovery
+  S_authdel --> M_secemail
   S_remind --> S_email
   S_remind --> M_remlog
   S_remind --> M_dead
@@ -132,7 +145,7 @@ Prisma models are attributed to a group via the services it invokes (model usage
 
 | Route group | Prefix | Key endpoints | Services used | Prisma models touched | Guards |
 |---|---|---|---|---|---|
-| **auth** | `/api/v1/auth` | `POST /register`, `POST /login`, `POST /refresh`, `POST /logout`, `GET /me`, `POST /forgot-password`, `POST /resend-verification`, `POST /reset-password`, `POST /verify-email` | `AuthService` (`apps/api/src/routes/auth/index.ts:33`) | `User` (`apps/api/src/services/auth.service.ts:69`); `AuthSession`, `User` via `session-tokens` (`apps/api/src/services/session-tokens.ts:52,97`) | Public or partial-auth by design: registration, login, forgot/reset/verify, refresh and logout do not require an existing organisation session; `/me` and `/resend-verification` use `authIdentityGuard`. Sensitive endpoints use identifier-aware `rateLimit` buckets for email, reset/verify token, refresh token, or bearer/access-cookie credentials. |
+| **auth** | `/api/v1/auth` | `POST /register`, `POST /login`, `POST /refresh`, `POST /logout`, `GET /me`, `POST /forgot-password`, `POST /resend-verification`, `POST /reset-password`, `POST /verify-email` | `AuthService`, password-recovery crypto/rate service, `AuthEmailDeliveryService` | `User`, `AuthSession`, `PasswordRecoveryRequest`, `AuthRecoveryRateLimitBucket`, `SecurityAuditEvent`, `AuthSecurityEmailOutbox` | Public or partial-auth by design: registration, login, forgot/reset/verify, refresh and logout do not require an existing organisation session; `/me` and `/resend-verification` use `authIdentityGuard`. The identifier-aware `rateLimit` buckets key by email, reset/verify token, refresh token, or bearer/access-cookie credentials as appropriate. Forgot/reset also add durable keyed-HMAC identifier/network budgets across processes. Forgot responses are enumeration-neutral; reset atomically terminates links, revokes sessions, appends an audit event and queues a notice. |
 | **organisation** | `/api/v1/organisation` | `GET /`, `PATCH /` | `OrganisationService` (`apps/api/src/routes/organisations/index.ts:12`), which composes `DeadlineService` (`apps/api/src/services/organisation.service.ts:4`) | `Organisation` (`apps/api/src/services/organisation.service.ts:11,24`) | `authGuard` + `subscriptionGuard` (onRequest hooks, `:14-15`); `requireAdmin` on `PATCH /` (`:26`) |
 | **compliance** | `/api/v1/compliance` | principles/records/summary/readiness/signoff reads; revision-checked record and signoff writes | `ComplianceService`; canonical snapshot hashing | `Organisation`, `Subscription`, `GovernanceStandard`, `GovernancePrinciple`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `ComplianceAuditEvent` | `authGuard` + `subscriptionGuard`; `requireAdmin` on record/signoff writes; writes serialize on the organisation row |
 | **board-members** | `/api/v1/board-members` | `GET /`, `POST /`, `PATCH /:id`, `DELETE /:id` | `BoardMemberService` (`apps/api/src/routes/board-members/index.ts:12`) | `BoardMember` (`apps/api/src/services/board-member.service.ts:11-69`) | `authGuard` + `subscriptionGuard` (`:14-15`); `requireAdmin` on POST/PATCH/DELETE (`:30,43,55`) |
@@ -196,6 +209,14 @@ The package is published as ESM with compiled output under `dist/` (`packages/sh
 ### Shared service-layer utilities
 
 - **`session-tokens`** (`apps/api/src/services/session-tokens.ts`) is the common token-issuance module, touching `AuthSession` and `User` (`:52,97`) and importing `signAccessToken` from `utils/jwt.js` (`:3`). It is shared by `AuthService` and `TeamService`.
+- **Password-recovery crypto and rate utilities** derive tokens and
+  domain-separated keyed digests from `AUTH_RECOVERY_SECRET`; the public route,
+  reset transaction and delivery worker share that one versioned contract.
+- **`AuthEmailDeliveryService`** claims due recovery-link and post-reset-notice
+  rows, renders their immutable inputs through the row's pinned template version,
+  binds that version into the provider idempotency key, quarantines ambiguous
+  outcomes, and performs bounded retention cleanup. The production scheduler is
+  its only recurring driver.
 - **`subscription-access`** util (`utils/subscription-access.js`) centralises the active/trial/grace logic used by both the `subscriptionGuard` middleware (`apps/api/src/middleware/subscription.ts:2`) and `BillingService` (`apps/api/src/services/billing.service.ts:7`) and `DeadlineRemindersService` (`apps/api/src/services/deadline-reminders.service.ts:3`).
 - **`EmailService`** depends only on environment utilities — `isConfiguredSecret` and `getPrimaryFrontendOrigin` (`apps/api/src/services/email.service.ts:2-3`); it makes no Prisma calls, which is why it can be instantiated standalone in the health probe.
 

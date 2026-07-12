@@ -29,7 +29,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['audit', 'production dependency audit completed'],
       ['check-production', 'production env validation completed against real secrets'],
       ['github-environment', 'GitHub production environment variables verified before release image promotion'],
-      ['github-secret-store', 'GitHub production secret names verified without reading values'],
+      ['github-secret-store', 'GitHub production secret names, including AUTH_RECOVERY_SECRET, verified without reading values'],
       ['deploy-preflight', 'digest-pinned deploy preflight completed'],
       ['deploy-production', 'production Docker deployment completed'],
       ['deploy-smoke', 'post-deploy public HTTPS smoke completed'],
@@ -47,7 +47,8 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['real-production-values', 'real production values created from the template'],
       ['secret-source-excluded-from-git', 'production secret source excluded from git'],
       ['node-env-production', 'NODE_ENV set for production runtimes'],
-      ['jwt-secret-entropy', 'JWT_SECRET has production entropy'],
+      ['jwt-secret-entropy', 'JWT_SECRET and the independent AUTH_RECOVERY_SECRET have production entropy'],
+      ['auth-recovery-secret-rotation-rehearsal', 'auth recovery secret rotation was rehearsed end to end on an isolated recent restore'],
       ['frontend-api-origins', 'frontend and API origins are HTTPS'],
       ['supabase-api-only', 'Supabase URL, service role, and bucket are available only to API/server runtimes'],
       ['web-compose-api-origin', 'web Compose API origin matches API URL'],
@@ -105,6 +106,8 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['scheduler-command', 'scheduler runs the approved production scheduler and job commands'],
       ['scheduler-secret-source', 'scheduler receives the production secret source'],
       ['scheduler-logs-alerts', 'scheduler logs and failure alerts are available'],
+      ['auth-email-delivery-runtime', 'authentication email delivery worker runtime and isolated rehearsal are verified'],
+      ['auth-delivery-anomaly-alert', 'authentication delivery anomaly alert claim, retry, acknowledgement, and incident routing are rehearsed'],
     ],
   },
   {
@@ -114,7 +117,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['stripe-products-prices', 'Stripe live products and prices match expected IDs'],
       ['stripe-webhook-endpoint', 'Stripe webhook points to deployed API endpoint'],
       ['stripe-webhook-secret', 'Stripe webhook signing secret matches secret store value'],
-      ['resend-send', 'Resend can send from EMAIL_FROM'],
+      ['password-recovery-resend-delivery', 'deployed Resend recovery-link and post-reset notice delivery are independently proven'],
       ['providers-check', 'production Stripe and Resend provider checker completed'],
       ['email-links-production-origin', 'email links point to production frontend origin'],
     ],
@@ -370,7 +373,7 @@ const databaseRestoreEnvironmentFields = [
 const placeholderOrLocalPattern = /\b(todo|tbd|pending(?!-navigation confirmation|-storage-deletion-count)|open|example(?:\.com|\.org|\.net)?|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b|project_ref|change-me|your_|your-|file:\/\//i;
 const sampleSupabaseProjectRefPattern = /https:\/\/(?:configured-project|example|ci-project|test-project|demo-project|sample-project)\.supabase\.co\b/i;
 const directRawSecretPattern = /(?:sk_live_[A-Za-z0-9_=-]{8,}|whsec_[A-Za-z0-9_=-]{8,}|re_[A-Za-z0-9_=-]{8,}|gh[pousr]_[A-Za-z0-9_=-]{8,}|github_pat_[A-Za-z0-9_=-]{8,}|eyJ[A-Za-z0-9_-]{20,}|(?:postgres(?:ql)?|https?):\/\/[^\s/@:]+:[^\s/@]+@|Bearer\s+[A-Za-z0-9._~+/=-]{8,}|Basic\s+[A-Za-z0-9+/]{8,}={0,2}|-----BEGIN(?: RSA| EC| OPENSSH)? PRIVATE KEY-----)/i;
-const sensitiveAssignmentPattern = /\b(?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|GITHUB_TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|PASSWORD|TOKEN|KEY|APIKEY|API_KEY|PRIVATE_KEY|CLIENT_SECRET|AWS[_-]?SECRET[_-]?ACCESS[_-]?KEY|SERVICE[_-]?ROLE[_-]?KEY)\s*[:=]\s*["']?([^\s"',;}]+)/i;
+const sensitiveAssignmentPattern = /\b(?:DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|GITHUB_TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|PASSWORD|TOKEN|KEY|APIKEY|API_KEY|PRIVATE_KEY|CLIENT_SECRET|AWS[_-]?SECRET[_-]?ACCESS[_-]?KEY|SERVICE[_-]?ROLE[_-]?KEY)\s*[:=]\s*["']?([^\s"',;}]+)/i;
 const approvedEvidenceReferenceHosts = ['charitypilot.ie', 'github.com'];
 const sensitiveEvidenceReferenceQueryKeys = new Set([
   'access_token',
@@ -938,6 +941,69 @@ function requireEvidenceText(text, needle, message, issues) {
   if (!text.includes(needle)) {
     issues.push(message);
   }
+}
+
+function requireDistinctCommandOutputEvidence(
+  actualCheck,
+  identityNeedles,
+  label,
+  requiredMarkers,
+  checkPath,
+  issues,
+) {
+  const matchingEntry = Array.isArray(actualCheck.evidence)
+    ? actualCheck.evidence.find((entry) => {
+        if (entry?.type !== 'command-output') return false;
+        const text = evidenceText([entry]);
+        return identityNeedles.every((needle) => text.includes(needle));
+      })
+    : null;
+  if (!matchingEntry) {
+    issues.push(`${checkPath}.evidence must include separate command-output evidence for ${label}`);
+    return null;
+  }
+
+  const text = evidenceText([matchingEntry]);
+  for (const marker of requiredMarkers) {
+    requireEvidenceText(
+      text,
+      marker,
+      `${checkPath}.evidence ${label} transcript must include ${marker}`,
+      issues,
+    );
+  }
+  return matchingEntry;
+}
+
+function requireDistinctEvidenceEntry(
+  actualCheck,
+  identityNeedles,
+  label,
+  requiredMarkers,
+  checkPath,
+  issues,
+) {
+  const matchingEntry = Array.isArray(actualCheck.evidence)
+    ? actualCheck.evidence.find((entry) => {
+        const text = evidenceText([entry]);
+        return identityNeedles.every((needle) => text.includes(needle));
+      })
+    : null;
+  if (!matchingEntry) {
+    issues.push(`${checkPath}.evidence must include separate evidence for ${label}`);
+    return null;
+  }
+
+  const text = evidenceText([matchingEntry]);
+  for (const marker of requiredMarkers) {
+    requireEvidenceText(
+      text,
+      marker,
+      `${checkPath}.evidence ${label} entry must include ${marker}`,
+      issues,
+    );
+  }
+  return matchingEntry;
 }
 
 function validateSha256Digest(value, path, issues) {
@@ -2122,6 +2188,7 @@ const executableCheckerEvidenceRequirements = new Map([
     commandLabel: 'check:production:github-secrets',
     command: 'npm run check:production:github-secrets -- --environment=production',
     successText: 'Production GitHub secret-store check passed',
+    requiredMarkers: ['AUTH_RECOVERY_SECRET'],
   }],
   ['hostingDnsTls.hosting-check', {
     commandLabel: 'check:production:hosting',
@@ -2161,6 +2228,9 @@ function validateExecutableCheckerEvidence(areaId, checkId, actualCheck, checkPa
     issues,
   );
   requireEvidenceText(text, requirement.successText, `${checkPath}.evidence must include ${requirement.successText}`, issues);
+  for (const marker of requirement.requiredMarkers ?? []) {
+    requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
+  }
 }
 
 function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, issues) {
@@ -2354,6 +2424,89 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     ]) {
       requireEvidenceText(text, marker, `${checkPath}.evidence must include ${marker}`, issues);
     }
+    const sameLineRollbackEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      [
+        'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+        '--schema-compatibility-attestation-file=',
+      ],
+      'the same-line P1-07A-compatible rollback rehearsal',
+      [
+        '--backup-output-dir=',
+        'previous signed digest manifest',
+        'live migration-history probe',
+        'host-wide production cutover lock',
+        'Production compose rollback completed',
+        'Production deploy smoke passed',
+      ],
+      checkPath,
+      issues,
+    );
+    const p109RecoveryEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      ['npm run deploy:recover:p109 -- --production-env-file=.env.production'],
+      'the failed P1-09 recovery rehearsal',
+      [
+        '--backup-output-dir=',
+        '--recovery-attestation-file=',
+        'P1-09 recovery attestation',
+        '20 selected-image migration SHA-256 values',
+        'exact 19-migration applied predecessor chain plus one unresolved failed P1-09 target',
+        'P1-09 failed migration was resolved as rolled back and immediately recovered through the complete production deploy path',
+      ],
+      checkPath,
+      issues,
+    );
+    const p107aRecoveryEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      ['npm run deploy:recover:p107a -- --production-env-file=.env.production'],
+      'the failed P1-07A recovery rehearsal',
+      [
+        '--backup-output-dir=',
+        '--recovery-attestation-file=',
+        'P1-07A recovery attestation',
+        '21 selected-image migration SHA-256 values',
+        'exact 20-migration applied predecessor chain plus one unresolved failed P1-07A target',
+        'P1-07A failed migration was resolved as rolled back and immediately recovered through the complete production deploy path',
+      ],
+      checkPath,
+      issues,
+    );
+    const p109RestoreRollbackEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      [
+        'npm run deploy:rollback -- --production-env-file=.env.production --rollback-digest-file=release-image-digests.previous.env',
+        '--database-restore-attestation-file=',
+        '--restored-backup-file=',
+      ],
+      'the P1-09 restore-only cross-boundary rollback rehearsal',
+      [
+        '--backup-output-dir=',
+        'p109-restored',
+        '20260711230000_add_domain_invariants_referential_safety',
+        '20260712013000_add_password_recovery_integrity',
+        'P1-07A migration absent',
+        'Exact P1-09 restored-history checksum and P1-07A-absence probe passed before any migration',
+        'Production compose rollback completed',
+        'Production deploy smoke passed',
+      ],
+      checkPath,
+      issues,
+    );
+    const requiredRollbackEntries = [
+      sameLineRollbackEvidence,
+      p109RecoveryEvidence,
+      p107aRecoveryEvidence,
+      p109RestoreRollbackEvidence,
+    ].filter(Boolean);
+    if (
+      requiredRollbackEntries.length === 4 &&
+      new Set(requiredRollbackEntries).size !== 4
+    ) {
+      issues.push(
+        `${checkPath}.evidence must keep the same-line rollback, P1-09 recovery, P1-07A recovery, and P1-09 restore-only rollback in four distinct command-output entries`,
+      );
+    }
   }
 
   if (checkId === 'cosign') {
@@ -2377,7 +2530,7 @@ function validateReleaseGateEvidence(checkId, actualCheck, checkPath, release, i
     requireEvidenceText(text, 'release-image-digests', `${checkPath}.evidence must include release-image-digests artifact`, issues);
     requireEvidenceText(
       text,
-      'CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1',
+      'CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1',
       `${checkPath}.evidence must include the reviewed database compatibility marker`,
       issues,
     );
@@ -2456,7 +2609,7 @@ function validateCheckSpecificEvidence(
       'real-production-values': ['.env.production', 'real production values'],
       'secret-source-excluded-from-git': ['secret store', 'excluded from git'],
       'node-env-production': ['NODE_ENV=production'],
-      'jwt-secret-entropy': ['JWT_SECRET', '32 characters', 'high entropy'],
+      'jwt-secret-entropy': ['JWT_SECRET', 'AUTH_RECOVERY_SECRET', '32 to 64 bytes', 'independent', 'high entropy'],
       'frontend-api-origins': ['https://app.charitypilot.ie', 'https://api.charitypilot.ie'],
       'supabase-api-only': ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_STORAGE_BUCKET', 'API/server runtimes only'],
       'web-compose-api-origin': ['CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_API_URL'],
@@ -2469,6 +2622,105 @@ function validateCheckSpecificEvidence(
     for (const marker of secretsMarkersByCheck[checkId] ?? []) {
       if (!text.includes(marker)) {
         issues.push(`${checkPath}.evidence must include ${marker}`);
+      }
+    }
+
+    if (checkId === 'auth-recovery-secret-rotation-rehearsal') {
+      const dryRunEvidence = requireDistinctCommandOutputEvidence(
+        actualCheck,
+        ['node dist/jobs/rotate-auth-recovery-secret.js', '--dry-run'],
+        'the auth-recovery secret rotation dry-run rehearsal',
+        [
+          'isolated recent restore',
+          '--confirm-api-and-scheduler-quiesced',
+          'DRY_RUN',
+          'mutationApplied: false',
+          'databaseIdentitySha256',
+          'deploymentProfile: production',
+        ],
+        checkPath,
+        issues,
+      );
+      const executeEvidence = requireDistinctCommandOutputEvidence(
+        actualCheck,
+        ['node dist/jobs/rotate-auth-recovery-secret.js', '--execute'],
+        'the auth-recovery secret rotation execution rehearsal',
+        [
+          'isolated recent restore',
+          '--confirm-api-and-scheduler-quiesced',
+          '--confirm-outbox-preservation-understood',
+          '--expected-database-identity-sha256',
+          '--expected-deployment-profile production',
+          'EXECUTED',
+          'recoveryBlocked: true',
+          'terminationReason: KEY_ROTATED',
+          'remainingCapabilities: 0',
+          'remainingRequestEvidenceRows: 0',
+          'remainingLegacySlots: 0',
+          'remainingRateBuckets: 0',
+        ],
+        checkPath,
+        issues,
+      );
+      const activationEvidence = requireDistinctCommandOutputEvidence(
+        actualCheck,
+        ['node dist/jobs/rotate-auth-recovery-secret.js', '--activate-after-replacement'],
+        'the auth-recovery replacement-secret activation rehearsal',
+        [
+          'isolated recent restore',
+          '--confirm-api-and-scheduler-quiesced',
+          '--expected-database-identity-sha256',
+          '--expected-deployment-profile production',
+          'different replacement secret',
+          'ACTIVATED',
+          'recoveryBlocked: false',
+          'credentialsIssued: false',
+        ],
+        checkPath,
+        issues,
+      );
+      const postActivationEvidence = requireDistinctCommandOutputEvidence(
+        actualCheck,
+        ['post-activation recovery rehearsal'],
+        'the auth-recovery post-activation smoke rehearsal',
+        [
+          'isolated recent restore',
+          'old-key process rejected by database fence',
+          'new recovery request',
+          'reset consumption',
+          'preserved completion-notice worker',
+        ],
+        checkPath,
+        issues,
+      );
+      const rotationEntries = [
+        dryRunEvidence,
+        executeEvidence,
+        activationEvidence,
+        postActivationEvidence,
+      ].filter(Boolean);
+      if (rotationEntries.length === 4 && new Set(rotationEntries).size !== 4) {
+        issues.push(
+          `${checkPath}.evidence must keep dry-run, execute, replacement activation, and post-activation smoke in four distinct command-output entries`,
+        );
+      }
+      for (const entry of rotationEntries) {
+        if (typeof release?.commitSha === 'string') {
+          requireEvidenceText(
+            evidenceText([entry]),
+            release.commitSha,
+            `${checkPath}.evidence every rotation rehearsal transcript must include release.commitSha`,
+            issues,
+          );
+        }
+        if (typeof release?.imageDigestManifest?.apiImage === 'string') {
+          requireEvidenceText(
+            evidenceText([entry]),
+            release.imageDigestManifest.apiImage,
+            `${checkPath}.evidence every rotation rehearsal transcript must include the promoted API image digest`,
+            issues,
+          );
+        }
       }
     }
   }
@@ -2663,17 +2915,56 @@ function validateCheckSpecificEvidence(
       }
     }
 
-    if (checkId === 'resend-send') {
-      const requiredMarkers = [
-        'EMAIL_FROM',
-        'Resend test send',
-        'accepted message id',
-        'production sender domain',
-        'verified Resend sender domain',
-      ];
-      for (const marker of requiredMarkers) {
-        if (!text.includes(marker)) {
-          issues.push(`${checkPath}.evidence must include ${marker}`);
+    if (checkId === 'password-recovery-resend-delivery') {
+      const recoveryLinkEvidence = requireDistinctEvidenceEntry(
+        actualCheck,
+        ['deployed recovery-link email', 'Resend accepted'],
+        'the deployed Resend recovery-link email',
+        [
+          'EMAIL_FROM',
+          'verified production sender domain',
+          'accepted message id or equivalent provider delivery reference',
+          'https://app.charitypilot.ie',
+          'deterministic HTML and plain-text alternatives',
+          'complete fragment link',
+          'redacted provider reference',
+          'no raw token',
+        ],
+        checkPath,
+        issues,
+      );
+      const postResetNoticeEvidence = requireDistinctEvidenceEntry(
+        actualCheck,
+        ['deployed post-reset registered-address notice', 'Resend accepted'],
+        'the deployed Resend post-reset registered-address notice',
+        [
+          'EMAIL_FROM',
+          'verified production sender domain',
+          'accepted message id or equivalent provider delivery reference',
+          'deterministic HTML and plain-text alternatives',
+          'redacted provider reference',
+          'no raw token',
+        ],
+        checkPath,
+        issues,
+      );
+      if (
+        recoveryLinkEvidence &&
+        postResetNoticeEvidence &&
+        recoveryLinkEvidence === postResetNoticeEvidence
+      ) {
+        issues.push(
+          `${checkPath}.evidence must keep the deployed recovery-link email and post-reset registered-address notice in two distinct evidence entries`,
+        );
+      }
+      for (const entry of [recoveryLinkEvidence, postResetNoticeEvidence].filter(Boolean)) {
+        if (typeof release?.commitSha === 'string') {
+          requireEvidenceText(
+            evidenceText([entry]),
+            release.commitSha,
+            `${checkPath}.evidence each deployed Resend proof must include release.commitSha`,
+            issues,
+          );
         }
       }
     }
@@ -2813,6 +3104,109 @@ function validateCheckSpecificEvidence(
     for (const alertEvidence of requiredFailureAlerts) {
       if (!text.includes(alertEvidence)) {
         issues.push(`${checkPath}.evidence must include ${alertEvidence} evidence`);
+      }
+    }
+  }
+
+  if (areaId === 'jobs' && checkId === 'auth-email-delivery-runtime') {
+    const runtimeEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      ['deployed authentication email delivery runtime', 'production-scheduler'],
+      'the deployed authentication email delivery runtime',
+      [
+        'node dist/jobs/process-auth-email-delivery.js',
+        'digest-pinned API image',
+        'same production secret source',
+      ],
+      checkPath,
+      issues,
+    );
+    const rehearsalEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      ['node dist/jobs/process-auth-email-delivery.js', '[AuthEmailDelivery] completed'],
+      'the isolated authentication email delivery worker rehearsal',
+      [
+        'isolated non-production data',
+        'recovery control ready',
+        'exit 0',
+      ],
+      checkPath,
+      issues,
+    );
+    if (runtimeEvidence && rehearsalEvidence && runtimeEvidence === rehearsalEvidence) {
+      issues.push(
+        `${checkPath}.evidence must keep deployed runtime proof and isolated worker rehearsal in two distinct command-output entries`,
+      );
+    }
+    for (const entry of [runtimeEvidence, rehearsalEvidence].filter(Boolean)) {
+      if (typeof release?.commitSha === 'string') {
+        requireEvidenceText(
+          evidenceText([entry]),
+          release.commitSha,
+          `${checkPath}.evidence each runtime/rehearsal transcript must include release.commitSha`,
+          issues,
+        );
+      }
+      if (typeof release?.imageDigestManifest?.apiImage === 'string') {
+        requireEvidenceText(
+          evidenceText([entry]),
+          release.imageDigestManifest.apiImage,
+          `${checkPath}.evidence each runtime/rehearsal transcript must include the promoted API image digest`,
+          issues,
+        );
+      }
+    }
+  }
+
+  if (areaId === 'jobs' && checkId === 'auth-delivery-anomaly-alert') {
+    const rehearsalEvidence = requireDistinctCommandOutputEvidence(
+      actualCheck,
+      ['authentication-delivery anomaly alert rehearsal'],
+      'the isolated authentication-delivery anomaly alert rehearsal',
+      [
+        'isolated non-production data',
+        'REJECTED',
+        'UNCERTAIN',
+        'KEY_UNAVAILABLE',
+        'STALE_QUARANTINED',
+        'count-only sanitized alert',
+        'webhook failure released the claim for retry',
+        'stale claim was reclaimed',
+        'confirmed webhook response acknowledged the exact claim',
+        'unacknowledged rows survived cleanup',
+      ],
+      checkPath,
+      issues,
+    );
+    const incidentConfirmationEvidence = requireDistinctEvidenceEntry(
+      actualCheck,
+      ['authentication-delivery anomaly alert', 'incident system confirmation'],
+      'the external incident-system confirmation for the authentication-delivery anomaly alert',
+      [
+        'redacted alert reference',
+        'accountable incident owner',
+        'no recipient, token, request, account, or secret value',
+      ],
+      checkPath,
+      issues,
+    );
+    if (
+      rehearsalEvidence &&
+      incidentConfirmationEvidence &&
+      rehearsalEvidence === incidentConfirmationEvidence
+    ) {
+      issues.push(
+        `${checkPath}.evidence must keep the anomaly rehearsal transcript and external incident-system confirmation in two distinct entries`,
+      );
+    }
+    for (const entry of [rehearsalEvidence, incidentConfirmationEvidence].filter(Boolean)) {
+      if (typeof release?.commitSha === 'string') {
+        requireEvidenceText(
+          evidenceText([entry]),
+          release.commitSha,
+          `${checkPath}.evidence each anomaly rehearsal/confirmation entry must include release.commitSha`,
+          issues,
+        );
       }
     }
   }
@@ -3338,7 +3732,7 @@ export function redactLaunchEvidenceTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|JWT_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY|GITHUB_TOKEN)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY|GITHUB_TOKEN)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')

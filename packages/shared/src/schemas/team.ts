@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { accountEmailSchema } from './auth.js';
 import { withBcryptPasswordByteLimit } from './password.js';
 
 const assignableRoleValues = ['ADMIN', 'MEMBER'] as const;
@@ -23,7 +24,7 @@ export const teamGovernanceReasonSchema = z
 const membershipVersion = z.number().int().positive();
 
 export const inviteTeamMemberSchema = z.object({
-  email: z.string().email('Enter a valid email address'),
+  email: accountEmailSchema,
   role: z.enum(['ADMIN', 'MEMBER']).default('MEMBER'),
 });
 

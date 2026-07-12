@@ -13,6 +13,9 @@ import { DOCUMENT_RECOVERY_REQUIRED_BINDING_FLAGS } from './verify-document-reco
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
+const productionAuthRecoverySecret = Buffer.from(
+  Array.from({ length: 48 }, (_value, index) => index + 1),
+).toString('base64url');
 const validRuntimeWebApiUrlEnv = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
 };
@@ -247,6 +250,12 @@ function completeProductionEnv(overrides = {}) {
     DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: 'db.charitypilot.ie',
     STORAGE_DELETE_TIMEOUT_MS: '5000',
     JWT_SECRET: 'J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
+    AUTH_RECOVERY_SECRET: productionAuthRecoverySecret,
+    SECURITY_EMAIL_PROVIDER_TIMEOUT_MS: '8000',
+    AUTH_DELIVERY_INTERVAL_MS: '5000',
+    AUTH_DELIVERY_BATCH_SIZE: '25',
+    AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '500',
+    AUTH_DELIVERY_STALE_SENDING_MS: '60000',
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
     STRIPE_SECRET_KEY: 'sk_live_configuredSecret',
@@ -279,6 +288,36 @@ test('production preflight rejects unknown options before reading configuration'
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /Unknown option: --surprise/);
   assert.match(result.stderr, /Usage: node scripts\/check-production\.mjs \[--production-env-file=<path>\]/);
+});
+
+test('production preflight requires canonical recovery-secret bytes and never echoes the secret', () => {
+  const tooLarge = Buffer.from(
+    Array.from({ length: 65 }, (_value, index) => (index + 17) % 256),
+  ).toString('base64url');
+  for (const value of [`${productionAuthRecoverySecret}!`, `${productionAuthRecoverySecret}=`, tooLarge]) {
+    const issues = validateProductionEnvContent(completeProductionEnv({
+      AUTH_RECOVERY_SECRET: value,
+    }));
+    assert.ok(
+      issues.some((issue) => issue.includes('AUTH_RECOVERY_SECRET must')),
+      issues.join('\n'),
+    );
+    assert.doesNotMatch(issues.join('\n'), new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-secret-redaction-'));
+  const envPath = join(tempDir, '.env.production');
+  try {
+    writeFileSync(envPath, completeProductionEnv({
+      AUTH_RECOVERY_SECRET: productionAuthRecoverySecret,
+      PORT: 'not-a-port',
+    }));
+    const result = runPreflight([`--production-env-file=${envPath}`]);
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, new RegExp(productionAuthRecoverySecret));
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('fails clearly when the explicit production env file is missing', () => {
@@ -332,6 +371,7 @@ test('passes when the selected env file contains complete production values', ()
       'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=db.charitypilot.ie',
       'STORAGE_DELETE_TIMEOUT_MS=5000',
       'JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
+      `AUTH_RECOVERY_SECRET=${productionAuthRecoverySecret}`,
       'FRONTEND_URL=https://app.charitypilot.ie',
       'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
       'STRIPE_SECRET_KEY=sk_live_configuredSecret',
@@ -2162,7 +2202,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   const productionTodo = readRepoFile('PRODUCTION_TODO.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(productionTodo, /Current local status checked 2026-07-11/);
+  assert.match(productionTodo, /Current local status refreshed 2026-07-12/);
   assert.match(productionTodo, /9 of 27 production values are complete/);
   assert.match(
     productionTodo,
@@ -2170,7 +2210,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   );
   assert.match(
     productionTodo,
-    /launch evidence ledger is now 9 of 86 checks\s+>\s+complete from local\/CI release-gate evidence/s,
+    /ledger is now 9 of 89 checks\s+>\s+complete from local\/CI release-gate evidence/s,
   );
   assert.match(productionTodo, /final signoffs remain 0 of 5\s+>\s+approved/s);
   assert.match(productionTodo, /`approvedForLaunch` is false/);
@@ -2190,7 +2230,9 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, /browserQa\.checks\.browser-qa-completed/);
   assert.match(productionTodo, /npm run check:production:browser-qa-env/);
   assert.match(productionTodo, /Deployed browser QA environment preflight passed/);
-  assert.match(productionTodo, /86 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /89 machine-readable launch evidence checks/);
+  assert.match(productionTodo, /AUTH_RECOVERY_SECRET/);
+  assert.match(productionTodo, /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/);
   assert.match(productionTodo, /Missing production values are grouped by provider\/source/);
   assert.match(productionTodo, /release\s+image promotion/i);
   assert.match(productionTodo, /browserQa\.checks\.accessibility-coverage/);
@@ -2205,7 +2247,7 @@ test('production todo reflects current launch blockers without overclaiming loca
   assert.match(productionTodo, new RegExp(`commit\\s+[\r\n>\\s]*\`${escapeRegExp(selectedGateCommit)}\``));
   assert.match(
     productionTodo,
-    /745 checks passed, 0 failed, and 2 Windows-only symbolic-link privilege skips \(747 total\)/,
+    /827 checks passed, 0 failed, and 2\s+expected Windows\s+symbolic-link privilege skips \(829 total\)/,
   );
   assert.doesNotMatch(productionTodo, /351\/351 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /349\/349 production-tooling checks/);
@@ -2247,10 +2289,15 @@ test('agent continuation handoff reflects current launch evidence progress witho
   const handoff = readRepoFile('docs/agent-continuation-handoff.md');
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
-  assert.match(handoff, /Known current state from `npm run launch:status -- --json` on \d{4}-\d{2}-\d{2}/);
-  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 86`/);
-  assert.match(handoff, /The evidence ledger is currently `9 \/ 86`/);
-  assert.match(handoff, /77 \/ 86` machine-readable launch checks remain/);
+  assert.match(handoff, /Known launch state refreshed on \d{4}-\d{2}-\d{2}/);
+  assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 89`/);
+  assert.match(handoff, /The evidence ledger is currently `9 \/ 89`/);
+  assert.match(handoff, /80 \/ 89` machine-readable launch checks remain/);
+  assert.match(handoff, /P1-07A password-recovery integrity - `LOCALLY_VERIFIED`/);
+  assert.match(handoff, /exact-pushed-SHA[\s\S]{0,80}GitHub CI and managed E2E publication pending/i);
+  assert.match(handoff, /runner contracts `113 \/ 113` plus browser[\s\S]{0,80}scenarios `105 \/ 105` in `7\.6m`/);
+  assert.match(handoff, /clean isolated teardown/);
+  assert.doesNotMatch(handoff, /managed browser suite must be rerun/);
   assert.match(handoff, /releaseGate\.check-production/);
   assert.match(handoff, /releaseGate\.github-environment/);
   assert.match(handoff, /releaseGate\.github-secret-store/);
@@ -2260,7 +2307,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /required GitHub `production` secret names without reading secret/);
   assert.match(
     handoff,
-    /Most recent local production-tooling gate[\s\S]{0,240}`745` checks[\s\S]{0,120}`0` failed[\s\S]{0,120}`2` Windows-only symbolic-link privilege skips \(`747`[\s\S]{0,40}total\)/,
+    /final P1-07A local production-tooling gate[\s\S]{0,240}`827` checks passed[\s\S]{0,120}`0` failed[\s\S]{0,120}`2`[\s\S]{0,80}Windows\s+symbolic-link privilege skips \(`829`[\s\S]{0,40}total\)/i,
   );
   assert.doesNotMatch(handoff, /351\s*\/\s*351`? checks/);
   assert.doesNotMatch(handoff, /349\s*\/\s*349`? checks/);
@@ -2268,13 +2315,13 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.doesNotMatch(handoff, /345\s*\/\s*345`? checks/);
   assert.match(
     handoff,
-    /Older `548 \/ 548`, `546 \/ 546`, `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
+    /Older `823`, `791`,[\s\S]{0,80}`746`, `745`, `548 \/ 548`, `546 \/ 546`, `545 \/ 545`, `544 \/ 544`, `494 \/ 494`, `488 \/ 488`, `396 \/ 396`, `352 \/ 352`,[\s\S]{0,80}`338 \/ 338`, and `339 \/ 339` entries[\s\S]{0,180}historical/,
   );
   assert.match(
     handoff,
     /GitHub `production` environment secrets currently include[\s\S]{0,160}`JWT_SECRET` and `READINESS_API_KEY`/,
   );
-  assert.match(handoff, /still fails with six[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,240}`ERROR_ALERT_WEBHOOK_URL`/);
+  assert.match(handoff, /lacks seven required names:[\s\S]{0,240}`AUTH_RECOVERY_SECRET`[\s\S]{0,240}`DATABASE_URL`[\s\S]{0,320}`ERROR_ALERT_WEBHOOK_URL`/);
   assert.doesNotMatch(handoff, /GitHub `production` environment secrets list is currently empty/);
   assert.match(handoff, /Re-run launch status/);
   assert.match(handoff, new RegExp(`commit \`${escapeRegExp(selectedGateCommit)}\``));
@@ -2312,9 +2359,9 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.doesNotMatch(handoff, /317\/317 production-tooling checks/);
   assert.doesNotMatch(handoff, /316\/316 production-tooling checks/);
   assert.doesNotMatch(handoff, /315\/315 production-tooling checks/);
-  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 86`/);
-  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 86`/);
-  assert.doesNotMatch(handoff, /86 \/ 86` machine-readable launch checks remain/);
+  assert.doesNotMatch(handoff, /Machine-readable launch evidence completion: `0 \/ 89`/);
+  assert.doesNotMatch(handoff, /The evidence ledger is still `0 \/ 89`/);
+  assert.doesNotMatch(handoff, /89 \/ 89` machine-readable launch checks remain/);
   assert.doesNotMatch(handoff, /313\/313 production-tooling checks/);
   assert.doesNotMatch(handoff, /restore-test ownership/);
 });
@@ -2357,7 +2404,7 @@ test('production env template exposes only the API origin to the web runtime', (
     template,
     /CHARITYPILOT_MIGRATION_IMAGE=ghcr\.io\/jasperfordesq-ai\/charity-governance-migrations@sha256:REPLACE_ME_MIGRATION_IMAGE_DIGEST/,
   );
-  assert.match(template, /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/);
+  assert.match(template, /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/);
   assert.match(template, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
   assert.match(template, /Docker Compose/);
   assert.match(generator, /CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL/);
@@ -2608,6 +2655,7 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
   const productionSchedulerSource = readRepoFile('apps/api/src/jobs/production-scheduler.ts');
   const deadlineReminders = composeServiceBlock(compose, 'deadline-reminders');
   const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
+  const authRecoverySecretRotation = composeServiceBlock(compose, 'auth-recovery-secret-rotation');
 
   assert.match(migrate, /image:\s+\$\{CHARITYPILOT_MIGRATION_IMAGE:\?Set CHARITYPILOT_MIGRATION_IMAGE\}/);
   assert.doesNotMatch(migrate, /env_file:/);
@@ -2641,6 +2689,7 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
   for (const secret of [
     'DATABASE_URL',
     'JWT_SECRET',
+    'AUTH_RECOVERY_SECRET',
     'READINESS_API_KEY',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
@@ -2653,6 +2702,7 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
 
   for (const secret of [
     'JWT_SECRET',
+    'AUTH_RECOVERY_SECRET',
     'READINESS_API_KEY',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
@@ -2693,6 +2743,24 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
   assert.match(productionScheduler, /FRONTEND_URL:\s+\$\{FRONTEND_URL:\?Set FRONTEND_URL\}/);
   assert.match(productionScheduler, /RESEND_API_KEY:\s+\$\{RESEND_API_KEY:\?Set RESEND_API_KEY\}/);
   assert.match(productionScheduler, /EMAIL_FROM:\s+\$\{EMAIL_FROM:\?Set EMAIL_FROM\}/);
+  assert.match(
+    productionScheduler,
+    /AUTH_RECOVERY_SECRET:\s+\$\{AUTH_RECOVERY_SECRET:\?Set AUTH_RECOVERY_SECRET\}/,
+  );
+  assert.match(
+    productionScheduler,
+    /SECURITY_EMAIL_PROVIDER_TIMEOUT_MS:\s+\$\{SECURITY_EMAIL_PROVIDER_TIMEOUT_MS:-8000\}/,
+  );
+  assert.match(productionScheduler, /AUTH_DELIVERY_INTERVAL_MS:\s+\$\{AUTH_DELIVERY_INTERVAL_MS:-5000\}/);
+  assert.match(productionScheduler, /AUTH_DELIVERY_BATCH_SIZE:\s+\$\{AUTH_DELIVERY_BATCH_SIZE:-25\}/);
+  assert.match(
+    productionScheduler,
+    /AUTH_DELIVERY_CLEANUP_BATCH_SIZE:\s+\$\{AUTH_DELIVERY_CLEANUP_BATCH_SIZE:-500\}/,
+  );
+  assert.match(
+    productionScheduler,
+    /AUTH_DELIVERY_STALE_SENDING_MS:\s+\$\{AUTH_DELIVERY_STALE_SENDING_MS:-60000\}/,
+  );
   assert.match(productionScheduler, /SUPABASE_URL:\s+\$\{SUPABASE_URL:\?Set SUPABASE_URL\}/);
   assert.match(
     productionScheduler,
@@ -2728,7 +2796,29 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
     /ERROR_ALERT_WEBHOOK_URL:\s+\$\{ERROR_ALERT_WEBHOOK_URL:\?Set ERROR_ALERT_WEBHOOK_URL\}/,
   );
 
-  for (const service of [migrate, api, web, productionScheduler, deadlineReminders, documentStorageCleanup]) {
+  assert.match(
+    authRecoverySecretRotation,
+    /image:\s+\$\{CHARITYPILOT_API_IMAGE:\?Set CHARITYPILOT_API_IMAGE\}/,
+  );
+  assert.match(authRecoverySecretRotation, /profiles:[\s\S]*- maintenance/);
+  assert.match(authRecoverySecretRotation, /CHARITYPILOT_DEPLOYMENT_MODE:\s+production/);
+  assert.match(
+    authRecoverySecretRotation,
+    /AUTH_RECOVERY_SECRET:\s+\$\{AUTH_RECOVERY_SECRET:\?Set AUTH_RECOVERY_SECRET\}/,
+  );
+  assert.doesNotMatch(authRecoverySecretRotation, /env_file:/);
+  assert.doesNotMatch(authRecoverySecretRotation, /ports:/);
+  assert.doesNotMatch(authRecoverySecretRotation, /healthcheck:/);
+
+  for (const service of [
+    migrate,
+    api,
+    web,
+    productionScheduler,
+    deadlineReminders,
+    documentStorageCleanup,
+    authRecoverySecretRotation,
+  ]) {
     assert.match(service, /security_opt:[\s\S]*no-new-privileges:true/);
     assert.match(service, /cap_drop:[\s\S]*- ALL/);
   }
@@ -2740,6 +2830,7 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
     ['production-scheduler', productionScheduler],
     ['deadline-reminders', deadlineReminders],
     ['document-storage-cleanup', documentStorageCleanup],
+    ['auth-recovery-secret-rotation', authRecoverySecretRotation],
   ]) {
     assertComposeServiceHasReadOnlyRootfs(service, serviceName);
   }
@@ -2982,6 +3073,53 @@ test('production operations docs keep Supabase credentials API-only', () => {
   assert.doesNotMatch(launchChecklist, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.match(launchChecklist, /npm run check:production:github-secrets -- --environment=production/);
   assert.match(launchChecklist, /required production secret names exist without reading secret values/);
+  assert.match(launchChecklist, /secretsAndEnv\.auth-recovery-secret-rotation-rehearsal/);
+  assert.match(launchChecklist, /jobs\.auth-email-delivery-runtime/);
+  assert.match(launchChecklist, /jobs\.auth-delivery-anomaly-alert/);
+  assert.match(launchChecklist, /billingAndEmail\.password-recovery-resend-delivery/);
+  assert.match(
+    launchChecklist,
+    /deployed runtime plus isolated one-shot worker command[\s\S]{0,240}jobs\.auth-email-delivery-runtime/,
+  );
+  assert.match(
+    launchChecklist,
+    /isolated anomaly rehearsal plus distinct external incident-system confirmation[\s\S]{0,240}jobs\.auth-delivery-anomaly-alert/,
+  );
+  assert.match(
+    launchChecklist,
+    /billingAndEmail\.password-recovery-resend-delivery[\s\S]{0,320}two distinct provider-proof entries/,
+  );
+});
+
+test('production runbook requires invalidate-before-rotate recovery-key handling', () => {
+  const runbook = readRepoFile('docs/production-runbook.md');
+  const rotationJob = readRepoFile('apps/api/src/jobs/rotate-auth-recovery-secret.ts');
+  const compose = readRepoFile('compose.production.yml');
+
+  assert.match(runbook, /Never replace\s+`AUTH_RECOVERY_SECRET` in place/);
+  assert.match(runbook, /auth-recovery-secret-rotation/);
+  assert.match(runbook, /terminates every non-suppressed,[\s\S]*`KEY_ROTATED`/);
+  assert.match(runbook, /clears both halves of every legacy `User` reset[\s\S]*deletes the keyed recovery-rate buckets/);
+  assert.match(runbook, /deliberately preserves the[\s\S]*`AuthSecurityEmailOutbox`/);
+  assert.match(runbook, /--expected-database-identity-sha256 REVIEWED_SHA256/);
+  assert.match(runbook, /--expected-deployment-profile production/);
+  assert.match(runbook, /--expected-request-evidence-rows REVIEWED_COUNT/);
+  assert.match(runbook, /--activate-after-replacement/);
+  assert.match(runbook, /An old-key process must fail the database fence/);
+  assert.match(runbook, /`EXECUTED` must report[\s\S]*Create a new independent canonical 32-64-byte secret/);
+  assert.match(runbook, /pre-invalidation credential-bearing[\s\S]*must never be started against that restore/);
+  assert.match(runbook, /Do not record raw secrets, recipient addresses, tokens, request IDs or[\s\S]*account IDs/);
+  assert.match(rotationJob, /Prisma\.TransactionIsolationLevel\.Serializable/);
+  assert.match(rotationJob, /'KEY_ROTATED'::"PasswordRecoveryTerminationReason"/);
+  assert.match(rotationJob, /DELETE FROM "AuthRecoveryRateLimitBucket"/);
+  assert.match(rotationJob, /"requestEvidenceRedactedAt" = CURRENT_TIMESTAMP/);
+  assert.match(rotationJob, /UPDATE "AuthRecoveryControl"[\s\S]*"blocked" = TRUE/);
+  assert.match(rotationJob, /replacement matches the retired key/);
+  assert.doesNotMatch(rotationJob, /(?:DELETE FROM|UPDATE) "AuthSecurityEmailOutbox"/);
+  assert.match(
+    compose,
+    /auth-recovery-secret-rotation:[\s\S]*CHARITYPILOT_DEPLOYMENT_MODE: production[\s\S]*AUTH_RECOVERY_SECRET: \$\{AUTH_RECOVERY_SECRET:\?Set AUTH_RECOVERY_SECRET\}/,
+  );
 });
 
 test('production runbook documents deployed browser QA evidence commands', () => {
@@ -3081,13 +3219,13 @@ test('plain English launch guide names every final approval role', () => {
   const selectedGateCommit = currentAuditSelectedGateCommit();
 
   assert.doesNotMatch(launchGuide, /[^\x00-\x7F]/);
-  assert.match(launchGuide, /Last updated: 2026-07-10/);
-  assert.match(launchGuide, /18 production values needing real data/);
+  assert.match(launchGuide, /Last updated: 2026-07-12/);
+  assert.match(launchGuide, /18 counted production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 27` complete/);
-  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 86` complete/);
+  assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 89` complete/);
   assert.match(
     launchGuide,
-    /Production-tooling tests \| Local `npm run test:production-check` passed 745 checks with 0 failures and 2 Windows-only symbolic-link privilege skips \(747 total\)/,
+    /Production-tooling tests \| The final P1-07A local gate passed 827 checks with 0 failures and 2 expected Windows symbolic-link privilege skips \(829 total\) on 2026-07-12; the final local managed disposable E2E gate also passed 113\/113 runner contracts and 105\/105 browser scenarios in 7\.6m with clean isolated teardown; exact-pushed-SHA GitHub CI and managed E2E runs remain separate pending publication gates/,
   );
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 488\/488/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
@@ -3135,13 +3273,15 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
   assert.doesNotMatch(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
-  assert.match(launchGuide, /86 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /89 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /AUTH_RECOVERY_SECRET/);
+  assert.match(launchGuide, /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.cross-browser-coverage/);
   assert.match(launchGuide, /browserQa\.checks\.ios-safari-device-coverage/);
   assert.match(launchGuide, /Launch-Critical Route Inventory/);
   assert.match(launchGuide, /every route in desktop, mobile, light-mode, and dark-mode evidence/);
-  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 86` complete/);
+  assert.doesNotMatch(launchGuide, /machine-readable launch evidence is `0 \/ 89` complete/);
   assert.match(launchGuide, /TLS is now turnkey by default/);
   assert.match(launchGuide, /default reverse proxy overlay \(`compose\.production-tls\.yml` \+/);
   assert.match(
@@ -3315,7 +3455,7 @@ test('backend product audit records current launch and dependency posture', () =
   assert.match(backendAudit, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(backendAudit, /found 0 vulnerabilities/);
   assert.match(backendAudit, /18 of 27 production values require real data/);
-  assert.match(backendAudit, /86 machine-readable launch evidence checks/);
+  assert.match(backendAudit, /89 machine-readable launch evidence checks/);
   assert.doesNotMatch(backendAudit, /Date checked: 2026-07-03/);
   assert.doesNotMatch(backendAudit, /Phase 7 current/);
 });
@@ -3391,6 +3531,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-deploy.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-compose-rollback.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-recover-p109-migration.mjs')));
+  assert.ok(existsSync(join(repoRoot, 'scripts', 'production-recover-p107a-migration.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-cutover-lock.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'init-production-launch-evidence.mjs')));
   assert.ok(existsSync(join(repoRoot, 'scripts', 'production-launch-evidence.mjs')));
@@ -3445,12 +3586,20 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
     packageJson.scripts['deploy:recover:p109'],
     'node scripts/production-recover-p109-migration.mjs',
   );
+  assert.equal(
+    packageJson.scripts['deploy:recover:p107a'],
+    'node scripts/production-recover-p107a-migration.mjs',
+  );
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-deploy-preflight\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-deploy\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-compose-rollback\.test\.mjs/);
   assert.match(
     packageJson.scripts['test:production-check'],
     /scripts\/production-recover-p109-migration\.test\.mjs/,
+  );
+  assert.match(
+    packageJson.scripts['test:production-check'],
+    /scripts\/production-recover-p107a-migration\.test\.mjs/,
   );
   assert.match(packageJson.scripts['test:production-check'], /scripts\/production-cutover-lock\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/init-production-launch-evidence\.test\.mjs/);
@@ -3473,7 +3622,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(readRepoFile('scripts/production-deploy-preflight.mjs'), /runProductionPreflight/);
   assert.match(
     readRepoFile('scripts/production-deploy-preflight.mjs'),
-    /REQUIRED_DATABASE_COMPATIBILITY = 'p109-governance-integrity-v1'/,
+    /REQUIRED_DATABASE_COMPATIBILITY = 'p107a-password-recovery-v1'/,
   );
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /runProductionDeployPreflightFromArgs/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /smoke-production-deploy\.mjs/);
@@ -3489,6 +3638,16 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(p109Recovery, /--entrypoint/);
   assert.match(p109Recovery, /--rolled-back/);
   assert.doesNotMatch(p109Recovery, /"--applied"/);
+  const p107aRecovery = readRepoFile('scripts/production-recover-p107a-migration.mjs');
+  assert.match(p107aRecovery, /runProductionFailedMigrationRecoveryFromArgs/);
+  assert.match(p107aRecovery, /BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY/);
+  assert.match(p107aRecovery, /CHARITYPILOT_P107A_MIGRATION_CHECKSUMS_V1/);
+  assert.match(p107aRecovery, /applied_predecessor_rows <> 20/);
+  assert.match(p107aRecovery, /total_history_rows <> 21/);
+  assert.match(p107aRecovery, /target_catalog|target catalog|target_table_rows/);
+  assert.match(p107aRecovery, /unsafe_future_expiry_count/);
+  assert.match(p107aRecovery, /inactive_principal_cleanup_rows/);
+  assert.doesNotMatch(p107aRecovery, /"--applied"/);
   assert.match(readRepoFile('scripts/production-compose-deploy.mjs'), /acquireProductionCutoverLock/);
   assert.match(readRepoFile('scripts/production-compose-rollback.mjs'), /cutoverLock/);
   assert.match(readRepoFile('scripts/production-launch-evidence.mjs'), /REQUIRED_LAUNCH_AREAS/);
@@ -3551,7 +3710,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /gh run watch RELEASE_RUN_ID --exit-status/);
   assert.match(
     runbook,
-    /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, any matching `npm run deploy:rollback` rehearsal, and `npm run deploy:recover:p109`/,
+    /pass `--no-tls-proxy` to `npm run deploy:preflight`, `npm run deploy:production`, any matching `npm run deploy:rollback` rehearsal, `npm run deploy:recover:p109`, and `npm run deploy:recover:p107a`/,
   );
   assert.match(runbook, /npm run check:production:hosting -- --production-env-file=\.env\.production/);
   assert.match(runbook, /npm run check:production:observability -- --production-env-file=\.env\.production/);
@@ -3631,7 +3790,12 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /node dist\/jobs\/production-scheduler\.js/);
   assert.match(runbook, /node dist\/jobs\/send-deadline-reminders\.js/);
   assert.match(runbook, /node dist\/jobs\/cleanup-document-storage\.js/);
-  assert.match(runbook, /failure-alert evidence/);
+  assert.match(runbook, /node dist\/jobs\/process-auth-email-delivery\.js/);
+  assert.match(runbook, /two existing job-failure\s+alerts/);
+  assert.match(
+    runbook,
+    /authentication-delivery anomaly alert plus incident-system\s+confirmation/,
+  );
   assert.match(runbook, /--profile maintenance --profile jobs down --remove-orphans/);
   assert.match(runbook, /--profile maintenance run --rm --no-deps migrate/);
   assert.match(runbook, /old API, web, production scheduler, one-shot jobs, and Caddy proxy before any database change/);
@@ -3654,7 +3818,7 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   assert.match(runbook, /P1-09 deliberately fails closed/);
   assert.match(
     runbook,
-    /requires the exact reviewed `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` line/,
+    /requires the exact reviewed `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1` line/,
   );
   assert.match(runbook, /all 20 reviewed `migration\.sql` files inside\s+that selected image/);
   assert.match(runbook, /`_prisma_migrations\.checksum` to equal the corresponding selected-image SHA-256/);
@@ -3678,21 +3842,37 @@ test('production deploy preflight is wired for digest-pinned image promotion', (
   );
   assert.match(runbook, /never use `--applied`/);
   assert.doesNotMatch(runbook, /P1-09[^\n]*failed[^\n]*plainly rerun/i);
+  assert.match(runbook, /P1-07A applies the same fail-closed recovery discipline/);
+  assert.match(runbook, /hashes all 21 exact\s+`migration\.sql` files/);
+  assert.match(runbook, /exactly 20 distinct applied predecessors plus one\s+sole unresolved failed P1-07A target/);
+  assert.match(runbook, /inactive-principal\s+rows are inventoried[\s\S]*exact selected\s+migration bytes clear both legacy fields/i);
+  assert.match(
+    runbook,
+    /npm run deploy:recover:p107a -- --production-env-file=\.env\.production --backup-output-dir=\/mnt\/encrypted\/charitypilot\/p107a-recovery --recovery-attestation-file=\/secure\/p107a-recovery-attestation\.json --dry-run/,
+  );
+  assert.match(
+    runbook,
+    /npm run deploy:recover:p107a -- --production-env-file=\.env\.production --backup-output-dir=\/mnt\/encrypted\/charitypilot\/p107a-recovery --recovery-attestation-file=\/secure\/p107a-recovery-attestation\.json\n/,
+  );
 
   assert.match(launchChecklist, /npm run deploy:preflight -- --production-env-file=\.env\.production/);
   assert.match(launchChecklist, /npm run deploy:production -- --production-env-file=\.env\.production/);
-  assert.match(launchChecklist, /CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1/);
+  assert.match(launchChecklist, /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/);
   assert.match(
     launchChecklist,
-    /`p006-deadline-calendar-v1` manifest fails closed without.*`--database-restore-attestation-file`.*retains the P0-06 reconciliation gate/,
+    /P1-09 manifest is rejected as image-only.*exact pre-P107A backup is restored.*`p109-restored` posture/,
   );
   assert.match(
     launchChecklist,
-    /pre-P0-06 or markerless legacy manifest requires the same restore proof.*`pre-p006-restored`/,
+    /`p006-deadline-calendar-v1` and markerless\/pre-P0-06 restore paths remain separately attested.*P0-06 reconciliation gate preserved/,
   );
   assert.match(
     launchChecklist,
     /P1-09 migration image was rehearsed.*npm run deploy:recover:p109.*all 20 migration SHA-256 values.*exact 19-migration applied predecessor chain.*checksum-divergent history\/catalog state.*failed before resolution/,
+  );
+  assert.match(
+    launchChecklist,
+    /P1-07A migration image was rehearsed.*npm run deploy:recover:p107a.*all 21 selected-image migration SHA-256 values.*exact 20-applied-predecessor.*terminal repeatable-read\/read-only SQL.*target-only `--rolled-back`/,
   );
   assert.doesNotMatch(
     launchChecklist,
@@ -4065,6 +4245,11 @@ test('email delivery logs do not include recipient or subject PII', () => {
   const emailService = readRepoFile('apps/api/src/services/email.service.ts');
   const logStatements = emailService.match(/this\.logger\.(?:warn|error)\([^;]+;/g) ?? [];
 
+  assert.doesNotMatch(
+    emailService,
+    /\bsendPasswordReset\s*\(/,
+    'password recovery email must use the durable delivery worker instead of a legacy fire-and-forget helper',
+  );
   assert.ok(logStatements.length > 0, 'email service should keep operational delivery logs');
   assert.doesNotMatch(emailService, /console\.(?:warn|error)\(/);
   for (const statement of logStatements) {
@@ -5003,6 +5188,10 @@ test('CI API Docker smoke runs in production mode and exercises keyed readiness'
   assert.match(smokeStep, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
   assert.match(
     smokeStep,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
+  assert.match(
+    smokeStep,
     /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_ci/,
   );
   assert.match(smokeStep, /readiness_unauthorized_status/);
@@ -5070,6 +5259,10 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(deadlineRun, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(deadlineRun, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
   assert.match(deadlineRun, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
+  assert.match(
+    deadlineRun,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
   assert.match(deadlineRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(deadlineRun, /-e AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
   assert.match(deadlineRun, /-e NEXT_PUBLIC_API_URL=https:\/\/api\.charitypilot\.ie/);
@@ -5090,6 +5283,10 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
   assert.match(schedulerRun, /-e EMAIL_FROM=noreply@charitypilot\.ie/);
+  assert.match(
+    schedulerRun,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
   assert.match(schedulerRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);
@@ -5383,7 +5580,7 @@ test('release workflow archives a deployable image digest manifest', () => {
   assert.match(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_repository\}@\$\{api_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_IMAGE="\$\{web_repository\}@\$\{web_digest\}"/);
   assert.match(manifestStep, /CHARITYPILOT_MIGRATION_IMAGE="\$\{migration_repository\}@\$\{migration_digest\}"/);
-  assert.match(manifestStep, /CHARITYPILOT_DATABASE_COMPATIBILITY="p109-governance-integrity-v1"/);
+  assert.match(manifestStep, /CHARITYPILOT_DATABASE_COMPATIBILITY="p107a-password-recovery-v1"/);
   assert.match(manifestStep, /CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
   assert.doesNotMatch(manifestStep, /NEXT_PUBLIC_SUPABASE_URL/);
   assert.doesNotMatch(manifestStep, /CHARITYPILOT_API_IMAGE="\$\{api_image\}@\$\{api_digest\}"/);
@@ -5524,6 +5721,10 @@ test('release API Docker smoke runs in production mode and exercises keyed readi
   assert.match(smokeStep, /-e GITHUB_ACTIONS=true/);
   assert.match(smokeStep, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(smokeStep, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
+  assert.match(
+    smokeStep,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
   assert.match(smokeStep, /readiness_unauthorized_status/);
   assert.match(smokeStep, /test "\$\{readiness_unauthorized_status\}" = "401"/);
   assert.match(smokeStep, /x-charitypilot-readiness-key: ci-readiness-key-with-enough-entropy/);
@@ -5591,6 +5792,10 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(deadlineRun, /-e TRUSTED_PROXY_ADDRESSES=10\.0\.0\.10/);
   assert.match(deadlineRun, /-e READINESS_API_KEY=ci-readiness-key-with-enough-entropy/);
   assert.match(deadlineRun, /-e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy/);
+  assert.match(
+    deadlineRun,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
   assert.match(deadlineRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(deadlineRun, /-e AUTH_COOKIE_DOMAIN=\.charitypilot\.ie/);
   assert.match(deadlineRun, /-e NEXT_PUBLIC_API_URL="\$\{NEXT_PUBLIC_API_URL\}"/);
@@ -5611,6 +5816,10 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
   assert.match(schedulerRun, /-e FRONTEND_URL=https:\/\/app\.charitypilot\.ie/);
   assert.match(schedulerRun, /-e RESEND_API_KEY=re_ci_smoke_key/);
   assert.match(schedulerRun, /-e EMAIL_FROM=noreply@charitypilot\.ie/);
+  assert.match(
+    schedulerRun,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
   assert.match(schedulerRun, /-e SUPABASE_URL=https:\/\/ci-project\.supabase\.co/);
   assert.match(schedulerRun, /-e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key/);
   assert.match(schedulerRun, /-e SUPABASE_STORAGE_BUCKET=documents/);

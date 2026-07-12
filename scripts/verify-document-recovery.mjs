@@ -103,7 +103,7 @@ const SECRET_PATTERNS = [
   /\bkey-[A-Za-z0-9]{20,}/i,
   /\bAKIA[A-Z0-9]{16}\b/,
   /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/,
-  /\b(?:AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|DATABASE_URL|JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|PASSWORD)\b\s*[=:]/i,
+  /\b(?:AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|PASSWORD)\b\s*[=:]/i,
   /\bAWS[_-]?SECRET[_-]?ACCESS[_-]?KEY\s*[=:]\s*["']?[^\s,"'}\]]{8,}/i,
   /[?&](?:access[_-]?token|api[_-]?key|credential|jwt|key|password|refresh[_-]?token|secret|signature|sig|token|x-amz-credential|x-amz-signature)=/i,
   /\b(?:client[_-]?secret|api[_-]?key|access[_-]?token|auth[_-]?token|credential|private[_-]?key|password|refresh[_-]?token|secret|secret[_-]?key|service[_-]?role[_-]?key|signing[_-]?secret|token)\b["']?\s*[=:]\s*(?!null\b|true\b|false\b|"?REPLACE_)["']?[^\s,"'}]{4,}/i,
@@ -2391,7 +2391,7 @@ export function redactDocumentRecoveryTranscript(value) {
     .replace(/(\b(?:client[_-]?secret|api[_-]?key|access[_-]?token|auth[_-]?token|credential|private[_-]?key|password|refresh[_-]?token|secret|secret[_-]?key|service[_-]?role[_-]?key|signing[_-]?secret|token)\b["']?\s*[=:]\s*["']?)[^\s,'"}\]]+/gi, '$1[redacted]')
     .replace(/\b(AccountKey=)[A-Za-z0-9+/=]+/gi, '$1[redacted]')
     .replace(/(\bAWS[_-]?SECRET[_-]?ACCESS[_-]?KEY\s*[=:]\s*["']?)[^\s,'"}\]]+/gi, '$1[redacted]')
-    .replace(/\b((?:AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|DATABASE_URL|JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|PASSWORD)\s*[=:]\s*)[^\s,'"}]+/gi, '$1[redacted]');
+    .replace(/\b((?:AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|SUPABASE_SERVICE_ROLE_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|PASSWORD)\s*[=:]\s*)[^\s,'"}]+/gi, '$1[redacted]');
 }
 
 function parseArgs(args) {

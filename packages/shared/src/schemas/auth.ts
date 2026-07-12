@@ -1,8 +1,14 @@
 import { z } from 'zod';
 import { withBcryptPasswordByteLimit } from './password.js';
 
+export const MAX_ACCOUNT_EMAIL_LENGTH = 254;
+export const accountEmailSchema = z
+  .string()
+  .max(MAX_ACCOUNT_EMAIL_LENGTH, 'Email address must be at most 254 characters')
+  .email('Invalid email address');
+
 export const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: accountEmailSchema,
   password: withBcryptPasswordByteLimit(
     z
       .string()
@@ -17,7 +23,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: accountEmailSchema,
   password: withBcryptPasswordByteLimit(z.string().min(1, 'Password is required')),
 });
 
@@ -26,7 +32,7 @@ export const refreshSchema = z.object({
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: accountEmailSchema,
 });
 
 export const resetPasswordSchema = z.object({

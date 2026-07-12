@@ -102,27 +102,51 @@ CharityPilot runs scheduled work two ways depending on environment.
 
 ### In-process cron (development)
 
-`server.ts` constructs a `DeadlineRemindersService` from the Fastify Prisma client and calls `startCronJobs()` after the server is listening (`apps/api/src/server.ts:94-96`). `startCronJobs` short-circuits in production unless `ENABLE_IN_PROCESS_JOBS === 'true'`, otherwise it schedules `sendDueReminders()` on a 24-hour `setInterval` (`apps/api/src/utils/cron.ts:3-18`). Production compose explicitly sets `ENABLE_IN_PROCESS_JOBS: "false"` on the API service (`compose.production.yml:38`), so the API never runs jobs in production.
+After the API binds the current recovery-key generation and starts listening,
+`server.ts` starts the development reminder timer and, outside production, a
+separate bounded five-second authentication-delivery loop. `startCronJobs`
+short-circuits reminder work in production unless
+`ENABLE_IN_PROCESS_JOBS === 'true'`; production Compose keeps that flag false.
+The local authentication loop is never started in the public-production or
+compiled personal-server runtime.
 
 ### Standalone job processes (production)
 
-The standalone jobs live in `apps/api/src/jobs` and are exposed both as npm `jobs:*` scripts (`apps/api/package.json:17-19`) and as compose services running the compiled `dist/jobs/*.js`:
+The standalone jobs live in `apps/api/src/jobs` and are exposed as npm `jobs:*`
+scripts. The long-running scheduler and the reminder/cleanup one-shots also have
+Compose services; authentication delivery has a direct one-shot entrypoint for
+isolated rehearsal or an approved platform-scheduler replacement:
 
 | Job entrypoint | npm script | Compose service | What it does |
 | --- | --- | --- | --- |
-| `production-scheduler.ts` | `jobs:production-scheduler` | `production-scheduler` (long-running) | Runs both jobs on independent recurring timers; deadline reminders default 24h, document cleanup default 1h (`apps/api/src/jobs/production-scheduler.ts:14-15`, `apps/api/src/jobs/production-scheduler.ts:248-264`); `compose.production.yml:96-124` |
+| `production-scheduler.ts` | `jobs:production-scheduler` | `production-scheduler` (long-running) | Runs deadline reminders, document cleanup, and durable authentication-email delivery on independent recurring timers. Recovery links and post-reset notices use five-second polling by default; the scheduler also quarantines stale sends and performs bounded recovery-ledger cleanup. |
 | `send-deadline-reminders.ts` | `jobs:deadline-reminders` | `deadline-reminders` (one-shot, `jobs` profile) | Builds a `DeadlineRemindersService` and calls `sendDueReminders()` once, exiting non-zero on failure (`apps/api/src/jobs/send-deadline-reminders.ts:9-26`); `compose.production.yml:126-150` |
 | `cleanup-document-storage.ts` | `jobs:document-storage-cleanup` | `document-storage-cleanup` (one-shot, `jobs` profile) | Retries pending storage deletions via `DocumentService.retryPendingStorageDeletions()` using `StorageService.deleteFile()` (`apps/api/src/jobs/cleanup-document-storage.ts:18-23`); `compose.production.yml:152-177` |
+| `process-auth-email-delivery.ts` | `jobs:auth-email-delivery` | no dedicated service; run from the selected API image for an isolated one-shot rehearsal | Validates the authentication-delivery env, verifies the bound recovery key, processes one bounded batch of recovery links/notices, quarantines stale claims, performs bounded cleanup, and exits non-zero on failure. |
 
-Two additional jobs are deliberately **not** scheduled or exposed as HTTP
-routes: `jobs:recover-team-ownership` and
-`jobs:reconcile-billing-authority`. They are restricted, one-off operator
-workflows requiring explicit authority, exact live-state evidence, dry runs,
-target-bound confirmations, and serializable database locks. See the
-[ownership recovery](../team-ownership-recovery.md) and [billing authority
-reconciliation](../billing-authority-reconciliation.md) runbooks.
+Restricted operator jobs such as `jobs:recover-team-ownership`,
+`jobs:reconcile-billing-authority`, and `jobs:rotate-auth-recovery-secret` are
+deliberately not scheduled or exposed as public HTTP routes. They require
+explicit authority, exact live-state evidence, dry runs, target-bound
+confirmations, and database locks. See the [ownership
+recovery](../team-ownership-recovery.md), [billing authority
+reconciliation](../billing-authority-reconciliation.md), and [production
+runbook](../production-runbook.md) rotation procedures.
 
-The deadline-reminders path reads/writes the database and sends email via Resend (its compose service requires `DATABASE_URL`, `RESEND_API_KEY`, `EMAIL_FROM` — `compose.production.yml:135-141`). The document-storage-cleanup path reads the database and deletes from Supabase storage (it requires `DATABASE_URL` and the `SUPABASE_*` variables — `compose.production.yml:161-168`). Both report failures through `sendJobFailureAlert`, which posts to `ERROR_ALERT_WEBHOOK_URL` (`apps/api/src/jobs/production-scheduler.ts:167-186`). The `production-scheduler` service is the always-on production scheduler, while the two one-shot services sit behind the `jobs` Compose profile for ad-hoc/external-cron invocation (`compose.production.yml:128-129`, `compose.production.yml:154-155`).
+The deadline-reminders and authentication-delivery paths read/write the database
+and send email via Resend. Authentication delivery additionally requires the
+versioned `AUTH_RECOVERY_SECRET`; the raw secret and derived token/rate material
+never appear in logs. API and scheduler startup bind or verify the selected key
+before accepting traffic or processing jobs. Every recovery/delivery transaction
+then locks the singleton `AuthRecoveryControl` generation and rejects a blocked,
+mismatched, or historically retired secret. Review-worthy terminal rows use durable count-only alert claims, so a
+failed webhook or scheduler crash cannot erase operator follow-up. The
+document-storage-cleanup path reads the database and
+deletes from Supabase storage. All three recurring paths report sanitized
+failures through `sendJobFailureAlert`, which posts to
+`ERROR_ALERT_WEBHOOK_URL`. The `production-scheduler` service is always on,
+while the reminder and cleanup one-shot services remain under the `jobs`
+Compose profile.
 
 ## Component diagram
 

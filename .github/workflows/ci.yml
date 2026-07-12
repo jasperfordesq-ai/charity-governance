@@ -69,6 +69,9 @@ jobs:
       - name: Verify P1-09 domain invariants upgrade from legacy PostgreSQL data
         run: npm run db:verify:p109-upgrade
 
+      - name: Verify P1-07A password recovery upgrade from legacy PostgreSQL data
+        run: npm run db:verify:p107a-upgrade
+
       - name: Deploy Prisma migrations
         run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 
@@ -185,6 +188,7 @@ jobs:
             -e READINESS_API_KEY=ci-readiness-key-with-enough-entropy \
             -e "DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write" \
             -e JWT_SECRET=ci-production-jwt-secret-with-enough-entropy \
+            -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
             -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
@@ -224,6 +228,7 @@ jobs:
             -e CI=true \
             -e GITHUB_ACTIONS=true \
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
+            -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
             -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
@@ -331,6 +336,7 @@ jobs:
             -e CI=true \
             -e GITHUB_ACTIONS=true \
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
+            -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
             -e NEXT_PUBLIC_API_URL=https://api.charitypilot.ie \
@@ -376,6 +382,7 @@ jobs:
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e RESEND_API_KEY=re_ci_smoke_key \
             -e EMAIL_FROM=noreply@charitypilot.ie \
+            -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e SUPABASE_URL=https://ci-project.supabase.co \
             -e SUPABASE_SERVICE_ROLE_KEY=ci-configured-service-role-key \
             -e SUPABASE_STORAGE_BUCKET=documents \

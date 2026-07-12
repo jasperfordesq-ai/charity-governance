@@ -15,6 +15,7 @@ const USAGE_TEXT =
 export const REQUIRED_GITHUB_PRODUCTION_SECRETS = Object.freeze([
   { name: 'DATABASE_URL', hint: 'Managed production PostgreSQL URL with sslmode=verify-full and target_session_attrs=read-write' },
   { name: 'JWT_SECRET', hint: 'High-entropy API JWT signing secret' },
+  { name: 'AUTH_RECOVERY_SECRET', hint: 'Canonical 32-64 byte password-recovery root secret, distinct from other application secrets' },
   { name: 'READINESS_API_KEY', hint: 'High-entropy keyed readiness probe secret' },
   { name: 'STRIPE_SECRET_KEY', hint: 'Stripe live secret key' },
   { name: 'STRIPE_WEBHOOK_SECRET', hint: 'Stripe live webhook signing secret' },
@@ -229,7 +230,7 @@ export function runProductionGitHubSecretsCheckFromArgs(args = process.argv.slic
 
   return result(
     0,
-    `Production GitHub secret-store check passed: ${options.environment} has ${REQUIRED_GITHUB_PRODUCTION_SECRETS.length} required secret name(s); secret values were not read.\n`,
+    `Production GitHub secret-store check passed: ${options.environment} has ${REQUIRED_GITHUB_PRODUCTION_SECRETS.length} required secret name(s), including AUTH_RECOVERY_SECRET; secret values were not read.\n`,
     '',
   );
 }

@@ -1268,9 +1268,20 @@ test('resetPassword consumes the reset token atomically before revoking sessions
     $queryRaw: async () => [{ id: 'locked-row' }],
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
   };
-  const service = new AuthService(prisma as never, {} as never);
+  const recovery = {
+    resetPassword: async () => {
+      consumed = true;
+      sessionUpdates.push({ durableRecoveryBoundary: true });
+      return { message: 'Password has been reset successfully.' };
+    },
+  };
+  const service = new AuthService(prisma as never, {} as never, recovery as never);
 
-  const result = await service.resetPassword('reset-token', 'NewPassword1');
+  const result = await service.resetPassword(
+    'reset-token',
+    'NewPassword1',
+    { ipAddress: '203.0.113.10', requestId: 'reset-request-1' },
+  );
 
   assert.deepEqual(result, { message: 'Password has been reset successfully.' });
   assert.equal(consumed, true);
@@ -1296,10 +1307,19 @@ test('resetPassword rejects token reuse when another request already consumed it
     $queryRaw: async () => [{ id: 'locked-row' }],
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
   };
-  const service = new AuthService(prisma as never, {} as never);
+  const recovery = {
+    resetPassword: async () => {
+      throw new AppError(400, 'INVALID_RESET_TOKEN', 'This reset link is invalid or has expired.');
+    },
+  };
+  const service = new AuthService(prisma as never, {} as never, recovery as never);
 
   await assert.rejects(
-    () => service.resetPassword('reset-token', 'NewPassword1'),
+    () => service.resetPassword(
+      'reset-token',
+      'NewPassword1',
+      { ipAddress: '203.0.113.10', requestId: 'reset-request-2' },
+    ),
     (error: unknown) => error instanceof AppError && error.statusCode === 400 && error.code === 'INVALID_RESET_TOKEN',
   );
 

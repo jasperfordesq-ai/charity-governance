@@ -21,115 +21,40 @@ function emailSpy() {
 
 // ── forgotPassword: must never reveal whether an account exists ──
 
-test('forgotPassword sends a reset link for a known account and returns the generic message', async () => {
-  const updates: Call[] = [];
-  const email = emailSpy();
-  const prisma = {
-    user: {
-      findUnique: async () => ({ id: 'u1', email: 'owner@example.org', name: 'Owner' }),
-      update: async (args: unknown) => { updates.push({ name: 'user.update', args }); return {}; },
+test('AuthService forwards forgot-password context to the durable recovery service', async () => {
+  const calls: unknown[][] = [];
+  const recovery = {
+    requestPasswordReset: async (...args: unknown[]) => {
+      calls.push(args);
+      return { message: 'If an account with that email exists, a reset link has been sent.' };
     },
   };
-  const service = new AuthService(prisma as never, email.service as never);
+  const service = new AuthService({} as never, emailSpy().service as never, recovery as never);
+  const context = { ipAddress: '203.0.113.10', requestId: 'request-1' };
 
-  const result = await service.forgotPassword('owner@example.org');
-
-  assert.match(result.message, /if an account with that email exists/i);
-  assert.equal(updates.length, 1, 'a reset token must be stored for a known account');
-  // The stored token must be hashed, not the raw token.
-  const data = (updates[0].args as { data: { resetToken: string } }).data;
-  assert.match(data.resetToken, /^[a-f0-9]{64}$/, 'reset token must be stored as a sha256 hash');
-  assert.equal(email.sent.filter((s) => s.name === 'reset').length, 1);
-});
-
-test('forgotPassword keeps its neutral response when email delivery resolves false', async () => {
-  let emailAttempted = false;
-  const prisma = {
-    user: {
-      findUnique: async () => ({ id: 'u1', email: 'owner@example.org', name: 'Owner' }),
-      update: async () => ({}),
-    },
-  };
-  const service = new AuthService(prisma as never, {
-    sendPasswordReset: async () => {
-      emailAttempted = true;
-      return false;
-    },
-  } as never);
-
-  const result = await service.forgotPassword('owner@example.org');
+  const result = await service.forgotPassword('owner@example.org', context);
 
   assert.match(result.message, /if an account with that email exists/i);
-  assert.equal(emailAttempted, true);
-});
-
-test('forgotPassword returns the same message and does nothing for an unknown account', async () => {
-  const updates: Call[] = [];
-  const email = emailSpy();
-  const prisma = {
-    user: {
-      findUnique: async () => null,
-      update: async (args: unknown) => { updates.push({ name: 'user.update', args }); return {}; },
-    },
-  };
-  const service = new AuthService(prisma as never, email.service as never);
-
-  const result = await service.forgotPassword('ghost@example.org');
-
-  assert.match(result.message, /if an account with that email exists/i);
-  assert.equal(updates.length, 0, 'no token is stored for an unknown account');
-  assert.equal(email.sent.length, 0, 'no email is sent for an unknown account');
+  assert.deepEqual(calls, [['owner@example.org', context]]);
 });
 
 // ── resetPassword: token must be single-use and sessions revoked ──
 
-function resetPrisma(opts: { found: boolean; consumeCount: number; revoked?: Call[] }) {
-  const revoked = opts.revoked ?? [];
-  return {
-    user: {
-      findFirst: async () => (opts.found ? { id: 'u1', organisationId: 'org1' } : null),
+test('AuthService forwards reset-password context to the durable recovery service', async () => {
+  const calls: unknown[][] = [];
+  const recovery = {
+    resetPassword: async (...args: unknown[]) => {
+      calls.push(args);
+      return { message: 'Password has been reset successfully.' };
     },
-    $transaction: async (cb: (tx: unknown) => Promise<unknown>) =>
-      cb({
-        $queryRaw: async () => [{ id: 'locked-row' }],
-        user: { updateMany: async () => ({ count: opts.consumeCount }) },
-        authSession: { updateMany: async (args: unknown) => { revoked.push({ name: 'revoke', args }); return { count: 3 }; } },
-      }),
   };
-}
+  const service = new AuthService({} as never, emailSpy().service as never, recovery as never);
+  const context = { ipAddress: '203.0.113.10', requestId: 'request-2' };
 
-test('resetPassword rejects an invalid or expired token', async () => {
-  const service = new AuthService(resetPrisma({ found: false, consumeCount: 0 }) as never, emailSpy().service as never);
-  await assert.rejects(
-    () => service.resetPassword('bad-token', 'NewPassword1'),
-    (err: unknown) => (err as { code?: string; statusCode?: number })?.code === 'INVALID_RESET_TOKEN' &&
-      (err as { statusCode?: number })?.statusCode === 400,
-  );
-});
-
-test('resetPassword consumes the token, sets the password, and revokes all sessions', async () => {
-  const revoked: Call[] = [];
-  const service = new AuthService(resetPrisma({ found: true, consumeCount: 1, revoked }) as never, emailSpy().service as never);
-
-  const result = await service.resetPassword('good-token', 'NewPassword1');
+  const result = await service.resetPassword('good-token', 'NewPassword1', context);
 
   assert.match(result.message, /reset successfully/i);
-  assert.equal(revoked.length, 1, 'all active sessions must be revoked on password reset');
-  const where = (revoked[0].args as { where: { userId: string; revokedAt: null } }).where;
-  assert.equal(where.userId, 'u1');
-  assert.equal(where.revokedAt, null);
-  const data = (revoked[0].args as { data: { revocationReason: string } }).data;
-  assert.equal(data.revocationReason, 'PASSWORD_RESET');
-});
-
-test('resetPassword rejects when the token was already consumed concurrently', async () => {
-  // findFirst saw the token, but the atomic consume updated 0 rows (another
-  // request won the race) — must fail rather than silently set the password.
-  const service = new AuthService(resetPrisma({ found: true, consumeCount: 0 }) as never, emailSpy().service as never);
-  await assert.rejects(
-    () => service.resetPassword('good-token', 'NewPassword1'),
-    (err: unknown) => (err as { code?: string })?.code === 'INVALID_RESET_TOKEN',
-  );
+  assert.deepEqual(calls, [['good-token', 'NewPassword1', context]]);
 });
 
 // ── verifyEmail: token must be single-use ──

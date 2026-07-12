@@ -61,7 +61,10 @@ function restoreEnv(snapshot: Map<string, string | undefined>): void {
 
 async function buildReadinessApp(prismaOverrides: Record<string, unknown>) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', prismaOverrides as never);
+  app.decorate('prisma', {
+    $transaction: async () => ({ id: 1 }),
+    ...prismaOverrides,
+  } as never);
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
   return app;
 }
@@ -268,7 +271,24 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
     storageService: {
       async deleteFile() {},
     },
+    authEmailDeliveryService: {
+      async processDueDeliveries() {
+        return {
+          processed: 0,
+          accepted: 0,
+          rejected: 0,
+          uncertain: 0,
+          keyUnavailable: 0,
+          retryScheduled: 0,
+          staleQuarantined: 0,
+          cleaned: 0,
+        };
+      },
+    },
     documentStorageCleanupLimit: 7,
+    authDeliveryBatchSize: 25,
+    authDeliveryCleanupBatchSize: 500,
+    authDeliveryStaleSendingMs: 60000,
     logger: {
       info() {},
       error() {},
@@ -280,6 +300,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
 
   assert.equal(result.deadlineRemindersFailed, false);
   assert.equal(result.documentStorageCleanupFailed, false);
+  assert.equal(result.authEmailDeliveryFailed, false);
   assert.equal(alerts.length, 0);
 });
 

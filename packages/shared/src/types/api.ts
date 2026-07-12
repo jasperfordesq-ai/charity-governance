@@ -128,12 +128,35 @@ export interface TeamSessionResponse {
   revocationReason: AuthSessionRevocationReason | null;
 }
 
+export type SecurityAuditEventType =
+  | 'MEMBER_SUSPENDED'
+  | 'MEMBER_REACTIVATED'
+  | 'MEMBER_REMOVED'
+  | 'MEMBER_ROLE_CHANGED'
+  | 'OWNERSHIP_TRANSFERRED'
+  | 'OWNERSHIP_RECOVERED'
+  | 'SESSION_REVOKED'
+  | 'ALL_SESSIONS_REVOKED'
+  | 'ORGANISATION_SUSPENDED'
+  | 'ORGANISATION_REACTIVATED'
+  | 'ORGANISATION_CLOSED'
+  | 'INVITE_REVOKED'
+  | 'PASSWORD_RESET_COMPLETED';
+
 export interface SecurityAuditEventResponse {
-  type: string;
+  type: SecurityAuditEventType;
   actorLabel: string;
   subjectLabel: string;
   reason: string;
   occurredAt: string;
+}
+
+export interface PasswordRecoveryAcceptedResponse {
+  message: string;
+}
+
+export interface PasswordResetResponse {
+  message: string;
 }
 
 export interface TeamInviteResponse {

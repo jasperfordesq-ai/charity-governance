@@ -17,15 +17,18 @@ export type ErrorAlertPayload = {
   requestId: string;
   timestamp: string;
   affectedCount?: number;
-  action?: 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS';
+  action?:
+    | 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS'
+    | 'REVIEW_AUTH_EMAIL_DELIVERY';
 };
 
 export type OperationalErrorAlertInput = {
-  job: 'deadline-reminders' | 'document-storage-cleanup';
+  job: 'deadline-reminders' | 'document-storage-cleanup' | 'auth-email-delivery';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
-    | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED';
+    | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
+    | 'AUTH_EMAIL_DELIVERY_FAILED';
   error: unknown;
   affectedCount?: number;
 };
@@ -99,7 +102,12 @@ export function buildOperationalErrorAlertPayload(input: OperationalErrorAlertIn
           affectedCount: input.affectedCount ?? 0,
           action: 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS' as const,
         }
-      : {}),
+      : input.code === 'AUTH_EMAIL_DELIVERY_FAILED'
+        ? {
+            affectedCount: input.affectedCount ?? 0,
+            action: 'REVIEW_AUTH_EMAIL_DELIVERY' as const,
+          }
+        : {}),
   };
 }
 

@@ -84,13 +84,16 @@ function clearProviderConfiguration(): void {
 
 interface HealthAppOptions {
   queryRaw?: () => Promise<unknown>;
+  transaction?: () => Promise<unknown>;
 }
 
 async function buildHealthApp(options: HealthAppOptions = {}) {
   const queryRaw = options.queryRaw ?? (async () => [{ result: 1 }]);
+  const transaction = options.transaction ?? (async () => ({ id: 1 }));
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
     $queryRaw: queryRaw,
+    $transaction: transaction,
   } as never);
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
   return app;
@@ -113,6 +116,7 @@ test('authenticated readiness reports ready when every dependency is healthy', {
     assert.equal(response.statusCode, 200);
     assert.equal(body.status, 'ready');
     assert.equal(body.checks.database, true);
+    assert.equal(body.checks.authRecoveryControlReady, true);
     assert.equal(body.checks.billingConfigured, true);
     assert.equal(body.checks.emailConfigured, true);
     assert.equal(body.checks.storageConfigured, true);
@@ -120,6 +124,41 @@ test('authenticated readiness reports ready when every dependency is healthy', {
   } finally {
     restoreEnv(snapshot);
     await app.close();
+  }
+});
+
+test('authenticated readiness fails closed when authentication recovery control is blocked or mismatched', { concurrency: false }, async () => {
+  const snapshot = snapshotEnv();
+  process.env.READINESS_API_KEY = READINESS_KEY;
+  setFullyConfiguredProviders();
+
+  try {
+    for (const reason of [
+      'Authentication recovery is blocked pending controlled key activation',
+      'Authentication recovery process is using a non-active root key',
+    ]) {
+      const app = await buildHealthApp({
+        transaction: async () => { throw new Error(reason); },
+      });
+      try {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/api/v1/health/readiness',
+          headers: { [READINESS_HEADER]: READINESS_KEY },
+        });
+        const body = response.json();
+
+        assert.equal(response.statusCode, 503);
+        assert.equal(body.status, 'not_ready');
+        assert.equal(body.checks.database, true);
+        assert.equal(body.checks.authRecoveryControlReady, false);
+        assert.equal(JSON.stringify(body).includes(reason), false);
+      } finally {
+        await app.close();
+      }
+    }
+  } finally {
+    restoreEnv(snapshot);
   }
 });
 

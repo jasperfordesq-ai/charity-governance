@@ -18,6 +18,8 @@
     "jobs:deadline-reminders": "node dist/jobs/send-deadline-reminders.js",
     "jobs:reconcile-deadline-reminder": "node dist/jobs/reconcile-deadline-reminder.js",
     "jobs:document-storage-cleanup": "node dist/jobs/cleanup-document-storage.js",
+    "jobs:auth-email-delivery": "node dist/jobs/process-auth-email-delivery.js",
+    "jobs:rotate-auth-recovery-secret": "node dist/jobs/rotate-auth-recovery-secret.js",
     "jobs:recover-document-storage-deletion": "node dist/jobs/recover-document-storage-deletion.js",
     "jobs:recover-team-ownership": "node dist/jobs/recover-team-ownership.js",
     "jobs:reconcile-billing-authority": "node dist/jobs/reconcile-billing-authority.js"

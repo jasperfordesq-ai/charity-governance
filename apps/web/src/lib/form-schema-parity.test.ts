@@ -21,13 +21,14 @@ test('form-schemas sources its rules from @charitypilot/shared (single source of
   assert.match(src, /from '@charitypilot\/shared'/);
   // The shared password field is re-used directly, so client and server cannot diverge.
   assert.match(src, /registerSchema\.shape\.password/);
+  assert.match(src, /resetPasswordSchema\.shape\.password/);
 });
 
 const FORMS: Array<[string, string]> = [
   ['login/page.tsx', 'loginSchema'],
   ['register/page.tsx', 'registerSchema'],
   ['forgot-password/page.tsx', 'forgotPasswordSchema'],
-  ['reset-password/page.tsx', 'passwordIssue'],
+  ['reset-password/page.tsx', 'resetPasswordIssue'],
   ['accept-invite/page.tsx', 'passwordIssue'],
 ];
 
@@ -40,9 +41,13 @@ for (const [file, marker] of FORMS) {
 }
 
 test('the password forms no longer gate on a bare length-only check', () => {
-  for (const file of ['register/page.tsx', 'reset-password/page.tsx', 'accept-invite/page.tsx']) {
+  for (const [file, helper] of [
+    ['register/page.tsx', 'passwordIssue'],
+    ['reset-password/page.tsx', 'resetPasswordIssue'],
+    ['accept-invite/page.tsx', 'passwordIssue'],
+  ] as const) {
     const src = authFile(file);
-    assert.ok(/passwordIssue/.test(src), `${file} must use the shared password rule`);
+    assert.ok(src.includes(helper), `${file} must use the shared password rule through ${helper}`);
     // The old ad-hoc submit gate that let weak-but-long passwords through must be gone.
     assert.ok(
       !/setError\('Password must be at least 8 characters\.'\)/.test(src),

@@ -1,6 +1,6 @@
 # CharityPilot Agent Continuation Handoff
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 This document exists so a new Codex, Claude, or other coding agent can continue the same CharityPilot production-completion goal without relying on chat memory or a pasted prompt.
 
@@ -254,11 +254,12 @@ The detailed issue contract remains in
   tenant-scoped composite conflict pointers, transactional history-preserving
   board deletion, five database checks, and narrow Prisma race mapping make the
   same invariants durable. The atomic migration never rewrites governance data
-  and ships with a historical failure/remediation/recovery verifier. Production
-  recovery requires the P1-09 compatibility line, an exact env/image-bound
-  attestation, all 20 checksums captured inside the selected digest-pinned image,
-  exact failed history/catalog/data state, terminal read-only SQL whose errors
-  cannot be masked, exact resolution, and immediate full redeploy. Local proof
+  and ships with a historical failure/remediation/recovery verifier. At this
+  checkpoint, production recovery required the P1-09 compatibility line, an
+  exact env/image-bound attestation, all 20 checksums captured inside the
+  selected digest-pinned image, exact failed history/catalog/data state,
+  terminal read-only SQL whose errors cannot be masked, exact resolution, and
+  immediate full redeploy. Local proof
   is shared `54 / 54`, API `749 / 749` plus live concurrency `2 / 2`, web
   `369 / 369`, production tooling `791` pass / `0` fail / `2` platform skips,
   personal-server `21 / 21`, local-Docker `44 / 44`,
@@ -271,6 +272,34 @@ The detailed issue contract remains in
   GitHub CI run `29168177797` and managed E2E run `29168177757` passed for that
   SHA; E2E passed `113 / 113` runner contracts and `105 / 105` browser scenarios
   in `3.6m`.
+- **P1-07A password-recovery integrity - `LOCALLY_VERIFIED`; exact-pushed-SHA
+  GitHub CI and managed E2E publication pending.** Password recovery now uses a bounded
+  durable request ledger, database-backed keyed identifier/network budgets,
+  concurrent-link-safe delivery, a durable versioned Resend worker, atomic
+  password/request/session/audit/outbox completion, and a registered-address
+  post-reset notice. The recovery root secret is protected by a database
+  generation fence, append-only retired-fingerprint history, and a quiesced
+  invalidate-before-replace rotation workflow. Migration
+  `20260712013000_add_password_recovery_integrity` preserves valid active legacy
+  slots exactly once, clears inactive legacy slots without inventing recovery
+  evidence, fails closed on active account emails that exceed the durable
+  recipient bound, and retires both legacy `User` fields. Current ordinary deploys use
+  `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`; P1-09 is now
+  a restore-only rollback boundary requiring an exact pre-P1-07A backup and the
+  checksum-bound, read-only restored-history/P1-07A-absence probe before backup
+  or migration. Final local evidence is shared `55 / 55`, API `810 / 810` plus four
+  isolated real-PostgreSQL proofs `4 / 4`, web `371 / 371`, production tooling
+  `827` passed / `0` failed / `2` expected Windows symbolic-link privilege skips
+  (`829` total), personal-server `24 / 24`, local-Docker `45 / 45`, and the final
+  local managed disposable E2E gate: runner contracts `113 / 113` plus browser
+  scenarios `105 / 105` in `7.6m`, followed by clean isolated teardown. Lint,
+  E2E typecheck, Prisma,
+  optimized builds, security/dependency, reliability `395 / 395`, historical
+  migration, built-image recovery, rollback, and launch-evidence gates also
+  passed. No exact pushed implementation SHA, GitHub CI run, or GitHub-managed
+  E2E run is claimed yet.
+  Parent item P1-07 remains open for MFA, breached-password policy, and the
+  remaining reviewed account/ownership-recovery policy.
 
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
@@ -349,8 +378,11 @@ Safety invariants:
 - initialization creates one blank organisation, one verified Owner, an active
   Complete entitlement and governance reference data, and refuses nonempty
   Organisation/User state;
-- the Owner password and account recovery secrets are transient and are never
-  persisted to `.env.personal-server`;
+- the Owner password and plaintext invitation/reset capabilities are transient
+  and are never persisted to `.env.personal-server`; the independent
+  `AUTH_RECOVERY_SECRET` root is deliberately persisted only in that ignored,
+  operator-protected env file and must be rotated through the documented
+  invalidate-before-replace workflow;
 - registration and provider-backed email recovery fail closed; directors use
   Owner/Admin-created fragment invitation links and host-issued fragment reset
   links;
@@ -366,7 +398,7 @@ Safety invariants:
 - normal stop/update commands never delete the personal database or document
   volumes.
 
-Current repository evidence:
+Original personal-server implementation checkpoint evidence from 2026-07-11:
 
 - API `726 / 726` passed;
 - web `363 / 363` passed;
@@ -416,14 +448,18 @@ rollback. A migration/start failure may intentionally leave writers stopped.
 Record the compatible commit/image identity and rehearse the runbook's deliberate
 restore procedure before treating updates as production-grade.
 
-Known current state from `npm run launch:status -- --json` on 2026-07-11:
+Known launch state refreshed on 2026-07-12 from the checked workstation,
+current GitHub metadata, and the expanded 89-check evidence schema:
 
 - Phase: `ENV_INCOMPLETE`
-- `.env.production` exists but still has 18 values needing real production data.
+- `.env.production` exists but still has 18 counted values needing real
+  production data. It also predates P1-07A and lacks the separately required
+  `AUTH_RECOVERY_SECRET` and
+  `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`.
 - Production values complete: `9 / 27`.
 - Launch evidence ledger exists at `.charitypilot-launch-evidence/production-launch-evidence.json`.
-- Machine-readable launch evidence completion: `9 / 86`.
-- Strict counted launch gates: `18 / 118` complete (`15.3%`), counting only production values, launch evidence checks, and final signoff roles.
+- Machine-readable launch evidence completion: `9 / 89`.
+- Strict counted launch gates: `18 / 121` complete (`14.9%`), counting only production values, launch evidence checks, and final signoff roles.
 - `approvedForLaunch`: `false`
 - Final signoffs approved: `0 / 5`
 - Real charity data remains blocked.
@@ -436,10 +472,14 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
   `cb78eb85bb0127150ad448037b5d03b8060869bf`.
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
-- Most recent local production-tooling gate captured by this handoff:
-  `npm run test:production-check` passed on 2026-07-11 with `745` checks
-  passed, `0` failed, and `2` Windows-only symbolic-link privilege skips (`747`
-  total). Older `548 / 548`, `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
+- The final P1-07A local production-tooling gate captured by this handoff passed
+  on 2026-07-12 with `827` checks passed, `0` failed, and `2` expected Windows
+  symbolic-link privilege skips (`829` total). The final local managed
+  disposable E2E gate also passed `113 / 113` runner contracts and `105 / 105`
+  browser scenarios in `7.6m` with clean isolated teardown. Exact-pushed-SHA
+  GitHub CI and managed E2E runs remain separate pending publication gates.
+  Older `823`, `791`,
+  `746`, `745`, `548 / 548`, `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
 - This handoff may be committed by a later docs-only refresh commit. Treat
@@ -448,7 +488,7 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
 - The generated platform audit intentionally keeps repository clean/synced state
   live-only; run `npm run launch:status -- --json` and inspect
   `repositoryState` from the release checkout before collecting launch evidence.
-- Fresh public DNS/HTTPS spot check on 2026-07-09 found both canonical
+- Fresh public DNS/HTTPS spot check on 2026-07-12 found both canonical
   production hosts unresolved from this workstation:
   `app.charitypilot.ie` and `api.charitypilot.ie`.
 - GitHub `production` environment variables currently include
@@ -463,12 +503,16 @@ Known current state from `npm run launch:status -- --json` on 2026-07-11:
 - `npm run check:production:github-secrets -- --environment=production` now
   verifies required GitHub `production` secret names without reading secret
   values when GitHub is the approved deployment secret store.
-- GitHub `production` environment secrets currently include the generated
-  non-provider entries `JWT_SECRET` and `READINESS_API_KEY`. The live
-  `check:production:github-secrets` run on 2026-07-09 still fails with six
-  missing provider/operator secrets: `DATABASE_URL`, `STRIPE_SECRET_KEY`,
+- GitHub `production` environment secrets currently include only the generated
+  non-provider entries `JWT_SECRET` and `READINESS_API_KEY`. The live metadata
+  refresh on 2026-07-12 therefore lacks seven required names:
+  `AUTH_RECOVERY_SECRET`, `DATABASE_URL`, `STRIPE_SECRET_KEY`,
   `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
   `ERROR_ALERT_WEBHOOK_URL`.
+- `master` remains unprotected. The GitHub `production` environment permits
+  administrator bypass and has no protection rules or deployment branch policy.
+  The active immutable personal-release tag ruleset is separate and does not
+  satisfy the public-production branch/environment gate.
 
 The 18 missing production values are:
 
@@ -947,12 +991,12 @@ These require human/operator/provider access and must not be faked:
 9. Complete external penetration test.
 10. Remediate or formally accept pentest findings.
 11. Complete deployed browser QA and accessibility checks.
-12. Complete all 86 machine-readable launch evidence checks.
+12. Complete all 89 machine-readable launch evidence checks.
 13. Complete final engineering, operations, security, legal/compliance, and business signoffs.
 
 ### Launch Evidence Still Open
 
-The evidence ledger is currently `9 / 86`. Those completed checks are local/CI
+The evidence ledger is currently `9 / 89`. Those completed checks are local/CI
 release-gate basics only; they do not replace real production env validation,
 digest-pinned deployment, public HTTPS smoke, rollback, provider, backup/restore,
 deployed browser QA, legal, pentest, or final signoff evidence.
@@ -1068,8 +1112,8 @@ npm run check:production:evidence -- --evidence-file=.charitypilot-launch-eviden
 
 Strict launch evidence metric:
 
-- `77 / 86` machine-readable launch checks remain.
-- Strict counted launch gates are `18 / 118` complete, so `100 / 118`
+- `80 / 89` machine-readable launch checks remain.
+- Strict counted launch gates are `18 / 121` complete, so `103 / 121`
   counted gates remain. This is an operator progress metric only, not a legal,
   security, operations, or business readiness certification.
 - Strict launch evidence is still mostly incomplete because the remaining checks
@@ -1090,4 +1134,4 @@ Repo-side-only estimate:
 
 ## Final Rule For Future Agents
 
-Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 86 launch evidence checks, and all five final signoffs are complete and recorded.
+Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 89 launch evidence checks, and all five final signoffs are complete and recorded.

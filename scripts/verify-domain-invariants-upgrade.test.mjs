@@ -137,7 +137,9 @@ test('P1-09 disposable PostgreSQL verifier binds the historical boundary and com
     'REMEDIATED_BLOCKER_ASSERTIONS_SQL',
     'P109_RECOVERY_IMAGE_CHECKSUM_SCRIPT',
     'P109_RECOVERY_MIGRATIONS',
+    'P109_RESTORED_MIGRATIONS',
     'buildP109RecoveryPreflightSql',
+    'buildP109RestoredHistoryProbeSql',
     'parseP109MigrationChecksumOutput',
     'execute the exact read-only production P1-09 recovery preflight before resolution',
     "['migrate', 'deploy', '--schema', previousMigrationWorkspace.schemaPath]",
@@ -152,6 +154,8 @@ test('P1-09 disposable PostgreSQL verifier binds the historical boundary and com
     'cross-tenant ConflictRecord board pointer',
     'linked board-member deletion',
     'explicit detach preserves conflict history',
+    'prove the exact P1-09 restore-only rollback boundary before any P1-07A migration',
+    'Exact P1-09 restored-history checksum and P1-07A-absence probe passed against live PostgreSQL',
   ]) {
     assert.ok(verifier.includes(proof), `verifier is missing proof contract: ${proof}`);
   }
@@ -180,6 +184,15 @@ test('P1-09 disposable PostgreSQL verifier binds the historical boundary and com
   assert.ok(checksumRejection < checksumRestore);
   assert.ok(checksumRestore < productionWrapperPreflight);
   assert.ok(productionWrapperPreflight < rolledBackResolution);
+  const validUpgrade = verifier.indexOf(
+    "'apply valid P1-09 upgrade with Prisma migrate deploy'",
+  );
+  const restoredBoundaryProbe = verifier.indexOf(
+    'buildP109RestoredHistoryProbeSql(selectedMigrationChecksums)',
+  );
+  const mutationFailureCases = verifier.indexOf('const failureCases = [');
+  assert.ok(validUpgrade >= 0 && validUpgrade < restoredBoundaryProbe);
+  assert.ok(restoredBoundaryProbe < mutationFailureCases);
 
   let output = '';
   await verifyDomainInvariantUpgrade({
@@ -219,13 +232,27 @@ test('P1-09 built-image mode uses exact recovery command shapes before release p
   );
   assert.match(
     verifier,
-    /\['db', 'execute', '--stdin', '--schema', 'prisma\/schema\.prisma'\]/,
+    /\['db', 'execute', '--stdin', '--schema', targetSchemaPath\]/,
   );
   assert.match(
     verifier,
     /\['migrate', 'resolve', '--rolled-back', plan\.target, '--schema', targetSchemaPath\]/,
   );
-  assert.match(verifier, /targetSchemaPath = migrationImage \? 'prisma\/schema\.prisma' : schemaPath/);
+  assert.match(
+    verifier,
+    /targetSchemaPath = migrationImage[\s\S]*\? '\/p109-proof\/prisma\/schema\.prisma'[\s\S]*: targetMigrationWorkspace\.schemaPath/,
+  );
+  assert.match(
+    verifier,
+    /'--mount', `type=bind,source=\$\{targetMigrationWorkspace\.root\},target=\/p109-proof,readonly`/,
+  );
+  assert.match(verifier, /createTargetMigrationWorkspace\(plan, migrationsRoot\)/);
+  assert.match(verifier, /\[\.\.\.plan\.previous, plan\.target\]/);
+  assert.match(
+    verifier,
+    /selectedMigrationChecksums\[migrationName\] !== checkoutMigrationChecksums\[migrationName\]/,
+  );
+  assert.match(verifier, /proof workspace did not stop at its exact target migration/);
   assert.match(verifier, /\{ input: recoveryPreflightSql \}/);
   assert.match(
     verifier,

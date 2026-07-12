@@ -217,6 +217,59 @@ enum SecurityAuditEventType {
   INVITE_REVOKED
 }
 
+enum PasswordRecoverySource {
+  SELF_SERVICE_EMAIL
+  LEGACY_USER_SLOT
+  PERSONAL_SERVER_OPERATOR
+}
+
+enum PasswordRecoveryDeliveryState {
+  SUPPRESSED
+  PENDING
+  SENDING
+  ACCEPTED
+  REJECTED
+  UNCERTAIN
+}
+
+enum PasswordRecoverySuppressionReason {
+  NO_ELIGIBLE_ACCOUNT
+  RATE_LIMITED
+  OUTSTANDING_LIMIT
+}
+
+enum PasswordRecoveryTerminationReason {
+  PASSWORD_RESET_COMPLETED
+  DELIVERY_REJECTED
+  KEY_UNAVAILABLE
+  KEY_ROTATED
+  ACCOUNT_INACTIVE
+  EXPIRED
+}
+
+enum AuthRecoveryRateLimitScope {
+  FORGOT_IDENTIFIER_15M
+  FORGOT_IDENTIFIER_24H
+  FORGOT_NETWORK_15M
+  FORGOT_NETWORK_24H
+  RESET_TOKEN_15M
+  RESET_TOKEN_24H
+  RESET_NETWORK_15M
+  RESET_NETWORK_24H
+}
+
+enum AuthSecurityEmailKind {
+  PASSWORD_RESET_COMPLETED_NOTICE
+}
+
+enum AuthSecurityEmailDeliveryState {
+  PENDING
+  SENDING
+  ACCEPTED
+  REJECTED
+  UNCERTAIN
+}
+
 enum DeadlineReminderStatus {
   RESERVED
   SENDING
@@ -295,6 +348,8 @@ model Organisation {
   billingCheckoutAttempt      BillingCheckoutAttempt?
   billingAuthorityGrants      BillingAuthorityGrant[]
   securityAuditEvents         SecurityAuditEvent[]
+  passwordRecoveryRequests    PasswordRecoveryRequest[]
+  authSecurityEmailOutbox     AuthSecurityEmailOutbox[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -318,15 +373,17 @@ model User {
   verifyToken       String?   @unique
   verifyTokenExpiry DateTime?
 
-  complianceUpdates            ComplianceRecord[]      @relation("UpdatedBy")
-  signoffUpdates               ComplianceSignoff[]     @relation("SignoffUpdatedBy")
-  documentUploads              Document[]              @relation("UploadedBy")
-  sentInvites                  TeamInvite[]            @relation("InvitedBy")
+  complianceUpdates            ComplianceRecord[]        @relation("UpdatedBy")
+  signoffUpdates               ComplianceSignoff[]       @relation("SignoffUpdatedBy")
+  documentUploads              Document[]                @relation("UploadedBy")
+  sentInvites                  TeamInvite[]              @relation("InvitedBy")
   reminderLogs                 DeadlineReminderLog[]
   authSessions                 AuthSession[]
-  billingAuthorityGrants       BillingAuthorityGrant[] @relation("BillingAuthorityActor")
-  securityAuditEventsAsActor   SecurityAuditEvent[]    @relation("SecurityAuditActor")
-  securityAuditEventsAsSubject SecurityAuditEvent[]    @relation("SecurityAuditSubject")
+  billingAuthorityGrants       BillingAuthorityGrant[]   @relation("BillingAuthorityActor")
+  securityAuditEventsAsActor   SecurityAuditEvent[]      @relation("SecurityAuditActor")
+  securityAuditEventsAsSubject SecurityAuditEvent[]      @relation("SecurityAuditSubject")
+  passwordRecoveryRequests     PasswordRecoveryRequest[]
+  authSecurityEmailOutbox      AuthSecurityEmailOutbox[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -389,27 +446,143 @@ model BillingAuthorityGrant {
 }
 
 model SecurityAuditEvent {
-  id               String                 @id @default(cuid())
-  organisationId   String
-  organisation     Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  type             SecurityAuditEventType
-  actorKind        SecurityAuditActorKind
-  actorUserId      String?
-  actorUser        User?                  @relation("SecurityAuditActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
-  actorLabel       String
-  subjectLabel     String
-  subjectUserId    String?
-  subjectUser      User?                  @relation("SecurityAuditSubject", fields: [subjectUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
-  subjectSessionId String?
-  reason           String
-  context          Json?
-  requestId        String?
-  eventVersion     Int                    @default(1)
-  occurredAt       DateTime               @default(now())
+  id                    String                    @id @default(cuid())
+  organisationId        String
+  organisation          Organisation              @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  type                  SecurityAuditEventType
+  actorKind             SecurityAuditActorKind
+  actorUserId           String?
+  actorUser             User?                     @relation("SecurityAuditActor", fields: [actorUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  actorLabel            String
+  subjectLabel          String
+  subjectUserId         String?
+  subjectUser           User?                     @relation("SecurityAuditSubject", fields: [subjectUserId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  subjectSessionId      String?
+  reason                String
+  context               Json?
+  requestId             String?
+  eventVersion          Int                       @default(1)
+  occurredAt            DateTime                  @default(now())
+  securityEmailOutboxes AuthSecurityEmailOutbox[]
 
+  @@unique([id, organisationId])
   @@index([organisationId, occurredAt, id])
   @@index([organisationId, subjectUserId, occurredAt, id])
   @@index([organisationId, actorUserId, occurredAt, id])
+}
+
+model PasswordRecoveryRequest {
+  id                        String                             @id @default(uuid()) @db.Uuid
+  source                    PasswordRecoverySource
+  organisationId            String?
+  organisation              Organisation?                      @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  userId                    String?
+  user                      User?                              @relation(fields: [userId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  identifierDigest          String?                            @db.Char(64)
+  requestIpDigest           String?                            @db.Char(64)
+  requestNetworkDigest      String?                            @db.Char(64)
+  rateKeyVersion            Int?
+  requestEvidenceRedactedAt DateTime?
+  tokenHash                 String?                            @unique @db.Char(64)
+  tokenNonce                String?                            @db.Char(64)
+  tokenKeyVersion           Int?
+  recipientEmail            String?
+  recipientName             String?
+  frontendOrigin            String?
+  deliveryTemplateVersion   Int?
+  deliveryState             PasswordRecoveryDeliveryState      @default(PENDING)
+  suppressionReason         PasswordRecoverySuppressionReason?
+  claimToken                String?                            @db.Uuid
+  claimedAt                 DateTime?
+  deliveryAttemptedAt       DateTime?
+  deliveryFinalizedAt       DateTime?
+  deliveryAttemptCount      Int                                @default(0)
+  nextDeliveryAttemptAt     DateTime?
+  providerMessageId         String?                            @unique
+  reviewAlertClaimToken     String?                            @db.Uuid
+  reviewAlertClaimedAt      DateTime?
+  reviewAlertedAt           DateTime?
+  evidenceRetentionAnchorAt DateTime                           @default(now())
+  expiresAt                 DateTime?
+  terminatedAt              DateTime?
+  terminationReason         PasswordRecoveryTerminationReason?
+  createdAt                 DateTime                           @default(now())
+  updatedAt                 DateTime                           @default(now()) @updatedAt
+
+  @@index([userId, terminatedAt, expiresAt, id])
+  @@index([deliveryState, nextDeliveryAttemptAt, id])
+  @@index([deliveryState, claimedAt, id])
+  @@index([reviewAlertedAt, reviewAlertClaimedAt, createdAt, id])
+  @@index([evidenceRetentionAnchorAt, id])
+  @@index([expiresAt, id])
+  @@index([createdAt, id])
+}
+
+model AuthRecoveryRateLimitBucket {
+  scope           AuthRecoveryRateLimitScope
+  keyVersion      Int
+  subjectDigest   String                     @db.Char(64)
+  windowStartedAt DateTime
+  count           Int                        @default(1)
+  windowEndsAt    DateTime
+  expiresAt       DateTime
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @default(now()) @updatedAt
+
+  @@id([scope, keyVersion, subjectDigest, windowStartedAt])
+  @@index([expiresAt])
+}
+
+model AuthRecoveryControl {
+  id                       Int       @id
+  blocked                  Boolean   @default(false)
+  generation               Int       @default(1)
+  activeSecretFingerprint  String?   @db.Char(64)
+  retiredSecretFingerprint String?   @db.Char(64)
+  blockedAt                DateTime?
+  activatedAt              DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @default(now()) @updatedAt
+}
+
+model AuthRecoveryRetiredSecret {
+  fingerprint       String   @id @db.Char(64)
+  retiredGeneration Int      @unique
+  retiredAt         DateTime @default(now())
+}
+
+model AuthSecurityEmailOutbox {
+  id                        String                         @id @default(uuid()) @db.Uuid
+  kind                      AuthSecurityEmailKind
+  organisationId            String
+  organisation              Organisation                   @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  userId                    String
+  user                      User                           @relation(fields: [userId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  auditEventId              String                         @unique
+  auditEvent                SecurityAuditEvent             @relation(fields: [auditEventId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  recipientEmail            String
+  recipientName             String
+  deliveryTemplateVersion   Int                            @default(1)
+  deliveryState             AuthSecurityEmailDeliveryState @default(PENDING)
+  claimToken                String?                        @db.Uuid
+  claimedAt                 DateTime?
+  deliveryAttemptedAt       DateTime?
+  deliveryFinalizedAt       DateTime?
+  deliveryAttemptCount      Int                            @default(0)
+  nextDeliveryAttemptAt     DateTime?
+  providerMessageId         String?                        @unique
+  reviewAlertClaimToken     String?                        @db.Uuid
+  reviewAlertClaimedAt      DateTime?
+  reviewAlertedAt           DateTime?
+  evidenceRetentionAnchorAt DateTime                       @default(now())
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @default(now()) @updatedAt
+
+  @@index([deliveryState, nextDeliveryAttemptAt, id])
+  @@index([deliveryState, claimedAt, id])
+  @@index([reviewAlertedAt, reviewAlertClaimedAt, createdAt, id])
+  @@index([evidenceRetentionAnchorAt, id])
+  @@index([createdAt, id])
 }
 
 model GovernancePrinciple {

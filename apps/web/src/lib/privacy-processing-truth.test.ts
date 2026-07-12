@@ -64,7 +64,8 @@ test('privacy purposes match implemented email and analytics behavior', () => {
   for (const method of [
     'sendWelcomeEmail',
     'sendEmailVerification',
-    'sendPasswordReset',
+    'sendPasswordRecoveryEmail',
+    'sendPasswordResetCompletedNotice',
     'sendTeamInvite',
     'sendDeadlineReminder',
   ]) {

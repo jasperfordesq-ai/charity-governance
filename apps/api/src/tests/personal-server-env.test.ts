@@ -16,6 +16,7 @@ const ENV_KEYS = [
   'DATABASE_URL',
   'JWT_SECRET',
   'READINESS_API_KEY',
+  'AUTH_RECOVERY_SECRET',
   'DOCUMENT_STORAGE_DRIVER',
   'LOCAL_FILE_STORAGE_DIR',
   'AUTH_COOKIE_DOMAIN',
@@ -40,6 +41,7 @@ function withPersonalEnv(
     DATABASE_URL: 'postgresql://charitypilot:local-password@db:5432/charitypilot',
     JWT_SECRET: 'jwt-personal-server-secret-value-1234567890',
     READINESS_API_KEY: 'readiness-personal-server-secret-1234567890',
+    AUTH_RECOVERY_SECRET: '0123456789abcdef'.repeat(4),
     DOCUMENT_STORAGE_DRIVER: 'local',
     LOCAL_FILE_STORAGE_DIR: '/var/lib/charitypilot/documents',
     AUTH_COOKIE_DOMAIN: undefined,
@@ -140,6 +142,7 @@ test('personal-server requires production mode, distinct strong secrets, local s
     NODE_ENV: 'development',
     JWT_SECRET: 'short',
     READINESS_API_KEY: 'short',
+    AUTH_RECOVERY_SECRET: 'short',
     DOCUMENT_STORAGE_DRIVER: 'supabase',
     AUTH_COOKIE_DOMAIN: '.example.test',
     SELF_REGISTRATION_ENABLED: 'true',
@@ -148,14 +151,21 @@ test('personal-server requires production mode, distinct strong secrets, local s
     assert.ok(issues.includes('NODE_ENV must be production for personal-server mode'));
     assert.ok(issues.includes('JWT_SECRET must be a configured secret of at least 32 characters'));
     assert.ok(issues.includes('READINESS_API_KEY must be a configured secret of at least 32 characters'));
+    assert.ok(issues.includes('AUTH_RECOVERY_SECRET must be a configured secret of at least 32 characters'));
     assert.ok(issues.includes('DOCUMENT_STORAGE_DRIVER must be exactly local for personal-server mode'));
     assert.ok(issues.includes('AUTH_COOKIE_DOMAIN must be unset in personal-server mode'));
     assert.ok(issues.includes('SELF_REGISTRATION_ENABLED must be exactly false in personal-server mode'));
   });
 
   const sharedSecret = 'shared-personal-server-secret-value-123456789';
-  withPersonalEnv({ JWT_SECRET: sharedSecret, READINESS_API_KEY: sharedSecret }, () => {
+  withPersonalEnv({
+    JWT_SECRET: sharedSecret,
+    READINESS_API_KEY: sharedSecret,
+    AUTH_RECOVERY_SECRET: sharedSecret,
+  }, () => {
     const issues = personalIssues(() => validatePersonalServerEnv());
-    assert.ok(issues.includes('JWT_SECRET and READINESS_API_KEY must be distinct secrets'));
+    assert.ok(issues.includes(
+      'JWT_SECRET, READINESS_API_KEY, and AUTH_RECOVERY_SECRET must be distinct secrets',
+    ));
   });
 });

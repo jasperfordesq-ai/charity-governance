@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { z } from 'zod';
-import { loginSchema, registerSchema, resetPasswordSchema } from '../schemas/auth.js';
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  MAX_ACCOUNT_EMAIL_LENGTH,
+  registerSchema,
+  resetPasswordSchema,
+} from '../schemas/auth.js';
 import {
   BCRYPT_PASSWORD_MAX_UTF8_BYTES,
   BCRYPT_PASSWORD_MAX_UTF8_BYTES_MESSAGE,
   passwordUtf8ByteLength,
 } from '../schemas/password.js';
-import { acceptTeamInviteSchema } from '../schemas/team.js';
+import { acceptTeamInviteSchema, inviteTeamMemberSchema } from '../schemas/team.js';
 
 type PasswordParseResult = z.SafeParseReturnType<unknown, unknown>;
 
@@ -129,5 +135,24 @@ test('legacy 128-character caps remain present alongside the stricter bcrypt byt
     if (parsed.success) continue;
     assert.ok(parsed.error.issues.some(({ code }) => code === 'too_big'));
     assert.ok(parsed.error.issues.some(({ message }) => message === BCRYPT_PASSWORD_MAX_UTF8_BYTES_MESSAGE));
+  }
+});
+
+test('every account identity schema enforces the shared 254-character email ceiling', () => {
+  const suffix = '@example.com';
+  const maximumEmail = `${'a'.repeat(MAX_ACCOUNT_EMAIL_LENGTH - suffix.length)}${suffix}`;
+  const overlongEmail = `a${maximumEmail}`;
+  assert.equal(maximumEmail.length, 254);
+  assert.equal(overlongEmail.length, 255);
+
+  const schemas = [
+    registerSchema.pick({ email: true }),
+    loginSchema.pick({ email: true }),
+    forgotPasswordSchema,
+    inviteTeamMemberSchema.pick({ email: true }),
+  ];
+  for (const schema of schemas) {
+    assert.equal(schema.safeParse({ email: maximumEmail }).success, true);
+    assert.equal(schema.safeParse({ email: overlongEmail }).success, false);
   }
 });

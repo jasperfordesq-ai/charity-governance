@@ -5,11 +5,16 @@ import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
 import {
   hashOpaqueToken,
-  issueSessionTokens,
+  issueLoginSessionTokens,
   revokeSessionToken,
   rotateSessionTokens,
 } from './session-tokens.js';
 import { publicOrganisationSelect } from '../utils/public-dtos.js';
+import {
+  PasswordRecoveryService,
+  mapPasswordRecoveryInfrastructureError,
+  type PasswordRecoveryRequestContext,
+} from './password-recovery.service.js';
 
 interface RegisterData {
   email: string;
@@ -31,7 +36,6 @@ const SALT_ROUNDS = 12;
 // timing, which hashes before its existence check.
 const DUMMY_PASSWORD_HASH = '$2b$12$5x1wZg/1s7XL/AUM6hR6OeX6zHNP.H0FgxiRa5EDVKtm6RFwhiVdK';
 const TRIAL_DAYS = 14;
-const RESET_TOKEN_EXPIRY_HOURS = 1;
 const VERIFY_TOKEN_EXPIRY_HOURS = 24;
 const REGISTRATION_ACCEPTED_MESSAGE = 'If this registration can be completed, check your email for next steps.';
 
@@ -68,12 +72,15 @@ function isUniqueConstraintError(error: unknown): boolean {
 
 export class AuthService {
   private emailService: EmailService;
+  private passwordRecoveryService: PasswordRecoveryService;
 
   constructor(
     private prisma: PrismaClient,
     emailService?: EmailService,
+    passwordRecoveryService?: PasswordRecoveryService,
   ) {
     this.emailService = emailService ?? new EmailService();
+    this.passwordRecoveryService = passwordRecoveryService ?? new PasswordRecoveryService(prisma);
   }
 
   async register(data: RegisterData) {
@@ -190,7 +197,11 @@ export class AuthService {
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
-    const tokens = await issueSessionTokens(this.prisma, user);
+    // Bind issuance to the exact bcrypt credential checked above. The session
+    // transaction rechecks it while holding the principal lock shared with
+    // password-reset serialization, so an old password can never mint a live
+    // session after a reset has committed.
+    const tokens = await issueLoginSessionTokens(this.prisma, user);
 
     return { user, ...tokens };
   }
@@ -231,32 +242,12 @@ export class AuthService {
     return user;
   }
 
-  async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizeEmail(email) },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        lifecycleStatus: true,
-        organisation: { select: { lifecycleStatus: true } },
-      },
-    });
-
-    if (user && hasActiveLifecycle(user)) {
-      const reset = createOneTimeToken();
-      const resetTokenExpiry = new Date();
-      resetTokenExpiry.setHours(resetTokenExpiry.getHours() + RESET_TOKEN_EXPIRY_HOURS);
-
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { resetToken: reset.hash, resetTokenExpiry },
-      });
-
-      void this.emailService.sendPasswordReset(user.email, user.name, reset.token);
+  async forgotPassword(email: string, context: PasswordRecoveryRequestContext) {
+    try {
+      return await this.passwordRecoveryService.requestPasswordReset(email, context);
+    } catch (error) {
+      throw mapPasswordRecoveryInfrastructureError(error);
     }
-
-    return { message: 'If an account with that email exists, a reset link has been sent.' };
   }
 
   async resendEmailVerification(userId: string) {
@@ -297,85 +288,16 @@ export class AuthService {
     return { message: 'Verification email sent.' };
   }
 
-  async resetPassword(token: string, password: string) {
-    const resetToken = hashOpaqueToken(token);
-    const user = await this.prisma.user.findFirst({
-      where: {
-        resetToken,
-        lifecycleStatus: 'ACTIVE',
-        organisation: { lifecycleStatus: 'ACTIVE' },
-      },
-      select: { id: true, organisationId: true },
-    });
-
-    if (!user) {
-      throw new AppError(400, 'INVALID_RESET_TOKEN', 'This reset link is invalid or has expired. Please request a new one.');
+  async resetPassword(
+    token: string,
+    password: string,
+    context: PasswordRecoveryRequestContext,
+  ) {
+    try {
+      return await this.passwordRecoveryService.resetPassword(token, password, context);
+    } catch (error) {
+      throw mapPasswordRecoveryInfrastructureError(error);
     }
-
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-    await this.prisma.$transaction(async (tx) => {
-      const lockedOrganisations = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id"
-        FROM "Organisation"
-        WHERE "id" = ${user.organisationId}
-          AND "lifecycleStatus" = 'ACTIVE'::"OrganisationLifecycleStatus"
-        FOR UPDATE
-      `;
-      const lockedUsers = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id"
-        FROM "User"
-        WHERE "id" = ${user.id}
-          AND "organisationId" = ${user.organisationId}
-          AND "lifecycleStatus" = 'ACTIVE'::"UserLifecycleStatus"
-        FOR UPDATE
-      `;
-      const now = new Date();
-
-      if (lockedOrganisations.length !== 1 || lockedUsers.length !== 1) {
-        throw new AppError(
-          400,
-          'INVALID_RESET_TOKEN',
-          'This reset link is invalid or has expired. Please request a new one.',
-        );
-      }
-
-      const consumed = await tx.user.updateMany({
-        where: {
-          id: user.id,
-          organisationId: user.organisationId,
-          lifecycleStatus: 'ACTIVE',
-          resetToken,
-          resetTokenExpiry: { gt: now },
-        },
-        data: {
-          passwordHash,
-          resetToken: null,
-          resetTokenExpiry: null,
-        },
-      });
-
-      if (consumed.count !== 1) {
-        throw new AppError(
-          400,
-          'INVALID_RESET_TOKEN',
-          'This reset link is invalid or has expired. Please request a new one.',
-        );
-      }
-
-      await tx.authSession.updateMany({
-        where: {
-          userId: user.id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: now,
-          revocationReason: 'PASSWORD_RESET',
-        },
-      });
-    });
-
-    return { message: 'Password has been reset successfully.' };
   }
 
   async verifyEmail(token: string) {

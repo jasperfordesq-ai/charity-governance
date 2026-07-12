@@ -38,11 +38,24 @@ const PUBLIC_ROUTES_TO_WARM = [
 ] as const;
 
 function assertDestructiveRuntimeSecrets(): void {
-  for (const name of ['E2E_READINESS_API_KEY', 'E2E_JWT_SECRET'] as const) {
+  for (const name of [
+    'E2E_READINESS_API_KEY',
+    'E2E_JWT_SECRET',
+    'E2E_AUTH_RECOVERY_SECRET',
+  ] as const) {
     const value = process.env[name];
-    if (typeof value !== 'string' || value.length < 32) {
+    const minimumLength = name === 'E2E_AUTH_RECOVERY_SECRET' ? 43 : 32;
+    if (typeof value !== 'string' || value.length < minimumLength) {
       throw new Error(`${name} must be an explicit high-entropy secret for destructive E2E.`);
     }
+  }
+  if (
+    process.env.E2E_AUTH_RECOVERY_SECRET === process.env.E2E_JWT_SECRET ||
+    process.env.E2E_AUTH_RECOVERY_SECRET === process.env.E2E_READINESS_API_KEY
+  ) {
+    throw new Error(
+      'E2E_AUTH_RECOVERY_SECRET must be distinct from E2E_JWT_SECRET and E2E_READINESS_API_KEY.',
+    );
   }
 }
 

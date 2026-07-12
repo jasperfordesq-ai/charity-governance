@@ -29,3 +29,8 @@ export function firstSchemaError(schema: SafeParser, data: unknown): string | nu
 export function passwordIssue(password: string): string | null {
   return firstSchemaError(registerSchema.shape.password as unknown as SafeParser, password);
 }
+
+/** The reset-password rule, kept separate so recovery-specific policy cannot drift. */
+export function resetPasswordIssue(password: string): string | null {
+  return firstSchemaError(resetPasswordSchema.shape.password as unknown as SafeParser, password);
+}

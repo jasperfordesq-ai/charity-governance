@@ -30,6 +30,10 @@ test('personal server uses isolated release resources without source mounts', ()
   assert.match(web, /target: runner/);
   assert.equal((web.match(/NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: personal-server/g) ?? []).length, 2);
   assert.match(turbo, /"NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE"/);
+  assert.match(turbo, /"CHARITYPILOT_DEPLOYMENT_MODE"/);
+  assert.match(turbo, /"AUTH_RECOVERY_SECRET"/);
+  assert.match(turbo, /"AUTH_DELIVERY_INTERVAL_MS"/);
+  assert.match(turbo, /"AUTH_DELIVERY_STALE_SENDING_MS"/);
   assert.match(compose, /name: charitypilot-personal-server-db/);
   assert.match(compose, /name: charitypilot-personal-server-documents/);
   assert.doesNotMatch(compose, /- \.:\/app|C:\\platforms|node_modules:\/app/);
@@ -89,6 +93,16 @@ test('personal initialization is explicit, one-shot, and separately configured',
   assert.match(initializer, /PERSONAL_SERVER_OWNER_PASSWORD: \$\{PERSONAL_SERVER_OWNER_PASSWORD:-\}/);
   assert.match(exampleEnv, /^PERSONAL_SERVER_OWNER_PASSWORD=$/m);
   assert.doesNotMatch(exampleEnv, /^SEED_LOCAL_ADMIN=/m);
+});
+
+test('recovery-secret rotation receives the configured secret in its maintenance container', () => {
+  const rotation = serviceSection('auth-recovery-secret-rotation');
+  assert.match(rotation, /profiles:\s*- maintenance/);
+  assert.match(rotation, /CHARITYPILOT_DEPLOYMENT_MODE: personal-server/);
+  assert.match(
+    rotation,
+    /AUTH_RECOVERY_SECRET: \$\{AUTH_RECOVERY_SECRET:\?Set AUTH_RECOVERY_SECRET in \.env\.personal-server\}/,
+  );
 });
 
 test('the isolated network pins both application and private-tunnel proxy trust', () => {

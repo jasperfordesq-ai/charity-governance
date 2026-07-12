@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { requireAuthRecoveryControlForRuntime } from '../../services/auth-recovery-control.js';
 import { BillingService } from '../../services/billing.service.js';
 import { EmailService } from '../../services/email.service.js';
 import { StorageService, withReadinessTimeout } from '../../services/storage.service.js';
@@ -189,6 +190,16 @@ export async function healthRoutes(app: FastifyInstance) {
       request.log.error(err, 'Readiness database check failed');
     }
 
+    let authRecoveryControlReady = false;
+    if (database) {
+      try {
+        await requireAuthRecoveryControlForRuntime(app.prisma);
+        authRecoveryControlReady = true;
+      } catch (err) {
+        request.log.error(err, 'Readiness authentication recovery control check failed');
+      }
+    }
+
     let emailConfigured = false;
     try {
       emailConfigured = new EmailService().isConfigured();
@@ -199,6 +210,7 @@ export async function healthRoutes(app: FastifyInstance) {
     const storage = new StorageService();
     const checks = {
       database,
+      authRecoveryControlReady,
       billingConfigured: billing.isConfigured(),
       emailConfigured,
       storageConfigured: storage.isConfigured(),
@@ -210,6 +222,7 @@ export async function healthRoutes(app: FastifyInstance) {
     );
     const ready =
       database &&
+      authRecoveryControlReady &&
       providerChecksReady &&
       checks.storageConfigured &&
       checks.storageBucketReachable;

@@ -13,6 +13,10 @@ type SessionUser = {
   role: TokenPayload['role'];
 };
 
+type LoginSessionUser = SessionUser & {
+  passwordHash: string;
+};
+
 type SessionLocatorRow = {
   id: string;
   userId: string;
@@ -25,6 +29,10 @@ type LockedPrincipalRow = {
   role: TokenPayload['role'];
   userLifecycleStatus: 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
   organisationLifecycleStatus: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+};
+
+type LockedIssuancePrincipalRow = LockedPrincipalRow & {
+  passwordHash: string;
 };
 
 type LockedFamilyRow = LockedPrincipalRow & {
@@ -65,6 +73,10 @@ function invalidRefreshToken(): AppError {
   return new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
 }
 
+function invalidLoginCredentials(): AppError {
+  return new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+}
+
 function createAccessToken(user: SessionUser, sessionId: string): string {
   return signAccessToken({
     userId: user.id,
@@ -78,12 +90,13 @@ async function lockActivePrincipal(
   client: SessionClient,
   userId: string,
   expectedOrganisationId?: string,
+  expectedPasswordHash?: string,
 ): Promise<SessionUser> {
   // MATERIALIZED CTEs make the lock order explicit while FOR SHARE permits
   // unrelated users in one organisation to establish sessions concurrently.
   // Lifecycle writers take FOR UPDATE and therefore cannot pass this boundary
   // until the issuance/rotation transaction has committed.
-  const principals = await client.$queryRaw<LockedPrincipalRow[]>`
+  const principals = await client.$queryRaw<LockedIssuancePrincipalRow[]>`
     WITH principal_organisation AS MATERIALIZED (
       SELECT "organisationId"
       FROM "User"
@@ -97,7 +110,9 @@ async function lockActivePrincipal(
       FOR SHARE OF organisation
     ),
     locked_user AS MATERIALIZED (
-      SELECT account."id", account."organisationId", account."role", account."lifecycleStatus"
+      SELECT
+        account."id", account."organisationId", account."role",
+        account."passwordHash", account."lifecycleStatus"
       FROM "User" AS account
       JOIN locked_organisation
         ON locked_organisation."id" = account."organisationId"
@@ -108,6 +123,7 @@ async function lockActivePrincipal(
       locked_user."id",
       locked_user."organisationId",
       locked_user."role",
+      locked_user."passwordHash",
       locked_user."lifecycleStatus" AS "userLifecycleStatus",
       locked_organisation."lifecycleStatus" AS "organisationLifecycleStatus"
     FROM locked_user
@@ -120,9 +136,12 @@ async function lockActivePrincipal(
     !principal ||
     principal.userLifecycleStatus !== 'ACTIVE' ||
     principal.organisationLifecycleStatus !== 'ACTIVE' ||
-    (expectedOrganisationId && principal.organisationId !== expectedOrganisationId)
+    (expectedOrganisationId && principal.organisationId !== expectedOrganisationId) ||
+    (expectedPasswordHash !== undefined && principal.passwordHash !== expectedPasswordHash)
   ) {
-    throw invalidRefreshToken();
+    throw expectedPasswordHash === undefined
+      ? invalidRefreshToken()
+      : invalidLoginCredentials();
   }
 
   return {
@@ -192,7 +211,11 @@ async function lockPrincipalAndFamily(
   `;
 }
 
-async function issueSessionTokensWithClient(client: SessionClient, expectedUser: SessionUser) {
+async function issueSessionTokensWithClient(
+  client: SessionClient,
+  expectedUser: SessionUser,
+  expectedPasswordHash?: string,
+) {
   const refreshToken = crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
   const refreshTokenHash = hashOpaqueToken(refreshToken);
   const familyId = crypto.randomUUID();
@@ -202,6 +225,7 @@ async function issueSessionTokensWithClient(client: SessionClient, expectedUser:
     client,
     expectedUser.id,
     expectedUser.organisationId,
+    expectedPasswordHash,
   );
   const session = await client.authSession.create({
     data: {
@@ -231,6 +255,23 @@ export async function issueSessionTokensInTransaction(
 
 export async function issueSessionTokens(prisma: PrismaClient, expectedUser: SessionUser) {
   return prisma.$transaction((tx) => issueSessionTokensWithClient(tx, expectedUser));
+}
+
+/**
+ * Establish a login session only if the password credential verified before
+ * bcrypt comparison is still the live credential under the principal lock.
+ * A concurrent password reset therefore either commits first and prevents
+ * issuance, or waits for issuance and then revokes the newly-created session.
+ */
+export async function issueLoginSessionTokens(
+  prisma: PrismaClient,
+  expectedUser: LoginSessionUser,
+) {
+  return prisma.$transaction((tx) => issueSessionTokensWithClient(
+    tx,
+    expectedUser,
+    expectedUser.passwordHash,
+  ));
 }
 
 export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: string) {

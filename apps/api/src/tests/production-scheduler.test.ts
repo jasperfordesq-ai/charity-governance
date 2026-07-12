@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   productionSchedulerConfigFromEnv,
+  runAuthEmailDelivery,
   runDeadlineReminders,
   runDocumentStorageCleanup,
   runProductionSchedulerOnce,
@@ -32,6 +33,10 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     DEADLINE_REMINDERS_INTERVAL_MS: '120000',
     DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: '60000',
     DOCUMENT_STORAGE_CLEANUP_LIMIT: '7',
+    AUTH_DELIVERY_INTERVAL_MS: '5000',
+    AUTH_DELIVERY_BATCH_SIZE: '11',
+    AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '222',
+    AUTH_DELIVERY_STALE_SENDING_MS: '45000',
     PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: '15000',
     PRODUCTION_SCHEDULER_RUN_ONCE: 'true',
   });
@@ -40,6 +45,10 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     deadlineRemindersIntervalMs: 120000,
     documentStorageCleanupIntervalMs: 60000,
     documentStorageCleanupLimit: 7,
+    authDeliveryIntervalMs: 5000,
+    authDeliveryBatchSize: 11,
+    authDeliveryCleanupBatchSize: 222,
+    authDeliveryStaleSendingMs: 45000,
     shutdownTimeoutMs: 15000,
     runOnce: true,
   });
@@ -50,6 +59,10 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     DEADLINE_REMINDERS_INTERVAL_MS: '0',
     DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: '-1',
     DOCUMENT_STORAGE_CLEANUP_LIMIT: 'not-a-number',
+    AUTH_DELIVERY_INTERVAL_MS: '0',
+    AUTH_DELIVERY_BATCH_SIZE: '101',
+    AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '2',
+    AUTH_DELIVERY_STALE_SENDING_MS: '999999',
     PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: '60000',
   });
 
@@ -57,6 +70,10 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     deadlineRemindersIntervalMs: 24 * 60 * 60 * 1000,
     documentStorageCleanupIntervalMs: 60 * 60 * 1000,
     documentStorageCleanupLimit: 25,
+    authDeliveryIntervalMs: 5 * 1000,
+    authDeliveryBatchSize: 25,
+    authDeliveryCleanupBatchSize: 500,
+    authDeliveryStaleSendingMs: 60 * 1000,
     shutdownTimeoutMs: 45 * 1000,
     runOnce: false,
   });
@@ -115,6 +132,7 @@ test('production job entrypoints use the scheduler logger contract instead of di
     'jobs/send-deadline-reminders.ts',
     'jobs/cleanup-document-storage.ts',
     'jobs/production-scheduler.ts',
+    'jobs/process-auth-email-delivery.ts',
   ];
 
   for (const file of jobFiles) {
@@ -128,6 +146,7 @@ test('production reminder runtime avoids direct console.log calls', () => {
     'jobs/send-deadline-reminders.ts',
     'jobs/cleanup-document-storage.ts',
     'jobs/production-scheduler.ts',
+    'jobs/process-auth-email-delivery.ts',
     'services/deadline-reminders.service.ts',
     'utils/cron.ts',
   ];
@@ -180,7 +199,25 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     deadlineService,
     documentService,
     storageService,
+    authEmailDeliveryService: {
+      async processDueDeliveries(input) {
+        events.push(`auth-delivery:${input.limit}:${input.cleanupLimit}:${input.staleSendingMs}`);
+        return {
+          processed: 0,
+          accepted: 0,
+          rejected: 0,
+          uncertain: 0,
+          keyUnavailable: 0,
+          retryScheduled: 0,
+          staleQuarantined: 0,
+          cleaned: 0,
+        };
+      },
+    },
     documentStorageCleanupLimit: 7,
+    authDeliveryBatchSize: 11,
+    authDeliveryCleanupBatchSize: 222,
+    authDeliveryStaleSendingMs: 45000,
     logger: {
       info(message: string) {
         logs.push(message);
@@ -191,14 +228,188 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     },
   });
 
-  assert.deepEqual(events, ['deadline-reminders', 'document-cleanup:7']);
+  assert.deepEqual(events, [
+    'deadline-reminders',
+    'document-cleanup:7',
+    'auth-delivery:11:222:45000',
+  ]);
   assert.deepEqual(deleted, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
   assert.deepEqual(result, {
     deadlineRemindersFailed: false,
     documentStorageCleanupFailed: false,
+    authEmailDeliveryFailed: false,
   });
   assert.ok(logs.some((message) => message.includes('Deadline reminders run completed')));
   assert.ok(logs.some((message) => message.includes('Document storage cleanup run completed')));
+  assert.ok(logs.some((message) => message.includes('Authentication email delivery run completed')));
+});
+
+test('auth email delivery alerts with count-only terminal outcomes', async () => {
+  const alerts: ErrorAlertPayload[] = [];
+  const logs: string[] = [];
+  const failed = await runAuthEmailDelivery({
+    deliveryService: {
+      async processDueDeliveries() {
+        return {
+          processed: 6,
+          accepted: 2,
+          rejected: 1,
+          uncertain: 1,
+          keyUnavailable: 1,
+          retryScheduled: 1,
+          staleQuarantined: 1,
+          cleaned: 3,
+        };
+      },
+    },
+    batchSize: 25,
+    cleanupBatchSize: 500,
+    staleSendingMs: 60000,
+    logger: {
+      info(message) { logs.push(message); },
+      error(message) { logs.push(message); },
+    },
+    alertSender: async (payload) => { alerts.push(payload); },
+  });
+
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].code, 'AUTH_EMAIL_DELIVERY_FAILED');
+  assert.equal(alerts[0].url, '/jobs/auth-email-delivery');
+  assert.equal(alerts[0].affectedCount, 4);
+  assert.equal(alerts[0].action, 'REVIEW_AUTH_EMAIL_DELIVERY');
+  assert.doesNotMatch(
+    JSON.stringify(alerts[0]),
+    /private@example\.org|user-secret|org-secret|raw-token|requestId-[0-9]/i,
+  );
+  assert.ok(logs.some((message) => message.includes('Processed: 6')));
+});
+
+test('auth email delivery alerts when stale claims are the only terminal outcomes', async () => {
+  const alerts: ErrorAlertPayload[] = [];
+  const failed = await runAuthEmailDelivery({
+    deliveryService: {
+      async processDueDeliveries() {
+        return {
+          processed: 0,
+          accepted: 0,
+          rejected: 0,
+          uncertain: 0,
+          keyUnavailable: 0,
+          retryScheduled: 0,
+          staleQuarantined: 2,
+          cleaned: 0,
+        };
+      },
+    },
+    batchSize: 25,
+    cleanupBatchSize: 500,
+    staleSendingMs: 60_000,
+    logger: { info() {}, error() {} },
+    alertSender: async (payload) => {
+      alerts.push(payload);
+      return true;
+    },
+  });
+
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].affectedCount, 2);
+});
+
+test('auth email delivery acknowledges one count-only persisted review alert even with zero current-run anomalies', async () => {
+  const alerts: ErrorAlertPayload[] = [];
+  const acknowledged: unknown[] = [];
+  const claim = {
+    claimToken: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    affectedCount: 5,
+  };
+  const failed = await runAuthEmailDelivery({
+    deliveryService: {
+      async processDueDeliveries() {
+        return {
+          processed: 0, accepted: 0, rejected: 0, uncertain: 0,
+          keyUnavailable: 0, retryScheduled: 0, staleQuarantined: 0, cleaned: 0,
+        };
+      },
+      async claimOperatorReviewAlert(limit) {
+        assert.equal(limit, 500);
+        return claim;
+      },
+      async markOperatorReviewAlertSent(received) {
+        acknowledged.push(received);
+        return received.affectedCount;
+      },
+      async releaseOperatorReviewAlertClaim() {
+        assert.fail('confirmed webhook delivery must not release the persisted claim');
+      },
+    },
+    batchSize: 25,
+    cleanupBatchSize: 500,
+    staleSendingMs: 60_000,
+    logger: { info() {}, error() {} },
+    alertSender: async (payload) => {
+      alerts.push(payload);
+      return true;
+    },
+  });
+
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].affectedCount, 5);
+  assert.equal(alerts[0].action, 'REVIEW_AUTH_EMAIL_DELIVERY');
+  assert.deepEqual(acknowledged, [claim]);
+  assert.doesNotMatch(JSON.stringify(alerts[0]), /aaaaaaaa|example|organisation|user|token/i);
+});
+
+test('failed auth review webhook releases its exact claim and the next scheduler run retries it', async () => {
+  const claim = {
+    claimToken: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    affectedCount: 2,
+  };
+  let pending = true;
+  let attempts = 0;
+  const released: unknown[] = [];
+  const acknowledged: unknown[] = [];
+  const deliveryService = {
+    async processDueDeliveries() {
+      return {
+        processed: 0, accepted: 0, rejected: 0, uncertain: 0,
+        keyUnavailable: 0, retryScheduled: 0, staleQuarantined: 0, cleaned: 0,
+      };
+    },
+    async claimOperatorReviewAlert() { return pending ? claim : null; },
+    async markOperatorReviewAlertSent(received: typeof claim) {
+      pending = false;
+      acknowledged.push(received);
+      return received.affectedCount;
+    },
+    async releaseOperatorReviewAlertClaim(received: typeof claim) {
+      released.push(received);
+      return received.affectedCount;
+    },
+  };
+  const run = () => runAuthEmailDelivery({
+    deliveryService,
+    batchSize: 25,
+    cleanupBatchSize: 500,
+    staleSendingMs: 60_000,
+    logger: { info() {}, error() {} },
+    alertSender: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('webhook outcome unknown');
+      return true;
+    },
+  });
+
+  assert.equal(await run(), true);
+  assert.equal(pending, true);
+  assert.deepEqual(released, [claim]);
+  assert.deepEqual(acknowledged, []);
+  assert.equal(await run(), true);
+  assert.equal(pending, false);
+  assert.deepEqual(acknowledged, [claim]);
+  assert.equal(attempts, 2);
 });
 
 test('runDeadlineReminders sends a sanitized operational alert when the production reminder run fails', async () => {

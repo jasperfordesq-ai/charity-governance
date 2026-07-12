@@ -36,6 +36,7 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `JWT_EXPIRY` | API | Access-token lifetime as a `15m`/`1h`/`3600s` duration; capped at 1h in production (`apps/api/src/utils/env.ts:248-264`) | No, but validated if set; default `15m` (`.env.example:19`) |
 | `REFRESH_TOKEN_TTL_DAYS` | API | Refresh-token TTL; integer 1–30 (`apps/api/src/utils/env.ts:266-279`) | No, but validated if set; default `7` (`.env.example:20`) |
 | `JWT_REFRESH_SECRET` | API | Listed in Turbo's `globalEnv` for cache keying (`turbo.json:10`) | Not enforced by `validateProductionEnv` |
+| `AUTH_RECOVERY_SECRET` | API, authentication-delivery worker, and restricted rotation command | Independent canonical 32-64 byte root secret for versioned recovery tokens and keyed abuse-control subjects. It must differ from `JWT_SECRET` and `READINESS_API_KEY`; rotate only through the documented invalidate-before-replace workflow. | Yes |
 | `AUTH_COOKIE_DOMAIN` | API | Cookie scope for the canonical split-host deployment; production should use `.charitypilot.ie`, must not be a URL, must be an approved CharityPilot host, and must cover both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` (`apps/api/src/utils/env.ts`) | Yes for the canonical production deployment |
 
 ### Public origins / frontend
@@ -104,17 +105,28 @@ through the authenticated CharityPilot API download route.
 | `READINESS_DEPENDENCY_TIMEOUT_MS` / `STORAGE_READINESS_TIMEOUT_MS` | readiness route (`apps/api/src/routes/health/index.ts`) | Bound dependency-probe latency in the readiness check | No |
 | `ENABLE_IN_PROCESS_JOBS` | API | Whether reminders run in-process; kept `false` when a dedicated scheduler runs them (`.env.production.example:82-83`) | No |
 | `DEADLINE_REMINDERS_INTERVAL_MS` / `DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS` / `DOCUMENT_STORAGE_CLEANUP_LIMIT` | scheduler container | Production scheduler intervals and batch size (`.env.production.example:84-91`) | No (have defaults) |
+| `SECURITY_EMAIL_PROVIDER_TIMEOUT_MS` | API/authentication-delivery worker | Bounded Resend request timeout for recovery links and reset-completion notices; canonical integer 1000-15000 ms | No; default 8000 ms |
+| `AUTH_DELIVERY_INTERVAL_MS` / `AUTH_DELIVERY_BATCH_SIZE` | scheduler container | Authentication-delivery cadence and per-kind claim bound | No; defaults 5000 ms / 25 |
+| `AUTH_DELIVERY_CLEANUP_BATCH_SIZE` / `AUTH_DELIVERY_STALE_SENDING_MS` | scheduler container | Shared evidence-cleanup budget and stale-claim quarantine threshold; the stale threshold must exceed the provider timeout | No; defaults 500 / 60000 ms |
 | `PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS` | scheduler container | Bounded active-run shutdown wait; defaults to 45,000 ms and rejects values above the 55,000 ms safety ceiling so Compose's 60-second grace remains larger | No |
 | `PRODUCTION_SCHEDULER_RUN_ONCE` | scheduler job (`apps/api/src/jobs/production-scheduler.ts`) | Run the scheduler once and exit (used by CI smoke) | No |
 | `CHARITYPILOT_API_IMAGE` / `CHARITYPILOT_WEB_IMAGE` / `CHARITYPILOT_MIGRATION_IMAGE` | Compose | Digest-pinned release image refs (`.env.production.example:65-69`) | Deployment-specific |
-| `CHARITYPILOT_DATABASE_COMPATIBILITY` | release manifest + rollback guard | Declares the reviewed application/database compatibility line. Current releases use `p109-governance-integrity-v1` because P1-09's database checks and restrictive composite conflict relation are not compatible with older application images. Same-line image rollback still requires a fresh exact-manifest-hash-bound operator attestation and live migration-history probe; the marker is never sufficient by itself. | Deployment-specific |
+| `CHARITYPILOT_DATABASE_COMPATIBILITY` | release manifest + rollback guard | Declares the reviewed application/database compatibility line. Current releases use `p107a-password-recovery-v1`: P1-07A retires the legacy `User` reset slot and is behaviorally incompatible with P1-09 images. Same-line image rollback is limited to P107A-capable images and still requires a fresh exact-manifest-hash-bound operator attestation plus the live migration-history probe. P1-09 requires an exact pre-P107A restored backup and its separately bound restore attestation; the marker is never sufficient by itself. | Deployment-specific |
 | `CADDY_ACME_EMAIL` / `CHARITYPILOT_WEB_DOMAIN` / `CHARITYPILOT_API_DOMAIN` | default TLS proxy | Caddy automatic Let's Encrypt config (`.env.production.example:74-79`) | Required for the default repo deploy path; use `--no-tls-proxy` only when managed platform TLS replaces Caddy |
 
-Two additional validator entry points enforce subsets of the surface for the standalone job containers: `validateDeadlineRemindersEnv` requires `DATABASE_URL`, `FRONTEND_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, and `ERROR_ALERT_WEBHOOK_URL` (`apps/api/src/utils/env.ts:385-406`); `validateDocumentStorageCleanupEnv` requires `DATABASE_URL`, the three Supabase vars, and `ERROR_ALERT_WEBHOOK_URL` (`apps/api/src/utils/env.ts:367-383`).
+Three additional validator entry points enforce job-specific subsets of the
+surface. `validateDeadlineRemindersEnv` requires `DATABASE_URL`, `FRONTEND_URL`,
+`RESEND_API_KEY`, `EMAIL_FROM`, and `ERROR_ALERT_WEBHOOK_URL`;
+`validateDocumentStorageCleanupEnv` requires `DATABASE_URL`, the three Supabase
+storage vars, and `ERROR_ALERT_WEBHOOK_URL`; and `validateAuthDeliveryEnv`
+requires the database, canonical frontend, Resend sender, alert webhook,
+`AUTH_RECOVERY_SECRET`, and bounded authentication-delivery controls. The
+long-running production scheduler runs all three validators before scheduling
+any work, while each one-shot entrypoint runs its own relevant validator.
 
 ### Turbo `globalEnv`
 
-`turbo.json` lists the environment variables that participate in Turbo's task-cache hashing, so that changing any of them invalidates cached `build`/`lint`/`test` outputs. The list covers `DATABASE_URL`, server, JWT, all six Stripe vars, Resend, the three Supabase vars, and the `NEXT_PUBLIC_*` build values, including the deployment-mode marker. Note `JWT_REFRESH_SECRET` and `API_URL` appear here for cache correctness even though they are not enforced by `validateProductionEnv`.
+`turbo.json` lists the environment variables that participate in Turbo's task-cache hashing and strict task environment, so changing them invalidates cached outputs and required shell values reach the task. The list covers `DATABASE_URL`, server, JWT and recovery secrets, authentication-delivery controls, alerting, both deployment-mode markers, all six Stripe vars, Resend, the three Supabase vars, and the `NEXT_PUBLIC_*` build values. Note `JWT_REFRESH_SECRET` and `API_URL` appear here for cache correctness even though they are not enforced by `validateProductionEnv`.
 
 ## How secret strength and placeholders are checked
 

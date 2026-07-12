@@ -86,6 +86,7 @@ function remoteEnv(overrides = {}) {
     E2E_DATABASE_SERVER_ADDRESS: REMOTE_ADDRESS,
     E2E_READINESS_API_KEY: "R3adiness-e2e-Key_7Kp9N4xQ2vT8mW6c",
     E2E_JWT_SECRET: "Jwt-e2e-Key_9Zp4N7xQ2vT8mW6cR5sL3dF1",
+    E2E_AUTH_RECOVERY_SECRET: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
     E2E_API_URL: "https://api.e2e.example.test",
     E2E_WEB_URL: "https://web.e2e.example.test",
     E2E_AUTH_COOKIE_DOMAIN: "e2e.example.test",
@@ -408,7 +409,7 @@ test("remote mode rejects automation selection and deployed-QA mixing", () => {
   );
 });
 
-test("remote mode requires high-entropy readiness and JWT secrets", () => {
+test("remote mode requires independent high-entropy runtime secrets", () => {
   for (const overrides of [
     { E2E_READINESS_API_KEY: undefined },
     { E2E_READINESS_API_KEY: "short" },
@@ -416,10 +417,28 @@ test("remote mode requires high-entropy readiness and JWT secrets", () => {
     { E2E_JWT_SECRET: undefined },
     { E2E_JWT_SECRET: "short" },
     { E2E_JWT_SECRET: "b".repeat(64) },
+    { E2E_AUTH_RECOVERY_SECRET: undefined },
+    { E2E_AUTH_RECOVERY_SECRET: "short" },
+    { E2E_AUTH_RECOVERY_SECRET: "b".repeat(64) },
   ]) {
     expectSafetyError(
       () => loadDisposableDatabaseConfig(remoteEnv(overrides)),
       /high-entropy/,
+    );
+  }
+
+  for (const reusedSecretName of [
+    "E2E_READINESS_API_KEY",
+    "E2E_JWT_SECRET",
+  ]) {
+    const env = remoteEnv();
+    expectSafetyError(
+      () =>
+        loadDisposableDatabaseConfig({
+          ...env,
+          [reusedSecretName]: env.E2E_AUTH_RECOVERY_SECRET,
+        }),
+      /must be distinct/,
     );
   }
 });
@@ -617,6 +636,9 @@ test("TypeScript database helpers retain P0-04 tables and route every direct con
   );
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("ComplianceAuditEvent"));
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("SecurityAuditEvent"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("PasswordRecoveryRequest"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("AuthRecoveryRateLimitBucket"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("AuthSecurityEmailOutbox"));
   assert.ok(
     DISPOSABLE_DATABASE_RESET_TABLES.includes("DocumentStorageDeletionRecovery"),
   );
@@ -649,7 +671,7 @@ test("TypeScript database helpers retain P0-04 tables and route every direct con
   assert.doesNotMatch(source, /localhost:5434\/charitypilot/);
 });
 
-test("reset inventory exactly covers every Prisma model except the two reference tables", () => {
+test("reset inventory covers every Prisma model except reference data and migration-owned recovery control history", () => {
   const dbSource = readFileSync(require.resolve("./db.ts"), "utf8");
   const schemaSource = readFileSync(
     require.resolve("../../apps/api/prisma/schema.prisma"),
@@ -659,7 +681,12 @@ test("reset inventory exactly covers every Prisma model except the two reference
   const prismaModels = [
     ...schemaSource.matchAll(/^model\s+([A-Za-z_][A-Za-z0-9_]*)\s+\{/gm),
   ].map((match) => match[1]);
-  const preservedModels = ["GovernancePrinciple", "GovernanceStandard"];
+  const preservedModels = [
+    "GovernancePrinciple",
+    "GovernanceStandard",
+    "AuthRecoveryControl",
+    "AuthRecoveryRetiredSecret",
+  ];
   const expectedResetTables = prismaModels
     .filter((model) => !preservedModels.includes(model))
     .sort();
@@ -675,7 +702,13 @@ test("reset inventory exactly covers every Prisma model except the two reference
   assert.doesNotMatch(dbSource, /const APP_TABLES/);
   assert.deepEqual(
     [...PRESERVED_PUBLIC_TABLES],
-    ["GovernancePrinciple", "GovernanceStandard", "_prisma_migrations"],
+    [
+      "GovernancePrinciple",
+      "GovernanceStandard",
+      "AuthRecoveryControl",
+      "AuthRecoveryRetiredSecret",
+      "_prisma_migrations",
+    ],
   );
 });
 

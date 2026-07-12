@@ -28,6 +28,7 @@ const SAMPLE = [
   'NODE_ENV=production',
   'JWT_SECRET=REPLACE_ME_RANDOM_SECRET_AT_LEAST_32_CHARACTERS',
   'READINESS_API_KEY=REPLACE_ME_RANDOM_READINESS_KEY_AT_LEAST_32_CHARACTERS',
+  'AUTH_RECOVERY_SECRET=REPLACE_ME_RANDOM_AUTH_RECOVERY_SECRET_AT_LEAST_43_CHARACTERS',
   'DATABASE_URL=REPLACE_ME_PRODUCTION_POSTGRES_URL_WITH_SSLMODE_REQUIRE',
   'STRIPE_SECRET_KEY=REPLACE_ME_STRIPE_LIVE_SECRET_KEY',
   'AUTH_COOKIE_DOMAIN=',
@@ -39,6 +40,7 @@ test('auto-generates the random secrets and forces NODE_ENV', () => {
   const env = parseEnv(buildProductionEnv(SAMPLE, () => `generated-secret-${n++}`));
   assert.equal(env.JWT_SECRET, 'generated-secret-0');
   assert.equal(env.READINESS_API_KEY, 'generated-secret-1');
+  assert.equal(env.AUTH_RECOVERY_SECRET, 'generated-secret-2');
   assert.equal(env.NODE_ENV, 'production');
 });
 

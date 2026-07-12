@@ -82,6 +82,17 @@ test('local development defaults use the documented API port', () => {
   assert.match(rootEnvExample, /PORT=3002/);
 });
 
+test('local API runtimes have a canonical password-recovery root secret independent of JWT and readiness secrets', () => {
+  const rootEnvExample = readRepoFile('.env.example');
+  const localCompose = readRepoFile('compose.local.yml');
+  const canonicalLocalSecret = '0123456789abcdef'.repeat(4);
+
+  assert.match(rootEnvExample, new RegExp(`^AUTH_RECOVERY_SECRET=${canonicalLocalSecret}$`, 'm'));
+  assert.match(localCompose, new RegExp(`AUTH_RECOVERY_SECRET:\\s+${canonicalLocalSecret}`));
+  assert.doesNotMatch(localCompose, /AUTH_RECOVERY_SECRET:\s+local-dev-jwt-secret/);
+  assert.doesNotMatch(localCompose, /AUTH_RECOVERY_SECRET:\s+local-readiness-key/);
+});
+
 test('local admin seed reports the configured admin account', () => {
   const seedScript = readRepoFile('apps/api/prisma/seed.ts');
 
@@ -732,35 +743,16 @@ test('platform audit ledger records local browser evidence without closing deplo
   assert.doesNotMatch(auditLedger, /generated base commit/);
   assert.doesNotMatch(auditGenerator, /not current for generated base commit/);
   assert.doesNotMatch(auditLedger, /passed locally on 2026-07-09 at commit 73e8484/);
-  assert.match(auditLedger, /9\/86 evidence checks/);
-  assert.doesNotMatch(auditLedger, /0\/86 evidence checks/);
-  assert.match(auditLedger, /352\/352 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /351\/351 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /349\/349 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /346\/346 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /345\/345 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /340\/340 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /338\/338 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /333\/333 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /332\/332 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /331\/331 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /330\/330 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /322\/322 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /321\/321 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /320\/320 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /319\/319 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /318\/318 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /317\/317 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /316\/316 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /315\/315 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /313\/313 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /312\/312 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /311\/311 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /304\/304 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /300\/300 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /298\/298 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /297\/297 production-tooling checks/);
-  assert.doesNotMatch(auditLedger, /286\/286 production-tooling checks/);
+  assert.match(auditLedger, /9\/89 evidence checks/);
+  assert.doesNotMatch(auditLedger, /0\/89 evidence checks/);
+  assert.match(auditGenerator, /P1-07A final local verification[\s\S]*shared 55\/55[\s\S]*API 810\/810/);
+  assert.match(auditLedger, /P1-07A final local verification[\s\S]*shared 55\/55[\s\S]*API 810\/810/);
+  assert.match(auditGenerator, /production tooling 827 passed \/ 0 failed \/ 2 expected Windows symbolic-link privilege skips \(829 total\)/);
+  assert.match(auditLedger, /production tooling 827 passed \/ 0 failed \/ 2 expected Windows symbolic-link privilege skips \(829 total\)/);
+  assert.match(auditLedger, /final local managed disposable E2E gate with 113\/113 runner contracts plus 105\/105 browser scenarios in 7\.6m followed by clean isolated teardown/);
+  assert.match(auditLedger, /Exact-pushed-SHA GitHub CI and managed E2E runs remain pending publication gates/);
+  assert.doesNotMatch(auditLedger, /managed browser suite(?: still)? must be rerun/);
+  assert.match(auditLedger, /Historical 2026-07-09 checkpoint:[\s\S]*352\/352 production-tooling checks/);
   assert.match(auditLedger, /security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed/);
   assert.match(auditLedger, /95 Playwright E2E tests passed/);
   assert.match(auditLedger, /GREEN - repository release gates passed/);
@@ -786,7 +778,7 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
 
   assert.match(auditGenerator, /Launch status now separates missing production env values from external launch evidence gates/);
-  assert.match(auditGenerator, /86 machine-readable launch evidence checks/);
+  assert.match(auditGenerator, /89 machine-readable launch evidence checks/);
   assert.match(auditGenerator, /launch evidence ledger status/);
   assert.match(auditGenerator, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditGenerator, /Release binding/);
@@ -805,12 +797,12 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /release image promotion GitHub environment variables/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
   assert.match(auditLedger, /Launch status now separates missing production env values from external launch evidence gates/);
-  assert.match(auditLedger, /86 machine-readable launch evidence checks/);
+  assert.match(auditLedger, /89 machine-readable launch evidence checks/);
   assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditLedger, /Release binding:/);
   assert.match(auditLedger, /Launch Progress Summary/);
-  assert.match(auditLedger, /Strict launch gates complete: 0 \/ 118 \(118 remaining, 0% complete\)/);
+  assert.match(auditLedger, /Strict launch gates complete: 0 \/ 121 \(121 remaining, 0% complete\)/);
   assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /group missing production values by provider\/source/);
   assert.match(auditLedger, /Local-state note/);

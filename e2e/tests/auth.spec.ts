@@ -1,6 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect, registerViaUi, loginViaUi, reliableFill, TEST_PASSWORD, uniqueEmail } from '../fixtures';
-import { createVerifiedOwner, getUserAndOrg, injectResetToken, injectVerifyToken, isEmailVerified } from '../helpers/db';
+import {
+  createVerifiedOwner,
+  getPasswordRecoveryResetEvidence,
+  getUserAndOrg,
+  injectResetToken,
+  injectVerifyToken,
+  isEmailVerified,
+} from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 async function requestPasswordResetViaUi(page: Page, email: string): Promise<void> {
@@ -22,8 +29,8 @@ async function requestPasswordResetViaUi(page: Page, email: string): Promise<voi
     await page.getByRole('button', { name: 'Send reset link' }).click({ noWaitAfter: true });
     const response = await forgotRequest;
     if (response?.ok()) {
-      await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible({ timeout: 60_000 });
-      await expect(page.getByText(email)).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Check for a reset email' })).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByText(/If an active account exists for the address you entered/)).toBeVisible();
       return;
     }
   }
@@ -77,7 +84,7 @@ test.describe('Authentication', () => {
     await expect(page.getByRole('heading', { name: 'Verification failed' })).toBeVisible({ timeout: 60_000 });
   });
 
-  test('forgot-password request then reset-password form changes the password', async ({ page }) => {
+  test('password recovery atomically changes the password, revokes sessions, and records security evidence', async ({ page, newFencedContext, browserOriginFence }) => {
     const email = uniqueEmail('reset');
     const newPassword = 'NewPass123';
 
@@ -88,30 +95,99 @@ test.describe('Authentication', () => {
       organisationName: 'Reset Flow Charity',
     });
 
-    await requestPasswordResetViaUi(page, email);
+    const firstOldSession = await newFencedContext();
+    const secondOldSession = await newFencedContext();
+    const firstOldSessionPage = await firstOldSession.newPage();
+    const secondOldSessionPage = await secondOldSession.newPage();
 
-    const token = await injectResetToken(email);
-    await page.goto('about:blank');
-    await gotoWithDevServerRetry(page, `/reset-password#token=${token}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Set a new password' })).toBeVisible({ timeout: 60_000 });
-    await page.waitForLoadState('load');
-    await page.waitForTimeout(1_500);
+    try {
+      await loginViaUi(firstOldSessionPage, email, TEST_PASSWORD);
+      await loginViaUi(secondOldSessionPage, email, TEST_PASSWORD);
 
-    await fillResetPasswordForm(page, 'alllowercase');
-    await page.getByRole('button', { name: 'Reset password' }).click();
-    await expect(page.getByText('Password must contain at least one uppercase letter')).toBeVisible();
+      await requestPasswordResetViaUi(page, email);
 
-    await fillResetPasswordForm(page, newPassword);
-    const resetRequest = page.waitForResponse(
-      (response) => /\/api\/v1\/auth\/reset-password/.test(response.url()) && response.request().method() === 'POST',
-      { timeout: 15_000 },
-    );
-    await page.getByRole('button', { name: 'Reset password' }).click();
-    expect((await resetRequest).ok()).toBe(true);
-    await expect(page.getByRole('heading', { name: 'Password reset' })).toBeVisible({ timeout: 60_000 });
+      const token = await injectResetToken(email);
+      await page.goto('about:blank');
+      await gotoWithDevServerRetry(page, `/reset-password#token=${token}`, { waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('heading', { name: 'Set a new password' })).toBeVisible({ timeout: 60_000 });
+      await expect.poll(() => new URL(page.url()).hash).toBe('');
+      await page.waitForLoadState('load');
+      await page.waitForTimeout(1_500);
 
-    await loginViaUi(page, email, newPassword);
-    await expect(page).toHaveURL(/\/dashboard/);
+      await fillResetPasswordForm(page, 'alllowercase');
+      await page.getByRole('button', { name: 'Reset password' }).click();
+      await expect(page.getByText('Password must contain at least one uppercase letter')).toBeVisible();
+
+      await fillResetPasswordForm(page, newPassword);
+      const resetRequest = page.waitForResponse(
+        (response) => /\/api\/v1\/auth\/reset-password/.test(response.url()) && response.request().method() === 'POST',
+        { timeout: 15_000 },
+      );
+      await page.getByRole('button', { name: 'Reset password' }).click();
+      expect((await resetRequest).ok()).toBe(true);
+      await expect(page.getByRole('heading', { name: 'Password reset' })).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByText(/every existing session has been signed out/i)).toBeVisible();
+
+      const evidence = await getPasswordRecoveryResetEvidence(email, token);
+      expect(evidence.activeSessionCount).toBe(0);
+      expect(evidence.passwordResetSessionCount).toBeGreaterThanOrEqual(2);
+      expect(evidence.outstandingRecoveryCount).toBe(0);
+      expect(evidence.completedRecoveryCount).toBeGreaterThanOrEqual(1);
+      expect(evidence.resetAuditCount).toBe(1);
+      expect(evidence.completionOutboxCount).toBe(1);
+      expect(evidence.legacyResetSlotCleared).toBe(true);
+      expect(evidence.plaintextArtifactCount).toBe(0);
+
+      const revokedSessionStatuses = await Promise.all(
+        [firstOldSessionPage, secondOldSessionPage].map((oldSessionPage) =>
+          oldSessionPage.evaluate(async (apiOrigin) => {
+            const response = await fetch(`${apiOrigin}/api/v1/auth/me`, {
+              credentials: 'include',
+            });
+            await response.arrayBuffer();
+            return response.status;
+          }, browserOriginFence.apiOrigin),
+        ),
+      );
+      expect(revokedSessionStatuses).toEqual([401, 401]);
+
+      await page.goto('about:blank');
+      await gotoWithDevServerRetry(page, `/reset-password#token=${token}`, { waitUntil: 'domcontentloaded' });
+      await fillResetPasswordForm(page, newPassword);
+      const replayRequest = page.waitForResponse(
+        (response) => /\/api\/v1\/auth\/reset-password/.test(response.url()) && response.request().method() === 'POST',
+        { timeout: 15_000 },
+      );
+      await page.getByRole('button', { name: 'Reset password' }).click();
+      expect((await replayRequest).status()).toBe(400);
+      await expect(
+        page.getByText("Reset link not accepted", { exact: true }),
+      ).toBeVisible();
+
+      await gotoWithDevServerRetry(page, '/login');
+      await reliableFill(page.getByLabel('Email address'), email);
+      await reliableFill(page.getByLabel('Password', { exact: true }), TEST_PASSWORD);
+      const oldPasswordLogin = page.waitForResponse(
+        (response) => /\/api\/v1\/auth\/login/.test(response.url()) && response.request().method() === 'POST',
+        { timeout: 15_000 },
+      );
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      expect((await oldPasswordLogin).status()).toBe(401);
+      await expect(page.getByText(/invalid email or password/i)).toBeVisible();
+      await expect(page).toHaveURL(/\/login/);
+
+      await loginViaUi(page, email, newPassword);
+      await expect(page).toHaveURL(/\/dashboard/);
+      await gotoWithDevServerRetry(page, '/team');
+      await expect(
+        page.getByText('Password reset completed', { exact: true }),
+      ).toBeVisible({ timeout: 60_000 });
+    } finally {
+      await Promise.all([
+        firstOldSession.close().catch(() => undefined),
+        secondOldSession.close().catch(() => undefined),
+      ]);
+    }
   });
 
   test('an invalid reset token shows the failure state without changing password', async ({ page }) => {
@@ -127,6 +203,8 @@ test.describe('Authentication', () => {
     );
     await page.getByRole('button', { name: 'Reset password' }).click();
     expect((await resetRequest).status()).toBe(400);
-    await expect(page.getByText(/invalid|expired|link/i)).toBeVisible({ timeout: 60_000 });
+    await expect(
+      page.getByText("Reset link not accepted", { exact: true }),
+    ).toBeVisible({ timeout: 60_000 });
   });
 });

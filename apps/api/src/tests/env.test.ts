@@ -1,9 +1,19 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
-import { validateDeadlineRemindersEnv, validateDocumentStorageCleanupEnv, validateProductionEnv } from '../utils/env.js';
+import {
+  validateAuthDeliveryEnv,
+  validateDeadlineRemindersEnv,
+  validateDocumentStorageCleanupEnv,
+  validateProductionEnv,
+} from '../utils/env.js';
 
 const ORIGINAL_ENV = { ...process.env };
+const AUTH_RECOVERY_TEST_SECRET = '0123456789abcdef'.repeat(4);
+
+beforeEach(() => {
+  process.env.AUTH_RECOVERY_SECRET = AUTH_RECOVERY_TEST_SECRET;
+});
 
 afterEach(() => {
   for (const key of Object.keys(process.env)) {
@@ -25,6 +35,7 @@ function setCompleteProductionEnv(overrides: Record<string, string | undefined> 
     READINESS_API_KEY: 'configured-readiness-key-32-chars',
     DATABASE_URL: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
     JWT_SECRET: 'a'.repeat(40),
+    AUTH_RECOVERY_SECRET: AUTH_RECOVERY_TEST_SECRET,
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
     NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
@@ -106,6 +117,86 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
 
   assert.doesNotThrow(() => validateProductionEnv());
+});
+
+test('validateProductionEnv requires a distinct high-entropy recovery secret', () => {
+  setCompleteProductionEnv({ AUTH_RECOVERY_SECRET: undefined });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_RECOVERY_SECRET is missing or still contains a placeholder value'),
+  );
+
+  setCompleteProductionEnv({ AUTH_RECOVERY_SECRET: 'short' });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_RECOVERY_SECRET must be at least 43 characters'),
+  );
+
+  for (const invalid of [
+    `${AUTH_RECOVERY_TEST_SECRET}!`,
+    `${AUTH_RECOVERY_TEST_SECRET}=`,
+    Buffer.alloc(65, 7).toString('base64url'),
+  ]) {
+    setCompleteProductionEnv({ AUTH_RECOVERY_SECRET: invalid });
+    assert.throws(
+      () => validateProductionEnv(),
+      (error: unknown) =>
+        error instanceof AppError &&
+        Array.isArray(error.details) &&
+        error.details.some((issue: string) =>
+          issue.includes('AUTH_RECOVERY_SECRET must'),
+        ),
+    );
+  }
+
+  setCompleteProductionEnv({
+    AUTH_RECOVERY_SECRET: 'a'.repeat(40),
+    JWT_SECRET: 'a'.repeat(40),
+  });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_RECOVERY_SECRET must be distinct from JWT_SECRET and READINESS_API_KEY'),
+  );
+});
+
+test('validateAuthDeliveryEnv accepts bounded scheduler configuration and rejects unsafe timing', () => {
+  setCompleteProductionEnv({
+    SECURITY_EMAIL_PROVIDER_TIMEOUT_MS: '8000',
+    AUTH_DELIVERY_INTERVAL_MS: '5000',
+    AUTH_DELIVERY_BATCH_SIZE: '25',
+    AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '500',
+    AUTH_DELIVERY_STALE_SENDING_MS: '60000',
+  });
+  assert.doesNotThrow(() => validateAuthDeliveryEnv());
+
+  process.env.AUTH_DELIVERY_STALE_SENDING_MS = '8000';
+  assert.throws(
+    () => validateAuthDeliveryEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'AUTH_DELIVERY_ENV_INVALID' &&
+      Array.isArray(error.details) &&
+      error.details.some((issue: string) => issue.includes('AUTH_DELIVERY_STALE_SENDING_MS')),
+  );
+
+  process.env.AUTH_DELIVERY_STALE_SENDING_MS = '60000';
+  process.env.AUTH_DELIVERY_CLEANUP_BATCH_SIZE = '2';
+  assert.throws(
+    () => validateAuthDeliveryEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('AUTH_DELIVERY_CLEANUP_BATCH_SIZE must be an integer from 3 to 1000'),
+  );
 });
 
 test('validateProductionEnv requires exact authenticated read-write PostgreSQL routing', async (t) => {

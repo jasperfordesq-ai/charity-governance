@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { validateStrongPersonalServerPassword } from './initialize-personal-server.js';
 import { hashOpaqueToken } from '../services/session-tokens.js';
+import { assertAuthRecoveryControlForCurrentSecret } from '../services/auth-recovery-control.js';
 import {
   getPersonalServerOrigin,
   isExactLoopbackHttpOrigin,
@@ -98,6 +99,7 @@ export async function issuePersonalServerResetLink(
   resetUrl.hash = new URLSearchParams({ token: plaintextToken }).toString();
 
   return client.$transaction(async (tx) => {
+    await assertAuthRecoveryControlForCurrentSecret(tx);
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PERSONAL_ACCOUNT_ADVISORY_LOCK})`;
 
     const organisationCount = await tx.organisation.count();
@@ -105,26 +107,44 @@ export async function issuePersonalServerResetLink(
       throw new Error('Personal server reset-link refused: expected exactly one organisation');
     }
 
-    const user = await tx.user.findUnique({
-      where: { email: command.email },
-      select: { id: true, organisationId: true, lifecycleStatus: true },
-    });
+    const users = await tx.$queryRaw<Array<{
+      id: string;
+      organisationId: string;
+      lifecycleStatus: 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
+    }>>`
+      WITH locked_organisation AS MATERIALIZED (
+        SELECT "id", "lifecycleStatus"
+        FROM "Organisation"
+        ORDER BY "id"
+        FOR UPDATE
+      )
+      SELECT account."id", account."organisationId", account."lifecycleStatus"
+      FROM "User" AS account
+      JOIN locked_organisation
+        ON locked_organisation."id" = account."organisationId"
+      WHERE account."email" = ${command.email}
+        AND locked_organisation."lifecycleStatus" = 'ACTIVE'::"OrganisationLifecycleStatus"
+      FOR UPDATE OF account
+    `;
+    const user = users[0];
     if (!user || user.lifecycleStatus !== 'ACTIVE') {
       throw new Error('Personal server reset-link refused: active account not found');
     }
 
-    const updated = await tx.user.updateMany({
-      where: {
-        id: user.id,
-        email: command.email,
+    await tx.passwordRecoveryRequest.create({
+      data: {
+        source: 'PERSONAL_SERVER_OPERATOR',
         organisationId: user.organisationId,
-        lifecycleStatus: 'ACTIVE',
+        userId: user.id,
+        tokenHash: resetToken,
+        deliveryState: 'ACCEPTED',
+        deliveryFinalizedAt: now,
+        deliveryAttemptCount: 0,
+        expiresAt: resetTokenExpiry,
+        createdAt: now,
+        updatedAt: now,
       },
-      data: { resetToken, resetTokenExpiry },
     });
-    if (updated.count !== 1) {
-      throw new Error('Personal server reset-link refused: account changed concurrently');
-    }
 
     return {
       resetLinkCreated: true,
@@ -142,6 +162,7 @@ export async function resetPersonalServerPassword(
   const passwordHash = await bcrypt.hash(command.password, SALT_ROUNDS);
 
   return client.$transaction(async (tx) => {
+    await assertAuthRecoveryControlForCurrentSecret(tx);
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PERSONAL_ACCOUNT_ADVISORY_LOCK})`;
 
     const organisationCount = await tx.organisation.count();
@@ -149,18 +170,63 @@ export async function resetPersonalServerPassword(
       throw new Error('Personal server password reset refused: expected exactly one organisation');
     }
 
-    const user = await tx.user.findUnique({
-      where: { email: command.email },
-      select: {
-        id: true,
-        email: true,
-        lifecycleStatus: true,
-        organisationId: true,
-      },
-    });
+    const users = await tx.$queryRaw<Array<{
+      id: string;
+      email: string;
+      name: string;
+      lifecycleStatus: 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
+      organisationId: string;
+    }>>`
+      WITH locked_organisation AS MATERIALIZED (
+        SELECT "id", "lifecycleStatus"
+        FROM "Organisation"
+        ORDER BY "id"
+        FOR UPDATE
+      )
+      SELECT
+        account."id", account."email", account."name",
+        account."lifecycleStatus", account."organisationId"
+      FROM "User" AS account
+      JOIN locked_organisation
+        ON locked_organisation."id" = account."organisationId"
+      WHERE account."email" = ${command.email}
+        AND locked_organisation."lifecycleStatus" = 'ACTIVE'::"OrganisationLifecycleStatus"
+      FOR UPDATE OF account
+    `;
+    const user = users[0];
     if (!user || user.lifecycleStatus !== 'ACTIVE') {
       throw new Error('Personal server password reset refused: active account not found');
     }
+
+    await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "PasswordRecoveryRequest"
+      WHERE "userId" = ${user.id}
+        AND "organisationId" = ${user.organisationId}
+      ORDER BY "id"
+      FOR UPDATE
+    `;
+    await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "AuthSession"
+      WHERE "userId" = ${user.id}
+        AND "revokedAt" IS NULL
+      ORDER BY "id"
+      FOR UPDATE
+    `;
+
+    const terminated = await tx.passwordRecoveryRequest.updateMany({
+      where: {
+        userId: user.id,
+        organisationId: user.organisationId,
+        terminatedAt: null,
+      },
+      data: {
+        terminatedAt: now,
+        terminationReason: 'PASSWORD_RESET_COMPLETED',
+        nextDeliveryAttemptAt: null,
+      },
+    });
 
     const updated = await tx.user.updateMany({
       where: {
@@ -171,8 +237,6 @@ export async function resetPersonalServerPassword(
       },
       data: {
         passwordHash,
-        resetToken: null,
-        resetTokenExpiry: null,
       },
     });
     if (updated.count !== 1) {
@@ -182,6 +246,27 @@ export async function resetPersonalServerPassword(
     const revoked = await tx.authSession.updateMany({
       where: { userId: user.id, revokedAt: null },
       data: { revokedAt: now, revocationReason: 'PASSWORD_RESET' },
+    });
+
+    const subjectLabel = user.name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 160)
+      || user.email.slice(0, 160);
+    await tx.securityAuditEvent.create({
+      data: {
+        organisationId: user.organisationId,
+        type: 'ALL_SESSIONS_REVOKED',
+        actorKind: 'SUPPORT',
+        actorLabel: 'Personal-server operator',
+        subjectLabel,
+        subjectUserId: user.id,
+        reason: 'Password reset completed through the restricted personal-server operator command.',
+        context: {
+          eventKind: 'PASSWORD_RESET_COMPLETED',
+          method: 'PERSONAL_SERVER_OPERATOR',
+          terminatedRequestCount: terminated.count,
+          revokedSessionCount: revoked.count,
+        },
+        occurredAt: now,
+      },
     });
 
     return { passwordReset: true, sessionsRevoked: revoked.count };

@@ -19,7 +19,9 @@ import { governanceRegisterRoutes } from './routes/governance-registers/index.js
 import { teamRoutes } from './routes/team/index.js';
 import { healthRoutes } from './routes/health/index.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
-import { startCronJobs } from './utils/cron.js';
+import { AuthEmailDeliveryService } from './services/auth-email-delivery.service.js';
+import { bindAuthRecoveryControlForRuntime } from './services/auth-recovery-control.js';
+import { startCronJobs, startLocalAuthDeliveryCron } from './utils/cron.js';
 import { validateRuntimeEnv } from './utils/personal-server-env.js';
 import { apiLoggerOptionsForEnvironment } from './utils/logger.js';
 import { parsePort } from './utils/port.js';
@@ -87,14 +89,21 @@ await app.register(healthRoutes, { prefix: '/api/v1/health' });
 
 const port = parsePort(process.env.PORT, 3002);
 const host = process.env.HOST ?? '0.0.0.0';
+let localAuthDeliveryTimer: NodeJS.Timeout | undefined;
 
 try {
+  await bindAuthRecoveryControlForRuntime(app.prisma);
   await app.listen({ port, host });
   app.log.info(`CharityPilot API running on http://${host}:${port}`);
 
   // Cron jobs
   const deadlineRemindersService = new DeadlineRemindersService(app.prisma);
   startCronJobs(deadlineRemindersService);
+  if (environment !== 'production') {
+    localAuthDeliveryTimer = startLocalAuthDeliveryCron(
+      new AuthEmailDeliveryService(app.prisma),
+    );
+  }
 } catch (err) {
   app.log.error(err);
   process.exit(1);
@@ -109,6 +118,7 @@ async function shutdown(signal: NodeJS.Signals) {
   app.log.info({ signal }, 'Shutting down CharityPilot API');
 
   try {
+    if (localAuthDeliveryTimer) clearInterval(localAuthDeliveryTimer);
     await app.close();
     process.exit(0);
   } catch (err) {

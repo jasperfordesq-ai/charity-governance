@@ -68,6 +68,7 @@ function completeDeployEnv(overrides = {}) {
       "postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write",
     DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: "db.charitypilot.ie",
     JWT_SECRET: "J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5",
+    AUTH_RECOVERY_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     FRONTEND_URL: "https://app.charitypilot.ie",
     AUTH_COOKIE_DOMAIN: ".charitypilot.ie",
     STRIPE_SECRET_KEY: "sk_live_configuredSecret",
@@ -93,7 +94,7 @@ function completeDeployEnv(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${digest}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${digest}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${digest}`,
-    CHARITYPILOT_DATABASE_COMPATIBILITY: "p109-governance-integrity-v1",
+    CHARITYPILOT_DATABASE_COMPATIBILITY: "p107a-password-recovery-v1",
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: "https://api.charitypilot.ie",
     ...overrides,
   };
@@ -406,6 +407,138 @@ test("attested pre-P0-06 restore skips only the unavailable P0-06 reminder gate"
   );
   assert.ok(calls.some((command) => command.includes("up")));
   assert.doesNotMatch(result.stdout, /quiesced reminder cutover preparation/);
+});
+
+test("attested restored P1-09 line uses only its exact internal preflight posture", async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  const probeCommand = ["docker", "compose", "exact-p109-restored-probe"];
+  const calls = [];
+  let preflightOptions;
+  const result = runProductionComposeDeployFromArgs(
+    ["--production-env-file", "production.env", ...backupArgs],
+    {
+      processEnv: cleanEnv(),
+      attestedDatabaseCompatibility: "p109-restored",
+      preMigrationDatabaseProbeCommand: probeCommand,
+      runPreflight: (_args, _env, options) => {
+        preflightOptions = options;
+        return { status: 0, stdout: "preflight ok\n", stderr: "" };
+      },
+      runCommand: (command) => calls.push({ type: "command", command }),
+      runBackup: successfulBackup(calls),
+      runSmoke: () => ({ status: 0, stdout: "smoke ok\n", stderr: "" }),
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(preflightOptions, {
+    expectedDatabaseCompatibility: "p109-governance-integrity-v1",
+  });
+  const probeIndex = calls.findIndex(
+    (call) => call.type === "command" && call.command === probeCommand,
+  );
+  const quiesceIndex = calls.findIndex(
+    (call) => call.type === "command" && call.command.includes("down"),
+  );
+  const backupIndex = calls.findIndex((call) => call.type === "backup");
+  const migrateIndex = calls.findIndex(
+    (call) =>
+      call.type === "command" &&
+      call.command.includes("run") &&
+      call.command.includes("migrate"),
+  );
+  assert.ok(quiesceIndex > -1, "the runtime must be quiesced");
+  assert.ok(probeIndex > quiesceIndex, "the exact probe must run after quiescence");
+  assert.ok(backupIndex > probeIndex, "the exact probe must pass before backup");
+  assert.ok(migrateIndex > backupIndex, "migration must run only after backup");
+  assert.match(
+    result.stdout,
+    /Exact restored-database history was proven read-only before any backup or migration/,
+  );
+});
+
+test("attested restored P1-09 deploy rejects a missing exact probe before preflight", async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  let preflightCalled = false;
+  const result = runProductionComposeDeployFromArgs(
+    ["--production-env-file", "production.env", ...backupArgs],
+    {
+      processEnv: cleanEnv(),
+      attestedDatabaseCompatibility: "p109-restored",
+      runPreflight: () => {
+        preflightCalled = true;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    },
+  );
+
+  assert.equal(result.status, 1);
+  assert.equal(preflightCalled, false);
+  assert.match(result.stderr, /requires the internal exact P1-09 restored-history probe/);
+});
+
+test("ordinary production deploy rejects an unexpected internal database probe", async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  let preflightCalled = false;
+  const result = runProductionComposeDeployFromArgs(
+    ["--production-env-file", "production.env", ...backupArgs],
+    {
+      processEnv: cleanEnv(),
+      preMigrationDatabaseProbeCommand: ["docker", "compose", "unexpected-probe"],
+      runPreflight: () => {
+        preflightCalled = true;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    },
+  );
+
+  assert.equal(result.status, 1);
+  assert.equal(preflightCalled, false);
+  assert.match(result.stderr, /rejected an unexpected internal pre-migration database probe/);
+});
+
+test("failed restored P1-09 probe keeps the runtime quiesced before backup or migration", async () => {
+  const runProductionComposeDeployFromArgs = await loadDeployRunner();
+  const probeCommand = ["docker", "compose", "exact-p109-restored-probe"];
+  const calls = [];
+  let backupCalled = false;
+  let smokeCalled = false;
+  const result = runProductionComposeDeployFromArgs(
+    ["--production-env-file", "production.env", ...backupArgs],
+    {
+      processEnv: cleanEnv(),
+      attestedDatabaseCompatibility: "p109-restored",
+      preMigrationDatabaseProbeCommand: probeCommand,
+      runPreflight: () => ({ status: 0, stdout: "preflight ok\n", stderr: "" }),
+      runCommand: (command) => {
+        calls.push(command);
+        if (command === probeCommand) {
+          throw new Error("exact P1-09 restored-history probe rejected P1-07A residue");
+        }
+      },
+      runBackup: () => {
+        backupCalled = true;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+      runSmoke: () => {
+        smokeCalled = true;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    },
+  );
+
+  assert.equal(result.status, 1);
+  assert.equal(backupCalled, false);
+  assert.equal(smokeCalled, false);
+  assert.deepEqual(calls.at(-1), calls[1], "failure must repeat the quiesce command");
+  assert.equal(
+    calls.some(
+      (command) => command !== probeCommand && command.includes("run") && command.includes("migrate"),
+    ),
+    false,
+  );
+  assert.match(result.stderr, /probe rejected P1-07A residue/);
+  assert.match(result.stderr, /production runtime remains stopped/);
 });
 
 test("attested restored P0-06 line uses its exact preflight marker without skipping reconciliation", async () => {

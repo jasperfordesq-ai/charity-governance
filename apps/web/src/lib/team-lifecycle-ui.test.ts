@@ -66,7 +66,7 @@ test('session inventory and revocation controls cover one family, all families, 
   assert.doesNotMatch(modal, /refreshToken|accessToken/);
 });
 
-test('administrators receive the immutable audit view while ordinary members do not', () => {
+test('administrators receive the immutable audit view with password-reset evidence while ordinary members do not', () => {
   const page = team('page.tsx');
   const panel = team('team-security-audit-panel.tsx');
 
@@ -74,6 +74,8 @@ test('administrators receive the immutable audit view while ordinary members do 
   assert.match(page, /effectiveRole === UserRole\.OWNER \|\| effectiveRole === UserRole\.ADMIN/);
   assert.match(page, /<TeamSecurityAuditPanel/);
   assert.match(panel, /Immutable evidence/);
+  assert.match(panel, /PASSWORD_RESET_COMPLETED: 'Password reset completed'/);
+  assert.match(panel, /<time dateTime=\{event\.occurredAt\}/);
   assert.match(panel, /Affected: \{event\.subjectLabel\}/);
   assert.doesNotMatch(panel, /events\.slice/);
   assert.match(panel, /Security audit could not be loaded/);

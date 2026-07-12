@@ -511,6 +511,7 @@ test('readiness reports 503 not_ready with billingConfigured false when Stripe e
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
     $queryRaw: async () => [{ result: 1 }],
+    $transaction: async () => ({ id: 1 }),
   } as never);
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
 

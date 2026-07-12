@@ -42,14 +42,15 @@ Use this checklist as the top-level launch evidence ledger. Keep every item open
 - [ ] `npm run check:production -- --production-env-file=.env.production` completed against the real production secret source.
 - [ ] `npm run check:production:github-env -- --environment=production` completed before release image promotion, proving GitHub `production` has the required public web build variables without reading secret values.
 - [ ] `npm run check:production:github-secrets -- --environment=production` completed if GitHub `production` is the approved secret store, proving the required production secret names exist without reading secret values.
-- [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with exact `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1` and digest-pinned API, web, and migration images; absent, stale, or arbitrary markers failed before Compose or signature verification.
+- [ ] `npm run deploy:preflight -- --production-env-file=.env.production` completed with exact `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1` and digest-pinned API, web, and migration images; absent, stale, or arbitrary markers failed before Compose or signature verification.
 - [ ] Before scheduling downtime, the exact digest-pinned P0-06 migration and API images were rehearsed against a recent isolated restore of production. Evidence records clone age/source, confirms the live target was never used, proves no range/tenant/renamed/duplicate/AGM-evidence/id-collision migration blocker, inventories every legacy reminder ambiguity through the restricted tool, rehearses the immutable reconciliation decisions, and records isolated-clone destruction. Any anomaly was resolved through an approved production data plan and re-rehearsed on a newer clone.
 - [ ] The exact P1-09 migration image was rehearsed against the same recent isolated restore and reported zero board chronology, conduct evidence, induction evidence, fundraising chronology, filing evidence, and cross-tenant conflict-pointer blockers. An isolated invalid fixture also proved the transaction leaves no target constraints/index/FK changes and Prisma records the failed migration. The recovery rehearsal used only `npm run deploy:recover:p109 -- --production-env-file=.env.production --backup-output-dir=<approved-encrypted-path> --recovery-attestation-file=<protected-attestation>`: evidence proves the fresh attestation matched the exact env bytes, migration digest, and migration name; all 20 migration SHA-256 values were read from that selected digest-pinned image and matched `_prisma_migrations.checksum`; the shared cutover lock covered standard preflight, re-quiesce, checksum-bound repository-owned repeatable-read/read-only SQL, exact rolled-back resolution, and the reentrant complete deploy; and anything other than the exact 19-migration applied predecessor chain plus one sole latest failed P1-09 attempt, or any unknown, partial, mixed, later, or checksum-divergent history/catalog state, failed before resolution. Exact built-image evidence confirms the terminal invariant `DO` returns nonzero for a tampered checksum with no trailing transaction statement to mask the exception, while a pristine positive run returns zero and connection close leaves no persisted mutation. No production governance fact was rewritten automatically and no raw Compose resolution command was used.
+- [ ] The exact P1-07A migration image was rehearsed against the same isolated restore and reported zero active-principal legacy reset-token half-pairs, malformed hashes, expiries more than one hour beyond the database clock, and account emails longer than 254 characters. Evidence proves each valid active legacy slot is backfilled exactly once before both `User` fields are retired, while inactive-principal rows with either field are deterministically cleared without creating recovery evidence. The recovery rehearsal used only `npm run deploy:recover:p107a -- --production-env-file=.env.production --backup-output-dir=<approved-encrypted-path> --recovery-attestation-file=<protected-attestation>`: a fresh exact-env/image attestation, all 21 selected-image migration SHA-256 values, the exact 20-applied-predecessor plus sole unresolved target history, zero target catalog residue, unchanged P1-09 audit enum/catalog, the shared cutover lock, re-quiescence, terminal repeatable-read/read-only SQL, exact target-only `--rolled-back`, and immediate retained backup/migration/status/reconciliation/startup/smoke all passed. Tampered-checksum and pristine built-image probes returned nonzero and zero respectively without persisted preflight mutation; no raw Compose resolution, `--applied`, or direct migration-history edit was used.
 - [ ] `npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=<approved-encrypted-path>` completed on the production Docker host using `compose.production.yml`, `release-image-digests.env`, and digest-pinned images. Evidence shows preflight/pull before downtime; old API/web/scheduler/jobs/proxy down before backup and migration; a retained restore-verified backup with owner-only permissions; migration alone; live Prisma-history probe; quiesced reminder preparation; zero unresolved reminder blockers; promoted-runtime startup; and no automatic old-image fallback. Record either the default Caddy/TLS overlay evidence with `compose.production-tls.yml`, or managed-load-balancer/hosting TLS evidence with `--no-tls-proxy`.
 - [ ] The deploy command's post-deploy public HTTPS smoke completed against the production web and API origins.
-- [ ] Rollback rehearsal proves an image-only rollback is accepted only when the previous manifest declares `CHARITYPILOT_DATABASE_COMPATIBILITY=p109-governance-integrity-v1`, a fresh `--schema-compatibility-attestation-file` matches the exact manifest SHA-256, a protected `--backup-output-dir` is supplied, and the live Prisma migration-history probe passes before runtime start. A `p006-deadline-calendar-v1` manifest fails closed without a fresh manifest-and-backup-hash-bound `--database-restore-attestation-file` plus the exact pre-P1-09 `--restored-backup-file`, and its restored database retains the P0-06 reconciliation gate. A genuinely pre-P0-06 or markerless legacy manifest requires the same restore proof before the internal `pre-p006-restored` path may skip that otherwise unavailable gate; any unknown non-empty compatibility marker is rejected rather than inferred to be legacy. Any cross-boundary rehearsal uses an isolated restored database and post-rollback public HTTPS smoke proof. Evidence also confirms the original production env bytes survive unchanged, the owner-only temporary merged env is removed and redacted, and any cleanup-failure recovery command references the durable original env rather than the deleted temporary file.
+- [ ] Rollback rehearsal proves image-only rollback is accepted only for a previous P107A-capable manifest declaring `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`, with a fresh exact-manifest-SHA-bound `--schema-compatibility-attestation-file`, protected `--backup-output-dir`, and passing live migration-history probe. A P1-09 manifest is rejected as image-only and is accepted only after the runtime is stopped and an exact pre-P107A backup is restored: the restore attestation binds the manifest and backup hashes, exact `20260711230000_add_domain_invariants_referential_safety` restored head, absent `20260712013000_add_password_recovery_integrity`, and the internal `p109-restored` posture. The existing `p006-deadline-calendar-v1` and markerless/pre-P0-06 restore paths remain separately attested, with the P0-06 reconciliation gate preserved wherever available. Unknown non-empty markers fail closed. Every cross-boundary rehearsal uses an isolated restored database and post-rollback public HTTPS smoke proof; original env bytes survive unchanged, the owner-only temporary merged env is removed/redacted, and cleanup guidance names only the durable env.
 - [ ] Each cutover backup occupies a unique child under approved encrypted storage and cannot overwrite an earlier deploy's dump; its SHA-256, off-host copy/reference, retention owner/window, secure-deletion date, access controls, and restore result are recorded outside Git. Native-Linux uid/gid ownership and local `0700`/`0600` modes do not substitute for encryption or P0-10 joint database/object recovery evidence.
-- [ ] Deployment evidence shows the host-wide production cutover lock was acquired before preflight/attestation validation, shared reentrantly by rollback or P1-09 recovery and delegated deploy, rejected a concurrent rehearsal before Docker/database work, and was released after success/failure. Reentrant entry and release prove the persisted token still matches; missing/tampered ownership and release failures return structured fail-closed errors without discarding the preceding result. Any crash-stale lock removal names the operator and proof that no deploy, rollback, or recovery process remained.
+- [ ] Deployment evidence shows the host-wide production cutover lock was acquired before preflight/attestation validation, shared reentrantly by rollback, P1-09 recovery, or P1-07A recovery and delegated deploy, rejected a concurrent rehearsal before Docker/database work, and was released after success/failure. Reentrant entry and release prove the persisted token still matches; missing/tampered ownership and release failures return structured fail-closed errors without discarding the preceding result. Any crash-stale lock removal names the operator and proof that no deploy, rollback, or recovery process remained.
 - [ ] `cosign signature verification` passed for all promoted image digests.
 - [ ] The release workflow evidence identifies `.github/workflows/release-images.yml` and a release ref of `refs/heads/master` or `refs/tags/v*`.
 - [ ] `npm run check:production:release-run -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json` verified the GitHub Actions run metadata and `release-image-digests` artifact through the GitHub API.
@@ -88,6 +89,8 @@ Evidence:
 - [ ] `.env.production` or the platform-generated equivalent is excluded from git.
 - [ ] `NODE_ENV=production` is set for the API, web app, and scheduled job runtime.
 - [ ] `JWT_SECRET` is high entropy and at least 32 characters.
+- [ ] `AUTH_RECOVERY_SECRET` is an independent canonical 32-64 byte hex/base64url secret in the approved secret store and is not reused as `JWT_SECRET` or `READINESS_API_KEY`.
+- [ ] The named rotation owner captured four distinct command-output entries from an isolated recent restore: `--dry-run`, `--execute`, `--activate-after-replacement` with a different secret, and post-activation login/new-request/reset/completion-notice smoke. Every transcript binds the exact promoted `release.commitSha` and digest-pinned API image. Together they prove database/profile/generation binding, control-first in-flight serialization, `KEY_ROTATED` capability invalidation, keyed request-evidence redaction, legacy-slot clearing, rate-bucket reset, blocked old-key rejection, different-key activation, preserved completion notices, and no raw secret, database URL, recipient, token, request, or account value.
 - [ ] `FRONTEND_URL=https://app.charitypilot.ie` and `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`.
 - [ ] `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` are available only to API/server runtimes and are absent from the web runtime and browser bundle.
 - [ ] `CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL` is set for Docker Compose and matches `NEXT_PUBLIC_API_URL`.
@@ -95,7 +98,7 @@ Evidence:
 - [ ] Stripe keys are live-mode production keys; the four price IDs are distinct, and `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` identifies the approved dedicated live portal configuration.
 - [ ] Resend sender domain is verified for production sending.
 - [ ] Supabase service role key is stored only in the API secret store.
-- [ ] Machine-readable launch evidence names each required secret/origin fact without recording raw secret values.
+- [ ] Machine-readable launch evidence names each required secret/origin fact and records the four-entry recovery-key rotation rehearsal in `secretsAndEnv.auth-recovery-secret-rotation-rehearsal` without recording raw secret values.
 
 Evidence:
 
@@ -104,6 +107,8 @@ Evidence:
 | Secret store path | |
 | Preflight output location | |
 | Rotation owner | |
+| Recovery-secret rotation rehearsal evidence | |
+| Post-activation smoke evidence | |
 
 ## 3. Hosting, DNS, And TLS
 
@@ -216,13 +221,15 @@ Evidence:
 - [ ] The deployed scheduler command is `node dist/jobs/production-scheduler.js`.
 - [ ] Reminder job test evidence covers `node dist/jobs/send-deadline-reminders.js`.
 - [ ] Document storage cleanup test evidence covers `node dist/jobs/cleanup-document-storage.js`.
+- [ ] Separate command-output evidence binds the promoted `release.commitSha` and digest-pinned API image to both the deployed `production-scheduler` authentication-delivery runtime and an isolated successful `node dist/jobs/process-auth-email-delivery.js` one-shot rehearsal using the same production secret contract.
 - [ ] The scheduler and one-shot job runtimes receive the same production secret source that passed preflight, either as injected environment variables or as a non-committed env file materialized for the job runtime.
 - [ ] Scheduler and job logs are captured.
 - [ ] Failure alerts are tested for both `deadline-reminders` and `document-storage-cleanup`.
+- [ ] Authentication-delivery review alerts were rehearsed against isolated data: persisted `REJECTED`, `UNCERTAIN`, `KEY_UNAVAILABLE`, and `STALE_QUARANTINED` rows are claimed once, webhook failure releases them for retry, stale claims recover after a crash, successful count-only delivery is acknowledged, and unacknowledged rows survive cleanup. A separate external incident-system confirmation, redacted alert reference, accountable owner, and exact `release.commitSha` are recorded without recipient/token/request/account/secret values.
 - [ ] Incident routing distinguishes `DOCUMENT_STORAGE_CLEANUP_FAILED` from the actionable `DOCUMENT_STORAGE_DELETION_DEAD_LETTERED` alert; a failed alert delivery is retried and a successfully acknowledged dead letter is not alerted every scheduler run.
 - [ ] The document-deletion recovery runbook was rehearsed only against an isolated non-production target: tenant users can only `REQUEUE_UNCHANGED`, corrected-path/external-completion dispositions require the named platform-operator dry-run/review/execute flow, and no ad-hoc SQL or direct provider mutation bypasses the append-only recovery event.
 - [ ] No production dead letter was manufactured for launch evidence. Any real recovery evidence records the named actor, reason, reviewed attempts/terminal reason, database-authority/path digests, exact execution confirmation, disposition, append-only `DocumentStorageDeletionRecovery` reference, and external provider proof where applicable.
-- [ ] Machine-readable launch evidence names scheduler ownership, command surface, shared production secret source, captured scheduler logs, and both job failure alerts.
+- [ ] Machine-readable launch evidence names scheduler ownership, all four job entrypoints, shared production secret source, captured scheduler logs, and both existing job-failure alerts. It records the deployed runtime plus isolated one-shot worker command separately in `jobs.auth-email-delivery-runtime`, and the isolated anomaly rehearsal plus distinct external incident-system confirmation in `jobs.auth-delivery-anomaly-alert`.
 
 Evidence:
 
@@ -232,6 +239,8 @@ Evidence:
 | Scheduler service evidence location | |
 | Reminder job test output location | |
 | Cleanup job test output location | |
+| Authentication-delivery runtime/rehearsal evidence | |
+| Authentication anomaly rehearsal and incident confirmation | |
 | Failure alert evidence location | |
 | Dead-letter alert/retry evidence location | |
 | Recovery rehearsal/operator evidence location | |
@@ -252,8 +261,11 @@ Evidence:
 - [ ] Deployed proof covers first purchase, rapid duplicate clicks, supported portal plan/interval change, scheduled cancellation, final cancellation webhook, terminal restart, and webhook retry/order without creating two non-terminal subscriptions.
 - [ ] Resend API key can send from `EMAIL_FROM` on the verified production sender domain, with an accepted message id or equivalent provider delivery reference recorded outside git.
 - [ ] Password reset and verification email links point to the production frontend origin.
+- [ ] Deployed recovery proof shows known, unknown, inactive, suppressed, provider-rejected, and provider-uncertain forgot-password requests remain enumeration-neutral; the identifier/network limits survive an API restart and a second replica; and no raw submitted unknown-account email, caller address/network, or reset token is retained.
+- [ ] Resend accepted both a recovery-link email and the post-reset registered-address notice from the verified sender. Evidence contains only redacted provider references, proves the link uses the canonical production frontend origin, and records alerting for stale/uncertain recovery delivery or outbox work.
+- [ ] Concurrent reset proof shows exactly one winner, generic replay failure, termination of every outstanding link, revocation of every old session, one immutable predecessor-compatible `ALL_SESSIONS_REVOKED` event with the trusted virtual `PASSWORD_RESET_COMPLETED` marker, and one durable completion-notice outbox row.
 - [ ] `npm run check:production:providers -- --production-env-file=.env.production` completed from a trusted shell and recorded redacted evidence proving the exact price amounts/cadences/currency/product grouping, safe pinned portal policy and allow-list, enabled live webhook endpoint and events, and verified Resend sender domain.
-- [ ] Machine-readable launch evidence identifies all four approved active live recurring Stripe prices and the pinned safe portal-policy result without recording raw secret/provider values.
+- [ ] Machine-readable launch evidence identifies all four approved active live recurring Stripe prices and the pinned safe portal-policy result. In `billingAndEmail.password-recovery-resend-delivery`, it keeps the deployed recovery-link email and post-reset registered-address notice in two distinct provider-proof entries, each bound to `release.commitSha`, with deterministic HTML/plain-text evidence, the complete canonical fragment link where applicable, redacted accepted-message references, and no raw token or provider secret.
 
 Evidence:
 
@@ -266,6 +278,8 @@ Evidence:
 | Deployed purchase/portal/cancellation/restart proof | |
 | Resend evidence location | |
 | Test message location | |
+| Deployed recovery-link acceptance evidence | |
+| Deployed post-reset notice acceptance evidence | |
 
 ## 8. Observability And Incidents
 
@@ -331,6 +345,7 @@ Evidence:
 ## 11. External Security Review
 
 - [ ] External penetration test is complete before handling real charity data, with the testing provider, testing scope, tested production web/API origins, and exact promoted `release.commitSha` recorded.
+- [ ] The external scope includes account enumeration, distributed recovery flooding, token replay, concurrent valid links, provider timeout/ambiguous acceptance, session invalidation, audit authorization, and recovery-key/queue failure behaviour.
 - [ ] Critical and high findings are remediated or formally accepted by the accountable owner, with finding tracker, risk acceptance approver, and acceptance date recorded outside git.
 - [ ] Retest evidence exists for fixed findings, with retest date and retest result recorded.
 - [ ] Report reference is stored outside git and referenced in the machine-readable launch evidence with report version and report date.

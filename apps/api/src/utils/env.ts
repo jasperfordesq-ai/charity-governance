@@ -10,6 +10,7 @@ const CANONICAL_PRODUCTION_WEB_ORIGIN = 'https://app.charitypilot.ie';
 const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
+const MIN_AUTH_RECOVERY_SECRET_LENGTH = 43;
 
 function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
   return (
@@ -264,6 +265,81 @@ function requireMinLength(name: string, minLength: number, issues: string[]) {
   }
 }
 
+function requireOptionalCanonicalIntegerRange(
+  name: string,
+  minimum: number,
+  maximum: number,
+  issues: string[],
+): number | undefined {
+  const raw = process.env[name]?.trim();
+  if (!raw) return undefined;
+  if (!/^(?:0|[1-9]\d*)$/.test(raw)) {
+    issues.push(`${name} must be an integer from ${minimum} to ${maximum}`);
+    return undefined;
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    issues.push(`${name} must be an integer from ${minimum} to ${maximum}`);
+    return undefined;
+  }
+  return value;
+}
+
+function requireAuthRecoverySecret(issues: string[]): void {
+  const secret = requireConfiguredEnv('AUTH_RECOVERY_SECRET', issues);
+  if (!secret) return;
+  if (secret.length < MIN_AUTH_RECOVERY_SECRET_LENGTH) {
+    issues.push(
+      `AUTH_RECOVERY_SECRET must be at least ${MIN_AUTH_RECOVERY_SECRET_LENGTH} characters`,
+    );
+  }
+  if (secret === process.env.JWT_SECRET || secret === process.env.READINESS_API_KEY) {
+    issues.push('AUTH_RECOVERY_SECRET must be distinct from JWT_SECRET and READINESS_API_KEY');
+  }
+  let decoded: Buffer;
+  if (/^[0-9a-f]+$/i.test(secret) && secret.length % 2 === 0) {
+    decoded = Buffer.from(secret, 'hex');
+  } else if (/^[A-Za-z0-9_-]+$/.test(secret)) {
+    decoded = Buffer.from(secret, 'base64url');
+  } else {
+    issues.push('AUTH_RECOVERY_SECRET must be canonical hex or base64url');
+    return;
+  }
+  if (
+    decoded.length < 32 ||
+    decoded.length > 64 ||
+    (secret.toLowerCase() !== decoded.toString('hex') &&
+      secret !== decoded.toString('base64url'))
+  ) {
+    issues.push('AUTH_RECOVERY_SECRET must canonically encode 32 to 64 high-entropy bytes');
+  }
+}
+
+function validateAuthDeliveryNumericEnv(issues: string[]): void {
+  const providerTimeout = requireOptionalCanonicalIntegerRange(
+    'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS',
+    1_000,
+    15_000,
+    issues,
+  );
+  requireOptionalCanonicalIntegerRange('AUTH_DELIVERY_INTERVAL_MS', 1_000, 60_000, issues);
+  requireOptionalCanonicalIntegerRange('AUTH_DELIVERY_BATCH_SIZE', 1, 100, issues);
+  requireOptionalCanonicalIntegerRange('AUTH_DELIVERY_CLEANUP_BATCH_SIZE', 3, 1_000, issues);
+  const staleSendingMs = requireOptionalCanonicalIntegerRange(
+    'AUTH_DELIVERY_STALE_SENDING_MS',
+    16_000,
+    300_000,
+    issues,
+  );
+  if (
+    providerTimeout !== undefined &&
+    staleSendingMs !== undefined &&
+    staleSendingMs <= providerTimeout
+  ) {
+    issues.push('AUTH_DELIVERY_STALE_SENDING_MS must exceed SECURITY_EMAIL_PROVIDER_TIMEOUT_MS');
+  }
+}
+
 function requireAccessTokenExpiry(issues: string[]) {
   const value = process.env.JWT_EXPIRY?.trim();
   if (!value) return;
@@ -432,6 +508,32 @@ export function validateDeadlineRemindersEnv(): void {
   );
 }
 
+export function validateAuthDeliveryEnv(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  const issues: string[] = [];
+
+  requireDatabaseUrl('DATABASE_URL', issues);
+  requireUrl('FRONTEND_URL', issues, {
+    requireHttps: true,
+    allowCommaSeparated: true,
+    requireOrigin: true,
+    requireApprovedPublicHost: true,
+    canonicalOriginRole: 'web',
+  });
+  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+  requireApprovedEmailSender('EMAIL_FROM', issues);
+  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireAuthRecoverySecret(issues);
+  validateAuthDeliveryNumericEnv(issues);
+
+  throwIfProductionIssues(
+    'AUTH_DELIVERY_ENV_INVALID',
+    'Authentication email delivery environment is not ready',
+    issues,
+  );
+}
+
 export function validateProductionEnv(): void {
   if (process.env.NODE_ENV !== 'production') return;
 
@@ -448,6 +550,7 @@ export function validateProductionEnv(): void {
   requireMinLength('READINESS_API_KEY', 32, issues);
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
+  requireAuthRecoverySecret(issues);
   requireAccessTokenExpiry(issues);
   requireRefreshTokenTtlDays(issues);
   requireUrl('FRONTEND_URL', issues, {
@@ -490,6 +593,7 @@ export function validateProductionEnv(): void {
 
   requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);
+  validateAuthDeliveryNumericEnv(issues);
 
   requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);

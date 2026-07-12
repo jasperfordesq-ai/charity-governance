@@ -75,7 +75,7 @@ function releaseDigestManifest(overrides = {}) {
     CHARITYPILOT_API_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${'a'.repeat(64)}`,
     CHARITYPILOT_WEB_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-web@sha256:${'a'.repeat(64)}`,
     CHARITYPILOT_MIGRATION_IMAGE: `ghcr.io/jasperfordesq-ai/charity-governance-migrations@sha256:${'a'.repeat(64)}`,
-    CHARITYPILOT_DATABASE_COMPATIBILITY: 'p109-governance-integrity-v1',
+    CHARITYPILOT_DATABASE_COMPATIBILITY: 'p107a-password-recovery-v1',
     CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
     ...overrides,
   };
@@ -249,7 +249,7 @@ test('production release run checker rejects digest artifact contents that do no
     assert.equal(result.status, 1);
     assert.match(result.stderr, /release-image-digests artifact CHARITYPILOT_API_IMAGE must match release\.imageDigestManifest\.apiImage/);
     assert.match(result.stderr, /release-image-digests artifact CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL must match release\.imageDigestManifest\.webBuildNextPublicApiUrl/);
-    assert.match(result.stderr, /CHARITYPILOT_DATABASE_COMPATIBILITY must equal p109-governance-integrity-v1/);
+    assert.match(result.stderr, /CHARITYPILOT_DATABASE_COMPATIBILITY must equal p107a-password-recovery-v1/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

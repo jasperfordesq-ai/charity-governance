@@ -136,6 +136,7 @@ const FORBIDDEN_AMBIENT_LOCAL_KEYS = Object.freeze([
   "E2E_BOOTSTRAP_PASSWORD",
   "E2E_DATABASE_RUNNER_PASSWORD",
   "E2E_JWT_SECRET",
+  "E2E_AUTH_RECOVERY_SECRET",
   "E2E_READINESS_API_KEY",
   "E2E_AUTH_COOKIE_DOMAIN",
   "E2E_APP_IMAGE",
@@ -234,6 +235,8 @@ export function createLocalRunIdentity(overrides = {}) {
   const runnerPassword = overrides.runnerPassword ?? generatedSecret();
   const bootstrapPassword = overrides.bootstrapPassword ?? generatedSecret();
   const jwtSecret = overrides.jwtSecret ?? generatedSecret(48);
+  const authRecoverySecret =
+    overrides.authRecoverySecret ?? generatedSecret(32);
   const readinessKey = overrides.readinessKey ?? generatedSecret(32);
   const encodedPassword = encodeURIComponent(runnerPassword);
   const databaseUrl =
@@ -254,6 +257,7 @@ export function createLocalRunIdentity(overrides = {}) {
     bootstrapPassword,
     runnerPassword,
     jwtSecret,
+    authRecoverySecret,
     readinessKey,
     databaseUrl,
     composeEnv: {
@@ -261,6 +265,7 @@ export function createLocalRunIdentity(overrides = {}) {
       E2E_DATABASE_RUNNER_PASSWORD: runnerPassword,
       E2E_DATABASE_INSTANCE_ID: instanceId,
       E2E_JWT_SECRET: jwtSecret,
+      E2E_AUTH_RECOVERY_SECRET: authRecoverySecret,
       E2E_READINESS_API_KEY: readinessKey,
       E2E_APP_IMAGE: `${projectName}-app:local`,
       E2E_DATABASE_IMAGE: `${projectName}-database:local`,
@@ -277,6 +282,7 @@ export function createLocalRunIdentity(overrides = {}) {
       E2E_DATABASE_EXPECTED_SCHEMA: LOCAL_CONTRACT.databaseSchema,
       E2E_READINESS_API_KEY: readinessKey,
       E2E_JWT_SECRET: jwtSecret,
+      E2E_AUTH_RECOVERY_SECRET: authRecoverySecret,
       E2E_WEB_URL: LOCAL_CONTRACT.webUrl,
       E2E_API_URL: LOCAL_CONTRACT.apiUrl,
     },
@@ -285,6 +291,7 @@ export function createLocalRunIdentity(overrides = {}) {
       runnerPassword,
       encodeURIComponent(runnerPassword),
       jwtSecret,
+      authRecoverySecret,
       readinessKey,
       databaseUrl,
     ],
@@ -449,6 +456,7 @@ export function ambientSecretCandidates(env) {
     env.E2E_DATABASE_URL,
     env.E2E_READINESS_API_KEY,
     env.E2E_JWT_SECRET,
+    env.E2E_AUTH_RECOVERY_SECRET,
     env.E2E_OWNER_EMAIL,
     env.E2E_OWNER_PASSWORD,
     env.E2E_AUTH_COOKIE_DOMAIN,
@@ -807,6 +815,7 @@ export function expectedLocalServiceEnvironments(identity) {
       HOST: "0.0.0.0",
       JWT_EXPIRY: "15m",
       JWT_SECRET: composeEnv.E2E_JWT_SECRET,
+      AUTH_RECOVERY_SECRET: composeEnv.E2E_AUTH_RECOVERY_SECRET,
       LOCAL_FILE_STORAGE_DIR: "/var/lib/charitypilot-e2e-documents",
       NEXT_TELEMETRY_DISABLED: "1",
       NODE_ENV: "development",
@@ -1974,9 +1983,9 @@ async function runDeployedQa(playwrightArgs, env, dependencies) {
   );
 }
 
-function requireStrongRuntimeSecret(env, name) {
+function requireStrongRuntimeSecret(env, name, minimumLength = 32) {
   const value = env[name];
-  if (typeof value !== "string" || value.length < 32) {
+  if (typeof value !== "string" || value.length < minimumLength) {
     throw new Error(
       `${name} must be an explicit high-entropy secret for remote-disposable execution.`,
     );
@@ -2240,6 +2249,19 @@ async function runRemoteDisposable(playwrightArgs, env, dependencies) {
   }
   requireStrongRuntimeSecret(env, "E2E_READINESS_API_KEY");
   requireStrongRuntimeSecret(env, "E2E_JWT_SECRET");
+  const authRecoverySecret = requireStrongRuntimeSecret(
+    env,
+    "E2E_AUTH_RECOVERY_SECRET",
+    43,
+  );
+  if (
+    authRecoverySecret === env.E2E_JWT_SECRET ||
+    authRecoverySecret === env.E2E_READINESS_API_KEY
+  ) {
+    throw new Error(
+      "E2E_AUTH_RECOVERY_SECRET must be distinct from E2E_JWT_SECRET and E2E_READINESS_API_KEY.",
+    );
+  }
 
   dependencies.signal?.throwIfAborted();
   const config = await dependencies.databasePreflight(env);

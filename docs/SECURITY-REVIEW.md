@@ -47,7 +47,8 @@ with regression tests, plus one earlier dependency advisory:
 - **Authorization:** `authGuard` re-derives role/org from the database (never
   trusts token claims); owner/admin-only routes enforce role server-side.
 - **Sessions:** opaque refresh tokens stored hashed, rotated, with **reuse
-  detection** (a reused revoked token revokes all sessions).
+  detection** (a reused revoked token quarantines every active successor in the
+  same session family without destroying unrelated device families).
 - **Billing:** Stripe webhook signature verified against the raw body;
   idempotent via `StripeWebhookEvent` + a unique-constraint insert; every handler
   asserts the Stripe customer matches the organisation before granting
@@ -60,6 +61,39 @@ with regression tests, plus one earlier dependency advisory:
 - **Database:** every org-scoped model is indexed on `organisationId`; report
   tables have composite `(organisationId, reportingYear)` indexes; auth/session
   lookups indexed. No index changes warranted.
+
+### 2026-07-12 password-recovery follow-up
+
+The outcome above is the historical 2026-06-20 review snapshot. The later
+P1-07A review found that password recovery still depended on a single mutable
+`User` token slot and process-local request limiting. Concurrent requests could
+replace one another, restarts or multiple API replicas did not share the abuse
+budget, and a completed reset had no dedicated immutable event or durable
+registered-address notice.
+
+P1-07A replaces that path with a bounded request ledger, domain-separated keyed
+identifier/network rate buckets, explicit delivery states, an atomic
+password/session/request/audit transaction, and a separate durable security
+email outbox. The public forgot-password response remains indistinguishable for
+known, unknown, inactive, suppressed, rejected, and uncertain outcomes. Raw
+email input for an unknown account, IP/network values, reset tokens, passwords,
+session credentials, keys, and complete provider payloads are not retained in
+the recovery ledger or audit context.
+
+Terminal delivery anomalies carry a separate durable operator-review lifecycle:
+concurrent schedulers claim each row once, emit only an aggregate count, and
+acknowledge only a confirmed webhook response. Failure releases the claim and a
+crash becomes reclaimable; cleanup cannot remove an unacknowledged anomaly.
+The root secret is also bound to a singleton database generation fence locked
+before every recovery or delivery transaction. Rotation invalidates
+capabilities, deletes rate buckets, one-way redacts retained keyed request
+digests, advances the generation, and blocks recovery until a different secret
+is explicitly activated against zero postconditions. An old-key process cannot
+resume after activation.
+
+MFA remains a later policy-bound slice. Breached-password screening is also not
+claimed here: selecting a breach source and deciding fail-open/fail-closed
+behaviour during source outages requires an explicit reviewed policy.
 
 ### Open product decisions (not bugs — for the owner to decide)
 

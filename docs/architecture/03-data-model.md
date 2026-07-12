@@ -1,10 +1,10 @@
 # Data Model Reference
 
-CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 27 models and 28 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
+CharityPilot persists its domain in PostgreSQL via Prisma. The schema (`apps/api/prisma/schema.prisma`) defines 33 models and 39 enums. The data model is multi-tenant: almost every business table carries an `organisationId` foreign key back to `Organisation`, which acts as the tenant root. This reference documents each model, its fields and relations, the enum set, the tenant-isolation pattern, composite unique constraints and indexes, and the important referential and immutability behaviours.
 
 ## Migration history
 
-The schema was built up across eighteen migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
+The schema was built up across 21 migrations under `apps/api/prisma/migrations/`, listed here for context (chronological by timestamp prefix):
 
 | Migration directory | Purpose (inferred from name) |
 | --- | --- |
@@ -26,6 +26,9 @@ The schema was built up across eighteen migrations under `apps/api/prisma/migrat
 | `20260711030000_add_team_lifecycle_security` | Organisation/member lifecycle versions, rotating-session families and revocation reasons, exactly-one-owner constraints, and append-only security audit events |
 | `20260711120000_add_billing_authority_grants` | Session/version-bound Checkout and Portal authority, immutable provider evidence, and ownership/lifecycle interlocks |
 | `20260711180000_add_security_audit_subject_label_snapshot` | Immutable bounded subject-label snapshots with safe historical backfill |
+| `20260711213000_add_document_storage_deletion_retry_lifecycle` | Bounded storage-deletion retry, dead-letter and recovery evidence lifecycle |
+| `20260711230000_add_domain_invariants_referential_safety` | Governance chronology/evidence checks and tenant-safe board-member conflict references |
+| `20260712013000_add_password_recovery_integrity` | Durable password-recovery requests/rate budgets, security-email outbox, reset audit event, and legacy-token expand compatibility |
 
 A `seed.ts` script also lives at `apps/api/prisma/seed.ts`.
 
@@ -49,6 +52,10 @@ All enums are declared at the top of the schema.
 | `BillingAuthorityGrantState` | `CLAIMED`, `PROVIDER_STARTED`, `CAPABILITY_ISSUED`, `RELEASED` | `BillingAuthorityGrant.state` |
 | `BillingAuthorityGrantReleaseReason` | provider not-issued/revoked/terminal, elapsed Checkout safe-release time, restricted operator attestation | `BillingAuthorityGrant.releaseReason` |
 | `DocumentCategory` | `CONSTITUTION`, `POLICY`, `BOARD_MINUTES`, `FINANCIAL_STATEMENT`, `INSURANCE`, `ANNUAL_REPORT`, `RISK_REGISTER`, `CODE_OF_CONDUCT`, `STRATEGIC_PLAN`, `OTHER` | `Document.category` |
+| `DocumentStorageDeletionState` | `PENDING`, `DEAD_LETTER`, `PROCESSED` | `DocumentStorageDeletion.state` |
+| `DocumentStorageDeletionTerminalReason` | `MAX_ATTEMPTS_EXHAUSTED`, `PERMANENT_STORAGE_PATH_REJECTED` | `DocumentStorageDeletion.terminalReason` |
+| `DocumentStorageDeletionRecoveryActorType` | `TENANT_USER`, `PLATFORM_OPERATOR` | `DocumentStorageDeletionRecovery.actorType` |
+| `DocumentStorageDeletionRecoveryDisposition` | unchanged/corrected-path requeue or externally evidenced completion | `DocumentStorageDeletionRecovery.disposition` |
 | `RegisterStatus` | `OPEN`, `MONITORING`, `CLOSED` | `RiskRecord`, `ComplaintRecord`, `FundraisingRecord` |
 | `ConflictStatus` | `DECLARED`, `MANAGED`, `CLOSED` | `ConflictRecord.status` |
 | `RiskCategory` | `GOVERNANCE`, `FINANCIAL`, `OPERATIONAL`, `LEGAL`, `SAFEGUARDING`, `REPUTATIONAL`, `FUNDRAISING`, `DATA_PROTECTION`, `OTHER` | `RiskRecord.category` |
@@ -58,7 +65,14 @@ All enums are declared at the top of the schema.
 | `UserLifecycleStatus` | `ACTIVE`, `SUSPENDED`, `REMOVED` | `User.lifecycleStatus` |
 | `AuthSessionRevocationReason` | logout, rotation/reuse/expiry, password/member/ownership/admin/user revocation reasons | `AuthSession.revocationReason` |
 | `SecurityAuditActorKind` | `USER`, `SUPPORT`, `SYSTEM` | `SecurityAuditEvent.actorKind` |
-| `SecurityAuditEventType` | member/invite/role/ownership/session security transitions | `SecurityAuditEvent.type` |
+| `SecurityAuditEventType` | unchanged member/invite/role/ownership/session transitions | `SecurityAuditEvent.type`; reset completion is stored compatibly as truthful `ALL_SESSIONS_REVOKED` plus trusted immutable context and projected as the virtual API label `PASSWORD_RESET_COMPLETED` |
+| `PasswordRecoverySource` | `SELF_SERVICE_EMAIL`, `LEGACY_USER_SLOT`, `PERSONAL_SERVER_OPERATOR` | `PasswordRecoveryRequest.source` |
+| `PasswordRecoveryDeliveryState` | `SUPPRESSED`, `PENDING`, `SENDING`, `ACCEPTED`, `REJECTED`, `UNCERTAIN` | `PasswordRecoveryRequest.deliveryState` |
+| `PasswordRecoverySuppressionReason` | no eligible account, durable rate limit, outstanding-link limit | `PasswordRecoveryRequest.suppressionReason` |
+| `PasswordRecoveryTerminationReason` | reset completed, delivery rejected, key unavailable/rotated, account inactive, expired | `PasswordRecoveryRequest.terminationReason` |
+| `AuthRecoveryRateLimitScope` | identifier/network 15-minute and 24-hour forgot/reset windows | `AuthRecoveryRateLimitBucket.scope` |
+| `AuthSecurityEmailKind` | `PASSWORD_RESET_COMPLETED_NOTICE` | `AuthSecurityEmailOutbox.kind` |
+| `AuthSecurityEmailDeliveryState` | `PENDING`, `SENDING`, `ACCEPTED`, `REJECTED`, `UNCERTAIN` | `AuthSecurityEmailOutbox.deliveryState` |
 | `DeadlineReminderStatus` | `RESERVED`, `SENDING`, `SENT`, `SKIPPED`, `FAILED`, `UNCERTAIN` | `DeadlineReminderLog.status` |
 | `DeadlineReminderReconciliationOutcome` | `ACCEPTED_CONFIRMED`, `NOT_ACCEPTED_CONFIRMED`, `UNKNOWN_ACKNOWLEDGED` | Immutable restricted-operator resolution of an `UNCERTAIN` attempt |
 | `GeneratedDeadlineKind` | `CHARITY_ANNUAL_REPORT`, `COMPANY_FINANCIAL_STATEMENTS`, `COMPANY_ANNUAL_MEMBER_ACTION`, `CRO_ANNUAL_RETURN`, `LEGACY_UNVERIFIED` | `Deadline.generatedKind` |
@@ -70,9 +84,9 @@ All enums are declared at the top of the schema.
 
 | Category | Models | Isolation key |
 | --- | --- | --- |
-| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `BoardMember`, `Document`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt`, `BillingAuthorityGrant`, `SecurityAuditEvent` | `organisationId` |
+| **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `BoardMember`, `Document`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt`, `BillingAuthorityGrant`, `SecurityAuditEvent`, targeted `PasswordRecoveryRequest`, `AuthSecurityEmailOutbox` | `organisationId` |
 | **Global reference data** (shared across all tenants, no `organisationId`) | `GovernancePrinciple`, `GovernanceStandard` | none — read-only catalogue |
-| **Keyed differently** | `AuthSession` (by `userId`), `DocumentStandardLink` (by `documentId`/`standardId`), `DocumentStorageDeletion` and `ComplianceAuditEvent` (retain tenant identifiers as scalar history), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
+| **Keyed differently** | `AuthSession` (by `userId`), suppressed `PasswordRecoveryRequest` and `AuthRecoveryRateLimitBucket` (keyed-HMAC subjects only), singleton `AuthRecoveryControl`, append-only `AuthRecoveryRetiredSecret`, `DocumentStandardLink` (by `documentId`/`standardId`), `DocumentStorageDeletion` and `ComplianceAuditEvent` (retain tenant identifiers as scalar history), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
 
 Notes on the differently-keyed models:
 
@@ -87,6 +101,13 @@ Notes on the differently-keyed models:
 - **`SecurityAuditEvent`** is organisation-scoped and append-only. Actor and
   subject relations use composite tenant keys with restrictive deletion so
   lifecycle history cannot be erased by a later membership action.
+- **Suppressed `PasswordRecoveryRequest` rows** intentionally have no user or
+  organisation relation. They retain only keyed digests and bounded suppression
+  evidence so unknown-account requests consume the same durable budgets without
+  storing the submitted identity.
+- **`AuthRecoveryRateLimitBucket`** contains no tenant or user fact; its
+  domain-separated keyed digest is the complete subject identity for one
+  bounded window.
 
 ## Models
 
@@ -144,7 +165,7 @@ causes dependent current generated deadlines to be superseded.
 | `resetToken`, `verifyToken` | `String? @unique` | password reset / email verification tokens |
 | `resetTokenExpiry`, `verifyTokenExpiry` | `DateTime?` | |
 
-Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `documentUploads`, `sentInvites`, plus `reminderLogs`, `authSessions`, billing-authority grants, and security-audit actor/subject links. Composite uniqueness on `(id, organisationId)` constrains tenant-bound relations. A partial unique index plus deferred continuity trigger enforce exactly one active owner per organisation, and membership triggers increment the version and reject hard deletion.
+Relations: named back-relations `complianceUpdates`, `signoffUpdates`, `documentUploads`, `sentInvites`, plus `reminderLogs`, `authSessions`, password-recovery requests, security-email outbox rows, billing-authority grants, and security-audit actor/subject links. Composite uniqueness on `(id, organisationId)` constrains tenant-bound relations. A partial unique index plus deferred continuity trigger enforce exactly one active owner per organisation, and membership triggers increment the version and reject hard deletion. The legacy `resetToken` pair remains only for the expand-compatibility window; new requests use `PasswordRecoveryRequest`.
 
 ### AuthSession
 `apps/api/prisma/schema.prisma:178-191` — refresh-token store for rotating JWT sessions.
@@ -200,6 +221,72 @@ Immutable team-security and governance evidence.
 Insert checks enforce actor-kind consistency and tenant-safe actor/subject
 relations. Update and delete triggers always reject; UI responses use a
 privacy-minimised projection rather than exposing raw evidence identifiers.
+
+### PasswordRecoveryRequest
+
+A bounded ledger for self-service, legacy-expand, and personal-server recovery
+links. It stores only the token hash plus the nonce/key version required to
+derive a self-service token; plaintext tokens never enter PostgreSQL.
+
+Targeted rows carry composite user/organisation relations, bounded recipient
+and frontend-origin snapshots, a one-hour expiry, delivery claim/evidence, and
+an optional terminal tuple. Suppressed dummy rows contain only
+domain-separated keyed identifier/IP/network digests and a suppression reason,
+so unknown account input is not retained. Checks constrain every source,
+delivery, claim, timeline and termination shape. Immutable identity/evidence
+columns cannot be rewritten after insert, while the delivery worker may make
+only the enumerated monotonic state transitions. Key rotation may perform the
+single permitted destructive privacy transition: clear all retained keyed
+identifier/IP/network evidence together and set `requestEvidenceRedactedAt`.
+Review-worthy terminal outcomes use separate durable alert claim and
+acknowledgement timestamps, so cleanup cannot erase pending operator action. A
+trigger-maintained evidence anchor advances on delivery finalization, request
+termination, or alert acknowledgement; ordinary retention is measured from that
+latest durable event rather than initial row creation.
+
+### AuthRecoveryRateLimitBucket
+
+Durable multi-instance abuse budgets keyed by `(scope, keyVersion,
+subjectDigest, windowStartedAt)`. Only domain-separated HMAC digests and bounded
+window counts are stored. Expiry indexes support cleanup after no more than 48
+hours; no raw email, IP or network value is present.
+
+### AuthRecoveryControl
+
+One singleton row is the transaction-ordering root for recovery. It binds the
+active secret fingerprint to a positive generation. Every request, reset,
+delivery, cleanup and review-alert transaction locks it before other recovery
+state. Rotation changes it atomically to blocked, records the old fingerprint
+in append-only `AuthRecoveryRetiredSecret` history, and advances the generation.
+Exact-generation activation accepts only a fingerprint that has never appeared
+in that history after all zero postconditions hold. A database trigger permits
+only initial binding, active-to-blocked rotation, and blocked-to-active
+replacement activation; direct key swaps and control deletion fail closed.
+
+### AuthRecoveryRetiredSecret
+
+Append-only history of every fingerprint retired by a successful recovery-key
+rotation. Database triggers accept an insert only when its fingerprint and
+generation match the current active control row, reject update/deletion/
+truncation, and require that exact history row before the control can advance to
+blocked. Replacement activation fails if the candidate fingerprint appears
+anywhere in this history, not only if it matches the most recent key.
+
+### AuthSecurityEmailOutbox
+
+A tenant/user/audit-bound outbox for the registered-address
+`PASSWORD_RESET_COMPLETED_NOTICE`. It is created in the same transaction as the
+password change, recovery termination, session revocation and immutable audit
+event. The stored audit type remains the predecessor-compatible and truthful
+`ALL_SESSIONS_REVOKED`; trusted append-only context identifies reset completion,
+and the current audit API projects that exact marker as
+`PASSWORD_RESET_COMPLETED`. Provider claim/evidence follows the same bounded
+pending/sending/accepted/rejected/uncertain lifecycle without mutating the audit
+row. Rejected and uncertain rows use the same durable review-alert claim/ack
+lifecycle. Its trigger-maintained evidence anchor advances on terminal delivery
+or alert acknowledgement. Ordinary retention is seven days from that latest
+durable event, while an unacknowledged review row is retained until the alert
+succeeds.
 
 ### GovernancePrinciple
 `apps/api/prisma/schema.prisma:193-201` — global reference data (the governance code's principles).
@@ -630,6 +717,8 @@ The schema declares explicit referential actions only where deletion semantics m
 | `BillingAuthorityGrant.organisation` → `Organisation` | `Restrict` | unresolved or historical provider authority must be explicitly retained/released |
 | `BillingAuthorityGrant.actorUser` / `.actorSession` | `Restrict` | principal evidence cannot be erased while the grant remains |
 | `SecurityAuditEvent.organisation` / actor / subject | `Restrict` | security history survives lifecycle changes and soft removal |
+| `PasswordRecoveryRequest.organisation` / `.user` | `Restrict` | active or retained recovery evidence cannot be orphaned by a hard delete |
+| `AuthSecurityEmailOutbox.organisation` / `.user` / `.auditEvent` | `Restrict` | the durable notice stays bound to the exact reset audit evidence |
 
 ## Entity-relationship diagram — tenant root
 
@@ -655,7 +744,12 @@ erDiagram
     Organisation ||--o| BillingCheckoutAttempt : "has one current attempt"
     Organisation ||--o{ BillingAuthorityGrant : "retains provider authority"
     Organisation ||--o{ SecurityAuditEvent : "records security history"
+    Organisation ||--o{ PasswordRecoveryRequest : "targets recovery"
+    Organisation ||--o{ AuthSecurityEmailOutbox : "queues security notices"
     User ||--o{ AuthSession : "owns"
+    User ||--o{ PasswordRecoveryRequest : "receives recovery"
+    User ||--o{ AuthSecurityEmailOutbox : "receives security notice"
+    SecurityAuditEvent ||--o| AuthSecurityEmailOutbox : "binds notice"
     User ||--o{ BillingAuthorityGrant : "claims"
     AuthSession ||--o{ BillingAuthorityGrant : "binds"
     BoardMember ||--o{ ConflictRecord : "named in"

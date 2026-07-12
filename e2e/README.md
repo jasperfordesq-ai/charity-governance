@@ -13,7 +13,7 @@ monorepo, so Playwright never enters the API/web production installs or images.
 
 | Spec | Journey |
 | --- | --- |
-| `tests/auth.spec.ts` | register -> email-verify (real `/verify-email` flow) -> log in -> dashboard; forgot-password -> reset-password -> log in with the new password; plus invalid verification/reset-token cases |
+| `tests/auth.spec.ts` | register -> email-verify (real `/verify-email` flow) -> log in -> dashboard; forgot-password -> reset-password -> log in with the new password, with enumeration-neutral copy, ledger-backed token injection, denial of old sessions, and immutable audit/outbox evidence; plus invalid verification/reset-token cases |
 | `tests/compliance.spec.ts` | record a governance standard's status (auto-saved) -> board sign-off on the Export page; pending standard edits trigger the in-app navigation confirmation |
 | `tests/conditional-obligations.spec.ts` | save organisation conditional triggers -> verify profile-triggered Documents, Deadlines, and Regulator prompts appear |
 | `tests/documents.spec.ts` | upload a document -> download it and verify the bytes |

@@ -24,6 +24,7 @@ import {
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runProductionComposeDeployFromArgs } from "./production-compose-deploy.mjs";
 import { redactProductionDeployTranscript } from "./production-deploy-preflight.mjs";
+import { p109RestoredHistoryProbeComposeCommand } from "./production-p109-restored-database-probe.mjs";
 import {
   acquireProductionCutoverLock,
   releaseProductionCutoverLock,
@@ -32,7 +33,9 @@ import {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, "..");
 const DATABASE_COMPATIBILITY_ENV = "CHARITYPILOT_DATABASE_COMPATIBILITY";
-const CURRENT_DATABASE_COMPATIBILITY = "p109-governance-integrity-v1";
+const CURRENT_DATABASE_COMPATIBILITY = "p107a-password-recovery-v1";
+const P109_DATABASE_COMPATIBILITY = "p109-governance-integrity-v1";
+const P109_RESTORED_COMPATIBILITY = "p109-restored";
 const P006_DATABASE_COMPATIBILITY = "p006-deadline-calendar-v1";
 const PRE_P006_RESTORED_COMPATIBILITY = "pre-p006-restored";
 const RESTORE_ATTESTATION_KIND = "charitypilot-database-restore-attestation";
@@ -42,7 +45,13 @@ const MAX_ATTESTATION_AGE_MS = 30 * 60 * 1000;
 const RESTORE_ACKNOWLEDGEMENT =
   "I confirm the production runtime was stopped and the database was restored from a backup captured before the incompatible migration.";
 const COMPATIBILITY_ACKNOWLEDGEMENT =
-  "I confirm the selected application images are compatible with the live P1-09 database schema and migration history.";
+  "I confirm the selected application images are compatible with the live P1-07A database schema and migration history.";
+const P109_RESTORE_MIGRATION_HEAD =
+  "20260711230000_add_domain_invariants_referential_safety";
+const P107A_INCOMPATIBLE_MIGRATION =
+  "20260712013000_add_password_recovery_integrity";
+const P109_RESTORE_ACKNOWLEDGEMENT =
+  "I confirm the production runtime was stopped and the exact restored database backup ends at P1-09 before the P1-07A password recovery migration.";
 
 const requiredImages = [
   {
@@ -423,6 +432,7 @@ function validateDatabaseRestoreAttestation(
   rollbackDigestPath,
   restoredBackupPath,
   now = new Date(),
+  { expectedRestoredCompatibility = null } = {},
 ) {
   const attestation = readAttestation(path, "database restore attestation");
 
@@ -478,6 +488,28 @@ function validateDatabaseRestoreAttestation(
     );
   }
 
+  if (expectedRestoredCompatibility === P109_DATABASE_COMPATIBILITY) {
+    if (attestation.restoredDatabaseCompatibility !== P109_DATABASE_COMPATIBILITY) {
+      issues.push(
+        `restoredDatabaseCompatibility must be ${P109_DATABASE_COMPATIBILITY}`,
+      );
+    }
+    if (attestation.restoredMigrationHead !== P109_RESTORE_MIGRATION_HEAD) {
+      issues.push(`restoredMigrationHead must be ${P109_RESTORE_MIGRATION_HEAD}`);
+    }
+    if (attestation.incompatibleMigration !== P107A_INCOMPATIBLE_MIGRATION) {
+      issues.push(`incompatibleMigration must be ${P107A_INCOMPATIBLE_MIGRATION}`);
+    }
+    if (attestation.p107aMigrationAbsent !== true) {
+      issues.push('p107aMigrationAbsent must be true');
+    }
+    if (attestation.p109RestoreAcknowledgement !== P109_RESTORE_ACKNOWLEDGEMENT) {
+      issues.push(
+        `p109RestoreAcknowledgement must exactly equal: ${P109_RESTORE_ACKNOWLEDGEMENT}`,
+      );
+    }
+  }
+
   if (issues.length > 0) {
     throw new Error(
       [
@@ -515,10 +547,11 @@ function validateRollbackCompatibility(
 
   if (
     compatibility !== "" &&
+    compatibility !== P109_DATABASE_COMPATIBILITY &&
     compatibility !== P006_DATABASE_COMPATIBILITY
   ) {
     throw new Error(
-      `rollback digest manifest declares unsupported ${DATABASE_COMPATIBILITY_ENV}=${compatibility}; only ${CURRENT_DATABASE_COMPATIBILITY}, ${P006_DATABASE_COMPATIBILITY}, or an absent legacy marker is modelled.`,
+      `rollback digest manifest declares unsupported ${DATABASE_COMPATIBILITY_ENV}=${compatibility}; only ${CURRENT_DATABASE_COMPATIBILITY}, ${P109_DATABASE_COMPATIBILITY}, ${P006_DATABASE_COMPATIBILITY}, or an absent legacy marker is modelled.`,
     );
   }
 
@@ -544,7 +577,16 @@ function validateRollbackCompatibility(
     rollbackDigestPath,
     restoredBackupPath,
     now,
+    { expectedRestoredCompatibility: compatibility },
   );
+  if (compatibility === P109_DATABASE_COMPATIBILITY) {
+    return {
+      compatibility,
+      attestedDatabaseCompatibility: P109_RESTORED_COMPATIBILITY,
+      posture:
+        "P1-07A boundary rollback authorised only after a fresh exact-manifest-and-backup-hash-bound attestation for an exact pre-P107A database restored at the P1-09 migration head.",
+    };
+  }
   if (compatibility === P006_DATABASE_COMPATIBILITY) {
     return {
       compatibility,
@@ -713,6 +755,14 @@ export function runProductionComposeRollbackFromArgs(
         cutoverLock,
         attestedDatabaseCompatibility:
           rollbackCompatibility.attestedDatabaseCompatibility,
+        preMigrationDatabaseProbeCommand:
+          rollbackCompatibility.attestedDatabaseCompatibility ===
+          P109_RESTORED_COMPATIBILITY
+            ? p109RestoredHistoryProbeComposeCommand({
+                productionEnvFile: mergedEnvPath,
+                tlsProxy: options.tlsProxy,
+              })
+            : null,
       });
       const stdoutPrefix = [
         `Production compose rollback${options.dryRun ? " dry-run" : ""}:`,

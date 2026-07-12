@@ -40,6 +40,7 @@ export const API_LOG_REDACT_PATHS = [
   'stripeSignature',
   'env.DATABASE_URL',
   'env.JWT_SECRET',
+  'env.AUTH_RECOVERY_SECRET',
   'env.STRIPE_SECRET_KEY',
   'env.STRIPE_WEBHOOK_SECRET',
   'env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID',

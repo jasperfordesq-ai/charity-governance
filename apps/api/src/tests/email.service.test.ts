@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { EmailService } from '../services/email.service.js';
+import {
+  renderPasswordRecoverySecurityEmailV1,
+  renderPasswordResetCompletedNoticeV1,
+} from '../services/security-email-templates.js';
 
 type SentEmail = {
   from: string;
   to: string;
   subject: string;
   html: string;
+  text?: string;
 };
 
 type SendOptions = { idempotencyKey?: string; signal?: AbortSignal } | undefined;
@@ -23,6 +29,7 @@ function captureEmailService(
   sendBehaviour?: SendBehaviour,
   logger?: TestEmailLogger,
   deadlineReminderProviderTimeoutMs?: number,
+  securityEmailProviderTimeoutMs?: number,
 ) {
   process.env.RESEND_API_KEY = 're_test_key';
   process.env.EMAIL_FROM = 'noreply@example.org';
@@ -31,8 +38,8 @@ function captureEmailService(
   const sentMessages: SentEmail[] = [];
   const sentOptions: SendOptions[] = [];
   const service = logger
-    ? new EmailService(logger, deadlineReminderProviderTimeoutMs)
-    : new EmailService(undefined, deadlineReminderProviderTimeoutMs);
+    ? new EmailService(logger, deadlineReminderProviderTimeoutMs, securityEmailProviderTimeoutMs)
+    : new EmailService(undefined, deadlineReminderProviderTimeoutMs, securityEmailProviderTimeoutMs);
   (service as unknown as { resend: { emails: { send: (message: SentEmail, options?: SendOptions) => Promise<unknown> } } }).resend = {
     emails: {
       send: async (message: SentEmail, options?: SendOptions) => {
@@ -56,6 +63,84 @@ function captureEmailService(
     sentOptions: () => sentOptions,
   };
 }
+
+function renderedEmailHash(rendered: { subject: string; html: string; text: string }): string {
+  return createHash('sha256').update(JSON.stringify(rendered)).digest('hex');
+}
+
+test('security email v1 renderers are deterministic and pinned byte-for-byte', () => {
+  const recovery = renderPasswordRecoverySecurityEmailV1({
+    recipientName: 'Ada <Admin>',
+    token: 'token-&-value',
+    frontendOrigin: 'https://snapshot.example.org',
+  });
+  const notice = renderPasswordResetCompletedNoticeV1({
+    recipientName: 'Ada <Admin>',
+    changedAt: new Date('2026-07-11T12:34:00.000Z'),
+  });
+
+  assert.equal(
+    renderedEmailHash(recovery),
+    '97cd30166e3324440f0086218082070a5514d10911b5fca1a7a7814d08bb2ffe',
+  );
+  assert.equal(
+    renderedEmailHash(notice),
+    '1d3df10ba080d2bce8e91b1da7725af4a69b6d98c6619ef8370268efdd677609',
+  );
+  assert.deepEqual(
+    renderPasswordRecoverySecurityEmailV1({
+      recipientName: 'Ada <Admin>',
+      token: 'token-&-value',
+      frontendOrigin: 'https://snapshot.example.org',
+    }),
+    recovery,
+  );
+  assert.deepEqual(
+    renderPasswordResetCompletedNoticeV1({
+      recipientName: 'Ada <Admin>',
+      changedAt: new Date('2026-07-11T12:34:00.000Z'),
+    }),
+    notice,
+  );
+  assert.doesNotMatch(recovery.html, /new Date|2025|2026|2027/);
+  assert.match(
+    recovery.text,
+    /https:\/\/snapshot\.example\.org\/reset-password#token=token-%26-value/,
+  );
+  assert.match(notice.html, /11 July 2026 at 12:34 UTC/);
+  assert.match(notice.text, /authorised organisation administrator immediately/);
+  assert.doesNotMatch(notice.text, /CharityPilot support/i);
+});
+
+test('unsupported security email template versions fail before provider I/O', async () => {
+  const { service, sentMessages } = captureEmailService();
+
+  await assert.rejects(
+    () => service.sendPasswordRecoveryEmail(
+      'owner@example.org',
+      'Owner',
+      'reset-token',
+      {
+        idempotencyKey: 'charitypilot-password-recovery-v2:unsupported',
+        templateVersion: 2,
+      },
+    ),
+    /Unsupported password recovery email template version: 2/,
+  );
+  await assert.rejects(
+    () => service.sendPasswordResetCompletedNotice(
+      'owner@example.org',
+      'Owner',
+      new Date('2026-07-11T12:34:00.000Z'),
+      {
+        idempotencyKey: 'charitypilot-security-email-v2:unsupported',
+        templateVersion: 2,
+      },
+    ),
+    /Unsupported password reset notice template version: 2/,
+  );
+  assert.equal(sentMessages().length, 0);
+});
 
 test('email send succeeds only when Resend returns a non-empty acceptance id', async () => {
   const { service } = captureEmailService();
@@ -121,7 +206,9 @@ test('email send contains thrown provider failures and sanitizes their logs', as
   const { service } = captureEmailService(
     'https://app.example.org',
     async () => {
-      throw new Error('Network failure for owner@example.org token=raw-token re_test_secret');
+      throw new Error(
+        'Network failure for owner@example.org token=raw-token link=https://app.example.org/reset-password#token=raw-fragment-capability re_test_secret',
+      );
     },
     {
       warn: () => undefined,
@@ -129,15 +216,172 @@ test('email send contains thrown provider failures and sanitizes their logs', as
     },
   );
 
-  const delivered = await service.sendPasswordReset('owner@example.org', 'Owner', 'reset-token');
+  const delivered = await service.sendPasswordRecoveryEmail(
+    'owner@example.org',
+    'Owner',
+    'reset-token',
+    {
+      idempotencyKey: 'charitypilot-password-recovery-v1:thrown-provider',
+      templateVersion: 1,
+    },
+  );
 
-  assert.equal(delivered, false);
+  assert.deepEqual(delivered, { outcome: 'UNCERTAIN' });
   assert.equal(errors.length, 1);
   assert.match(errors[0], /name=Error/);
   assert.match(errors[0], /\[email\]/);
   assert.match(errors[0], /token=\[redacted\]/);
   assert.match(errors[0], /resend-key=\[redacted\]/);
-  assert.doesNotMatch(errors[0], /owner@example\.org|raw-token|re_test_secret/);
+  assert.doesNotMatch(
+    errors[0],
+    /owner@example\.org|raw-token|raw-fragment-capability|re_test_secret/,
+  );
+});
+
+test('password recovery email returns typed acceptance and freezes the exact idempotency key and origin', async () => {
+  const { service, sent, sentOptions } = captureEmailService('https://current.example.org');
+
+  const outcome = await service.sendPasswordRecoveryEmail(
+    'owner@example.org',
+    'Owner',
+    'reset-token',
+    {
+      idempotencyKey: 'charitypilot-password-recovery-v1:request-1',
+      templateVersion: 1,
+      frontendOrigin: 'https://requested.example.org',
+    },
+  );
+
+  assert.deepEqual(outcome, {
+    outcome: 'ACCEPTED',
+    providerMessageId: 'email_test_acceptance',
+  });
+  assert.equal(
+    sentOptions()[0]?.idempotencyKey,
+    'charitypilot-password-recovery-v1:request-1',
+  );
+  assert.ok(sentOptions()[0]?.signal instanceof AbortSignal);
+  assert.match(
+    sent().html,
+    /href="https:\/\/requested\.example\.org\/reset-password#token=reset-token"/,
+  );
+  assert.match(
+    sent().text ?? '',
+    /https:\/\/requested\.example\.org\/reset-password#token=reset-token/,
+  );
+  assert.doesNotMatch(sent().html, /current\.example\.org/);
+});
+
+test('security email outcomes distinguish definite, retryable and ambiguous provider failures', async () => {
+  const cases: Array<{
+    error: Record<string, unknown>;
+    expected: unknown;
+  }> = [
+    {
+      error: { name: 'validation_error', statusCode: 422, message: 'invalid sender' },
+      expected: { outcome: 'REJECTED', retryable: false },
+    },
+    {
+      error: { name: 'rate_limit_exceeded', statusCode: 429, message: 'slow down' },
+      expected: { outcome: 'REJECTED', retryable: true },
+    },
+    {
+      error: { name: 'concurrent_idempotent_requests', statusCode: 409, message: 'in progress' },
+      expected: { outcome: 'UNCERTAIN' },
+    },
+    {
+      error: { name: 'internal_server_error', statusCode: 503, message: 'unknown outcome' },
+      expected: { outcome: 'UNCERTAIN' },
+    },
+  ];
+
+  for (const [index, testCase] of cases.entries()) {
+    const { service } = captureEmailService(
+      'https://app.example.org',
+      async () => ({ data: null, error: testCase.error }),
+    );
+    assert.deepEqual(
+      await service.sendPasswordRecoveryEmail(
+        'owner@example.org',
+        'Owner',
+        'reset-token',
+        {
+          idempotencyKey: `charitypilot-password-recovery-v1:failure-${index}`,
+          templateVersion: 1,
+        },
+      ),
+      testCase.expected,
+    );
+  }
+});
+
+test('security email timeout is bounded, classified uncertain and cannot be changed by late acceptance', async () => {
+  let abortObserved = false;
+  let lateAcceptanceAttempted = false;
+  const { service } = captureEmailService(
+    'https://app.example.org',
+    async (_message, options) => new Promise((resolve) => {
+      const signal = options?.signal;
+      assert.ok(signal);
+      const observeAbort = () => {
+        abortObserved = true;
+        // Deliberately ignore cancellation to prove the application-owned race,
+        // rather than provider/fetch cooperation, enforces the deadline.
+        setTimeout(() => {
+          lateAcceptanceAttempted = true;
+          resolve({ data: { id: 'unsafe-late-acceptance' }, error: null });
+        }, 5);
+      };
+      if (signal.aborted) observeAbort();
+      else signal.addEventListener('abort', observeAbort, { once: true });
+    }),
+    undefined,
+    undefined,
+    10,
+  );
+
+  const outcome = await service.sendPasswordRecoveryEmail(
+    'owner@example.org',
+    'Owner',
+    'reset-token',
+    {
+      idempotencyKey: 'charitypilot-password-recovery-v1:timeout',
+      templateVersion: 1,
+    },
+  );
+
+  assert.deepEqual(outcome, { outcome: 'UNCERTAIN' });
+  assert.equal(abortObserved, true);
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.equal(lateAcceptanceAttempted, true);
+  assert.deepEqual(outcome, { outcome: 'UNCERTAIN' });
+});
+
+test('password reset completion notice contains no password or recovery capability', async () => {
+  const { service, sent, sentOptions } = captureEmailService();
+
+  const outcome = await service.sendPasswordResetCompletedNotice(
+    'owner@example.org',
+    'Owner',
+    new Date('2026-07-11T12:34:00.000Z'),
+    {
+      idempotencyKey: 'charitypilot-security-email-v1:notice-1',
+      templateVersion: 1,
+    },
+  );
+
+  assert.equal(outcome.outcome, 'ACCEPTED');
+  assert.equal(
+    sentOptions()[0]?.idempotencyKey,
+    'charitypilot-security-email-v1:notice-1',
+  );
+  assert.match(sent().subject, /password was changed/i);
+  assert.match(sent().html, /All existing CharityPilot sessions/);
+  assert.match(sent().html, /11 July 2026/);
+  assert.match(sent().text ?? '', /11 July 2026 at 12:34 UTC/);
+  assert.match(sent().text ?? '', /authorised organisation administrator immediately/);
+  assert.doesNotMatch(sent().html, /reset-token|#token=|\?token=|NewPassword/i);
+  assert.doesNotMatch(sent().text ?? '', /reset-token|#token=|\?token=|NewPassword/i);
 });
 
 test('welcome email escapes user-controlled HTML values', async () => {
@@ -156,7 +400,15 @@ test('token emails put encoded tokens in URL fragments, not query strings', asyn
   const { service, sent } = captureEmailService();
   const token = 'abc&next=<script>alert(1)</script>';
 
-  await service.sendPasswordReset('owner@example.org', 'Ada <Admin>', token);
+  await service.sendPasswordRecoveryEmail(
+    'owner@example.org',
+    'Ada <Admin>',
+    token,
+    {
+      idempotencyKey: 'charitypilot-password-recovery-v1:fragment-test',
+      templateVersion: 1,
+    },
+  );
 
   const { html } = sent();
   assert.equal(html.includes(token), false);
@@ -171,7 +423,15 @@ test('outbound emails use the primary frontend origin when multiple browser orig
 
   await service.sendWelcomeEmail('owner@example.org', 'Ada Admin', 'Good Works');
   await service.sendEmailVerification('owner@example.org', 'Ada Admin', 'verify-token');
-  await service.sendPasswordReset('owner@example.org', 'Ada Admin', 'reset-token');
+  await service.sendPasswordRecoveryEmail(
+    'owner@example.org',
+    'Ada Admin',
+    'reset-token',
+    {
+      idempotencyKey: 'charitypilot-password-recovery-v1:origin-test',
+      templateVersion: 1,
+    },
+  );
   await service.sendTeamInvite('owner@example.org', 'Good Works', 'Ada Admin', 'invite-token', 'ADMIN');
   await service.sendDeadlineReminder('owner@example.org', 'Good Works', {
     title: 'Annual report',

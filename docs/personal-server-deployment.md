@@ -275,7 +275,10 @@ path. The `reset-link` command issues a one-hour, single-use link for one exact
 active account. It stores only the token hash, places the plaintext token in the
 URL fragment so it is not sent in HTTP requests or Caddy access logs, and lets
 the director choose their own password on the existing reset page. Consuming
-the link clears it and revokes the account's existing sessions. The operator
+the link terminates every outstanding link, revokes the account's existing
+sessions, and appends the same immutable password-reset event used by the public
+profile. Up to three unexpired operator-issued links can coexist, so generating
+a replacement does not silently invalidate a link already delivered. The operator
 must verify the requester's identity outside CharityPilot before generating or
 sending the link. An emergency direct-password reset exists for exceptional
 recovery, but a reset link is preferred because the operator never learns the
@@ -519,7 +522,11 @@ npm run personal:server:start
 npm run personal:server:status
 ```
 
-Starting must reuse compiled images and persistent data. It must not reinstall
+Starting must reuse compiled images and persistent data. It first starts only
+PostgreSQL and runs the compiled migration image's read-only `prisma migrate
+status` comparison. Any missing, failed, unknown, or otherwise divergent
+migration history stops startup before API, web, or Caddy can start. This check
+does not deploy or resolve a migration. Routine start must not reinstall
 dependencies, compile pages, migrate without a reviewed update, or seed data.
 
 ### Status
@@ -560,6 +567,97 @@ factory reset as an ordinary troubleshooting step.
 ### Update
 
 An update should be a deliberate maintenance window:
+
+Existing installations created before the password-recovery integrity upgrade
+do not yet have `AUTH_RECOVERY_SECRET` in `.env.personal-server`. Add it before
+running the update command; otherwise the upgraded validator correctly fails
+closed before backup or migration. If the key already exists, leave it
+unchanged: do not rotate it as an ordinary update step. The following local
+PowerShell block inserts one independent 48-byte secret as canonical lowercase
+hex, writes it directly to the ignored environment file, and prints only a
+non-secret completion message:
+
+```powershell
+$path = (Resolve-Path '.env.personal-server').Path
+$lines = [IO.File]::ReadAllLines($path)
+if ($lines -match '^AUTH_RECOVERY_SECRET=') {
+  Write-Host 'AUTH_RECOVERY_SECRET is already configured; leaving it unchanged.'
+} else {
+  $bytes = New-Object byte[] 48
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+  $secret = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+  $existingSecrets = $lines |
+    Where-Object { $_ -match '^(JWT_SECRET|READINESS_API_KEY)=' } |
+    ForEach-Object { ($_ -split '=', 2)[1] }
+  if ($existingSecrets -contains $secret) { throw 'Generated recovery secret was not independent; rerun the block.' }
+  $updated = [Collections.Generic.List[string]]::new()
+  $inserted = $false
+  foreach ($line in $lines) {
+    $updated.Add($line)
+    if (-not $inserted -and $line -match '^JWT_SECRET=') {
+      $updated.Add("AUTH_RECOVERY_SECRET=$secret")
+      $inserted = $true
+    }
+  }
+  if (-not $inserted) { throw 'JWT_SECRET was not found; stop and inspect the environment file.' }
+  [IO.File]::WriteAllLines($path, $updated, [Text.UTF8Encoding]::new($false))
+  Remove-Variable secret, bytes
+  Write-Host 'Added an independent canonical AUTH_RECOVERY_SECRET to .env.personal-server.'
+}
+```
+
+Do not print the generated value, paste it into chat, or include the environment
+file or secret value in update evidence. Record only that the prerequisite was
+completed. This compatibility step does not rerun `init`, migrate, seed, or
+modify any database or document volume.
+
+If incident response later requires rotating `AUTH_RECOVERY_SECRET`, never edit
+the environment value first. Delivered personal-operator links and legacy reset
+slots remain capabilities even though the delivery worker is disabled in this
+profile. Create and verify a protected `npm run personal:server:backup`, then
+stop `caddy`, `web`, and `api` while leaving the database available. Label the
+backup as a pre-invalidation credential-bearing snapshot; never start a runtime
+against a restore of it until the invalidation command has been run again.
+
+Run the maintenance service first with `--dry-run`. Use a named operator, an
+approved case reference, and exactly `PLANNED_KEY_ROTATION` or
+`SUSPECTED_KEY_COMPROMISE`:
+
+```powershell
+docker compose --env-file .env.personal-server -f compose.personal-server.yml stop caddy web api
+docker compose --env-file .env.personal-server -f compose.personal-server.yml --profile maintenance run --rm auth-recovery-secret-rotation node dist/jobs/rotate-auth-recovery-secret.js --dry-run --reason SUSPECTED_KEY_COMPROMISE --operator "NAMED OPERATOR" --case-reference "APPROVED-CASE-REFERENCE" --confirm-api-and-scheduler-quiesced
+```
+
+Review the count-only result, current generation, canonical database-identity
+SHA-256 and exact `personal-server` profile. Then rerun with `--execute`, all
+five emitted counts, `--expected-generation`,
+`--expected-request-evidence-rows`, `--expected-database-identity-sha256`,
+`--expected-deployment-profile personal-server`,
+`--confirm-outbox-preservation-understood`, and the exact emitted
+`--confirm-execute` acknowledgement. The serializable command terminates every
+non-suppressed recovery capability as `KEY_ROTATED`, clears both halves of every
+legacy `User` reset slot, deletes keyed rate buckets, one-way redacts retained
+keyed request evidence, preserves completion notices, advances the database
+generation, and leaves recovery blocked. Equal counts cannot authorize another
+database, profile, or generation.
+
+Only after `EXECUTED` reports `recoveryBlocked: true` plus zero remaining
+capabilities, request-evidence rows, legacy slots, and rate buckets may the
+operator generate an independent canonical replacement and update
+`AUTH_RECOVERY_SECRET` in the ignored `.env.personal-server`. Keep the API
+stopped. Run the same maintenance service with
+`--activate-after-replacement`, the emitted blocked generation,
+database-identity SHA-256, `personal-server` profile, quiescence confirmation,
+and exact emitted `--confirm-activate` acknowledgement. The activation refuses
+every secret recorded in the append-only retired-fingerprint history and any
+non-zero rotation postcondition. Only after it
+reports `ACTIVATED` and `recoveryBlocked: false` may
+`npm run personal:server:start` run. Verify login, issue and consume one new
+manual reset link, and retain the named operator, reason, protected backup
+reference, case reference, redacted command outputs, database/profile/generation
+binding and restart evidence. Never include tokens, addresses, request IDs or
+either secret value in the incident record.
 
 1. tell directors the service will be briefly unavailable;
 2. create and verify a new database-and-document recovery set;
@@ -625,6 +723,13 @@ The successful command prints the one-hour bearer link only after the database
 update succeeds. Send it through a trusted channel. It must not print database
 URLs, hashes, session tokens or information about other accounts.
 
+The private profile has no email provider, so it cannot deliver the public
+registered-address completion notice. After a reset, the host operator must
+notify the already-verified requester through a separate trusted channel and
+the Owner must review the `PASSWORD_RESET_COMPLETED` entry in **Team &
+Permissions**. That documented manual notice is a private-profile exception; it
+is not evidence for the public-production email gate.
+
 Prefer the reset link. If a director cannot use that flow, the emergency
 fallback replaces the password for exactly one active account:
 
@@ -634,12 +739,13 @@ npm run personal:server:reset-password -- --email=director@example.org
 ```
 
 The personal database must already be running. On success the transaction
-replaces the password hash, clears any outstanding reset token, revokes all of
-that user's current sessions, and only then prints the generated replacement
-password once. It does not email the password and it does not force a change at
-the next login. Transfer it through a trusted separate channel, ask the user to
-store or replace it promptly, clear sensitive terminal scrollback, and never
-paste it into chat, source control or the env file.
+replaces the password hash, terminates every outstanding recovery link, retires
+any legacy reset slot, revokes all of that user's current sessions, and appends
+the same immutable operator-attributed reset evidence before printing the
+generated replacement password once. It does not email the password and it does
+not force a change at the next login. Transfer it through a trusted separate
+channel, ask the user to store or replace it promptly, clear sensitive terminal
+scrollback, and never paste it into chat, source control or the env file.
 
 ## Backup policy
 

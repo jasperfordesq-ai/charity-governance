@@ -26,7 +26,10 @@ test('personal-server readiness requires database and local storage but reports 
   const before = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
   const storageRoot = await mkdtemp(join(tmpdir(), 'charitypilot-personal-readiness-'));
   const app = Fastify({ logger: false });
-  app.decorate('prisma', { $queryRaw: async () => [{ '?column?': 1 }] } as never);
+  app.decorate('prisma', {
+    $queryRaw: async () => [{ '?column?': 1 }],
+    $transaction: async () => ({ id: 1 }),
+  } as never);
 
   try {
     process.env.NODE_ENV = 'production';
@@ -48,6 +51,7 @@ test('personal-server readiness requires database and local storage but reports 
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json().checks, {
       database: true,
+      authRecoveryControlReady: true,
       billingConfigured: false,
       emailConfigured: false,
       storageConfigured: true,
