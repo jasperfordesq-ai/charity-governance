@@ -19,6 +19,12 @@ The Windows personal-server host baseline is Windows 11 24H2 or later (kernel
 build 26100+), with current security updates. Installer preflight fails closed
 when the Windows build is missing, malformed or below that baseline.
 
+The separate Linux host profile currently supports a dedicated non-root
+x86-64 operator with local Docker Engine at `unix:///var/run/docker.sock`.
+Repository contracts exist, but clean-VM and recovery acceptance are incomplete;
+the Linux profile is supervised testing only. Root operation, ARM hosts, remote
+or TCP Docker endpoints and ambient Docker/BuildKit overrides fail closed.
+
 This policy does not turn the public/commercial production profile into a
 launched service. The private Windows profile and the future public service have
 separate deployment and evidence requirements.
@@ -89,6 +95,12 @@ closed. Compose invocations pin the exact project name and scrub ambient
 `COMPOSE_*` controls so a parent shell cannot activate maintenance or
 initializer profiles during routine start.
 
+On Linux the same lifecycle verifies and pins only the local
+`unix:///var/run/docker.sock` endpoint. Linux protected directories use
+operator-owned mode `0700` and protected files use mode `0600`. Docker-group
+membership remains root-equivalent authority and must be restricted to the
+dedicated operator.
+
 Recovery rehearsal keeps the disposable PostgreSQL container root filesystem
 read-only. Its authenticated custom-format dump remains a protected host file,
 is opened as one non-empty regular file and is streamed to
@@ -103,6 +115,11 @@ low-level `personal:server:init`/`update` commands, raw Docker Compose, ad-hoc
 database commands, or manual volume deletion bypasses installer receipts,
 source checks, ACL enforcement and recovery gates. Those are not supported
 installation or recovery procedures.
+
+The Linux first-install entry point is `scripts/Install-CharityPilot.sh`.
+Linux failed-install resume, replacement-host recovery and version-bound update/
+rollback wrappers are not yet supported; preserve failed state and exact source
+for supervised recovery. Raw lifecycle or Compose commands are not substitutes.
 
 Authentication-recovery root-key incidents use only
 `npm run personal:server:rotate-auth-recovery-secret`. That lifecycle command
@@ -146,6 +163,11 @@ recovery sets. A protected
 `%LOCALAPPDATA%\CharityPilot\personal-server-location.json` pointer and the
 user-level `CHARITYPILOT_PERSONAL_SERVER_ENV_FILE` value allow supported
 operator commands to find a custom state root.
+
+On Linux the default state root is
+`${XDG_DATA_HOME:-$HOME/.local/share}/charitypilot/personal-server`, with its
+pointer under `${XDG_STATE_HOME:-$HOME/.local/state}/charitypilot`. New shells
+must receive the exact absolute `CHARITYPILOT_PERSONAL_SERVER_ENV_FILE` value.
 
 The Windows installer applies protected NTFS ACLs for the installing operator
 and LOCAL SYSTEM. These controls do not protect against either principal, a

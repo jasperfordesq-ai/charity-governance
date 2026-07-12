@@ -37,6 +37,8 @@ import { validateTailscalePrivateAccess } from './personal-server-certify.mjs';
 import {
   composeSafeEnvironment,
   pinnedLocalDockerEnvironment,
+  validateLocalDockerEndpoint,
+  validateLocalDockerRuntime,
   validateLocalDockerDesktopEndpoint,
   validateLocalDockerDesktopRuntime,
 } from './personal-server-docker-boundary.mjs';
@@ -840,20 +842,31 @@ function verifyLocalDockerDesktopRuntime(context) {
       timeout: context.commandTimeoutMs,
     });
     if (result.status !== 0) {
-      throw new Error('Unable to verify the local Windows Docker Desktop runtime boundary');
+      throw new Error('Unable to verify the local personal-server Docker runtime boundary');
     }
     return String(result.stdout ?? '').trim();
   };
   const [endpoint = '', skipTlsVerify = ''] = invoke([
     'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}|{{.Endpoints.docker.SkipTLSVerify}}',
   ]).split('|');
-  validateLocalDockerDesktopEndpoint({ endpoint, skipTlsVerify }, context.processEnv);
+  validateLocalDockerEndpoint({
+    endpoint,
+    skipTlsVerify,
+    platform: context.hostPlatform,
+  }, context.processEnv);
   const pinnedProbeEnvironment = pinnedLocalDockerEnvironment(context.processEnv, endpoint);
   const [operatingSystem = '', serverOs = ''] = invoke([
     'info', '--format', '{{.OperatingSystem}}|{{.OSType}}',
   ], pinnedProbeEnvironment).split('|');
   const apiVersion = invoke(['version', '--format', '{{.Server.APIVersion}}'], pinnedProbeEnvironment);
-  validateLocalDockerDesktopRuntime({ endpoint, skipTlsVerify, operatingSystem, serverOs, apiVersion }, context.processEnv);
+  validateLocalDockerRuntime({
+    endpoint,
+    skipTlsVerify,
+    operatingSystem,
+    serverOs,
+    apiVersion,
+    platform: context.hostPlatform,
+  }, context.processEnv);
   context.dockerEndpoint = endpoint;
   context.dockerBoundaryVerified = true;
 }
@@ -2182,6 +2195,21 @@ function authRecoveryRotationPaths(context) {
 }
 
 function applyProtectedPathAcl(path, kind, context, { verifyOnly = false } = {}) {
+  if (context.hostPlatform === 'linux') {
+    const status = lstatSync(path);
+    const expectedDirectory = kind === 'Directory';
+    if (status.isSymbolicLink() || (expectedDirectory ? !status.isDirectory() : !status.isFile())) {
+      throw new Error(`Protected Linux ${kind.toLowerCase()} has an invalid type or is a symbolic link`);
+    }
+    const expectedMode = expectedDirectory ? 0o700 : 0o600;
+    if (!verifyOnly) chmodSync(path, expectedMode);
+    const verified = lstatSync(path);
+    const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if ((verified.mode & 0o777) !== expectedMode || (currentUid !== null && verified.uid !== currentUid)) {
+      throw new Error(`Protected Linux ${kind.toLowerCase()} must be owned by the operator with mode ${expectedMode.toString(8)}`);
+    }
+    return;
+  }
   const command = [
     'powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive',
     '-ExecutionPolicy', 'Bypass', '-File',
@@ -6077,6 +6105,7 @@ export function runPersonalServer({
   now = () => new Date(),
   writeOutput = (value) => process.stdout.write(value),
   commandTimeoutMs = 30 * 60 * 1000,
+  hostPlatform = process.platform,
 } = {}) {
   const parsed = parsePersonalServerArgs(args);
   if (parsed.command === 'help') {
@@ -6094,6 +6123,7 @@ export function runPersonalServer({
     commandTimeoutMs,
     dockerBoundaryVerified: false,
     dockerEndpoint: null,
+    hostPlatform,
   };
 
   const composePath = join(context.repoRoot, COMPOSE_FILE_NAME);

@@ -1,5 +1,11 @@
 # Personal Server Deployment on Windows
 
+This runbook is the authority for the Windows host profile. The separate,
+currently supervised Linux host profile is documented in
+[`personal-server-deployment-linux.md`](personal-server-deployment-linux.md).
+Linux support does not relax any Windows installation, recovery or release
+gate described here.
+
 Last reviewed: 2026-07-12
 
 ## Current status

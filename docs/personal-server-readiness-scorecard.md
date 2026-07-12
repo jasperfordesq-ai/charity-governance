@@ -5,7 +5,9 @@ Last reviewed: 2026-07-12
 ## Purpose
 
 This is the completion contract for CharityPilot's private, single-charity
-Windows deployment. It does not score the future public SaaS launch.
+deployment. The existing 100-point score applies to Windows. Linux has a
+separate provisional gate below and must not inherit Windows live evidence.
+Neither score covers the future public SaaS launch.
 
 Two views are recorded because they answer different questions:
 
@@ -139,6 +141,33 @@ That state cannot be deleted, renamed or rebound merely to make a second install
 pass. The next acceptance attempt requires a genuinely blank Windows 11 24H2+
 computer or VM with a fresh Docker Desktop daemon. Until that external state is
 available, the clean-install and downstream live gates cannot be executed.
+
+## Provisional Linux host-profile gate
+
+The separate `private-linux-server` profile was added on 2026-07-12 to preserve
+a low-cost cloud and native-Linux deployment option. Repository implementation
+includes a dedicated non-root x86-64 Bash installer, read-only host/source/
+Docker preflight, local Unix-socket lifecycle boundary, operator-owned `0700`
+state directories and `0600` protected files, and the unchanged compiled
+Caddy/Next.js/Fastify/PostgreSQL plus encrypted-recovery topology.
+
+Linux readiness is **implemented but not live-certified**. It has no 100/100
+claim and is limited to supervised testing with replaceable data until:
+
+- [ ] a clean Ubuntu 24.04 x86-64 VM installs using only
+      `scripts/Install-CharityPilot.sh`;
+- [ ] local Docker socket, Caddy-only loopback publication, Owner login and
+      post-reboot login pass;
+- [ ] exact private Tailscale Serve access passes from a second director device;
+- [ ] an encrypted off-host set and separate key restore on another blank VM;
+- [ ] Linux failed-resume, replacement-host, update and rollback wrappers exist
+      and pass live acceptance;
+- [ ] scheduled backup monitoring and disk/security-update operations pass;
+- [ ] Linux CI passes at the exact release SHA; and
+- [ ] an immutable published release archive passes Linux acceptance.
+
+Windows points and Windows live restore evidence must not be credited to Linux.
+See [`personal-server-deployment-linux.md`](personal-server-deployment-linux.md).
 
 The previous 58/100 figure is retired because it mixed implementation progress
 with live certification. Use the two named scores above instead.

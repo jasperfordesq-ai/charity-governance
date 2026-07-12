@@ -15,10 +15,11 @@ Before starting production-completion work, read:
 - [CharityPilot Agent Continuation Handoff](docs/agent-continuation-handoff.md)
 - [Full-Platform Remediation Audit](docs/platform-remediation-audit-2026-07-10.md)
 
-Before changing the private, single-charity Windows deployment profile, also
+Before changing either private, single-charity host profile, also
 read:
 
 - [Personal Server Deployment on Windows](docs/personal-server-deployment.md)
+- [Private Personal Server on Linux](docs/personal-server-deployment-linux.md)
 - [Personal Local Use Readiness](docs/personal-local-use.md)
 - [Personal Server 100/100 Readiness Scorecard](docs/personal-server-readiness-scorecard.md)
 - [Personal Server Release Maintainer Runbook](docs/personal-server-release-maintainer.md)
@@ -52,9 +53,10 @@ publication. Do not attach another service to that edge bridge or broaden the
 host bind. Caddy must not trust incoming `X-Forwarded-*` values because direct
 loopback and Tailscale Serve share the edge gateway; the configured origin is
 authoritative and Fastify trusts only Caddy's fixed internal address.
-Every live Docker lifecycle/certification path must re-prove the local Windows
-Docker Desktop Linux named-pipe boundary and pin its remaining Docker children
-to that endpoint. Keep the explicit Compose project name and case-insensitive
+Every live Docker lifecycle/certification path must re-prove its local host
+boundary: the Windows Docker Desktop Linux named pipe or the Linux
+`unix:///var/run/docker.sock`. Remote/TCP daemons and ambient overrides remain
+forbidden. Pin remaining Docker children to the verified endpoint. Keep the explicit Compose project name and case-insensitive
 ambient `COMPOSE_*` scrubbing; routine start must not inherit profiles.
 
 ## Personal-server invariants
@@ -64,6 +66,11 @@ ambient `COMPOSE_*` scrubbing; routine start must not inherit profiles.
   recovery entry point. Do not document or use raw
   `personal:server:init`, Docker Compose, database commands or volume deletion
   as an equivalent operator path.
+- `scripts/Install-CharityPilot.sh` is the Linux first-install entry point for a
+  dedicated non-root x86-64 operator. Its profile remains supervised testing
+  until clean-VM, reboot, recovery, update and rollback acceptance pass. Do not
+  substitute raw `personal:server:init` or Compose, and do not describe Linux
+  failed-install resume, replacement recovery or updating as supported yet.
 - A supervised unreleased clean-Git failure may advance source only through the
   installer's explicit `-RepairToGitRevision` initial-phase exception: same
   source/state paths, clean canonical descendant, local image identity and no
@@ -81,6 +88,7 @@ ambient `COMPOSE_*` scrubbing; routine start must not inherit profiles.
   state root, `.env.personal-server`, `install-state.json`,
   `recovery-key.hex`, runtime-health reports, recovery sets, the protected
   `%LOCALAPPDATA%\CharityPilot\personal-server-location.json` pointer and the
+  Linux XDG state pointer, plus the
   `CHARITYPILOT_PERSONAL_SERVER_ENV_FILE` contract.
 - Keep the recovery key separate from off-host recovery sets. Do not weaken the
   authenticated-encrypted recovery-set, manifest-HMAC, rehearsal, guarded

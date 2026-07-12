@@ -1,5 +1,13 @@
 # Personal Server Release Maintainer Runbook
 
+The release bundle contains both Windows and Linux host entry points. The
+Windows gate below remains unchanged. Linux publication additionally requires a
+clean x86-64 Linux VM installation using `scripts/Install-CharityPilot.sh`,
+local Unix-socket Docker proof, reboot/login, off-host recovery and separate
+blank-VM restore evidence. Until Linux update, rollback, failed-resume and
+replacement-host wrappers pass, release notes must label Linux as a supervised
+testing profile rather than a generally supported installation target.
+
 This runbook is for the CharityPilot repository owner. End users do not need a
 GitHub token: they download a named, immutable release asset after the release
 workflow has succeeded.

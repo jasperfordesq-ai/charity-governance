@@ -2,11 +2,12 @@
 # CharityPilot - Personal Server (optimized local appliance)
 # =============================================================================
 #
-# Operators use the supported Windows installer; it creates protected external
-# state, generates secrets, injects the Owner password only into the one-shot
-# child, builds, migrates, initializes, and starts:
+# Operators use the host-specific installer. Both create protected external
+# state, generate secrets, inject the Owner password only into the one-shot
+# child, build, migrate, initialize, and start:
 #
 #   Get-Help .\scripts\Install-CharityPilot.ps1 -Full
+#   bash scripts/Install-CharityPilot.sh --help
 #
 # The personal owner/workspace initializer and migrations are deliberately
 # excluded from normal startup. Routine starts use:

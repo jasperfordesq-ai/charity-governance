@@ -1,6 +1,9 @@
-const LOCAL_DOCKER_ENDPOINTS = new Set([
+const WINDOWS_LOCAL_DOCKER_ENDPOINTS = new Set([
   'npipe:////./pipe/dockerdesktoplinuxengine',
   'npipe:////./pipe/docker_engine',
+]);
+const LINUX_LOCAL_DOCKER_ENDPOINTS = new Set([
+  'unix:///var/run/docker.sock',
 ]);
 
 const DANGEROUS_DOCKER_CONTROLS = new Set([
@@ -18,6 +21,59 @@ function dangerousDockerOverrides(environment = {}) {
       normalized.startsWith('BUILDX_')
     ) && String(value ?? '').trim();
   });
+}
+
+function localDockerError(platform) {
+  return platform === 'linux'
+    ? 'Personal-server lifecycle requires the local Linux Docker Engine Unix socket with Engine API 1.48 or later and no remote-daemon overrides'
+    : 'Personal-server lifecycle requires the local Windows Docker Desktop Linux named pipe with Engine API 1.48 or later and no remote-daemon overrides';
+}
+
+export function validateLocalDockerEndpoint({
+  endpoint,
+  skipTlsVerify,
+  platform = process.platform,
+}, environment = {}) {
+  const normalizedEndpoint = String(endpoint ?? '').trim().toLowerCase();
+  const allowedEndpoints = platform === 'win32'
+    ? WINDOWS_LOCAL_DOCKER_ENDPOINTS
+    : platform === 'linux'
+      ? LINUX_LOCAL_DOCKER_ENDPOINTS
+      : new Set();
+  if (
+    dangerousDockerOverrides(environment).length ||
+    !allowedEndpoints.has(normalizedEndpoint) ||
+    String(skipTlsVerify).trim().toLowerCase() !== 'false'
+  ) {
+    throw new Error(localDockerError(platform));
+  }
+  return true;
+}
+
+export function validateLocalDockerRuntime({
+  endpoint,
+  skipTlsVerify,
+  operatingSystem,
+  serverOs,
+  apiVersion,
+  platform = process.platform,
+}, environment = {}) {
+  validateLocalDockerEndpoint({ endpoint, skipTlsVerify, platform }, environment);
+  const apiMatch = /^(\d+)\.(\d+)$/u.exec(String(apiVersion ?? '').trim());
+  const apiSupported = apiMatch && (
+    Number(apiMatch[1]) > 1 || (Number(apiMatch[1]) === 1 && Number(apiMatch[2]) >= 48)
+  );
+  const runtimeIdentityValid = platform === 'win32'
+    ? /docker desktop/iu.test(String(operatingSystem ?? ''))
+    : platform === 'linux' && String(operatingSystem ?? '').trim().length > 0;
+  if (
+    !runtimeIdentityValid ||
+    String(serverOs ?? '').trim().toLowerCase() !== 'linux' ||
+    !apiSupported
+  ) {
+    throw new Error(localDockerError(platform));
+  }
+  return true;
 }
 
 export function composeSafeEnvironment(environment = {}) {
@@ -50,14 +106,7 @@ export function validateLocalDockerDesktopEndpoint({
   endpoint,
   skipTlsVerify,
 }, environment = {}) {
-  if (
-    dangerousDockerOverrides(environment).length ||
-    !LOCAL_DOCKER_ENDPOINTS.has(String(endpoint ?? '').trim().toLowerCase()) ||
-    String(skipTlsVerify).trim().toLowerCase() !== 'false'
-  ) {
-    throw new Error('Personal-server lifecycle requires the local Windows Docker Desktop Linux named pipe with Engine API 1.48 or later and no remote-daemon overrides');
-  }
-  return true;
+  return validateLocalDockerEndpoint({ endpoint, skipTlsVerify, platform: 'win32' }, environment);
 }
 
 export function validateLocalDockerDesktopRuntime({
@@ -67,17 +116,12 @@ export function validateLocalDockerDesktopRuntime({
   serverOs,
   apiVersion,
 }, environment = {}) {
-  validateLocalDockerDesktopEndpoint({ endpoint, skipTlsVerify }, environment);
-  const apiMatch = /^(\d+)\.(\d+)$/u.exec(String(apiVersion ?? '').trim());
-  const apiSupported = apiMatch && (
-    Number(apiMatch[1]) > 1 || (Number(apiMatch[1]) === 1 && Number(apiMatch[2]) >= 48)
-  );
-  if (
-    !/docker desktop/iu.test(String(operatingSystem ?? '')) ||
-    String(serverOs ?? '').trim().toLowerCase() !== 'linux' ||
-    !apiSupported
-  ) {
-    throw new Error('Personal-server lifecycle requires the local Windows Docker Desktop Linux named pipe with Engine API 1.48 or later and no remote-daemon overrides');
-  }
-  return true;
+  return validateLocalDockerRuntime({
+    endpoint,
+    skipTlsVerify,
+    operatingSystem,
+    serverOs,
+    apiVersion,
+    platform: 'win32',
+  }, environment);
 }

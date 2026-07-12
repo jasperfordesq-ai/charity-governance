@@ -43,7 +43,7 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 apps/api          Fastify API (routes, services, middleware, prisma, jobs)
 apps/web          Next.js web app (app router, components, lib)
 packages/shared   Shared types and Zod schemas
-scripts/          Operational tooling (Windows installer/updater, recovery, production checks)
+scripts/          Operational tooling (Windows/Linux installers, recovery, production checks)
 docs/             Deployment, recovery, launch, QA and security runbooks
 compose*.yml      Docker Compose: local development, personal server and public production
 ```
@@ -153,6 +153,40 @@ Also see the [personal-server readiness scorecard](docs/personal-server-readines
 [release-maintainer runbook](docs/personal-server-release-maintainer.md),
 [security policy](SECURITY.md), and [support boundaries](SUPPORT.md).
 
+### Private Linux server profile
+
+The same compiled single-charity stack now has a separate
+`private-linux-server` host profile for a dedicated x86-64 Linux computer or
+cloud VM. It uses native Docker Engine, Caddy, Next.js, Fastify, PostgreSQL and
+the shared authenticated-encrypted recovery engine. It does not require IIS,
+Apache, nginx or a hosting control panel.
+
+The Linux profile is implemented and contract-tested, but it has not completed
+clean-VM, reboot, off-host recovery, replacement-host, update or rollback live
+acceptance. Treat it as a supervised testing profile with replaceable data until
+those gates are recorded.
+
+From a clean canonical `master` clone on a dedicated non-root Linux operator:
+
+```bash
+bash scripts/Install-CharityPilot.sh --preflight-only
+
+bash scripts/Install-CharityPilot.sh \
+  --owner-email owner@example.org \
+  --owner-name "Owner Name" \
+  --organisation-name "Charity Name"
+```
+
+The installer keeps Caddy loopback-only, creates protected external state,
+prints the Owner password once, creates and rehearses an encrypted recovery set,
+and records `ready` only after bounded runtime-health checks pass. Remote Docker,
+root operation, ARM hosts, dirty source and occupied state roots fail closed.
+For director access use only the exact private Tailscale `.ts.net` HTTPS origin;
+do not publish the Caddy port or enable Funnel.
+
+See the complete [Private Personal Server on Linux](docs/personal-server-deployment-linux.md)
+runbook before creating a VM or storing any data.
+
 ---
 
 ## Local development
@@ -229,6 +263,7 @@ The API runs on <http://localhost:3002> and the web app on
 | `npm run security:scan` | Secret + static analysis scan |
 | `npm run personal:ready` | Local personal-use readiness gate; no live payments or production providers |
 | `powershell -File .\scripts\Install-CharityPilot.ps1 -PreflightOnly` | Supported no-write Windows install preflight; add official release proof when available |
+| `bash scripts/Install-CharityPilot.sh --preflight-only` | No-write x86-64 Linux host/source/Docker preflight for the supervised testing profile |
 | `npm run personal:server:start` | Start the compiled private server without migration or seeding |
 | `npm run personal:server:status` | Show private-server health and the newest completed recovery-set name in the default backup root |
 | `npm run personal:server:backup` | Create and verify an authenticated-encrypted database/document recovery set |
