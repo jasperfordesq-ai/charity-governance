@@ -92,8 +92,10 @@ test('failed clean-Git install can adopt only a verified canonical descendant re
   assert.match(failedResumeSource, /\$State\.installationMode -cne 'fresh-install'/u);
   assert.match(failedResumeSource, /\[string\]\$State\.activeImageTag -cne 'local'/u);
   assert.match(failedResumeSource, /\$null -ne \$recordedArchive/u);
-  assert.match(failedResumeSource, /\[string\]\$State\.failedFromPhase -cne 'initializing'/u);
+  assert.match(failedResumeSource, /repairableFailedPhases = @\('initializing', 'initialized-backup-pending'\)/u);
+  assert.match(failedResumeSource, /\$repairableFailedPhases -cnotcontains \$failedFromPhase/u);
   assert.match(failedResumeSource, /published recovery set must remain on its exact recorded source/u);
+  assert.match(failedResumeSource, /incomplete recovery directories must remain on its exact recorded source/u);
   assert.match(installer, /RepairToGitRevision/u);
   assert.match(installer, /RepairToGitRevision is never valid for a release installation/u);
   assert.match(failedResumeSource, /\$RepairToGitRevision -cne \$currentRevision/u);
@@ -116,6 +118,7 @@ test('failed-install source repair helper executes descendant and rejection case
   const fromRevision = 'a'.repeat(40);
   const toRevision = 'b'.repeat(40);
   const baseState = {
+    phase: 'failed',
     installationMode: 'fresh-install',
     activeImageTag: 'local',
     failedFromPhase: 'initializing',
@@ -141,13 +144,21 @@ test('failed-install source repair helper executes descendant and rejection case
   };
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
-  const invoke = ({ state = baseState, current = baseCurrent, target = toRevision, ancestor = true, publishedSet = false } = {}) => {
+  const invoke = ({
+    state = baseState,
+    current = baseCurrent,
+    target = toRevision,
+    ancestor = true,
+    publishedSet = false,
+    incompleteSet = false,
+  } = {}) => {
     const directory = mkdtempSync(join(tmpdir(), 'charitypilot-failed-resume-source-'));
     const statePath = join(directory, 'state.json');
     const currentPath = join(directory, 'current.json');
     const recoveryRoot = join(directory, 'recovery');
     mkdirSync(recoveryRoot, { recursive: true });
     if (publishedSet) mkdirSync(join(recoveryRoot, 'published-set'), { recursive: true });
+    if (incompleteSet) mkdirSync(join(recoveryRoot, '.interrupted.incomplete'), { recursive: true });
     writeFileSync(statePath, JSON.stringify(state));
     writeFileSync(currentPath, JSON.stringify(current));
     const command = [
@@ -179,6 +190,13 @@ test('failed-install source repair helper executes descendant and rejection case
   const advance = JSON.parse(accepted.stdout.trim());
   assert.equal(advance.fromRevision, fromRevision);
   assert.equal(advance.toRevision, toRevision);
+  assert.equal(advance.failedFromPhase, 'initializing');
+
+  const postInitialization = invoke({
+    state: { ...baseState, failedFromPhase: 'initialized-backup-pending' },
+  });
+  assert.equal(postInitialization.status, 0, postInitialization.stderr || postInitialization.stdout);
+  assert.equal(JSON.parse(postInitialization.stdout.trim()).failedFromPhase, 'initialized-backup-pending');
 
   const exactCurrent = { ...baseCurrent, revision: fromRevision, originMasterRevision: fromRevision };
   const exact = invoke({ current: exactCurrent, target: '' });
@@ -194,12 +212,14 @@ test('failed-install source repair helper executes descendant and rejection case
   assert.notEqual(invoke({ current: { ...baseCurrent, branch: 'repair' } }).status, 0);
   assert.notEqual(invoke({ state: { ...baseState, installationMode: 'replacement-restore' } }).status, 0);
   assert.notEqual(invoke({ state: { ...baseState, activeImageTag: 'personal-v1.0.0' } }).status, 0);
-  assert.notEqual(invoke({ state: { ...baseState, failedFromPhase: 'initialized-backup-pending' } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, phase: 'ready' } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, failedFromPhase: 'ready' } }).status, 0);
   assert.notEqual(invoke({ state: { ...baseState, source: { ...clone(baseState.source), verifiedArchive: { sha256: 'x' } } } }).status, 0);
   assert.notEqual(invoke({ state: { ...baseState, source: { ...clone(baseState.source), releaseIdentity: { tag: 'personal-v1.0.0' } } } }).status, 0);
   assert.notEqual(invoke({ state: { ...baseState, source: { ...clone(baseState.source), revision: fromRevision.toUpperCase(), originMasterRevision: fromRevision.toUpperCase() } } }).status, 0);
   assert.notEqual(invoke({ current: { ...baseCurrent, revision: toRevision.toUpperCase(), originMasterRevision: toRevision.toUpperCase() } }).status, 0);
   assert.notEqual(invoke({ publishedSet: true }).status, 0);
+  assert.notEqual(invoke({ incompleteSet: true }).status, 0);
   assert.notEqual(invoke({ current: exactCurrent, target: fromRevision }).status, 0);
 });
 

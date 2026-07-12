@@ -26,6 +26,10 @@ function Resolve-CharityPilotFailedResumeSourceAdvance {
         [scriptblock]$AncestorCheck
     )
 
+    if ([string]$State.phase -cne 'failed') {
+        throw 'Failed-install source repair requires protected installation phase failed.'
+    }
+
     $recordedSource = Get-CharityPilotOptionalPropertyValue -InputObject $State -Name 'source'
     $recordedKind = [string](Get-CharityPilotOptionalPropertyValue -InputObject $recordedSource -Name 'kind')
     $recordedRevision = [string](Get-CharityPilotOptionalPropertyValue -InputObject $recordedSource -Name 'revision')
@@ -70,17 +74,20 @@ function Resolve-CharityPilotFailedResumeSourceAdvance {
         return $null
     }
 
+    $failedFromPhase = [string]$State.failedFromPhase
+    $repairableFailedPhases = @('initializing', 'initialized-backup-pending')
     if ($State.installationMode -cne 'fresh-install' -or
         [string]$State.activeImageTag -cne 'local' -or
-        [string]$State.failedFromPhase -cne 'initializing') {
-        throw 'Only a failed unreleased clean-Git fresh install from the initializing phase may advance to a repaired canonical descendant.'
+        $repairableFailedPhases -cnotcontains $failedFromPhase) {
+        throw 'Only a failed unreleased clean-Git fresh install from initializing or initialized-backup-pending may advance to a repaired canonical descendant.'
     }
-    $publishedRecoverySets = @(
-        Get-ChildItem -LiteralPath $RecoveryRoot -Directory -Force |
-            Where-Object { -not $_.Name.StartsWith('.') }
-    )
+    $recoveryDirectories = @(Get-ChildItem -LiteralPath $RecoveryRoot -Directory -Force)
+    $publishedRecoverySets = @($recoveryDirectories | Where-Object { -not $_.Name.StartsWith('.') })
     if ($publishedRecoverySets.Count -ne 0) {
         throw 'A failed install with a published recovery set must remain on its exact recorded source.'
+    }
+    if ($recoveryDirectories.Count -ne 0) {
+        throw 'A failed install with incomplete recovery directories must remain on its exact recorded source until supervised recovery.'
     }
     if ([string]::IsNullOrWhiteSpace($RepairToGitRevision)) {
         throw "Canonical source changed after failure. Repeat with -RepairToGitRevision $currentRevision only after reviewing that repair commit."
@@ -105,6 +112,7 @@ function Resolve-CharityPilotFailedResumeSourceAdvance {
         format = 'charitypilot-personal-server-failed-resume-source-advance/v1'
         fromRevision = $recordedRevision
         toRevision = $currentRevision
+        failedFromPhase = $failedFromPhase
         verifiedAt = [DateTimeOffset]::UtcNow.ToString('o')
     }
 }
