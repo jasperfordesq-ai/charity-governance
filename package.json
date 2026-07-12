@@ -3,6 +3,9 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "author": "Jasper Ford",
+  "contributors": [
+    "hOUR Timebank CLG (Ireland)"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/jasperfordesq-ai/charity-governance.git"

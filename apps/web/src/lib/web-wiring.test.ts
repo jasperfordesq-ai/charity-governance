@@ -3147,6 +3147,7 @@ test('public attribution follows the Project NEXUS AGPL licensing model', () => 
   const notice = repo('NOTICE');
   assert.match(notice, /CharityPilot Attribution, Additional Terms, and Notices/);
   assert.match(notice, /Copyright \(c\) 2024-2026 Jasper Ford/);
+  assert.match(notice, /Official contributor:[\s\S]*hOUR Timebank CLG \(Ireland\)/);
   assert.match(notice, /AGPL-3\.0-or-later Section 7/);
   assert.match(notice, /Under AGPL Section 7\(b\)/);
   assert.doesNotMatch(notice, /Mary Casey|Steven J\. Kelly|Sarah Bird|Fergal Conlon/);
@@ -3155,6 +3156,7 @@ test('public attribution follows the Project NEXUS AGPL licensing model', () => 
 
   const attribution = component('legal-attribution.tsx');
   assert.match(attribution, /Jasper Ford/);
+  assert.match(attribution, /hOUR Timebank CLG/);
   assert.match(attribution, /AGPL-3\.0-or-later/);
   assert.match(attribution, /no warranty/i);
   assert.match(attribution, /https:\/\/github\.com\/jasperfordesq-ai\/charity-governance/);
@@ -3168,6 +3170,7 @@ test('public attribution follows the Project NEXUS AGPL licensing model', () => 
   assert.ok(existsSync(aboutPagePath), 'public about page should exist');
   const aboutPage = readFileSync(aboutPagePath, 'utf8');
   assert.match(aboutPage, /Jasper Ford/);
+  assert.match(aboutPage, /hOUR Timebank CLG \(Ireland\)/);
   assert.match(aboutPage, /IP holder/);
   assert.match(aboutPage, /AGPL-3\.0-or-later/);
   assert.match(aboutPage, /Section 7\(b\)/);
@@ -3179,6 +3182,7 @@ test('public attribution follows the Project NEXUS AGPL licensing model', () => 
   assert.match(readme, /## UI Attribution Requirement/);
   assert.match(readme, /Under AGPL Section 7\(b\)/);
   assert.match(readme, /\[NOTICE\]\(NOTICE\)/);
+  assert.match(readme, /\[CONTRIBUTORS\.md\]\(CONTRIBUTORS\.md\)/);
   assert.doesNotMatch(readme, /Mary Casey|Steven J\. Kelly|Sarah Bird|Fergal Conlon/);
 
   assert.match(app('(marketing)/layout.tsx'), /href="\/about"/);

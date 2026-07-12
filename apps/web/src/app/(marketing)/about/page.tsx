@@ -4,7 +4,7 @@ import { SOURCE_REPOSITORY_URL } from '@/components/legal-attribution';
 export const metadata: Metadata = {
   title: 'About CharityPilot',
   description:
-    'About CharityPilot, its copyright attribution to Jasper Ford, AGPL license, and public source repository.',
+    'About CharityPilot, its creator Jasper Ford, official contributor hOUR Timebank CLG (Ireland), AGPL license, and public source repository.',
 };
 
 export default function AboutPage() {
@@ -40,6 +40,17 @@ export default function AboutPage() {
 
           <div>
             <h2 className="text-2xl font-bold text-gray-950 dark:text-white">
+              Official contributor
+            </h2>
+            <p className="mt-4 leading-7 text-gray-700 dark:text-gray-300">
+              hOUR Timebank CLG (Ireland) is officially recognised as a contributor to
+              the CharityPilot platform. This acknowledgement does not alter Jasper
+              Ford&apos;s status as creator and IP holder.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-2xl font-bold text-gray-950 dark:text-white">
               License and source
             </h2>
             <p className="mt-4 leading-7 text-gray-700 dark:text-gray-300">
@@ -67,8 +78,8 @@ export default function AboutPage() {
           </h2>
           <p className="mt-4 leading-7 text-gray-700 dark:text-gray-300">
             Anyone using, modifying, deploying, or conveying CharityPilot should preserve
-            the copyright notice, AGPL license notice, AGPL Section 7(b) attribution,
-            and source repository link. The application footer includes this visible
+            the copyright notice, creator and contributor credits, AGPL license notice,
+            AGPL Section 7(b) attribution, and source repository link. The application footer includes this visible
             attribution so users can trace the project back to its public source.
           </p>
         </div>
