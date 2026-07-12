@@ -17,6 +17,10 @@ manifest from the canonical
 [GitHub Releases page](https://github.com/jasperfordesq-ai/charity-governance/releases).
 Do not install GitHub's generic **Code > Download ZIP** archive.
 
+The supported host baseline is Windows 11 24H2 or later (kernel build 26100+)
+with current security updates. Older or unverified Windows builds fail installer
+preflight and are outside the support boundary.
+
 For a new Windows installation, failed-install resume or blank replacement-host
 recovery, use only `scripts/Install-CharityPilot.ps1`. For a verified release
 update or its permitted pre-cutover resume, use only

@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, release as operatingSystemRelease } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   composeSafeEnvironment,
@@ -39,6 +39,7 @@ const RELEASE_IDENTITY_FILE = 'personal-server-release.json';
 const MINIMUM_ENGINE_VERSION = '28.0.0';
 const MINIMUM_ENGINE_API_VERSION = '1.48';
 const MINIMUM_COMPOSE_VERSION = '2.33.1';
+const MINIMUM_WINDOWS_BUILD = 26100;
 const REQUIRED_REPOSITORY_FILES = [
   'package.json',
   'package-lock.json',
@@ -163,6 +164,18 @@ export function satisfiesNodeEngine(version, range) {
   if (!match) return false;
   const comparison = compareVersions(version, match[1]);
   return comparison !== null && comparison >= 0;
+}
+
+export function supportedWindowsBuild(platform, release) {
+  if (platform !== 'win32') return null;
+  const match = /^10\.0\.(\d+)(?:\.\d+)?$/u.exec(String(release).trim());
+  if (!match) return null;
+  const build = Number(match[1]);
+  if (!Number.isSafeInteger(build)) return null;
+  return {
+    build,
+    supported: build >= MINIMUM_WINDOWS_BUILD,
+  };
 }
 
 function ipv4ToInteger(address) {
@@ -545,6 +558,7 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
   const repositoryRoot = resolve(options.repositoryRoot ?? dependencies.repositoryRoot ?? defaultRepositoryRoot);
   const environment = dependencies.environment ?? process.env;
   const platform = dependencies.platform ?? process.platform;
+  const osRelease = dependencies.osRelease ?? operatingSystemRelease();
   const execute = dependencies.execute ?? defaultExecute;
   const diskFreeBytes = dependencies.diskFreeBytes ?? defaultDiskFreeBytes;
   const canBindPort = dependencies.canBindPort ?? defaultCanBindPort;
@@ -596,6 +610,18 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
     windows,
     windows ? 'Windows host detected.' : `Unsupported host platform: ${platform}.`,
     'Run this installer in Windows PowerShell on the intended Windows host.',
+  );
+  const windowsBuild = supportedWindowsBuild(platform, osRelease);
+  addCheck(
+    checks,
+    'system.windows-version',
+    windowsBuild?.supported === true,
+    windowsBuild?.supported === true
+      ? `Windows 11 24H2-or-later build ${windowsBuild.build} satisfies the supported host baseline.`
+      : windowsBuild
+        ? `Windows build ${windowsBuild.build} is below the supported Windows 11 24H2 baseline (${MINIMUM_WINDOWS_BUILD}).`
+        : 'The Windows release/build could not be verified.',
+    'Upgrade the installation host to Windows 11 24H2 or later, apply current Windows updates, and rerun preflight.',
   );
 
   const stateAbsolute = isAbsolute(requestedStateRoot);
@@ -794,7 +820,6 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
     'Clear DOCKER_HOST, Docker TLS/certificate/API/config/platform overrides, DOCKER_BUILDKIT, BUILDKIT_*, and BUILDX_*; switch Docker Desktop to Linux containers, select its local context, and rerun preflight.',
     endpointBoundaryError || undefined,
   );
-
   const executeVerifiedDocker = (command, args, options = {}) => {
     if (command !== 'docker' || !localDockerDesktop) {
       return { status: 1, stdout: '', stderr: 'Verified local Docker Desktop runtime is unavailable.' };

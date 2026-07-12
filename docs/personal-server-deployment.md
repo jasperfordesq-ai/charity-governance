@@ -14,7 +14,7 @@ At this review point:
 - the Windows installer, compiled runtime, protected external state, encrypted
   recovery, guarded update/rollback/restore/decommission and replacement-host
   restore contracts exist;
-- the personal-server contract suite passed 155/155 checks; production checks
+- the personal-server contract suite passed 156/156 checks; production checks
   passed 830 with two intentional platform skips; lint, compiled builds,
   secret scanning and SAST passed;
 - exact commit `c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` has green canonical CI
@@ -136,7 +136,8 @@ application.
 
 Use:
 
-- a currently supported Windows release;
+- Windows 11 24H2 or later (kernel build 26100 or later), with current Windows
+  updates applied;
 - PowerShell 5.1 or later;
 - WSL 2;
 - local Windows Docker Desktop running Linux Engine 28 / API 1.48 or later and

@@ -70,7 +70,8 @@ Desktop and WSL 2 run these Linux services:
 - **PostgreSQL** stores accounts and governance records; a separate persistent
   volume stores uploaded documents.
 
-This profile requires local Windows Docker Desktop in Linux-container mode with
+This profile requires Windows 11 24H2 or later (kernel build 26100+), with
+current Windows updates, plus local Docker Desktop in Linux-container mode with
 Engine 28 / API 1.48 or later and Docker Compose 2.33.1 or later. Remote Docker
 contexts and daemon/API overrides are rejected by preflight and every live
 lifecycle/runtime-certification command.

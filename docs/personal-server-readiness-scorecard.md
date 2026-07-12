@@ -39,12 +39,13 @@ release/live score is 100/100 and every critical gate is complete.
 
 ## Current named baseline: 2026-07-12 code baseline and live evidence
 
-This baseline records the committed restore code at
-`c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` and the live evidence gathered
-against it. The documentation update is a separate descendant change and is not
-claimed as part of that code commit's exact-SHA evidence. Unrelated pre-existing
-local full-platform edits are outside this score. This is not a Release, not
-clean-host acceptance and not permission to store important records.
+This baseline records the restore repair beginning at
+`c5175eef1ba9ad0c3c9e46371c26165701c4d6a3`, subsequent supported-host
+preflight checks and the live evidence gathered against them. The cited
+`c5175ee` runs prove that restore slice; later descendant changes require their
+own exact-SHA CI. Unrelated pre-existing local full-platform edits are outside
+this score. This is not a Release, not clean-host acceptance and not permission
+to store important records.
 
 | Area | Max | Repository coverage | Release/live certification | Current evidence and remaining gap |
 | --- | ---: | --- | ---: | --- |
@@ -59,7 +60,7 @@ clean-host acceptance and not permission to store important records.
 
 ### Test evidence for this baseline
 
-- the personal-server contract suite passed 155/155 on 2026-07-12;
+- the personal-server contract suite passed 156/156 on 2026-07-12;
 - production checks passed 830 with two intentional skips, the PostgreSQL
   backup slice passed 43 with one Windows symlink-privilege skip, and lint,
   compiled builds, secret scanning and SAST passed;

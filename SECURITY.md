@@ -15,6 +15,10 @@ safely. Use only the named `CharityPilot-personal-v*.zip` release asset with its
 checksum and manifest. GitHub's repository-level **Code > Download ZIP** archive
 is not a release bundle and is unsupported for installation.
 
+The Windows personal-server host baseline is Windows 11 24H2 or later (kernel
+build 26100+), with current security updates. Installer preflight fails closed
+when the Windows build is missing, malformed or below that baseline.
+
 This policy does not turn the public/commercial production profile into a
 launched service. The private Windows profile and the future public service have
 separate deployment and evidence requirements.

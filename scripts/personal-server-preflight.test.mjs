@@ -12,6 +12,7 @@ import {
   parsePreflightOptions,
   runPersonalServerPreflight,
   satisfiesNodeEngine,
+  supportedWindowsBuild,
 } from './personal-server-preflight.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -87,6 +88,7 @@ function passingDependencies(customResponse = null) {
   return {
     dependencies: {
       platform: 'win32',
+      osRelease: '10.0.26200',
       repositoryRoot,
       environment: { LOCALAPPDATA: join(tmpdir(), 'charitypilot-preflight-base') },
       nodeVersion: '24.14.1',
@@ -108,6 +110,10 @@ test('origin, version and CIDR helpers enforce exact contracts', () => {
   assert.throws(() => canonicalInstallOrigin('http://[::1]:8080', 8080));
   assert.equal(satisfiesNodeEngine('24.14.1', '>=22.0.0'), true);
   assert.equal(satisfiesNodeEngine('20.17.0', '>=22.0.0'), false);
+  assert.deepEqual(supportedWindowsBuild('win32', '10.0.26100'), { build: 26100, supported: true });
+  assert.deepEqual(supportedWindowsBuild('win32', '10.0.26099'), { build: 26099, supported: false });
+  assert.equal(supportedWindowsBuild('win32', '6.3.9600'), null);
+  assert.equal(supportedWindowsBuild('linux', '10.0.26200'), null);
   assert.equal(cidrOverlaps('172.30.250.0/24', '172.30.250.128/25'), true);
   assert.equal(cidrOverlaps('172.30.250.0/24', '172.30.251.0/24'), false);
   assert.equal(classifyTailscaleServeConfiguration({}, 'charitypilot.example.ts.net', 8080), 'empty');
@@ -209,6 +215,19 @@ test('complete Windows, Node, npm, Docker, WSL2, network and storage preflight p
       false,
     );
   }
+});
+
+test('preflight rejects Windows builds below the explicit supported host baseline', async () => {
+  const { dependencies } = passingDependencies();
+  dependencies.osRelease = '10.0.26099';
+  const report = await runPersonalServerPreflight({
+    repositoryRoot,
+    stateRoot: join(tmpdir(), 'charitypilot-unsupported-windows-build'),
+  }, dependencies);
+  const check = report.checks.find((item) => item.id === 'system.windows-version');
+  assert.equal(check?.status, 'failed');
+  assert.match(check?.summary ?? '', /below the supported Windows 11 24H2 baseline/u);
+  assert.ok(report.failures.some((failure) => failure.id === 'system.windows-version'));
 });
 
 test('Compose older than gw_priority support fails even when wait flags exist', async () => {
