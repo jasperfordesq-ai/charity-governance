@@ -1546,6 +1546,7 @@ test('guarded decommission deletion tolerates an already-absent exact volume', (
     {
       dryRun: false,
       repoRoot: 'C:\\protected-source',
+      hostPlatform: 'win32',
       processEnv: {},
       spawnSyncImpl: executor.spawn,
       writeOutput: () => {},

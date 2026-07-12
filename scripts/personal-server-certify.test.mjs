@@ -325,6 +325,7 @@ test('live certification orchestration inspects both networks and every exact se
   try {
     const report = await certify({ 'env-file': envPath, 'local-only': true }, {
       repoRoot: root,
+      hostPlatform: 'win32',
       processEnv: {
         COMPOSE_PROFILES: 'maintenance,personal-init',
         COMPOSE_PROJECT_NAME: 'hostile-project',
@@ -369,6 +370,7 @@ test('runtime certification never contacts a remote endpoint discovered from con
     await assert.rejects(
       () => certify({ 'env-file': envPath, 'local-only': true }, {
         repoRoot: root,
+        hostPlatform: 'win32',
         processEnv: {},
         runImpl: (command, args) => {
           calls.push([command, ...args]);
