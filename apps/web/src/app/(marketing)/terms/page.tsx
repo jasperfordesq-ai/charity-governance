@@ -162,8 +162,9 @@ export default function TermsPage() {
           <h2>6. Intellectual Property</h2>
           <p>
             The CharityPilot software and source code were created by Jasper Ford, who is the
-            copyright and IP holder for the software. CharityPilot is licensed under
-            AGPL-3.0-or-later, with source available at{' '}
+            copyright and IP holder for the software. hOUR Timebank CLG (Ireland) is officially
+            recognised as a contributor to the CharityPilot platform. CharityPilot is licensed
+            under AGPL-3.0-or-later, with source available at{' '}
             <a href="https://github.com/jasperfordesq-ai/charity-governance">
               https://github.com/jasperfordesq-ai/charity-governance
             </a>

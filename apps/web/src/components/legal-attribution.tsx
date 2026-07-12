@@ -3,7 +3,9 @@ export const SOURCE_REPOSITORY_URL = 'https://github.com/jasperfordesq-ai/charit
 export function LegalAttribution({ className = '' }: { className?: string }) {
   return (
     <p className={className}>
-      Powered by CharityPilot. Created by Jasper Ford. Licensed under
+      Powered by CharityPilot. Created by Jasper Ford. Contributor: hOUR Timebank CLG
+      {' '}
+      (Ireland). Licensed under
       {' '}
       AGPL-3.0-or-later. Source:
       {' '}

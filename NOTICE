@@ -31,6 +31,14 @@ AUTHORSHIP AND CREDITS
 Original creator and copyright holder:
 - Jasper Ford
 
+Official contributor:
+- hOUR Timebank CLG (Ireland)
+
+Contributor status is an acknowledgement of contribution to the CharityPilot
+platform. It does not transfer or imply ownership of CharityPilot, a copyright
+assignment, trademark rights, endorsement of modified versions, or authority
+to offer separate commercial licences unless separately agreed in writing.
+
 Copyright:
 - Copyright (c) 2024-2026 Jasper Ford.
 
@@ -71,6 +79,7 @@ Canonical attribution wording:
 
   Powered by CharityPilot
   Created by Jasper Ford
+  Contributor: hOUR Timebank CLG (Ireland)
   Licensed under AGPL v3-or-later
   Source: https://github.com/jasperfordesq-ai/charity-governance
 
@@ -97,6 +106,7 @@ A clear notice may use wording such as:
 
   This software is a modified version of CharityPilot.
   Original software created by Jasper Ford.
+  Official contributor: hOUR Timebank CLG (Ireland).
   This modified version is not endorsed by the original author unless a
   separate written agreement says otherwise.
 

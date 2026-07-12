@@ -7,6 +7,7 @@ registers, so a charity can track compliance, board members, documents,
 deadlines, and sign-off in one place.
 
 Created by **Jasper Ford**, the CharityPilot copyright and IP holder.
+**hOUR Timebank CLG (Ireland)** is an official contributor to the platform.
 Commercial SaaS operations may be provided by Project Nexus Ltd. Two tiers:
 **Essentials** and **Complete**, with a free trial.
 
@@ -240,6 +241,10 @@ Canonical repository:
 CharityPilot was created by **Jasper Ford**, who is the copyright and IP holder
 for the CharityPilot software and source code.
 
+**hOUR Timebank CLG (Ireland)** is officially recognised as a contributor to
+CharityPilot. See [CONTRIBUTORS.md](CONTRIBUTORS.md) and [NOTICE](NOTICE) for the
+canonical contributor and attribution records.
+
 ## License
 
 License: AGPL v3 or later (`AGPL-3.0-or-later`).
@@ -259,8 +264,8 @@ notice, and AGPL Section 7 terms.
 
 Under AGPL Section 7(b), all public deployments, modified versions, and
 downstream interfaces based on CharityPilot must preserve clear attribution to
-CharityPilot and Jasper Ford, together with a link to the public source
-repository.
+CharityPilot, Jasper Ford, and hOUR Timebank CLG (Ireland), together with a link
+to the public source repository.
 
 Interactive interfaces should keep attribution visible in an ordinary legal
 notice path, such as the global footer and About page. The canonical wording is:
@@ -268,6 +273,7 @@ notice path, such as the global footer and About page. The canonical wording is:
 ```text
 Powered by CharityPilot
 Created by Jasper Ford
+Contributor: hOUR Timebank CLG (Ireland)
 Licensed under AGPL v3-or-later
 Source: https://github.com/jasperfordesq-ai/charity-governance
 ```
