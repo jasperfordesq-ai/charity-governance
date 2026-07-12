@@ -13,6 +13,10 @@ const DEFAULT_DEVELOPMENT_WEB_ORIGIN = 'http://localhost:3003';
 const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
 const DEVELOPMENT_API_HOSTS = new Set(['localhost', '127.0.0.1']);
 
+export function shouldLoadExternalWebFonts(deploymentMode?: string): boolean {
+  return deploymentMode !== 'personal-server';
+}
+
 function isLoopbackHostname(hostname: string): boolean {
   const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return normalizedHostname === 'localhost' || normalizedHostname === '127.0.0.1' || normalizedHostname === '::1';
@@ -138,14 +142,21 @@ export function createContentSecurityPolicy({
     scriptSrc.push("'unsafe-eval'");
   }
 
+  const styleSrc = ["'self'", "'unsafe-inline'"];
+  const fontSrc = ["'self'", 'data:'];
+  if (!isPersonalServer) {
+    styleSrc.push('https://fonts.googleapis.com');
+    fontSrc.splice(1, 0, 'https://fonts.gstatic.com');
+  }
+
   return [
     "default-src 'self'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
     `script-src ${scriptSrc.join(' ')}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    `style-src ${styleSrc.join(' ')}`,
+    `font-src ${fontSrc.join(' ')}`,
     "img-src 'self' data: blob:",
     `connect-src ${connectSrc}`,
     "form-action 'self'",

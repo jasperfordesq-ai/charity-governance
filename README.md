@@ -27,7 +27,7 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 
 - **Database:** PostgreSQL via Prisma (`apps/api/prisma/schema.prisma`)
 - **Auth:** HTTP-only cookie sessions, hashed rotating refresh tokens, role guards
-- **Billing:** Stripe · **Email:** Resend · **Document storage:** Supabase private bucket behind an authenticated API byte proxy, or local filesystem for dev
+- **Billing:** Stripe · **Email:** Resend · **Document storage:** Supabase private bucket behind an authenticated API byte proxy, or protected local storage for development and the personal server
 - **Default ports:** API `3002` · Web `3003` · PostgreSQL `5434`
 
 > **Full architecture map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the complete,
@@ -43,19 +43,25 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 apps/api          Fastify API (routes, services, middleware, prisma, jobs)
 apps/web          Next.js web app (app router, components, lib)
 packages/shared   Shared types and Zod schemas
-scripts/          Operational tooling (production checks, deploy, env setup, backups)
-docs/             Launch guide, runbook, QA, security review, Supabase setup
-compose*.yml      Docker Compose: local dev stack and production stack
+scripts/          Operational tooling (Windows installer/updater, recovery, production checks)
+docs/             Deployment, recovery, launch, QA and security runbooks
+compose*.yml      Docker Compose: local development, personal server and public production
 ```
 
 ---
 
 ## Private personal server on Windows
 
+> **Current status:** the implementation and local contract tests are
+> substantially in place, but no versioned personal-server release has been
+> published and the full clean-Windows acceptance record is not yet 100/100.
+> A clean canonical `master` clone is a supervised test route only. Do not store
+> important charity records until every critical readiness gate is green.
+
 For one charity using a Windows computer as a small private server, use the
 compiled `personal-server` profile rather than the source-mounted development
 stack. Windows is the host; it does not need IIS or Windows Server. Docker
-Desktop runs these services:
+Desktop and WSL 2 run these Linux services:
 
 - **Caddy** is the only front-door web server and the only container with a
   host port (`127.0.0.1:8080` by default).
@@ -67,22 +73,69 @@ Desktop runs these services:
 Caddy routes `/api/v1/*` to Fastify and everything else to Next.js, so browsers
 use one exact origin. Normal start reuses compiled images and persistent data;
 it does not compile pages, watch Windows files, migrate, or seed demo data.
+Tailscale, when selected, supplies private HTTPS in front of loopback Caddy; it
+is not the CharityPilot web server.
 
-The first-install helper creates one empty charity workspace, one verified
-Owner and local Complete access. It prints a generated Owner password once
-without storing that password in `.env.personal-server`:
+The supported Windows entry point is `scripts/Install-CharityPilot.ps1`. It
+runs a read-only preflight before it can create anything, then creates one empty
+charity workspace, one verified Owner and local Complete access. It protects
+external state for only the current Windows operator and LOCAL SYSTEM, builds
+the compiled runtime, creates an authenticated-encrypted recovery set, rehearses
+recovery and records bounded runtime health. It prints the generated Owner
+password once without storing it in `.env.personal-server`.
+
+Until a release exists, a fresh clean clone can inspect the supervised test
+route without changing the host:
 
 ```powershell
-npm run personal:server:init -- --owner-email=owner@example.org --owner-name="Owner Name" --organisation-name="Charity Name" --origin=http://localhost:8080
+git clone https://github.com/jasperfordesq-ai/charity-governance.git CharityPilot
+Set-Location .\CharityPilot
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-CharityPilot.ps1 -PreflightOnly
 ```
 
-For access by other directors, configure the profile with the exact private
-Tailscale HTTPS origin instead of the loopback origin, then point Tailscale
-Serve at Caddy. Do not forward a router port or use Tailscale Funnel.
+Then preview the complete local-only installation, still without creating any
+file, Docker resource, database or account:
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-CharityPilot.ps1 -DryRun -OwnerEmail owner@example.org -OwnerName "Owner Name" -OrganisationName "Charity Name"
+```
+
+Remove `-DryRun` only after every check passes:
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-CharityPilot.ps1 -OwnerEmail owner@example.org -OwnerName "Owner Name" -OrganisationName "Charity Name"
+```
+
+When published, an official `personal-v*` GitHub Release contains a named ZIP,
+`.zip.sha256` sidecar, outer `.manifest.json` and an inner
+`personal-server-release.json`. GitHub's **Code > Download ZIP** archive is not
+an installable release. Keep all release assets; the installer verifies the ZIP,
+checksum, exact contents and inner identity before installation. The exact
+download/extraction commands are in the runbook.
+
+By default the environment, install state, recovery key, encrypted recovery
+sets and runtime reports live outside the checkout under
+`%LOCALAPPDATA%\CharityPilot\personal-server`; use `-StateRoot` to select a
+dedicated protected directory on an encrypted data drive.
+
+For access by other directors, install and sign in to Tailscale, then pass this
+host's exact `.ts.net` HTTPS origin to the installer. The installer creates only
+the exact private Tailscale Serve proxy when existing Serve state is safely
+empty. Tailscale Funnel, Cloudflare Tunnel and router forwarding are
+unsupported.
+
+The same installer is the supported replacement-host recovery entry point. It
+authenticates one encrypted recovery set with its separately held key, verifies
+the exact compatible source and old/new origins, restores into an empty host,
+rotates host secrets, revokes restored sessions and completes backup, rehearsal,
+health and ACL gates before marking the replacement ready.
 
 The complete installation, private-access, account, backup, recovery, update,
 security and VM-migration runbook is
 [`docs/personal-server-deployment.md`](docs/personal-server-deployment.md).
+Also see the [personal-server readiness scorecard](docs/personal-server-readiness-scorecard.md),
+[release-maintainer runbook](docs/personal-server-release-maintainer.md),
+[security policy](SECURITY.md), and [support boundaries](SUPPORT.md).
 
 ---
 
@@ -153,17 +206,22 @@ The API runs on <http://localhost:3002> and the web app on
 | `npm run dev` | Start API + web in watch mode |
 | `npm run build` | Build all workspaces |
 | `npm run lint` | Lint |
-| `npm test` | Unit tests + production-tooling tests + local Docker check |
+| `npm test` | Unit, production-tooling, personal-server and local-Docker contract checks |
 | `npx turbo test` | Just the unit tests (fast) |
 | `npm run db:migrate -w @charitypilot/api` | Apply database migrations |
 | `npm run db:seed -w @charitypilot/api` | Seed reference/demo data |
 | `npm run security:scan` | Secret + static analysis scan |
 | `npm run personal:ready` | Local personal-use readiness gate; no live payments or production providers |
-| `npm run personal:server:init -- --help` | Show safe first-install options for the compiled private server |
+| `powershell -File .\scripts\Install-CharityPilot.ps1 -PreflightOnly` | Supported no-write Windows install preflight; add official release proof when available |
 | `npm run personal:server:start` | Start the compiled private server without migration or seeding |
 | `npm run personal:server:status` | Show private-server health and the newest completed recovery-set name in the default backup root |
-| `npm run personal:server:backup` | Create a matched database-and-document recovery set |
-| `npm run personal:server:update` | Back up, build, migrate and restart during a deliberate maintenance window |
+| `npm run personal:server:backup` | Create and verify an authenticated-encrypted database/document recovery set |
+| `npm run personal:server:rehearse-restore -- --recovery-set=<path>` | Rehearse a recovery set in isolated disposable full-stack resources |
+| `npm run personal:server:restore -- --help` | Show guarded current-host restore options; use the runbook's confirmation flow |
+| `powershell -File .\scripts\Update-CharityPilot.ps1 -PreflightOnly ...` | Verify a newer official release before a version-bound update |
+| `npm run personal:server:rollback -- --help` | Show guarded rollback options for a completed version-bound update |
+| `npm run personal:server:decommission -- --help` | Show terminal guarded decommission options |
+| `npm run personal:server:certify -- --local-only` | Bounded loopback runtime-health attestation, not complete readiness certification |
 | `npm run personal:server:stop` | Gracefully stop services without deleting persistent volumes |
 | `npm run personal:server:reset-link -- --email=name@example.org` | Issue a one-hour private password-reset link for one active account |
 | `npm run personal:server:reset-password -- --email=name@example.org` | Emergency fallback: set a generated replacement password and revoke that account's sessions |

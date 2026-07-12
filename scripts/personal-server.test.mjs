@@ -2,21 +2,51 @@ import assert from 'node:assert/strict';
 import {
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  archiveUpdateReceipt,
+  executePersonalServerCutoverRecovery,
+  executePersonalServerCleanup,
+  executePersonalServerDecommissionFinalization,
+  executePersonalServerRestoreCutover,
   generateStrongOneTimePassword,
+  environmentFilePath,
   parsePersonalServerArgs,
   parsePersonalServerEnv,
+  personalServerDecommissionConfirmation,
+  personalServerRestoreConfirmation,
+  personalServerRollbackConfirmation,
+  removePersonalVolumeIfPresent,
   renderPersonalServerEnv,
   runPersonalServer,
+  validateRecoveryApplicationBinding,
+  validateCleanGitReleaseAdoption,
+  validateReplacementRestoreSourceBinding,
+  validateTailscaleServeClosed,
+  validatePersonalServerFreshRecovery,
+  validatePersonalServerContainerAbsence,
+  validatePersonalServerNetworkIdentity,
+  validatePersonalServerVolumeIdentity,
 } from './personal-server.mjs';
+import {
+  cleanupPersonalServerRecoveryStaging,
+  decryptPersonalServerArtifact,
+  encryptPersonalServerArtifact,
+  hmacPersonalServerRecoveryManifest,
+  inspectPersonalServerDocumentArchive,
+  loadPersonalServerEncryptionKey,
+  personalServerRecoveryFormats,
+  sha256RecoveryFile,
+  verifyPersonalServerRecoverySet,
+} from './personal-server-recovery.mjs';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
@@ -28,6 +58,7 @@ function validConfig() {
   return {
     port: '8080',
     origin: 'http://localhost:8080',
+    imageTag: 'local',
     postgresDatabase: 'charitypilot_personal_server',
     postgresUser: 'charitypilot_personal_server',
     postgresPassword: 'a'.repeat(64),
@@ -51,6 +82,27 @@ function withWorkspace(callback, { withEnv = true } = {}) {
   }
 }
 
+function writeReadyInstallationState(root, overrides = {}) {
+  const state = {
+    format: 'charitypilot-personal-server-install-state/v1',
+    phase: 'ready',
+    sourceRoot: root,
+    source: {
+      kind: 'clean-git',
+      revision: 'a'.repeat(40),
+      branch: 'master',
+      canonicalRemote: true,
+      canonicalTrackingRef: true,
+      originMasterRevision: 'a'.repeat(40),
+    },
+    activeImageTag: 'local',
+    ...overrides,
+  };
+  writeFileSync(join(root, 'install-state.json'), `${JSON.stringify(state, null, 2)}\n`);
+  writeFileSync(join(root, 'recovery-key.hex'), `${'1'.repeat(64)}\n`);
+  return state;
+}
+
 function fakeExecutor(handler = () => null) {
   const calls = [];
   const spawn = (executable, args, options) => {
@@ -61,10 +113,11 @@ function fakeExecutor(handler = () => null) {
   return { calls, spawn };
 }
 
-function runAt(root, args, executor, output) {
+function runAt(root, args, executor, output, processEnv = {}) {
   return runPersonalServer({
     args,
     repoRoot: root,
+    processEnv,
     spawnSyncImpl: executor.spawn,
     randomBytesImpl: deterministicRandomBytes,
     now: () => new Date(NOW),
@@ -76,11 +129,245 @@ function commandText(calls) {
   return calls.map((call) => call.command.join(' ')).join('\n');
 }
 
+function writeTarOctal(header, offset, length, value) {
+  const encoded = `${value.toString(8).padStart(length - 1, '0')}\0`;
+  assert.equal(Buffer.byteLength(encoded), length);
+  header.write(encoded, offset, length, 'ascii');
+}
+
+function tarArchive(entries) {
+  const records = [];
+  for (const entry of entries) {
+    const content = Buffer.from(entry.content ?? '');
+    const header = Buffer.alloc(512);
+    header.write(entry.name, 0, 100, 'utf8');
+    writeTarOctal(header, 100, 8, 0o600);
+    writeTarOctal(header, 108, 8, 0);
+    writeTarOctal(header, 116, 8, 0);
+    writeTarOctal(header, 124, 12, content.length);
+    writeTarOctal(header, 136, 12, 0);
+    header.fill(0x20, 148, 156);
+    header[156] = (entry.type ?? '0').charCodeAt(0);
+    header.write('ustar\0', 257, 6, 'ascii');
+    header.write('00', 263, 2, 'ascii');
+    let checksum = 0;
+    for (const byte of header) checksum += byte;
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+    records.push(header, content);
+    const padding = (512 - (content.length % 512)) % 512;
+    if (padding > 0) records.push(Buffer.alloc(padding));
+  }
+  records.push(Buffer.alloc(1024));
+  return Buffer.concat(records);
+}
+
+function createRecoveryFixture(root, {
+  encrypted = false,
+  origin = validConfig().origin,
+  imageTag = 'local',
+  applicationSource = { kind: 'unmanaged-local' },
+  imageIds = {
+    api: `sha256:${'a'.repeat(64)}`,
+    migrations: `sha256:${'b'.repeat(64)}`,
+    web: `sha256:${'c'.repeat(64)}`,
+  },
+} = {}) {
+  const recoverySetId = 'personal-server-2026-07-11T12-00-00-000Z-abababab';
+  const setPath = join(root, recoverySetId);
+  mkdirSync(setPath);
+  const databasePlaintext = Buffer.from('verified-personal-database-dump', 'utf8');
+  const databasePath = join(setPath, 'database.dump');
+  const documentsPath = join(setPath, 'documents.tar');
+  writeFileSync(databasePath, databasePlaintext);
+  writeFileSync(documentsPath, tarArchive([{
+    name: 'organisation-1/board-minutes.txt',
+    content: 'approved minutes',
+  }]));
+  const documentInventory = inspectPersonalServerDocumentArchive(documentsPath);
+  const databaseSha256 = sha256RecoveryFile(databasePath);
+  const databaseFingerprint = 'f'.repeat(64);
+  const proof = {
+    format: 'charitypilot-postgres-restore-proof/v2',
+    ok: true,
+    recoverySetId,
+    sourceIdentityBindingMatched: true,
+    sourceReadOnlyVerified: true,
+    restoreTarget: { cleanupVerified: true, productionOverwritten: false },
+    comparison: {
+      mismatchCount: 0,
+      rowFingerprintsMatched: true,
+      databaseFingerprintMatched: true,
+    },
+    dump: { sha256: databaseSha256, bytes: String(databasePlaintext.length) },
+    source: { databaseFingerprintSha256: databaseFingerprint },
+  };
+  const proofPath = join(setPath, 'database.restore-proof.json');
+  writeFileSync(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
+
+  let databaseDescriptor = {
+    file: 'database.dump',
+    bytes: databasePlaintext.length,
+    sha256: databaseSha256,
+    plaintextBytes: databasePlaintext.length,
+    plaintextSha256: databaseSha256,
+    encryption: { format: personalServerRecoveryFormats.plaintextArtifact },
+  };
+  let documentsDescriptor = {
+    file: 'documents.tar',
+    bytes: readFileSync(documentsPath).length,
+    sha256: sha256RecoveryFile(documentsPath),
+    plaintextBytes: readFileSync(documentsPath).length,
+    plaintextSha256: sha256RecoveryFile(documentsPath),
+    encryption: { format: personalServerRecoveryFormats.plaintextArtifact },
+  };
+  let encryptionKeyFile;
+  if (encrypted) {
+    encryptionKeyFile = join(root, 'recovery-encryption.key');
+    writeFileSync(encryptionKeyFile, `${'1'.repeat(64)}\n`);
+    const keyRecord = loadPersonalServerEncryptionKey(encryptionKeyFile);
+    const encryptedDatabasePath = `${databasePath}.enc`;
+    const encryptedDocumentsPath = `${documentsPath}.enc`;
+    const encryptedDatabase = encryptPersonalServerArtifact({
+      inputPath: databasePath,
+      outputPath: encryptedDatabasePath,
+      key: keyRecord.key,
+      aadContext: `${recoverySetId}:database`,
+      randomBytesImpl: (size) => Buffer.alloc(size, 0x11),
+    });
+    const encryptedDocuments = encryptPersonalServerArtifact({
+      inputPath: documentsPath,
+      outputPath: encryptedDocumentsPath,
+      key: keyRecord.key,
+      aadContext: `${recoverySetId}:documents`,
+      randomBytesImpl: (size) => Buffer.alloc(size, 0x22),
+    });
+    rmSync(databasePath);
+    rmSync(documentsPath);
+    databaseDescriptor = {
+      file: 'database.dump.enc',
+      ...encryptedDatabase,
+      encryption: {
+        format: personalServerRecoveryFormats.encryptedArtifact,
+        keySha256: keyRecord.keySha256,
+      },
+    };
+    documentsDescriptor = {
+      file: 'documents.tar.enc',
+      ...encryptedDocuments,
+      encryption: {
+        format: personalServerRecoveryFormats.encryptedArtifact,
+        keySha256: keyRecord.keySha256,
+      },
+    };
+  }
+
+  const manifest = {
+    format: 'charitypilot-personal-server-backup/v2',
+    recoverySetId,
+    createdAt: NOW.toISOString(),
+    project: 'charitypilot-personal-server',
+    origin,
+    application: {
+      format: 'charitypilot-personal-server-application-identity/v1',
+      imageTag,
+      images: {
+        api: { name: `charitypilot-personal-server-api:${imageTag}`, id: imageIds.api },
+        migrations: { name: `charitypilot-personal-server-migrations:${imageTag}`, id: imageIds.migrations },
+        web: { name: `charitypilot-personal-server-web:${imageTag}`, id: imageIds.web },
+      },
+      source: applicationSource,
+    },
+    writersQuiesced: true,
+    database: {
+      ...databaseDescriptor,
+      restoreVerified: true,
+      contentFingerprintSha256: databaseFingerprint,
+      restoreProof: {
+        file: 'database.restore-proof.json',
+        bytes: readFileSync(proofPath).length,
+        sha256: sha256RecoveryFile(proofPath),
+      },
+    },
+    documents: {
+      ...documentsDescriptor,
+      volume: 'charitypilot-personal-server-documents',
+      fileCount: documentInventory.fileCount,
+      totalFileBytes: documentInventory.totalFileBytes,
+      inventorySha256: documentInventory.inventorySha256,
+    },
+  };
+  if (encrypted) {
+    const keyRecord = loadPersonalServerEncryptionKey(encryptionKeyFile);
+    manifest.authentication = {
+      format: personalServerRecoveryFormats.manifestAuthentication,
+      file: 'manifest.hmac-sha256',
+      keySha256: keyRecord.keySha256,
+    };
+  }
+  const manifestPath = join(setPath, 'manifest.json');
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(join(setPath, 'manifest.sha256'), `${sha256RecoveryFile(manifestPath)}  manifest.json\n`);
+  if (encrypted) {
+    const keyRecord = loadPersonalServerEncryptionKey(encryptionKeyFile);
+    writeFileSync(
+      join(setPath, 'manifest.hmac-sha256'),
+      `${hmacPersonalServerRecoveryManifest(manifestPath, keyRecord.key)}  manifest.json\n`,
+    );
+  }
+  return { setPath, recoverySetId, encryptionKeyFile, documentInventory };
+}
+
 test('argument parser exposes the safe command surface and rejects invented options', () => {
   assert.deepEqual(parsePersonalServerArgs(['help']), { command: 'help', options: {} });
+  assert.deepEqual(parsePersonalServerArgs(['resume-init', '--dry-run']), {
+    command: 'resume-init',
+    options: { dryRun: true },
+  });
   assert.deepEqual(
     parsePersonalServerArgs(['reset-link', '--email=director@example.org', '--dry-run']),
     { command: 'reset-link', options: { email: 'director@example.org', dryRun: true } },
+  );
+  assert.deepEqual(
+    parsePersonalServerArgs(['rehearse-restore', '--recovery-set=C:\\recovery']),
+    { command: 'rehearse-restore', options: { 'recovery-set': 'C:\\recovery', dryRun: false } },
+  );
+  assert.deepEqual(
+    parsePersonalServerArgs([
+      'rehearse-restore',
+      '--recovery-set=C:\\recovery',
+      '--source-origin=https://old-host.example.ts.net',
+    ]),
+    {
+      command: 'rehearse-restore',
+      options: {
+        'recovery-set': 'C:\\recovery',
+        'source-origin': 'https://old-host.example.ts.net',
+        dryRun: false,
+      },
+    },
+  );
+  assert.deepEqual(
+    parsePersonalServerArgs(['restore', '--recovery-set=C:\\recovery', '--confirm=exact']),
+    { command: 'restore', options: { 'recovery-set': 'C:\\recovery', confirm: 'exact', dryRun: false } },
+  );
+  assert.deepEqual(
+    parsePersonalServerArgs(['decommission', '--recovery-set=C:\\recovery', '--confirm=exact']),
+    { command: 'decommission', options: { 'recovery-set': 'C:\\recovery', confirm: 'exact', dryRun: false } },
+  );
+  assert.deepEqual(
+    parsePersonalServerArgs([
+      'update',
+      '--update-receipt=C:\\state\\pending-update.json',
+      '--resume-pending',
+    ]),
+    {
+      command: 'update',
+      options: {
+        'update-receipt': 'C:\\state\\pending-update.json',
+        resumePending: true,
+        dryRun: false,
+      },
+    },
   );
   assert.throws(() => parsePersonalServerArgs(['stop', '--volumes']), /Unknown option/);
   assert.throws(() => parsePersonalServerArgs(['reset-link', '--email']), /requires a value/);
@@ -91,6 +378,70 @@ test('argument parser exposes the safe command surface and rejects invented opti
   assert.throws(
     () => parsePersonalServerArgs(['start', '--help', '--help']),
     /--help may be provided only once/,
+  );
+  assert.throws(
+    () => parsePersonalServerArgs(['update', '--resume-pending', '--resume-pending']),
+    /--resume-pending may be provided only once/,
+  );
+  assert.throws(
+    () => parsePersonalServerArgs(['update', '--resume-pending=true']),
+    /--resume-pending does not accept a value/,
+  );
+});
+
+test('replacement-host parser exposes a separate plan and guarded bootstrap surface', () => {
+  assert.deepEqual(
+    parsePersonalServerArgs([
+      'bootstrap-restore-plan', '--recovery-set=C:\\recovery',
+      '--source-origin=https://old.example.ts.net', '--origin=https://new.example.ts.net',
+      '--port=8080', '--encryption-key-file=C:\\key.hex',
+    ]),
+    {
+      command: 'bootstrap-restore-plan',
+      options: {
+        'recovery-set': 'C:\\recovery',
+        'source-origin': 'https://old.example.ts.net',
+        origin: 'https://new.example.ts.net',
+        port: '8080',
+        'encryption-key-file': 'C:\\key.hex',
+        dryRun: false,
+      },
+    },
+  );
+  assert.deepEqual(
+    parsePersonalServerArgs([
+      'bootstrap-restore', '--recovery-set=C:\\recovery',
+      '--source-origin=https://old.example.ts.net', '--origin=https://new.example.ts.net',
+      '--port=8080', '--confirm=exact', '--owner-email=owner@example.org',
+      '--owner-password-file=C:\\owner-password.txt', '--encryption-key-file=C:\\key.hex',
+    ]).command,
+    'bootstrap-restore',
+  );
+  assert.throws(
+    () => parsePersonalServerArgs(['restore', '--owner-password-file=C:\\owner-password.txt']),
+    /Unknown option/u,
+  );
+});
+
+test('replacement-host source binding requires the exact authenticated tag and commit without retained image IDs', () => {
+  const application = {
+    format: 'charitypilot-personal-server-application-identity/v1',
+    imageTag: 'personal-v1.2.3',
+    source: { kind: 'release-bundle', tag: 'personal-v1.2.3', commitSha: 'a'.repeat(40) },
+  };
+  const source = {
+    releaseIdentity: { tag: 'personal-v1.2.3', commitSha: 'a'.repeat(40) },
+  };
+  assert.equal(validateReplacementRestoreSourceBinding(application, 'personal-v1.2.3', source), true);
+  assert.throws(
+    () => validateReplacementRestoreSourceBinding(application, 'personal-v1.2.4', source),
+    /exact authenticated backup source/u,
+  );
+  assert.throws(
+    () => validateReplacementRestoreSourceBinding(application, 'personal-v1.2.3', {
+      releaseIdentity: { tag: 'personal-v1.2.3', commitSha: 'b'.repeat(40) },
+    }),
+    /exact authenticated backup source/u,
   );
 });
 
@@ -132,6 +483,380 @@ test('existing personal-server upgrade guidance adds a canonical independent rec
   assert.doesNotMatch(deploymentGuide, /Write-Host\s+['"]?\$secret/u);
 });
 
+test('cutover recovery stops every writer before restoring a tag or destructive data', () => {
+  const originalState = {
+    format: 'charitypilot-personal-server-install-state/v1',
+    phase: 'ready',
+    activeImageTag: 'personal-v1.0.0',
+    previousRelease: { imageTag: 'personal-v0.9.0' },
+  };
+  const restoredStates = [];
+  const calls = [];
+  executePersonalServerCutoverRecovery({
+    stopWriters: () => calls.push('stop-writers'),
+    restoreImageTag: () => calls.push('restore-image-tag'),
+    restoreData: () => calls.push('restore-data'),
+    startRuntime: () => calls.push('start-runtime'),
+    restoreInstallationState: () => {
+      calls.push('restore-install-state');
+      restoredStates.push(structuredClone(originalState));
+    },
+  });
+  assert.deepEqual(calls, [
+    'stop-writers',
+    'restore-image-tag',
+    'restore-data',
+    'start-runtime',
+    'restore-install-state',
+  ]);
+  assert.deepEqual(restoredStates, [originalState]);
+});
+
+test('disposable rehearsal cleanup attempts every exact operation and aggregates all failures', () => {
+  const calls = [];
+  assert.throws(
+    () => executePersonalServerCleanup([
+      () => {
+        calls.push('caddy');
+        throw new Error('caddy removal failed');
+      },
+      () => calls.push('web'),
+      () => {
+        calls.push('network');
+        throw new Error('network removal failed');
+      },
+    ]),
+    (error) => {
+      assert.match(error.message, /caddy removal failed/u);
+      assert.match(error.message, /network removal failed/u);
+      return true;
+    },
+  );
+  assert.deepEqual(calls, ['caddy', 'web', 'network']);
+});
+
+test('first official release adoption requires unchanged canonical origin/master and target ancestry', () => {
+  const base = {
+    installationSource: {
+      kind: 'git',
+      revision: 'a'.repeat(40),
+      branch: 'master',
+      canonicalRemote: true,
+    },
+    activeImageTag: 'local',
+    currentImageTag: 'local',
+    workingTree: '',
+    revision: 'a'.repeat(40),
+    branch: 'master',
+    remote: 'https://github.com/jasperfordesq-ai/charity-governance.git',
+    originMasterRevision: 'a'.repeat(40),
+    targetCommitSha: 'b'.repeat(40),
+    targetCommitPresent: true,
+    targetDescendsFromCurrent: true,
+  };
+  assert.equal(validateCleanGitReleaseAdoption(base), true);
+  assert.equal(validateCleanGitReleaseAdoption({ ...base, targetCommitSha: base.revision }), true);
+  for (const mutation of [
+    { workingTree: ' M changed.txt' },
+    { revision: 'c'.repeat(40) },
+    { branch: 'feature' },
+    { remote: 'https://github.com/example/fork.git' },
+    { originMasterRevision: 'c'.repeat(40) },
+    { targetCommitPresent: false },
+    { targetDescendsFromCurrent: false },
+    { activeImageTag: 'personal-v0.9.0' },
+  ]) {
+    assert.throws(() => validateCleanGitReleaseAdoption({ ...base, ...mutation }));
+  }
+  assert.throws(() => validateCleanGitReleaseAdoption({
+    ...base,
+    installationSource: { ...base.installationSource, branch: 'feature' },
+  }));
+});
+
+test('cutover recovery fails closed before destructive recovery when writers cannot stop', () => {
+  const calls = [];
+  assert.throws(
+    () => executePersonalServerCutoverRecovery({
+      stopWriters: () => {
+        calls.push('stop-writers');
+        throw new Error('writer stop failed');
+      },
+      restoreImageTag: () => calls.push('restore-image-tag'),
+      restoreData: () => calls.push('restore-data'),
+      startRuntime: () => calls.push('start-runtime'),
+      restoreInstallationState: () => calls.push('restore-install-state'),
+    }),
+    /writer stop failed/u,
+  );
+  assert.deepEqual(calls, ['stop-writers']);
+});
+
+test('cutover recovery does not claim the exact install state before runtime recovery succeeds', () => {
+  const calls = [];
+  assert.throws(
+    () => executePersonalServerCutoverRecovery({
+      stopWriters: () => calls.push('stop-writers'),
+      restoreImageTag: () => calls.push('restore-image-tag'),
+      restoreData: () => calls.push('restore-data'),
+      startRuntime: () => {
+        calls.push('start-runtime');
+        throw new Error('runtime start failed');
+      },
+      restoreInstallationState: () => calls.push('restore-install-state'),
+    }),
+    /runtime start failed/u,
+  );
+  assert.deepEqual(calls, ['stop-writers', 'restore-image-tag', 'restore-data', 'start-runtime']);
+});
+
+test('restore cutover persists restoring before mutation and migrates only after raw fingerprint proof', () => {
+  const calls = [];
+  executePersonalServerRestoreCutover({
+    persistRestoring: () => calls.push('persist-restoring'),
+    stopWriters: () => calls.push('stop-writers'),
+    restoreSelectedDatabase: () => calls.push('restore-database'),
+    proveSelectedDatabaseFingerprint: () => calls.push('prove-raw-fingerprint'),
+    migrateCurrentSchema: () => calls.push('migrate-current-schema'),
+    restoreSelectedDocuments: () => calls.push('restore-documents'),
+    startSelectedRuntime: () => calls.push('start-runtime'),
+    verifySelectedApplication: () => calls.push('verify-application'),
+    persistReady: () => calls.push('persist-ready'),
+  });
+  assert.deepEqual(calls, [
+    'persist-restoring',
+    'stop-writers',
+    'restore-database',
+    'prove-raw-fingerprint',
+    'migrate-current-schema',
+    'restore-documents',
+    'start-runtime',
+    'verify-application',
+    'persist-ready',
+  ]);
+});
+
+test('restore cutover failure never advances to ready or later destructive stages', () => {
+  const calls = [];
+  assert.throws(
+    () => executePersonalServerRestoreCutover({
+      persistRestoring: () => calls.push('persist-restoring'),
+      stopWriters: () => calls.push('stop-writers'),
+      restoreSelectedDatabase: () => calls.push('restore-database'),
+      proveSelectedDatabaseFingerprint: () => {
+        calls.push('prove-raw-fingerprint');
+        throw new Error('fingerprint mismatch');
+      },
+      migrateCurrentSchema: () => calls.push('migrate-current-schema'),
+      restoreSelectedDocuments: () => calls.push('restore-documents'),
+      startSelectedRuntime: () => calls.push('start-runtime'),
+      verifySelectedApplication: () => calls.push('verify-application'),
+      persistReady: () => calls.push('persist-ready'),
+    }),
+    /fingerprint mismatch/u,
+  );
+  assert.deepEqual(calls, [
+    'persist-restoring',
+    'stop-writers',
+    'restore-database',
+    'prove-raw-fingerprint',
+  ]);
+});
+
+test('decommission finalization rehearses the exact final set before closing access or deleting resources', () => {
+  const calls = [];
+  const verified = { recoverySetId: 'final' };
+  assert.equal(executePersonalServerDecommissionFinalization({
+    stopWriters: () => calls.push('stop-writers'),
+    verifyFinalRecovery: () => {
+      calls.push('verify-final-recovery');
+      return verified;
+    },
+    rehearseFinalRecovery: (value) => {
+      assert.equal(value, verified);
+      calls.push('rehearse-final-recovery');
+    },
+    closePrivateAccess: () => calls.push('close-private-access'),
+    removeRuntime: () => calls.push('remove-runtime'),
+    removeDatabaseVolume: () => calls.push('remove-database-volume'),
+    removeDocumentVolume: () => calls.push('remove-document-volume'),
+    assertResourcesAbsent: () => calls.push('prove-resources-absent'),
+    persistDecommissioned: () => calls.push('persist-decommissioned'),
+  }), verified);
+  assert.deepEqual(calls, [
+    'stop-writers',
+    'verify-final-recovery',
+    'rehearse-final-recovery',
+    'close-private-access',
+    'remove-runtime',
+    'remove-database-volume',
+    'remove-document-volume',
+    'prove-resources-absent',
+    'persist-decommissioned',
+  ]);
+});
+
+test('decommission verification failure leaves private access and every resource untouched', () => {
+  const calls = [];
+  assert.throws(
+    () => executePersonalServerDecommissionFinalization({
+      stopWriters: () => calls.push('stop-writers'),
+      verifyFinalRecovery: () => {
+        calls.push('verify-final-recovery');
+        throw new Error('final verification failed');
+      },
+      rehearseFinalRecovery: () => calls.push('rehearse-final-recovery'),
+      closePrivateAccess: () => calls.push('close-private-access'),
+      removeRuntime: () => calls.push('remove-runtime'),
+      removeDatabaseVolume: () => calls.push('remove-database-volume'),
+      removeDocumentVolume: () => calls.push('remove-document-volume'),
+      assertResourcesAbsent: () => calls.push('prove-resources-absent'),
+      persistDecommissioned: () => calls.push('persist-decommissioned'),
+    }),
+    /final verification failed/u,
+  );
+  assert.deepEqual(calls, ['stop-writers', 'verify-final-recovery']);
+});
+
+test('decommission deletion failure never records a completed decommission', () => {
+  const calls = [];
+  assert.throws(
+    () => executePersonalServerDecommissionFinalization({
+      stopWriters: () => calls.push('stop-writers'),
+      verifyFinalRecovery: () => {
+        calls.push('verify-final-recovery');
+        return {};
+      },
+      rehearseFinalRecovery: () => calls.push('rehearse-final-recovery'),
+      closePrivateAccess: () => calls.push('close-private-access'),
+      removeRuntime: () => calls.push('remove-runtime'),
+      removeDatabaseVolume: () => {
+        calls.push('remove-database-volume');
+        throw new Error('volume removal failed');
+      },
+      removeDocumentVolume: () => calls.push('remove-document-volume'),
+      assertResourcesAbsent: () => calls.push('prove-resources-absent'),
+      persistDecommissioned: () => calls.push('persist-decommissioned'),
+    }),
+    /volume removal failed/u,
+  );
+  assert.deepEqual(calls, [
+    'stop-writers',
+    'verify-final-recovery',
+    'rehearse-final-recovery',
+    'close-private-access',
+    'remove-runtime',
+    'remove-database-volume',
+  ]);
+});
+
+test('guarded decommission deletion tolerates an already-absent exact volume', () => {
+  const executor = fakeExecutor(() => ({ status: 0, stdout: '', stderr: '' }));
+  removePersonalVolumeIfPresent(
+    'charitypilot-personal-server-db',
+    'personal-server-db',
+    {
+      dryRun: false,
+      repoRoot: 'C:\\protected-source',
+      processEnv: {},
+      spawnSyncImpl: executor.spawn,
+      writeOutput: () => {},
+      commandTimeoutMs: 30_000,
+    },
+  );
+  assert.deepEqual(executor.calls.map((call) => call.command), [[
+    'docker',
+    'volume',
+    'ls',
+    '--filter',
+    'name=charitypilot-personal-server-db',
+    '--format',
+    '{{.Name}}',
+  ]]);
+});
+
+test('Tailscale closure accepts only an exact empty Serve configuration', () => {
+  assert.equal(validateTailscaleServeClosed({}), true);
+  assert.equal(validateTailscaleServeClosed({
+    TCP: {},
+    Web: {},
+    AllowFunnel: {},
+    Foreground: {},
+    Services: {},
+  }), true);
+  assert.throws(
+    () => validateTailscaleServeClosed({ TCP: { 443: { HTTPS: true } } }),
+    /not closed/u,
+  );
+  assert.throws(
+    () => validateTailscaleServeClosed({ Unexpected: {} }),
+    /unexpected configuration/u,
+  );
+});
+
+test('rollback application binding requires the authenticated source and exact retained image IDs', () => {
+  const tag = 'personal-v1.2.3';
+  const commitSha = '1'.repeat(40);
+  const source = { kind: 'release-bundle', releaseIdentity: { tag, commitSha } };
+  const images = {
+    api: { name: `charitypilot-personal-server-api:${tag}`, id: `sha256:${'a'.repeat(64)}` },
+    migrations: { name: `charitypilot-personal-server-migrations:${tag}`, id: `sha256:${'b'.repeat(64)}` },
+    web: { name: `charitypilot-personal-server-web:${tag}`, id: `sha256:${'c'.repeat(64)}` },
+  };
+  const application = {
+    format: 'charitypilot-personal-server-application-identity/v1',
+    imageTag: tag,
+    source: { kind: 'release-bundle', tag, commitSha },
+    images,
+  };
+  assert.equal(validateRecoveryApplicationBinding(application, tag, source, structuredClone(images)), true);
+  assert.throws(
+    () => validateRecoveryApplicationBinding(
+      { ...application, source: { ...application.source, commitSha: '2'.repeat(40) } },
+      tag,
+      source,
+      images,
+    ),
+    /source identity/u,
+  );
+  assert.throws(
+    () => validateRecoveryApplicationBinding(application, tag, source, {
+      ...images,
+      web: { ...images.web, id: `sha256:${'d'.repeat(64)}` },
+    }),
+    /Retained web image/u,
+  );
+});
+
+test('completed update receipt archival is collision-safe and preserves prior evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-update-receipt-'));
+  try {
+    const pendingPath = join(root, 'pending-update.json');
+    const attemptId = 'ab'.repeat(12);
+    const tag = 'personal-v1.2.3';
+    const existingPath = join(root, `completed-update-${tag}-${attemptId}.json`);
+    writeFileSync(pendingPath, '{"pending":true}\n');
+    writeFileSync(existingPath, '{"prior":true}\n');
+    const receipt = {
+      path: pendingPath,
+      identity: { tag },
+      value: { attemptId },
+    };
+    const archivedPath = archiveUpdateReceipt(receipt, 'completed', {
+      dryRun: false,
+      randomBytesImpl: deterministicRandomBytes,
+      writeOutput: () => {},
+    });
+    assert.notEqual(archivedPath, existingPath);
+    assert.match(archivedPath, /-abababab\.json$/u);
+    assert.equal(existsSync(pendingPath), false);
+    assert.equal(readFileSync(existingPath, 'utf8'), '{"prior":true}\n');
+    assert.equal(readFileSync(archivedPath, 'utf8'), '{"pending":true}\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('init dry-run plans build, migration, initializer, and start without writing or revealing a password', () => {
   withWorkspace((root) => {
     const executor = fakeExecutor();
@@ -147,6 +872,8 @@ test('init dry-run plans build, migration, initializer, and start without writin
     const text = output.join('');
     assert.equal(executor.calls.length, 0);
     assert.equal(existsSync(join(root, '.env.personal-server')), false);
+    assert.match(text, /pull db document-storage-init caddy/);
+    assert.match(text, /caddy caddy validate --config \/etc\/caddy\/Caddyfile/);
     assert.match(text, /--profile personal-init build migrate/);
     assert.match(text, /--profile personal-init build api/);
     assert.match(text, /--profile personal-init build web/);
@@ -181,6 +908,12 @@ test('successful init stores no owner password and prints it only after every ch
     assert.equal(initializer.command.includes(match[1]), false);
     assert.equal(initializer.options.env.PERSONAL_SERVER_OWNER_PASSWORD, match[1]);
 
+    const loginVerification = executor.calls.find((call) => call.command.includes('--input-type=module'));
+    assert.ok(loginVerification);
+    assert.equal(loginVerification.command.includes(match[1]), false);
+    assert.equal(loginVerification.options.env.PERSONAL_SERVER_OWNER_PASSWORD, match[1]);
+    assert.equal(loginVerification.options.env.PERSONAL_SERVER_OWNER_EMAIL, 'owner@example.org');
+
     const commands = commandText(executor.calls);
     assert.ok(commands.indexOf('--profile personal-init build migrate') < commands.indexOf('--profile personal-init build api'));
     assert.ok(commands.indexOf('--profile personal-init build api') < commands.indexOf('--profile personal-init build web'));
@@ -190,7 +923,7 @@ test('successful init stores no owner password and prints it only after every ch
   }, { withEnv: false });
 });
 
-test('init failure never prints the generated owner password', () => {
+test('post-initializer runtime failure still reveals the only usable Owner credential', () => {
   withWorkspace((root) => {
     const executor = fakeExecutor((call) => (
       call.command.includes('up') ? { status: 1, stdout: '', stderr: 'failed' } : null
@@ -202,9 +935,127 @@ test('init failure never prints the generated owner password', () => {
       '--owner-name=Example Owner',
       '--organisation-name=Example Charity',
     ], executor, output), /failed/);
-    assert.doesNotMatch(output.join(''), /Generated Owner password|Cp!7/);
+    assert.match(output.join(''), /Owner workspace was created/);
+    assert.match(output.join(''), /Generated Owner password \(shown once\):/);
     assert.doesNotMatch(readFileSync(join(root, '.env.personal-server'), 'utf8'), /^PERSONAL_SERVER_OWNER_PASSWORD=/m);
   }, { withEnv: false });
+});
+
+test('failure before the initializer commits never reveals an unused Owner credential', () => {
+  withWorkspace((root) => {
+    const executor = fakeExecutor((call) => (
+      call.command.includes('build') ? { status: 1, stdout: '', stderr: 'failed' } : null
+    ));
+    const output = [];
+    assert.throws(() => runAt(root, [
+      'init',
+      '--owner-email=owner@example.org',
+      '--owner-name=Example Owner',
+      '--organisation-name=Example Charity',
+    ], executor, output), /failed/);
+    assert.doesNotMatch(output.join(''), /Generated Owner password|Cp!7/);
+  }, { withEnv: false });
+});
+
+test('failed installation resume initializes an empty transactional database and marks backup pending', () => {
+  withWorkspace((root) => {
+    const releaseIdentity = {
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: 'personal-v1.0.0',
+      commitSha: 'a'.repeat(40),
+    };
+    writeFileSync(join(root, 'personal-server-release.json'), JSON.stringify(releaseIdentity));
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'failed',
+      sourceRoot: root,
+      source: { releaseIdentity },
+    }));
+    writeFileSync(join(root, 'recovery-key.hex'), `${'1'.repeat(64)}\n`);
+    const executor = fakeExecutor((call) => {
+      if (call.command.join(' ').includes('charitypilot-personal-server-initialization-state/v1')) {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            format: 'charitypilot-personal-server-initialization-state/v1',
+            organisationCount: 0,
+            userCount: 0,
+            subscriptionCount: 0,
+            owner: null,
+          }),
+          stderr: '',
+        };
+      }
+      return null;
+    });
+    const output = [];
+    runAt(root, ['resume-init'], executor, output);
+    assert.equal(JSON.parse(readFileSync(join(root, 'install-state.json'), 'utf8')).phase, 'initialized-backup-pending');
+    assert.match(output.join(''), /previously absent Owner workspace/u);
+    assert.equal((output.join('').match(/replacement Owner password \(shown once\)/gu) ?? []).length, 1);
+  });
+});
+
+test('failed installation resume resets exactly one committed Owner and refuses to rerun initializer', () => {
+  withWorkspace((root) => {
+    const releaseIdentity = {
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: 'personal-v1.0.0',
+      commitSha: 'a'.repeat(40),
+    };
+    writeFileSync(join(root, 'personal-server-release.json'), JSON.stringify(releaseIdentity));
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'failed',
+      sourceRoot: root,
+      source: { releaseIdentity },
+    }));
+    const executor = fakeExecutor((call) => {
+      const command = call.command.join(' ');
+      if (command.includes('charitypilot-personal-server-initialization-state/v1')) {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            format: 'charitypilot-personal-server-initialization-state/v1',
+            organisationCount: 1,
+            userCount: 1,
+            subscriptionCount: 1,
+            owner: { email: 'owner@example.org', role: 'OWNER', emailVerified: true },
+          }),
+          stderr: '',
+        };
+      }
+      if (call.command.at(-1) === 'reset-password') {
+        return { status: 0, stdout: JSON.stringify({ passwordReset: true, sessionsRevoked: 2 }), stderr: '' };
+      }
+      return null;
+    });
+    const output = [];
+    runAt(root, ['resume-init'], executor, output);
+    assert.equal(executor.calls.some(({ command }) => command.at(-1) === 'personal-init'), false);
+    assert.match(output.join(''), /one exact existing Owner workspace/u);
+    assert.match(output.join(''), /replacement Owner password \(shown once\)/u);
+  });
+});
+
+test('failed installation resume is bound to the exact protected source root', () => {
+  withWorkspace((root) => {
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'failed',
+      sourceRoot: join(root, 'different-source'),
+      source: {
+        canonicalRemote: true,
+        revision: 'a'.repeat(40),
+      },
+    }));
+    assert.throws(
+      () => runAt(root, ['resume-init'], fakeExecutor(), []),
+      /source root does not match/u,
+    );
+  });
 });
 
 test('init reuses but never overwrites an existing environment file', () => {
@@ -213,6 +1064,58 @@ test('init reuses but never overwrites an existing environment file', () => {
     const executor = fakeExecutor();
     runAt(root, ['init'], executor, []);
     assert.equal(readFileSync(join(root, '.env.personal-server'), 'utf8'), before);
+  });
+});
+
+test('an explicit protected state environment stays outside the source checkout', () => {
+  withWorkspace((root) => {
+    const stateRoot = mkdtempSync(join(tmpdir(), 'charitypilot-personal-state-'));
+    const envPath = join(stateRoot, '.env.personal-server');
+    try {
+      const executor = fakeExecutor();
+      runAt(root, [
+        'init',
+        '--owner-email=owner@example.org',
+        '--owner-name=Example Owner',
+        '--organisation-name=Example Charity',
+      ], executor, [], { CHARITYPILOT_PERSONAL_SERVER_ENV_FILE: envPath });
+      assert.equal(existsSync(envPath), true);
+      assert.equal(existsSync(join(root, '.env.personal-server')), false);
+      assert.match(commandText(executor.calls), new RegExp(envPath.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')));
+    } finally {
+      rmSync(stateRoot, { recursive: true, force: true });
+    }
+  }, { withEnv: false });
+});
+
+test('protected location pointer makes a custom state root discoverable from stale parent shells', () => {
+  withWorkspace((root) => {
+    const localAppData = mkdtempSync(join(tmpdir(), 'charitypilot-local-appdata-'));
+    const stateRoot = mkdtempSync(join(tmpdir(), 'charitypilot-custom-state-'));
+    const pointerDirectory = join(localAppData, 'CharityPilot');
+    const environmentPath = join(stateRoot, '.env.personal-server');
+    try {
+      mkdirSync(pointerDirectory, { recursive: true });
+      writeFileSync(join(pointerDirectory, 'personal-server-location.json'), JSON.stringify({
+        format: 'charitypilot-personal-server-location/v1',
+        stateRoot,
+        environmentPath,
+      }));
+      assert.equal(environmentFilePath({ repoRoot: root, processEnv: { LOCALAPPDATA: localAppData } }), environmentPath);
+      const explicit = join(stateRoot, 'explicit.env');
+      assert.equal(environmentFilePath({
+        repoRoot: root,
+        processEnv: { LOCALAPPDATA: localAppData, CHARITYPILOT_PERSONAL_SERVER_ENV_FILE: explicit },
+      }), explicit);
+      writeFileSync(join(pointerDirectory, 'personal-server-location.json'), '{bad json');
+      assert.throws(
+        () => environmentFilePath({ repoRoot: root, processEnv: { LOCALAPPDATA: localAppData } }),
+        /not valid JSON/u,
+      );
+    } finally {
+      rmSync(localAppData, { recursive: true, force: true });
+      rmSync(stateRoot, { recursive: true, force: true });
+    }
   });
 });
 
@@ -266,6 +1169,41 @@ test('routine start fails closed on incompatible migration history before applic
   });
 });
 
+test('exclusive operation lock blocks concurrent work and safely preserves stale-lock evidence', () => {
+  withWorkspace((root) => {
+    const lockPath = join(root, 'personal-server-operation.lock');
+    const active = {
+      format: 'charitypilot-personal-server-operation-lock/v1',
+      operationId: 'a'.repeat(24),
+      pid: process.pid,
+      hostname: hostname(),
+      command: 'backup',
+      startedAt: NOW.toISOString(),
+    };
+    writeFileSync(lockPath, JSON.stringify(active));
+    const blockedExecutor = fakeExecutor();
+    assert.throws(
+      () => runAt(root, ['stop'], blockedExecutor, []),
+      /operation backup is already locked/u,
+    );
+    assert.equal(blockedExecutor.calls.length, 0);
+
+    const stale = {
+      ...active,
+      operationId: 'b'.repeat(24),
+      pid: 2_000_000_000,
+      command: 'update',
+      startedAt: new Date(NOW.getTime() - (60 * 60 * 1000)).toISOString(),
+    };
+    writeFileSync(lockPath, JSON.stringify(stale));
+    const executor = fakeExecutor();
+    runAt(root, ['stop'], executor, []);
+    assert.equal(existsSync(lockPath), false);
+    assert.equal(existsSync(join(root, `operation-lock-stale-${stale.operationId}.json`)), true);
+    assert.equal(executor.calls.length, 1);
+  });
+});
+
 test('status reports only allowlisted service health and the configured nonsecret origin', () => {
   withWorkspace((root) => {
     const records = ['db', 'api', 'web', 'caddy']
@@ -293,9 +1231,9 @@ test('backup dry-run shows quiesce, database verification, document copy, and ve
     runAt(root, ['backup', '--dry-run'], executor, output);
     const text = output.join('');
     assert.equal(executor.calls.length, 0);
-    assert.ok(text.indexOf('stop caddy web api') < text.indexOf('postgres-backup.mjs backup'));
-    assert.ok(text.indexOf('postgres-backup.mjs backup') < text.indexOf('postgres-backup.mjs verify-restore'));
-    assert.ok(text.indexOf('verify-restore') < text.indexOf(`volume inspect charitypilot-personal-server-documents`));
+    assert.ok(text.indexOf('stop caddy web api') < text.indexOf('postgres-backup.mjs source-identity'));
+    assert.ok(text.indexOf('postgres-backup.mjs source-identity') < text.indexOf('postgres-backup.mjs prove-restore'));
+    assert.ok(text.indexOf('prove-restore') < text.indexOf(`volume inspect charitypilot-personal-server-documents`));
     assert.ok(text.indexOf('volume inspect') < text.indexOf('documents.tar'));
     assert.ok(text.indexOf('documents.tar') < text.lastIndexOf('up -d --no-build --wait'));
     assert.doesNotMatch(text, /J{32}|R{32}|a{64}/u);
@@ -312,12 +1250,12 @@ test('backup failure restores previously running services and removes incomplete
         return { status: 0, stdout: 'db\napi\nweb\ncaddy\n', stderr: '' };
       }
       if (text.includes('ps -q db')) return { status: 0, stdout: 'abcdef1234567890\n', stderr: '' };
-      if (text.includes('postgres-backup.mjs backup')) return { status: 1, stdout: '', stderr: 'backup failed' };
+      if (text.includes('postgres-backup.mjs source-identity')) return { status: 1, stdout: '', stderr: 'identity failed' };
       return null;
     });
     assert.throws(
       () => runAt(root, ['backup', `--output-dir=${backupRoot}`], executor, []),
-      /postgres-backup\.mjs backup.*failed/s,
+      /postgres-backup\.mjs source-identity.*identity failed/s,
     );
     const commands = commandText(executor.calls);
     assert.ok(commands.indexOf('stop caddy web api') < commands.lastIndexOf('up -d --no-build --wait'));
@@ -325,17 +1263,843 @@ test('backup failure restores previously running services and removes incomplete
   });
 });
 
+test('installed backup fails closed instead of downgrading when the recovery key is missing', () => {
+  withWorkspace((root) => {
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'ready',
+    }));
+    assert.throws(
+      () => runAt(root, ['backup', '--dry-run'], fakeExecutor(), []),
+      /recovery key is missing.*plaintext backup/u,
+    );
+  });
+});
+
 test('update dry-run completes backup verification before build and migration', () => {
   withWorkspace((root) => {
+    const targetTag = 'personal-v1.0.0';
+    const commitSha = 'c'.repeat(40);
+    writeFileSync(join(root, 'personal-server-release.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: targetTag,
+      commitSha,
+      commitTime: NOW.toISOString(),
+    }));
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'ready',
+      sourceRoot: root,
+      source: {
+        kind: 'clean-git', revision: 'a'.repeat(40), branch: 'master', canonicalRemote: true,
+      },
+      activeImageTag: 'local',
+    }));
+    writeFileSync(join(root, 'recovery-key.hex'), `${'1'.repeat(64)}\n`);
+    const receiptPath = join(root, 'pending-update.json');
+    writeFileSync(receiptPath, JSON.stringify({
+      format: 'charitypilot-personal-server-update-receipt/v1',
+      phase: 'prepared',
+      createdAt: NOW.toISOString(),
+      current: { imageTag: 'local', sourceRoot: root },
+      target: {
+        sourceRoot: root,
+        tag: targetTag,
+        commitSha,
+        archiveFile: `CharityPilot-${targetTag}.zip`,
+        archiveSha256: 'd'.repeat(64),
+      },
+    }));
     const output = [];
-    runAt(root, ['update', '--dry-run'], fakeExecutor(), output);
+    runAt(root, ['update', `--update-receipt=${receiptPath}`, '--dry-run'], fakeExecutor(), output);
     const text = output.join('');
-    const verification = text.indexOf('postgres-backup.mjs verify-restore');
+    const verification = text.indexOf('postgres-backup.mjs prove-restore');
     const build = text.indexOf('--profile personal-init build migrate');
     const webBuild = text.indexOf('--profile personal-init build web');
     const migration = text.lastIndexOf('--profile maintenance run --rm migrate');
     assert.ok(verification >= 0 && verification < build && build < webBuild && webBuild < migration);
+    assert.match(text, /git rev-parse --verify "?refs\/remotes\/origin\/master\^\{commit\}"?/u);
+    assert.match(text, /git cat-file -e "c{40}\^\{commit\}"/u);
+    assert.match(text, /git merge-base --is-ancestor a{40} c{40}/u);
+    const snapshotStop = text.indexOf('stop caddy web api');
+    const tagSwitch = text.indexOf('atomically switch protected image tag local -> personal-v1.0.0');
+    assert.ok(snapshotStop >= 0 && snapshotStop < tagSwitch);
+    assert.doesNotMatch(text.slice(snapshotStop, tagSwitch), /up -d --no-build --wait/u);
+    assert.ok(text.lastIndexOf('up -d --no-build --wait') > migration);
+    assert.match(text, /version-bound update local -> personal-v1\.0\.0/u);
   });
+});
+
+test('pending update recovery requires an explicit resume and rejects ambiguous cutover phases', () => {
+  withWorkspace((root) => {
+    const targetTag = 'personal-v1.0.0';
+    const commitSha = 'c'.repeat(40);
+    const receiptPath = join(root, 'pending-update.json');
+    writeFileSync(join(root, 'personal-server-release.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: targetTag,
+      commitSha,
+      commitTime: NOW.toISOString(),
+    }));
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'ready',
+      sourceRoot: root,
+      source: {
+        kind: 'clean-git', revision: 'a'.repeat(40), branch: 'master', canonicalRemote: true,
+      },
+      activeImageTag: 'local',
+    }));
+    writeFileSync(join(root, 'recovery-key.hex'), `${'1'.repeat(64)}\n`);
+    const receipt = {
+      format: 'charitypilot-personal-server-update-receipt/v1',
+      phase: 'pre-cutover',
+      attemptId: 'ab'.repeat(12),
+      createdAt: NOW.toISOString(),
+      current: { imageTag: 'local', sourceRoot: root },
+      target: {
+        sourceRoot: root,
+        tag: targetTag,
+        commitSha,
+        archiveFile: `CharityPilot-${targetTag}.zip`,
+        archiveSha256: 'd'.repeat(64),
+      },
+    };
+    writeFileSync(receiptPath, JSON.stringify(receipt));
+
+    assert.throws(
+      () => runAt(root, ['update', `--update-receipt=${receiptPath}`, '--dry-run'], fakeExecutor(), []),
+      /explicit --resume-pending/u,
+    );
+    const output = [];
+    runAt(
+      root,
+      ['update', `--update-receipt=${receiptPath}`, '--resume-pending', '--dry-run'],
+      fakeExecutor(),
+      output,
+    );
+    assert.match(output.join(''), /pre-cutover -> cutover-started/u);
+
+    writeFileSync(receiptPath, JSON.stringify({ ...receipt, phase: 'cutover-started' }));
+    assert.throws(
+      () => runAt(
+        root,
+        ['update', `--update-receipt=${receiptPath}`, '--resume-pending', '--dry-run'],
+        fakeExecutor(),
+        [],
+      ),
+      /ambiguous update receipt phase cutover-started/u,
+    );
+  });
+});
+
+test('rollback dry-run binds the prior source, retained images, and exact recovery set', () => {
+  withWorkspace((root) => {
+    const currentTag = 'personal-v2.0.0';
+    const previousTag = 'personal-v1.0.0';
+    const currentCommitSha = '2'.repeat(40);
+    const previousCommitSha = '1'.repeat(40);
+    const previousSourceRoot = join(root, 'previous-release');
+    mkdirSync(previousSourceRoot);
+    writeFileSync(join(previousSourceRoot, 'compose.personal-server.yml'), 'name: charitypilot-personal-server\nservices: {}\n');
+    writeFileSync(join(root, 'personal-server-release.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: currentTag,
+      commitSha: currentCommitSha,
+    }));
+    writeFileSync(join(previousSourceRoot, 'personal-server-release.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: previousTag,
+      commitSha: previousCommitSha,
+    }));
+    const previousRecovery = createRecoveryFixture(root, {
+      encrypted: true,
+      imageTag: previousTag,
+      applicationSource: {
+        kind: 'release-bundle',
+        tag: previousTag,
+        commitSha: previousCommitSha,
+      },
+    });
+    writeFileSync(join(root, 'recovery-key.hex'), `${'1'.repeat(64)}\n`);
+    writeFileSync(join(root, '.env.personal-server'), renderPersonalServerEnv({
+      ...validConfig(),
+      imageTag: currentTag,
+    }));
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'ready',
+      sourceRoot: root,
+      source: {
+        kind: 'release-bundle',
+        releaseIdentity: { tag: currentTag, commitSha: currentCommitSha },
+      },
+      previousRelease: {
+        sourceRoot: previousSourceRoot,
+        source: {
+          kind: 'release-bundle',
+          releaseIdentity: { tag: previousTag, commitSha: previousCommitSha },
+        },
+        imageTag: previousTag,
+        recoverySetPath: previousRecovery.setPath,
+      },
+    }));
+    const confirmation = personalServerRollbackConfirmation(currentTag, previousTag, previousRecovery.setPath);
+    const stateBefore = readFileSync(join(root, 'install-state.json'), 'utf8');
+    const environmentBefore = readFileSync(join(root, '.env.personal-server'), 'utf8');
+    const discoveryExecutor = fakeExecutor();
+    const discoveryOutput = [];
+    runAt(root, ['rollback', '--dry-run'], discoveryExecutor, discoveryOutput);
+    assert.match(discoveryOutput.join(''), new RegExp(confirmation.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+    assert.equal(discoveryExecutor.calls.length, 0);
+    assert.doesNotMatch(discoveryOutput.join(''), /network create|postgres-backup|atomically switch/u);
+    assert.equal(readFileSync(join(root, 'install-state.json'), 'utf8'), stateBefore);
+    assert.equal(readFileSync(join(root, '.env.personal-server'), 'utf8'), environmentBefore);
+    const output = [];
+    runAt(root, ['rollback', `--confirm=${confirmation}`, '--dry-run'], fakeExecutor(), output);
+    const text = output.join('');
+    assert.match(text, /image inspect charitypilot-personal-server-api:personal-v1\.0\.0/u);
+    assert.match(text, /atomically switch protected image tag personal-v2\.0\.0 -> personal-v1\.0\.0/u);
+    assert.match(text, /rollback personal-v2\.0\.0 -> personal-v1\.0\.0/u);
+    const rehearsal = text.indexOf('network create --internal');
+    const preservationPlan = text.lastIndexOf('ps --status running --services');
+    const preservation = text.indexOf('postgres-backup.mjs source-identity', preservationPlan);
+    const tagSwitch = text.indexOf('atomically switch protected image tag');
+    const restoredRuntime = text.lastIndexOf('up -d --no-build --wait');
+    assert.ok(
+      rehearsal >= 0 && rehearsal < preservationPlan && preservationPlan < preservation &&
+      preservation < tagSwitch && tagSwitch < restoredRuntime,
+    );
+    assert.doesNotMatch(text.slice(preservation, tagSwitch), /up -d --no-build --wait/u);
+    assert.equal(parsePersonalServerEnv(readFileSync(join(root, '.env.personal-server'), 'utf8')).CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG, currentTag);
+  });
+});
+
+test('first official release rollback retains the exact original clean-Git source and local images', () => {
+  withWorkspace((root) => {
+    const currentTag = 'personal-v1.0.0';
+    const currentCommitSha = 'b'.repeat(40);
+    const originalCommitSha = 'a'.repeat(40);
+    const originalSourceRoot = join(root, 'original-clean-git');
+    mkdirSync(originalSourceRoot);
+    writeFileSync(
+      join(originalSourceRoot, 'compose.personal-server.yml'),
+      'name: charitypilot-personal-server\nservices: {}\n',
+    );
+    writeFileSync(join(root, 'personal-server-release.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-bundle/v1',
+      profile: 'personal-server',
+      tag: currentTag,
+      commitSha: currentCommitSha,
+    }));
+    const previousRecovery = createRecoveryFixture(root, {
+      encrypted: true,
+      imageTag: 'local',
+      applicationSource: { kind: 'clean-git', commitSha: originalCommitSha },
+    });
+    writeFileSync(join(root, 'recovery-key.hex'), `${'1'.repeat(64)}\n`);
+    writeFileSync(join(root, '.env.personal-server'), renderPersonalServerEnv({
+      ...validConfig(),
+      imageTag: currentTag,
+    }));
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'ready',
+      sourceRoot: root,
+      source: {
+        kind: 'release-bundle',
+        releaseIdentity: { tag: currentTag, commitSha: currentCommitSha },
+      },
+      activeImageTag: currentTag,
+      previousRelease: {
+        sourceRoot: originalSourceRoot,
+        source: {
+          kind: 'git',
+          revision: originalCommitSha,
+          branch: 'master',
+          canonicalRemote: true,
+        },
+        imageTag: 'local',
+        recoverySetPath: previousRecovery.setPath,
+      },
+    }));
+    const confirmation = personalServerRollbackConfirmation(currentTag, 'local', previousRecovery.setPath);
+    const output = [];
+    runAt(root, ['rollback', `--confirm=${confirmation}`, '--dry-run'], fakeExecutor(), output);
+    const text = output.join('');
+    assert.match(text, /git status --porcelain=v1 --untracked-files=all/u);
+    assert.match(text, /git rev-parse HEAD/u);
+    for (const role of ['api', 'migrations', 'web']) {
+      assert.match(text, new RegExp(`image inspect charitypilot-personal-server-${role}:local`, 'u'));
+    }
+    assert.match(text, /atomically switch protected image tag personal-v1\.0\.0 -> local/u);
+  });
+});
+
+test('authenticated recovery artifact encryption round-trips and rejects tampering', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-crypto-'));
+  try {
+    const plaintextPath = join(root, 'database.dump');
+    const encryptedPath = join(root, 'database.dump.enc');
+    const decryptedPath = join(root, 'database.restored.dump');
+    const keyFile = join(root, 'recovery.key');
+    writeFileSync(plaintextPath, 'database bytes that must authenticate');
+    writeFileSync(keyFile, `${'2'.repeat(64)}\n`);
+    const key = loadPersonalServerEncryptionKey(keyFile).key;
+    const encrypted = encryptPersonalServerArtifact({
+      inputPath: plaintextPath,
+      outputPath: encryptedPath,
+      key,
+      aadContext: 'personal-server-test:database',
+      randomBytesImpl: (size) => Buffer.alloc(size, 0x5a),
+    });
+    const decrypted = decryptPersonalServerArtifact({
+      inputPath: encryptedPath,
+      outputPath: decryptedPath,
+      key,
+      aadContext: 'personal-server-test:database',
+    });
+    assert.equal(decrypted.sha256, encrypted.plaintextSha256);
+    assert.deepEqual(readFileSync(decryptedPath), readFileSync(plaintextPath));
+    assert.throws(
+      () => decryptPersonalServerArtifact({
+        inputPath: encryptedPath,
+        outputPath: join(root, 'wrong-context.dump'),
+        key,
+        aadContext: 'different-set:database',
+      }),
+      /authentication failed/u,
+    );
+
+    const tampered = readFileSync(encryptedPath);
+    tampered[tampered.length - 1] ^= 0xff;
+    writeFileSync(encryptedPath, tampered);
+    const rejectedOutput = join(root, 'tampered.dump');
+    assert.throws(
+      () => decryptPersonalServerArtifact({
+        inputPath: encryptedPath,
+        outputPath: rejectedOutput,
+        key,
+        aadContext: 'personal-server-test:database',
+      }),
+      /authentication failed/,
+    );
+    assert.equal(existsSync(rejectedOutput), false);
+    assert.equal(existsSync(`${rejectedOutput}.partial`), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('document recovery extraction rejects traversal and link entries without writing outside staging', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-tar-'));
+  try {
+    const traversalArchive = join(root, 'traversal.tar');
+    const traversalRoot = join(root, 'traversal-output');
+    const outsidePath = join(root, 'escaped.txt');
+    writeFileSync(traversalArchive, tarArchive([{ name: '../escaped.txt', content: 'escape' }]));
+    assert.throws(
+      () => inspectPersonalServerDocumentArchive(traversalArchive, { extractTo: traversalRoot }),
+      /unsafe path segment/,
+    );
+    assert.equal(existsSync(outsidePath), false);
+    assert.equal(existsSync(traversalRoot), false);
+
+    const linkArchive = join(root, 'link.tar');
+    const linkRoot = join(root, 'link-output');
+    writeFileSync(linkArchive, tarArchive([{ name: 'organisation-1/link', type: '2' }]));
+    assert.throws(
+      () => inspectPersonalServerDocumentArchive(linkArchive, { extractTo: linkRoot }),
+      /entry type "2" is forbidden/,
+    );
+    assert.equal(existsSync(linkRoot), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('document recovery accepts a safe GNU long filename and preserves its content identity', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-long-name-'));
+  try {
+    const archivePath = join(root, 'long-name.tar');
+    const extractionRoot = join(root, 'documents');
+    const longPath = `organisation-1/${'board-governance-record-'.repeat(6)}.pdf`;
+    writeFileSync(archivePath, tarArchive([
+      { name: '././@LongLink', type: 'L', content: `${longPath}\0` },
+      { name: 'truncated-name', content: 'long-name document bytes' },
+    ]));
+    const inventory = inspectPersonalServerDocumentArchive(archivePath, { extractTo: extractionRoot });
+    assert.equal(inventory.fileCount, 1);
+    assert.equal(inventory.files[0].path, longPath);
+    assert.equal(readFileSync(join(extractionRoot, ...longPath.split('/')), 'utf8'), 'long-name document bytes');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('recovery-set verifier binds manifest, proof, encrypted artifacts, and document inventory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-set-'));
+  try {
+    const fixture = createRecoveryFixture(root, { encrypted: true });
+    const verified = verifyPersonalServerRecoverySet({
+      recoverySetPath: fixture.setPath,
+      expectedProject: 'charitypilot-personal-server',
+      expectedOrigin: validConfig().origin,
+      encryptionKeyFile: fixture.encryptionKeyFile,
+    });
+    try {
+      assert.equal(verified.databaseProof.comparison.databaseFingerprintMatched, true);
+      assert.deepEqual(verified.documentInventory.files, fixture.documentInventory.files);
+      assert.equal(readFileSync(join(verified.documentsPath, 'organisation-1', 'board-minutes.txt'), 'utf8'), 'approved minutes');
+    } finally {
+      cleanupPersonalServerRecoveryStaging(verified.stagingDirectory);
+    }
+
+    const documentArtifact = join(fixture.setPath, 'documents.tar.enc');
+    const tampered = readFileSync(documentArtifact);
+    tampered[20] ^= 0xff;
+    writeFileSync(documentArtifact, tampered);
+    assert.throws(
+      () => verifyPersonalServerRecoverySet({
+        recoverySetPath: fixture.setPath,
+        expectedProject: 'charitypilot-personal-server',
+        expectedOrigin: validConfig().origin,
+        encryptionKeyFile: fixture.encryptionKeyFile,
+      }),
+      /Document artifact SHA-256 does not match/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('encrypted recovery manifest rejects metadata substitution even when SHA-256 is recomputed', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-manifest-auth-'));
+  try {
+    const fixture = createRecoveryFixture(root, { encrypted: true });
+    const manifestPath = join(fixture.setPath, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.createdAt = new Date(NOW.getTime() + 60_000).toISOString();
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    writeFileSync(join(fixture.setPath, 'manifest.sha256'), `${sha256RecoveryFile(manifestPath)}  manifest.json\n`);
+    assert.throws(
+      () => verifyPersonalServerRecoverySet({
+        recoverySetPath: fixture.setPath,
+        expectedProject: 'charitypilot-personal-server',
+        expectedOrigin: validConfig().origin,
+        encryptionKeyFile: fixture.encryptionKeyFile,
+        materialize: false,
+      }),
+      /manifest authentication failed/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rehearse-restore dry-run plans isolated application-level recovery and changes no state', () => {
+  withWorkspace((root) => {
+    const fixture = createRecoveryFixture(root);
+    const before = readdirSync(root).sort();
+    const executor = fakeExecutor();
+    const output = [];
+    runAt(root, ['rehearse-restore', `--recovery-set=${fixture.setPath}`, '--dry-run'], executor, output);
+    const text = output.join('');
+    assert.equal(executor.calls.length, 0);
+    assert.match(text, /network create --internal/);
+    assert.match(text, /postgres-backup\.mjs prove-restore/);
+    assert.match(text, /charitypilot-personal-server-api:local/);
+    assert.match(text, /application-document-reconciliation/);
+    assert.match(text, /charitypilot-personal-server-web:local/);
+    assert.match(text, /Caddyfile\.personal-server/);
+    assert.match(text, /full-application-login-and-document-proof/);
+    const rehearsalName = 'charitypilot-personal-rehearsal-abababababab';
+    for (const container of ['caddy', 'web', 'api', 'postgres']) {
+      assert.match(text, new RegExp(`docker rm -f ${rehearsalName}-${container}`, 'u'));
+    }
+    assert.match(text, new RegExp(`docker volume rm ${rehearsalName}-documents`, 'u'));
+    assert.match(text, new RegExp(`docker volume rm ${rehearsalName}-db`, 'u'));
+    assert.match(text, new RegExp(`docker network rm ${rehearsalName}`, 'u'));
+    assert.match(text, /no recovery containers, networks, volumes, or restored files were created/);
+    assert.deepEqual(readdirSync(root).sort(), before);
+  });
+});
+
+test('full-application rehearsal proves Caddy privacy headers and private compiled login content', () => {
+  const source = readFileSync(new URL('./personal-server.mjs', import.meta.url), 'utf8');
+  assert.match(source, /page\.headers\.get\('x-charitypilot-deployment'\) !== 'personal-server'/u);
+  assert.match(source, /x-robots-tag/u);
+  assert.match(source, /robots\.includes\('noindex'\).*robots\.includes\('nofollow'\)/su);
+  assert.match(source, /pageBody\.includes\('Welcome back'\).*pageBody\.includes\('private CharityPilot server'\)/su);
+});
+
+test('replacement-host bootstrap dry-run rehearses before exact blank target creation and never initializes an Owner', () => {
+  withWorkspace((root) => {
+    const fixture = createRecoveryFixture(root, {
+      encrypted: true,
+      applicationSource: { kind: 'clean-git', commitSha: 'a'.repeat(40) },
+    });
+    const state = {
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'restore-prepared',
+      installationMode: 'replacement-restore',
+      sourceRoot: root,
+      source: { revision: 'a'.repeat(40), canonicalRemote: true },
+      activeImageTag: 'local',
+      origin: validConfig().origin,
+      port: 8080,
+      restoreOperation: {
+        recoverySetPath: fixture.setPath,
+        sourceOrigin: validConfig().origin,
+        startedAt: NOW.toISOString(),
+      },
+    };
+    writeFileSync(join(root, 'install-state.json'), `${JSON.stringify(state, null, 2)}\n`);
+    const before = readdirSync(root).sort();
+    const executor = fakeExecutor();
+    const output = [];
+    runAt(root, [
+      'bootstrap-restore',
+      `--recovery-set=${fixture.setPath}`,
+      `--source-origin=${validConfig().origin}`,
+      `--origin=${validConfig().origin}`,
+      '--port=8080',
+      `--confirm=${personalServerRestoreConfirmation(fixture.recoverySetId)}`,
+      `--encryption-key-file=${fixture.encryptionKeyFile}`,
+      '--dry-run',
+    ], executor, output);
+    const text = output.join('');
+    const rehearsal = text.indexOf('network create --internal');
+    const absence = text.indexOf('container ls -a --filter label=com.docker.compose.project=charitypilot-personal-server');
+    const targetCreate = text.indexOf('create --no-build db document-storage-init');
+    const restore = text.indexOf('pg_restore --username', targetCreate);
+    const revoke = text.indexOf('revoke-all-restored-sessions');
+    assert.ok(
+      rehearsal >= 0 && rehearsal < absence && absence < targetCreate && targetCreate < restore && restore < revoke,
+      JSON.stringify({ rehearsal, absence, targetCreate, restore, revoke }),
+    );
+    assert.match(text, /replacement-restoring/);
+    assert.match(text, /initialized-backup-pending/);
+    assert.doesNotMatch(text, /initialize-personal-server|--no-deps(?:\s+-e\s+\S+)*\s+personal-init/u);
+    assert.equal(existsSync(join(root, '.env.personal-server')), false);
+    assert.deepEqual(readdirSync(root).sort(), before);
+  }, { withEnv: false });
+});
+
+test('restore dry-run requires the exact phrase and plans identity gates, rehearsal, preservation, then replacement', () => {
+  withWorkspace((root) => {
+    writeReadyInstallationState(root);
+    const fixture = createRecoveryFixture(root, { encrypted: true });
+    const executor = fakeExecutor();
+    const rejectedOutput = [];
+    assert.throws(
+      () => runAt(root, [
+        'restore',
+        `--recovery-set=${fixture.setPath}`,
+        '--confirm=wrong',
+        '--dry-run',
+      ], executor, rejectedOutput),
+      new RegExp(personalServerRestoreConfirmation(fixture.recoverySetId), 'u'),
+    );
+    assert.equal(executor.calls.length, 0);
+    assert.doesNotMatch(rejectedOutput.join(''), /dropdb|volume inspect/);
+
+    const output = [];
+    runAt(root, [
+      'restore',
+      `--recovery-set=${fixture.setPath}`,
+      `--confirm=${personalServerRestoreConfirmation(fixture.recoverySetId)}`,
+      '--dry-run',
+    ], executor, output);
+    const text = output.join('');
+    const identity = text.indexOf('volume inspect charitypilot-personal-server-db');
+    const networkIdentity = text.indexOf('network inspect charitypilot-personal-server-internal');
+    const rehearsal = text.indexOf('network create --internal');
+    const preservation = text.indexOf('postgres-backup.mjs source-identity', rehearsal);
+    const restoring = text.indexOf('transition protected installation state ready -> restoring', preservation);
+    const destructive = text.indexOf('dropdb --username');
+    const rawFingerprintProof = text.indexOf('postgres-backup.mjs prove-restore', destructive);
+    const currentMigration = text.indexOf('--profile maintenance run --rm migrate', rawFingerprintProof);
+    const documentClear = text.indexOf('find /documents -mindepth 1');
+    assert.ok(identity >= 0 && identity < networkIdentity && networkIdentity < rehearsal);
+    assert.ok(rehearsal >= 0 && rehearsal < preservation);
+    assert.ok(preservation >= 0 && preservation < restoring && restoring < destructive);
+    assert.ok(destructive < rawFingerprintProof && rawFingerprintProof < currentMigration);
+    assert.ok(currentMigration < documentClear);
+    assert.doesNotMatch(text.slice(preservation, destructive), /up -d --no-build --wait/u);
+    assert.match(text, /up -d --no-build --wait/);
+    assert.match(text, /application-document-reconciliation/);
+    assert.match(text, /no personal database, document volume, container, network, or recovery-set file was changed/);
+    assert.equal(executor.calls.length, 0);
+  });
+});
+
+test('ready-install restore supports an explicit source-origin rebind with a separately bound confirmation', () => {
+  withWorkspace((root) => {
+    writeReadyInstallationState(root);
+    const sourceOrigin = 'https://old-charity-host.example.ts.net';
+    const targetOrigin = validConfig().origin;
+    const fixture = createRecoveryFixture(root, { encrypted: true, origin: sourceOrigin });
+    const confirmation = personalServerRestoreConfirmation(fixture.recoverySetId, sourceOrigin, targetOrigin);
+    assert.match(confirmation, /:REBIND-ORIGIN:[a-f0-9]{16}$/u);
+    const before = readdirSync(root).sort();
+    const stateBefore = readFileSync(join(root, 'install-state.json'), 'utf8');
+    const environmentBefore = readFileSync(join(root, '.env.personal-server'), 'utf8');
+    const discoveryExecutor = fakeExecutor();
+    const discoveryOutput = [];
+    runAt(root, [
+      'restore',
+      `--recovery-set=${fixture.setPath}`,
+      `--source-origin=${sourceOrigin}`,
+      '--dry-run',
+    ], discoveryExecutor, discoveryOutput);
+    assert.match(
+      discoveryOutput.join(''),
+      new RegExp(confirmation.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'),
+    );
+    assert.equal(discoveryExecutor.calls.length, 0);
+    assert.doesNotMatch(discoveryOutput.join(''), /network create|postgres-backup|dropdb/u);
+    assert.deepEqual(readdirSync(root).sort(), before);
+    assert.equal(readFileSync(join(root, 'install-state.json'), 'utf8'), stateBefore);
+    assert.equal(readFileSync(join(root, '.env.personal-server'), 'utf8'), environmentBefore);
+    const output = [];
+    runAt(root, [
+      'restore',
+      `--recovery-set=${fixture.setPath}`,
+      `--source-origin=${sourceOrigin}`,
+      `--confirm=${confirmation}`,
+      '--dry-run',
+    ], fakeExecutor(), output);
+    assert.match(output.join(''), new RegExp(`${sourceOrigin} -> ${targetOrigin}`.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+  });
+});
+
+test('restore target volume validation fails closed on project, driver, name, or logical volume mismatch', () => {
+  const valid = {
+    Name: 'charitypilot-personal-server-db',
+    Driver: 'local',
+    Labels: {
+      'com.docker.compose.project': 'charitypilot-personal-server',
+      'com.docker.compose.volume': 'personal-server-db',
+    },
+  };
+  assert.equal(
+    validatePersonalServerVolumeIdentity(valid, 'charitypilot-personal-server-db', 'personal-server-db'),
+    true,
+  );
+  for (const invalid of [
+    { ...valid, Name: 'another-db' },
+    { ...valid, Driver: 'custom' },
+    { ...valid, Labels: { ...valid.Labels, 'com.docker.compose.project': 'another-project' } },
+    { ...valid, Labels: { ...valid.Labels, 'com.docker.compose.volume': 'another-volume' } },
+  ]) {
+    assert.throws(
+      () => validatePersonalServerVolumeIdentity(invalid, 'charitypilot-personal-server-db', 'personal-server-db'),
+      /not the exact personal-server Compose volume/,
+    );
+  }
+});
+
+test('decommission requires a fresh recovery set, exact project identities, and exact confirmation', () => {
+  withWorkspace((root) => {
+    writeReadyInstallationState(root);
+    const fixture = createRecoveryFixture(root, { encrypted: true });
+    const executor = fakeExecutor();
+    assert.equal(validatePersonalServerFreshRecovery({
+      recoverySetId: fixture.recoverySetId,
+      createdAt: NOW.toISOString(),
+    }, NOW), true);
+    assert.throws(() => validatePersonalServerFreshRecovery({
+      recoverySetId: fixture.recoverySetId,
+      createdAt: NOW.toISOString(),
+    }, new Date(NOW.getTime() + (25 * 60 * 60 * 1000))), /within the last 24 hours/);
+
+    assert.throws(() => runAt(root, [
+      'decommission',
+      `--recovery-set=${fixture.setPath}`,
+      '--confirm=wrong',
+      '--dry-run',
+    ], executor, []), new RegExp(personalServerDecommissionConfirmation(fixture.recoverySetId), 'u'));
+
+    const output = [];
+    runAt(root, [
+      'decommission',
+      `--recovery-set=${fixture.setPath}`,
+      `--confirm=${personalServerDecommissionConfirmation(fixture.recoverySetId)}`,
+      '--dry-run',
+    ], executor, output);
+    const text = output.join('');
+    assert.equal(executor.calls.length, 0);
+    assert.match(text, /volume inspect charitypilot-personal-server-db/);
+    assert.match(text, /network inspect charitypilot-personal-server-internal/);
+    const finalBackup = text.indexOf('postgres-backup.mjs source-identity');
+    const decommissioning = text.indexOf('transition protected installation state ready -> decommissioning');
+    const finalRehearsal = text.indexOf('network create --internal', decommissioning);
+    const deletion = text.lastIndexOf(' down');
+    const absenceProof = text.lastIndexOf('volume ls --filter name=charitypilot-personal-server-documents');
+    const decommissioned = text.indexOf('transition protected installation state decommissioning -> decommissioned');
+    assert.ok(finalBackup >= 0 && finalBackup < decommissioning);
+    assert.ok(decommissioning < finalRehearsal && finalRehearsal < deletion);
+    assert.ok(deletion < absenceProof && absenceProof < decommissioned);
+    assert.doesNotMatch(text.slice(finalBackup, deletion), /compose .* up -d --no-build --wait/u);
+    assert.match(text, /compose .* down/);
+    assert.match(text, /volume rm charitypilot-personal-server-db/);
+    assert.match(text, /volume rm charitypilot-personal-server-documents/);
+    assert.match(text, /container ls -a --filter label=com\.docker\.compose\.project=charitypilot-personal-server/u);
+    assert.match(text, /source files, configuration, or recovery sets were removed/);
+    assert.doesNotMatch(text, /--volumes|-v/);
+  });
+});
+
+test('decommission resumes only from the exact protected final set without creating another backup', () => {
+  withWorkspace((root) => {
+    const source = {
+      kind: 'clean-git',
+      revision: 'a'.repeat(40),
+      canonicalRemote: true,
+    };
+    const fixture = createRecoveryFixture(root, {
+      encrypted: true,
+      applicationSource: { kind: 'clean-git', commitSha: source.revision },
+    });
+    writeReadyInstallationState(root, {
+      phase: 'decommissioning',
+      source,
+      decommissionOperation: {
+        finalRecoverySet: {
+          recoverySetId: fixture.recoverySetId,
+          path: fixture.setPath,
+          manifestSha256: sha256RecoveryFile(join(fixture.setPath, 'manifest.json')),
+          createdAt: NOW.toISOString(),
+        },
+        startedAt: NOW.toISOString(),
+      },
+    });
+    const confirmation = personalServerDecommissionConfirmation(fixture.recoverySetId);
+    assert.throws(
+      () => runAt(root, [
+        'decommission',
+        `--recovery-set=${fixture.setPath}`,
+        '--confirm=wrong',
+        '--dry-run',
+      ], fakeExecutor(), []),
+      new RegExp(confirmation, 'u'),
+    );
+    const blockedExecutor = fakeExecutor();
+    assert.throws(
+      () => runAt(root, ['start'], blockedExecutor, []),
+      /decommissioning.*ordinary lifecycle commands are blocked/u,
+    );
+    assert.equal(blockedExecutor.calls.length, 0);
+
+    const output = [];
+    runAt(root, [
+      'decommission',
+      `--recovery-set=${fixture.setPath}`,
+      `--confirm=${confirmation}`,
+      '--dry-run',
+    ], fakeExecutor(), output);
+    const text = output.join('');
+    assert.match(text, /Resuming guarded decommission from exact final recovery set/u);
+    assert.match(text, /network create --internal/u);
+    assert.match(text, /compose .* down/u);
+    assert.doesNotMatch(text, /postgres-backup\.mjs source-identity --json/u);
+  });
+});
+
+test('interrupted restoring state blocks ordinary lifecycle commands while status stays non-mutating', () => {
+  withWorkspace((root) => {
+    writeReadyInstallationState(root, {
+      phase: 'restoring',
+      restoreOperation: {
+        preservationRecoverySet: { recoverySetId: 'personal-server-preservation-test' },
+      },
+    });
+    const executor = fakeExecutor();
+    assert.throws(
+      () => runAt(root, ['start'], executor, []),
+      /interrupted restoring state/u,
+    );
+    const output = [];
+    runAt(root, ['status'], executor, output);
+    assert.equal(executor.calls.length, 0);
+    assert.match(output.join(''), /installation phase: restoring/u);
+    assert.match(output.join(''), /writers must remain stopped/u);
+  });
+});
+
+test('unknown protected installation phases fail closed before any Docker command', () => {
+  withWorkspace((root) => {
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'ready-typo',
+    }));
+    const executor = fakeExecutor();
+    assert.throws(
+      () => runAt(root, ['start'], executor, []),
+      /invalid identity or phase/u,
+    );
+    assert.equal(executor.calls.length, 0);
+  });
+});
+
+test('decommissioned installation state blocks empty-volume recreation while status remains safe', () => {
+  withWorkspace((root) => {
+    writeFileSync(join(root, 'install-state.json'), JSON.stringify({
+      format: 'charitypilot-personal-server-install-state/v1',
+      phase: 'decommissioned',
+      finalRecoverySet: { recoverySetId: 'personal-server-final-test' },
+    }));
+    const executor = fakeExecutor();
+    assert.throws(
+      () => runAt(root, ['start'], executor, []),
+      /decommissioned.*cannot recreate empty data volumes/u,
+    );
+    assert.throws(
+      () => runAt(root, ['init'], executor, []),
+      /init is not permitted.*decommissioned/u,
+    );
+    const output = [];
+    runAt(root, ['status'], executor, output);
+    assert.equal(executor.calls.length, 0);
+    assert.match(output.join(''), /installation phase: decommissioned/u);
+    assert.match(output.join(''), /personal-server-final-test/u);
+  });
+});
+
+test('decommission network identity validation fails closed', () => {
+  const valid = {
+    Name: 'charitypilot-personal-server-internal',
+    Driver: 'bridge',
+    Internal: true,
+    Labels: {
+      'com.docker.compose.project': 'charitypilot-personal-server',
+      'com.docker.compose.network': 'personal-server-internal',
+    },
+    IPAM: { Config: [{ Subnet: '172.30.250.0/24', Gateway: '172.30.250.1' }] },
+  };
+  assert.equal(validatePersonalServerNetworkIdentity(valid), true);
+  for (const invalid of [
+    { ...valid, Name: 'another-network' },
+    { ...valid, Driver: 'overlay' },
+    { ...valid, Internal: false },
+    { ...valid, IPAM: { Config: [{ Subnet: '172.30.251.0/24', Gateway: '172.30.251.1' }] } },
+    { ...valid, Labels: { ...valid.Labels, 'com.docker.compose.project': 'another-project' } },
+  ]) {
+    assert.throws(() => validatePersonalServerNetworkIdentity(invalid), /not the exact internal personal-server Compose network/);
+  }
+});
+
+test('decommission container absence proof rejects any surviving project container', () => {
+  assert.equal(validatePersonalServerContainerAbsence(''), true);
+  assert.throws(
+    () => validatePersonalServerContainerAbsence('abc123 charitypilot-personal-server-api-1\n'),
+    /did not remove every personal-server Compose project container/u,
+  );
 });
 
 test('reset-link prints a validated bearer URL only after successful child completion', () => {

@@ -56,7 +56,7 @@ x-api-environment: &api-environment
 
 services:
   db:
-    image: postgres:16.4-alpine
+    image: postgres:16.4-alpine@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.personal-server}
@@ -64,6 +64,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.personal-server}
     volumes:
       - personal-server-db:/var/lib/postgresql/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=16m
     networks:
       - personal-server-internal
     healthcheck:
@@ -79,9 +83,17 @@ services:
     logging: *json-logging
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
 
   document-storage-init:
-    image: alpine:3.20
+    image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     command: ["sh", "-ec", "install -d -o 1000 -g 1000 -m 0700 /data/documents"]
     restart: "no"
     user: "0:0"
@@ -89,7 +101,7 @@ services:
       - CHOWN
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
     volumes:
       - personal-server-documents:/data/documents
     networks:
@@ -104,7 +116,7 @@ services:
     profiles:
       - maintenance
       - personal-init
-    image: charitypilot-personal-server-migrations:local
+    image: charitypilot-personal-server-migrations:${CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG:?Set CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG in .env.personal-server}
     pull_policy: never
     build:
       context: .
@@ -121,7 +133,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env.personal-server}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.personal-server}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env.personal-server}
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
     networks:
       - personal-server-internal
     mem_limit: 512m
@@ -131,7 +143,7 @@ services:
     <<: *service-security
 
   api:
-    image: charitypilot-personal-server-api:local
+    image: charitypilot-personal-server-api:${CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG:?Set CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG in .env.personal-server}
     pull_policy: never
     build:
       context: .
@@ -146,7 +158,7 @@ services:
     environment: *api-environment
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
     volumes:
       - personal-server-documents:/data/documents
     networks:
@@ -169,7 +181,7 @@ services:
     <<: *service-security
 
   web:
-    image: charitypilot-personal-server-web:local
+    image: charitypilot-personal-server-web:${CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG:?Set CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG in .env.personal-server}
     pull_policy: never
     build:
       context: .
@@ -193,7 +205,7 @@ services:
       CHARITYPILOT_INTERNAL_API_URL: http://api:3002
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
     networks:
       - personal-server-internal
     healthcheck:
@@ -214,7 +226,7 @@ services:
     <<: *service-security
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     restart: unless-stopped
     depends_on:
       api:
@@ -224,11 +236,16 @@ services:
     ports:
       - "127.0.0.1:${CHARITYPILOT_PERSONAL_SERVER_PORT:-8080}:8080"
     command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    user: "1000:1000"
+    cap_add:
+      # The official binary carries this file capability. Keeping it in the
+      # bounding set is required even though this profile listens on 8080.
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
-      - /config:rw,noexec,nosuid,size=16m
-      - /data:rw,noexec,nosuid,size=16m
-      - /tmp:rw,noexec,nosuid,size=16m
+      - /config:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+      - /data:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
     volumes:
       - ./caddy/Caddyfile.personal-server:/etc/caddy/Caddyfile:ro
     networks:
@@ -249,7 +266,7 @@ services:
   personal-init:
     profiles:
       - personal-init
-    image: charitypilot-personal-server-api:local
+    image: charitypilot-personal-server-api:${CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG:?Set CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG in .env.personal-server}
     pull_policy: never
     command: ["node", "dist/jobs/initialize-personal-server.js"]
     restart: "no"
@@ -269,7 +286,7 @@ services:
       PERSONAL_SERVER_ORGANISATION_NAME: ${PERSONAL_SERVER_ORGANISATION_NAME:?Set PERSONAL_SERVER_ORGANISATION_NAME in .env.personal-server}
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
     networks:
       - personal-server-internal
     mem_limit: 768m
@@ -281,7 +298,7 @@ services:
   auth-recovery-secret-rotation:
     profiles:
       - maintenance
-    image: charitypilot-personal-server-api:local
+    image: charitypilot-personal-server-api:${CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG:?Set CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG in .env.personal-server}
     pull_policy: never
     command: ["node", "dist/jobs/rotate-auth-recovery-secret.js"]
     restart: "no"
@@ -296,7 +313,7 @@ services:
       AUTH_RECOVERY_SECRET: ${AUTH_RECOVERY_SECRET:?Set AUTH_RECOVERY_SECRET in .env.personal-server}
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
     networks:
       - personal-server-internal
     mem_limit: 512m

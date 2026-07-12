@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createContentSecurityPolicy } from './content-security-policy';
+import {
+  createContentSecurityPolicy,
+  shouldLoadExternalWebFonts,
+} from './content-security-policy';
+
+test('personal-server uses local system fonts while public modes keep the hosted web font', () => {
+  assert.equal(shouldLoadExternalWebFonts('personal-server'), false);
+  assert.equal(shouldLoadExternalWebFonts('production'), true);
+  assert.equal(shouldLoadExternalWebFonts(undefined), true);
+});
 
 test('production CSP uses only the canonical API connect source', () => {
   const csp = createContentSecurityPolicy({
@@ -10,6 +19,8 @@ test('production CSP uses only the canonical API connect source', () => {
   });
 
   assert.match(csp, /connect-src 'self' https:\/\/api\.charitypilot\.ie(?:;|$)/);
+  assert.match(csp, /style-src 'self' 'unsafe-inline' https:\/\/fonts\.googleapis\.com(?:;|$)/);
+  assert.match(csp, /font-src 'self' https:\/\/fonts\.gstatic\.com data:(?:;|$)/);
 });
 
 test('production CSP falls back instead of trusting non-canonical API connect sources', () => {
@@ -84,7 +95,12 @@ test('personal-server CSP permits its exact HTTPS origin and keeps production ha
 
   assert.match(csp, /connect-src 'self' https:\/\/charitypilot\.example-tailnet\.ts\.net(?:;|$)/);
   assert.match(csp, /upgrade-insecure-requests/);
-  assert.doesNotMatch(csp, /api\.charitypilot\.ie|unsafe-eval|ws:\/\//);
+  assert.match(csp, /style-src 'self' 'unsafe-inline'(?:;|$)/);
+  assert.match(csp, /font-src 'self' data:(?:;|$)/);
+  assert.doesNotMatch(
+    csp,
+    /api\.charitypilot\.ie|unsafe-eval|ws:\/\/|fonts\.googleapis\.com|fonts\.gstatic\.com/,
+  );
 });
 
 test('personal-server CSP permits exact loopback HTTP without forcing an HTTPS upgrade', () => {
@@ -97,7 +113,12 @@ test('personal-server CSP permits exact loopback HTTP without forcing an HTTPS u
   });
 
   assert.match(csp, /connect-src 'self' http:\/\/127\.0\.0\.1:8080(?:;|$)/);
-  assert.doesNotMatch(csp, /upgrade-insecure-requests|api\.charitypilot\.ie|unsafe-eval|ws:\/\//);
+  assert.match(csp, /style-src 'self' 'unsafe-inline'(?:;|$)/);
+  assert.match(csp, /font-src 'self' data:(?:;|$)/);
+  assert.doesNotMatch(
+    csp,
+    /upgrade-insecure-requests|api\.charitypilot\.ie|unsafe-eval|ws:\/\/|fonts\.googleapis\.com|fonts\.gstatic\.com/,
+  );
 });
 
 test('personal-server CSP fails closed for non-loopback HTTP and non-origin values', () => {

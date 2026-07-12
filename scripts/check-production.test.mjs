@@ -4741,7 +4741,12 @@ test('CI keeps every production release gate wired', () => {
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:[\s\S]*branches:[\s\S]*- master/);
   assert.match(workflow, /^permissions:\s*\n\s+contents:\s+read\s*$/m);
-  assert.match(workflow, /node-version:\s+22/);
+  assert.match(workflow, /^\s*CI_NODE_VERSION:\s+22\.23\.1\s*$/m);
+  assert.match(workflow, /^\s*CI_NPM_VERSION:\s+11\.11\.0\s*$/m);
+  assert.match(workflow, /node-version:\s+\$\{\{\s*env\.CI_NODE_VERSION\s*\}\}/);
+  assert.match(workflow, /npm install --global npm@\$\{CI_NPM_VERSION\}/);
+  assert.match(workflow, /test "\$\(node --version\)" = "v\$\{CI_NODE_VERSION\}"/);
+  assert.match(workflow, /test "\$\(npm --version\)" = "\$\{CI_NPM_VERSION\}"/);
   assert.match(workflow, /run:\s+npm ci/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/start-ci-postgres\.test\.mjs/);
   assert.match(packageJson.scripts['test:production-check'], /scripts\/security-scan\.test\.mjs/);

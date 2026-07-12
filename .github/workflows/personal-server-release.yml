@@ -1,0 +1,449 @@
+name: Personal Server Release
+
+on:
+  push:
+    tags:
+      - 'personal-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-server-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_NODE_VERSION: 22.23.1
+  RELEASE_NPM_VERSION: 11.11.0
+  PERSONAL_RELEASE_RULESET: Immutable personal release tags
+
+jobs:
+  ci:
+    name: Complete repository release gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  e2e:
+    name: Managed browser release gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/e2e.yml
+
+  verify:
+    name: Verify exact source and build release candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      archive: ${{ steps.package.outputs.archive }}
+      manifest: ${{ steps.package.outputs.manifest }}
+      checksum: ${{ steps.package.outputs.checksum }}
+      archive_sha256: ${{ steps.package.outputs.archive_sha256 }}
+
+    steps:
+      - name: Checkout exact release tag without persisted credentials
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup exact Node runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: ${{ env.RELEASE_NODE_VERSION }}
+          cache: npm
+
+      - name: Install exact npm runtime
+        run: npm install --global npm@${RELEASE_NPM_VERSION}
+
+      - name: Validate immutable personal release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v${RELEASE_NODE_VERSION}"
+          test "$(npm --version)" = "${RELEASE_NPM_VERSION}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ] || [[ ! "${GITHUB_REF_NAME}" =~ ^personal-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Personal releases require a personal-vMAJOR.MINOR.PATCH tag." >&2
+            exit 1
+          fi
+          if [ "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" != "tag" ]; then
+            echo "Personal releases require an annotated tag, not a lightweight tag." >&2
+            exit 1
+          fi
+          git fetch https://github.com/jasperfordesq-ai/charity-governance.git master:refs/remotes/canonical/master
+          if [ "${GITHUB_SHA}" != "$(git rev-parse refs/remotes/canonical/master)" ]; then
+            echo "Personal release tags must point at the current canonical master commit." >&2
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+            echo "Release checkout is unexpectedly dirty." >&2
+            exit 1
+          fi
+
+      - name: Build source archive, manifest, and checksum
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          base="CharityPilot-${tag}"
+          archive="${base}.zip"
+          manifest="${base}.manifest.json"
+          checksum="${archive}.sha256"
+          commit_time="$(node -e 'process.stdout.write(new Date(process.argv[1]).toISOString())' "$(git show -s --format=%cI "${GITHUB_SHA}")")"
+          inner_manifest="$(node - "${tag}" "${GITHUB_SHA}" "${commit_time}" <<'NODE'
+          const [tag, commitSha, commitTime] = process.argv.slice(2);
+          process.stdout.write(JSON.stringify({
+            format: 'charitypilot-personal-server-bundle/v1',
+            tag,
+            commitSha,
+            commitTime,
+            profile: 'personal-server',
+          }));
+          NODE
+          )"
+
+          git archive --format=zip \
+            --prefix="${base}/" \
+            --add-virtual-file="${base}/personal-server-release.json:${inner_manifest}" \
+            --output="${archive}" \
+            "${GITHUB_SHA}"
+          archive_sha256="$(sha256sum "${archive}" | awk '{print $1}')"
+          archive_bytes="$(wc -c < "${archive}" | tr -d ' ')"
+          tracked_files="$(( $(git ls-tree -r --name-only "${GITHUB_SHA}" | wc -l | tr -d ' ') + 1 ))"
+
+          printf '%s  %s\n' "${archive_sha256}" "${archive}" > "${checksum}"
+          node - "${manifest}" "${tag}" "${GITHUB_SHA}" "${commit_time}" "${archive}" "${archive_sha256}" "${archive_bytes}" "${tracked_files}" <<'NODE'
+          const fs = require('node:fs');
+          const [manifest, tag, commitSha, commitTime, archive, archiveSha256, archiveBytes, trackedFiles] = process.argv.slice(2);
+          const value = {
+            format: 'charitypilot-personal-server-release/v1',
+            tag,
+            commitSha,
+            commitTime,
+            archive: { file: archive, sha256: archiveSha256, bytes: Number(archiveBytes) },
+            trackedFileCount: Number(trackedFiles),
+            operatorEntryPoint: 'scripts/Install-CharityPilot.ps1',
+            profile: 'personal-server',
+            requirements: {
+              operatingSystem: 'supported Windows with WSL 2',
+              node: '>=22.0.0',
+              npm: '11.11.0',
+              dockerDesktop: 'Linux containers and Docker Compose v2+',
+            },
+          };
+          fs.writeFileSync(manifest, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+          NODE
+
+          {
+            echo "archive=${archive}"
+            echo "manifest=${manifest}"
+            echo "checksum=${checksum}"
+            echo "archive_sha256=${archive_sha256}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload verified release candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: personal-server-release-candidate
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.manifest }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 1
+
+  windows-verify:
+    name: Verify Windows installer and ACL contract
+    needs:
+      - verify
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download exact verified release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: personal-server-release-candidate
+          path: release-candidate
+
+      - name: Verify and extract exact candidate on Windows
+        shell: powershell
+        env:
+          ARCHIVE: ${{ needs.verify.outputs.archive }}
+          MANIFEST: ${{ needs.verify.outputs.manifest }}
+          CHECKSUM: ${{ needs.verify.outputs.checksum }}
+          ARCHIVE_SHA256: ${{ needs.verify.outputs.archive_sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = Join-Path $PWD 'release-candidate'
+          $archive = Join-Path $candidate $env:ARCHIVE
+          $manifest = Join-Path $candidate $env:MANIFEST
+          $checksum = Join-Path $candidate $env:CHECKSUM
+          foreach ($path in @($archive, $manifest, $checksum)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing release candidate file: $path" }
+          }
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -cne $env:ARCHIVE_SHA256) { throw 'Candidate archive digest does not match verify-job output' }
+          $checksumLine = (Get-Content -LiteralPath $checksum -Raw).Trim()
+          if ($checksumLine -cne "$actual  $($env:ARCHIVE)") { throw 'Candidate checksum sidecar is not exact' }
+          $outer = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+          if ($outer.format -cne 'charitypilot-personal-server-release/v1' -or
+              $outer.tag -cne $env:GITHUB_REF_NAME -or
+              $outer.commitSha -cne $env:GITHUB_SHA -or
+              $outer.archive.sha256 -cne $actual -or
+              [int64]$outer.archive.bytes -ne (Get-Item -LiteralPath $archive).Length) {
+            throw 'Candidate outer manifest identity is not exact'
+          }
+          $extracted = Join-Path $env:RUNNER_TEMP 'charitypilot-release-candidate'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+          $source = Join-Path $extracted "CharityPilot-$($env:GITHUB_REF_NAME)"
+          $innerPath = Join-Path $source 'personal-server-release.json'
+          $inner = Get-Content -LiteralPath $innerPath -Raw | ConvertFrom-Json
+          if ($inner.format -cne 'charitypilot-personal-server-bundle/v1' -or
+              $inner.profile -cne 'personal-server' -or
+              $inner.tag -cne $env:GITHUB_REF_NAME -or
+              $inner.commitSha -cne $env:GITHUB_SHA) {
+            throw 'Candidate inner bundle identity is not exact'
+          }
+          & (Join-Path $source 'scripts/personal-server-release-archive.ps1') `
+            -ArchivePath $archive -SourceRoot $source -Tag $env:GITHUB_REF_NAME
+          $fileCount = @(Get-ChildItem -LiteralPath $source -Recurse -Force -File).Count
+          if ($fileCount -ne [int64]$outer.trackedFileCount) { throw 'Candidate tracked file count is not exact' }
+          "CANDIDATE_ROOT=$source" | Out-File -LiteralPath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Setup exact Node runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: ${{ env.RELEASE_NODE_VERSION }}
+
+      - name: Install exact npm runtime
+        shell: pwsh
+        run: npm install --global npm@$env:RELEASE_NPM_VERSION
+
+      - name: Parse Windows PowerShell entry points
+        shell: powershell
+        working-directory: ${{ env.CANDIDATE_ROOT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [void][scriptblock]::Create((Get-Content -LiteralPath scripts/Install-CharityPilot.ps1 -Raw))
+          [void][scriptblock]::Create((Get-Content -LiteralPath scripts/Update-CharityPilot.ps1 -Raw))
+          [void][scriptblock]::Create((Get-Content -LiteralPath scripts/personal-server-windows-acl.ps1 -Raw))
+
+      - name: Run personal-server contracts on Windows
+        shell: powershell
+        working-directory: ${{ env.CANDIDATE_ROOT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((node --version) -cne "v$env:RELEASE_NODE_VERSION") { throw 'Unexpected Node runtime' }
+          if ((npm --version) -cne $env:RELEASE_NPM_VERSION) { throw 'Unexpected npm runtime' }
+          npm run test:personal-server
+          if ($LASTEXITCODE -ne 0) { throw 'Personal-server contracts failed' }
+
+      - name: Prove owner-only ACL application and verification
+        shell: powershell
+        working-directory: ${{ env.CANDIDATE_ROOT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = Join-Path $env:RUNNER_TEMP ('charitypilot-acl-' + [guid]::NewGuid().ToString('N'))
+          try {
+            [void](New-Item -ItemType Directory -Path $target)
+            & .\scripts\personal-server-windows-acl.ps1 -Path $target -Kind Directory
+            & .\scripts\personal-server-windows-acl.ps1 -Path $target -Kind Directory -VerifyOnly
+          }
+          finally {
+            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+          }
+
+  publish:
+    name: Attest and publish immutable release
+    needs:
+      - ci
+      - e2e
+      - verify
+      - windows-verify
+    runs-on: ubuntu-latest
+    environment: personal-server-release
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download verified release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: personal-server-release-candidate
+          path: release-candidate
+
+      - name: Verify repository immutable-release setting
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_RELEASE_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo 'The protected PERSONAL_RELEASE_ADMIN_READ_TOKEN secret is required.' >&2
+            exit 1
+          fi
+          test "$(gh api -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')" = 'true'
+
+      - name: Verify tag ruleset and remote tag identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruleset_id="$(gh api -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/rulesets" \
+            --jq ".[] | select(.name == \"${PERSONAL_RELEASE_RULESET}\" and .target == \"tag\" and .enforcement == \"active\") | .id" | head -n 1)"
+          test -n "${ruleset_id}"
+          ruleset_json="$(gh api -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/rulesets/${ruleset_id}")"
+          RULESET_JSON="${ruleset_json}" node <<'NODE'
+          const value = JSON.parse(process.env.RULESET_JSON);
+          const includes = value.conditions?.ref_name?.include ?? [];
+          const excludes = value.conditions?.ref_name?.exclude ?? [];
+          const types = (value.rules ?? []).map(({ type }) => type).sort();
+          if (
+            value.target !== 'tag' ||
+            value.enforcement !== 'active' ||
+            JSON.stringify(includes) !== JSON.stringify(['refs/tags/personal-v*']) ||
+            JSON.stringify(excludes) !== JSON.stringify(['refs/tags/__no_personal_release_tag__']) ||
+            JSON.stringify(types) !== JSON.stringify(['deletion', 'update']) ||
+            (value.bypass_actors ?? []).length !== 0
+          ) process.exit(1);
+          NODE
+
+          tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}")"
+          tag_type="$(jq -r '.object.type' <<<"${tag_object}")"
+          tag_sha="$(jq -r '.object.sha' <<<"${tag_object}")"
+          test "${tag_type}" = 'tag'
+          peeled="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}")"
+          test "$(jq -r '.object.type' <<<"${peeled}")" = 'commit'
+          test "$(jq -r '.object.sha' <<<"${peeled}")" = "${GITHUB_SHA}"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/master" --jq '.object.sha')" = "${GITHUB_SHA}"
+
+      - name: Re-verify release candidate identity and digest
+        working-directory: release-candidate
+        env:
+          ARCHIVE: ${{ needs.verify.outputs.archive }}
+          MANIFEST: ${{ needs.verify.outputs.manifest }}
+          CHECKSUM: ${{ needs.verify.outputs.checksum }}
+          ARCHIVE_SHA256: ${{ needs.verify.outputs.archive_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "${ARCHIVE}" && test -f "${MANIFEST}" && test -f "${CHECKSUM}"
+          sha256sum --check "${CHECKSUM}"
+          test "$(sha256sum "${ARCHIVE}" | awk '{print $1}')" = "${ARCHIVE_SHA256}"
+          test "$(jq -r .format "${MANIFEST}")" = 'charitypilot-personal-server-release/v1'
+          test "$(jq -r .tag "${MANIFEST}")" = "${GITHUB_REF_NAME}"
+          test "$(jq -r .commitSha "${MANIFEST}")" = "${GITHUB_SHA}"
+          test "$(jq -r .archive.sha256 "${MANIFEST}")" = "${ARCHIVE_SHA256}"
+
+      - name: Attest release archive and identity files
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            release-candidate/${{ needs.verify.outputs.archive }}
+            release-candidate/${{ needs.verify.outputs.manifest }}
+            release-candidate/${{ needs.verify.outputs.checksum }}
+
+      - name: Publish immutable GitHub Release assets
+        working-directory: release-candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ needs.verify.outputs.archive }}
+          MANIFEST: ${{ needs.verify.outputs.manifest }}
+          CHECKSUM: ${{ needs.verify.outputs.checksum }}
+          ARCHIVE_SHA256: ${{ needs.verify.outputs.archive_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; refusing to replace immutable assets." >&2
+            exit 1
+          fi
+          {
+            printf '%s\n\n' 'This is the versioned CharityPilot private Windows personal-server source bundle.'
+            printf '%s\n\n' 'Verify the downloaded ZIP before extraction:'
+            printf '    SHA-256: %s\n\n' "${ARCHIVE_SHA256}"
+            printf '%s\n\n' 'GitHub provenance: `gh attestation verify <downloaded-zip> --repo jasperfordesq-ai/charity-governance`'
+            printf '%s\n\n' 'Follow `README.md` and `docs/personal-server-deployment.md` from the extracted bundle. The supported Windows entry point is `scripts/Install-CharityPilot.ps1`.'
+            printf '%s\n' 'This release is for the private single-charity profile. It is not evidence that the separate public SaaS production profile has launched.'
+          } > personal-server-release-notes.md
+          cleanup_armed=true
+          cleanup_failed_release() {
+            if [ "${cleanup_armed}" != true ]; then return; fi
+            failed_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" 2>/dev/null || true)"
+            if [ -n "${failed_release}" ] && [ "$(jq -r '.immutable == false' <<<"${failed_release}")" = 'true' ]; then
+              gh release delete "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --yes >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup_failed_release ERR
+
+          gh release create "${GITHUB_REF_NAME}" \
+            "${ARCHIVE}" \
+            "${CHECKSUM}" \
+            "${MANIFEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --draft \
+            --title "CharityPilot Personal Server ${GITHUB_REF_NAME}" \
+            --notes-file personal-server-release-notes.md
+          archive_digest="$(sha256sum "${ARCHIVE}" | awk '{print $1}')"
+          checksum_digest="$(sha256sum "${CHECKSUM}" | awk '{print $1}')"
+          manifest_digest="$(sha256sum "${MANIFEST}" | awk '{print $1}')"
+          assets_verified=false
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}")"
+            if RELEASE_JSON="${release_json}" \
+              ARCHIVE="${ARCHIVE}" ARCHIVE_DIGEST="${archive_digest}" \
+              CHECKSUM="${CHECKSUM}" CHECKSUM_DIGEST="${checksum_digest}" \
+              MANIFEST="${MANIFEST}" MANIFEST_DIGEST="${manifest_digest}" node <<'NODE'
+          const release = JSON.parse(process.env.RELEASE_JSON);
+          const expected = new Map([
+            [process.env.ARCHIVE, process.env.ARCHIVE_DIGEST],
+            [process.env.CHECKSUM, process.env.CHECKSUM_DIGEST],
+            [process.env.MANIFEST, process.env.MANIFEST_DIGEST],
+          ]);
+          if (release.draft !== true || release.immutable !== false || release.tag_name !== process.env.GITHUB_REF_NAME) process.exit(1);
+          if (release.assets?.length !== expected.size) process.exit(1);
+          for (const asset of release.assets) {
+            const digest = expected.get(asset.name);
+            if (!digest || asset.state !== 'uploaded' || asset.digest !== `sha256:${digest}`) process.exit(1);
+            expected.delete(asset.name);
+          }
+          if (expected.size) process.exit(1);
+          NODE
+            then
+              assets_verified=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "${assets_verified}" != true ]; then
+            echo 'Draft release asset digests did not become verifiable.' >&2
+            cleanup_failed_release
+            cleanup_armed=false
+            exit 1
+          fi
+
+          gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            published="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" 2>/dev/null || true)"
+            if [ -n "${published}" ] && [ "$(jq -r '.draft == false and .immutable == true' <<<"${published}")" = 'true' ]; then
+              cleanup_armed=false
+              trap - ERR
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Published release did not become immutable.' >&2
+          cleanup_failed_release
+          cleanup_armed=false
+          exit 1

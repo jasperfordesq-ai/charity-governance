@@ -76,7 +76,7 @@ function initializerHarness(counts = { organisations: 0, users: 0 }) {
   const tx = {
     $queryRaw: async () => {
       advisoryLockCalls += 1;
-      return [{ pg_advisory_xact_lock: null }];
+      return [{ acquired: 1 }];
     },
     governancePrinciple: {
       upsert: async (query: { where: { number: number } }) => {
@@ -224,7 +224,7 @@ test('compiled account reset validates transient credentials, changes one active
     $queryRaw: async () => {
       rawCall += 1;
       if (rawCall === 1) return [AUTH_RECOVERY_CONTROL];
-      if (rawCall === 2) return [{ pg_advisory_xact_lock: null }];
+      if (rawCall === 2) return [{ acquired: 1 }];
       if (rawCall === 3) return [{
         id: 'owner-1',
         email: 'owner@charity.local',
@@ -319,7 +319,7 @@ test('compiled reset-link stores only a one-hour token hash and returns the exac
     $queryRaw: async () => {
       rawCall += 1;
       if (rawCall === 1) return [AUTH_RECOVERY_CONTROL];
-      if (rawCall === 2) return [{ pg_advisory_xact_lock: null }];
+      if (rawCall === 2) return [{ acquired: 1 }];
       return [{ id: 'owner-1', organisationId: 'org-1', lifecycleStatus: 'ACTIVE' }];
     },
     organisation: { count: async () => 1 },

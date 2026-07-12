@@ -1,6 +1,7 @@
 {
 	admin off
 	auto_https off
+	persist_config off
 	servers {
 		# Tailscale Serve / a local private tunnel reaches this container through
 		# Docker's fixed bridge gateway. Trust only that exact hop (plus container
@@ -13,7 +14,11 @@
 
 :8080 {
 	encode zstd gzip
-	header X-Robots-Tag "noindex, nofollow, noarchive"
+	header {
+		-Server
+		X-CharityPilot-Deployment "personal-server"
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
 
 	@charitypilot_api path /api/v1/*
 	handle @charitypilot_api {

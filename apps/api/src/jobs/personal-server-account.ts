@@ -100,7 +100,15 @@ export async function issuePersonalServerResetLink(
 
   return client.$transaction(async (tx) => {
     await assertAuthRecoveryControlForCurrentSecret(tx);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PERSONAL_ACCOUNT_ADVISORY_LOCK})`;
+    const advisoryLock = await tx.$queryRaw<Array<{ acquired: number }>>`
+      WITH "advisoryLock" AS (
+        SELECT pg_advisory_xact_lock(${PERSONAL_ACCOUNT_ADVISORY_LOCK})
+      )
+      SELECT 1::int AS "acquired" FROM "advisoryLock"
+    `;
+    if (advisoryLock.length !== 1 || advisoryLock[0]?.acquired !== 1) {
+      throw new Error('Personal-server account reset could not acquire its transaction lock');
+    }
 
     const organisationCount = await tx.organisation.count();
     if (organisationCount !== 1) {
@@ -163,7 +171,15 @@ export async function resetPersonalServerPassword(
 
   return client.$transaction(async (tx) => {
     await assertAuthRecoveryControlForCurrentSecret(tx);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PERSONAL_ACCOUNT_ADVISORY_LOCK})`;
+    const advisoryLock = await tx.$queryRaw<Array<{ acquired: number }>>`
+      WITH "advisoryLock" AS (
+        SELECT pg_advisory_xact_lock(${PERSONAL_ACCOUNT_ADVISORY_LOCK})
+      )
+      SELECT 1::int AS "acquired" FROM "advisoryLock"
+    `;
+    if (advisoryLock.length !== 1 || advisoryLock[0]?.acquired !== 1) {
+      throw new Error('Personal-server account reset could not acquire its transaction lock');
+    }
 
     const organisationCount = await tx.organisation.count();
     if (organisationCount !== 1) {

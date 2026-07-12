@@ -8,7 +8,11 @@ RUN npm ci
 
 FROM deps AS build
 WORKDIR /app
-COPY . .
+COPY tsconfig.base.json turbo.json ./
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+COPY scripts/next-build-fs-retry.cjs scripts/next-build-fs-retry.cjs
+COPY scripts/clean-next-export.cjs scripts/clean-next-export.cjs
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=public-production
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL

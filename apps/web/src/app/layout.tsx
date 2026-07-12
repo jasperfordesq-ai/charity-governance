@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { Providers } from './providers';
+import { shouldLoadExternalWebFonts } from '@/lib/content-security-policy';
 import { PRODUCTION_WEB_ORIGIN } from '@/lib/site-origin';
 import './globals.css';
 
@@ -42,15 +43,20 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const loadExternalWebFonts = shouldLoadExternalWebFonts(
+    process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+  );
 
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.ico" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
+        {loadExternalWebFonts ? (
+          <link
+            href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+            rel="stylesheet"
+          />
+        ) : null}
         {/* Prevent FOUC: apply .dark before paint for every route. Honours explicit
             localStorage.theme choices and falls back to the system preference. */}
         <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.theme;var dark=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList[dark?'add':'remove']('dark')}catch(e){}` }} />

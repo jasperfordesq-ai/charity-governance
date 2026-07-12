@@ -148,7 +148,15 @@ export async function initializePersonalServer(
   const passwordHash = await bcrypt.hash(config.ownerPassword, SALT_ROUNDS);
 
   return client.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${PERSONAL_INITIALIZER_ADVISORY_LOCK})`;
+    const advisoryLock = await tx.$queryRaw<Array<{ acquired: number }>>`
+      WITH "advisoryLock" AS (
+        SELECT pg_advisory_xact_lock(${PERSONAL_INITIALIZER_ADVISORY_LOCK})
+      )
+      SELECT 1::int AS "acquired" FROM "advisoryLock"
+    `;
+    if (advisoryLock.length !== 1 || advisoryLock[0]?.acquired !== 1) {
+      throw new Error('Personal server initialization could not acquire its transaction lock');
+    }
 
     const [organisationCount, userCount] = await Promise.all([
       tx.organisation.count(),
