@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
+  fstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -28,6 +29,7 @@ import {
   personalServerRollbackConfirmation,
   removePersonalVolumeIfPresent,
   renderPersonalServerEnv,
+  runCommandFromFile,
   runPersonalServer,
   validateRecoveryApplicationBinding,
   validateCleanGitReleaseAdoption,
@@ -2639,6 +2641,8 @@ test('replacement-host bootstrap dry-run rehearses before exact blank target cre
     const edgeNetworkAbsence = text.indexOf('network ls --filter name=charitypilot-personal-server-edge');
     const targetCreate = text.indexOf('create --no-build db document-storage-init');
     const restore = text.indexOf('pg_restore --username', targetCreate);
+    assert.match(text, /docker exec -i <db-container-id> pg_restore --username/u);
+    assert.doesNotMatch(text, /docker cp .*charitypilot-personal-restore/u);
     const rebindMatches = [...text.matchAll(/rebind-personal-server-auth-recovery-secret\.js/gu)];
     const rehearsalRebindDryRun = rebindMatches[0]?.index ?? -1;
     const rehearsalRebindExecute = rebindMatches[1]?.index ?? -1;
@@ -3052,6 +3056,79 @@ test('decommission network identity validation fails closed', () => {
     }, 'edge', { allowDetached: true }),
     /exact reviewed service attachments/u,
   );
+});
+
+test('database restore input streams through pinned Docker stdin and closes its file descriptor', () => {
+  withWorkspace((root) => {
+    const dumpPath = join(root, 'verified-database.dump');
+    const dump = Buffer.from('verified custom-format dump fixture');
+    writeFileSync(dumpPath, dump);
+    const endpoint = 'npipe:////./pipe/dockerDesktopLinuxEngine';
+    let inputFd;
+    let callCount = 0;
+    const context = {
+      dryRun: false,
+      repoRoot: root,
+      processEnv: {
+        DOCKER_HOST: 'tcp://untrusted.example:2375',
+        DOCKER_TLS_VERIFY: '1',
+        PRESERVED_ENVIRONMENT_VALUE: 'yes',
+      },
+      dockerEndpoint: endpoint,
+      dockerBoundaryVerified: true,
+      commandTimeoutMs: 30_000,
+      spawnSyncImpl: (executable, args, options) => {
+        callCount += 1;
+        assert.equal(executable, 'docker');
+        assert.deepEqual(args, ['exec', '-i', 'database-container', 'pg_restore']);
+        assert.equal(options.cwd, root);
+        assert.equal(options.env.DOCKER_HOST, endpoint);
+        assert.equal(options.env.DOCKER_TLS_VERIFY, undefined);
+        assert.equal(options.env.PRESERVED_ENVIRONMENT_VALUE, 'yes');
+        assert.equal(options.stdio[1], 'inherit');
+        assert.equal(options.stdio[2], 'inherit');
+        inputFd = options.stdio[0];
+        assert.equal(Number.isInteger(inputFd), true);
+        assert.deepEqual(readFileSync(inputFd), dump);
+        return { status: 0, stdout: '', stderr: '' };
+      },
+    };
+
+    runCommandFromFile(
+      ['docker', 'exec', '-i', 'database-container', 'pg_restore'],
+      dumpPath,
+      context,
+    );
+    assert.equal(callCount, 1);
+    assert.throws(() => fstatSync(inputFd), /EBADF|file descriptor/iu);
+
+    writeFileSync(dumpPath, dump);
+    let failedInputFd;
+    assert.throws(
+      () => runCommandFromFile(
+        ['docker', 'exec', '-i', 'database-container', 'pg_restore'],
+        dumpPath,
+        {
+          ...context,
+          spawnSyncImpl: (executable, args, options) => {
+            assert.equal(executable, 'docker');
+            assert.deepEqual(args, ['exec', '-i', 'database-container', 'pg_restore']);
+            failedInputFd = options.stdio[0];
+            return { status: 7, stdout: '', stderr: 'restore failed' };
+          },
+        },
+      ),
+      /docker exec -i database-container pg_restore failed/u,
+    );
+    assert.throws(() => fstatSync(failedInputFd), /EBADF|file descriptor/iu);
+
+    writeFileSync(dumpPath, '');
+    assert.throws(
+      () => runCommandFromFile(['docker', 'exec', '-i', 'database-container', 'pg_restore'], dumpPath, context),
+      /one non-empty regular file/u,
+    );
+    assert.equal(callCount, 1);
+  });
 });
 
 test('interrupted auth recovery rotation blocks runtime start while status remains non-mutating', () => {

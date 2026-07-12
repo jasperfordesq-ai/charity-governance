@@ -6,6 +6,7 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  fstatSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
@@ -915,6 +916,39 @@ function runCommandToFile(command, outputPath, context) {
     throw new Error('Document archive is empty');
   }
   renameSync(tempPath, outputPath);
+}
+
+export function runCommandFromFile(command, inputPath, context, { secrets = [] } = {}) {
+  if (context.dryRun) {
+    context.writeOutput(`DRY RUN: ${formatPersonalServerCommand(command)} < ${shellQuote(inputPath)}\n`);
+    return;
+  }
+  if (command[0] === 'docker') verifyLocalDockerDesktopRuntime(context);
+  const fd = openSync(inputPath, 'r');
+  try {
+    const status = fstatSync(fd);
+    if (!status.isFile() || status.size <= 0) {
+      throw new Error('Database restore input must be one non-empty regular file');
+    }
+    const environment = command[0] === 'docker'
+      ? pinnedLocalDockerEnvironment(context.processEnv, context.dockerEndpoint)
+      : context.processEnv;
+    const result = context.spawnSyncImpl(command[0], command.slice(1), {
+      cwd: context.repoRoot,
+      env: environment,
+      encoding: 'utf8',
+      stdio: [fd, 'inherit', 'inherit'],
+      timeout: context.commandTimeoutMs,
+    });
+    if (result.status !== 0) {
+      throw new Error(`${formatPersonalServerCommand(command)} failed`);
+    }
+  } catch (error) {
+    if (error instanceof Error) error.message = redactText(error.message, secrets);
+    throw error;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function sha256File(path) {
@@ -4117,39 +4151,20 @@ function assertPersonalRestoreTargets(context, { requireEdge = true, allowDetach
 }
 
 function restoreDatabaseDump(container, dumpPath, values, context, { replaceDatabase }) {
-  const containerDump = `/tmp/charitypilot-personal-restore-${randomHex(4, context.randomBytesImpl)}.dump`;
-  let copied = false;
-  let pendingError = null;
-  try {
-    runCommand(['docker', 'cp', dumpPath, `${container}:${containerDump}`], context);
-    copied = true;
-    if (replaceDatabase) {
-      runCommand([
-        'docker', 'exec', container, 'dropdb', '--username', values.POSTGRES_USER,
-        '--if-exists', '--force', values.POSTGRES_DB,
-      ], context);
-      runCommand([
-        'docker', 'exec', container, 'createdb', '--username', values.POSTGRES_USER,
-        '--owner', values.POSTGRES_USER, values.POSTGRES_DB,
-      ], context);
-    }
+  if (replaceDatabase) {
     runCommand([
-      'docker', 'exec', container, 'pg_restore', '--username', values.POSTGRES_USER,
-      '--dbname', values.POSTGRES_DB, '--exit-on-error', '--no-owner', '--no-privileges', containerDump,
+      'docker', 'exec', container, 'dropdb', '--username', values.POSTGRES_USER,
+      '--if-exists', '--force', values.POSTGRES_DB,
     ], context);
-  } catch (error) {
-    pendingError = error;
-    throw error;
-  } finally {
-    if (copied || context.dryRun) {
-      try {
-        runCommand(['docker', 'exec', container, 'rm', '-f', containerDump], context);
-      } catch (cleanupError) {
-        if (!pendingError) throw cleanupError;
-        pendingError.message = `${pendingError.message}\nFailed to remove the staged database dump: ${cleanupError.message}`;
-      }
-    }
+    runCommand([
+      'docker', 'exec', container, 'createdb', '--username', values.POSTGRES_USER,
+      '--owner', values.POSTGRES_USER, values.POSTGRES_DB,
+    ], context);
   }
+  runCommandFromFile([
+    'docker', 'exec', '-i', container, 'pg_restore', '--username', values.POSTGRES_USER,
+    '--dbname', values.POSTGRES_DB, '--exit-on-error', '--no-owner', '--no-privileges',
+  ], dumpPath, context, { secrets: [values.POSTGRES_PASSWORD] });
 }
 
 function populateDocumentVolume(volumeName, documentsPath, context, {
