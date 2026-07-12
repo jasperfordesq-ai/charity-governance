@@ -256,7 +256,9 @@ function normalizedHealth(row) {
 }
 
 function normalizedPublishers(row) {
-  return row.Publishers ?? row.publishers ?? [];
+  return (row.Publishers ?? row.publishers ?? []).filter((publisher) => (
+    Number(publisher.PublishedPort ?? publisher.publishedPort) > 0
+  ));
 }
 
 export function validateComposeRuntime(rows, expectedPort) {

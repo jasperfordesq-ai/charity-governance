@@ -105,10 +105,19 @@ test('compose runtime validation requires four healthy services and only one exa
     service('caddy', [{ URL: '127.0.0.1', TargetPort: 8080, PublishedPort: 8080 }]),
   ];
   assert.equal(validateComposeRuntime(rows, 8080).length, 4);
+  const composeFiveRows = rows.map((row) => row.Service === 'api'
+    ? service('api', [{ URL: '', TargetPort: 3002, PublishedPort: 0, Protocol: 'tcp' }])
+    : row.Service === 'caddy'
+      ? service('caddy', [
+        { URL: '', TargetPort: 80, PublishedPort: 0, Protocol: 'tcp' },
+        { URL: '127.0.0.1', TargetPort: 8080, PublishedPort: 8080, Protocol: 'tcp' },
+      ])
+      : row);
+  assert.equal(validateComposeRuntime(composeFiveRows, 8080).length, 4);
   assert.equal(parseComposePs(rows.map((row) => JSON.stringify(row)).join('\n')).length, 4);
   assert.throws(() => validateComposeRuntime(rows.filter(({ Service }) => Service !== 'api'), 8080), /Missing/u);
   assert.throws(
-    () => validateComposeRuntime(rows.map((row) => row.Service === 'db' ? service('db', [{ URL: '0.0.0.0' }]) : row), 8080),
+    () => validateComposeRuntime(rows.map((row) => row.Service === 'db' ? service('db', [{ URL: '0.0.0.0', TargetPort: 5432, PublishedPort: 5432 }]) : row), 8080),
     /unexpectedly publishes/u,
   );
   assert.throws(

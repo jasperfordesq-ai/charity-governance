@@ -262,7 +262,10 @@ try {
       email: process.env.CHARITYPILOT_PROBE_OWNER_EMAIL,
       name: 'Disposable restore proof',
       passwordHash: await bcrypt.hash(process.env.CHARITYPILOT_PROBE_OWNER_PASSWORD, 12),
-      role: 'OWNER',
+      // A restored organisation already has its one invariant-protected Owner.
+      // Use a disposable administrator to prove authenticated access without
+      // weakening or colliding with that production ownership invariant.
+      role: 'ADMIN',
       organisationId: organisation.id,
       emailVerified: true,
       lifecycleStatus: 'ACTIVE',
@@ -4213,7 +4216,9 @@ function populateDocumentVolume(volumeName, documentsPath, context, {
     runCommand([
       'docker', 'run', '-d', '--name', loader, '--pull', 'never', '--network', 'none',
       ...(rehearsalToken ? ['--label', `charitypilot.personal-rehearsal=${rehearsalToken}`] : []),
-      '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true',
+      '--read-only', '--cap-drop', 'ALL',
+      '--cap-add', 'CHOWN', '--cap-add', 'FOWNER', '--cap-add', 'DAC_OVERRIDE',
+      '--security-opt', 'no-new-privileges=true',
       '--mount', `type=volume,src=${volumeName},dst=/documents`,
       DOCUMENT_ARCHIVE_IMAGE, 'sleep', '300',
     ], context);
@@ -5053,7 +5058,7 @@ function runDisposableApplicationRehearsal(
       : null;
     if (!context.dryRun) {
       const sampled = syntheticProof.sampledDocument
-        ? ' one authenticated synthetic-Owner document download matched byte-for-byte.'
+        ? ' one authenticated synthetic-administrator document download matched byte-for-byte.'
         : ' no recovered document existed to sample.';
       const optionalOwner = ownerProof ? ' The supplied real Owner credential also passed without being reset or stored.' : '';
       context.writeOutput(`Disposable full-application restore rehearsal passed through Caddy; documents reconciled: ${applicationInventory.documents.length};${sampled}${optionalOwner}\n`);
