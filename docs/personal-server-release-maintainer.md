@@ -37,6 +37,23 @@ The repository currently uses these distribution controls:
 
 Do not weaken any of these controls to make a release pass.
 
+## Repair a supervised pre-release clean-Git install
+
+The clean-`master` route exists only for supervised acceptance before the first
+official release. If it fails during the initial installer phase because source
+code itself needs repair, publish and review the fix on canonical `master`,
+fast-forward the same clean checkout, and follow the deployment runbook's
+target-bound `-ResumeFailed -RepairToGitRevision <exact HEAD SHA>` procedure.
+
+The installer does not fetch or choose a commit. It accepts only exact clean
+`HEAD == origin/master`, proves the old failed SHA is an ancestor, requires the
+protected install to be unreleased/fresh/initial-phase with no published
+recovery set, and records the advance. Never use this exception for a release
+archive, replacement restore, later failed phase or ordinary version update.
+Never edit `install-state.json` or delete preserved volumes to make a repair
+fit. Once releases exist, ship fixes through a new immutable release and the
+version-bound updater instead.
+
 ## One-time least-privilege environment secret
 
 GitHub's immutable-release settings endpoint requires repository

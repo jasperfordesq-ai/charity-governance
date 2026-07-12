@@ -71,6 +71,16 @@ database commands, or manual volume deletion bypasses installer receipts,
 source checks, ACL enforcement and recovery gates. Those are not supported
 installation or recovery procedures.
 
+An ordinary failed-install resume remains bound to its exact recorded source.
+Before the first official release only, an initial-phase clean-Git test install
+may adopt a reviewed canonical descendant by supplying its exact SHA through
+`-RepairToGitRevision`. The installer requires clean canonical `master`, exact
+`HEAD == origin/master`, ancestry from the failed commit, local/unreleased image
+identity, no published recovery set, the same source/state paths and an explicit
+target match. It records the advance in protected state. This exception cannot
+rebind a release archive, replacement restore or later-phase failure, and it is
+not an update mechanism.
+
 ## Protected state and recovery keys
 
 The installer keeps durable private state outside the source checkout. Its

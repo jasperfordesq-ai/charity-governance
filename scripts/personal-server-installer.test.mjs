@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -11,10 +11,12 @@ const installerPath = resolve(root, 'scripts/Install-CharityPilot.ps1');
 const aclPath = resolve(root, 'scripts/personal-server-windows-acl.ps1');
 const archiveVerifierPath = resolve(root, 'scripts/personal-server-release-archive.ps1');
 const updaterPath = resolve(root, 'scripts/Update-CharityPilot.ps1');
+const failedResumeSourcePath = resolve(root, 'scripts/personal-server-failed-resume-source.ps1');
 const installer = await import('node:fs').then(({ readFileSync }) => readFileSync(installerPath, 'utf8'));
 const acl = await import('node:fs').then(({ readFileSync }) => readFileSync(aclPath, 'utf8'));
 const archiveVerifier = await import('node:fs').then(({ readFileSync }) => readFileSync(archiveVerifierPath, 'utf8'));
 const updater = await import('node:fs').then(({ readFileSync }) => readFileSync(updaterPath, 'utf8'));
+const failedResumeSource = readFileSync(failedResumeSourcePath, 'utf8');
 
 test('Windows installer is checkout-independent and uses the supported wrappers', () => {
   assert.match(installer, /\$PSScriptRoot/u);
@@ -78,6 +80,125 @@ test('durable state is external, non-secret, phased and backup-gated', () => {
       rehearsal < runtimeHealth &&
       runtimeHealth < ready,
   );
+});
+
+test('failed clean-Git install can adopt only a verified canonical descendant repair before resume', () => {
+  assert.match(failedResumeSource, /recordedRevision -cnotmatch '\^\[0-9a-f\]\{40\}\$'/u);
+  assert.match(failedResumeSource, /recordedBranch -cne 'master'/u);
+  assert.match(failedResumeSource, /currentOriginMasterRevision -cne \$currentRevision/u);
+  assert.match(failedResumeSource, /currentClean -ne \$true/u);
+  assert.match(failedResumeSource, /\$State\.installationMode -cne 'fresh-install'/u);
+  assert.match(failedResumeSource, /\[string\]\$State\.activeImageTag -cne 'local'/u);
+  assert.match(failedResumeSource, /\$null -ne \$recordedArchive/u);
+  assert.match(failedResumeSource, /\[string\]\$State\.failedFromPhase -cne 'initializing'/u);
+  assert.match(failedResumeSource, /published recovery set must remain on its exact recorded source/u);
+  assert.match(installer, /RepairToGitRevision/u);
+  assert.match(installer, /RepairToGitRevision is never valid for a release installation/u);
+  assert.match(failedResumeSource, /\$RepairToGitRevision -cne \$currentRevision/u);
+  assert.match(failedResumeSource, /merge-base --is-ancestor \$recordedRevision \$currentRevision/u);
+  assert.match(installer, /failedResumeSourceAdvances/u);
+  assert.match(installer, /source repair history exceeds its bounded safety limit/u);
+  assert.match(failedResumeSource, /charitypilot-personal-server-failed-resume-source-advance\/v1/u);
+  assert.doesNotMatch(`${installer}\n${failedResumeSource}`, /git(?:\.exe)?\s+(?:pull|fetch)/iu);
+
+  const sourceAdvanceWrite = installer.indexOf('Protected failed-install state now records the verified canonical descendant repair source.');
+  const resumeInvocation = installer.indexOf('Invoke-NpmCommand -Arguments $initArguments', sourceAdvanceWrite);
+  assert.ok(sourceAdvanceWrite > -1 && sourceAdvanceWrite < resumeInvocation);
+
+  const resumeValidation = installer.indexOf('$resumeState = if ($ResumeFailed)');
+  const preflightOnlyExit = installer.indexOf("Write-Host 'Preflight passed. No installation state was created.'");
+  assert.ok(resumeValidation > -1 && resumeValidation < preflightOnlyExit);
+});
+
+test('failed-install source repair helper executes descendant and rejection cases', { skip: process.platform !== 'win32' }, () => {
+  const fromRevision = 'a'.repeat(40);
+  const toRevision = 'b'.repeat(40);
+  const baseState = {
+    installationMode: 'fresh-install',
+    activeImageTag: 'local',
+    failedFromPhase: 'initializing',
+    source: {
+      kind: 'git',
+      revision: fromRevision,
+      branch: 'master',
+      canonicalRemote: true,
+      canonicalTrackingRef: true,
+      originMasterRevision: fromRevision,
+      verifiedArchive: null,
+      releaseIdentity: null,
+    },
+  };
+  const baseCurrent = {
+    kind: 'git',
+    revision: toRevision,
+    branch: 'master',
+    canonicalRemote: true,
+    canonicalTrackingRef: true,
+    originMasterRevision: toRevision,
+    clean: true,
+  };
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const invoke = ({ state = baseState, current = baseCurrent, target = toRevision, ancestor = true, publishedSet = false } = {}) => {
+    const directory = mkdtempSync(join(tmpdir(), 'charitypilot-failed-resume-source-'));
+    const statePath = join(directory, 'state.json');
+    const currentPath = join(directory, 'current.json');
+    const recoveryRoot = join(directory, 'recovery');
+    mkdirSync(recoveryRoot, { recursive: true });
+    if (publishedSet) mkdirSync(join(recoveryRoot, 'published-set'), { recursive: true });
+    writeFileSync(statePath, JSON.stringify(state));
+    writeFileSync(currentPath, JSON.stringify(current));
+    const command = [
+      `. ${psQuote(failedResumeSourcePath)}`,
+      `$state = Get-Content -LiteralPath ${psQuote(statePath)} -Raw | ConvertFrom-Json`,
+      `$current = Get-Content -LiteralPath ${psQuote(currentPath)} -Raw | ConvertFrom-Json`,
+      `$ancestorCheck = { param($from, $to, $root) ${ancestor ? '$true' : '$false'} }`,
+      'try {',
+      `  $result = Resolve-CharityPilotFailedResumeSourceAdvance -State $state -CurrentSource $current -RepairToGitRevision ${psQuote(target)} -RecoveryRoot ${psQuote(recoveryRoot)} -RepositoryRoot ${psQuote(root)} -AncestorCheck $ancestorCheck`,
+      "  if ($null -eq $result) { Write-Output 'EXACT' } else { $result | ConvertTo-Json -Compress }",
+      '  exit 0',
+      '} catch {',
+      '  [Console]::Error.WriteLine($_.Exception.Message)',
+      '  exit 1',
+      '}',
+    ].join('; ');
+    try {
+      return spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], {
+        encoding: 'utf8',
+        windowsHide: true,
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+
+  const accepted = invoke();
+  assert.equal(accepted.status, 0, accepted.stderr || accepted.stdout);
+  const advance = JSON.parse(accepted.stdout.trim());
+  assert.equal(advance.fromRevision, fromRevision);
+  assert.equal(advance.toRevision, toRevision);
+
+  const exactCurrent = { ...baseCurrent, revision: fromRevision, originMasterRevision: fromRevision };
+  const exact = invoke({ current: exactCurrent, target: '' });
+  assert.equal(exact.status, 0, exact.stderr || exact.stdout);
+  assert.equal(exact.stdout.trim(), 'EXACT');
+
+  assert.notEqual(invoke({ ancestor: false }).status, 0);
+  assert.notEqual(invoke({ target: '' }).status, 0);
+  assert.notEqual(invoke({ target: 'c'.repeat(40) }).status, 0);
+  assert.notEqual(invoke({ current: { ...baseCurrent, clean: false } }).status, 0);
+  assert.notEqual(invoke({ current: { ...baseCurrent, canonicalRemote: false } }).status, 0);
+  assert.notEqual(invoke({ current: { ...baseCurrent, canonicalTrackingRef: false } }).status, 0);
+  assert.notEqual(invoke({ current: { ...baseCurrent, branch: 'repair' } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, installationMode: 'replacement-restore' } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, activeImageTag: 'personal-v1.0.0' } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, failedFromPhase: 'initialized-backup-pending' } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, source: { ...clone(baseState.source), verifiedArchive: { sha256: 'x' } } } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, source: { ...clone(baseState.source), releaseIdentity: { tag: 'personal-v1.0.0' } } } }).status, 0);
+  assert.notEqual(invoke({ state: { ...baseState, source: { ...clone(baseState.source), revision: fromRevision.toUpperCase(), originMasterRevision: fromRevision.toUpperCase() } } }).status, 0);
+  assert.notEqual(invoke({ current: { ...baseCurrent, revision: toRevision.toUpperCase(), originMasterRevision: toRevision.toUpperCase() } }).status, 0);
+  assert.notEqual(invoke({ publishedSet: true }).status, 0);
+  assert.notEqual(invoke({ current: exactCurrent, target: fromRevision }).status, 0);
 });
 
 test('replacement-host installer verifies before writing, rotates secrets, and never invokes the initializer', () => {
@@ -159,7 +280,7 @@ test('Windows updater requires a verified new bundle and delegates version-bound
 });
 
 test('PowerShell installer and helpers parse without syntax errors', { skip: process.platform !== 'win32' }, () => {
-  for (const scriptPath of [installerPath, updaterPath, aclPath, archiveVerifierPath]) {
+  for (const scriptPath of [installerPath, updaterPath, aclPath, archiveVerifierPath, failedResumeSourcePath]) {
     const escaped = scriptPath.replaceAll("'", "''");
     const command = `$tokens=$null; $errors=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('${escaped}', [ref]$tokens, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }`;
     const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {

@@ -351,8 +351,8 @@ Do not run `tailscale serve reset` as ordinary troubleshooting.
 
 After initialization begins, failure is preserved as protected phase `failed`;
 writers are commanded to stop and volumes are never deleted. Fix the reported
-cause, then repeat the exact source, archive proof, state root, origin and port
-with `-ResumeFailed`:
+host/configuration cause, then repeat the exact source, archive proof, state
+root, origin and port with `-ResumeFailed`:
 
 ```powershell
 powershell -NoLogo -NoProfile -ExecutionPolicy Bypass `
@@ -367,6 +367,52 @@ powershell -NoLogo -NoProfile -ExecutionPolicy Bypass `
 Do not pass the Owner name or organisation again. Resume is source-bound and
 accepts only an empty database or exactly one matching committed Owner
 workspace. It never reruns the initializer over unrelated data.
+
+### Supervised clean-Git repair exception
+
+This exception exists only before an official release, when a supervised clean
+Git installation fails during its initial `initializing` phase because the
+installer/Compose source itself needs a committed repair. It is not a general
+update route. A release ZIP, replacement-host restore, later failed phase, or
+install that already published a recovery set must use its exact recorded
+source.
+
+Review and publish the repair to canonical `master`, then fast-forward the same
+source checkout. Do not edit protected state or delete the preserved volumes:
+
+```powershell
+git status --short
+git switch master
+git pull --ff-only
+$repairCommit = (git rev-parse HEAD).Trim()
+if ($repairCommit -cne (git rev-parse origin/master).Trim()) {
+  throw 'The repair checkout is not exact canonical origin/master.'
+}
+
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\Install-CharityPilot.ps1 `
+  -PreflightOnly `
+  -ResumeFailed `
+  -RepairToGitRevision $repairCommit `
+  -StateRoot $stateRoot `
+  -Origin $origin `
+  -Port $port
+
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\Install-CharityPilot.ps1 `
+  -ResumeFailed `
+  -RepairToGitRevision $repairCommit `
+  -StateRoot $stateRoot `
+  -Origin $origin `
+  -Port $port
+```
+
+The installer independently requires the same source directory, a clean
+credential-free canonical remote, `master`, `HEAD == origin/master`, an exact
+lowercase target SHA, and proof that the failed SHA is an ancestor of the
+target. It records a bounded protected source-advance receipt before rebuilding.
+Omitting or mistyping the target fails before Docker work. The installer never
+fetches or selects the repair commit for you.
 
 For a failed replacement-host restore, repeat the exact replacement command,
 including `-RestoreRecoverySet`, `-RecoveryKeyFile`, `-SourceOrigin`, `-Origin`,
@@ -383,6 +429,7 @@ including `-RestoreRecoverySet`, `-RecoveryKeyFile`, `-SourceOrigin`, `-Origin`,
 | `-Port` | Caddy loopback port, default `8080`. |
 | `-StateRoot` | Absolute absent-or-empty protected directory outside the checkout. |
 | `-ResumeFailed` | Resume the exact protected failed install/restore binding. |
+| `-RepairToGitRevision` | Explicit target SHA for the narrowly bounded supervised clean-Git initial-phase repair exception; valid only with `-ResumeFailed`. Never valid for a release or replacement restore. |
 | `-ArchivePath`, `-ChecksumPath` | Retained official release ZIP and checksum sidecar. |
 | `-ExpectedArchiveSha256` | Exact canonical SHA-256 alternative/addition to the checksum sidecar. |
 | `-RestoreRecoverySet` | One verified encrypted recovery-set directory for an empty replacement host. |

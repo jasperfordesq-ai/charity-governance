@@ -61,6 +61,7 @@ Use the protected phase to select the supported route:
 | Phase or condition | Supported response |
 | --- | --- |
 | Fresh/restore installation `failed` | Repeat the exact installer binding with `-ResumeFailed`; do not initialize again. |
+| Supervised clean-Git test install failed from `initializing` because source needs a committed fix | Preserve state/volumes, review and fast-forward the same checkout to clean canonical `origin/master`, then use the runbook's explicit `-RepairToGitRevision <exact SHA>` resume. This is unavailable once a recovery set exists and is never valid for a release or replacement restore. |
 | `pending-update.json` in `prepared` or `pre-cutover` | Repeat the exact verified updater with `-ResumePending`. |
 | `updating` after an ambiguous/later cutover | Preserve both sources, images, receipt and recovery sets; ordinary commands remain blocked pending supervised recovery. |
 | `restoring` | Keep writers stopped and preserve both selected and preservation recovery sets. |

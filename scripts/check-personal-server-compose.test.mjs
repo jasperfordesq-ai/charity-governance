@@ -96,6 +96,10 @@ test('database and front door run with the least compatible privileges', () => {
   assert.match(caddyService, /<<: \*service-security/);
   assert.match(compose, /x-service-security: &service-security\s+security_opt:[\s\S]*?cap_drop:\s*- ALL/);
 
+  const documentStorageInit = serviceSection('document-storage-init');
+  assert.match(documentStorageInit, /cap_add:\s+- CHOWN\s+- FOWNER/);
+  assert.match(documentStorageInit, /<<: \*service-security/);
+
   for (const mount of compose.matchAll(/^\s+- (\/[^\n]+:rw[^\n]+)$/gm)) {
     assert.match(mount[1], /(?:^|,)nodev(?:,|$)/, `tmpfs must be nodev: ${mount[1]}`);
   }

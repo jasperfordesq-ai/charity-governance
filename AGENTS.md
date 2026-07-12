@@ -46,6 +46,11 @@ public-launch evidence.
   recovery entry point. Do not document or use raw
   `personal:server:init`, Docker Compose, database commands or volume deletion
   as an equivalent operator path.
+- A supervised unreleased clean-Git failure may advance source only through the
+  installer's explicit `-RepairToGitRevision` initial-phase exception: same
+  source/state paths, clean canonical descendant, local image identity and no
+  published recovery set. Release, replacement and later-phase resumes remain
+  exact-source. Never edit protected state to bypass this gate.
 - `scripts/Update-CharityPilot.ps1` is the supported version-bound update and
   permitted pre-cutover-resume entry point. Raw `personal:server:update` is an
   internal receipt-bound delegate, not an operator substitute. Preserve the old

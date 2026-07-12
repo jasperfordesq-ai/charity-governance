@@ -99,6 +99,7 @@ services:
     user: "0:0"
     cap_add:
       - CHOWN
+      - FOWNER
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=16m

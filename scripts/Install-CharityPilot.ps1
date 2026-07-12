@@ -10,6 +10,7 @@ param(
     [switch]$PreflightOnly,
     [switch]$DryRun,
     [switch]$ResumeFailed,
+    [string]$RepairToGitRevision,
     [string]$RestoreRecoverySet,
     [string]$RecoveryKeyFile,
     [string]$SourceOrigin,
@@ -31,6 +32,14 @@ if ($PSVersionTable.PSVersion -lt [Version]'5.1.0') {
 }
 if ($PreflightOnly -and $DryRun) {
     throw '-PreflightOnly and -DryRun are separate modes; choose one.'
+}
+if (-not [string]::IsNullOrWhiteSpace($RepairToGitRevision)) {
+    if (-not $ResumeFailed) {
+        throw '-RepairToGitRevision is valid only with -ResumeFailed.'
+    }
+    if ($RepairToGitRevision -cnotmatch '^[0-9a-f]{40}$') {
+        throw '-RepairToGitRevision must be the exact lowercase 40-character target commit SHA.'
+    }
 }
 
 $replacementRestore = -not [string]::IsNullOrWhiteSpace($RestoreRecoverySet)
@@ -60,6 +69,8 @@ $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $preflightScript = Join-Path $PSScriptRoot 'personal-server-preflight.mjs'
 $aclScript = Join-Path $PSScriptRoot 'personal-server-windows-acl.ps1'
 $archiveVerifierScript = Join-Path $PSScriptRoot 'personal-server-release-archive.ps1'
+$failedResumeSourceScript = Join-Path $PSScriptRoot 'personal-server-failed-resume-source.ps1'
+. $failedResumeSourceScript
 
 if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
     throw 'LOCALAPPDATA is unavailable. CharityPilot needs it for the protected installation-location pointer.'
@@ -385,6 +396,8 @@ function Write-LocationPointer {
     return $true
 }
 
+$script:resumeSourceAdvance = $null
+
 function Read-And-ValidateFailedInstallState {
     if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
         throw '-ResumeFailed requires the original protected install-state.json.'
@@ -426,18 +439,32 @@ function Read-And-ValidateFailedInstallState {
         throw 'Failed-install protected environment, recovery key, or recovery directory is missing.'
     }
     $storedRelease = Get-OptionalPropertyValue -InputObject $state.source -Name 'releaseIdentity'
-    if ($null -ne $releaseIdentity) {
+    if ($null -ne $storedRelease) {
+        if (-not [string]::IsNullOrWhiteSpace($RepairToGitRevision)) {
+            throw '-RepairToGitRevision is never valid for a release installation.'
+        }
+        if ($null -eq $releaseIdentity) {
+            throw 'A failed release installation requires the exact same verified release archive and checksum proof.'
+        }
         if ($storedRelease.tag -cne $releaseIdentity.tag -or
             $storedRelease.commitSha -cne $releaseIdentity.commitSha -or
             $state.source.verifiedArchive.sha256 -cne $verifiedArchive.sha256) {
             throw 'Failed-install release identity does not match the same verified release archive.'
         }
     }
-    elseif ($state.source.revision -cne $preflight.source.revision -or
-        $state.source.canonicalRemote -ne $true -or
-        $state.source.canonicalTrackingRef -ne $true -or
-        $state.source.originMasterRevision -cne $state.source.revision) {
-        throw 'Failed-install Git identity does not match the same canonical clean revision.'
+    elseif ($null -ne $releaseIdentity) {
+        throw 'A failed clean-Git installation cannot be rebound to a release archive during resume.'
+    }
+    else {
+        $script:resumeSourceAdvance = Resolve-CharityPilotFailedResumeSourceAdvance `
+            -State $state `
+            -CurrentSource $preflight.source `
+            -RepairToGitRevision $RepairToGitRevision `
+            -RecoveryRoot $recoveryRoot `
+            -RepositoryRoot $repositoryRoot
+        if ($null -ne $script:resumeSourceAdvance) {
+            Write-Host "Verified failed-install source repair advance: $($script:resumeSourceAdvance.fromRevision) -> $($script:resumeSourceAdvance.toRevision)"
+        }
     }
     return $state
 }
@@ -526,6 +553,8 @@ if ($replacementRestore) {
     }
 }
 
+$resumeState = if ($ResumeFailed) { Read-And-ValidateFailedInstallState } else { $null }
+
 if ($PreflightOnly) {
     Write-Host 'Preflight passed. No installation state was created.'
     exit 0
@@ -562,8 +591,6 @@ else {
         "--port=$Port"
     )
 }
-
-$resumeState = if ($ResumeFailed) { Read-And-ValidateFailedInstallState } else { $null }
 
 if ($DryRun) {
     Write-Host 'DRY RUN: the following ACL and initialization plan is read-only.'
@@ -617,6 +644,39 @@ try {
         $env:CHARITYPILOT_PERSONAL_SERVER_ENV_FILE = $environmentPath
         $environmentPointerChanged = $true
         $script:installState = $resumeState
+        if ($null -ne $script:resumeSourceAdvance) {
+            $existingSourceAdvances = Get-OptionalPropertyValue -InputObject $script:installState -Name 'failedResumeSourceAdvances'
+            $sourceAdvanceHistory = @()
+            if ($null -ne $existingSourceAdvances) {
+                $sourceAdvanceHistory += @($existingSourceAdvances)
+            }
+            if ($sourceAdvanceHistory.Count -ge 32) {
+                throw 'Failed-install source repair history exceeds its bounded safety limit.'
+            }
+            foreach ($priorSourceAdvance in $sourceAdvanceHistory) {
+                if ($priorSourceAdvance.format -cne 'charitypilot-personal-server-failed-resume-source-advance/v1' -or
+                    [string]$priorSourceAdvance.fromRevision -cnotmatch '^[0-9a-f]{40}$' -or
+                    [string]$priorSourceAdvance.toRevision -cnotmatch '^[0-9a-f]{40}$') {
+                    throw 'Failed-install source repair history is malformed.'
+                }
+            }
+            $sourceAdvanceHistory += [pscustomobject]$script:resumeSourceAdvance
+            $sourceAdvanceProperty = $script:installState.PSObject.Properties['failedResumeSourceAdvances']
+            if ($null -eq $sourceAdvanceProperty) {
+                $script:installState | Add-Member -MemberType NoteProperty -Name 'failedResumeSourceAdvances' -Value $sourceAdvanceHistory
+            }
+            else {
+                $script:installState.failedResumeSourceAdvances = $sourceAdvanceHistory
+            }
+            $script:installState.source.kind = $preflight.source.kind
+            $script:installState.source.revision = $preflight.source.revision
+            $script:installState.source.branch = $preflight.source.branch
+            $script:installState.source.canonicalRemote = $preflight.source.canonicalRemote
+            $script:installState.source.canonicalTrackingRef = $preflight.source.canonicalTrackingRef
+            $script:installState.source.originMasterRevision = $preflight.source.originMasterRevision
+            Write-InstallState
+            Write-Host 'Protected failed-install state now records the verified canonical descendant repair source.'
+        }
     }
     else {
       if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
