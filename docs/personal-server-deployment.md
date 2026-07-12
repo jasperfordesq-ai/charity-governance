@@ -13,8 +13,9 @@ At this review point:
 - the Windows installer, compiled runtime, protected external state, encrypted
   recovery, guarded update/rollback/restore/decommission and replacement-host
   restore contracts exist;
-- the final rebased personal-server contract suite passed 107/107 checks after
-  the update-safety and password-recovery integrity integration work;
+- the final rebased personal-server contract suite passed 152/152 checks after
+  the Docker-boundary, two-network isolation, replacement-host auth rebind and
+  resumable incident-rotation integration work;
 - no `personal-v*` tag or GitHub Release has been published;
 - the exact release-workflow Administration-read environment secret has not yet
   been configured;
@@ -76,10 +77,24 @@ the Linux containers that make up CharityPilot:
 | Document volume | Stores uploaded document bytes |
 | Tailscale, when selected | Private network membership and HTTPS in front of loopback Caddy |
 
-Caddy listens only on `127.0.0.1:<port>`. It sends `/api/v1/*` to Fastify and
-everything else to Next.js. Next.js, Fastify and PostgreSQL have no host port.
-Tailscale is an optional private HTTPS access layer; it is not CharityPilot's
-web server.
+Docker publishes Caddy's container listener only at the Windows host's exact
+`127.0.0.1:<port>` bind. Caddy sends `/api/v1/*` to Fastify and everything else
+to Next.js. Next.js, Fastify and PostgreSQL have no host port. Tailscale is an
+optional private HTTPS access layer; it is not CharityPilot's web server.
+
+Docker Desktop cannot publish a Windows host port from a container attached
+only to an `internal: true` network. Caddy is therefore the sole dual-homed
+container: it joins the internal application bridge at fixed
+`172.30.250.10` and a dedicated non-internal edge bridge
+`172.30.251.0/24`. Only Caddy joins the edge bridge and its port is still bound
+explicitly to `127.0.0.1`; API, web and PostgreSQL remain internal-only. The
+edge bridge is a Docker transport requirement, not public exposure.
+
+Caddy does not trust incoming `X-Forwarded-*` values. Direct loopback and
+Tailscale Serve share the edge gateway, so trusting that hop would allow a local
+process to spoof a client address. Caddy replaces those values before proxying;
+the exact configured origin, rather than forwarded scheme/host input, controls
+personal-server cookies, redirects, CSP and server-side API requests.
 
 ```mermaid
 flowchart LR
@@ -115,7 +130,10 @@ Use:
 - a currently supported Windows release;
 - PowerShell 5.1 or later;
 - WSL 2;
-- Docker Desktop running Linux containers and Docker Compose v2;
+- local Windows Docker Desktop running Linux Engine 28 / API 1.48 or later and
+  Docker Compose 2.33.1 or later (required for deterministic Caddy edge-bridge
+  `gw_priority`); remote Docker contexts and `DOCKER_HOST` overrides are not
+  supported;
 - Node.js satisfying the root `package.json` engine;
 - the exact npm version declared by `packageManager`;
 - Git only for the supervised clean-clone route; and
@@ -226,6 +244,10 @@ It contains:
 - `.env.personal-server`, the generated private configuration;
 - `install-state.json`, the non-secret phased operation record;
 - `recovery-key.hex`, the recovery encryption/authentication key;
+- `pending-auth-recovery-rotation.json`, the ACL-protected count-only incident
+  receipt while a rotation is active or retained as its latest completion;
+- `pending-auth-recovery-secret.hex`, present only during the fail-closed secret
+  replacement window, plus `auth-recovery-rotation-history\` redacted archives;
 - `recovery\`, the default encrypted recovery-set root; and
 - runtime-health reports.
 
@@ -263,10 +285,19 @@ powershell -NoLogo -NoProfile -ExecutionPolicy Bypass `
   -PreflightOnly @sourceProof
 ```
 
-Preflight checks Windows, PowerShell, Node, exact npm, Docker/Compose/WSL2,
-Linux containers, source identity, required files, port, subnet, free space,
-state-root safety, existing resources and—when HTTPS is selected—Tailscale
-identity plus Serve/Funnel state. It creates nothing.
+Preflight checks Windows, PowerShell, Node, exact npm, local Docker Desktop,
+Engine API, Compose, WSL2, Linux containers, source identity, required files,
+the loopback port, both reserved subnets, exact preserved-network identities,
+free space, state-root safety, existing resources and—when HTTPS is
+selected—Tailscale identity plus Serve/Funnel state. It creates nothing.
+
+Preflight and every live lifecycle/runtime-certification command require the
+local Windows Docker Desktop Linux named-pipe endpoint and Engine API 1.48 or
+later, then pin every Docker child to that verified named pipe for the rest of
+the operation. Remote contexts and daemon/API environment overrides fail closed.
+Lifecycle commands also pin the Compose project name and remove ambient
+`COMPOSE_*` controls, so a parent shell cannot enable maintenance or initializer
+profiles during routine start.
 
 ### Preview and install locally
 
@@ -465,13 +496,17 @@ tailscale status
 tailscale serve status
 ```
 
-The exact read-only Compose diagnostic, when genuinely needed, is:
+Use the supported lifecycle diagnostics; they pin the verified local Docker
+Desktop endpoint, exact Compose project and protected environment:
 
 ```powershell
-docker compose `
-  --env-file $env:CHARITYPILOT_PERSONAL_SERVER_ENV_FILE `
-  -f .\compose.personal-server.yml ps
+npm run personal:server:status
+npm run personal:server:certify -- --local-only
 ```
+
+Do not substitute a raw `docker compose ps` command. Ambient Docker or Compose
+controls can otherwise inspect a different daemon, file or project and produce
+misleading evidence.
 
 ### Runtime-health attestation
 
@@ -694,14 +729,23 @@ powershell -NoLogo -NoProfile -ExecutionPolicy Bypass `
   @replacementArguments @sourceProof
 ```
 
-The installer copies and protects the recovery key, generates fresh database,
-JWT and readiness secrets, performs a disposable full-stack rehearsal with a
-random synthetic Owner inside only the disposable database, creates the exact
-production volumes/network, restores and migrates, revokes every restored
-session, starts and reconciles the runtime, creates a new encrypted backup,
-rehearses it, certifies runtime health, verifies ACLs and marks state `ready`.
-Existing account passwords are not reset; everyone must sign in again because
-all restored sessions are revoked.
+The installer copies and protects the recovery key and generates fresh database,
+JWT, authentication-recovery and readiness secrets. In both the disposable
+full-stack rehearsal and the real blank target it restores and migrates first,
+then runs the internal replacement-host-only authentication-recovery rebind
+before any API starts. That one serializable transaction retires the restored
+active fingerprint when present, invalidates old reset capabilities and keyed
+evidence, preserves completion notices, and binds the fresh host secret with
+zero postconditions. A count-only dry-run, exact recovery-set/manifest/database
+binding and exact execute confirmation fence the transaction; neither secret or
+fingerprint is emitted.
+
+The installer then creates the exact production volumes/networks, reconciles
+documents, revokes every restored session, starts and reconciles the runtime,
+creates a new encrypted backup, rehearses it, certifies runtime health, verifies
+ACLs and marks state `ready`. Existing account passwords are not reset; everyone
+must sign in again because all restored sessions are revoked. Old reset links
+and legacy reset slots are deliberately unusable on the replacement host.
 
 Optionally add `-OwnerEmail` and `-OwnerPasswordFile` for an additional real
 Owner acceptance proof. The password must be in a separately protected file,
@@ -785,74 +829,76 @@ not initialize, migrate, seed or modify a database or document volume.
 
 ### Security-incident rotation of `AUTH_RECOVERY_SECRET`
 
-If incident response requires rotation, never edit the environment value first.
-Delivered operator links and legacy reset slots remain capabilities even though
-provider email delivery is disabled in this profile. Create and verify a
-protected encrypted backup, then stop Caddy, Next.js and Fastify while leaving
-PostgreSQL available:
+If incident response requires rotation, never edit the protected environment
+and never use raw Docker Compose. Delivered operator links and legacy reset
+slots remain capabilities even though provider email delivery is disabled in
+this profile. Use the supported receipt-backed lifecycle command from the exact
+installed source directory.
+
+The first call is count-only. It briefly quiesces Caddy, Next.js and Fastify,
+inspects the exact database under the operation lock, restores the previous
+service availability and writes a protected 30-minute review receipt. Use a
+named human, an approved case reference, and exactly
+`PLANNED_KEY_ROTATION` or `SUSPECTED_KEY_COMPROMISE`:
 
 ```powershell
-npm run personal:server:backup
-
-$envFile = $env:CHARITYPILOT_PERSONAL_SERVER_ENV_FILE
-docker compose --env-file $envFile `
-  -f .\compose.personal-server.yml stop caddy web api
+npm run personal:server:rotate-auth-recovery-secret -- `
+  --reason=SUSPECTED_KEY_COMPROMISE `
+  "--operator=Named Charity Director" `
+  --case-reference=INC-2026-0042
 ```
 
-Label that set as a pre-invalidation, credential-bearing snapshot. Never start
-an application runtime against a restore of it until the invalidation command
-has been run again. The Compose calls below are a restricted quiesced security
-maintenance procedure; they are not substitutes for the Windows installer or
-updater.
-
-Run the rotation service first with `--dry-run`, a named operator, an approved
-case reference, and exactly `PLANNED_KEY_ROTATION` or
-`SUSPECTED_KEY_COMPROMISE`:
+No secret, raw operator name or raw case reference is written to the receipt.
+Review the count-only summary and the exact comprehensive confirmation printed
+by the command. Put that exact value in a PowerShell variable and begin the
+same confirmed call before the review expires. Its protected authority-at-start
+checkpoint permits a long verified backup to finish after that time; it does
+not permit a confirmation first submitted after expiry:
 
 ```powershell
-docker compose --env-file $envFile `
-  -f .\compose.personal-server.yml `
-  --profile maintenance run --rm auth-recovery-secret-rotation `
-  node dist/jobs/rotate-auth-recovery-secret.js `
-  --dry-run `
+$confirmation = 'PASTE THE COMPLETE EXACT CONFIRMATION HERE'
+
+npm run personal:server:rotate-auth-recovery-secret -- `
   --reason SUSPECTED_KEY_COMPROMISE `
-  --operator "NAMED OPERATOR" `
-  --case-reference "APPROVED-CASE-REFERENCE" `
-  --confirm-api-and-scheduler-quiesced
+  --operator "Named Charity Director" `
+  --case-reference "INC-2026-0042" `
+  "--confirm=$confirmation"
 ```
 
-Review the count-only result, current generation, canonical database-identity
-SHA-256 and exact `personal-server` profile. Rerun with `--execute`, all five
-emitted counts, `--expected-generation`,
-`--expected-request-evidence-rows`, `--expected-database-identity-sha256`,
-`--expected-deployment-profile personal-server`,
-`--confirm-outbox-preservation-understood`, and the exact emitted
-`--confirm-execute` acknowledgement. The serializable command terminates every
-non-suppressed recovery capability as `KEY_ROTATED`, clears both halves of every
-legacy `User` reset slot, deletes keyed rate buckets, one-way redacts retained
-keyed request evidence, preserves completion notices, advances the database
-generation and leaves recovery blocked. Equal counts cannot authorise a
-different database, profile or generation.
+The confirmed command creates and verifies an authenticated-encrypted
+credential-bearing recovery set before mutation, repeats the count-only review
+under quiescence, and refuses drift. It then terminates every non-suppressed
+recovery capability as `KEY_ROTATED`, clears both halves of every legacy `User`
+reset slot, deletes keyed rate buckets, one-way redacts retained keyed request
+evidence, preserves completion notices and advances the database generation.
+It creates a fresh independent secret in protected state, atomically changes
+exactly one environment line, applies and verifies the Windows ACL, activates
+the replacement only against zero postconditions, starts the runtime, verifies
+container health, creates a second authenticated-encrypted recovery set under
+the new secret state, and proves that new set with an isolated full-application
+restore rehearsal before it marks the rotation complete. It archives only
+redacted evidence. Neither secret is placed in an argument, receipt, log or
+command output.
 
-Only after `EXECUTED` reports `recoveryBlocked: true` and zero remaining
-capabilities, request-evidence rows, legacy slots and rate buckets may the
-operator generate an independent canonical replacement and change the one
-`AUTH_RECOVERY_SECRET` line in the protected external environment. Keep the API
-stopped and reapply/verify the file ACL with
-`scripts/personal-server-windows-acl.ps1`.
-
-Run the same maintenance service with `--activate-after-replacement`, the
-emitted blocked generation, database-identity SHA-256, `personal-server`
-profile, quiescence confirmation and exact emitted `--confirm-activate`
-acknowledgement. Activation refuses every secret in the append-only retired
-fingerprint history and any non-zero rotation postcondition. Only after it
-reports `ACTIVATED` and `recoveryBlocked: false` may
-`npm run personal:server:start` run.
+If power loss or a child failure interrupts the operation, application writers
+remain stopped and installation phase is `auth-recovery-rotating`. Rerun the
+same supported command with the same named operator, case reference and exact
+confirmation. Its read-only control-status reconciliation distinguishes an
+uncommitted invalidation, a blocked database and an activated replacement. Do
+not start services manually, edit the environment, generate another key or
+restore the pre-invalidation backup into service. That backup contains live
+pre-rotation capabilities and remains incident evidence only; it is not an
+ordinary recovery source. The completion message names the separately verified
+post-rotation recovery-set identity that passed the isolated rehearsal. The
+protected post-activation intent also binds the exact recovery and rehearsal
+identities, so a retry adopts or removes only their matching incomplete files,
+temporary plaintext staging and labelled disposable Docker resources.
 
 Verify login, issue and consume one new manual reset link, and retain the named
 operator, reason, protected backup reference, case reference, redacted command
-outputs, database/profile/generation binding and restart evidence. Never record
-tokens, addresses, request IDs or either secret value.
+outputs, database/profile/generation binding, restart evidence, and the named
+post-rotation recovery-set and rehearsal evidence. Never record tokens,
+addresses, request IDs or either secret value.
 
 From the new release directory:
 
@@ -959,7 +1005,7 @@ npm run personal:server:decommission -- `
 The supplied set authorises the operation. The command then creates a separate
 final quiesced encrypted recovery set, verifies and full-stack rehearses it,
 records `decommissioning`, closes exact Tailscale Serve, removes only the exact
-Compose containers, internal network and two data volumes, proves they are
+Compose containers, internal/edge networks and two data volumes, proves they are
 absent and records `decommissioned`.
 
 Source, `.env.personal-server`, recovery key, install state and all recovery
@@ -1041,6 +1087,8 @@ Before storing important records, record evidence that:
       `ready`;
 - [ ] the Owner signed in and stored the one-time password safely;
 - [ ] only Caddy publishes one exact loopback port;
+- [ ] only Caddy joins the non-internal edge bridge; API, web and PostgreSQL
+      remain on the internal bridge only;
 - [ ] no source mount, watcher, public bind, router forward, Funnel or
       Cloudflare Tunnel exists;
 - [ ] the configured origin, cookie and proxy chain are exact;
@@ -1051,6 +1099,10 @@ Before storing important records, record evidence that:
 - [ ] disposable full-stack restore rehearsal and sampled login/download proof
       passed;
 - [ ] guarded restore passed without losing the preservation set;
+- [ ] supported authentication-recovery rotation survived an interrupted
+      activation and post-activation backup boundary, rejected old links,
+      issued and consumed a new link, and retained the redacted receipt plus
+      rehearsed post-rotation recovery-set evidence;
 - [ ] start, health and Owner login passed after a real Windows reboot;
 - [ ] a previous-release update and guarded rollback passed;
 - [ ] decommission and replacement-host recovery were tested with disposable

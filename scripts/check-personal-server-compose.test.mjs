@@ -181,14 +181,22 @@ test('recovery-secret rotation receives the configured secret in its maintenance
   );
 });
 
-test('the isolated network pins both application and private-tunnel proxy trust', () => {
-  assert.match(serviceSection('caddy'), /ipv4_address: 172\.30\.250\.10/);
+test('the internal and Caddy-only edge networks isolate services without trusting spoofable forwarded headers', () => {
+  const caddyService = serviceSection('caddy');
+  assert.match(caddyService, /personal-server-internal:\s*\n\s+ipv4_address: 172\.30\.250\.10/);
+  assert.match(caddyService, /personal-server-edge:\s*\n\s+gw_priority: 1/);
+  assert.deepEqual(
+    [...caddyService.matchAll(/^\s{6}(personal-server-[a-z-]+):/gm)].map((match) => match[1]).sort(),
+    ['personal-server-edge', 'personal-server-internal'],
+  );
+  for (const service of ['db', 'document-storage-init', 'migrate', 'api', 'web', 'personal-init', 'auth-recovery-secret-rotation']) {
+    assert.doesNotMatch(serviceSection(service), /personal-server-edge/, `${service} must remain internal-only`);
+  }
   assert.match(compose, /subnet: 172\.30\.250\.0\/24/);
   assert.match(compose, /gateway: 172\.30\.250\.1/);
-  assert.match(
-    caddy,
-    /trusted_proxies static 172\.30\.250\.1\/32 127\.0\.0\.1\/32 ::1\/128/,
-  );
-  assert.match(caddy, /trusted_proxies_strict/);
-  assert.match(caddy, /client_ip_headers X-Forwarded-For/);
+  assert.match(compose, /personal-server-edge:\s*\n\s+name: charitypilot-personal-server-edge\s*\n\s+driver: bridge\s*\n\s+internal: false/);
+  assert.match(compose, /subnet: 172\.30\.251\.0\/24/);
+  assert.match(compose, /gateway: 172\.30\.251\.1/);
+  assert.doesNotMatch(caddy, /trusted_proxies|client_ip_headers/u);
+  assert.match(compose, /TRUSTED_PROXY_ADDRESSES: 172\.30\.250\.10/u);
 });

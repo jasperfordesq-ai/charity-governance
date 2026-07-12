@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { serializeErrorForLog } from '../utils/logger.js';
@@ -25,6 +25,7 @@ const VALUE_OPTIONS = new Set([
   '--confirm-activate',
 ]);
 const FLAG_OPTIONS = new Set([
+  '--control-status',
   '--dry-run',
   '--execute',
   '--activate-after-replacement',
@@ -64,8 +65,14 @@ export type AuthRecoverySecretRotationEvidence = {
   databaseIdentitySha256: string;
 };
 
+export type AuthRecoverySecretRotationControlStatus =
+  AuthRecoverySecretRotationEvidence & {
+    blocked: boolean;
+    currentSecretActive: boolean;
+  };
+
 export type AuthRecoverySecretRotationCommand = {
-  mode: 'dry-run' | 'execute' | 'activate';
+  mode: 'control-status' | 'dry-run' | 'execute' | 'activate';
   reason: AuthRecoverySecretRotationReason;
   operator: string;
   caseReference: string;
@@ -79,6 +86,7 @@ export type AuthRecoverySecretRotationCommand = {
 };
 
 export type AuthRecoverySecretRotationStore = {
+  controlStatus(): Promise<AuthRecoverySecretRotationControlStatus>;
   inspect(): Promise<AuthRecoverySecretRotationEvidence>;
   rotate(
     expected: AuthRecoverySecretRotationCounts,
@@ -277,12 +285,13 @@ export function parseAuthRecoverySecretRotationArgs(
     }
   }
 
+  const controlStatus = args.includes('--control-status');
   const dryRun = args.includes('--dry-run');
   const execute = args.includes('--execute');
   const activate = args.includes('--activate-after-replacement');
-  if (Number(dryRun) + Number(execute) + Number(activate) !== 1) {
+  if (Number(controlStatus) + Number(dryRun) + Number(execute) + Number(activate) !== 1) {
     throw new Error(
-      'Choose exactly one mode: --dry-run, --execute, or --activate-after-replacement',
+      'Choose exactly one mode: --control-status, --dry-run, --execute, or --activate-after-replacement',
     );
   }
   if (!args.includes('--confirm-api-and-scheduler-quiesced')) {
@@ -320,7 +329,7 @@ export function parseAuthRecoverySecretRotationArgs(
   const executionConfirmation = optionValue(args, '--confirm-execute')?.trim();
   const activationConfirmation = optionValue(args, '--confirm-activate')?.trim();
 
-  if (dryRun) {
+  if (controlStatus || dryRun) {
     if (
       hasAnyExpectedCount ||
       expectedGeneration !== undefined ||
@@ -330,10 +339,14 @@ export function parseAuthRecoverySecretRotationArgs(
       executionConfirmation !== undefined ||
       activationConfirmation !== undefined
     ) {
-      throw new Error('Execution-only counts and confirmations must not be supplied with --dry-run');
+      throw new Error(
+        `Execution-only counts and confirmations must not be supplied with ${
+          controlStatus ? '--control-status' : '--dry-run'
+        }`,
+      );
     }
     return {
-      mode: 'dry-run',
+      mode: controlStatus ? 'control-status' : 'dry-run',
       reason,
       operator,
       caseReference,
@@ -445,6 +458,7 @@ function assertCommand(command: AuthRecoverySecretRotationCommand): void {
   }
   if (
     command.mode !== 'dry-run' &&
+    command.mode !== 'control-status' &&
     command.mode !== 'execute' &&
     command.mode !== 'activate'
   ) {
@@ -460,7 +474,7 @@ function assertCommand(command: AuthRecoverySecretRotationCommand): void {
   if (command.apiAndSchedulerQuiesced !== true) {
     throw new Error('Auth recovery secret rotation refused: API and scheduler must be quiesced');
   }
-  if (command.mode === 'dry-run') {
+  if (command.mode === 'control-status' || command.mode === 'dry-run') {
     if (
       command.expected !== undefined ||
       command.expectedDatabaseIdentitySha256 !== undefined ||
@@ -469,7 +483,11 @@ function assertCommand(command: AuthRecoverySecretRotationCommand): void {
       command.activationConfirmation !== undefined ||
       command.outboxPreservationUnderstood
     ) {
-      throw new Error('Auth recovery secret rotation refused: dry-run contains execute authority');
+      throw new Error(
+        `Auth recovery secret rotation refused: ${
+          command.mode === 'control-status' ? 'control status' : 'dry-run'
+        } contains execute authority`,
+      );
     }
     return;
   }
@@ -559,6 +577,17 @@ function countsEqual(
     left.securityNotices === right.securityNotices;
 }
 
+function fingerprintsEqual(left: string | null, right: string): boolean {
+  if (
+    left === null ||
+    !/^[a-f0-9]{64}$/u.test(left) ||
+    !/^[a-f0-9]{64}$/u.test(right)
+  ) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+}
+
 function isSerializableConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as {
@@ -614,13 +643,10 @@ export class PrismaAuthRecoverySecretRotationStore implements AuthRecoverySecret
     });
   }
 
-  private async lockedCounts(
+  private async lockedCountsForGeneration(
     tx: Prisma.TransactionClient,
-    requireActiveSecret: boolean,
+    generation: number,
   ): Promise<AuthRecoverySecretRotationCounts> {
-    const control = requireActiveSecret
-      ? await requireAuthRecoveryControlForCurrentSecret(tx)
-      : await lockAuthRecoveryControl(tx);
     await tx.$executeRaw`
       LOCK TABLE
         "PasswordRecoveryRequest",
@@ -632,7 +658,7 @@ export class PrismaAuthRecoverySecretRotationStore implements AuthRecoverySecret
     `;
     const rows = await tx.$queryRaw<RotationCountRow[]>`
       SELECT
-        ${control.generation}::BIGINT AS "generation",
+        ${generation}::BIGINT AS "generation",
         (
           SELECT COUNT(*)
           FROM "PasswordRecoveryRequest"
@@ -658,6 +684,16 @@ export class PrismaAuthRecoverySecretRotationStore implements AuthRecoverySecret
     return countsFromRow(rows[0]);
   }
 
+  private async lockedCounts(
+    tx: Prisma.TransactionClient,
+    requireActiveSecret: boolean,
+  ): Promise<AuthRecoverySecretRotationCounts> {
+    const control = requireActiveSecret
+      ? await requireAuthRecoveryControlForCurrentSecret(tx)
+      : await lockAuthRecoveryControl(tx);
+    return this.lockedCountsForGeneration(tx, control.generation);
+  }
+
   private async lockedEvidence(
     tx: Prisma.TransactionClient,
     requireActiveSecret: boolean,
@@ -665,6 +701,25 @@ export class PrismaAuthRecoverySecretRotationStore implements AuthRecoverySecret
     const counts = await this.lockedCounts(tx, requireActiveSecret);
     const databaseIdentitySha256 = await this.liveDatabaseIdentitySha256(tx);
     return { counts, databaseIdentitySha256 };
+  }
+
+  async controlStatus(): Promise<AuthRecoverySecretRotationControlStatus> {
+    return this.prisma.$transaction(async (tx) => {
+      const control = await lockAuthRecoveryControl(tx);
+      const counts = await this.lockedCountsForGeneration(tx, control.generation);
+      const databaseIdentitySha256 = await this.liveDatabaseIdentitySha256(tx);
+      return {
+        blocked: control.blocked,
+        currentSecretActive:
+          !control.blocked && fingerprintsEqual(control.activeSecretFingerprint, this.secretFingerprint),
+        counts,
+        databaseIdentitySha256,
+      };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 10_000,
+      timeout: 30_000,
+    });
   }
 
   async inspect(): Promise<AuthRecoverySecretRotationEvidence> {
@@ -894,6 +949,35 @@ export async function runAuthRecoverySecretRotation(
 ) {
   assertCommand(command);
   const currentDeploymentProfile = authRecoveryDeploymentProfile(env);
+  if (command.mode === 'control-status') {
+    const status = await store.controlStatus();
+    assertCounts(status.counts, 'control status');
+    if (
+      typeof status.blocked !== 'boolean' ||
+      typeof status.currentSecretActive !== 'boolean' ||
+      (status.blocked && status.currentSecretActive) ||
+      !/^[a-f0-9]{64}$/u.test(status.databaseIdentitySha256)
+    ) {
+      throw new Error('Auth recovery secret rotation refused: control status is invalid');
+    }
+    return {
+      mode: 'CONTROL_STATUS' as const,
+      mutationApplied: false,
+      blocked: status.blocked,
+      generation: status.counts.generation,
+      currentSecretActive: status.currentSecretActive,
+      capabilities: status.counts.capabilities,
+      requestEvidenceRows: status.counts.requestEvidenceRows,
+      legacySlots: status.counts.legacySlots,
+      rateBuckets: status.counts.rateBuckets,
+      securityNotices: status.counts.securityNotices,
+      reason: command.reason,
+      caseReferenceSha256: createHash('sha256').update(command.caseReference).digest('hex'),
+      databaseIdentitySha256: status.databaseIdentitySha256,
+      deploymentProfile: currentDeploymentProfile,
+      credentialsIssued: false,
+    };
+  }
   if (
     command.mode !== 'dry-run' &&
     command.expectedDeploymentProfile !== currentDeploymentProfile

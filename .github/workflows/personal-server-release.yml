@@ -131,7 +131,7 @@ jobs:
               operatingSystem: 'supported Windows with WSL 2',
               node: '>=22.0.0',
               npm: '11.11.0',
-              dockerDesktop: 'Linux containers and Docker Compose v2+',
+              dockerDesktop: 'local Windows Docker Desktop, Linux Engine 28.0.0 or later with API 1.48 or later, and Docker Compose 2.33.1 or later',
             },
           };
           fs.writeFileSync(manifest, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });

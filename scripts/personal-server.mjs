@@ -24,6 +24,7 @@ import { hostname, tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   cleanupPersonalServerRecoveryStaging,
+  cleanupPersonalServerRecoveryStagingForSet,
   encryptPersonalServerArtifact,
   hmacPersonalServerRecoveryManifest,
   inspectPersonalServerDocumentArchive,
@@ -32,6 +33,35 @@ import {
   verifyPersonalServerRecoverySet,
 } from './personal-server-recovery.mjs';
 import { validateTailscalePrivateAccess } from './personal-server-certify.mjs';
+import {
+  composeSafeEnvironment,
+  pinnedLocalDockerEnvironment,
+  validateLocalDockerDesktopEndpoint,
+  validateLocalDockerDesktopRuntime,
+} from './personal-server-docker-boundary.mjs';
+import {
+  authRecoveryRotationControlStatusFromJobEvidence,
+  authRecoveryRotationEnvironmentSha256,
+  authRecoveryRotationIdentitySha256,
+  completeAuthRecoveryRotation,
+  createAuthRecoveryRotationIdentityHashes,
+  createAuthRecoveryRotationReviewReceipt,
+  createRedactedAuthRecoveryRotationArchive,
+  markAuthRecoveryRotationActivating,
+  markAuthRecoveryRotationExecuting,
+  parseAuthRecoveryRotationJobEvidence,
+  planAuthRecoveryRotationResume,
+  reconcileAuthRecoveryRotationReceipt,
+  recordAuthRecoveryRotationAuthorityStart,
+  recordAuthRecoveryRotationActivated,
+  recordAuthRecoveryRotationBackup,
+  recordAuthRecoveryRotationBlocked,
+  recordAuthRecoveryRotationFailure,
+  recordAuthRecoveryRotationSecretReplacement,
+  validateAuthRecoveryRotationReceipt,
+} from './personal-server-auth-recovery-rotation.mjs';
+
+export { validateLocalDockerDesktopRuntime } from './personal-server-docker-boundary.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(scriptsDir, '..');
@@ -42,6 +72,23 @@ const PROJECT_NAME = 'charitypilot-personal-server';
 const DATABASE_VOLUME = 'charitypilot-personal-server-db';
 const DOCUMENT_VOLUME = 'charitypilot-personal-server-documents';
 const INTERNAL_NETWORK = 'charitypilot-personal-server-internal';
+const EDGE_NETWORK = 'charitypilot-personal-server-edge';
+const PERSONAL_NETWORK_IDENTITIES = Object.freeze({
+  internal: Object.freeze({
+    name: INTERNAL_NETWORK,
+    composeName: 'personal-server-internal',
+    internal: true,
+    subnet: '172.30.250.0/24',
+    gateway: '172.30.250.1',
+  }),
+  edge: Object.freeze({
+    name: EDGE_NETWORK,
+    composeName: 'personal-server-edge',
+    internal: false,
+    subnet: '172.30.251.0/24',
+    gateway: '172.30.251.1',
+  }),
+});
 const DOCUMENT_ARCHIVE_IMAGE = 'alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc';
 const POSTGRES_IMAGE = 'postgres:16.4-alpine@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const CADDY_IMAGE = 'caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648';
@@ -54,6 +101,9 @@ const MAX_DECOMMISSION_RECOVERY_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_RECOVERY_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const STALE_OPERATION_LOCK_AGE_MS = 15 * 60 * 1000;
 const MAX_PENDING_UPDATE_RESUME_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const AUTH_RECOVERY_ROTATION_RECEIPT_FILE = 'pending-auth-recovery-rotation.json';
+const AUTH_RECOVERY_ROTATION_SECRET_FILE = 'pending-auth-recovery-secret.hex';
+const AUTH_RECOVERY_ROTATION_ARCHIVE_DIRECTORY = 'auth-recovery-rotation-history';
 const INSTALLATION_PHASES = new Set([
   'initializing',
   'restore-prepared',
@@ -63,6 +113,7 @@ const INSTALLATION_PHASES = new Set([
   'ready',
   'updating',
   'restoring',
+  'auth-recovery-rotating',
   'decommissioning',
   'decommissioned',
 ]);
@@ -233,6 +284,8 @@ try {
   await prisma.$disconnect();
 }
 `;
+const REPLACEMENT_AUTH_REBIND_FORMAT = 'charitypilot-personal-replacement-auth-rebind/v1';
+const REPLACEMENT_AUTH_REBIND_JOB = 'dist/jobs/rebind-personal-server-auth-recovery-secret.js';
 
 function usage() {
   return `CharityPilot personal-server operator
@@ -251,6 +304,7 @@ Usage:
   node scripts/personal-server.mjs rehearse-restore --recovery-set=<path> [--source-origin=<original-origin>] [--owner-password-file=<absolute-path>] [--encryption-key-file=<absolute-path>] [--dry-run]
   node scripts/personal-server.mjs restore --recovery-set=<path> --confirm=<typed-confirmation> [--source-origin=<original-origin>] [--preservation-output-dir=<path>] [--encryption-key-file=<absolute-path>] [--dry-run]
   node scripts/personal-server.mjs decommission --recovery-set=<path> --confirm=<typed-confirmation> [--encryption-key-file=<absolute-path>] [--dry-run]
+  node scripts/personal-server.mjs rotate-auth-recovery-secret --reason=<reason> --operator=<named-human> --case-reference=<case> [--confirm=<exact-review-confirmation>] [--output-dir=<path>] [--encryption-key-file=<absolute-path>] [--dry-run]
   node scripts/personal-server.mjs reset-link --email=<canonical-lowercase-email> [--dry-run]
   node scripts/personal-server.mjs reset-password --email=<canonical-lowercase-email> [--dry-run]
   node scripts/personal-server.mjs help
@@ -263,7 +317,8 @@ Safety:
   - bootstrap-restore is only for an installer-prepared, blank replacement host and never runs the Owner initializer;
   - rehearse-restore uses isolated disposable database, document, network, API, web, and Caddy resources;
   - restore verifies and rehearses the selected set, creates a preservation backup, and requires exact typed confirmation;
-  - decommission requires a fresh verified recovery set and removes only the exact Compose containers, network, and two data volumes;
+  - decommission requires a fresh verified recovery set and removes only the exact Compose containers, networks, and two data volumes;
+  - auth recovery rotation uses a protected count-only review receipt, verified encrypted backup, atomic key activation and resumable fail-closed checkpoints;
   - reset-link is preferred; reset-password is an emergency fallback.
 `;
 }
@@ -340,6 +395,7 @@ export function parsePersonalServerArgs(argv) {
     'rehearse-restore': new Set(['--recovery-set', '--source-origin', '--owner-password-file', '--encryption-key-file']),
     restore: new Set(['--recovery-set', '--confirm', '--source-origin', '--preservation-output-dir', '--encryption-key-file']),
     decommission: new Set(['--recovery-set', '--confirm', '--encryption-key-file']),
+    'rotate-auth-recovery-secret': new Set(['--reason', '--operator', '--case-reference', '--confirm', '--output-dir', '--encryption-key-file']),
     'reset-link': new Set(['--email']),
     'reset-password': new Set(['--email']),
   };
@@ -724,9 +780,7 @@ function markInstallationDecommissioned(context, finalRecoverySet) {
     decommissionOperation: null,
     updatedAt: context.now().toISOString(),
   };
-  const temporaryPath = `${record.path}.${process.pid}.${context.randomBytesImpl(6).toString('hex')}.tmp`;
-  writeExclusiveFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(temporaryPath, record.path);
+  writeInstallationStateExact(context, value);
 }
 
 function writeInstallationStateExact(context, value) {
@@ -739,8 +793,16 @@ function writeInstallationStateExact(context, value) {
     throw new Error('Refusing to write an invalid personal-server installation state');
   }
   const temporaryPath = `${record.path}.${process.pid}.${context.randomBytesImpl(6).toString('hex')}.tmp`;
-  writeExclusiveFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(temporaryPath, record.path);
+  try {
+    writeExclusiveFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`);
+    applyProtectedPathAcl(temporaryPath, 'File', context);
+    applyProtectedPathAcl(temporaryPath, 'File', context, { verifyOnly: true });
+    renameSync(temporaryPath, record.path);
+    applyProtectedPathAcl(record.path, 'File', context, { verifyOnly: true });
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
   return value;
 }
 
@@ -760,7 +822,39 @@ function updateInstallationState(context, patch) {
 }
 
 function composePrefix(context) {
-  return ['docker', 'compose', '--env-file', environmentFilePath(context), '-f', COMPOSE_FILE_NAME];
+  return [
+    'docker', 'compose', '--project-name', PROJECT_NAME,
+    '--env-file', environmentFilePath(context), '-f', COMPOSE_FILE_NAME,
+  ];
+}
+
+function verifyLocalDockerDesktopRuntime(context) {
+  if (context.dockerBoundaryVerified) return;
+  const invoke = (args, env = context.processEnv) => {
+    const result = context.spawnSyncImpl('docker', args, {
+      cwd: context.repoRoot,
+      env,
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: context.commandTimeoutMs,
+    });
+    if (result.status !== 0) {
+      throw new Error('Unable to verify the local Windows Docker Desktop runtime boundary');
+    }
+    return String(result.stdout ?? '').trim();
+  };
+  const [endpoint = '', skipTlsVerify = ''] = invoke([
+    'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}|{{.Endpoints.docker.SkipTLSVerify}}',
+  ]).split('|');
+  validateLocalDockerDesktopEndpoint({ endpoint, skipTlsVerify }, context.processEnv);
+  const pinnedProbeEnvironment = pinnedLocalDockerEnvironment(context.processEnv, endpoint);
+  const [operatingSystem = '', serverOs = ''] = invoke([
+    'info', '--format', '{{.OperatingSystem}}|{{.OSType}}',
+  ], pinnedProbeEnvironment).split('|');
+  const apiVersion = invoke(['version', '--format', '{{.Server.APIVersion}}'], pinnedProbeEnvironment);
+  validateLocalDockerDesktopRuntime({ endpoint, skipTlsVerify, operatingSystem, serverOs, apiVersion }, context.processEnv);
+  context.dockerEndpoint = endpoint;
+  context.dockerBoundaryVerified = true;
 }
 
 function runCommand(command, context, { capture = false, env = context.processEnv, secrets = [] } = {}) {
@@ -768,9 +862,16 @@ function runCommand(command, context, { capture = false, env = context.processEn
     context.writeOutput(`DRY RUN: ${formatPersonalServerCommand(command)}\n`);
     return '';
   }
+  if (command[0] === 'docker') verifyLocalDockerDesktopRuntime(context);
+  const dockerEnvironment = command[0] === 'docker'
+    ? pinnedLocalDockerEnvironment(env, context.dockerEndpoint)
+    : env;
+  const effectiveEnvironment = command[0] === 'docker' && command[1] === 'compose'
+    ? composeSafeEnvironment(dockerEnvironment)
+    : dockerEnvironment;
   const result = context.spawnSyncImpl(command[0], command.slice(1), {
     cwd: context.repoRoot,
-    env,
+    env: effectiveEnvironment,
     encoding: 'utf8',
     stdio: capture ? 'pipe' : 'inherit',
     timeout: context.commandTimeoutMs,
@@ -787,12 +888,15 @@ function runCommandToFile(command, outputPath, context) {
     context.writeOutput(`DRY RUN: ${formatPersonalServerCommand(command)} > ${shellQuote(outputPath)}\n`);
     return;
   }
+  if (command[0] === 'docker') verifyLocalDockerDesktopRuntime(context);
   const tempPath = `${outputPath}.partial`;
   const fd = openSync(tempPath, 'wx', 0o600);
   try {
     const result = context.spawnSyncImpl(command[0], command.slice(1), {
       cwd: context.repoRoot,
-      env: context.processEnv,
+      env: command[0] === 'docker'
+        ? pinnedLocalDockerEnvironment(context.processEnv, context.dockerEndpoint)
+        : context.processEnv,
       encoding: 'utf8',
       stdio: ['ignore', fd, 'pipe'],
       timeout: context.commandTimeoutMs,
@@ -1033,7 +1137,10 @@ if (response.status !== 200) {
 
 function buildImagesSequentially(context) {
   for (const service of BUILD_SERVICES) {
-    runCommand([...composePrefix(context), '--profile', 'personal-init', 'build', service], context);
+    runCommand([
+      ...composePrefix(context), '--profile', 'personal-init',
+      'build', '--builder', 'default', service,
+    ], context);
   }
 }
 
@@ -1390,6 +1497,13 @@ function latestBackup(context) {
 
 function status(options, context) {
   const installationState = readInstallationState(context);
+  if (
+    installationState?.value.phase === 'ready' &&
+    pendingAuthRecoveryRotationAvailability(installationState.value)
+  ) {
+    context.writeOutput('rotation availability checkpoint: pending exact service-state restoration\n');
+    context.writeOutput('Run the same supported rotation confirmation again, or run a non-dry-run lifecycle command to finish the protected checkpoint first.\n');
+  }
   if (installationState?.value.phase === 'decommissioned') {
     context.writeOutput('installation phase: decommissioned\n');
     context.writeOutput(`final recovery set: ${installationState.value.finalRecoverySet?.recoverySetId ?? 'unknown'}\n`);
@@ -1406,6 +1520,14 @@ function status(options, context) {
     context.writeOutput('installation phase: decommissioning\n');
     context.writeOutput(`final recovery set: ${installationState.value.decommissionOperation?.finalRecoverySet?.recoverySetId ?? 'unknown'}\n`);
     context.writeOutput('Ordinary lifecycle commands are blocked; rerun guarded decommission with the exact stored final recovery set.\n');
+    return;
+  }
+  if (installationState?.value.phase === 'auth-recovery-rotating') {
+    const pending = readAuthRecoveryRotationReceipt(context);
+    context.writeOutput('installation phase: auth-recovery-rotating\n');
+    context.writeOutput(`rotation receipt: ${pending?.value.receiptId ?? 'missing'}\n`);
+    context.writeOutput(`rotation checkpoint: ${pending?.value.phase ?? 'unknown'}\n`);
+    context.writeOutput('Application writers must remain stopped. Resume only with the supported rotation command and its exact confirmation.\n');
     return;
   }
   const values = loadEnvironmentFile(environmentFilePath(context));
@@ -1490,6 +1612,18 @@ function runningServices(context) {
     .filter(Boolean);
 }
 
+function validatedQuiescenceAvailability(running, label) {
+  const databaseWasRunning = running.includes('db');
+  const writersBefore = WRITER_SERVICES.filter((service) => running.includes(service));
+  if (
+    (writersBefore.length !== 0 && writersBefore.length !== WRITER_SERVICES.length) ||
+    (writersBefore.length > 0 && !databaseWasRunning)
+  ) {
+    throw new Error(`${label} requires the personal server to be fully running or fully stopped; repair partial service availability first`);
+  }
+  return { databaseWasRunning, writersBefore };
+}
+
 function verifyContainerId(value) {
   const id = value.trim();
   if (!/^[a-f0-9]{12,64}$/u.test(id)) throw new Error('Could not resolve exactly one personal-server database container');
@@ -1546,9 +1680,15 @@ function parseAllowlistedJson(value, label) {
 
 function databaseProofEnvironment(values, context, databaseName = values.POSTGRES_DB, host = 'db') {
   const databaseUrl = personalDatabaseUrl(values, databaseName, host);
+  if (!context.dryRun && !context.dockerEndpoint) {
+    throw new Error('Database proof requires the verified local Docker endpoint');
+  }
+  const childEnvironment = context.dryRun
+    ? context.processEnv
+    : pinnedLocalDockerEnvironment(context.processEnv, context.dockerEndpoint);
   return {
     databaseUrl,
-    env: { ...context.processEnv, DATABASE_URL: databaseUrl },
+    env: { ...childEnvironment, DATABASE_URL: databaseUrl },
   };
 }
 
@@ -1718,13 +1858,16 @@ function captureBackupApplicationIdentity(values, context) {
   };
 }
 
-function dryRunBackup(values, backupRoot, context, encryptionKey, { leaveWritersStopped = false } = {}) {
-  const id = safeRecoveryId(context);
+function dryRunBackup(values, backupRoot, context, encryptionKey, {
+  leaveWritersStopped = false,
+  recoverySetId,
+} = {}) {
+  const id = recoverySetId ?? safeRecoveryId(context);
   const setDir = join(backupRoot, id);
   const archivePath = join(setDir, 'documents.tar');
   runningServices(context);
   runCommand([...composePrefix(context), 'stop', ...WRITER_SERVICES], context);
-  runCommand([...composePrefix(context), 'ps', '-q', 'db'], context);
+  runCommand([...composePrefix(context), 'ps', '--all', '-q', 'db'], context);
   createExactDatabaseProof({ values, recoverySetId: id, outputDirectory: setDir, context });
   runCommand(['docker', 'volume', 'inspect', DOCUMENT_VOLUME], context);
   runCommandToFile(documentArchiveCommand(), archivePath, context);
@@ -1763,7 +1906,7 @@ function encryptionKeyPathOption(options, context) {
   return undefined;
 }
 
-function performBackup(options, context, { leaveWritersStopped = false } = {}) {
+function performBackup(options, context, { leaveWritersStopped = false, recoverySetId } = {}) {
   const values = loadEnvironmentFile(environmentFilePath(context));
   validateCompose(context);
   const backupRoot = resolveBackupRoot(options['output-dir'], context);
@@ -1771,8 +1914,17 @@ function performBackup(options, context, { leaveWritersStopped = false } = {}) {
   const encryptionKey = encryptionKeyFile
     ? loadPersonalServerEncryptionKey(encryptionKeyFile)
     : null;
+  if (
+    recoverySetId !== undefined &&
+    !/^personal-server-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{8}$/u.test(recoverySetId)
+  ) {
+    throw new Error('Protected backup recovery-set identity is invalid');
+  }
   if (context.dryRun) {
-    return dryRunBackup(values, backupRoot, context, encryptionKey, { leaveWritersStopped });
+    return dryRunBackup(values, backupRoot, context, encryptionKey, {
+      leaveWritersStopped,
+      recoverySetId,
+    });
   }
 
   mkdirSync(backupRoot, { recursive: true, mode: 0o700 });
@@ -1781,18 +1933,22 @@ function performBackup(options, context, { leaveWritersStopped = false } = {}) {
     throw new Error('Backup output must be a real directory, not a file or symbolic link');
   }
   try { chmodSync(backupRoot, 0o700); } catch { /* Windows ACLs are managed by the operator. */ }
-  const id = safeRecoveryId(context);
+  const id = recoverySetId ?? safeRecoveryId(context);
   const incompleteDir = join(backupRoot, `.${id}.incomplete`);
   const finalDir = join(backupRoot, id);
   const runningBefore = runningServices(context);
-  const databaseWasRunning = runningBefore.includes('db');
-  const writersBefore = WRITER_SERVICES.filter((service) => runningBefore.includes(service));
+  const { databaseWasRunning, writersBefore } = validatedQuiescenceAvailability(
+    runningBefore,
+    'Authenticated backup',
+  );
   mkdirSync(incompleteDir, { recursive: false, mode: 0o700 });
   const dumpPath = join(incompleteDir, 'database.dump');
   const archivePath = join(incompleteDir, 'documents.tar');
   let databaseStartedForBackup = false;
+  let finalCreated = false;
   let pendingError = null;
   try {
+    if (writersBefore.length > 0) runCommand([...composePrefix(context), 'stop', ...writersBefore], context);
     if (!databaseWasRunning) {
       runCommand([
         ...composePrefix(context),
@@ -1806,9 +1962,8 @@ function performBackup(options, context, { leaveWritersStopped = false } = {}) {
       ], context);
       databaseStartedForBackup = true;
     }
-    if (writersBefore.length > 0) runCommand([...composePrefix(context), 'stop', ...writersBefore], context);
 
-    verifyContainerId(runCommand([...composePrefix(context), 'ps', '-q', 'db'], context, { capture: true }));
+    verifyContainerId(runCommand([...composePrefix(context), 'ps', '--all', '-q', 'db'], context, { capture: true }));
     const databaseProof = createExactDatabaseProof({
       values,
       recoverySetId: id,
@@ -1892,9 +2047,19 @@ function performBackup(options, context, { leaveWritersStopped = false } = {}) {
       expectedOrigin: values.CHARITYPILOT_PERSONAL_SERVER_ORIGIN,
       encryptionKeyFile,
       extractDocuments: false,
+      allowIncompleteDirectory: true,
     });
     cleanupPersonalServerRecoveryStaging(verified.stagingDirectory);
     renameSync(incompleteDir, finalDir);
+    finalCreated = true;
+    const finalVerified = verifyPersonalServerRecoverySet({
+      recoverySetPath: finalDir,
+      expectedProject: PROJECT_NAME,
+      expectedOrigin: values.CHARITYPILOT_PERSONAL_SERVER_ORIGIN,
+      encryptionKeyFile,
+      extractDocuments: false,
+    });
+    cleanupPersonalServerRecoveryStaging(finalVerified.stagingDirectory);
   } catch (error) {
     pendingError = error;
     throw error;
@@ -1906,6 +2071,7 @@ function performBackup(options, context, { leaveWritersStopped = false } = {}) {
           'up',
           '-d',
           '--no-build',
+          '--no-deps',
           '--wait',
           '--wait-timeout',
           String(DEFAULT_WAIT_SECONDS),
@@ -1918,6 +2084,7 @@ function performBackup(options, context, { leaveWritersStopped = false } = {}) {
       pendingError.message = `${pendingError.message}\nFailed to restore the pre-backup service state: ${restoreError.message}`;
     }
     if (pendingError && existsSync(incompleteDir)) rmSync(incompleteDir, { recursive: true, force: true });
+    if (pendingError && finalCreated && existsSync(finalDir)) rmSync(finalDir, { recursive: true, force: true });
   }
   context.writeOutput(`Verified recovery set: ${finalDir}\n`);
   return { backupPath: finalDir, dryRun: false, writersBefore: [...writersBefore] };
@@ -1947,6 +2114,1048 @@ function restorePreBackupWriterAvailability(recovery, context) {
 
 function backup(options, context) {
   performBackup(options, context);
+}
+
+function authRecoveryRotationPaths(context) {
+  const stateRoot = dirname(environmentFilePath(context));
+  return {
+    receipt: join(stateRoot, AUTH_RECOVERY_ROTATION_RECEIPT_FILE),
+    pendingSecret: join(stateRoot, AUTH_RECOVERY_ROTATION_SECRET_FILE),
+    archiveDirectory: join(stateRoot, AUTH_RECOVERY_ROTATION_ARCHIVE_DIRECTORY),
+  };
+}
+
+function applyProtectedPathAcl(path, kind, context, { verifyOnly = false } = {}) {
+  const command = [
+    'powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass', '-File',
+    join(context.repoRoot, 'scripts', 'personal-server-windows-acl.ps1'),
+    '-Path', path, '-Kind', kind,
+  ];
+  if (verifyOnly) command.push('-VerifyOnly');
+  runCommand(command, context);
+}
+
+function writeProtectedTextExact(path, content, context) {
+  if (context.dryRun) {
+    context.writeOutput(`DRY RUN: atomically write and ACL-verify protected file ${path}.\n`);
+    return;
+  }
+  const temporaryPath = `${path}.${process.pid}.${context.randomBytesImpl(6).toString('hex')}.tmp`;
+  try {
+    writeExclusiveFile(temporaryPath, content);
+    applyProtectedPathAcl(temporaryPath, 'File', context);
+    applyProtectedPathAcl(temporaryPath, 'File', context, { verifyOnly: true });
+    renameSync(temporaryPath, path);
+    applyProtectedPathAcl(path, 'File', context, { verifyOnly: true });
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
+function readAuthRecoveryRotationReceipt(context) {
+  const path = authRecoveryRotationPaths(context).receipt;
+  if (!existsSync(path)) return null;
+  const status = lstatSync(path);
+  if (!status.isFile() || status.isSymbolicLink() || status.size <= 0 || status.size > 128 * 1024) {
+    throw new Error('Pending auth recovery rotation receipt must be a small regular non-symlink file');
+  }
+  applyProtectedPathAcl(path, 'File', context, { verifyOnly: true });
+  const value = parseAllowlistedJson(readFileSync(path, 'utf8'), 'Pending auth recovery rotation receipt');
+  validateAuthRecoveryRotationReceipt(value, { now: context.now });
+  return { path, value };
+}
+
+function writeAuthRecoveryRotationReceipt(receipt, context) {
+  validateAuthRecoveryRotationReceipt(receipt, { now: context.now });
+  const path = authRecoveryRotationPaths(context).receipt;
+  writeProtectedTextExact(path, `${JSON.stringify(receipt, null, 2)}\n`, context);
+  if (!context.dryRun) {
+    const persisted = readAuthRecoveryRotationReceipt(context);
+    if (!persisted || persisted.value.receiptId !== receipt.receiptId || persisted.value.phase !== receipt.phase) {
+      throw new Error('Protected auth recovery rotation receipt did not persist exactly');
+    }
+  }
+  return { path, value: receipt };
+}
+
+function archiveAuthRecoveryRotationReceipt(receipt, outcome, context, {
+  postActivationRecovery = null,
+} = {}) {
+  const archive = createRedactedAuthRecoveryRotationArchive(receipt, {
+    archivedAt: context.now,
+    outcome,
+    postActivationRecovery,
+  });
+  const paths = authRecoveryRotationPaths(context);
+  if (context.dryRun) {
+    context.writeOutput(`DRY RUN: archive redacted auth recovery rotation receipt ${receipt.receiptId}.\n`);
+    return '<planned-auth-recovery-rotation-archive>';
+  }
+  if (!existsSync(paths.archiveDirectory)) {
+    mkdirSync(paths.archiveDirectory, { recursive: false, mode: 0o700 });
+    applyProtectedPathAcl(paths.archiveDirectory, 'Directory', context);
+    applyProtectedPathAcl(paths.archiveDirectory, 'Directory', context, { verifyOnly: true });
+  }
+  const archiveDirectoryStatus = lstatSync(paths.archiveDirectory);
+  if (!archiveDirectoryStatus.isDirectory() || archiveDirectoryStatus.isSymbolicLink()) {
+    throw new Error('Auth recovery rotation archive path is not a real directory');
+  }
+  const timestamp = context.now().toISOString().replace(/[:.]/gu, '-');
+  const archivePath = join(
+    paths.archiveDirectory,
+    `auth-recovery-rotation-${timestamp}-${receipt.receiptId}-${outcome}.json`,
+  );
+  writeProtectedTextExact(archivePath, `${JSON.stringify(archive, null, 2)}\n`, context);
+  return archivePath;
+}
+
+function removePendingAuthRecoveryRotationFiles(context, { removeReceipt = true } = {}) {
+  const paths = authRecoveryRotationPaths(context);
+  if (context.dryRun) {
+    context.writeOutput('DRY RUN: remove completed pending auth recovery rotation material.\n');
+    return;
+  }
+  rmSync(paths.pendingSecret, { force: true });
+  if (removeReceipt) rmSync(paths.receipt, { force: true });
+}
+
+function authRecoveryRotationInputs(options) {
+  const reason = options.reason;
+  const operator = options.operator;
+  const caseReference = options['case-reference'];
+  if (!reason) throw new Error('--reason is required');
+  if (!operator) throw new Error('--operator is required');
+  if (!caseReference) throw new Error('--case-reference is required');
+  return { reason, operator, caseReference };
+}
+
+function authRecoveryRotationIdentities(values, installation, context, environmentContent) {
+  if (!installation || !['ready', 'auth-recovery-rotating'].includes(installation.phase)) {
+    throw new Error('Auth recovery rotation requires ready or resumable protected installation state');
+  }
+  const application = captureBackupApplicationIdentity(values, context);
+  return createAuthRecoveryRotationIdentityHashes({
+    source: {
+      sourceRoot: installation.sourceRoot,
+      source: installation.source,
+      applicationSource: application.source,
+    },
+    installation: {
+      format: installation.format,
+      installationMode: installation.installationMode ?? 'fresh-install',
+      origin: installation.origin ?? values.CHARITYPILOT_PERSONAL_SERVER_ORIGIN,
+      port: installation.port ?? values.CHARITYPILOT_PERSONAL_SERVER_PORT,
+      activeImageTag: installation.activeImageTag,
+    },
+    images: application.images,
+    environmentContent,
+  });
+}
+
+function authRecoveryRotationJobCommand(context, jobArgs) {
+  return [
+    ...composePrefix(context), '--profile', 'maintenance', 'run', '--rm',
+    '--no-deps', '-T', 'auth-recovery-secret-rotation',
+    'node', 'dist/jobs/rotate-auth-recovery-secret.js', ...jobArgs,
+  ];
+}
+
+function runAuthRecoveryRotationJob(mode, inputs, values, context, receipt = null) {
+  const common = [
+    `--${mode}`,
+    '--reason', inputs.reason,
+    '--operator', inputs.operator,
+    '--case-reference', inputs.caseReference,
+    '--confirm-api-and-scheduler-quiesced',
+  ];
+  let args = common;
+  if (mode === 'execute') {
+    const counts = receipt.review.counts;
+    args = [
+      ...common,
+      '--expected-generation', String(counts.generation),
+      '--expected-capabilities', String(counts.capabilities),
+      '--expected-request-evidence-rows', String(counts.requestEvidenceRows),
+      '--expected-legacy-slots', String(counts.legacySlots),
+      '--expected-rate-buckets', String(counts.rateBuckets),
+      '--expected-security-notices', String(counts.securityNotices),
+      '--expected-database-identity-sha256', receipt.review.databaseIdentitySha256,
+      '--expected-deployment-profile', receipt.review.deploymentProfile,
+      '--confirm-outbox-preservation-understood',
+      '--confirm-execute', receipt.review.jobExecutionConfirmation,
+    ];
+  } else if (mode === 'activate-after-replacement') {
+    args = [
+      ...common,
+      '--expected-generation', String(receipt.review.counts.generation + 1),
+      '--expected-database-identity-sha256', receipt.review.databaseIdentitySha256,
+      '--expected-deployment-profile', receipt.review.deploymentProfile,
+      '--confirm-activate', receipt.execution.activationConfirmation,
+    ];
+  }
+  return runCommand(authRecoveryRotationJobCommand(context, args), context, {
+    capture: !context.dryRun,
+    secrets: [values.AUTH_RECOVERY_SECRET, values.POSTGRES_PASSWORD, values.JWT_SECRET, values.READINESS_API_KEY],
+  });
+}
+
+function withQuiescedAuthRecoveryWriters(context, callback) {
+  const runningBefore = runningServices(context);
+  const { databaseWasRunning, writersBefore } = validatedQuiescenceAvailability(
+    runningBefore,
+    'Authentication recovery rotation review',
+  );
+  let databaseStarted = false;
+  let pendingError = null;
+  try {
+    if (writersBefore.length > 0) {
+      runCommand([...composePrefix(context), 'stop', ...writersBefore], context);
+    }
+    if (!databaseWasRunning) {
+      runCommand([
+        ...composePrefix(context), 'up', '-d', '--no-build', '--wait',
+        '--wait-timeout', String(DEFAULT_WAIT_SECONDS), 'db',
+      ], context);
+      databaseStarted = true;
+    }
+    return {
+      result: callback(),
+      writersBefore,
+      databaseWasRunning,
+    };
+  } catch (error) {
+    pendingError = error;
+    throw error;
+  } finally {
+    try {
+      if (writersBefore.length > 0) {
+        runCommand([
+          ...composePrefix(context), 'up', '-d', '--no-build', '--no-deps', '--wait',
+          '--wait-timeout', String(DEFAULT_WAIT_SECONDS), ...writersBefore,
+        ], context);
+      }
+      if (databaseStarted) runCommand([...composePrefix(context), 'stop', 'db'], context);
+    } catch (restoreError) {
+      if (!pendingError) throw restoreError;
+      pendingError.message = `${pendingError.message}\nFailed to restore pre-review service availability: ${restoreError.message}`;
+    }
+  }
+}
+
+function ensureAuthRecoveryRotationDatabase(context) {
+  runCommand([...composePrefix(context), 'stop', ...WRITER_SERVICES], context);
+  runCommand([
+    ...composePrefix(context), 'up', '-d', '--no-build', '--wait',
+    '--wait-timeout', String(DEFAULT_WAIT_SECONDS), 'db',
+  ], context);
+}
+
+function authRecoveryRotationStatus(receipt, inputs, values, context) {
+  const evidence = parseAuthRecoveryRotationJobEvidence(
+    runAuthRecoveryRotationJob('control-status', inputs, values, context, receipt),
+    'CONTROL_STATUS',
+  );
+  return authRecoveryRotationControlStatusFromJobEvidence(receipt, evidence);
+}
+
+function validateAuthRecoveryRotationBackupOperation(operation, receipt, options, context) {
+  if (
+    !operation || operation.receiptId !== receipt.receiptId ||
+    operation.receiptPath !== authRecoveryRotationPaths(context).receipt ||
+    !['backup-pending', 'backup-complete'].includes(operation.stage) ||
+    typeof operation.backupPath !== 'string' || !isAbsolute(operation.backupPath) ||
+    typeof operation.backupRecoverySetId !== 'string' ||
+    basename(operation.backupPath) !== operation.backupRecoverySetId ||
+    !/^personal-server-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{8}$/u.test(operation.backupRecoverySetId) ||
+    !/^[a-f0-9]{64}$/u.test(operation.encryptionKeySha256 ?? '') ||
+    !Array.isArray(operation.writersBefore) ||
+    operation.writersBefore.some((service) => !WRITER_SERVICES.includes(service)) ||
+    new Set(operation.writersBefore).size !== operation.writersBefore.length ||
+    typeof operation.databaseWasRunning !== 'boolean' ||
+    (operation.writersBefore.length !== 0 && operation.writersBefore.length !== WRITER_SERVICES.length) ||
+    (operation.writersBefore.length > 0 && !operation.databaseWasRunning) ||
+    !Number.isFinite(Date.parse(operation.startedAt ?? ''))
+  ) {
+    throw new Error('Interrupted auth recovery rotation has invalid protected backup operation state');
+  }
+  if (
+    resolve(dirname(operation.backupPath)) !== resolveBackupRoot(options['output-dir'], context) ||
+    (operation.stage === 'backup-pending' && (
+      operation.backupReferenceSha256 !== null || operation.backupManifestSha256 !== null
+    )) ||
+    (operation.stage === 'backup-complete' && (
+      !/^[a-f0-9]{64}$/u.test(operation.backupReferenceSha256 ?? '') ||
+      !/^[a-f0-9]{64}$/u.test(operation.backupManifestSha256 ?? '')
+    ))
+  ) {
+    throw new Error('Interrupted auth recovery rotation backup intent changed');
+  }
+  const encryptionKeyFile = encryptionKeyPathOption(options, context);
+  const encryptionKey = loadPersonalServerEncryptionKey(encryptionKeyFile);
+  if (encryptionKey.keySha256 !== operation.encryptionKeySha256) {
+    throw new Error('Interrupted auth recovery rotation encryption key changed');
+  }
+  return { encryptionKeyFile };
+}
+
+function verifyAuthRecoveryRotationBackupOperation(operation, receipt, options, values, context) {
+  const { encryptionKeyFile } = validateAuthRecoveryRotationBackupOperation(
+    operation,
+    receipt,
+    options,
+    context,
+  );
+  if (operation.stage !== 'backup-complete') {
+    throw new Error('Interrupted auth recovery rotation backup is not complete');
+  }
+  const manifestPath = join(operation.backupPath, 'manifest.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error('Interrupted auth recovery rotation backup manifest is missing');
+  }
+  const manifestStatus = lstatSync(manifestPath);
+  if (!manifestStatus.isFile() || manifestStatus.isSymbolicLink() || manifestStatus.size <= 0) {
+    throw new Error('Interrupted auth recovery rotation backup manifest is unsafe');
+  }
+  const manifest = parseAllowlistedJson(
+    readFileSync(manifestPath, 'utf8'),
+    'Interrupted auth recovery rotation backup manifest',
+  );
+  const referenceSha256 = authRecoveryRotationIdentitySha256('backup-reference', {
+    recoverySetId: manifest.recoverySetId,
+    path: operation.backupPath,
+  });
+  const manifestSha256 = sha256File(manifestPath);
+  if (
+    manifest.recoverySetId !== operation.backupRecoverySetId ||
+    referenceSha256 !== operation.backupReferenceSha256 ||
+    manifestSha256 !== operation.backupManifestSha256 ||
+    (receipt.backup && (
+      receipt.backup.referenceSha256 !== referenceSha256 ||
+      receipt.backup.manifestSha256 !== manifestSha256
+    ))
+  ) {
+    throw new Error('Interrupted auth recovery rotation backup no longer matches protected state');
+  }
+  const verified = verifyPersonalServerRecoverySet({
+    recoverySetPath: operation.backupPath,
+    expectedProject: PROJECT_NAME,
+    expectedOrigin: values.CHARITYPILOT_PERSONAL_SERVER_ORIGIN,
+    encryptionKeyFile,
+    extractDocuments: false,
+  });
+  cleanupPersonalServerRecoveryStaging(verified.stagingDirectory);
+  return { referenceSha256, manifestSha256 };
+}
+
+function materializeAuthRecoveryRotationBackup(operation, receipt, options, values, context) {
+  validateAuthRecoveryRotationBackupOperation(operation, receipt, options, context);
+  cleanupPersonalServerRecoveryStagingForSet(operation.backupRecoverySetId);
+  let completedOperation = operation;
+  if (operation.stage === 'backup-pending') {
+    if (!existsSync(operation.backupPath)) {
+      const incompletePath = join(
+        dirname(operation.backupPath),
+        `.${operation.backupRecoverySetId}.incomplete`,
+      );
+      if (existsSync(incompletePath)) {
+        const status = lstatSync(incompletePath);
+        if (!status.isDirectory() || status.isSymbolicLink()) {
+          throw new Error('Interrupted auth recovery rotation incomplete backup path is unsafe');
+        }
+        rmSync(incompletePath, { recursive: true, force: false });
+      }
+      const recovery = performBackup({
+        'output-dir': options['output-dir'],
+        'encryption-key-file': options['encryption-key-file'],
+      }, context, {
+        leaveWritersStopped: true,
+        recoverySetId: operation.backupRecoverySetId,
+      });
+      if (resolve(recovery.backupPath) !== resolve(operation.backupPath)) {
+        throw new Error('Auth recovery rotation backup did not use its protected identity');
+      }
+    }
+    const manifestPath = join(operation.backupPath, 'manifest.json');
+    const manifest = parseAllowlistedJson(
+      readFileSync(manifestPath, 'utf8'),
+      'Auth recovery rotation backup manifest',
+    );
+    completedOperation = {
+      ...operation,
+      stage: 'backup-complete',
+      backupReferenceSha256: authRecoveryRotationIdentitySha256('backup-reference', {
+        recoverySetId: manifest.recoverySetId,
+        path: operation.backupPath,
+      }),
+      backupManifestSha256: sha256File(manifestPath),
+    };
+    updateInstallationState(context, { authRecoveryRotation: completedOperation });
+  }
+  const evidence = verifyAuthRecoveryRotationBackupOperation(
+    completedOperation,
+    receipt,
+    options,
+    values,
+    context,
+  );
+  return { operation: completedOperation, evidence };
+}
+
+function createAuthRecoveryRotationBackupIntent(receipt, options, runningBefore, context) {
+  const { databaseWasRunning, writersBefore } = validatedQuiescenceAvailability(
+    runningBefore,
+    'Authentication recovery rotation',
+  );
+  const backupRoot = resolveBackupRoot(options['output-dir'], context);
+  const backupRecoverySetId = safeRecoveryId(context);
+  const encryptionKeyFile = encryptionKeyPathOption(options, context);
+  const encryptionKey = loadPersonalServerEncryptionKey(encryptionKeyFile);
+  return {
+    receiptId: receipt.receiptId,
+    receiptPath: authRecoveryRotationPaths(context).receipt,
+    stage: 'backup-pending',
+    backupPath: join(backupRoot, backupRecoverySetId),
+    backupRecoverySetId,
+    backupReferenceSha256: null,
+    backupManifestSha256: null,
+    encryptionKeySha256: encryptionKey.keySha256,
+    writersBefore,
+    databaseWasRunning,
+    startedAt: context.now().toISOString(),
+  };
+}
+
+function pendingAuthRecoverySecret(context) {
+  const path = authRecoveryRotationPaths(context).pendingSecret;
+  if (!existsSync(path)) return null;
+  const status = lstatSync(path);
+  if (!status.isFile() || status.isSymbolicLink() || status.size < 65 || status.size > 129) {
+    throw new Error('Pending auth recovery replacement secret is not a small regular file');
+  }
+  applyProtectedPathAcl(path, 'File', context, { verifyOnly: true });
+  const value = readFileSync(path, 'utf8').trim();
+  if (!/^(?:[a-f0-9]{2}){32,64}$/u.test(value)) {
+    throw new Error('Pending auth recovery replacement secret is invalid');
+  }
+  return value;
+}
+
+function getOrCreatePendingAuthRecoverySecret(context) {
+  const existing = pendingAuthRecoverySecret(context);
+  if (existing) return existing;
+  const value = randomHex(48, context.randomBytesImpl);
+  writeProtectedTextExact(
+    authRecoveryRotationPaths(context).pendingSecret,
+    `${value}\n`,
+    context,
+  );
+  return value;
+}
+
+function environmentWithReplacementAuthRecoverySecret(before, replacement) {
+  const line = /^AUTH_RECOVERY_SECRET=([^\r\n]+)$/gmu;
+  const matches = [...before.matchAll(line)];
+  if (matches.length !== 1) {
+    throw new Error('Protected environment must contain exactly one AUTH_RECOVERY_SECRET line');
+  }
+  return before.replace(line, `AUTH_RECOVERY_SECRET=${replacement}`);
+}
+
+function applyAuthRecoveryEnvironmentReplacement(receipt, context) {
+  const envPath = environmentFilePath(context);
+  const current = readFileSync(envPath, 'utf8');
+  const currentSha256 = authRecoveryRotationEnvironmentSha256(current);
+  if (currentSha256 === receipt.replacement.afterEnvironmentSha256) {
+    loadEnvironmentFile(envPath);
+    applyProtectedPathAcl(envPath, 'File', context, { verifyOnly: true });
+    return;
+  }
+  if (currentSha256 !== receipt.identities.environmentSha256) {
+    throw new Error('Protected environment is neither the reviewed nor recorded replacement identity');
+  }
+  const replacementSecret = pendingAuthRecoverySecret(context);
+  if (!replacementSecret) {
+    throw new Error('Protected pending auth recovery replacement secret is missing');
+  }
+  if (createHash('sha256').update(replacementSecret).digest('hex') !== receipt.replacement.newSecretSha256) {
+    throw new Error('Pending auth recovery replacement secret does not match its protected receipt');
+  }
+  const after = environmentWithReplacementAuthRecoverySecret(current, replacementSecret);
+  if (authRecoveryRotationEnvironmentSha256(after) !== receipt.replacement.afterEnvironmentSha256) {
+    throw new Error('Pending auth recovery replacement environment does not match its protected receipt');
+  }
+  writeProtectedTextExact(envPath, after, context);
+  const persisted = readFileSync(envPath, 'utf8');
+  if (authRecoveryRotationEnvironmentSha256(persisted) !== receipt.replacement.afterEnvironmentSha256) {
+    throw new Error('Protected auth recovery environment replacement did not persist exactly');
+  }
+  loadEnvironmentFile(envPath);
+}
+
+function restoreAuthRecoveryRotationAvailability(operation, context) {
+  const writers = operation?.writersBefore;
+  if (
+    !Array.isArray(writers) ||
+    writers.some((service) => !WRITER_SERVICES.includes(service)) ||
+    new Set(writers).size !== writers.length ||
+    typeof operation?.databaseWasRunning !== 'boolean' ||
+    (writers.length !== 0 && writers.length !== WRITER_SERVICES.length) ||
+    (writers.length > 0 && !operation.databaseWasRunning)
+  ) {
+    throw new Error('Auth recovery rotation did not retain exact prior writer availability');
+  }
+  const writersToStop = WRITER_SERVICES.filter((service) => !writers.includes(service));
+  if (writersToStop.length > 0) runCommand([...composePrefix(context), 'stop', ...writersToStop], context);
+  if (operation.databaseWasRunning) {
+    runCommand([
+      ...composePrefix(context), 'up', '-d', '--no-build', '--no-deps', '--wait',
+      '--wait-timeout', String(DEFAULT_WAIT_SECONDS), 'db',
+    ], context);
+  }
+  if (writers.length > 0) {
+    runCommand([
+      ...composePrefix(context), 'up', '-d', '--no-build', '--no-deps', '--wait',
+      '--wait-timeout', String(DEFAULT_WAIT_SECONDS), ...writers,
+    ], context);
+  }
+  if (!operation.databaseWasRunning) {
+    runCommand([...composePrefix(context), 'stop', 'db'], context);
+  }
+}
+
+function pendingAuthRecoveryRotationAvailability(installation) {
+  const history = installation?.lastAuthRecoveryRotation;
+  if (!history || history.availabilityRestoredAt) return null;
+  return {
+    writersBefore: history.writersBefore,
+    databaseWasRunning: history.databaseWasRunning,
+  };
+}
+
+function finalizeReadyAuthRecoveryRotationAvailability(installation, context) {
+  const availability = pendingAuthRecoveryRotationAvailability(installation);
+  if (!availability) return installation;
+  restoreAuthRecoveryRotationAvailability(availability, context);
+  return updateInstallationState(context, {
+    lastAuthRecoveryRotation: {
+      ...installation.lastAuthRecoveryRotation,
+      availabilityRestoredAt: context.now().toISOString(),
+    },
+  });
+}
+
+function validatePostActivationRecoveryIntent(intent, options, context) {
+  if (
+    !intent || !['backup-pending', 'backup-complete', 'rehearsed'].includes(intent.stage) ||
+    typeof intent.path !== 'string' || !isAbsolute(intent.path) ||
+    typeof intent.recoverySetId !== 'string' || basename(intent.path) !== intent.recoverySetId ||
+    !/^personal-server-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{8}$/u.test(intent.recoverySetId) ||
+    !/^[a-f0-9]{12}$/u.test(intent.rehearsalToken ?? '') ||
+    !/^[a-f0-9]{64}$/u.test(intent.encryptionKeySha256 ?? '') ||
+    resolve(dirname(intent.path)) !== resolveBackupRoot(options['output-dir'], context) ||
+    (intent.stage === 'backup-pending' && (
+      intent.manifestSha256 !== null || intent.rehearsedAt !== null
+    )) ||
+    (intent.stage === 'backup-complete' && (
+      !/^[a-f0-9]{64}$/u.test(intent.manifestSha256 ?? '') || intent.rehearsedAt !== null
+    )) ||
+    (intent.stage === 'rehearsed' && (
+      !/^[a-f0-9]{64}$/u.test(intent.manifestSha256 ?? '') ||
+      !Number.isFinite(Date.parse(intent.rehearsedAt ?? ''))
+    ))
+  ) {
+    throw new Error('Post-activation recovery intent is invalid');
+  }
+  const encryptionKeyFile = encryptionKeyPathOption(options, context);
+  if (loadPersonalServerEncryptionKey(encryptionKeyFile).keySha256 !== intent.encryptionKeySha256) {
+    throw new Error('Post-activation recovery encryption key changed');
+  }
+  return { encryptionKeyFile };
+}
+
+function createPostActivationRecoveryIntent(options, context) {
+  const backupRoot = resolveBackupRoot(options['output-dir'], context);
+  const recoverySetId = safeRecoveryId(context);
+  const encryptionKeyFile = encryptionKeyPathOption(options, context);
+  return {
+    stage: 'backup-pending',
+    recoverySetId,
+    path: join(backupRoot, recoverySetId),
+    manifestSha256: null,
+    rehearsedAt: null,
+    rehearsalToken: randomHex(6, context.randomBytesImpl),
+    encryptionKeySha256: loadPersonalServerEncryptionKey(encryptionKeyFile).keySha256,
+  };
+}
+
+function verifyPostActivationRecoveryIntent(intent, options, values, context) {
+  const { encryptionKeyFile } = validatePostActivationRecoveryIntent(intent, options, context);
+  if (intent.stage === 'backup-pending') {
+    throw new Error('Post-activation recovery backup is not complete');
+  }
+  const manifestPath = join(intent.path, 'manifest.json');
+  if (sha256File(manifestPath) !== intent.manifestSha256) {
+    throw new Error('Post-activation recovery manifest changed');
+  }
+  const verified = verifyPersonalServerRecoverySet({
+    recoverySetPath: intent.path,
+    expectedProject: PROJECT_NAME,
+    expectedOrigin: values.CHARITYPILOT_PERSONAL_SERVER_ORIGIN,
+    encryptionKeyFile,
+    extractDocuments: false,
+  });
+  cleanupPersonalServerRecoveryStaging(verified.stagingDirectory);
+}
+
+function createPostActivationAuthRecoverySet(options, operation, context) {
+  const values = loadEnvironmentFile(environmentFilePath(context));
+  let intent = operation.postActivationRecovery ?? null;
+  if (!intent) {
+    intent = createPostActivationRecoveryIntent(options, context);
+    operation = { ...operation, postActivationRecovery: intent };
+    updateInstallationState(context, { authRecoveryRotation: operation });
+  }
+  validatePostActivationRecoveryIntent(intent, options, context);
+  cleanupPersonalServerRecoveryStagingForSet(intent.recoverySetId);
+  if (intent.stage === 'backup-pending') {
+    if (!existsSync(intent.path)) {
+      const incompletePath = join(dirname(intent.path), `.${intent.recoverySetId}.incomplete`);
+      if (existsSync(incompletePath)) {
+        const status = lstatSync(incompletePath);
+        if (!status.isDirectory() || status.isSymbolicLink()) {
+          throw new Error('Post-activation incomplete recovery path is unsafe');
+        }
+        rmSync(incompletePath, { recursive: true, force: false });
+      }
+      const recovery = performBackup({
+        'output-dir': options['output-dir'],
+        'encryption-key-file': options['encryption-key-file'],
+      }, context, { recoverySetId: intent.recoverySetId });
+      if (resolve(recovery.backupPath) !== resolve(intent.path)) {
+        throw new Error('Post-activation recovery backup did not use its protected identity');
+      }
+    }
+    const manifestPath = join(intent.path, 'manifest.json');
+    const manifest = parseAllowlistedJson(
+      readFileSync(manifestPath, 'utf8'),
+      'Post-rotation recovery manifest',
+    );
+    if (manifest.recoverySetId !== intent.recoverySetId) {
+      throw new Error('Post-rotation recovery set identity is inconsistent');
+    }
+    intent = {
+      ...intent,
+      stage: 'backup-complete',
+      manifestSha256: sha256File(manifestPath),
+    };
+    operation = { ...operation, postActivationRecovery: intent };
+    updateInstallationState(context, { authRecoveryRotation: operation });
+  }
+  verifyPostActivationRecoveryIntent(intent, options, values, context);
+  if (intent.stage === 'backup-complete') {
+    cleanupPersonalServerRecoveryStagingForSet(intent.recoverySetId);
+    rehearseRestore({
+      'recovery-set': intent.path,
+      'encryption-key-file': options['encryption-key-file'],
+      'internal-rehearsal-token': intent.rehearsalToken,
+    }, context);
+    intent = {
+      ...intent,
+      stage: 'rehearsed',
+      rehearsedAt: context.now().toISOString(),
+    };
+    operation = { ...operation, postActivationRecovery: intent };
+    updateInstallationState(context, { authRecoveryRotation: operation });
+  }
+  return {
+    recoverySetId: intent.recoverySetId,
+    path: intent.path,
+    manifestSha256: intent.manifestSha256,
+    rehearsedAt: intent.rehearsedAt,
+  };
+}
+
+function completeAuthRecoveryRotationLifecycle(receipt, operation, options, context) {
+  startRuntime(context);
+  const postActivationRecovery = createPostActivationAuthRecoverySet(options, operation, context);
+  const completed = receipt.phase === 'completed'
+    ? receipt
+    : completeAuthRecoveryRotation(receipt, { now: context.now });
+  writeAuthRecoveryRotationReceipt(completed, context);
+  const archivePath = archiveAuthRecoveryRotationReceipt(completed, 'completed', context, {
+    postActivationRecovery: {
+      recoverySetId: postActivationRecovery.recoverySetId,
+      manifestSha256: postActivationRecovery.manifestSha256,
+      rehearsedAt: postActivationRecovery.rehearsedAt,
+    },
+  });
+  removePendingAuthRecoveryRotationFiles(context, { removeReceipt: false });
+  const ready = updateInstallationState(context, {
+    phase: 'ready',
+    authRecoveryRotation: null,
+    lastAuthRecoveryRotation: {
+      receiptId: completed.receiptId,
+      archivePath,
+      completedAt: completed.completedAt,
+      backupPath: operation.backupPath,
+      postActivationRecovery,
+      outcome: 'completed',
+      writersBefore: operation.writersBefore,
+      databaseWasRunning: operation.databaseWasRunning,
+      availabilityRestoredAt: null,
+    },
+  });
+  finalizeReadyAuthRecoveryRotationAvailability(ready, context);
+  context.writeOutput(
+    `Authentication recovery secret rotation completed; runtime health passed and recovery set ${postActivationRecovery.recoverySetId} passed an isolated rehearsal.\n`,
+  );
+}
+
+function resetPreExecutionAuthRecoveryRotation(receipt, operation, context, outcome = 'incomplete') {
+  const archivePath = archiveAuthRecoveryRotationReceipt(receipt, outcome, context);
+  removePendingAuthRecoveryRotationFiles(context, { removeReceipt: false });
+  const ready = updateInstallationState(context, {
+    phase: 'ready',
+    authRecoveryRotation: null,
+    lastAuthRecoveryRotation: {
+      receiptId: receipt.receiptId,
+      archivePath,
+      completedAt: null,
+      backupPath: operation?.backupPath ?? null,
+      outcome,
+      writersBefore: operation?.writersBefore ?? [],
+      databaseWasRunning: operation?.databaseWasRunning ?? false,
+      availabilityRestoredAt: null,
+    },
+  });
+  finalizeReadyAuthRecoveryRotationAvailability(ready, context);
+}
+
+function reviewAuthRecoveryRotation(options, inputs, installation, values, context) {
+  installation = finalizeReadyAuthRecoveryRotationAvailability(installation, context);
+  if (existsSync(authRecoveryRotationPaths(context).pendingSecret)) {
+    throw new Error('Unexpected pending auth recovery replacement secret exists; resume or investigate the protected rotation state');
+  }
+  const existing = readAuthRecoveryRotationReceipt(context);
+  if (existing) {
+    const safelyClosed = (
+      installation.lastAuthRecoveryRotation?.receiptId === existing.value.receiptId &&
+      ['superseded', 'incomplete'].includes(installation.lastAuthRecoveryRotation?.outcome)
+    );
+    if (
+      existing.value.phase !== 'review-ready' &&
+      existing.value.phase !== 'completed' &&
+      !safelyClosed
+    ) {
+      throw new Error('An auth recovery rotation is already pending; resume it with its exact --confirm value');
+    }
+    archiveAuthRecoveryRotationReceipt(existing.value, 'superseded', context);
+    if (!context.dryRun) rmSync(existing.path, { force: true });
+  }
+  validateCompose(context);
+  const environmentContent = readFileSync(environmentFilePath(context), 'utf8');
+  const identities = authRecoveryRotationIdentities(values, installation, context, environmentContent);
+  const review = withQuiescedAuthRecoveryWriters(context, () => (
+    runAuthRecoveryRotationJob('dry-run', inputs, values, context)
+  ));
+  if (context.dryRun) {
+    context.writeOutput('DRY RUN: count-only auth recovery review would create no receipt, backup, secret, or database mutation.\n');
+    return;
+  }
+  const evidence = parseAuthRecoveryRotationJobEvidence(review.result, 'DRY_RUN');
+  const receipt = createAuthRecoveryRotationReviewReceipt({
+    receiptId: randomHex(12, context.randomBytesImpl),
+    reason: inputs.reason,
+    operator: inputs.operator,
+    caseReference: inputs.caseReference,
+    identities,
+    dryRunEvidence: evidence,
+    now: context.now,
+  });
+  writeAuthRecoveryRotationReceipt(receipt, context);
+  context.writeOutput('Count-only auth recovery rotation review is ready. No database or secret was changed.\n');
+  context.writeOutput(`Rerun the same command with --confirm=${JSON.stringify(receipt.confirmation)}\n`);
+}
+
+function rotateAuthRecoverySecret(options, context) {
+  const inputs = authRecoveryRotationInputs(options);
+  if (context.dryRun && options.confirm) {
+    throw new Error('--dry-run is review-only and must not be combined with --confirm');
+  }
+  const installationRecord = readInstallationState(context);
+  if (!installationRecord || !['ready', 'auth-recovery-rotating'].includes(installationRecord.value.phase)) {
+    throw new Error('Auth recovery rotation requires ready or resumable auth-recovery-rotating installer state');
+  }
+  const values = loadEnvironmentFile(environmentFilePath(context));
+  if (!options.confirm) {
+    if (installationRecord.value.phase !== 'ready') {
+      throw new Error('Interrupted auth recovery rotation requires the exact existing --confirm value');
+    }
+    reviewAuthRecoveryRotation(options, inputs, installationRecord.value, values, context);
+    return;
+  }
+
+  let pending = readAuthRecoveryRotationReceipt(context);
+  if (!pending) throw new Error('No protected auth recovery rotation receipt exists; run the review command first');
+  let receipt = pending.value;
+  let installation = installationRecord.value;
+  let operation = installation.authRecoveryRotation ?? null;
+  let identities = authRecoveryRotationIdentities(
+    values,
+    installation,
+    context,
+    readFileSync(environmentFilePath(context), 'utf8'),
+  );
+  const receiptValidation = {
+    now: context.now,
+    operator: inputs.operator,
+    caseReference: inputs.caseReference,
+    confirmation: options.confirm,
+  };
+  if (receipt.phase !== 'secret-replaced') receiptValidation.identities = identities;
+  if (receipt.reason !== inputs.reason) {
+    throw new Error('Rotation reason does not match the protected rotation receipt');
+  }
+  const initialValidation = validateAuthRecoveryRotationReceipt(receipt, receiptValidation);
+  if (installation.phase === 'ready' && receipt.phase === 'completed') {
+    if (
+      installation.lastAuthRecoveryRotation?.receiptId !== receipt.receiptId ||
+      installation.lastAuthRecoveryRotation?.outcome !== 'completed'
+    ) {
+      throw new Error('Completed auth recovery receipt does not match protected installation history');
+    }
+    finalizeReadyAuthRecoveryRotationAvailability(installation, context);
+    removePendingAuthRecoveryRotationFiles(context, { removeReceipt: false });
+    context.writeOutput('Authentication recovery secret rotation was already completed and remains bound to protected history.\n');
+    return;
+  }
+  if (
+    installation.phase === 'ready' &&
+    initialValidation.reviewExpired &&
+    !receipt.authorityStartedAt
+  ) {
+    throw new Error('Auth recovery rotation review expired before backup; run a fresh count-only review');
+  }
+  validateCompose(context);
+
+  try {
+    if (
+      installation.phase === 'ready' &&
+      receipt.phase === 'review-ready' &&
+      !receipt.authorityStartedAt
+    ) {
+      receipt = recordAuthRecoveryRotationAuthorityStart(receipt, {
+        operator: inputs.operator,
+        caseReference: inputs.caseReference,
+        identities,
+        confirmation: options.confirm,
+        now: context.now,
+      });
+      writeAuthRecoveryRotationReceipt(receipt, context);
+    }
+    if (installation.phase === 'ready') {
+      if (receipt.phase !== 'review-ready') {
+        throw new Error('Ready installation can execute only a review-ready auth recovery receipt');
+      }
+      const runningBefore = runningServices(context);
+      operation = createAuthRecoveryRotationBackupIntent(
+        receipt,
+        options,
+        runningBefore,
+        context,
+      );
+      updateInstallationState(context, {
+        phase: 'auth-recovery-rotating',
+        authRecoveryRotation: operation,
+      });
+      installation = readInstallationState(context).value;
+      const materialized = materializeAuthRecoveryRotationBackup(
+        operation,
+        receipt,
+        options,
+        values,
+        context,
+      );
+      operation = materialized.operation;
+      const backedUpReceipt = recordAuthRecoveryRotationBackup(receipt, {
+        ...materialized.evidence,
+        now: context.now,
+      });
+      writeAuthRecoveryRotationReceipt(backedUpReceipt, context);
+      receipt = backedUpReceipt;
+      ensureAuthRecoveryRotationDatabase(context);
+    } else {
+      if (!operation || operation.receiptId !== receipt.receiptId || operation.receiptPath !== pending.path) {
+        throw new Error('Interrupted auth recovery rotation does not match protected installation state');
+      }
+      ensureAuthRecoveryRotationDatabase(context);
+      const materialized = materializeAuthRecoveryRotationBackup(
+        operation,
+        receipt,
+        options,
+        values,
+        context,
+      );
+      operation = materialized.operation;
+      if (receipt.phase === 'review-ready') {
+        if (!receipt.authorityStartedAt) {
+          resetPreExecutionAuthRecoveryRotation(receipt, operation, context, 'superseded');
+          throw new Error('Auth recovery rotation lost its confirmed authority-at-start evidence; run a fresh count-only review');
+        }
+        const backedUpReceipt = recordAuthRecoveryRotationBackup(receipt, {
+          ...materialized.evidence,
+          now: context.now,
+        });
+        writeAuthRecoveryRotationReceipt(backedUpReceipt, context);
+        receipt = backedUpReceipt;
+      }
+      if (['executing', 'blocked', 'secret-replaced', 'activating', 'activated'].includes(receipt.phase)) {
+        const liveStatus = authRecoveryRotationStatus(receipt, inputs, values, context);
+        const reconciled = reconcileAuthRecoveryRotationReceipt(receipt, liveStatus, { now: context.now });
+        if (JSON.stringify(reconciled) !== JSON.stringify(receipt)) {
+          receipt = reconciled;
+          writeAuthRecoveryRotationReceipt(receipt, context);
+        }
+        const plan = planAuthRecoveryRotationResume(receipt, {
+          status: liveStatus,
+          identities,
+          now: context.now,
+        });
+        if (plan.controlState === 'old-active' && plan.reviewExpired && !receipt.authorityStartedAt) {
+          resetPreExecutionAuthRecoveryRotation(receipt, operation, context, 'superseded');
+          throw new Error('Auth recovery rotation review expired before invalidation; run a fresh count-only review');
+        }
+      }
+    }
+
+    if (receipt.phase === 'backup-complete') {
+      const repeatEvidence = parseAuthRecoveryRotationJobEvidence(
+        runAuthRecoveryRotationJob('dry-run', inputs, values, context),
+        'DRY_RUN',
+      );
+      const repeated = createAuthRecoveryRotationReviewReceipt({
+        receiptId: receipt.receiptId,
+        reason: inputs.reason,
+        operator: inputs.operator,
+        caseReference: inputs.caseReference,
+        identities: receipt.identities,
+        dryRunEvidence: repeatEvidence,
+        now: new Date(receipt.createdAt),
+      });
+      if (
+        repeated.confirmation !== receipt.confirmation ||
+        JSON.stringify(repeated.review) !== JSON.stringify(receipt.review)
+      ) {
+        const failed = recordAuthRecoveryRotationFailure(receipt, {
+          checkpoint: 'repeat-count-review',
+          error: new Error('Count-only evidence changed after the verified backup'),
+          now: context.now,
+        });
+        writeAuthRecoveryRotationReceipt(failed, context);
+        resetPreExecutionAuthRecoveryRotation(failed, operation, context, 'superseded');
+        throw new Error('Auth recovery rotation evidence changed after backup; run a fresh review');
+      }
+      identities = authRecoveryRotationIdentities(
+        values,
+        installation,
+        context,
+        readFileSync(environmentFilePath(context), 'utf8'),
+      );
+      receipt = markAuthRecoveryRotationExecuting(receipt, {
+        operator: inputs.operator,
+        caseReference: inputs.caseReference,
+        identities,
+        confirmation: options.confirm,
+        now: context.now,
+      });
+      writeAuthRecoveryRotationReceipt(receipt, context);
+    }
+
+    if (receipt.phase === 'executing') {
+      const executed = runAuthRecoveryRotationJob('execute', inputs, values, context, receipt);
+      receipt = recordAuthRecoveryRotationBlocked(receipt, executed, { now: context.now });
+      writeAuthRecoveryRotationReceipt(receipt, context);
+    }
+
+    if (receipt.phase === 'blocked') {
+      const before = readFileSync(environmentFilePath(context), 'utf8');
+      const replacementSecret = getOrCreatePendingAuthRecoverySecret(context);
+      const after = environmentWithReplacementAuthRecoverySecret(before, replacementSecret);
+      receipt = recordAuthRecoveryRotationSecretReplacement(receipt, {
+        before,
+        after,
+        now: context.now,
+      });
+      writeAuthRecoveryRotationReceipt(receipt, context);
+    }
+
+    if (receipt.phase === 'secret-replaced') {
+      applyAuthRecoveryEnvironmentReplacement(receipt, context);
+      const replacementValues = loadEnvironmentFile(environmentFilePath(context));
+      identities = authRecoveryRotationIdentities(
+        replacementValues,
+        installation,
+        context,
+        readFileSync(environmentFilePath(context), 'utf8'),
+      );
+      receipt = markAuthRecoveryRotationActivating(receipt, {
+        identities,
+        now: context.now,
+      });
+      writeAuthRecoveryRotationReceipt(receipt, context);
+      Object.assign(values, replacementValues);
+    }
+
+    if (receipt.phase === 'activating') {
+      const activated = runAuthRecoveryRotationJob(
+        'activate-after-replacement',
+        inputs,
+        values,
+        context,
+        receipt,
+      );
+      receipt = recordAuthRecoveryRotationActivated(receipt, activated, { now: context.now });
+      writeAuthRecoveryRotationReceipt(receipt, context);
+    }
+
+    if (receipt.phase === 'activated' || receipt.phase === 'completed') {
+      completeAuthRecoveryRotationLifecycle(receipt, operation, options, context);
+    }
+  } catch (error) {
+    const current = readAuthRecoveryRotationReceipt(context);
+    if (current && current.value.phase !== 'completed') {
+      try {
+        const failed = recordAuthRecoveryRotationFailure(current.value, {
+          checkpoint: 'lifecycle',
+          error,
+          now: context.now,
+        });
+        writeAuthRecoveryRotationReceipt(failed, context);
+      } catch (receiptError) {
+        error.message = `${error.message}\nCould not persist redacted auth recovery rotation failure evidence: ${receiptError.message}`;
+      }
+    }
+    const currentInstallation = readInstallationState(context)?.value;
+    if (currentInstallation?.phase === 'auth-recovery-rotating') {
+      try { runCommand([...composePrefix(context), 'stop', ...WRITER_SERVICES], context); }
+      catch (stopError) {
+        error.message = `${error.message}\nFailed to keep application writers stopped: ${stopError.message}`;
+      }
+      error.message = `${error.message}\nAuthentication recovery rotation remains fail-closed. Rerun the same supported command with the exact confirmation; do not restore the credential-bearing pre-invalidation backup into service.`;
+    } else if (
+      currentInstallation?.phase === 'ready' &&
+      operation &&
+      current?.value.phase === 'review-ready'
+    ) {
+      try { restoreAuthRecoveryRotationAvailability(operation, context); }
+      catch (restoreError) {
+        error.message = `${error.message}\nFailed to restore pre-rotation service availability: ${restoreError.message}`;
+      }
+    }
+    throw error;
+  }
 }
 
 function releaseVersion(tag) {
@@ -2249,7 +3458,8 @@ function dryRunVerifiedRecovery(recoveryPath, values, imageTag, source) {
 }
 
 function restoreVerifiedRecoveryIntoRuntime(verified, values, context) {
-  const targets = assertPersonalRestoreTargets(context);
+  const targets = assertPersonalRestoreTargets(context, { allowDetached: true });
+  ensureRecoveryDatabaseRunning(context);
   restoreDatabaseDump(
     targets.databaseContainer,
     verified.databasePath,
@@ -2263,6 +3473,13 @@ function restoreVerifiedRecoveryIntoRuntime(verified, values, context) {
 
 function stopAllWritersForDestructiveRecovery(context) {
   runCommand([...composePrefix(context), 'stop', ...WRITER_SERVICES], context);
+}
+
+function ensureRecoveryDatabaseRunning(context) {
+  runCommand([
+    ...composePrefix(context), 'up', '-d', '--no-build', '--wait',
+    '--wait-timeout', String(DEFAULT_WAIT_SECONDS), 'db',
+  ], context);
 }
 
 export function executePersonalServerCutoverRecovery({
@@ -2421,7 +3638,7 @@ function update(options, context) {
     );
     buildImagesSequentially(targetContext);
     runDisposableApplicationRehearsal(verified, values, targetContext, { images: personalImageNames(targetTag) });
-    assertPersonalRestoreTargets(currentContext);
+    assertPersonalRestoreTargets(currentContext, { allowDetached: true });
     transitionUpdateReceipt(receipt, ['prepared', 'pre-cutover'], 'pre-cutover', {
       preUpdateRecoverySet: recovery.backupPath,
       currentImageTag: currentTag,
@@ -2630,7 +3847,7 @@ function rollback(options, context) {
       previousContext,
     );
     runDisposableApplicationRehearsal(previousVerified, values, previousContext, { images: personalImageNames(previousTag) });
-    assertPersonalRestoreTargets(currentContext);
+    assertPersonalRestoreTargets(currentContext, { allowDetached: true });
     preservation = performBackup({
       'output-dir': options['output-dir'],
       'encryption-key-file': options['encryption-key-file'],
@@ -2767,19 +3984,41 @@ export function validatePersonalServerVolumeIdentity(volume, volumeName, compose
   return true;
 }
 
-export function validatePersonalServerNetworkIdentity(network) {
+export function validatePersonalServerNetworkIdentity(network, kind = 'internal', { allowDetached = false } = {}) {
+  const expected = PERSONAL_NETWORK_IDENTITIES[kind];
+  if (!expected) throw new Error(`Unknown personal-server network kind: ${kind}`);
   if (
     !network || typeof network !== 'object' ||
-    network.Name !== INTERNAL_NETWORK ||
+    network.Name !== expected.name ||
     network.Driver !== 'bridge' ||
-    network.Internal !== true ||
+    network.Internal !== expected.internal ||
     network.Labels?.['com.docker.compose.project'] !== PROJECT_NAME ||
-    network.Labels?.['com.docker.compose.network'] !== 'personal-server-internal' ||
+    network.Labels?.['com.docker.compose.network'] !== expected.composeName ||
     !Array.isArray(network.IPAM?.Config) || network.IPAM.Config.length !== 1 ||
-    network.IPAM.Config[0]?.Subnet !== '172.30.250.0/24' ||
-    network.IPAM.Config[0]?.Gateway !== '172.30.250.1'
+    network.IPAM.Config[0]?.Subnet !== expected.subnet ||
+    network.IPAM.Config[0]?.Gateway !== expected.gateway
   ) {
-    throw new Error(`Refusing decommission because Docker network ${INTERNAL_NETWORK} is not the exact internal personal-server Compose network`);
+    throw new Error(`Refusing decommission because Docker network ${expected.name} is not the exact ${kind} personal-server Compose network`);
+  }
+  if (
+    !network.Containers || typeof network.Containers !== 'object' || Array.isArray(network.Containers)
+  ) {
+    throw new Error(`Refusing personal-server operation because Docker network ${expected.name} has malformed attachments`);
+  }
+  const attachments = Object.values(network.Containers);
+  if (attachments.some((value) => !value || typeof value !== 'object' || typeof value.Name !== 'string')) {
+    throw new Error(`Refusing personal-server operation because Docker network ${expected.name} has a malformed attachment`);
+  }
+  const attachedNames = attachments.map((value) => value.Name).sort();
+  const expectedNames = kind === 'edge'
+    ? ['charitypilot-personal-server-caddy-1']
+    : ['api', 'caddy', 'db', 'web'].map((service) => `charitypilot-personal-server-${service}-1`).sort();
+  const unexpected = attachedNames.filter((name) => !expectedNames.includes(name));
+  const duplicates = new Set(attachedNames).size !== attachedNames.length;
+  const exactLiveSet = attachedNames.length === expectedNames.length &&
+    attachedNames.every((name, index) => name === expectedNames[index]);
+  if (unexpected.length || duplicates || (!allowDetached && !exactLiveSet)) {
+    throw new Error(`Refusing personal-server operation because Docker network ${expected.name} does not have its exact reviewed service attachments`);
   }
   return true;
 }
@@ -2796,25 +4035,27 @@ function inspectPersonalVolume(volumeName, composeVolumeName, context) {
   validatePersonalServerVolumeIdentity(volume, volumeName, composeVolumeName);
 }
 
-function inspectPersonalNetwork(context) {
+function inspectPersonalNetwork(context, kind = 'internal', { allowDetached = false } = {}) {
+  const expected = PERSONAL_NETWORK_IDENTITIES[kind];
+  if (!expected) throw new Error(`Unknown personal-server network kind: ${kind}`);
   if (context.dryRun) {
-    runCommand(['docker', 'network', 'inspect', INTERNAL_NETWORK], context);
+    runCommand(['docker', 'network', 'inspect', expected.name], context);
     return;
   }
   const network = parseDockerInspect(
-    runCommand(['docker', 'network', 'inspect', INTERNAL_NETWORK], context, { capture: true }),
-    `Docker network ${INTERNAL_NETWORK}`,
+    runCommand(['docker', 'network', 'inspect', expected.name], context, { capture: true }),
+    `Docker network ${expected.name}`,
   );
-  validatePersonalServerNetworkIdentity(network);
+  validatePersonalServerNetworkIdentity(network, kind, { allowDetached });
 }
 
 function inspectPersonalServiceContainer(service, expectedVolume, expectedDestination, context) {
   if (context.dryRun) {
-    runCommand([...composePrefix(context), 'ps', '-q', service], context);
+    runCommand([...composePrefix(context), 'ps', '--all', '-q', service], context);
     runCommand(['docker', 'inspect', `<${service}-container-id>`], context);
     return `<${service}-container-id>`;
   }
-  const id = verifyContainerId(runCommand([...composePrefix(context), 'ps', '-q', service], context, { capture: true }));
+  const id = verifyContainerId(runCommand([...composePrefix(context), 'ps', '--all', '-q', service], context, { capture: true }));
   const container = parseDockerInspect(
     runCommand(['docker', 'inspect', id], context, { capture: true }),
     `Docker container for ${service}`,
@@ -2833,10 +4074,11 @@ function inspectPersonalServiceContainer(service, expectedVolume, expectedDestin
   return id;
 }
 
-function assertPersonalRestoreTargets(context) {
+function assertPersonalRestoreTargets(context, { requireEdge = true, allowDetached = false } = {}) {
   inspectPersonalVolume(DATABASE_VOLUME, 'personal-server-db', context);
   inspectPersonalVolume(DOCUMENT_VOLUME, 'personal-server-documents', context);
-  inspectPersonalNetwork(context);
+  inspectPersonalNetwork(context, 'internal', { allowDetached });
+  if (requireEdge) inspectPersonalNetwork(context, 'edge', { allowDetached });
   return {
     databaseContainer: inspectPersonalServiceContainer('db', DATABASE_VOLUME, '/var/lib/postgresql/data', context),
   };
@@ -2878,13 +4120,24 @@ function restoreDatabaseDump(container, dumpPath, values, context, { replaceData
   }
 }
 
-function populateDocumentVolume(volumeName, documentsPath, context, { clearExisting }) {
-  const loader = `charitypilot-personal-document-loader-${randomHex(4, context.randomBytesImpl)}`;
+function populateDocumentVolume(volumeName, documentsPath, context, {
+  clearExisting,
+  loaderName,
+  rehearsalToken,
+}) {
+  const loader = loaderName ?? `charitypilot-personal-document-loader-${randomHex(4, context.randomBytesImpl)}`;
+  if (!/^[a-z0-9][a-z0-9_.-]{2,127}$/u.test(loader)) {
+    throw new Error('Document loader name is invalid');
+  }
+  if (rehearsalToken !== undefined && !/^[a-f0-9]{12}$/u.test(rehearsalToken)) {
+    throw new Error('Document loader rehearsal token is invalid');
+  }
   let started = false;
   let pendingError = null;
   try {
     runCommand([
       'docker', 'run', '-d', '--name', loader, '--pull', 'never', '--network', 'none',
+      ...(rehearsalToken ? ['--label', `charitypilot.personal-rehearsal=${rehearsalToken}`] : []),
       '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true',
       '--mount', `type=volume,src=${volumeName},dst=/documents`,
       DOCUMENT_ARCHIVE_IMAGE, 'sleep', '300',
@@ -3095,6 +4348,232 @@ function revokeRestoredSessions(values, image, network, context) {
   return result;
 }
 
+function assertExactObjectFields(value, fields, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be one JSON object`);
+  }
+  const expected = [...fields].sort();
+  const actual = Object.keys(value).sort();
+  if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
+    throw new Error(`${label} returned an unexpected field set`);
+  }
+}
+
+function nonNegativeSafeInteger(value, label, { positive = false } = {}) {
+  if (!Number.isSafeInteger(value) || value < (positive ? 1 : 0)) {
+    throw new Error(`${label} must be a ${positive ? 'positive' : 'non-negative'} safe integer`);
+  }
+  return value;
+}
+
+function validateReplacementAuthRebindDryRun(value, binding) {
+  const countNames = [
+    'capabilities', 'requestEvidenceRows', 'legacySlots', 'rateBuckets',
+    'securityNotices', 'retiredSecrets',
+  ];
+  assertExactObjectFields(value, [
+    'format', 'mode', 'mutationApplied', 'deploymentProfile', 'recoverySetId',
+    'manifestSha256', 'controlState', 'generation', ...countNames,
+    'databaseIdentitySha256', 'executeConfirmation', 'terminationReason',
+    'recoveryBlockedAfterExecute', 'credentialsIssued',
+  ], 'Replacement-host auth recovery rebind dry-run');
+  if (
+    value.format !== REPLACEMENT_AUTH_REBIND_FORMAT || value.mode !== 'DRY_RUN' ||
+    value.mutationApplied !== false || value.deploymentProfile !== 'personal-server' ||
+    value.recoverySetId !== binding.recoverySetId ||
+    value.manifestSha256 !== binding.manifestSha256 ||
+    !['unbound', 'active', 'blocked'].includes(value.controlState) ||
+    !/^[a-f0-9]{64}$/u.test(value.databaseIdentitySha256 ?? '') ||
+    typeof value.executeConfirmation !== 'string' || value.executeConfirmation.length < 32 ||
+    value.executeConfirmation.length > 4096 || /[\u0000-\u001f\u007f]/u.test(value.executeConfirmation) ||
+    value.terminationReason !== 'KEY_ROTATED' ||
+    value.recoveryBlockedAfterExecute !== false || value.credentialsIssued !== false
+  ) {
+    throw new Error('Replacement-host auth recovery rebind dry-run returned unsafe evidence');
+  }
+  nonNegativeSafeInteger(value.generation, 'Replacement auth recovery generation', { positive: true });
+  for (const name of countNames) nonNegativeSafeInteger(value[name], `Replacement auth recovery ${name}`);
+  return value;
+}
+
+function replacementAuthRebindExecuteArgs(binding, evidence) {
+  return [
+    '--execute',
+    '--recovery-set-id', binding.recoverySetId,
+    '--manifest-sha256', binding.manifestSha256,
+    '--confirm-api-and-scheduler-quiesced',
+    '--expected-control-state', evidence.controlState,
+    '--expected-generation', String(evidence.generation),
+    '--expected-capabilities', String(evidence.capabilities),
+    '--expected-request-evidence-rows', String(evidence.requestEvidenceRows),
+    '--expected-legacy-slots', String(evidence.legacySlots),
+    '--expected-rate-buckets', String(evidence.rateBuckets),
+    '--expected-security-notices', String(evidence.securityNotices),
+    '--expected-retired-secrets', String(evidence.retiredSecrets),
+    '--expected-database-identity-sha256', evidence.databaseIdentitySha256,
+    '--confirm-execute', evidence.executeConfirmation,
+  ];
+}
+
+function validateReplacementAuthRebindExecuted(value, binding, reviewed) {
+  assertExactObjectFields(value, [
+    'format', 'mode', 'mutationApplied', 'deploymentProfile', 'recoverySetId',
+    'manifestSha256', 'previousControlState', 'previousGeneration', 'generation',
+    'invalidatedCapabilities', 'redactedRequestEvidenceRows', 'clearedLegacySlots',
+    'deletedRateBuckets', 'securityNoticesPreserved', 'retiredSecrets',
+    'priorActiveSecretRetired', 'remainingCapabilities',
+    'remainingRequestEvidenceRows', 'remainingLegacySlots', 'remainingRateBuckets',
+    'databaseIdentitySha256', 'terminationReason', 'recoveryBlocked',
+    'boundToReplacementSecret', 'credentialsIssued',
+  ], 'Replacement-host auth recovery rebind execute');
+  const expectedGeneration = reviewed.generation + (reviewed.controlState === 'active' ? 1 : 0);
+  const expectedRetired = reviewed.retiredSecrets + (reviewed.controlState === 'active' ? 1 : 0);
+  if (
+    value.format !== REPLACEMENT_AUTH_REBIND_FORMAT || value.mode !== 'EXECUTED' ||
+    value.mutationApplied !== true || value.deploymentProfile !== 'personal-server' ||
+    value.recoverySetId !== binding.recoverySetId || value.manifestSha256 !== binding.manifestSha256 ||
+    value.previousControlState !== reviewed.controlState ||
+    value.previousGeneration !== reviewed.generation || value.generation !== expectedGeneration ||
+    value.invalidatedCapabilities !== reviewed.capabilities ||
+    value.redactedRequestEvidenceRows !== reviewed.requestEvidenceRows ||
+    value.clearedLegacySlots !== reviewed.legacySlots ||
+    value.deletedRateBuckets !== reviewed.rateBuckets ||
+    value.securityNoticesPreserved !== reviewed.securityNotices ||
+    value.retiredSecrets !== expectedRetired ||
+    value.priorActiveSecretRetired !== (reviewed.controlState === 'active') ||
+    value.remainingCapabilities !== 0 || value.remainingRequestEvidenceRows !== 0 ||
+    value.remainingLegacySlots !== 0 || value.remainingRateBuckets !== 0 ||
+    value.databaseIdentitySha256 !== reviewed.databaseIdentitySha256 ||
+    value.terminationReason !== 'KEY_ROTATED' || value.recoveryBlocked !== false ||
+    value.boundToReplacementSecret !== true || value.credentialsIssued !== false
+  ) {
+    throw new Error('Replacement-host auth recovery rebind execute returned unsafe evidence');
+  }
+  return {
+    format: REPLACEMENT_AUTH_REBIND_FORMAT,
+    recoverySetId: binding.recoverySetId,
+    manifestSha256: binding.manifestSha256,
+    databaseIdentitySha256: value.databaseIdentitySha256,
+    previousControlState: value.previousControlState,
+    previousGeneration: value.previousGeneration,
+    generation: value.generation,
+    invalidatedCapabilities: value.invalidatedCapabilities,
+    redactedRequestEvidenceRows: value.redactedRequestEvidenceRows,
+    clearedLegacySlots: value.clearedLegacySlots,
+    deletedRateBuckets: value.deletedRateBuckets,
+    securityNoticesPreserved: value.securityNoticesPreserved,
+    retiredSecrets: value.retiredSecrets,
+    priorActiveSecretRetired: value.priorActiveSecretRetired,
+  };
+}
+
+function replacementAuthRebindCommand(values, image, network, context, jobArgs) {
+  const databaseUrl = personalDatabaseUrl(values, values.POSTGRES_DB, 'db');
+  const childEnvironment = {
+    ...context.processEnv,
+    NODE_ENV: 'production',
+    CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+    DATABASE_URL: databaseUrl,
+    AUTH_RECOVERY_SECRET: values.AUTH_RECOVERY_SECRET,
+  };
+  return {
+    command: [
+      'docker', 'run', '--rm', '--pull', 'never', '--network', network,
+      '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
+      '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true',
+      '-e', 'NODE_ENV', '-e', 'CHARITYPILOT_DEPLOYMENT_MODE',
+      '-e', 'DATABASE_URL', '-e', 'AUTH_RECOVERY_SECRET',
+      image, 'node', REPLACEMENT_AUTH_REBIND_JOB, ...jobArgs,
+    ],
+    env: childEnvironment,
+    secrets: [databaseUrl, values.POSTGRES_PASSWORD, values.AUTH_RECOVERY_SECRET],
+  };
+}
+
+function rebindReplacementHostAuthRecovery({
+  values,
+  image,
+  network,
+  recoverySetId,
+  manifestSha256,
+  context,
+}) {
+  const binding = { recoverySetId, manifestSha256 };
+  if (
+    !/^personal-server-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{8}$/u.test(recoverySetId ?? '') ||
+    !/^[a-f0-9]{64}$/u.test(manifestSha256 ?? '')
+  ) throw new Error('Replacement-host auth recovery rebind binding is invalid');
+  const dryArgs = [
+    '--dry-run', '--recovery-set-id', recoverySetId, '--manifest-sha256', manifestSha256,
+    '--confirm-api-and-scheduler-quiesced',
+  ];
+  const dryCommand = replacementAuthRebindCommand(values, image, network, context, dryArgs);
+  if (context.dryRun) {
+    runCommand(dryCommand.command, context, {
+      env: dryCommand.env,
+      secrets: dryCommand.secrets,
+    });
+    const planned = {
+      controlState: 'active', generation: 1,
+      capabilities: 0, requestEvidenceRows: 0, legacySlots: 0,
+      rateBuckets: 0, securityNotices: 0, retiredSecrets: 0,
+      databaseIdentitySha256: '0'.repeat(64),
+      executeConfirmation: '<exact-confirmation-from-count-only-dry-run>',
+    };
+    const executeCommand = replacementAuthRebindCommand(
+      values,
+      image,
+      network,
+      context,
+      replacementAuthRebindExecuteArgs(binding, planned),
+    );
+    runCommand(executeCommand.command, context, {
+      env: executeCommand.env,
+      secrets: executeCommand.secrets,
+    });
+    return {
+      format: REPLACEMENT_AUTH_REBIND_FORMAT,
+      recoverySetId,
+      manifestSha256,
+      databaseIdentitySha256: '<verified-live-database-identity-sha256>',
+      previousControlState: '<reviewed-control-state>',
+      previousGeneration: 0,
+      generation: 0,
+      invalidatedCapabilities: 0,
+      redactedRequestEvidenceRows: 0,
+      clearedLegacySlots: 0,
+      deletedRateBuckets: 0,
+      securityNoticesPreserved: 0,
+      retiredSecrets: 0,
+      priorActiveSecretRetired: false,
+    };
+  }
+  const reviewed = validateReplacementAuthRebindDryRun(
+    parseAllowlistedJson(runCommand(dryCommand.command, context, {
+      capture: true,
+      env: dryCommand.env,
+      secrets: dryCommand.secrets,
+    }), 'Replacement-host auth recovery rebind dry-run'),
+    binding,
+  );
+  const executeCommand = replacementAuthRebindCommand(
+    values,
+    image,
+    network,
+    context,
+    replacementAuthRebindExecuteArgs(binding, reviewed),
+  );
+  return validateReplacementAuthRebindExecuted(
+    parseAllowlistedJson(runCommand(executeCommand.command, context, {
+      capture: true,
+      env: executeCommand.env,
+      secrets: executeCommand.secrets,
+    }), 'Replacement-host auth recovery rebind execute'),
+    binding,
+    reviewed,
+  );
+}
+
 function applicationDocumentInventory(container, context, secrets = []) {
   if (context.dryRun) {
     runCommand(['docker', 'exec', container, 'node', '--input-type=module', '-e', '<application-document-reconciliation>'], context);
@@ -3156,6 +4635,7 @@ function recoveryApiEnvironment(values, databaseHost, context, trustedProxy = '1
     HOST: '0.0.0.0',
     DATABASE_URL: personalDatabaseUrl(values, values.POSTGRES_DB, databaseHost),
     JWT_SECRET: values.JWT_SECRET,
+    AUTH_RECOVERY_SECRET: values.AUTH_RECOVERY_SECRET,
     JWT_EXPIRY: values.JWT_EXPIRY,
     REFRESH_TOKEN_TTL_DAYS: values.REFRESH_TOKEN_TTL_DAYS,
     READINESS_API_KEY: values.READINESS_API_KEY,
@@ -3175,20 +4655,38 @@ function recoveryApiEnvironment(values, databaseHost, context, trustedProxy = '1
 
 const RECOVERY_API_ENV_NAMES = [
   'NODE_ENV', 'CHARITYPILOT_DEPLOYMENT_MODE', 'PORT', 'HOST', 'DATABASE_URL', 'JWT_SECRET',
+  'AUTH_RECOVERY_SECRET',
   'JWT_EXPIRY', 'REFRESH_TOKEN_TTL_DAYS', 'READINESS_API_KEY', 'FRONTEND_URL',
   'NEXT_PUBLIC_API_URL', 'API_URL', 'CHARITYPILOT_INTERNAL_API_URL', 'TRUSTED_PROXY_ADDRESSES',
   'DOCUMENT_STORAGE_DRIVER', 'LOCAL_FILE_STORAGE_DIR', 'ENABLE_IN_PROCESS_JOBS',
   'SELF_REGISTRATION_ENABLED', 'SEED_LOCAL_ADMIN', 'SEED_DEMO_WORKSPACE',
 ];
 
-function proveRestoredDatabaseContent({ verified, values, host, network, context }) {
+function proveRestoredDatabaseContent({ verified, values, host, network, context, proofToken }) {
+  if (proofToken !== undefined && !/^[a-f0-9]{12}$/u.test(proofToken)) {
+    throw new Error('Post-restore proof token is invalid');
+  }
   const proofDirectory = context.dryRun
     ? '<temporary-post-restore-proof-directory>'
-    : mkdtempSync(join(tmpdir(), 'charitypilot-personal-post-restore-proof-'));
+    : proofToken
+      ? join(tmpdir(), `charitypilot-personal-post-restore-proof-${proofToken}`)
+      : mkdtempSync(join(tmpdir(), 'charitypilot-personal-post-restore-proof-'));
+  if (!context.dryRun && proofToken) {
+    if (existsSync(proofDirectory)) {
+      const status = lstatSync(proofDirectory);
+      if (!status.isDirectory() || status.isSymbolicLink()) {
+        throw new Error('Post-restore proof path is unsafe');
+      }
+      rmSync(proofDirectory, { recursive: true, force: false });
+    }
+    mkdirSync(proofDirectory, { recursive: false, mode: 0o700 });
+  }
   try {
     const proof = createExactDatabaseProof({
       values,
-      recoverySetId: `restored-${randomHex(8, context.randomBytesImpl)}`,
+      recoverySetId: proofToken
+        ? `restored-${proofToken}`
+        : `restored-${randomHex(8, context.randomBytesImpl)}`,
       outputDirectory: proofDirectory,
       context,
       host,
@@ -3224,6 +4722,74 @@ export function executePersonalServerCleanup(operations) {
   }
 }
 
+function disposableRehearsalResourceNames(token) {
+  if (!/^[a-f0-9]{12}$/u.test(token ?? '')) {
+    throw new Error('Disposable rehearsal token is invalid');
+  }
+  const network = `charitypilot-personal-rehearsal-${token}`;
+  return {
+    network,
+    databaseVolume: `${network}-db`,
+    documentVolume: `${network}-documents`,
+    databaseContainer: `${network}-postgres`,
+    apiContainer: `${network}-api`,
+    webContainer: `${network}-web`,
+    caddyContainer: `${network}-caddy`,
+    documentLoader: `${network}-document-loader`,
+    proofDirectory: join(tmpdir(), `charitypilot-personal-post-restore-proof-${token}`),
+  };
+}
+
+function validateDisposableRehearsalResource(kind, name, token, context) {
+  const value = parseDockerInspect(
+    runCommand(['docker', kind, 'inspect', name], context, { capture: true }),
+    `Disposable rehearsal ${kind}`,
+  );
+  const actualName = kind === 'container' ? String(value.Name ?? '').replace(/^\//u, '') : value.Name;
+  const labels = kind === 'container' ? value.Config?.Labels : value.Labels;
+  if (actualName !== name || labels?.['charitypilot.personal-rehearsal'] !== token) {
+    throw new Error(`Refusing to remove unbound disposable rehearsal ${kind} ${name}`);
+  }
+}
+
+function exactDisposableRehearsalContainerExists(name, context) {
+  const output = runCommand([
+    'docker', 'container', 'ls', '-a', '--filter', `name=${name}`, '--format', '{{.Names}}',
+  ], context, { capture: true });
+  return output.split(/\r?\n/u).some((candidate) => candidate.trim() === name);
+}
+
+function cleanupInterruptedDisposableRehearsal(token, context) {
+  const resources = disposableRehearsalResourceNames(token);
+  for (const name of [
+    resources.caddyContainer,
+    resources.webContainer,
+    resources.apiContainer,
+    resources.databaseContainer,
+    resources.documentLoader,
+  ]) {
+    if (!exactDisposableRehearsalContainerExists(name, context)) continue;
+    validateDisposableRehearsalResource('container', name, token, context);
+    runCommand(['docker', 'rm', '-f', name], context);
+  }
+  for (const name of [resources.documentVolume, resources.databaseVolume]) {
+    if (!exactDockerResourceExists('volume', name, context)) continue;
+    validateDisposableRehearsalResource('volume', name, token, context);
+    runCommand(['docker', 'volume', 'rm', name], context);
+  }
+  if (exactDockerResourceExists('network', resources.network, context)) {
+    validateDisposableRehearsalResource('network', resources.network, token, context);
+    runCommand(['docker', 'network', 'rm', resources.network], context);
+  }
+  if (existsSync(resources.proofDirectory)) {
+    const status = lstatSync(resources.proofDirectory);
+    if (!status.isDirectory() || status.isSymbolicLink()) {
+      throw new Error('Interrupted disposable rehearsal proof path is unsafe');
+    }
+    rmSync(resources.proofDirectory, { recursive: true, force: false });
+  }
+}
+
 function runDisposableApplicationRehearsal(
   verified,
   values,
@@ -3231,16 +4797,25 @@ function runDisposableApplicationRehearsal(
   {
     images = personalImageNames(values.CHARITYPILOT_PERSONAL_SERVER_IMAGE_TAG),
     ownerPassword = null,
+    replacementAuthRecoveryBinding = null,
+    rehearsalToken = null,
   } = {},
 ) {
-  const token = randomHex(6, context.randomBytesImpl);
-  const network = `charitypilot-personal-rehearsal-${token}`;
-  const databaseVolume = `${network}-db`;
-  const documentVolume = `${network}-documents`;
-  const databaseContainer = `${network}-postgres`;
-  const apiContainer = `${network}-api`;
-  const webContainer = `${network}-web`;
-  const caddyContainer = `${network}-caddy`;
+  const token = rehearsalToken ?? randomHex(6, context.randomBytesImpl);
+  const resources = disposableRehearsalResourceNames(token);
+  const {
+    network,
+    databaseVolume,
+    documentVolume,
+    databaseContainer,
+    apiContainer,
+    webContainer,
+    caddyContainer,
+  } = resources;
+  const rehearsalLabel = `charitypilot.personal-rehearsal=${token}`;
+  if (rehearsalToken && !context.dryRun) {
+    cleanupInterruptedDisposableRehearsal(token, context);
+  }
   const databaseEnv = {
     ...context.processEnv,
     POSTGRES_DB: values.POSTGRES_DB,
@@ -3263,14 +4838,15 @@ function runDisposableApplicationRehearsal(
     runCommand(['docker', 'image', 'inspect', images.api], context);
     runCommand(['docker', 'image', 'inspect', images.web], context);
     runCommand(['docker', 'image', 'inspect', CADDY_IMAGE], context);
-    runCommand(['docker', 'network', 'create', '--internal', '--label', 'charitypilot.personal-rehearsal=true', network], context);
+    runCommand(['docker', 'network', 'create', '--internal', '--label', rehearsalLabel, network], context);
     networkCreated = true;
-    runCommand(['docker', 'volume', 'create', '--label', 'charitypilot.personal-rehearsal=true', databaseVolume], context);
+    runCommand(['docker', 'volume', 'create', '--label', rehearsalLabel, databaseVolume], context);
     databaseVolumeCreated = true;
-    runCommand(['docker', 'volume', 'create', '--label', 'charitypilot.personal-rehearsal=true', documentVolume], context);
+    runCommand(['docker', 'volume', 'create', '--label', rehearsalLabel, documentVolume], context);
     documentVolumeCreated = true;
     runCommand([
       'docker', 'run', '-d', '--name', databaseContainer, '--pull', 'never',
+      '--label', rehearsalLabel,
       '--network', network, '--network-alias', 'db', '--read-only',
       '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m', '--tmpfs', '/var/run/postgresql:rw,noexec,nosuid,size=16m',
       '--mount', `type=volume,src=${databaseVolume},dst=/var/lib/postgresql/data`,
@@ -3280,8 +4856,12 @@ function runDisposableApplicationRehearsal(
     databaseStarted = true;
     waitForRecoveryDatabase(databaseContainer, values, context);
     restoreDatabaseDump(databaseContainer, verified.databasePath ?? '<verified-database-dump>', values, context, { replaceDatabase: false });
-    proveRestoredDatabaseContent({ verified, values, host: 'db', network, context });
-    populateDocumentVolume(documentVolume, documentsPath, context, { clearExisting: false });
+    proveRestoredDatabaseContent({ verified, values, host: 'db', network, context, proofToken: token });
+    populateDocumentVolume(documentVolume, documentsPath, context, {
+      clearExisting: false,
+      loaderName: resources.documentLoader,
+      rehearsalToken: token,
+    });
 
     const migrationDatabaseUrl = personalDatabaseUrl(values, values.POSTGRES_DB, 'db');
     runCommand([
@@ -3294,6 +4874,17 @@ function runDisposableApplicationRehearsal(
       secrets: [migrationDatabaseUrl, values.POSTGRES_PASSWORD],
     });
 
+    if (replacementAuthRecoveryBinding) {
+      rebindReplacementHostAuthRecovery({
+        values,
+        image: images.api,
+        network,
+        recoverySetId: replacementAuthRecoveryBinding.recoverySetId,
+        manifestSha256: replacementAuthRecoveryBinding.manifestSha256,
+        context,
+      });
+    }
+
     const syntheticProofIdentity = createDisposableProofIdentity({
       network,
       values,
@@ -3304,6 +4895,7 @@ function runDisposableApplicationRehearsal(
     const caddyConfigPath = join(context.repoRoot, 'caddy', 'Caddyfile.personal-server');
     runCommand([
       'docker', 'run', '-d', '--name', caddyContainer, '--pull', 'never',
+      '--label', rehearsalLabel,
       '--network', network, '--network-alias', 'caddy', '--read-only',
       '--user', '1000:1000',
       '--tmpfs', '/config:rw,noexec,nosuid,size=16m,uid=1000,gid=1000,mode=0700',
@@ -3319,6 +4911,7 @@ function runDisposableApplicationRehearsal(
     const apiEnv = recoveryApiEnvironment(values, 'db', context, caddyAddress);
     const apiArgs = [
       'docker', 'run', '-d', '--name', apiContainer, '--pull', 'never', '--network', network, '--network-alias', 'api',
+      '--label', rehearsalLabel,
       '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true',
       '--mount', `type=volume,src=${documentVolume},dst=/data/documents`,
@@ -3327,16 +4920,27 @@ function runDisposableApplicationRehearsal(
     apiArgs.push(images.api);
     runCommand(apiArgs, context, {
       env: apiEnv,
-      secrets: [apiEnv.DATABASE_URL, values.POSTGRES_PASSWORD, values.JWT_SECRET, values.READINESS_API_KEY],
+      secrets: [
+        apiEnv.DATABASE_URL,
+        values.POSTGRES_PASSWORD,
+        values.JWT_SECRET,
+        values.AUTH_RECOVERY_SECRET,
+        values.READINESS_API_KEY,
+      ],
     });
     apiStarted = true;
     waitForRecoveryApi(apiContainer, context);
-    const applicationInventory = applicationDocumentInventory(apiContainer, context, [values.JWT_SECRET, values.READINESS_API_KEY]);
+    const applicationInventory = applicationDocumentInventory(apiContainer, context, [
+      values.JWT_SECRET,
+      values.AUTH_RECOVERY_SECRET,
+      values.READINESS_API_KEY,
+    ]);
     if (!context.dryRun) compareApplicationDocuments(applicationInventory, verified.documentInventory);
 
     const webEnv = recoveryWebEnvironment(values, context);
     const webArgs = [
       'docker', 'run', '-d', '--name', webContainer, '--pull', 'never', '--network', network, '--network-alias', 'web',
+      '--label', rehearsalLabel,
       '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true',
     ];
@@ -3425,10 +5029,12 @@ function verifySelectedRecoverySet(options, values, context, { materialize }) {
 
 function assertPersonalBootstrapResourcesAbsent(context) {
   assertPersonalContainersAbsent(context);
+  assertPersonalNetworksAbsent(context);
   for (const [kind, name] of [
     ['volume', DATABASE_VOLUME],
     ['volume', DOCUMENT_VOLUME],
     ['network', INTERNAL_NETWORK],
+    ['network', EDGE_NETWORK],
   ]) {
     if (context.dryRun) {
       runCommand(['docker', kind, 'ls', '--filter', `name=${name}`, '--format', '{{.Name}}'], context);
@@ -3444,8 +5050,8 @@ function createPersonalBootstrapTargets(values, context) {
   ], context);
   inspectPersonalVolume(DATABASE_VOLUME, 'personal-server-db', context);
   inspectPersonalVolume(DOCUMENT_VOLUME, 'personal-server-documents', context);
-  inspectPersonalNetwork(context);
-  const targets = assertPersonalRestoreTargets(context);
+  inspectPersonalNetwork(context, 'internal', { allowDetached: true });
+  const targets = assertPersonalRestoreTargets(context, { requireEdge: false, allowDetached: true });
   runCommand([...composePrefix(context), 'start', 'db'], context);
   waitForRecoveryDatabase(targets.databaseContainer, values, context);
   const tableCount = runCommand([
@@ -3468,7 +5074,7 @@ function createPersonalBootstrapTargets(values, context) {
 function cleanupPersonalBootstrapTargets(context) {
   let cleanupError = null;
   try {
-    inspectPersonalNetworkIfPresent(context);
+    inspectPersonalNetworksIfPresent(context);
     runCommand([...composePrefix(context), 'down', '--remove-orphans'], context);
   } catch (error) {
     cleanupError = error;
@@ -3482,7 +5088,9 @@ function cleanupPersonalBootstrapTargets(context) {
   }
   try {
     assertPersonalContainersAbsent(context);
+    assertPersonalNetworksAbsent(context);
     assertDockerResourceAbsent('network', INTERNAL_NETWORK, context);
+    assertDockerResourceAbsent('network', EDGE_NETWORK, context);
     assertDockerResourceAbsent('volume', DATABASE_VOLUME, context);
     assertDockerResourceAbsent('volume', DOCUMENT_VOLUME, context);
   } catch (error) {
@@ -3587,6 +5195,7 @@ function bootstrapRestore(options, context) {
       throw new Error(`--confirm must exactly equal ${expectedConfirmation}`);
     }
     const imageTag = verified.manifest.application.imageTag;
+    const recoveryManifestSha256 = sha256File(join(recoverySetPath, 'manifest.json'));
     if (installation.value.activeImageTag !== imageTag) {
       throw new Error('Replacement-host image tag does not match protected installer state');
     }
@@ -3642,7 +5251,7 @@ function bootstrapRestore(options, context) {
       restoreOperation: {
         ...installation.value.restoreOperation,
         recoverySetId: verified.manifest.recoverySetId,
-        manifestSha256: context.dryRun ? '<verified-manifest-sha256>' : sha256File(join(recoverySetPath, 'manifest.json')),
+        manifestSha256: recoveryManifestSha256,
         sourceApplication: verified.manifest.application,
         originRebind: sourceOrigin === targetOrigin ? null : { sourceOrigin, targetOrigin },
         secretsRotated: ['POSTGRES_PASSWORD', 'JWT_SECRET', 'READINESS_API_KEY'],
@@ -3653,7 +5262,13 @@ function bootstrapRestore(options, context) {
     preparePinnedRuntimeImages(context);
     buildImagesSequentially(context);
     const ownerPassword = readOwnerPasswordProofFile(options);
-    runDisposableApplicationRehearsal(verified, values, context, { ownerPassword });
+    runDisposableApplicationRehearsal(verified, values, context, {
+      ownerPassword,
+      replacementAuthRecoveryBinding: {
+        recoverySetId: verified.manifest.recoverySetId,
+        manifestSha256: recoveryManifestSha256,
+      },
+    });
     assertPersonalBootstrapResourcesAbsent(context);
     resourceCreationAttempted = true;
     const targets = createPersonalBootstrapTargets(values, context);
@@ -3666,6 +5281,14 @@ function bootstrapRestore(options, context) {
     );
     proveRestoredDatabaseContent({ verified, values, host: 'db', network: INTERNAL_NETWORK, context });
     runCommand([...composePrefix(context), '--profile', 'maintenance', 'run', '--rm', 'migrate'], context);
+    const authRecoveryRebind = rebindReplacementHostAuthRecovery({
+      values,
+      image: personalImageNames(imageTag).api,
+      network: INTERNAL_NETWORK,
+      recoverySetId: verified.manifest.recoverySetId,
+      manifestSha256: recoveryManifestSha256,
+      context,
+    });
     populateDocumentVolume(
       DOCUMENT_VOLUME,
       verified.documentsPath ?? '<verified-recovered-documents>',
@@ -3675,7 +5298,11 @@ function bootstrapRestore(options, context) {
     const revoked = revokeRestoredSessions(values, personalImageNames(imageTag).api, INTERNAL_NETWORK, context);
     startRuntime(context);
     const apiContainer = inspectPersonalServiceContainer('api', DOCUMENT_VOLUME, '/data/documents', context);
-    const inventory = applicationDocumentInventory(apiContainer, context, [values.JWT_SECRET, values.READINESS_API_KEY]);
+    const inventory = applicationDocumentInventory(apiContainer, context, [
+      values.JWT_SECRET,
+      values.AUTH_RECOVERY_SECRET,
+      values.READINESS_API_KEY,
+    ]);
     if (!context.dryRun) compareApplicationDocuments(inventory, verified.documentInventory);
     if (ownerPassword) verifyBootstrapLogin(values, ownerPassword, context);
     const runtimeApplication = captureBackupApplicationIdentity(values, context);
@@ -3690,6 +5317,7 @@ function bootstrapRestore(options, context) {
         authenticatedApplication: verified.manifest.application,
         runtimeApplication,
         sessionsRevoked: revoked.sessionsRevoked,
+        authRecoveryRebind,
         restoredAt: context.now().toISOString(),
       },
       restoreOperation: {
@@ -3698,6 +5326,8 @@ function bootstrapRestore(options, context) {
         recoverySetPath: verified.recoverySetPath,
         sourceOrigin,
         targetOrigin,
+        secretsRotated: ['POSTGRES_PASSWORD', 'JWT_SECRET', 'AUTH_RECOVERY_SECRET', 'READINESS_API_KEY'],
+        authRecoveryRebind,
         completedAt: context.now().toISOString(),
       },
     });
@@ -3726,6 +5356,7 @@ function rehearseRestore(options, context) {
   try {
     runDisposableApplicationRehearsal(verified, values, context, {
       ownerPassword: readOwnerPasswordProofFile(options),
+      rehearsalToken: options['internal-rehearsal-token'] ?? null,
     });
     if (verified.originRebind) {
       context.writeOutput(`Recovery origin rebind rehearsed: ${verified.originRebind.sourceOrigin} -> ${verified.originRebind.targetOrigin}.\n`);
@@ -3764,8 +5395,7 @@ function restore(options, context) {
   let preservationVerified;
   let destructiveStarted = false;
   try {
-    assertPersonalRestoreTargets(context);
-    inspectPersonalNetwork(context);
+    assertPersonalRestoreTargets(context, { allowDetached: true });
     runDisposableApplicationRehearsal(verified, values, context);
     if (verified.originRebind) {
       context.writeOutput(`Recovery origin rebind rehearsed: ${verified.originRebind.sourceOrigin} -> ${verified.originRebind.targetOrigin}.\n`);
@@ -3796,7 +5426,7 @@ function restore(options, context) {
       installationState.value.sourceRoot,
       context,
     );
-    const targets = assertPersonalRestoreTargets(context);
+    const targets = assertPersonalRestoreTargets(context, { allowDetached: true });
     let applicationInventory = { documents: [] };
     executePersonalServerRestoreCutover({
       persistRestoring: () => updateInstallationState(context, {
@@ -3817,13 +5447,16 @@ function restore(options, context) {
         destructiveStarted = true;
         stopAllWritersForDestructiveRecovery(context);
       },
-      restoreSelectedDatabase: () => restoreDatabaseDump(
-        targets.databaseContainer,
-        verified.databasePath ?? '<verified-database-dump>',
-        values,
-        context,
-        { replaceDatabase: true },
-      ),
+      restoreSelectedDatabase: () => {
+        ensureRecoveryDatabaseRunning(context);
+        restoreDatabaseDump(
+          targets.databaseContainer,
+          verified.databasePath ?? '<verified-database-dump>',
+          values,
+          context,
+          { replaceDatabase: true },
+        );
+      },
       proveSelectedDatabaseFingerprint: () => proveRestoredDatabaseContent({
         verified,
         values,
@@ -3878,7 +5511,7 @@ function restore(options, context) {
     if (!context.dryRun) {
       context.writeOutput(`Personal server restored from ${verified.manifest.recoverySetId}; documents reconciled: ${applicationInventory.documents.length}.\n`);
     } else {
-      context.writeOutput('DRY RUN: no personal database, document volume, container, network, or recovery-set file was changed.\n');
+      context.writeOutput('DRY RUN: no personal database, document volume, container, networks, or recovery-set file was changed.\n');
     }
   } catch (error) {
     if (destructiveStarted && !context.dryRun && preservationVerified) {
@@ -3964,6 +5597,14 @@ export function validatePersonalServerContainerAbsence(output) {
   return true;
 }
 
+export function validatePersonalServerNetworkAbsence(output) {
+  if (typeof output !== 'string') throw new Error('Docker network absence proof must be text');
+  if (output.trim()) {
+    throw new Error('Decommission did not remove every personal-server Compose project network');
+  }
+  return true;
+}
+
 function assertPersonalContainersAbsent(context) {
   const output = runCommand([
     'docker', 'container', 'ls', '-a',
@@ -3971,6 +5612,15 @@ function assertPersonalContainersAbsent(context) {
     '--format', '{{.ID}} {{.Names}}',
   ], context, { capture: true });
   if (!context.dryRun) validatePersonalServerContainerAbsence(output);
+}
+
+function assertPersonalNetworksAbsent(context) {
+  const output = runCommand([
+    'docker', 'network', 'ls',
+    '--filter', `label=com.docker.compose.project=${PROJECT_NAME}`,
+    '--format', '{{.Name}}',
+  ], context, { capture: true });
+  if (!context.dryRun) validatePersonalServerNetworkAbsence(output);
 }
 
 function exactDockerResourceExists(kind, name, context) {
@@ -3987,9 +5637,13 @@ export function removePersonalVolumeIfPresent(volumeName, composeVolumeName, con
   runCommand(['docker', 'volume', 'rm', volumeName], context);
 }
 
-function inspectPersonalNetworkIfPresent(context) {
-  if (!exactDockerResourceExists('network', INTERNAL_NETWORK, context)) return;
-  inspectPersonalNetwork(context);
+function inspectPersonalNetworksIfPresent(context) {
+  for (const kind of ['internal', 'edge']) {
+    const expected = PERSONAL_NETWORK_IDENTITIES[kind];
+    if (exactDockerResourceExists('network', expected.name, context)) {
+      inspectPersonalNetwork(context, kind, { allowDetached: true });
+    }
+  }
 }
 
 export function validateTailscaleServeClosed(serveStatus) {
@@ -4155,7 +5809,8 @@ function decommission(options, context) {
       }
       inspectPersonalVolume(DATABASE_VOLUME, 'personal-server-db', context);
       inspectPersonalVolume(DOCUMENT_VOLUME, 'personal-server-documents', context);
-      inspectPersonalNetwork(context);
+      inspectPersonalNetwork(context, 'internal', { allowDetached: true });
+      inspectPersonalNetwork(context, 'edge', { allowDetached: true });
       const finalBackup = performBackup({
         'encryption-key-file': options['encryption-key-file'],
       }, context, { leaveWritersStopped: true });
@@ -4214,7 +5869,7 @@ function decommission(options, context) {
       ),
       closePrivateAccess: () => closePrivateTailscaleAccess(values, context),
       removeRuntime: () => {
-        inspectPersonalNetworkIfPresent(context);
+        inspectPersonalNetworksIfPresent(context);
         runCommand([...composePrefix(context), 'down'], context);
       },
       removeDatabaseVolume: () => removePersonalVolumeIfPresent(
@@ -4229,7 +5884,9 @@ function decommission(options, context) {
       ),
       assertResourcesAbsent: () => {
         assertPersonalContainersAbsent(context);
+        assertPersonalNetworksAbsent(context);
         assertDockerResourceAbsent('network', INTERNAL_NETWORK, context);
+        assertDockerResourceAbsent('network', EDGE_NETWORK, context);
         assertDockerResourceAbsent('volume', DATABASE_VOLUME, context);
         assertDockerResourceAbsent('volume', DOCUMENT_VOLUME, context);
       },
@@ -4243,7 +5900,7 @@ function decommission(options, context) {
     });
 
     if (context.dryRun) {
-      context.writeOutput('DRY RUN: no containers, network, volumes, source files, configuration, or recovery sets were removed.\n');
+      context.writeOutput('DRY RUN: no containers, networks, volumes, source files, configuration, or recovery sets were removed.\n');
     } else {
       context.writeOutput(`Personal server decommissioned after final verified recovery set ${finalBinding.recoverySetId}.\n`);
       context.writeOutput('Application source, .env.personal-server, and all host recovery sets were preserved.\n');
@@ -4378,6 +6035,8 @@ export function runPersonalServer({
     writeOutput,
     dryRun: parsed.options.dryRun === true,
     commandTimeoutMs,
+    dockerBoundaryVerified: false,
+    dockerEndpoint: null,
   };
 
   const composePath = join(context.repoRoot, COMPOSE_FILE_NAME);
@@ -4420,6 +6079,12 @@ export function runPersonalServer({
   ) {
     throw new Error('Personal server is decommissioning; ordinary lifecycle commands are blocked pending guarded decommission resume');
   }
+  if (
+    installationState?.value.phase === 'auth-recovery-rotating' &&
+    !['status', 'stop', 'rotate-auth-recovery-secret'].includes(parsed.command)
+  ) {
+    throw new Error('Personal server has an interrupted auth recovery rotation; writers remain stopped pending the exact supported rotation resume');
+  }
 
   const handlers = {
     init: initialize,
@@ -4435,6 +6100,7 @@ export function runPersonalServer({
     'rehearse-restore': rehearseRestore,
     restore,
     decommission,
+    'rotate-auth-recovery-secret': rotateAuthRecoverySecret,
     'reset-link': (options, ctx) => accountCommand('reset-link', options, ctx),
     'reset-password': (options, ctx) => accountCommand('reset-password', options, ctx),
   };
@@ -4442,6 +6108,17 @@ export function runPersonalServer({
   const operationLock = lockRequired ? acquireOperationLock(parsed.command, context) : null;
   let operationError;
   try {
+    const currentInstallation = readInstallationState(context)?.value;
+    if (
+      currentInstallation?.phase === 'ready' &&
+      pendingAuthRecoveryRotationAvailability(currentInstallation) &&
+      parsed.command !== 'status'
+    ) {
+      if (!lockRequired || context.dryRun) {
+        throw new Error('Exact post-rotation service availability restoration is pending; use status or complete it with a non-dry-run supported command');
+      }
+      finalizeReadyAuthRecoveryRotationAvailability(currentInstallation, context);
+    }
     handlers[parsed.command](parsed.options, context);
   } catch (error) {
     operationError = error;

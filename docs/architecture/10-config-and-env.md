@@ -36,7 +36,7 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `JWT_EXPIRY` | API | Access-token lifetime as a `15m`/`1h`/`3600s` duration; capped at 1h in production (`apps/api/src/utils/env.ts:248-264`) | No, but validated if set; default `15m` (`.env.example:19`) |
 | `REFRESH_TOKEN_TTL_DAYS` | API | Refresh-token TTL; integer 1–30 (`apps/api/src/utils/env.ts:266-279`) | No, but validated if set; default `7` (`.env.example:20`) |
 | `JWT_REFRESH_SECRET` | API | Listed in Turbo's `globalEnv` for cache keying (`turbo.json:10`) | Not enforced by `validateProductionEnv` |
-| `AUTH_RECOVERY_SECRET` | API, authentication-delivery worker, and restricted rotation command | Independent canonical 32-64 byte root secret for versioned recovery tokens and keyed abuse-control subjects. It must differ from `JWT_SECRET` and `READINESS_API_KEY`; rotate only through the documented invalidate-before-replace workflow. | Yes |
+| `AUTH_RECOVERY_SECRET` | API, authentication-delivery worker, supported personal-server rotation lifecycle, and internal replacement-host rebind | Independent canonical 32-64 byte root secret for versioned recovery tokens and keyed abuse-control subjects. It must differ from `JWT_SECRET` and `READINESS_API_KEY`; normal-host incidents use the receipt-backed invalidate-before-replace lifecycle, while blank replacement recovery atomically retires the restored binding and binds a new host secret before API startup. | Yes |
 | `AUTH_COOKIE_DOMAIN` | API | Cookie scope for the canonical split-host deployment; production should use `.charitypilot.ie`, must not be a URL, must be an approved CharityPilot host, and must cover both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` (`apps/api/src/utils/env.ts`) | Yes for the canonical production deployment |
 
 ### Public origins / frontend
@@ -164,7 +164,7 @@ only `.env.personal-server.example` is committed. Its durable values are:
 | `CHARITYPILOT_PERSONAL_SERVER_ORIGIN` | One exact HTTPS DNS origin, or exact loopback HTTP for local-only use; becomes both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` |
 | `CHARITYPILOT_PERSONAL_SERVER_PORT` | Caddy's loopback-published host port; default `8080` |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Credentials for only the internal PostgreSQL container; the generated password is URL-safe |
-| `JWT_SECRET`, `READINESS_API_KEY` | Distinct random secrets of at least 32 characters |
+| `JWT_SECRET`, `AUTH_RECOVERY_SECRET`, `READINESS_API_KEY` | Three distinct random secrets; `AUTH_RECOVERY_SECRET` canonically encodes 32-64 bytes and can change only through the supported receipt-backed rotation or replacement-host rebind |
 | `PERSONAL_SERVER_OWNER_EMAIL`, `PERSONAL_SERVER_OWNER_NAME`, `PERSONAL_SERVER_ORGANISATION_NAME` | Non-secret inputs used only by the empty-database initializer |
 
 `PERSONAL_SERVER_OWNER_PASSWORD`, reset tokens and emergency account passwords
@@ -176,12 +176,19 @@ host-only `Secure`, `HttpOnly`, `SameSite=Lax` cookies. Exact loopback HTTP is
 the only personal-server exception to the `Secure` attribute; non-loopback
 plain HTTP is rejected.
 
-The fixed `172.30.250.0/24` bridge uses `172.30.250.1` as the private-tunnel
-gateway hop and `172.30.250.10` for Caddy. Caddy applies strict trusted-proxy
-parsing only to the exact gateway/loopback sources; the API's
-`TRUSTED_PROXY_ADDRESSES` contains only Caddy. The exact configured public origin
-is used directly for server-side refresh requests, CSP and redirects so TLS
-termination outside Caddy cannot cause an HTTPS-to-HTTP downgrade.
+The fixed internal `172.30.250.0/24` bridge pins Caddy at `172.30.250.10`; the
+API's `TRUSTED_PROXY_ADDRESSES` contains only that address. A separate fixed
+`172.30.251.0/24` edge bridge gives Caddy the exact `172.30.251.1` Docker host
+gateway. Caddy alone joins that non-internal transport bridge, but it trusts no
+incoming `X-Forwarded-*` values: Docker makes direct loopback and Tailscale Serve
+share that gateway, so trusting it would let another local process spoof client
+headers. Caddy's reverse proxy replaces those values, and Fastify therefore sees
+the shared gateway as the network client while account/credential rate-limit
+buckets remain distinct. Its published Windows port remains bound to
+`127.0.0.1`, and API, web and database containers remain internal-only. The
+exact configured public origin is used directly for server-side refresh
+requests, CSP and redirects so TLS termination outside Caddy cannot cause an
+HTTPS-to-HTTP downgrade.
 
 `CHARITYPILOT_INTERNAL_API_URL=http://api:3002` is server-only. Browser requests
 stay on the configured public origin and Caddy routes `/api/v1/*` internally,

@@ -13,6 +13,12 @@ import { createServer } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  composeSafeEnvironment,
+  pinnedLocalDockerEnvironment,
+  validateLocalDockerDesktopEndpoint,
+  validateLocalDockerDesktopRuntime,
+} from './personal-server-docker-boundary.mjs';
 
 const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultRepositoryRoot = resolve(scriptsDirectory, '..');
@@ -20,10 +26,19 @@ const PREFLIGHT_FORMAT = 'charitypilot-personal-server-preflight/v1';
 const PERSONAL_PROJECT = 'charitypilot-personal-server';
 const PERSONAL_NETWORK = 'charitypilot-personal-server-internal';
 const PERSONAL_SUBNET = '172.30.250.0/24';
+const PERSONAL_EDGE_NETWORK = 'charitypilot-personal-server-edge';
+const PERSONAL_EDGE_SUBNET = '172.30.251.0/24';
+const PERSONAL_NETWORKS = Object.freeze([
+  Object.freeze({ name: PERSONAL_NETWORK, composeName: 'personal-server-internal', internal: true, subnet: PERSONAL_SUBNET, gateway: '172.30.250.1' }),
+  Object.freeze({ name: PERSONAL_EDGE_NETWORK, composeName: 'personal-server-edge', internal: false, subnet: PERSONAL_EDGE_SUBNET, gateway: '172.30.251.1' }),
+]);
 const MINIMUM_FREE_GIB = 20;
 const MINIMUM_FREE_BYTES = MINIMUM_FREE_GIB * 1024 ** 3;
 const CANONICAL_REMOTE = 'https://github.com/jasperfordesq-ai/charity-governance.git';
 const RELEASE_IDENTITY_FILE = 'personal-server-release.json';
+const MINIMUM_ENGINE_VERSION = '28.0.0';
+const MINIMUM_ENGINE_API_VERSION = '1.48';
+const MINIMUM_COMPOSE_VERSION = '2.33.1';
 const REQUIRED_REPOSITORY_FILES = [
   'package.json',
   'package-lock.json',
@@ -130,6 +145,19 @@ function compareVersions(left, right) {
   return 0;
 }
 
+function compareApiVersions(left, right) {
+  const parse = (value) => {
+    const match = /^(\d+)\.(\d+)$/u.exec(String(value).trim());
+    return match ? match.slice(1).map(Number) : null;
+  };
+  const a = parse(left);
+  const b = parse(right);
+  if (!a || !b) return null;
+  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;
+  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;
+  return 0;
+}
+
 export function satisfiesNodeEngine(version, range) {
   const match = /^>=\s*(\d+\.\d+\.\d+)$/u.exec(String(range).trim());
   if (!match) return false;
@@ -167,9 +195,14 @@ function normalizedOutput(value) {
   return String(value ?? '').replaceAll('\u0000', '').trim();
 }
 
-function defaultExecute(command, args, { cwd = defaultRepositoryRoot, timeout = 15_000 } = {}) {
+function defaultExecute(command, args, {
+  cwd = defaultRepositoryRoot,
+  timeout = 15_000,
+  env = process.env,
+} = {}) {
   const result = spawnSync(command, args, {
     cwd,
+    env,
     encoding: 'utf8',
     windowsHide: true,
     timeout,
@@ -382,18 +415,33 @@ function inspectDockerNetworks(execute, repositoryRoot) {
   try {
     const networks = JSON.parse(inspect.stdout);
     const overlaps = [];
+    const identityFailures = [];
     for (const network of networks) {
+      const expectedIdentity = PERSONAL_NETWORKS.find(({ name }) => name === network?.Name);
+      if (expectedIdentity && (
+        network.Driver !== 'bridge' ||
+        network.Internal !== expectedIdentity.internal ||
+        network.Labels?.['com.docker.compose.project'] !== PERSONAL_PROJECT ||
+        network.Labels?.['com.docker.compose.network'] !== expectedIdentity.composeName ||
+        !Array.isArray(network.IPAM?.Config) || network.IPAM.Config.length !== 1 ||
+        network.IPAM.Config[0]?.Subnet !== expectedIdentity.subnet ||
+        network.IPAM.Config[0]?.Gateway !== expectedIdentity.gateway
+      )) {
+        identityFailures.push({ name: expectedIdentity.name });
+      }
       for (const config of network?.IPAM?.Config ?? []) {
-        if (
-          typeof config?.Subnet === 'string' &&
-          cidrOverlaps(PERSONAL_SUBNET, config.Subnet) &&
-          !(network.Name === PERSONAL_NETWORK && config.Subnet === PERSONAL_SUBNET)
-        ) {
-          overlaps.push({ name: network.Name, subnet: config.Subnet });
+        if (typeof config?.Subnet !== 'string') continue;
+        for (const reserved of PERSONAL_NETWORKS) {
+          if (
+            cidrOverlaps(reserved.subnet, config.Subnet) &&
+            !(network.Name === reserved.name && config.Subnet === reserved.subnet)
+          ) {
+            overlaps.push({ name: network.Name, subnet: config.Subnet, reserved: reserved.subnet });
+          }
         }
       }
     }
-    return { overlaps };
+    return { overlaps, identityFailures };
   } catch {
     return { error: 'Docker returned invalid network inspection JSON.', overlaps: [] };
   }
@@ -657,36 +705,113 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
     expectedNpm ? `Install the declared package manager with: npm install --global npm@${expectedNpm}` : 'Restore package.json packageManager metadata.',
   );
 
-  const dockerVersion = execute('docker', [
+  const dockerContext = execute('docker', ['context', 'show'], { cwd: repositoryRoot, timeout: 30_000 });
+  const contextName = dockerContext.stdout.trim();
+  const dockerContextInspect = contextName
+    ? execute('docker', [
+      'context',
+      'inspect',
+      contextName,
+      '--format',
+      '{{.Endpoints.docker.Host}}|{{.Endpoints.docker.SkipTLSVerify}}',
+    ], { cwd: repositoryRoot, timeout: 30_000 })
+    : { status: 1, stdout: '', stderr: 'Docker context name is unavailable.' };
+  const [dockerEndpoint = '', dockerSkipTls = ''] = dockerContextInspect.stdout.split('|');
+  let endpointBoundarySafe = false;
+  let endpointBoundaryError = '';
+  try {
+    if (dockerContext.status !== 0 || dockerContextInspect.status !== 0 || !contextName) {
+      throw new Error(dockerContextInspect.stderr || dockerContext.stderr || 'Could not inspect the effective Docker context.');
+    }
+    validateLocalDockerDesktopEndpoint({
+      endpoint: dockerEndpoint,
+      skipTlsVerify: dockerSkipTls,
+    }, environment);
+    endpointBoundarySafe = true;
+  } catch (error) {
+    endpointBoundaryError = error instanceof Error ? error.message : String(error);
+  }
+
+  const pinnedDockerEnv = endpointBoundarySafe
+    ? composeSafeEnvironment(pinnedLocalDockerEnvironment(environment, dockerEndpoint.trim()))
+    : null;
+  const executePinnedDocker = (args, options = {}) => {
+    if (!pinnedDockerEnv) {
+      return { status: 1, stdout: '', stderr: endpointBoundaryError || 'Local Docker boundary validation failed.' };
+    }
+    return execute('docker', args, {
+      cwd: repositoryRoot,
+      ...options,
+      env: pinnedDockerEnv,
+    });
+  };
+
+  const dockerVersion = executePinnedDocker([
     'version',
     '--format',
-    '{{.Client.Version}}|{{.Server.Version}}|{{.Server.Os}}|{{.Server.Arch}}',
+    '{{.Client.Version}}|{{.Server.Version}}|{{.Server.Os}}|{{.Server.Arch}}|{{.Server.APIVersion}}',
   ], { cwd: repositoryRoot, timeout: 30_000 });
   const dockerParts = dockerVersion.stdout.split('|');
-  const dockerValid = dockerVersion.status === 0 && dockerParts.length === 4 && dockerParts[0] && dockerParts[1] && dockerParts[2] === 'linux';
+  const engineComparison = compareVersions(dockerParts[1], MINIMUM_ENGINE_VERSION);
+  const engineApiComparison = compareApiVersions(dockerParts[4], MINIMUM_ENGINE_API_VERSION);
+  const dockerValid = dockerVersion.status === 0 && dockerParts.length === 5 && dockerParts[0] &&
+    engineComparison !== null && engineComparison >= 0 && engineApiComparison !== null &&
+    engineApiComparison >= 0 && dockerParts[2] === 'linux';
   addCheck(
     checks,
     'docker.engine',
     Boolean(dockerValid),
     dockerValid
-      ? `Docker client ${dockerParts[0]} can reach Linux server ${dockerParts[1]} (${dockerParts[3]}).`
-      : 'Docker client/server is unavailable or Docker is not running Linux containers.',
-    'Start Docker Desktop, select Linux containers, wait for the engine to be ready, and rerun preflight.',
+      ? `Docker client ${dockerParts[0]} can reach Linux server ${dockerParts[1]} API ${dockerParts[4]} (${dockerParts[3]}).`
+      : `Docker Engine ${MINIMUM_ENGINE_VERSION} or later with API ${MINIMUM_ENGINE_API_VERSION} or later is required in Linux-container mode.`,
+    'Update Docker Desktop, select Linux containers, wait for the engine to be ready, and rerun preflight.',
   );
 
-  const composeVersion = execute('docker', ['compose', 'version', '--short'], { cwd: repositoryRoot });
-  const composeHelp = execute('docker', ['compose', 'up', '--help'], { cwd: repositoryRoot });
-  const composeValid = composeVersion.status === 0 && composeHelp.status === 0 && /--wait\b/u.test(composeHelp.stdout) && /--wait-timeout\b/u.test(composeHelp.stdout);
+  const dockerInfo = executePinnedDocker(['info', '--format', '{{.OperatingSystem}}'], { timeout: 30_000 });
+  const usesDockerDesktop = /docker desktop/iu.test(dockerInfo.stdout);
+  let localDockerDesktop = false;
+  if (endpointBoundarySafe && dockerInfo.status === 0 && usesDockerDesktop && dockerVersion.status === 0) {
+    try {
+      validateLocalDockerDesktopRuntime({
+        endpoint: dockerEndpoint,
+        skipTlsVerify: dockerSkipTls,
+        operatingSystem: dockerInfo.stdout,
+        serverOs: dockerParts[2],
+        apiVersion: dockerParts[4],
+      }, environment);
+      localDockerDesktop = true;
+    } catch {
+      localDockerDesktop = false;
+    }
+  }
+  addCheck(
+    checks,
+    'docker.local-desktop',
+    localDockerDesktop,
+    localDockerDesktop
+      ? `Docker context ${contextName} uses the local Windows Docker Desktop Linux named pipe.`
+      : 'The effective Docker endpoint is not the local Windows Docker Desktop Linux named pipe, or a remote-daemon environment override is active.',
+    'Clear DOCKER_HOST, Docker TLS/certificate/API/config/platform overrides, DOCKER_BUILDKIT, BUILDKIT_*, and BUILDX_*; switch Docker Desktop to Linux containers, select its local context, and rerun preflight.',
+    endpointBoundaryError || undefined,
+  );
+
+  const executeVerifiedDocker = (command, args, options = {}) => {
+    if (command !== 'docker' || !localDockerDesktop) {
+      return { status: 1, stdout: '', stderr: 'Verified local Docker Desktop runtime is unavailable.' };
+    }
+    return executePinnedDocker(args, options);
+  };
+  const composeVersion = executeVerifiedDocker('docker', ['compose', 'version', '--short']);
+  const composeHelp = executeVerifiedDocker('docker', ['compose', 'up', '--help']);
+  const composeComparison = compareVersions(composeVersion.stdout, MINIMUM_COMPOSE_VERSION);
+  const composeValid = composeVersion.status === 0 && composeComparison !== null && composeComparison >= 0 && composeHelp.status === 0 && /--wait\b/u.test(composeHelp.stdout) && /--wait-timeout\b/u.test(composeHelp.stdout);
   addCheck(
     checks,
     'docker.compose',
     composeValid,
-    composeValid ? `Docker Compose ${composeVersion.stdout} supports --wait and --wait-timeout.` : 'Docker Compose v2 with required wait capabilities is unavailable.',
-    'Update Docker Desktop/Compose, then confirm `docker compose up --help` lists --wait and --wait-timeout.',
+    composeValid ? `Docker Compose ${composeVersion.stdout} supports --wait, --wait-timeout and deterministic edge-network gw_priority.` : `Docker Compose ${MINIMUM_COMPOSE_VERSION} or later with required wait capabilities is unavailable.`,
+    `Update Docker Desktop/Compose to ${MINIMUM_COMPOSE_VERSION} or later, then confirm \`docker compose up --help\` lists --wait and --wait-timeout.`,
   );
-
-  const dockerInfo = execute('docker', ['info', '--format', '{{.OperatingSystem}}'], { cwd: repositoryRoot, timeout: 30_000 });
-  const usesDockerDesktop = /docker desktop/iu.test(dockerInfo.stdout);
   const wsl = detectWsl2(execute, repositoryRoot);
   const wslRequired = windows && usesDockerDesktop;
   const wslValid = !wslRequired || (wsl.available && wsl.versionTwo);
@@ -712,16 +837,14 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
     'Stop the owning application or choose a different --port and matching loopback origin. Do not publish on 0.0.0.0.',
   );
 
-  const networks = inspectDockerNetworks(execute, repositoryRoot);
-  const subnetValid = !networks.error && (resumeFailed
-    ? networks.overlaps.every(({ name }) => name === PERSONAL_NETWORK)
-    : networks.overlaps.length === 0);
+  const networks = inspectDockerNetworks(executeVerifiedDocker, repositoryRoot);
+  const subnetValid = !networks.error && networks.overlaps.length === 0 && (networks.identityFailures?.length ?? 0) === 0;
   addCheck(
     checks,
     'network.personal-subnet',
     subnetValid,
-    subnetValid ? `${PERSONAL_SUBNET} does not overlap an existing Docker network.` : `The reserved subnet cannot be used${networks.overlaps.length ? ` because of ${networks.overlaps.map((item) => `${item.name} (${item.subnet})`).join(', ')}` : ''}.`,
-    'Choose a coordinated replacement subnet and update Compose, Caddy trust, API trusted proxy, tests and documentation together; do not broaden proxy trust.',
+    subnetValid ? `${PERSONAL_SUBNET} and ${PERSONAL_EDGE_SUBNET} do not overlap existing Docker networks, and any preserved exact-name network has its reviewed identity.` : `A reserved subnet or preserved network identity cannot be used${networks.overlaps.length ? ` because of ${networks.overlaps.map((item) => `${item.name} (${item.subnet}) overlaps ${item.reserved}`).join(', ')}` : ''}${networks.identityFailures?.length ? `; invalid identities: ${networks.identityFailures.map(({ name }) => name).join(', ')}` : ''}.`,
+    'Preserve any failed-install resources. For a new install, choose coordinated replacement subnets and update Compose, Caddy header policy, API trusted proxy, tests and documentation together; never add a trusted edge proxy.',
     networks.error || undefined,
   );
 
@@ -770,7 +893,7 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
     environmentAbsent ? undefined : { envPath, legacyEnvPath },
   );
 
-  const resources = inspectExistingResources(execute, repositoryRoot);
+  const resources = inspectExistingResources(executeVerifiedDocker, repositoryRoot);
   const resourceItems = Object.values(resources.found ?? {}).flat();
   const resourcesAbsent = !resources.error && resourceItems.length === 0;
   addCheck(
@@ -806,6 +929,7 @@ export async function runPersonalServerPreflight(options = {}, dependencies = {}
     origin,
     port,
     personalSubnet: PERSONAL_SUBNET,
+    personalEdgeSubnet: PERSONAL_EDGE_SUBNET,
     source,
     checks,
     warnings,

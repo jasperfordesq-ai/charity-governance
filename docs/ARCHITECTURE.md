@@ -47,9 +47,13 @@ flowchart LR
 For local-only use the exact browser origin may be
 `http://localhost:8080`. Remote directors use one exact private HTTPS origin;
 Tailscale terminates HTTPS and proxies only to Caddy's loopback port. The
-fixed bridge pins Caddy's Docker gateway and API addresses: Caddy trusts
-forwarded scheme/client headers only from the exact gateway, while Fastify
-trusts only Caddy. The configured private origin remains authoritative for
+two fixed bridges keep trust explicit: Caddy alone joins the non-internal edge
+bridge, while Fastify remains on the internal bridge and trusts only Caddy's
+exact `172.30.250.10` address. Caddy deliberately trusts no incoming
+`X-Forwarded-*` values because local loopback and Tailscale Serve share the same
+Docker gateway; its reverse proxy replaces those values instead of allowing a
+local process to spoof a client address. Caddy's Windows port is still bound
+only to loopback. The configured private origin remains authoritative for
 Next.js redirects, CSP and server-side refresh requests across that HTTP hop.
 The database, API and Next.js ports are not published. See
 [Personal Server Deployment on Windows](personal-server-deployment.md) for the

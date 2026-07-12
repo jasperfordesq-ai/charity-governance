@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   readSync,
   renameSync,
   rmSync,
@@ -575,7 +576,11 @@ export function verifyPersonalServerRecoverySet({
   encryptionKeyFile,
   extractDocuments = true,
   materialize = true,
+  allowIncompleteDirectory = false,
 }) {
+  if (typeof allowIncompleteDirectory !== 'boolean') {
+    throw new Error('Recovery-set incomplete-directory policy must be boolean');
+  }
   const resolvedSet = resolve(recoverySetPath);
   const setStatus = lstatSync(resolvedSet);
   if (!setStatus.isDirectory() || setStatus.isSymbolicLink()) throw new Error('Recovery set must be a real non-symbolic-link directory');
@@ -595,7 +600,10 @@ export function verifyPersonalServerRecoverySet({
     throw new Error('Recovery manifest identity does not match this personal server');
   }
   validateApplicationIdentity(manifest.application);
-  if (basename(resolvedSet) !== manifest.recoverySetId) {
+  const expectedDirectoryName = allowIncompleteDirectory
+    ? `.${manifest.recoverySetId}.incomplete`
+    : manifest.recoverySetId;
+  if (basename(resolvedSet) !== expectedDirectoryName) {
     throw new Error('Recovery-set directory name does not match its authenticated recovery-set ID');
   }
   const database = verifyArtifactDescriptor(resolvedSet, manifest.database, 'Database artifact');
@@ -656,7 +664,10 @@ export function verifyPersonalServerRecoverySet({
     };
   }
 
-  const stagingDirectory = mkdtempSync(join(tmpdir(), RECOVERY_STAGING_PREFIX));
+  const stagingDirectory = mkdtempSync(join(
+    tmpdir(),
+    `${RECOVERY_STAGING_PREFIX}${manifest.recoverySetId}-`,
+  ));
   let complete = false;
   try {
     const databasePath = materializeArtifact(database, stagingDirectory, keyRecord, 'database', manifest.recoverySetId);
@@ -704,6 +715,23 @@ export function cleanupPersonalServerRecoveryStaging(path) {
     throw new Error('Refusing to remove a recovery staging path outside the operating-system temporary directory');
   }
   rmSync(resolved, { recursive: true, force: true });
+}
+
+export function cleanupPersonalServerRecoveryStagingForSet(recoverySetId) {
+  if (!SAFE_RECOVERY_ID.test(recoverySetId ?? '')) {
+    throw new Error('Recovery-set identity for staging cleanup is invalid');
+  }
+  const tempRoot = resolve(tmpdir());
+  const prefix = `${RECOVERY_STAGING_PREFIX}${recoverySetId}-`;
+  for (const entry of readdirSync(tempRoot, { withFileTypes: true })) {
+    if (!entry.name.startsWith(prefix)) continue;
+    const path = join(tempRoot, entry.name);
+    const status = lstatSync(path);
+    if (!entry.isDirectory() || !status.isDirectory() || status.isSymbolicLink()) {
+      throw new Error('Recovery staging cleanup found an unsafe matching path');
+    }
+    cleanupPersonalServerRecoveryStaging(path);
+  }
 }
 
 export const personalServerRecoveryFormats = Object.freeze({

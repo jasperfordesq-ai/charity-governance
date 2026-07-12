@@ -153,8 +153,10 @@ After the workflow succeeds:
 4. Run the documented installer from the extracted bundle while retaining all
    three original assets.
 5. Complete clean-host install, reboot/login, private-access, off-host recovery,
-   guarded restore and previous-release update/rollback acceptance. A green
-   release workflow is necessary but not sufficient for 100/100.
+   guarded restore, replacement-host authentication-recovery rebind, supported
+   incident-secret rotation/resume, post-rotation backup rehearsal, restored-link
+   rejection/new-link success, and previous-release update/rollback acceptance.
+   A green release workflow is necessary but not sufficient for 100/100.
 6. Record the release URL, commit SHA, artifact SHA-256, workflow run URL, and
    clean-host acceptance evidence in the readiness record. Never record the
    Owner password, environment, recovery key, private hostname, or charity data.

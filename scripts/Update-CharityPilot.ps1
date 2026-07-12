@@ -19,7 +19,10 @@ if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { throw 'LOCALAPPDATA is un
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $archiveVerifier = Join-Path $PSScriptRoot 'personal-server-release-archive.ps1'
 $aclHelper = Join-Path $PSScriptRoot 'personal-server-windows-acl.ps1'
+$dockerBoundaryHelper = Join-Path $PSScriptRoot 'personal-server-windows-docker-boundary.ps1'
 $pointerPath = Join-Path $env:LOCALAPPDATA 'CharityPilot\personal-server-location.json'
+
+. $dockerBoundaryHelper
 
 function Get-PropertyValue {
     param([object]$InputObject, [string]$Name)
@@ -223,8 +226,8 @@ if ($LASTEXITCODE -ne 0 -or $nodeEngine -notmatch '^>=\s*([0-9]+\.[0-9]+\.[0-9]+
 }
 $actualNpm = (& $npm --version | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $actualNpm -cne $declaredNpm) { throw "npm $declaredNpm is required." }
-$dockerOs = (& docker version --format '{{.Server.Os}}' | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $dockerOs -cne 'linux') { throw 'Docker Desktop must be running Linux containers.' }
+$dockerBoundary = Assert-CharityPilotLocalDockerBoundary
+Write-Host "Verified local Docker Desktop Engine $($dockerBoundary.engineVersion), API $($dockerBoundary.apiVersion), Compose $($dockerBoundary.composeVersion)."
 
 Write-Host "Verified version-bound update: $currentImageTag -> $($identity.tag)"
 Write-Host "Current rollback source: $currentSourceRoot"

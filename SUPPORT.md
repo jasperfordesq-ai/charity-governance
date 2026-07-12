@@ -21,8 +21,9 @@ For a new Windows installation, failed-install resume or blank replacement-host
 recovery, use only `scripts/Install-CharityPilot.ps1`. For a verified release
 update or its permitted pre-cutover resume, use only
 `scripts/Update-CharityPilot.ps1`. On an existing installation, use the exact
-documented start/status/stop/backup/rehearsal/restore/reset/decommission npm
-commands. The low-level `personal:server:init`/`update` commands, raw
+documented start/status/stop/backup/rehearsal/restore/reset/decommission and
+authentication-recovery rotation npm commands. The low-level
+`personal:server:init`/`update` commands, raw
 `docker compose` mutation, manual database migration/restore, volume deletion
 and Docker Desktop factory reset are not supported substitutes.
 
@@ -30,6 +31,14 @@ Private remote access currently means the exact `.ts.net` HTTPS origin managed
 by Tailscale Serve. Tailscale Funnel, Cloudflare Tunnel, router forwarding and
 other tunnels are unsupported. Local-only use must remain on the exact loopback
 HTTP origin selected during installation.
+
+Docker Desktop uses two fixed personal-server bridges. PostgreSQL, Fastify and
+Next.js remain on the internal bridge only; Caddy is the sole dual-homed
+container and the sole host-port publisher. The second, non-internal bridge is
+required to carry Caddy's loopback-only port to Windows. It is not permission to
+bind a public interface or attach another container. Preserve both networks and
+all volumes after a failed install; the supported installer resume path verifies
+their exact identities.
 
 ## Safe diagnostics
 
@@ -66,6 +75,7 @@ Use the protected phase to select the supported route:
 | `updating` after an ambiguous/later cutover | Preserve both sources, images, receipt and recovery sets; ordinary commands remain blocked pending supervised recovery. |
 | `restoring` | Keep writers stopped and preserve both selected and preservation recovery sets. |
 | `decommissioning` | Retry only with the exact final recovery set recorded in protected state/output. |
+| `auth-recovery-rotating` | Keep application writers stopped. Repeat only the supported rotation command with the same named operator, case reference and exact receipt confirmation; never start manually or restore the credential-bearing pre-invalidation set into service. Completion requires a separately encrypted post-rotation set and isolated rehearsal. |
 | `decommissioned` | Status only. Recover on another empty state root through the replacement-host installer. |
 
 For rollback or an origin-rebind restore, an omitted-confirmation `--dry-run`

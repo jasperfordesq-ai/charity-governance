@@ -50,6 +50,19 @@ function dryRunArgs() {
   ];
 }
 
+function controlStatusArgs() {
+  return [
+    '--control-status',
+    '--reason',
+    'SUSPECTED_KEY_COMPROMISE',
+    '--operator',
+    'Jasper Ford',
+    '--case-reference',
+    'INC-2026-0711',
+    '--confirm-api-and-scheduler-quiesced',
+  ];
+}
+
 function executeArgs(counts = COUNTS) {
   const confirmation = authRecoverySecretRotationConfirmation(
     'SUSPECTED_KEY_COMPROMISE',
@@ -127,6 +140,35 @@ test('rotation parser requires a quiesced dry-run and emits no execute authority
   );
 });
 
+test('control status requires named quiesced operator evidence and carries no mutation authority', () => {
+  assert.deepEqual(parseAuthRecoverySecretRotationArgs(controlStatusArgs()), {
+    mode: 'control-status',
+    reason: 'SUSPECTED_KEY_COMPROMISE',
+    operator: 'Jasper Ford',
+    caseReference: 'INC-2026-0711',
+    apiAndSchedulerQuiesced: true,
+    outboxPreservationUnderstood: false,
+  });
+  assert.throws(
+    () => parseAuthRecoverySecretRotationArgs(controlStatusArgs().filter(
+      (argument) => argument !== '--confirm-api-and-scheduler-quiesced',
+    )),
+    /--confirm-api-and-scheduler-quiesced is required/,
+  );
+  const unnamedOperator = controlStatusArgs();
+  unnamedOperator[unnamedOperator.indexOf('--operator') + 1] = 'admin';
+  assert.throws(
+    () => parseAuthRecoverySecretRotationArgs(unnamedOperator),
+    /safe named human operator identity/,
+  );
+  assert.throws(
+    () => parseAuthRecoverySecretRotationArgs([
+      ...controlStatusArgs(), '--expected-generation', '1',
+    ]),
+    /must not be supplied with --control-status/,
+  );
+});
+
 test('rotation execute is bound to every reviewed count and an exact acknowledgement', () => {
   const command = parseAuthRecoverySecretRotationArgs(executeArgs());
   assert.deepEqual(command.expected, COUNTS);
@@ -198,9 +240,172 @@ test('live database identity distinguishes schemas within the same database auth
   );
 });
 
+test('control status exposes only bounded reconciliation evidence for all three permitted lifecycle postures', async () => {
+  const postures = [
+    {
+      label: 'reviewed old secret is still active',
+      blocked: false,
+      currentSecretActive: true,
+      counts: COUNTS,
+    },
+    {
+      label: 'rotation is blocked with zero postconditions',
+      blocked: true,
+      currentSecretActive: false,
+      counts: {
+        ...COUNTS,
+        generation: COUNTS.generation + 1,
+        capabilities: 0,
+        requestEvidenceRows: 0,
+        legacySlots: 0,
+        rateBuckets: 0,
+      },
+    },
+    {
+      label: 'replacement secret is active with zero postconditions',
+      blocked: false,
+      currentSecretActive: true,
+      counts: {
+        ...COUNTS,
+        generation: COUNTS.generation + 1,
+        capabilities: 0,
+        requestEvidenceRows: 0,
+        legacySlots: 0,
+        rateBuckets: 0,
+      },
+    },
+  ] as const;
+
+  for (const posture of postures) {
+    let statusInspections = 0;
+    const store: AuthRecoverySecretRotationStore = {
+      async controlStatus() {
+        statusInspections += 1;
+        return {
+          blocked: posture.blocked,
+          currentSecretActive: posture.currentSecretActive,
+          counts: posture.counts,
+          databaseIdentitySha256: DATABASE_IDENTITY_SHA256,
+        };
+      },
+      async inspect() { throw new Error('control status must not use active-secret dry-run'); },
+      async rotate() { throw new Error('control status must not rotate'); },
+      async activate() { throw new Error('control status must not activate'); },
+    };
+    const result = await runAuthRecoverySecretRotation(
+      store,
+      parseAuthRecoverySecretRotationArgs(controlStatusArgs()),
+      {
+        ...PRODUCTION_ENV,
+        AUTH_RECOVERY_SECRET: 'current-root-secret-that-must-not-leak',
+      },
+    );
+    assert.equal(statusInspections, 1, posture.label);
+    assert.equal(result.mode, 'CONTROL_STATUS', posture.label);
+    assert.equal(result.mutationApplied, false, posture.label);
+    assert.equal(result.blocked, posture.blocked, posture.label);
+    assert.equal(result.generation, posture.counts.generation, posture.label);
+    assert.equal(result.currentSecretActive, posture.currentSecretActive, posture.label);
+    assert.equal(result.capabilities, posture.counts.capabilities, posture.label);
+    assert.equal(result.requestEvidenceRows, posture.counts.requestEvidenceRows, posture.label);
+    assert.equal(result.legacySlots, posture.counts.legacySlots, posture.label);
+    assert.equal(result.rateBuckets, posture.counts.rateBuckets, posture.label);
+    assert.equal(result.securityNotices, posture.counts.securityNotices, posture.label);
+    assert.equal(result.databaseIdentitySha256, DATABASE_IDENTITY_SHA256, posture.label);
+    assert.equal(result.deploymentProfile, 'production', posture.label);
+    assert.match(result.caseReferenceSha256, /^[a-f0-9]{64}$/u, posture.label);
+    const serialized = JSON.stringify(result);
+    assert.doesNotMatch(
+      serialized,
+      /current-root-secret|activeSecretFingerprint|retiredSecretFingerprint|Jasper Ford|INC-2026-0711/u,
+      posture.label,
+    );
+  }
+});
+
+test('control status fails closed before inspection without an explicit production deployment profile', async () => {
+  let touched = false;
+  const store: AuthRecoverySecretRotationStore = {
+    async controlStatus() {
+      touched = true;
+      return {
+        blocked: false,
+        currentSecretActive: true,
+        counts: COUNTS,
+        databaseIdentitySha256: DATABASE_IDENTITY_SHA256,
+      };
+    },
+    async inspect() { throw new Error('must not inspect'); },
+    async rotate() { throw new Error('must not rotate'); },
+    async activate() { throw new Error('must not activate'); },
+  };
+  await assert.rejects(
+    () => runAuthRecoverySecretRotation(
+      store,
+      parseAuthRecoverySecretRotationArgs(controlStatusArgs()),
+      { NODE_ENV: 'development', CHARITYPILOT_DEPLOYMENT_MODE: 'production' },
+    ),
+    /NODE_ENV must be production/,
+  );
+  await assert.rejects(
+    () => runAuthRecoverySecretRotation(
+      store,
+      parseAuthRecoverySecretRotationArgs(controlStatusArgs()),
+      { NODE_ENV: 'production' },
+    ),
+    /CHARITYPILOT_DEPLOYMENT_MODE must be explicit/,
+  );
+  assert.equal(touched, false);
+});
+
+test('control status rejects internally inconsistent or unbounded store evidence', async () => {
+  const baseStore = {
+    async inspect() { throw new Error('must not inspect'); },
+    async rotate() { throw new Error('must not rotate'); },
+    async activate() { throw new Error('must not activate'); },
+  };
+  await assert.rejects(
+    () => runAuthRecoverySecretRotation(
+      {
+        ...baseStore,
+        async controlStatus() {
+          return {
+            blocked: true,
+            currentSecretActive: true,
+            counts: COUNTS,
+            databaseIdentitySha256: DATABASE_IDENTITY_SHA256,
+          };
+        },
+      },
+      parseAuthRecoverySecretRotationArgs(controlStatusArgs()),
+      PRODUCTION_ENV,
+    ),
+    /control status is invalid/,
+  );
+  await assert.rejects(
+    () => runAuthRecoverySecretRotation(
+      {
+        ...baseStore,
+        async controlStatus() {
+          return {
+            blocked: false,
+            currentSecretActive: false,
+            counts: { ...COUNTS, capabilities: Number.MAX_SAFE_INTEGER + 1 },
+            databaseIdentitySha256: DATABASE_IDENTITY_SHA256,
+          };
+        },
+      },
+      parseAuthRecoverySecretRotationArgs(controlStatusArgs()),
+      PRODUCTION_ENV,
+    ),
+    /control status capabilities count is invalid/,
+  );
+});
+
 test('dry-run reports only bounded counts, reason, a case digest, and exact next acknowledgement', async () => {
   let inspected = 0;
   const store: AuthRecoverySecretRotationStore = {
+    async controlStatus() { throw new Error('must not inspect control status'); },
     async inspect() { inspected += 1; return EVIDENCE; },
     async rotate() { throw new Error('must not execute'); },
     async activate() { throw new Error('must not activate'); },
@@ -234,6 +439,7 @@ test('execute delegates only the reviewed counts and preserves completion notice
   let rotatedWith: AuthRecoverySecretRotationCounts | undefined;
   let rotatedDatabaseIdentity: string | undefined;
   const store: AuthRecoverySecretRotationStore = {
+    async controlStatus() { throw new Error('must not inspect control status'); },
     async inspect() { throw new Error('execute must not use unlocked preview'); },
     async rotate(expected, expectedDatabaseIdentitySha256) {
       rotatedWith = expected;
@@ -271,6 +477,7 @@ test('activation delegates only the reviewed generation and reports zero mutatio
   let activatedGeneration: number | undefined;
   let activatedDatabaseIdentity: string | undefined;
   const store: AuthRecoverySecretRotationStore = {
+    async controlStatus() { throw new Error('must not inspect control status'); },
     async inspect() { throw new Error('must not inspect'); },
     async rotate() { throw new Error('must not rotate'); },
     async activate(generation, expectedDatabaseIdentitySha256) {
@@ -303,6 +510,7 @@ test('activation delegates only the reviewed generation and reports zero mutatio
 test('rotation refuses changed live database evidence and deployment profile drift', async () => {
   let touched = false;
   const store: AuthRecoverySecretRotationStore = {
+    async controlStatus() { touched = true; throw new Error('unexpected control status'); },
     async inspect() { touched = true; return EVIDENCE; },
     async rotate() {
       touched = true;
@@ -367,6 +575,14 @@ test('production rotation store atomically invalidates every capability without 
     join(process.cwd(), 'src', 'jobs', 'process-auth-email-delivery.ts'),
     'utf8',
   );
+  const controlStatusMethod = source.slice(
+    source.indexOf('  async controlStatus()'),
+    source.indexOf('  async inspect()', source.indexOf('  async controlStatus()')),
+  );
+  const controlStatusCountReader = source.slice(
+    source.indexOf('  private async lockedCountsForGeneration('),
+    source.indexOf('  private async lockedCounts(', source.indexOf('  private async lockedCountsForGeneration(')),
+  );
 
   assert.match(source, /Prisma\.TransactionIsolationLevel\.Serializable/);
   assert.match(
@@ -395,6 +611,16 @@ test('production rotation store atomically invalidates every capability without 
   assert.match(source, /INSERT INTO "AuthRecoveryRetiredSecret"/);
   assert.match(source, /replacement key was previously retired/);
   assert.match(source, /requireAuthRecoveryControlForCurrentSecret/);
+  assert.match(controlStatusMethod, /lockAuthRecoveryControl/);
+  assert.match(controlStatusMethod, /currentSecretActive/);
+  assert.doesNotMatch(
+    controlStatusMethod,
+    /requireAuthRecoveryControlForCurrentSecret|assertAuthRecoveryControlForCurrentSecret|bindAuthRecoveryControlForRuntime|\b(?:INSERT|UPDATE|DELETE)\b/u,
+  );
+  assert.doesNotMatch(
+    controlStatusCountReader,
+    /\b(?:INSERT|UPDATE|DELETE)\b/u,
+  );
   assert.doesNotMatch(source, /(?:DELETE FROM|UPDATE) "AuthSecurityEmailOutbox"/);
   assert.match(controlSource, /has not been explicitly bound/);
   assert.match(serverSource, /bindAuthRecoveryControlForRuntime\(app\.prisma\)[\s\S]*app\.listen/);

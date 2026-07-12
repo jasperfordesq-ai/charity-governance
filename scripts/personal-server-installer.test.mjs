@@ -11,11 +11,13 @@ const installerPath = resolve(root, 'scripts/Install-CharityPilot.ps1');
 const aclPath = resolve(root, 'scripts/personal-server-windows-acl.ps1');
 const archiveVerifierPath = resolve(root, 'scripts/personal-server-release-archive.ps1');
 const updaterPath = resolve(root, 'scripts/Update-CharityPilot.ps1');
+const dockerBoundaryPath = resolve(root, 'scripts/personal-server-windows-docker-boundary.ps1');
 const failedResumeSourcePath = resolve(root, 'scripts/personal-server-failed-resume-source.ps1');
 const installer = await import('node:fs').then(({ readFileSync }) => readFileSync(installerPath, 'utf8'));
 const acl = await import('node:fs').then(({ readFileSync }) => readFileSync(aclPath, 'utf8'));
 const archiveVerifier = await import('node:fs').then(({ readFileSync }) => readFileSync(archiveVerifierPath, 'utf8'));
 const updater = await import('node:fs').then(({ readFileSync }) => readFileSync(updaterPath, 'utf8'));
+const dockerBoundary = await import('node:fs').then(({ readFileSync }) => readFileSync(dockerBoundaryPath, 'utf8'));
 const failedResumeSource = readFileSync(failedResumeSourcePath, 'utf8');
 
 test('Windows installer is checkout-independent and uses the supported wrappers', () => {
@@ -46,7 +48,7 @@ test('installer supports no-write preflight and dry-run paths before state creat
   assert.ok(preflightOnlyIndex > preflightIndex && preflightOnlyIndex < stateCreateIndex);
   assert.ok(dryRunIndex > preflightIndex && dryRunIndex < stateCreateIndex);
   assert.match(installer, /No installation state was created/u);
-  assert.match(installer, /No directory, environment file, container, volume, network, image, database, organisation or account was created/u);
+  assert.match(installer, /No directory, environment file, container, volume, networks, image, database, organisation or account was created/u);
 });
 
 test('durable state is external, non-secret, phased and backup-gated', () => {
@@ -267,6 +269,10 @@ test('Windows updater requires a verified new bundle and delegates version-bound
   assert.match(updater, /StringComparison\]::OrdinalIgnoreCase/u);
   assert.match(updater, /ReparsePoint/u);
   assert.match(updater, /Node satisfying \$nodeEngine is required/u);
+  assert.match(updater, /personal-server-windows-docker-boundary\.ps1/u);
+  assert.match(updater, /Assert-CharityPilotLocalDockerBoundary/u);
+  assert.ok(updater.indexOf('Assert-CharityPilotLocalDockerBoundary') < updater.indexOf('if ($PreflightOnly)'));
+  assert.ok(updater.indexOf('Assert-CharityPilotLocalDockerBoundary') < updater.indexOf("FileMode]::CreateNew"));
   assert.match(updater, /activeImageTag/u);
   assert.match(updater, /status', '--porcelain=v1', '--untracked-files=all/u);
   assert.match(updater, /'rev-parse', 'HEAD'/u);
@@ -277,10 +283,14 @@ test('Windows updater requires a verified new bundle and delegates version-bound
   assert.match(updater, /'merge-base', '--is-ancestor'/u);
   assert.match(updater, /personal:server:rollback -- --dry-run/u);
   assert.doesNotMatch(updater, /git\s+(?:pull|fetch)|docker\s+system\s+prune/iu);
+  assert.match(dockerBoundary, /DOCKER_DEFAULT_PLATFORM/u);
+  assert.match(dockerBoundary, /DOCKER_CONFIG/u);
+  assert.match(dockerBoundary, /BUILDKIT_\.\+/u);
+  assert.match(dockerBoundary, /BUILDX_\.\+/u);
 });
 
 test('PowerShell installer and helpers parse without syntax errors', { skip: process.platform !== 'win32' }, () => {
-  for (const scriptPath of [installerPath, updaterPath, aclPath, archiveVerifierPath, failedResumeSourcePath]) {
+  for (const scriptPath of [installerPath, updaterPath, aclPath, archiveVerifierPath, failedResumeSourcePath, dockerBoundaryPath]) {
     const escaped = scriptPath.replaceAll("'", "''");
     const command = `$tokens=$null; $errors=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('${escaped}', [ref]$tokens, [ref]$errors); if ($errors.Count) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }`;
     const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {

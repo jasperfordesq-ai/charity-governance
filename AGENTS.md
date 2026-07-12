@@ -25,6 +25,12 @@ read:
 - [Security Policy](SECURITY.md)
 - [Support Boundaries](SUPPORT.md)
 
+For the separate `personal-server` operating mode, those deployment, local-use,
+scorecard, release-maintainer, security and support documents are the current
+authority. Older personal-server status snapshots embedded in the full-platform
+handoff or remediation/completion audits do not override them; preserve the
+full-platform issue ledger for public-production remediation.
+
 That handoff records what has been achieved in the long-running product/production launch session, what remains blocked by real production providers or human review, and how to continue without dropping scope.
 
 The remediation audit is the authoritative human-maintained issue ledger for the
@@ -38,6 +44,18 @@ Caddy may publish a host port, and that port must remain loopback-only. Routine
 start must never migrate or seed. Do not weaken the strict public-production
 profile, remove organisation scoping, or treat private-profile verification as
 public-launch evidence.
+
+Caddy is the sole dual-homed service: the API, web and database stay on the
+`internal: true` application bridge, while Caddy alone also joins the exact
+non-internal edge bridge required for Docker Desktop's Windows loopback
+publication. Do not attach another service to that edge bridge or broaden the
+host bind. Caddy must not trust incoming `X-Forwarded-*` values because direct
+loopback and Tailscale Serve share the edge gateway; the configured origin is
+authoritative and Fastify trusts only Caddy's fixed internal address.
+Every live Docker lifecycle/certification path must re-prove the local Windows
+Docker Desktop Linux named-pipe boundary and pin its remaining Docker children
+to that endpoint. Keep the explicit Compose project name and case-insensitive
+ambient `COMPOSE_*` scrubbing; routine start must not inherit profiles.
 
 ## Personal-server invariants
 
@@ -68,6 +86,18 @@ public-launch evidence.
   authenticated-encrypted recovery-set, manifest-HMAC, rehearsal, guarded
   restore, rollback or decommission gates. Key loss and compromise are explicit
   recovery/security incidents.
+- `personal:server:rotate-auth-recovery-secret` is the only supported
+  authentication-recovery root-key rotation path. Preserve its count-only
+  receipt, encrypted pre-invalidation backup, protected pending secret,
+  invalidation-before-replacement ordering, ACL checks and resumable
+  `auth-recovery-rotating` phase. Completion also requires a separately encrypted
+  post-activation recovery set and isolated full-application rehearsal. Never
+  document its raw Compose maintenance job or manual environment editing as an
+  operator substitute.
+- Replacement-host recovery must rebind `AUTH_RECOVERY_SECRET` only through the
+  internal replacement-authorized serializable transaction after restored-data
+  proof and migration, in both disposable rehearsal and real blank target,
+  before any API startup. Never copy the old raw secret into a recovery set.
 - Replacement-host recovery must use the Windows installer, exact compatible
   source, selected encrypted set, separate key, recorded source origin and a
   different empty state root. It rotates host secrets and revokes restored

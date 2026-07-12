@@ -63,6 +63,28 @@ Tailscale Serve. Tailscale Funnel, Cloudflare Tunnel and other public or
 third-party tunnels are not supported by the current installer or runtime-health
 attestation. Do not make Caddy public to work around this boundary.
 
+Caddy alone joins both the internal application bridge and a dedicated
+non-internal Docker edge bridge because Docker Desktop cannot publish a Windows
+loopback port from an internal-only network. The edge bridge contains no API,
+web or database service, uses an exact reviewed subnet/gateway, and does not
+weaken the `127.0.0.1` host bind. Treat any other edge attachment or non-loopback
+publication as a security failure.
+
+Caddy deliberately trusts no incoming `X-Forwarded-*` values. Direct Windows
+loopback requests and Tailscale Serve reach its published port through the same
+Docker edge gateway, so treating that gateway as a trusted proxy would let a
+local process spoof a client address. Caddy replaces those headers before
+proxying. Fastify trusts only Caddy's fixed internal address
+`172.30.250.10`; do not broaden either boundary.
+
+The installer preflight and every live lifecycle/runtime-health command verify
+the local Windows Docker Desktop Linux named-pipe endpoint and Engine API before
+using Docker, then pin every Docker child in that operation to the verified
+named pipe. Remote daemon and forced API-version environment overrides fail
+closed. Compose invocations pin the exact project name and scrub ambient
+`COMPOSE_*` controls so a parent shell cannot activate maintenance or
+initializer profiles during routine start.
+
 The supported Windows entry point for a fresh install, failed-install resume or
 blank replacement-host recovery is `scripts/Install-CharityPilot.ps1`.
 Version-bound updates use `scripts/Update-CharityPilot.ps1`. Running the
@@ -70,6 +92,19 @@ low-level `personal:server:init`/`update` commands, raw Docker Compose, ad-hoc
 database commands, or manual volume deletion bypasses installer receipts,
 source checks, ACL enforcement and recovery gates. Those are not supported
 installation or recovery procedures.
+
+Authentication-recovery root-key incidents use only
+`npm run personal:server:rotate-auth-recovery-secret`. That lifecycle command
+owns the operation lock, local-Docker pin, count-only receipt, verified encrypted
+backup, invalidation-before-replacement transaction, protected temporary secret,
+ACL verification, activation, resumable fail-closed state, and a separately
+verified post-activation recovery set with an isolated restore rehearsal. The
+credential-bearing pre-invalidation set is incident evidence, not an ordinary
+restore source. The underlying
+maintenance job, raw Compose service and manual environment edits are not
+operator procedures. Replacement-host restore uses a different internal-only
+atomic rebind because the old raw host secret is intentionally absent; it must
+run in both the disposable rehearsal and blank target before API startup.
 
 An ordinary failed-install resume remains bound to its exact recorded source.
 Before the first official release only, an initial-phase clean-Git test install

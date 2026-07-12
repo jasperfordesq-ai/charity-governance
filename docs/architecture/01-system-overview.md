@@ -53,8 +53,11 @@ server and binds to `127.0.0.1:8080` by default. It routes `/api/v1/*` to the
 compiled Fastify container and all other paths to the compiled Next.js
 container. PostgreSQL and uploaded documents use personal-server-specific named
 volumes; no source tree or dependency directory is mounted into the runtime.
-On the fixed private bridge, Caddy trusts forwarding headers only from the exact
-Docker host gateway and Fastify trusts only Caddy's exact container address.
+PostgreSQL, Fastify and Next.js share one fixed `internal: true` application
+bridge. Caddy alone also joins a second fixed edge bridge so Docker Desktop can
+publish its loopback-only port without giving the application containers an
+external route. Caddy discards incoming forwarding headers and supplies its own;
+Fastify trusts only Caddy's exact internal-bridge address.
 For the Tailscale TLS-termination hop, the validated configured HTTPS origin is
 authoritative for Next.js refresh Origin headers, redirects and CSP; an internal
 plain-HTTP request URL cannot downgrade the browser-facing URL.

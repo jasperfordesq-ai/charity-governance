@@ -70,11 +70,19 @@ Desktop and WSL 2 run these Linux services:
 - **PostgreSQL** stores accounts and governance records; a separate persistent
   volume stores uploaded documents.
 
+This profile requires local Windows Docker Desktop in Linux-container mode with
+Engine 28 / API 1.48 or later and Docker Compose 2.33.1 or later. Remote Docker
+contexts and daemon/API overrides are rejected by preflight and every live
+lifecycle/runtime-certification command.
+
 Caddy routes `/api/v1/*` to Fastify and everything else to Next.js, so browsers
 use one exact origin. Normal start reuses compiled images and persistent data;
 it does not compile pages, watch Windows files, migrate, or seed demo data.
 Tailscale, when selected, supplies private HTTPS in front of loopback Caddy; it
-is not the CharityPilot web server.
+is not the CharityPilot web server. Caddy alone is dual-homed across a dedicated
+Docker edge bridge and the private application bridge; the edge bridge exists
+so Docker Desktop can carry the loopback-only port to Windows and does not make
+the site public.
 
 The supported Windows entry point is `scripts/Install-CharityPilot.ps1`. It
 runs a read-only preflight before it can create anything, then creates one empty
@@ -127,8 +135,15 @@ unsupported.
 The same installer is the supported replacement-host recovery entry point. It
 authenticates one encrypted recovery set with its separately held key, verifies
 the exact compatible source and old/new origins, restores into an empty host,
-rotates host secrets, revokes restored sessions and completes backup, rehearsal,
-health and ACL gates before marking the replacement ready.
+rotates host secrets, atomically retires the restored authentication-recovery
+binding and invalidates old reset capabilities before API startup, revokes
+restored sessions and completes backup, rehearsal, health and ACL gates before
+marking the replacement ready. Security-incident authentication-recovery
+root-key rotation uses the separate supported receipt-backed
+`personal:server:rotate-auth-recovery-secret`
+command and cannot complete until a post-rotation encrypted recovery set passes
+an isolated restore rehearsal; raw Compose and manual secret edits are not
+operator paths.
 
 The complete installation, private-access, account, backup, recovery, update,
 security and VM-migration runbook is

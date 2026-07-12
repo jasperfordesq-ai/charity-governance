@@ -13,11 +13,32 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  composeSafeEnvironment,
+  pinnedLocalDockerEnvironment,
+  validateLocalDockerDesktopEndpoint,
+  validateLocalDockerDesktopRuntime,
+} from './personal-server-docker-boundary.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(scriptsDir, '..');
 const EXPECTED_SERVICES = ['api', 'caddy', 'db', 'web'];
-const EXPECTED_NETWORK = 'charitypilot-personal-server-internal';
+const EXPECTED_NETWORKS = Object.freeze({
+  internal: Object.freeze({
+    name: 'charitypilot-personal-server-internal',
+    composeName: 'personal-server-internal',
+    internal: true,
+    subnet: '172.30.250.0/24',
+    gateway: '172.30.250.1',
+  }),
+  edge: Object.freeze({
+    name: 'charitypilot-personal-server-edge',
+    composeName: 'personal-server-edge',
+    internal: false,
+    subnet: '172.30.251.0/24',
+    gateway: '172.30.251.1',
+  }),
+});
 const EXPECTED_VOLUMES = [
   'charitypilot-personal-server-db',
   'charitypilot-personal-server-documents',
@@ -267,6 +288,82 @@ export function validateComposeRuntime(rows, expectedPort) {
   return EXPECTED_SERVICES.map((service) => ({ service, state: 'running', health: 'healthy' }));
 }
 
+export function validatePersonalServerRuntimeNetwork(network, kind) {
+  const expected = EXPECTED_NETWORKS[kind];
+  if (!expected) throw new Error(`Unknown personal-server network kind: ${kind}`);
+  if (
+    !network || typeof network !== 'object' || Array.isArray(network) ||
+    network.Name !== expected.name ||
+    network.Driver !== 'bridge' ||
+    network.Internal !== expected.internal ||
+    network.Labels?.['com.docker.compose.project'] !== 'charitypilot-personal-server' ||
+    network.Labels?.['com.docker.compose.network'] !== expected.composeName ||
+    !Array.isArray(network.IPAM?.Config) || network.IPAM.Config.length !== 1 ||
+    network.IPAM.Config[0]?.Subnet !== expected.subnet ||
+    network.IPAM.Config[0]?.Gateway !== expected.gateway
+  ) {
+    throw new Error(`Personal-server ${kind} network is not the exact reviewed Compose bridge`);
+  }
+  if (!network.Containers || typeof network.Containers !== 'object' || Array.isArray(network.Containers)) {
+    throw new Error(`Personal-server ${kind} network contains malformed attachment metadata`);
+  }
+  const attached = Object.values(network.Containers);
+  if (attached.some((value) => !value || typeof value !== 'object' || typeof value.Name !== 'string')) {
+    throw new Error(`Personal-server ${kind} network contains a malformed attachment`);
+  }
+  const attachedNames = attached.map((value) => value.Name).sort();
+  const expectedNames = kind === 'edge'
+    ? ['charitypilot-personal-server-caddy-1']
+    : EXPECTED_SERVICES.map((service) => `charitypilot-personal-server-${service}-1`).sort();
+  if (
+    attachedNames.length !== expectedNames.length ||
+    attachedNames.some((name, index) => name !== expectedNames[index])
+  ) {
+    throw new Error(`Personal-server ${kind} network does not have its exact reviewed service attachments`);
+  }
+  return { name: expected.name, internal: expected.internal, subnet: expected.subnet };
+}
+
+export function validatePersonalServerServiceNetworkAttachments(container, service) {
+  if (!EXPECTED_SERVICES.includes(service)) throw new Error(`Unknown personal-server service: ${service}`);
+  const expectedContainerName = `charitypilot-personal-server-${service}-1`;
+  const actualName = String(container?.Name ?? '').replace(/^\//u, '');
+  const networks = container?.NetworkSettings?.Networks;
+  const expectedNetworks = service === 'caddy'
+    ? [EXPECTED_NETWORKS.edge.name, EXPECTED_NETWORKS.internal.name]
+    : [EXPECTED_NETWORKS.internal.name];
+  const actualNetworks = networks && typeof networks === 'object' && !Array.isArray(networks)
+    ? Object.keys(networks).sort()
+    : [];
+  if (
+    actualName !== expectedContainerName ||
+    container?.Config?.Labels?.['com.docker.compose.project'] !== 'charitypilot-personal-server' ||
+    container?.Config?.Labels?.['com.docker.compose.service'] !== service ||
+    actualNetworks.length !== expectedNetworks.length ||
+    actualNetworks.some((name, index) => name !== expectedNetworks[index])
+  ) {
+    throw new Error(`Personal-server ${service} container does not have its exact reviewed network set`);
+  }
+  for (const name of actualNetworks) {
+    const endpoint = networks[name];
+    const expectedGatewayPriority = service === 'caddy' && name === EXPECTED_NETWORKS.edge.name ? 1 : 0;
+    if (
+      !endpoint || typeof endpoint !== 'object' || typeof endpoint.IPAddress !== 'string' ||
+      endpoint.GwPriority !== expectedGatewayPriority
+    ) {
+      throw new Error(`Personal-server ${service} has a malformed ${name} endpoint`);
+    }
+    if (name === EXPECTED_NETWORKS.internal.name) {
+      if (service === 'caddy' ? endpoint.IPAddress !== '172.30.250.10' : !/^172\.30\.250\.(?:[2-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-4])$/u.test(endpoint.IPAddress)) {
+        throw new Error(`Personal-server ${service} has an unexpected internal IPv4 address`);
+      }
+    } else if (!/^172\.30\.251\.(?:[2-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-4])$/u.test(endpoint.IPAddress)) {
+      throw new Error('Personal-server Caddy has an unexpected edge IPv4 address');
+    }
+  }
+  return actualNetworks;
+}
+
 export function validateBundleIdentity(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Personal-server bundle identity must be an object');
   if (value.format !== 'charitypilot-personal-server-bundle/v1' || value.profile !== 'personal-server') {
@@ -425,6 +522,10 @@ function pathIsWithin(child, parent) {
 export async function certify(options, context = {}) {
   const repoRoot = context.repoRoot ?? defaultRepoRoot;
   const processEnv = context.processEnv ?? process.env;
+  const execute = context.runImpl ?? run;
+  const fetchRuntime = context.fetchImpl ?? fetchWithTimeout;
+  const resolveSourceIdentity = context.sourceIdentityImpl ?? sourceIdentity;
+  const now = context.now ?? (() => new Date());
   const dryRun = options['dry-run'] === true;
   const envPath = resolve(repoRoot, options['env-file'] ?? processEnv.CHARITYPILOT_PERSONAL_SERVER_ENV_FILE ?? '.env.personal-server');
   if (options['report-file'] && !isAbsolute(options['report-file'])) {
@@ -440,8 +541,9 @@ export async function certify(options, context = {}) {
   const planned = [];
   if (dryRun) {
     planned.push('validate protected personal-server environment');
+    planned.push('verify local Windows Docker Desktop Linux named-pipe boundary and Engine API');
     planned.push('docker compose config --quiet and live ps JSON');
-    planned.push('inspect exact internal network and persistent volumes');
+    planned.push('inspect exact internal and Caddy-only edge networks plus persistent volumes');
     planned.push('fetch loopback Caddy /login and authenticated readiness');
     planned.push('fetch configured private HTTPS and verify Tailscale Serve when applicable');
     planned.push('write a redacted exclusive runtime-health report under protected state when requested');
@@ -450,34 +552,67 @@ export async function certify(options, context = {}) {
 
   const values = readEnvironmentFile(envPath);
   const configuration = validateEnvironment(values, { localOnly: options['local-only'] === true });
-  const release = sourceIdentity(repoRoot, processEnv, envPath);
-  const compose = ['compose', '--env-file', envPath, '-f', resolve(repoRoot, 'compose.personal-server.yml')];
-  run('docker', [...compose, 'config', '--quiet'], { cwd: repoRoot, env: processEnv });
-  const ps = run('docker', [...compose, 'ps', '--format', 'json'], { cwd: repoRoot, env: processEnv });
+  const release = resolveSourceIdentity(repoRoot, processEnv, envPath);
+  const dockerContext = execute('docker', [
+    'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}|{{.Endpoints.docker.SkipTLSVerify}}',
+  ], { cwd: repoRoot, env: processEnv });
+  const [dockerEndpoint = '', dockerSkipTlsVerify = ''] = dockerContext.stdout.trim().split('|');
+  validateLocalDockerDesktopEndpoint({
+    endpoint: dockerEndpoint,
+    skipTlsVerify: dockerSkipTlsVerify,
+  }, processEnv);
+  const dockerProbeEnv = pinnedLocalDockerEnvironment(processEnv, dockerEndpoint);
+  const dockerInfo = execute('docker', ['info', '--format', '{{.OperatingSystem}}|{{.OSType}}'], {
+    cwd: repoRoot, env: dockerProbeEnv,
+  });
+  const [dockerOperatingSystem = '', dockerServerOs = ''] = dockerInfo.stdout.trim().split('|');
+  const dockerVersion = execute('docker', ['version', '--format', '{{.Server.APIVersion}}'], {
+    cwd: repoRoot, env: dockerProbeEnv,
+  });
+  validateLocalDockerDesktopRuntime({
+    endpoint: dockerEndpoint,
+    skipTlsVerify: dockerSkipTlsVerify,
+    operatingSystem: dockerOperatingSystem,
+    serverOs: dockerServerOs,
+    apiVersion: dockerVersion.stdout.trim(),
+  }, processEnv);
+  const dockerEnv = pinnedLocalDockerEnvironment(processEnv, dockerEndpoint);
+  const compose = ['compose', '--project-name', 'charitypilot-personal-server', '--env-file', envPath, '-f', resolve(repoRoot, 'compose.personal-server.yml')];
+  const composeEnv = composeSafeEnvironment(dockerEnv);
+  execute('docker', [...compose, 'config', '--quiet'], { cwd: repoRoot, env: composeEnv });
+  const ps = execute('docker', [...compose, 'ps', '--format', 'json'], { cwd: repoRoot, env: composeEnv });
   const services = validateComposeRuntime(parseComposePs(ps.stdout), configuration.port);
 
-  const networkRaw = run('docker', ['network', 'inspect', EXPECTED_NETWORK], { cwd: repoRoot, env: processEnv });
-  const network = parseInspectObject(networkRaw.stdout, 'Personal network');
-  if (network.Name !== EXPECTED_NETWORK || network.Internal !== true || network.Driver !== 'bridge') {
-    throw new Error('Personal-server network is not the exact internal bridge');
+  const networkReports = {};
+  for (const kind of ['internal', 'edge']) {
+    const expected = EXPECTED_NETWORKS[kind];
+    const networkRaw = execute('docker', ['network', 'inspect', expected.name], { cwd: repoRoot, env: dockerEnv });
+    const network = parseInspectObject(networkRaw.stdout, `Personal ${kind} network`);
+    networkReports[kind] = validatePersonalServerRuntimeNetwork(network, kind);
   }
-  const subnets = (network.IPAM?.Config ?? []).map((entry) => entry.Subnet).filter(Boolean);
-  if (!subnets.includes('172.30.250.0/24')) throw new Error('Personal-server network does not use the reviewed subnet');
+
+  const serviceNetworks = {};
+  for (const service of EXPECTED_SERVICES) {
+    const containerName = `charitypilot-personal-server-${service}-1`;
+    const containerRaw = execute('docker', ['inspect', containerName], { cwd: repoRoot, env: dockerEnv });
+    const container = parseInspectObject(containerRaw.stdout, `Personal ${service} container`);
+    serviceNetworks[service] = validatePersonalServerServiceNetworkAttachments(container, service);
+  }
 
   const volumes = [];
   for (const name of EXPECTED_VOLUMES) {
-    const raw = run('docker', ['volume', 'inspect', name], { cwd: repoRoot, env: processEnv });
+    const raw = execute('docker', ['volume', 'inspect', name], { cwd: repoRoot, env: dockerEnv });
     const value = parseInspectObject(raw.stdout, `Volume ${name}`);
     if (value.Name !== name || value.Driver !== 'local') throw new Error(`Unexpected personal-server volume identity for ${name}`);
     volumes.push({ name, driver: value.Driver });
   }
 
   const localBase = `http://127.0.0.1:${configuration.port}`;
-  const loginResponse = await fetchWithTimeout(`${localBase}/login`, { headers: { Accept: 'text/html' } });
+  const loginResponse = await fetchRuntime(`${localBase}/login`, { headers: { Accept: 'text/html' } });
   if (loginResponse.status !== 200) throw new Error(`Loopback Caddy login returned HTTP ${loginResponse.status}`);
   validatePersonalResponseHeaders(loginResponse, 'Loopback Caddy login response');
 
-  const readinessResponse = await fetchWithTimeout(`${localBase}/api/v1/health/readiness`, {
+  const readinessResponse = await fetchRuntime(`${localBase}/api/v1/health/readiness`, {
     headers: {
       Accept: 'application/json',
       Origin: configuration.origin,
@@ -500,9 +635,9 @@ export async function certify(options, context = {}) {
 
   let privateAccess = { required: !configuration.loopback, checked: false };
   if (!configuration.loopback) {
-    const node = run('tailscale', ['status', '--json'], { cwd: repoRoot, env: processEnv });
+    const node = execute('tailscale', ['status', '--json'], { cwd: repoRoot, env: processEnv });
     const tailscaleNode = safeReadJson(node.stdout, 'Tailscale node status');
-    const serve = run('tailscale', ['serve', 'status', '--json'], { cwd: repoRoot, env: processEnv });
+    const serve = execute('tailscale', ['serve', 'status', '--json'], { cwd: repoRoot, env: processEnv });
     const tailscaleServe = safeReadJson(serve.stdout, 'Tailscale Serve status');
     const verifiedPrivateAccess = validateTailscalePrivateAccess(
       tailscaleNode,
@@ -510,7 +645,7 @@ export async function certify(options, context = {}) {
       configuration.origin,
       configuration.port,
     );
-    const publicResponse = await fetchWithTimeout(`${configuration.origin}/login`, { headers: { Accept: 'text/html' } });
+    const publicResponse = await fetchRuntime(`${configuration.origin}/login`, { headers: { Accept: 'text/html' } });
     if (publicResponse.status !== 200) throw new Error(`Private HTTPS login returned HTTP ${publicResponse.status}`);
     validatePersonalResponseHeaders(publicResponse, 'Private HTTPS login response');
     privateAccess = {
@@ -523,17 +658,19 @@ export async function certify(options, context = {}) {
 
   const report = {
     format: 'charitypilot-personal-server-runtime-health/v1',
-    generatedAt: new Date().toISOString(),
+    generatedAt: now().toISOString(),
     result: 'pass',
     scope: 'runtime-boundary-and-dependency-health-only',
+    docker: { localDesktop: true, serverOs: 'linux', engineApi: dockerVersion.stdout.trim() },
     release,
     origin: {
       kind: configuration.loopback ? 'loopback-http' : 'tailscale-private-https',
       sha256: sha256Text(configuration.origin),
     },
     loopbackPort: configuration.port,
-    services,
-    network: { name: EXPECTED_NETWORK, internal: true, subnet: '172.30.250.0/24' },
+    services: services.map((service) => ({ ...service, networks: serviceNetworks[service.service] })),
+    network: networkReports.internal,
+    edgeNetwork: networkReports.edge,
     volumes,
     http: {
       loopbackLoginStatus: loginResponse.status,

@@ -614,7 +614,7 @@ if ($DryRun) {
             $env:CHARITYPILOT_PERSONAL_SERVER_ENV_FILE = $previousProcessEnvironmentPath
         }
     }
-    Write-Host 'Dry run complete. No directory, environment file, container, volume, network, image, database, organisation or account was created.'
+    Write-Host 'Dry run complete. No directory, environment file, container, volume, networks, image, database, organisation or account was created.'
     exit 0
 }
 

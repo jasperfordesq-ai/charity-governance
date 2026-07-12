@@ -2,18 +2,18 @@
 # CharityPilot - Personal Server (optimized local appliance)
 # =============================================================================
 #
-# Use the safety wrapper; it creates .env.personal-server exclusively, generates
-# secrets, injects the Owner password only into the one-shot child, builds,
-# migrates, initializes, and starts:
+# Operators use the supported Windows installer; it creates protected external
+# state, generates secrets, injects the Owner password only into the one-shot
+# child, builds, migrates, initializes, and starts:
 #
-#   npm run personal:server:init -- --help
+#   Get-Help .\scripts\Install-CharityPilot.ps1 -Full
 #
 # The personal owner/workspace initializer and migrations are deliberately
 # excluded from normal startup. Routine starts use:
 #
 #   npm run personal:server:start
 #
-# This project has its own images, network, and volumes. It does not mount the
+# This project has its own images, networks, and volumes. It does not mount the
 # repository and cannot reuse or mutate the compose.local.yml personal data.
 # =============================================================================
 
@@ -252,6 +252,8 @@ services:
     networks:
       personal-server-internal:
         ipv4_address: 172.30.250.10
+      personal-server-edge:
+        gw_priority: 1
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/login"]
       interval: 10s
@@ -338,3 +340,11 @@ networks:
       config:
         - subnet: 172.30.250.0/24
           gateway: 172.30.250.1
+  personal-server-edge:
+    name: charitypilot-personal-server-edge
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.30.251.0/24
+          gateway: 172.30.251.1

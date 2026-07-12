@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +31,24 @@ test('personal release packaging is source-bound and independently checksummed',
   assert.match(workflow, /archiveSha256/u);
   assert.match(workflow, /trackedFileCount/u);
   assert.match(workflow, /scripts\/Install-CharityPilot\.ps1/u);
+  assert.match(workflow, /Docker Compose 2\.33\.1 or later/u);
+  assert.match(workflow, /API 1\.48 or later/u);
+  assert.match(workflow, /Linux Engine 28\.0\.0/u);
+});
+
+test('release source includes every personal-server security and recovery entrypoint', () => {
+  for (const path of [
+    'apps/api/src/jobs/rebind-personal-server-auth-recovery-secret.ts',
+    'apps/api/src/jobs/rotate-auth-recovery-secret.ts',
+    'scripts/personal-server-auth-recovery-rotation.mjs',
+    'scripts/personal-server-docker-boundary.mjs',
+    'scripts/personal-server-windows-docker-boundary.ps1',
+  ]) {
+    assert.equal(existsSync(resolve(root, path)), true, `${path} must be tracked in the release source`);
+  }
+  const apiDockerfile = readFileSync(resolve(root, 'apps/api/Dockerfile'), 'utf8');
+  assert.match(apiDockerfile, /COPY apps\/api \.\/apps\/api/u);
+  assert.match(apiDockerfile, /COPY --chown=node:node --from=build \/app\/apps\/api\/dist \.\/apps\/api\/dist/u);
 });
 
 test('personal release publication refuses replacement and uses pinned first-party actions', () => {

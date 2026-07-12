@@ -83,10 +83,11 @@ remote director-access method and do not expose its ports through a router.
    encrypted external disk or private cloud backup.
 
 `npm run personal:ready` does not prove the personal-server profile is healthy,
-does not verify Tailscale or Cloudflare access, and does not replace that
-profile's database-and-document recovery procedure. Conversely, a working
-personal server does not make the destructive broader E2E suites safe to run
-against personal records.
+does not verify the supported Tailscale private-access path, and does not
+replace that profile's database-and-document recovery procedure. Cloudflare
+Tunnel is unsupported for personal-server. Conversely, a working personal
+server does not make the destructive broader E2E suites safe to run against
+personal records.
 
 ## Remaining Human Responsibilities
 

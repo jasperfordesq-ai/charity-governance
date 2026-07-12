@@ -19,8 +19,8 @@ const ampleDisk = 30 * 1024 ** 3;
 
 function passingDependencies(customResponse = null) {
   const calls = [];
-  const execute = (command, args) => {
-    calls.push([command, [...args]]);
+  const execute = (command, args, options = {}) => {
+    calls.push([command, [...args], options]);
     const custom = customResponse?.(command, args);
     if (custom) return custom;
 
@@ -43,7 +43,7 @@ function passingDependencies(customResponse = null) {
     }
     if (command === 'powershell.exe') return { status: 0, stdout: '5.1.22621.4391|Desktop', stderr: '' };
     if (command === 'docker' && args[0] === 'version') {
-      return { status: 0, stdout: '29.5.2|29.5.2|linux|amd64', stderr: '' };
+      return { status: 0, stdout: '29.5.2|29.5.2|linux|amd64|1.54', stderr: '' };
     }
     if (command === 'docker' && args[0] === 'compose' && args[1] === 'version') {
       return { status: 0, stdout: '2.40.3', stderr: '' };
@@ -53,6 +53,12 @@ function passingDependencies(customResponse = null) {
     }
     if (command === 'docker' && args[0] === 'info') {
       return { status: 0, stdout: 'Docker Desktop', stderr: '' };
+    }
+    if (command === 'docker' && args[0] === 'context' && args[1] === 'show') {
+      return { status: 0, stdout: 'desktop-linux', stderr: '' };
+    }
+    if (command === 'docker' && args[0] === 'context' && args[1] === 'inspect') {
+      return { status: 0, stdout: 'npipe:////./pipe/dockerDesktopLinuxEngine|false', stderr: '' };
     }
     if (command === 'docker' && args[0] === 'network' && args[1] === 'ls') {
       return { status: 0, stdout: '', stderr: '' };
@@ -171,6 +177,11 @@ test('complete Windows, Node, npm, Docker, WSL2, network and storage preflight p
   const stateRoot = join(tmpdir(), `charitypilot-preflight-${process.pid}-passing`);
   rmSync(stateRoot, { recursive: true, force: true });
   const { dependencies, calls } = passingDependencies();
+  dependencies.environment = {
+    ...dependencies.environment,
+    DOCKER_CONTEXT: 'desktop-linux',
+    compose_profiles: 'maintenance',
+  };
   const report = await runPersonalServerPreflight(
     { repositoryRoot, stateRoot, origin: 'http://localhost:8080', port: 8080, dryRun: true },
     dependencies,
@@ -186,13 +197,101 @@ test('complete Windows, Node, npm, Docker, WSL2, network and storage preflight p
   assert.ok(report.checks.every((check) => check.status === 'passed'));
   assert.ok(calls.some(([command, args]) => command === 'docker' && args[0] === 'version'));
   assert.ok(calls.some(([command]) => command === 'wsl.exe'));
+  const daemonCalls = calls.filter(([command, args]) => command === 'docker' && args[0] !== 'context');
+  assert.ok(daemonCalls.length > 0);
+  for (const [, , callOptions] of daemonCalls) {
+    assert.equal(callOptions.env.DOCKER_HOST, 'npipe:////./pipe/dockerDesktopLinuxEngine');
+    assert.equal(
+      Object.keys(callOptions.env).some((name) => (
+        /^(?:DOCKER_CONTEXT|DOCKER_TLS|DOCKER_TLS_VERIFY|DOCKER_CERT_PATH|DOCKER_API_VERSION|DOCKER_BUILDKIT|DOCKER_DEFAULT_PLATFORM|DOCKER_CONFIG)$/iu.test(name) ||
+        /^(?:BUILDKIT_|BUILDX_|COMPOSE_)/iu.test(name)
+      )),
+      false,
+    );
+  }
+});
+
+test('Compose older than gw_priority support fails even when wait flags exist', async () => {
+  const stateRoot = join(tmpdir(), `charitypilot-preflight-${process.pid}-old-compose`);
+  rmSync(stateRoot, { recursive: true, force: true });
+  const { dependencies } = passingDependencies((command, args) => (
+    command === 'docker' && args[0] === 'compose' && args[1] === 'version'
+      ? { status: 0, stdout: '2.32.4', stderr: '' }
+      : null
+  ));
+  const report = await runPersonalServerPreflight({ repositoryRoot, stateRoot }, dependencies);
+  assert.equal(report.checks.find(({ id }) => id === 'docker.compose')?.status, 'failed');
+});
+
+test('Engine API older than gateway-priority support fails before installation', async () => {
+  const stateRoot = join(tmpdir(), `charitypilot-preflight-${process.pid}-old-engine`);
+  rmSync(stateRoot, { recursive: true, force: true });
+  const { dependencies } = passingDependencies((command, args) => (
+    command === 'docker' && args[0] === 'version'
+      ? { status: 0, stdout: '27.5.1|27.5.1|linux|amd64|1.47', stderr: '' }
+      : null
+  ));
+  const report = await runPersonalServerPreflight({ repositoryRoot, stateRoot }, dependencies);
+  assert.equal(report.checks.find(({ id }) => id === 'docker.engine')?.status, 'failed');
+});
+
+test('remote Docker endpoints and daemon environment overrides fail closed', async () => {
+  const stateRoot = join(tmpdir(), `charitypilot-preflight-${process.pid}-remote-docker`);
+  rmSync(stateRoot, { recursive: true, force: true });
+  const { dependencies, calls } = passingDependencies((command, args) => (
+    command === 'docker' && args[0] === 'context' && args[1] === 'inspect'
+      ? { status: 0, stdout: 'ssh://remote.example|false', stderr: '' }
+      : null
+  ));
+  const report = await runPersonalServerPreflight({ repositoryRoot, stateRoot }, dependencies);
+  assert.equal(report.checks.find(({ id }) => id === 'docker.local-desktop')?.status, 'failed');
+  assert.equal(
+    calls.some(([command, args]) => command === 'docker' && args[0] !== 'context'),
+    false,
+  );
+
+  for (const override of [
+    { DOCKER_HOST: 'tcp://remote.example:2376' },
+    { docker_api_version: '1.47' },
+    { DOCKER_DEFAULT_PLATFORM: 'linux/arm64' },
+    { docker_config: 'C:\\remote-docker-config' },
+    { BUILDKIT_HOST: 'tcp://remote-builder.example:1234' },
+    { buildx_builder: 'remote-builder' },
+  ]) {
+    const { dependencies: overriddenDependencies, calls: overrideCalls } = passingDependencies();
+    overriddenDependencies.environment = { ...overriddenDependencies.environment, ...override };
+    const overridden = await runPersonalServerPreflight({ repositoryRoot, stateRoot }, overriddenDependencies);
+    assert.equal(overridden.checks.find(({ id }) => id === 'docker.local-desktop')?.status, 'failed');
+    assert.equal(
+      overrideCalls.some(([command, args]) => command === 'docker' && args[0] !== 'context'),
+      false,
+    );
+  }
+});
+
+test('invalid local Docker runtime stops before Compose and resource inspection', async () => {
+  const stateRoot = join(tmpdir(), `charitypilot-preflight-${process.pid}-invalid-runtime`);
+  rmSync(stateRoot, { recursive: true, force: true });
+  const { dependencies, calls } = passingDependencies((command, args) => (
+    command === 'docker' && args[0] === 'version'
+      ? { status: 0, stdout: '29.5.2|29.5.2|windows|amd64|1.54', stderr: '' }
+      : null
+  ));
+  const report = await runPersonalServerPreflight({ repositoryRoot, stateRoot }, dependencies);
+  assert.equal(report.checks.find(({ id }) => id === 'docker.local-desktop')?.status, 'failed');
+  assert.equal(
+    calls.some(([command, args]) => (
+      command === 'docker' && ['compose', 'network', 'ps', 'volume'].includes(args[0])
+    )),
+    false,
+  );
 });
 
 test('dirty source, non-Linux Docker and unavailable port are blocking failures', async () => {
   const { dependencies } = passingDependencies((command, args) => {
     if (command === 'git' && args[0] === 'status') return { status: 0, stdout: ' M unsafe-change.txt', stderr: '' };
     if (command === 'docker' && args[0] === 'version') {
-      return { status: 0, stdout: '29.5.2|29.5.2|windows|amd64', stderr: '' };
+      return { status: 0, stdout: '29.5.2|29.5.2|windows|amd64|1.54', stderr: '' };
     }
     return null;
   });
@@ -253,7 +352,10 @@ test('relative or occupied state roots and overlapping Docker subnet fail closed
       if (command === 'docker' && args[0] === 'network' && args[1] === 'inspect') {
         return {
           status: 0,
-          stdout: JSON.stringify([{ Name: 'conflict', IPAM: { Config: [{ Subnet: '172.30.250.128/25' }] } }]),
+          stdout: JSON.stringify([
+            { Name: 'internal-conflict', IPAM: { Config: [{ Subnet: '172.30.250.128/25' }] } },
+            { Name: 'edge-conflict', IPAM: { Config: [{ Subnet: '172.30.251.128/25' }] } },
+          ]),
           stderr: '',
         };
       }
@@ -262,6 +364,8 @@ test('relative or occupied state roots and overlapping Docker subnet fail closed
     const occupied = await runPersonalServerPreflight({ repositoryRoot, stateRoot }, dependencies);
     assert.ok(occupied.failures.some((failure) => failure.id === 'state.empty-root'));
     assert.ok(occupied.failures.some((failure) => failure.id === 'network.personal-subnet'));
+    assert.equal(occupied.personalSubnet, '172.30.250.0/24');
+    assert.equal(occupied.personalEdgeSubnet, '172.30.251.0/24');
 
     const relative = await runPersonalServerPreflight({ repositoryRoot, stateRoot: 'relative-state' }, dependencies);
     assert.ok(relative.failures.some((failure) => failure.id === 'state.external-path'));
@@ -291,6 +395,57 @@ test('failed-install resume preflight requires and preserves the existing protec
     assert.equal(report.checks.find(({ id }) => id === 'installation.environment-absent')?.status, 'passed');
     assert.equal(report.checks.find(({ id }) => id === 'network.loopback-port')?.status, 'passed');
     assert.equal(existsSync(join(stateRoot, 'install-state.json')), true);
+  } finally {
+    rmSync(stateRoot, { recursive: true, force: true });
+  }
+});
+
+test('failed-install resume accepts only exact preserved internal and edge network identities', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-resume-networks-'));
+  writeFileSync(join(stateRoot, 'install-state.json'), JSON.stringify({
+    format: 'charitypilot-personal-server-install-state/v1', phase: 'failed',
+  }));
+  writeFileSync(join(stateRoot, '.env.personal-server'), 'protected test environment');
+  const network = (edge, overrides = {}) => ({
+    Name: edge ? 'charitypilot-personal-server-edge' : 'charitypilot-personal-server-internal',
+    Driver: 'bridge',
+    Internal: !edge,
+    Labels: {
+      'com.docker.compose.project': 'charitypilot-personal-server',
+      'com.docker.compose.network': edge ? 'personal-server-edge' : 'personal-server-internal',
+    },
+    IPAM: { Config: [{
+      Subnet: edge ? '172.30.251.0/24' : '172.30.250.0/24',
+      Gateway: edge ? '172.30.251.1' : '172.30.250.1',
+    }] },
+    ...overrides,
+  });
+  const dependenciesFor = (networks) => passingDependencies((command, args) => {
+    if (command === 'docker' && args[0] === 'network' && args[1] === 'ls' && args.includes('--quiet')) {
+      return { status: 0, stdout: networks.map((_, index) => `network-${index}`).join('\n'), stderr: '' };
+    }
+    if (command === 'docker' && args[0] === 'network' && args[1] === 'inspect') {
+      return { status: 0, stdout: JSON.stringify(networks), stderr: '' };
+    }
+    return null;
+  }).dependencies;
+  try {
+    const preservedBeforeEdgeRepair = await runPersonalServerPreflight(
+      { repositoryRoot, stateRoot, resumeFailed: true },
+      dependenciesFor([network(false)]),
+    );
+    assert.equal(
+      preservedBeforeEdgeRepair.checks.find(({ id }) => id === 'network.personal-subnet')?.status,
+      'passed',
+    );
+
+    const valid = await runPersonalServerPreflight({ repositoryRoot, stateRoot, resumeFailed: true }, dependenciesFor([network(false), network(true)]));
+    assert.equal(valid.checks.find(({ id }) => id === 'network.personal-subnet')?.status, 'passed');
+
+    const invalid = await runPersonalServerPreflight({ repositoryRoot, stateRoot, resumeFailed: true }, dependenciesFor([
+      network(false), network(true, { Internal: true }),
+    ]));
+    assert.equal(invalid.checks.find(({ id }) => id === 'network.personal-subnet')?.status, 'failed');
   } finally {
     rmSync(stateRoot, { recursive: true, force: true });
   }
