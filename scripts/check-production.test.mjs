@@ -2249,6 +2249,11 @@ test('production todo reflects current launch blockers without overclaiming loca
     productionTodo,
     /827 checks passed, 0 failed, and 2\s+expected Windows\s+symbolic-link privilege skips \(829 total\)/,
   );
+  assert.match(productionTodo, /- \[x\] Publish and exact-SHA verify the P1-07A durable recovery ledger/);
+  assert.match(productionTodo, /1e639c89b49ce5ed27a8ea3b887ef140c7f142b5/);
+  assert.match(productionTodo, /b2138acfe0b7b7a9127a14667f10a771982a0e3b/);
+  assert.match(productionTodo, /final CI run `29185333589` and managed E2E run `29185333588`/);
+  assert.match(productionTodo, /repository evidence, not deployment or\s+production launch approval/);
   assert.doesNotMatch(productionTodo, /351\/351 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /349\/349 production-tooling checks/);
   assert.doesNotMatch(productionTodo, /346\/346 production-tooling checks/);
@@ -2293,10 +2298,16 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.match(handoff, /Machine-readable launch evidence completion: `9 \/ 89`/);
   assert.match(handoff, /The evidence ledger is currently `9 \/ 89`/);
   assert.match(handoff, /80 \/ 89` machine-readable launch checks remain/);
-  assert.match(handoff, /P1-07A password-recovery integrity - `LOCALLY_VERIFIED`/);
-  assert.match(handoff, /exact-pushed-SHA[\s\S]{0,80}GitHub CI and managed E2E publication pending/i);
+  assert.match(handoff, /P1-07A password-recovery integrity - `CI_VERIFIED`/);
   assert.match(handoff, /runner contracts `113 \/ 113` plus browser[\s\S]{0,80}scenarios `105 \/ 105` in `7\.6m`/);
   assert.match(handoff, /clean isolated teardown/);
+  assert.match(handoff, /1e639c89b49ce5ed27a8ea3b887ef140c7f142b5/);
+  assert.match(handoff, /CI run[\s\S]{0,40}`29184769464`[\s\S]{0,180}failed only at the fresh scheduled-job image smoke's[\s\S]{0,80}recovery binding/);
+  assert.match(handoff, /managed E2E run `29184769502` passed/);
+  assert.match(handoff, /b2138acfe0b7b7a9127a14667f10a771982a0e3b/);
+  assert.match(handoff, /`29185333589` in `8m24s`/);
+  assert.match(handoff, /`29185333588` in `6m41s` with `105 \/ 105` browser/);
+  assert.match(handoff, /repository publication evidence, not deployment/);
   assert.doesNotMatch(handoff, /managed browser suite must be rerun/);
   assert.match(handoff, /releaseGate\.check-production/);
   assert.match(handoff, /releaseGate\.github-environment/);
@@ -2340,7 +2351,7 @@ test('agent continuation handoff reflects current launch evidence progress witho
   assert.doesNotMatch(handoff, /only Playwright E2E was skipped/);
   assert.match(handoff, /cb78eb85bb0127150ad448037b5d03b8060869bf/);
   assert.match(handoff, /29021018683/);
-  assert.match(handoff, /Latest verified release-gate hardening commit captured by this handoff/);
+  assert.match(handoff, /Earlier verified release-gate hardening checkpoint preserved by this handoff/);
   assert.match(handoff, /repositoryState\.headSha/);
   assert.match(handoff, /repo-scoped failed E2E cleanup hardening/);
   assert.match(handoff, /no-shell release gate execution hardening/);
@@ -3223,10 +3234,11 @@ test('plain English launch guide names every final approval role', () => {
   assert.match(launchGuide, /18 counted production values needing real data/);
   assert.match(launchGuide, /production values are `9 \/ 27` complete/);
   assert.match(launchGuide, /machine-readable launch evidence is `9 \/ 89` complete/);
-  assert.match(
-    launchGuide,
-    /Production-tooling tests \| The final P1-07A local gate passed 827 checks with 0 failures and 2 expected Windows symbolic-link privilege skips \(829 total\) on 2026-07-12; the final local managed disposable E2E gate also passed 113\/113 runner contracts and 105\/105 browser scenarios in 7\.6m with clean isolated teardown; exact-pushed-SHA GitHub CI and managed E2E runs remain separate pending publication gates/,
-  );
+  assert.match(launchGuide, /Production-tooling tests \| The final P1-07A local gate passed 827 checks/);
+  assert.match(launchGuide, /final verification SHA `b2138acfe0b7b7a9127a14667f10a771982a0e3b`/);
+  assert.match(launchGuide, /CI run `29185333589` in 8m24s/);
+  assert.match(launchGuide, /managed E2E run `29185333588` in 6m41s with 105\/105 browser scenarios/);
+  assert.match(launchGuide, /repository evidence, not deployment or production launch approval/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 488\/488/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 351\/351/);
   assert.doesNotMatch(launchGuide, /Production-tooling tests \| Local `npm run test:production-check` passed 350\/350/);

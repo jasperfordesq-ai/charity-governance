@@ -272,8 +272,7 @@ The detailed issue contract remains in
   GitHub CI run `29168177797` and managed E2E run `29168177757` passed for that
   SHA; E2E passed `113 / 113` runner contracts and `105 / 105` browser scenarios
   in `3.6m`.
-- **P1-07A password-recovery integrity - `LOCALLY_VERIFIED`; exact-pushed-SHA
-  GitHub CI and managed E2E publication pending.** Password recovery now uses a bounded
+- **P1-07A password-recovery integrity - `CI_VERIFIED`.** Password recovery now uses a bounded
   durable request ledger, database-backed keyed identifier/network budgets,
   concurrent-link-safe delivery, a durable versioned Resend worker, atomic
   password/request/session/audit/outbox completion, and a registered-address
@@ -296,8 +295,17 @@ The detailed issue contract remains in
   E2E typecheck, Prisma,
   optimized builds, security/dependency, reliability `395 / 395`, historical
   migration, built-image recovery, rollback, and launch-evidence gates also
-  passed. No exact pushed implementation SHA, GitHub CI run, or GitHub-managed
-  E2E run is claimed yet.
+  passed. Implementation commit
+  `1e639c89b49ce5ed27a8ea3b887ef140c7f142b5` first reached CI run
+  `29184769464`, which failed only at the fresh scheduled-job image smoke's
+  recovery binding; companion managed E2E run `29184769502` passed. The
+  follow-up repaired CI/release setup, and a local built-image replay passed
+  `migrate -> bind -> scheduler` with zero residue. Exact final verification SHA
+  `b2138acfe0b7b7a9127a14667f10a771982a0e3b` then passed CI run
+  `29185333589` in `8m24s`, including the repaired scheduled-job image smoke,
+  and managed E2E run `29185333588` in `6m41s` with `105 / 105` browser
+  scenarios. This is repository publication evidence, not deployment,
+  production-provider, legal, or human-policy evidence.
   Parent item P1-07 remains open for MFA, breached-password policy, and the
   remaining reviewed account/ownership-recovery policy.
 
@@ -468,7 +476,7 @@ current GitHub metadata, and the expanded 89-check evidence schema:
   `669 / 1000`, while the strict launch-gate score remained `18 / 117`.
 - GitHub CI for that audit baseline passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29068890047`.
-- Latest verified release-gate hardening commit captured by this handoff:
+- Earlier verified release-gate hardening checkpoint preserved by this handoff:
   `cb78eb85bb0127150ad448037b5d03b8060869bf`.
 - GitHub CI for that commit passed:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29021018683`.
@@ -477,7 +485,11 @@ current GitHub metadata, and the expanded 89-check evidence schema:
   symbolic-link privilege skips (`829` total). The final local managed
   disposable E2E gate also passed `113 / 113` runner contracts and `105 / 105`
   browser scenarios in `7.6m` with clean isolated teardown. Exact-pushed-SHA
-  GitHub CI and managed E2E runs remain separate pending publication gates.
+  publication is now complete: implementation commit
+  `1e639c89b49ce5ed27a8ea3b887ef140c7f142b5` and final verification SHA
+  `b2138acfe0b7b7a9127a14667f10a771982a0e3b`; CI run `29185333589` passed in
+  `8m24s` and managed E2E run `29185333588` passed in `6m41s` with `105 / 105`
+  browser scenarios. This closes P1-07A repository publication only.
   Older `823`, `791`,
   `746`, `745`, `548 / 548`, `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical

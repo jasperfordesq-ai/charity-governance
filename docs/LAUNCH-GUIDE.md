@@ -78,7 +78,7 @@ not as production launch approval.
 | TypeScript build (shared + API + web) | Must pass for the release ref |
 | Lint | Must pass for the release ref |
 | Unit tests (API, web, shared) | Must pass for the release ref |
-| Production-tooling tests | The final P1-07A local gate passed 827 checks with 0 failures and 2 expected Windows symbolic-link privilege skips (829 total) on 2026-07-12; the final local managed disposable E2E gate also passed 113/113 runner contracts and 105/105 browser scenarios in 7.6m with clean isolated teardown; exact-pushed-SHA GitHub CI and managed E2E runs remain separate pending publication gates |
+| Production-tooling tests | The final P1-07A local gate passed 827 checks with 0 failures and 2 expected Windows symbolic-link privilege skips (829 total) on 2026-07-12; the final local managed disposable E2E gate also passed 113/113 runner contracts and 105/105 browser scenarios in 7.6m with clean isolated teardown; final verification SHA `b2138acfe0b7b7a9127a14667f10a771982a0e3b` passed CI run `29185333589` in 8m24s, including repaired scheduled-job image smoke, and managed E2E run `29185333588` in 6m41s with 105/105 browser scenarios; this is repository evidence, not deployment or production launch approval |
 | Prisma schema validation | Must pass for the release ref |
 | Secret scan + SAST scan | Must pass for the release ref |
 | `npm audit` (production deps, moderate+) | Must show no moderate-or-higher production vulnerabilities |

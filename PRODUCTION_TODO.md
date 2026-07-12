@@ -92,9 +92,12 @@ Status marks reflect completed repository hardening work. Open items require rea
 - [x] Move browser authentication away from `localStorage` and into HTTP-only cookies.
 - [x] Replace stateless refresh JWTs with hashed, revocable, rotating refresh sessions.
 - [x] Hash password reset and email verification tokens before storage.
-- [ ] Publish and exact-SHA verify the locally completed P1-07A durable recovery
-      ledger, multi-instance abuse budgets, atomic session/audit/outbox reset,
+- [x] Publish and exact-SHA verify the P1-07A durable recovery ledger,
+      multi-instance abuse budgets, atomic session/audit/outbox reset,
       recovery-key rotation, and P107A migration/rollback evidence slice.
+      Implementation commit `1e639c89b49ce5ed27a8ea3b887ef140c7f142b5`
+      and final verification SHA `b2138acfe0b7b7a9127a14667f10a771982a0e3b`
+      passed final CI run `29185333589` and managed E2E run `29185333588`.
 - [x] Add logout and server-side refresh token revocation.
 - [x] Add role guards for administrator and owner-only mutations.
 - [x] Stop leaking unexpected server error messages in production.
@@ -133,8 +136,11 @@ Status marks reflect completed repository hardening work. Open items require rea
       2026-07-12 with 827 checks passed, 0 failed, and 2 expected Windows
       symbolic-link privilege skips (829 total). The final local managed
       disposable E2E gate also passed 113/113 runner contracts and 105/105
-      browser scenarios in 7.6m with clean isolated teardown. Exact-pushed-SHA
-      GitHub CI and managed E2E runs remain separate pending publication gates.
+      browser scenarios in 7.6m with clean isolated teardown. Final SHA
+      `b2138acfe0b7b7a9127a14667f10a771982a0e3b` passed CI in 8m24s, including
+      the repaired scheduled-job image smoke, and managed E2E in 6m41s with
+      105/105 browser scenarios. This is repository evidence, not deployment or
+      production launch approval.
 - [x] `npm run build -w @charitypilot/shared`
 - [x] `npm run build -w @charitypilot/api`
 - [x] `npm run build -w @charitypilot/web`

@@ -297,7 +297,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 ## Local Verification Evidence
 
-- P1-07A final local verification on 2026-07-12: shared 55/55, API 810/810 plus four isolated real-PostgreSQL proofs 4/4, web 371/371, production tooling 827 passed / 0 failed / 2 expected Windows symbolic-link privilege skips (829 total), personal-server 24/24, local-Docker 45/45, reliability 395/395, and the final local managed disposable E2E gate with 113/113 runner contracts plus 105/105 browser scenarios in 7.6m followed by clean isolated teardown. Exact-pushed-SHA GitHub CI and managed E2E runs remain pending publication gates; this is not deployed-browser or production-launch evidence.
+- P1-07A is CI_VERIFIED. Final local verification on 2026-07-12 passed shared 55/55, API 810/810 plus four isolated real-PostgreSQL proofs 4/4, web 371/371, production tooling 827 passed / 0 failed / 2 expected Windows symbolic-link privilege skips (829 total), personal-server 24/24, local-Docker 45/45, reliability 395/395, and the managed disposable E2E gate with 113/113 runner contracts plus 105/105 browser scenarios in 7.6m followed by clean isolated teardown. Implementation commit 1e639c89b49ce5ed27a8ea3b887ef140c7f142b5 first reached CI run 29184769464, which failed only at fresh scheduled-job image-smoke recovery binding; companion E2E run 29184769502 passed. After the CI/release setup repair and a zero-residue local built-image migrate -> bind -> scheduler replay, exact final verification SHA b2138acfe0b7b7a9127a14667f10a771982a0e3b passed CI run 29185333589 in 8m24s, including repaired scheduled-job image smoke, and managed E2E run 29185333588 in 6m41s with 105/105 browser scenarios. This is repository publication evidence, not deployed-browser, production-provider, legal, human-policy, or production-launch evidence.
 - Historical local release-gate evidence: `npm run release:ready` passed locally on 2026-07-09 at commit cf683f1: security scan, lint, build, workspace tests, dependency audit, reliability ledger, and 95 Playwright E2E tests passed; OVERALL: GREEN - repository release gates passed. This may be stale for the current checkout; rerun the selected gate on the final release ref and verify `npm run launch:status -- --json` reports the intended `repositoryState.headSha` before treating it as current release evidence.
 - P0-05 published evidence on 2026-07-10: local isolation contracts passed 113/113, the managed disposable browser gate passed 96/96, API/web/shared tests passed 488/295/23, and production/local-Docker tooling passed 512/44. Commit `e9f63038a5e8fe0c0680dcc015566dff2525a56b` then passed exact-SHA CI run `29116192805` and direct-`master` E2E run `29116192729`, where the isolated browser gate again passed 96/96. Static reliability-title linkage remains distinct from execution, and release-promotion plus deployed-browser evidence remain open under P0-09.
 - Historical 2026-07-09 checkpoint: `npm run test:production-check` passed 352/352 production-tooling checks, including production validators, launch evidence validation, provider checker contracts, GitHub secret-store checker contracts, deployment tooling, deployed browser QA environment preflight, launch evidence work queue JSON, and CI/release workflow guards.
@@ -344,7 +344,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Route | Area | File | Lines | Client | Static audit finding |
 | --- | --- | --- | --- | ---: | --- | --- |
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 365 | no | no obvious static risk; verify in browser |
-| P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 79 | no | no obvious static risk; verify in browser |
+| P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 90 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 163 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 232 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
@@ -367,7 +367,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
 | P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 230 | yes | no obvious static risk; verify in browser |
 | P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 448 | yes | no obvious static risk; verify in browser |
-| P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 264 | no | no obvious static risk; verify in browser |
+| P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 265 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 
 ## API And Backend Audit

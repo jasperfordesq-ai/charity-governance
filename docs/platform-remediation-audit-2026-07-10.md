@@ -1239,8 +1239,7 @@ Acceptance:
 ### P1-07 - MFA, session management, and recovery
 
 Status: `IN_PROGRESS` overall; P1-07A password-recovery integrity is
-`LOCALLY_VERIFIED`, with exact-pushed-SHA GitHub CI and managed E2E publication
-still pending
+`CI_VERIFIED`
 
 - Add MFA suitable for privileged users, session inventory, per-session and
   all-session revocation, breached-password controls, ownership recovery, and
@@ -1289,9 +1288,19 @@ P1-07A repository remediation on 2026-07-12:
   shared/API/web optimized builds, secret/SAST scans, the production image
   dependency audit, reliability `395 / 395`, historical migration verifiers,
   built-image recovery/rollback probes, and launch-evidence contracts passed.
-- The local managed browser rerun is complete. No exact pushed implementation
-  SHA, GitHub Actions CI run, or GitHub-managed E2E run is recorded until the
-  final pushed SHA supplies that publication evidence.
+- The local managed browser rerun is complete. Implementation commit
+  `1e639c89b49ce5ed27a8ea3b887ef140c7f142b5` first reached CI run
+  `29184769464`, which failed only at the fresh scheduled-job image smoke's
+  recovery binding; managed E2E run `29184769502` passed. The follow-up repaired
+  CI/release setup, and a local built-image replay passed
+  `migrate -> bind -> scheduler` with zero residue.
+- Exact final verification SHA
+  `b2138acfe0b7b7a9127a14667f10a771982a0e3b` passed GitHub CI run
+  `29185333589` in `8m24s`, including the repaired scheduled-job image smoke.
+  Managed E2E run `29185333588` passed in `6m41s` with `105 / 105` browser
+  scenarios. P1-07A is therefore `CI_VERIFIED`; this does not claim deployment,
+  production-provider evidence, MFA/breached-password/ownership-recovery policy,
+  or any legal or human approval.
 
 Remaining under the parent P1-07 item:
 
