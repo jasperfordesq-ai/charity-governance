@@ -12,6 +12,13 @@ Current external blocker: the `personal-server-release` environment exists, but
 `PERSONAL_RELEASE_ADMIN_READ_TOKEN` is not configured. The workflow must stop
 before publication until the least-privilege credential below is added.
 
+The supervised code snapshot at
+`c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` has green CI/E2E and a live
+Windows/Docker proof of streamed restore into a read-only-root PostgreSQL
+container. That evidence is deliberately narrower than the mandatory clean-host
+installation and does not make the snapshot a release candidate accepted for
+charity data.
+
 ## Trust controls
 
 The canonical repository is:
@@ -40,19 +47,28 @@ Do not weaken any of these controls to make a release pass.
 ## Repair a supervised pre-release clean-Git install
 
 The clean-`master` route exists only for supervised acceptance before the first
-official release. If it fails during the initial installer phase because source
-code itself needs repair, publish and review the fix on canonical `master`,
-fast-forward the same clean checkout, and follow the deployment runbook's
-target-bound `-ResumeFailed -RepairToGitRevision <exact HEAD SHA>` procedure.
+official release. If it fails from `initializing`, or from
+`initialized-backup-pending` before any recovery directory was created, because
+source code itself needs repair, publish and review the fix on canonical
+`master`, fast-forward the same clean checkout, and follow the deployment
+runbook's target-bound `-ResumeFailed -RepairToGitRevision <exact HEAD SHA>`
+procedure.
 
 The installer does not fetch or choose a commit. It accepts only exact clean
 `HEAD == origin/master`, proves the old failed SHA is an ancestor, requires the
-protected install to be unreleased/fresh/initial-phase with no published
-recovery set, and records the advance. Never use this exception for a release
-archive, replacement restore, later failed phase or ordinary version update.
+protected install to be unreleased/fresh and in one of those two exact phases
+with zero published and zero incomplete recovery directories, and records the
+advance. Never use this exception for a release archive, replacement restore,
+another failed phase or ordinary version update.
 Never edit `install-state.json` or delete preserved volumes to make a repair
 fit. Once releases exist, ship fixes through a new immutable release and the
 version-bound updater instead.
+
+If a supervised attempt has already published a recovery set or reached a later
+phase, a source-code repair cannot use this exception. Preserve the exact source,
+pointer, images, resources, set and key. Do not remove them merely to free the
+fixed Compose project name for another attempt; use a genuinely blank supported
+host/profile for new acceptance work.
 
 ## One-time least-privilege environment secret
 

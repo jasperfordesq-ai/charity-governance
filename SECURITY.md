@@ -85,6 +85,13 @@ closed. Compose invocations pin the exact project name and scrub ambient
 `COMPOSE_*` controls so a parent shell cannot activate maintenance or
 initializer profiles during routine start.
 
+Recovery rehearsal keeps the disposable PostgreSQL container root filesystem
+read-only. Its authenticated custom-format dump remains a protected host file,
+is opened as one non-empty regular file and is streamed to
+`docker exec -i ... pg_restore` through standard input. It is never staged with
+`docker cp`. Docker remains pinned to the verified local endpoint, and the file
+descriptor closes on both success and failure.
+
 The supported Windows entry point for a fresh install, failed-install resume or
 blank replacement-host recovery is `scripts/Install-CharityPilot.ps1`.
 Version-bound updates use `scripts/Update-CharityPilot.ps1`. Running the
@@ -107,14 +114,22 @@ atomic rebind because the old raw host secret is intentionally absent; it must
 run in both the disposable rehearsal and blank target before API startup.
 
 An ordinary failed-install resume remains bound to its exact recorded source.
-Before the first official release only, an initial-phase clean-Git test install
-may adopt a reviewed canonical descendant by supplying its exact SHA through
-`-RepairToGitRevision`. The installer requires clean canonical `master`, exact
-`HEAD == origin/master`, ancestry from the failed commit, local/unreleased image
-identity, no published recovery set, the same source/state paths and an explicit
-target match. It records the advance in protected state. This exception cannot
-rebind a release archive, replacement restore or later-phase failure, and it is
-not an update mechanism.
+Before the first official release only, a clean-Git test install failed from
+`initializing`, or from `initialized-backup-pending` before any recovery
+directory was created, may adopt a reviewed canonical descendant by supplying
+its exact SHA through `-RepairToGitRevision`. The installer requires clean
+canonical `master`, exact `HEAD == origin/master`, ancestry from the failed
+commit, local/unreleased image identity, zero published and zero incomplete
+recovery directories, the same source/state paths and an explicit target match.
+It records the advance in protected state. This exception cannot rebind a
+release archive, replacement restore or any other failed phase, and it is not an
+update mechanism.
+
+Once a recovery set has been published, preserve the failed installation's
+pointer, exact source, images, containers, networks, volumes, set and separate
+key. Do not delete or rename those resources to make a new install preflight
+pass. A separate acceptance attempt requires a genuinely blank supported
+Windows profile and Docker daemon.
 
 ## Protected state and recovery keys
 

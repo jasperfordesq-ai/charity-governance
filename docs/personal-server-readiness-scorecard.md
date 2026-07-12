@@ -7,16 +7,19 @@ Last reviewed: 2026-07-12
 This is the completion contract for CharityPilot's private, single-charity
 Windows deployment. It does not score the future public SaaS launch.
 
-Two scores are recorded because they answer different questions:
+Two views are recorded because they answer different questions:
 
-- **implementation completeness** asks whether the repository contains the
-  required fail-closed code, tests and operator documentation; and
+- **repository coverage** records whether the required fail-closed code, tests
+  and operator documentation are present without turning that coverage into a
+  readiness score; and
 - **release/live certification** asks whether a published immutable artifact has
   passed the required clean-host, recovery, reboot and private-access exercises.
 
-Passing local tests increases implementation confidence. It cannot by itself
-increase a live-certification item that requires a real release, Windows host,
-off-host copy, reboot or second device.
+Repository coverage must not be described as `100/100`, install-ready or
+certified while a named live gate remains open. Passing local tests increases
+implementation confidence. It cannot by itself increase a live-certification
+item that requires a real release, Windows host, off-host copy, reboot or second
+device.
 
 The profile may be called **install-ready for real charity use** only when the
 release/live score is 100/100 and every critical gate is complete.
@@ -34,31 +37,41 @@ release/live score is 100/100 and every critical gate is complete.
 | Documentation and continuous verification | 10 | README discoverability, exact clone/release/install/update/restore/reset/decommission instructions, security/support policy, static/profile tests, Windows CI, clean-tree checks, exact-SHA CI and final requirement-by-requirement audit. |
 | **Total** | **100** | **All critical gates and all named evidence.** |
 
-## Current named baseline: 2026-07-12 working tree
+## Current named baseline: 2026-07-12 code baseline and live evidence
 
-This baseline is for the current local working tree. It is not a release score,
-not a GitHub publication, and not permission to store important records.
+This baseline records the committed restore code at
+`c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` and the live evidence gathered
+against it. The documentation update is a separate descendant change and is not
+claimed as part of that code commit's exact-SHA evidence. Unrelated pre-existing
+local full-platform edits are outside this score. This is not a Release, not
+clean-host acceptance and not permission to store important records.
 
-| Area | Max | Implementation | Release/live certification | Current evidence and remaining gap |
-| --- | ---: | ---: | ---: | --- |
-| Versioned download and Windows installation | 20 | 20 | 6 | Installer, archive verifier, failed resume, replacement restore and fail-closed release workflow are implemented and locally verified. No public artifact or final clean-release install exists. |
-| Compiled runtime and isolation | 15 | 15 | 9 | Compose/security contracts and compiled API/web/migration images are green; a prior live attempt applied all migrations. No final ready install or post-reboot proof exists. |
-| Identity, secrets and private access | 15 | 15 | 4 | Transactional Owner bootstrap, distinct-secret/ACL gates, exact origin/Tailscale contracts, replacement-host auth rebind and resumable incident rotation exist. Tailscale and real Owner/second-device invitation/offboarding are unproved. |
-| Authenticated-encrypted backup and full recovery | 20 | 20 | 4 | AES-256-GCM artifacts, manifest HMAC, fingerprints, full-stack rehearsal, guarded restore, blank-host recovery and post-rotation recovery cleanup/rehearsal are implemented. No off-host set, guarded live restore or blank-host live recovery has passed. |
-| Update, rollback and decommissioning | 10 | 10 | 1 | Version-bound updater, receipt resume, rollback and terminal decommission contracts are implemented. No two real releases have completed update/rollback/decommission acceptance. |
-| Windows host operations | 10 | 10 | 4 | Supported-version, Docker/WSL boundary, two-subnet, ACL, diagnostic and operator contracts are implemented and this host meets the tested runtime versions. Tailscale, reboot/startup and scheduled-backup monitoring proof are absent. |
-| Documentation and continuous verification | 10 | 10 | 3 | The authoritative personal-server operator/security/support/release set, static/profile tests and Windows workflows agree with the implementation; older full-platform status snapshots are explicitly non-authoritative for this separate mode. Exact-SHA CI and release acceptance remain live gates. |
-| **Total** | **100** | **100/100** | **31/100** | **The repository implementation contract is complete; install-ready certification remains deliberately low because the external/live gates are real work, not paperwork.** |
+| Area | Max | Repository coverage | Release/live certification | Current evidence and remaining gap |
+| --- | ---: | --- | ---: | --- |
+| Versioned download and Windows installation | 20 | Implemented and locally verified | 6 | Installer, archive verifier, failed resume, replacement restore and fail-closed release workflow are implemented and locally verified. No public artifact or final clean-release install exists. |
+| Compiled runtime and isolation | 15 | Implemented and locally verified | 9 | Compose/security contracts and compiled API/web/migration images are green; a prior live attempt applied all migrations. No final ready install or post-reboot proof exists. |
+| Identity, secrets and private access | 15 | Implemented and locally verified | 4 | Transactional Owner bootstrap, distinct-secret/ACL gates, exact origin/Tailscale contracts, replacement-host auth rebind and resumable incident rotation exist. Tailscale and real Owner/second-device invitation/offboarding are unproved. |
+| Authenticated-encrypted backup and full recovery | 20 | Implemented; live acceptance incomplete | 4 | AES-256-GCM artifacts, manifest HMAC, fingerprints, full-stack rehearsal, guarded restore, blank-host recovery and post-rotation recovery cleanup/rehearsal are implemented. One live encrypted set and isolated database proof exist, and the repaired read-only stream boundary passed a separate live Windows/Docker proof; no complete full-stack rehearsal, off-host set, guarded live restore or blank-host live recovery has passed. |
+| Update, rollback and decommissioning | 10 | Implemented; live acceptance incomplete | 1 | Version-bound updater, receipt resume, rollback and terminal decommission contracts are implemented. No two real releases have completed update/rollback/decommission acceptance. |
+| Windows host operations | 10 | Implemented; live acceptance incomplete | 4 | Supported-version, Docker/WSL boundary, two-subnet, ACL, diagnostic and operator contracts are implemented and this host meets the tested runtime versions. Tailscale, reboot/startup and scheduled-backup monitoring proof are absent. |
+| Documentation and continuous verification | 10 | Implemented; release evidence incomplete | 3 | The authoritative personal-server operator/security/support/release set, static/profile tests and Windows workflows agree with the implementation; older full-platform status snapshots are explicitly non-authoritative for this separate mode. Exact-SHA CI and E2E are green for the restore repair, but clean-release acceptance remains open. |
+| **Total** | **100** | **No known open code-contract item; not a readiness certification** | **31/100** | **The profile is not install-ready because the mandatory external/live gates remain open.** |
 
 ### Test evidence for this baseline
 
-- the final rebased personal-server contract suite passed 152/152 on
-  2026-07-12 after the Docker-boundary, two-network isolation,
-  replacement-host auth rebind, incident-rotation resume and post-rotation
-  recovery-rehearsal adjustments;
-- API, web and real-PostgreSQL migration suites have passed during this work;
-- production API and web builds have passed; and
-- these local results are not yet bound to a clean published commit or Release.
+- the personal-server contract suite passed 155/155 on 2026-07-12;
+- production checks passed 830 with two intentional skips, the PostgreSQL
+  backup slice passed 43 with one Windows symlink-privilege skip, and lint,
+  compiled builds, secret scanning and SAST passed;
+- an independent security review found no remaining actionable concern in the
+  streamed-restore slice;
+- exact commit `c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` passed canonical
+  [CI](https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29194766905)
+  and [managed E2E](https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29194766923);
+- a real Windows/Docker proof streamed a custom-format dump into a read-only-root
+  PostgreSQL target through the committed helper, recovered the exact synthetic
+  row and removed every uniquely labelled disposable resource; and
+- this evidence is still not a named release or clean-host installation.
 
 ### Current external/live state
 
@@ -67,14 +80,25 @@ not a GitHub publication, and not permission to store important records.
   `PERSONAL_RELEASE_ADMIN_READ_TOKEN` is not configured;
 - a custom protected state root and location pointer exist from the supervised
   clean-Git certification attempt; its installation is currently preserved in
-  `failed` from `initializing`, with stopped project resources awaiting the
-  supported repaired-source resume, so it is not a ready installation;
+  `failed` from `initialized-backup-pending`, with five stopped containers, two
+  networks, two volumes and one completed authenticated-encrypted recovery set.
+  Its isolated database restore proof passed, but its full-application rehearsal
+  did not complete under the recorded source;
+- because that installation published a recovery set, its source cannot advance.
+  A new clean-clone preflight at `c5175ee` passed every other host/source gate and
+  correctly failed on the existing protected pointer and Docker resources. The
+  old state/resources were not edited or deleted, so this host cannot provide a
+  second clean-install result;
 - Tailscale is not installed on this host; and
 - no reboot, second-device, off-host, previous-release update or live guarded
   restore evidence exists.
 
 The previous 58/100 figure is retired because it mixed implementation progress
 with live certification. Use the two named scores above instead.
+
+The live stream proof closes the implementation defect but does not change the
+31/100 release/live score: it is narrower than the mandatory full installer,
+release provenance, reboot, private-device and recovery acceptance gates.
 
 ## Critical exit gates
 

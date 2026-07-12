@@ -70,7 +70,8 @@ Use the protected phase to select the supported route:
 | Phase or condition | Supported response |
 | --- | --- |
 | Fresh/restore installation `failed` | Repeat the exact installer binding with `-ResumeFailed`; do not initialize again. |
-| Supervised clean-Git test install failed from `initializing` because source needs a committed fix | Preserve state/volumes, review and fast-forward the same checkout to clean canonical `origin/master`, then use the runbook's explicit `-RepairToGitRevision <exact SHA>` resume. This is unavailable once a recovery set exists and is never valid for a release or replacement restore. |
+| Supervised clean-Git test install failed from `initializing`, or from `initialized-backup-pending` with zero recovery directories, because source needs a committed fix | Preserve state/volumes, review and fast-forward the same checkout to clean canonical `origin/master`, then use the runbook's explicit `-RepairToGitRevision <exact SHA>` resume. The installer requires zero published and zero incomplete recovery directories. This is never valid for a release or replacement restore. |
+| Failed installation from another phase or with any published/incomplete recovery directory | Preserve the exact source, pointer, images, containers, networks, volumes, set and separate key. Resume only the exact recorded binding; do not use `-RepairToGitRevision`, delete resources or free the fixed project name for another install. If the exact source cannot complete, stop and request supervised recovery; new acceptance work requires a genuinely blank profile/daemon. |
 | `pending-update.json` in `prepared` or `pre-cutover` | Repeat the exact verified updater with `-ResumePending`. |
 | `updating` after an ambiguous/later cutover | Preserve both sources, images, receipt and recovery sets; ordinary commands remain blocked pending supervised recovery. |
 | `restoring` | Keep writers stopped and preserve both selected and preservation recovery sets. |

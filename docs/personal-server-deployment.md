@@ -5,22 +5,31 @@ Last reviewed: 2026-07-12
 ## Current status
 
 The `personal-server` profile is the private, single-charity deployment mode for
-CharityPilot. Its implementation and local contract tests are substantially in
-place, but it is **not yet a published or 100/100 certified release**.
+CharityPilot. The committed code-contract slice has no known open implementation
+defect after the checks recorded below, but it is **not yet a published or
+100/100 certified release**. Overall release/live readiness remains 31/100.
 
 At this review point:
 
 - the Windows installer, compiled runtime, protected external state, encrypted
   recovery, guarded update/rollback/restore/decommission and replacement-host
   restore contracts exist;
-- the final rebased personal-server contract suite passed 152/152 checks after
-  the Docker-boundary, two-network isolation, replacement-host auth rebind and
-  resumable incident-rotation integration work;
+- the personal-server contract suite passed 155/155 checks; production checks
+  passed 830 with two intentional platform skips; lint, compiled builds,
+  secret scanning and SAST passed;
+- exact commit `c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` has green canonical CI
+  and managed E2E runs;
+- on Windows Docker Desktop, that commit streamed a real PostgreSQL
+  custom-format dump through `docker exec -i pg_restore` into a container with
+  a read-only root filesystem and recovered the exact synthetic proof row;
 - no `personal-v*` tag or GitHub Release has been published;
 - the exact release-workflow Administration-read environment secret has not yet
   been configured;
 - this Windows host has no ready personal-server installation or Tailscale
-  installation; and
+  installation. Its earlier supervised install is preserved, stopped and
+  failed from `initialized-backup-pending` after publishing one encrypted
+  recovery set; the exact-source rule therefore forbids adopting a later code
+  repair or deleting its pointer/resources to force another install; and
 - clean-release installation, Windows reboot, real Owner login, second-device
   Tailscale access, off-host recovery, guarded live restore and
   previous-release update/rollback still require final live evidence.
@@ -402,10 +411,12 @@ workspace. It never reruns the initializer over unrelated data.
 ### Supervised clean-Git repair exception
 
 This exception exists only before an official release, when a supervised clean
-Git installation fails during its initial `initializing` phase because the
-installer/Compose source itself needs a committed repair. It is not a general
-update route. A release ZIP, replacement-host restore, later failed phase, or
-install that already published a recovery set must use its exact recorded
+Git installation fails from `initializing`, or from
+`initialized-backup-pending` before any recovery directory was created, because
+the installer/Compose source itself needs a committed repair. It requires zero
+published and zero incomplete recovery directories. It is not a general update
+route. A release ZIP, replacement-host restore, any other failed phase, or
+install that already has a recovery directory must use its exact recorded
 source.
 
 Review and publish the repair to canonical `master`, then fast-forward the same
@@ -460,7 +471,7 @@ including `-RestoreRecoverySet`, `-RecoveryKeyFile`, `-SourceOrigin`, `-Origin`,
 | `-Port` | Caddy loopback port, default `8080`. |
 | `-StateRoot` | Absolute absent-or-empty protected directory outside the checkout. |
 | `-ResumeFailed` | Resume the exact protected failed install/restore binding. |
-| `-RepairToGitRevision` | Explicit target SHA for the narrowly bounded supervised clean-Git initial-phase repair exception; valid only with `-ResumeFailed`. Never valid for a release or replacement restore. |
+| `-RepairToGitRevision` | Explicit target SHA for the narrowly bounded supervised clean-Git repair from `initializing`, or `initialized-backup-pending` with zero recovery directories; valid only with `-ResumeFailed`. Never valid for a release or replacement restore. |
 | `-ArchivePath`, `-ChecksumPath` | Retained official release ZIP and checksum sidecar. |
 | `-ExpectedArchiveSha256` | Exact canonical SHA-256 alternative/addition to the checksum sidecar. |
 | `-RestoreRecoverySet` | One verified encrypted recovery-set directory for an empty replacement host. |
@@ -626,6 +637,14 @@ The command authenticates/decrypts the set and uses isolated disposable
 PostgreSQL, document, network, migration, Fastify, Next.js and Caddy resources.
 It proves raw database identity, current-schema migration, routing and exact
 database-to-document reconciliation, then removes only its disposable targets.
+
+The disposable PostgreSQL target keeps its root filesystem read-only. The
+verified custom-format dump is opened on the host as one non-empty regular file
+and streamed through the child process's standard input to
+`docker exec -i ... pg_restore`; it is never copied into the container. The
+operation pins Docker to the preflight-verified local Desktop Linux named pipe,
+closes the descriptor after success or failure and fails closed on an empty
+input or non-zero restore exit.
 
 For an additional real-Owner login and sampled document-download proof, supply
 a separately ACL-protected one-line password file:
