@@ -2594,6 +2594,12 @@ test('rehearse-restore dry-run plans isolated application-level recovery and cha
 
 test('full-application rehearsal proves Caddy privacy headers and private compiled login content', () => {
   const source = readFileSync(new URL('./personal-server.mjs', import.meta.url), 'utf8');
+  assert.match(
+    source,
+    /'--read-only', '--cap-drop', 'ALL',[\s\S]*'--cap-add', 'CHOWN', '--cap-add', 'FOWNER', '--cap-add', 'DAC_OVERRIDE',[\s\S]*'--security-opt', 'no-new-privileges=true',[\s\S]*DOCUMENT_ARCHIVE_IMAGE, 'sleep', '300'/u,
+  );
+  assert.match(source, /role: 'ADMIN',[\s\S]*organisationId: organisation\.id/u);
+  assert.doesNotMatch(source, /role: 'OWNER',[\s\S]*organisationId: organisation\.id/u);
   assert.match(source, /AUTH_RECOVERY_SECRET: values\.AUTH_RECOVERY_SECRET/u);
   assert.match(source, /RECOVERY_API_ENV_NAMES[\s\S]*'AUTH_RECOVERY_SECRET'/u);
   assert.match(source, /secrets: \[[\s\S]*values\.AUTH_RECOVERY_SECRET/u);
