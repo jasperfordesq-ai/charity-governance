@@ -1,5 +1,9 @@
 # Production Operations Readiness Implementation Plan
 
+> **Historical implementation plan:** retained for design and delivery
+> provenance. It does not override the current launch guide, production runbook,
+> remediation ledger or generated audit.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the repository-side production operations readiness pack that turns the remaining launch blockers into concrete evidence requirements, templates, and operator checklists.

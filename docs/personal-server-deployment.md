@@ -1,5 +1,11 @@
 # Personal Server Deployment on Windows
 
+This runbook is the authority for the Windows host profile. The separate,
+currently supervised Linux host profile is documented in
+[`personal-server-deployment-linux.md`](personal-server-deployment-linux.md).
+Linux support does not relax any Windows installation, recovery or release
+gate described here.
+
 Last reviewed: 2026-07-12
 
 ## Current status
@@ -14,7 +20,7 @@ At this review point:
 - the Windows installer, compiled runtime, protected external state, encrypted
   recovery, guarded update/rollback/restore/decommission and replacement-host
   restore contracts exist;
-- the personal-server contract suite passed 156/156 checks; production checks
+- the personal-server contract suite passed 160/160 checks; production checks
   passed 830 with two intentional platform skips; lint, compiled builds,
   secret scanning and SAST passed;
 - latest verified commit `bdedfc36c01d2ec139de0c3ed90d7a2d518787cc` has green

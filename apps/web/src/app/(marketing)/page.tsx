@@ -217,7 +217,7 @@ export default function LandingPage() {
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
-              <Card key={feature.title} className="border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+              <Card key={feature.title} className={statusPanelClassName('neutral', 'shadow-sm')}>
                 <CardBody className="p-7">
                   <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-teal-primary/10 text-teal-primary dark:bg-teal-bright/10 dark:text-teal-bright">
                     {feature.icon}
@@ -281,7 +281,7 @@ export default function LandingPage() {
             Two plans. No hidden fees. Start with a free 14-day trial and choose the coverage your charity needs.
           </p>
           <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
-            <Card className="border-2 border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+            <Card className={statusPanelClassName('neutral', 'border-2 shadow-sm')}>
               <CardHeader className="flex flex-col items-center px-8 pb-2 pt-8">
                 <p className="text-sm font-semibold uppercase tracking-wider text-teal-primary dark:text-teal-bright">Essentials</p>
                 <p className="mt-2 text-4xl font-bold text-gray-950 dark:text-white">
@@ -302,7 +302,7 @@ export default function LandingPage() {
                 </Button>
               </CardBody>
             </Card>
-            <Card className="relative overflow-visible border-2 border-teal-primary bg-white shadow-md dark:border-teal-bright dark:bg-gray-950">
+            <Card className={statusPanelClassName('brand', 'relative overflow-visible border-2 shadow-md')}>
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-lg bg-amber-accent px-4 py-1 text-xs font-bold text-gray-950">
                 Most popular
               </div>
@@ -333,7 +333,7 @@ export default function LandingPage() {
           </div>
           <div className="space-y-3">
             {faqs.map((faq) => (
-              <details key={faq.question} className="group overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+              <details key={faq.question} className={statusPanelClassName('neutral', 'group overflow-hidden')}>
                 <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-5 text-lg font-semibold text-gray-950 transition-colors hover:bg-gray-50 dark:text-white dark:hover:bg-gray-900">
                   {faq.question}
                   <ChevronDown className="ml-3 h-5 w-5 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180 dark:text-gray-400" aria-hidden="true" />

@@ -1,5 +1,9 @@
 # Frontend reliability goal — extending the trust ledger to the customer-facing app
 
+> **Historical prompt artifact:** this brief records the frontend reliability
+> programme that produced the current ledger. It is not a current branch,
+> coverage-total or execution-status report.
+
 This file holds a ready-to-run, all-day autonomous brief. Paste the fenced `GOAL`
 block below as the prompt for a fresh autonomous session (or a scheduled /
 background run) when you want to prove the **web app's** reliability and make the

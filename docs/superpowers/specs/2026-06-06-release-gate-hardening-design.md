@@ -1,5 +1,8 @@
 # Release Gate Hardening Design
 
+> **Historical design snapshot:** retained for provenance. Use the active
+> runbooks and generated reports for current release state.
+
 ## Purpose
 
 CharityPilot is close to code-level production readiness, but the release gate is not yet trustworthy. The first production-readiness slice will make the repository's release checks deterministic, clear, and aligned with the current branch and generated-file hygiene. This slice improves the path to production without claiming that external launch requirements such as hosting, secrets, monitoring, backups, penetration testing, and deployed browser QA are complete.

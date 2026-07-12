@@ -55,8 +55,9 @@ container. PostgreSQL and uploaded documents use personal-server-specific named
 volumes; no source tree or dependency directory is mounted into the runtime.
 PostgreSQL, Fastify and Next.js share one fixed `internal: true` application
 bridge. Caddy alone also joins a second fixed edge bridge so Docker Desktop can
-publish its loopback-only port without giving the application containers an
-external route. Caddy discards incoming forwarding headers and supplies its own;
+publish its Windows loopback-only port; the same reviewed topology is retained
+under native Linux Docker without giving application containers an external
+route. Caddy discards incoming forwarding headers and supplies its own;
 Fastify trusts only Caddy's exact internal-bridge address.
 For the Tailscale TLS-termination hop, the validated configured HTTPS origin is
 authoritative for Next.js refresh Origin headers, redirects and CSP; an internal
@@ -67,7 +68,8 @@ initializer permits only an empty database and creates exactly one organisation,
 one verified Owner and an active Complete entitlement. Routine start performs
 neither migration nor seeding. Registration and provider-backed recovery/email
 routes fail closed; director invitations and password recovery use explicit
-fragment-only links. See [Personal Server Deployment on Windows](../personal-server-deployment.md).
+fragment-only links. See [Personal Server Deployment on Windows](../personal-server-deployment.md)
+or the supervised [Private Personal Server on Linux](../personal-server-deployment-linux.md).
 
 ### API process startup
 

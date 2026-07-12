@@ -16,8 +16,8 @@ import { fileURLToPath } from 'node:url';
 import {
   composeSafeEnvironment,
   pinnedLocalDockerEnvironment,
-  validateLocalDockerDesktopEndpoint,
-  validateLocalDockerDesktopRuntime,
+  validateLocalDockerEndpoint,
+  validateLocalDockerRuntime,
 } from './personal-server-docker-boundary.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -527,6 +527,7 @@ export async function certify(options, context = {}) {
   const resolveSourceIdentity = context.sourceIdentityImpl ?? sourceIdentity;
   const now = context.now ?? (() => new Date());
   const dryRun = options['dry-run'] === true;
+  const hostPlatform = context.hostPlatform ?? process.platform;
   const envPath = resolve(repoRoot, options['env-file'] ?? processEnv.CHARITYPILOT_PERSONAL_SERVER_ENV_FILE ?? '.env.personal-server');
   if (options['report-file'] && !isAbsolute(options['report-file'])) {
     throw new Error('--report-file must be an absolute path in both dry-run and live modes');
@@ -541,7 +542,7 @@ export async function certify(options, context = {}) {
   const planned = [];
   if (dryRun) {
     planned.push('validate protected personal-server environment');
-    planned.push('verify local Windows Docker Desktop Linux named-pipe boundary and Engine API');
+    planned.push('verify the local host Docker boundary and Engine API');
     planned.push('docker compose config --quiet and live ps JSON');
     planned.push('inspect exact internal and Caddy-only edge networks plus persistent volumes');
     planned.push('fetch loopback Caddy /login and authenticated readiness');
@@ -557,9 +558,10 @@ export async function certify(options, context = {}) {
     'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}|{{.Endpoints.docker.SkipTLSVerify}}',
   ], { cwd: repoRoot, env: processEnv });
   const [dockerEndpoint = '', dockerSkipTlsVerify = ''] = dockerContext.stdout.trim().split('|');
-  validateLocalDockerDesktopEndpoint({
+  validateLocalDockerEndpoint({
     endpoint: dockerEndpoint,
     skipTlsVerify: dockerSkipTlsVerify,
+    platform: hostPlatform,
   }, processEnv);
   const dockerProbeEnv = pinnedLocalDockerEnvironment(processEnv, dockerEndpoint);
   const dockerInfo = execute('docker', ['info', '--format', '{{.OperatingSystem}}|{{.OSType}}'], {
@@ -569,12 +571,13 @@ export async function certify(options, context = {}) {
   const dockerVersion = execute('docker', ['version', '--format', '{{.Server.APIVersion}}'], {
     cwd: repoRoot, env: dockerProbeEnv,
   });
-  validateLocalDockerDesktopRuntime({
+  validateLocalDockerRuntime({
     endpoint: dockerEndpoint,
     skipTlsVerify: dockerSkipTlsVerify,
     operatingSystem: dockerOperatingSystem,
     serverOs: dockerServerOs,
     apiVersion: dockerVersion.stdout.trim(),
+    platform: hostPlatform,
   }, processEnv);
   const dockerEnv = pinnedLocalDockerEnvironment(processEnv, dockerEndpoint);
   const compose = ['compose', '--project-name', 'charitypilot-personal-server', '--env-file', envPath, '-f', resolve(repoRoot, 'compose.personal-server.yml')];

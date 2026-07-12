@@ -4,8 +4,8 @@ This is a reference for CharityPilot's **production** runtime dependencies and t
 `overrides` pins in the root `package.json`. Dev-only tooling (TypeScript, Turbo,
 ESLint, tsx, Prisma CLI, Playwright, type packages) is omitted except where noted.
 
-Versions below are the declared ranges as of commit `7fcd404`; see each
-`package.json` for the authoritative spec.
+Versions below were rechecked against the workspace manifests on 2026-07-12;
+each `package.json` and the lockfile remain the authoritative specifications.
 
 ## How dependencies are organised
 
@@ -44,6 +44,7 @@ toolchain (`turbo`, `typescript`).
 | `@heroui/react` | `^2.7.0` | Component library (React Aria + Tailwind). |
 | `@heroui/theme` | `^2.4.0` | HeroUI theming tokens (light/dark). |
 | `framer-motion` | `^12.6.0` | Animations/transitions used by HeroUI and the UI. |
+| `lucide-react` | `^1.23.0` | Application icon set used by navigation, actions and status UI. |
 | `axios` | `^1.16.0` | Browser API client (`apps/web/src/lib/api.ts`), with single-flight refresh. |
 | `postcss` | `^8.5.14` | CSS pipeline for Tailwind (also see the override pin below). |
 

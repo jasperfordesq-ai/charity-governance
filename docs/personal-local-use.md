@@ -6,11 +6,11 @@ Stripe, Supabase, Resend, DNS, TLS, public hosting, or final legal signoff, and
 does not prove the platform is legal advice.
 
 This document covers the source-mounted development stack only. If several
-directors need a faster compiled installation that remains hosted on a Windows
-computer and is reached through private HTTPS, use the separate
-[Personal Server Deployment on Windows](personal-server-deployment.md) guide.
-That profile has a different Compose file, origin model, account lifecycle and
-operator commands.
+directors need a faster compiled installation, use the separate personal-server
+mode: [Personal Server Deployment on Windows](personal-server-deployment.md) for
+Windows or [Private Personal Server on Linux](personal-server-deployment-linux.md)
+for the currently supervised x86-64 Linux host profile. Those profiles have a
+different Compose file, origin model, account lifecycle and operator commands.
 
 Use this gate before entering records you care about:
 

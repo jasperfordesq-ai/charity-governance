@@ -6,7 +6,9 @@ Start with:
 
 - [`README.md`](README.md) for the supported deployment choices;
 - [`docs/personal-server-deployment.md`](docs/personal-server-deployment.md) for
-  the private Windows installation and operating runbook; and
+  the private Windows installation and operating runbook;
+- [`docs/personal-server-deployment-linux.md`](docs/personal-server-deployment-linux.md)
+  for the supervised private x86-64 Linux profile; and
 - [`docs/personal-server-readiness-scorecard.md`](docs/personal-server-readiness-scorecard.md)
   for the evidence required before important charity records are stored.
 
@@ -21,6 +23,11 @@ The supported host baseline is Windows 11 24H2 or later (kernel build 26100+)
 with current security updates. Older or unverified Windows builds fail installer
 preflight and are outside the support boundary.
 
+The Linux testing baseline is a current x86-64 Linux VM, initially Ubuntu 24.04
+LTS, a dedicated non-root operator, Node 22+, exact repository npm, local Docker
+Engine API 1.48+ and Compose 2.33.1+. It is not yet generally supported for
+irreplaceable records because clean-VM recovery/update acceptance is incomplete.
+
 For a new Windows installation, failed-install resume or blank replacement-host
 recovery, use only `scripts/Install-CharityPilot.ps1`. For a verified release
 update or its permitted pre-cutover resume, use only
@@ -30,6 +37,11 @@ authentication-recovery rotation npm commands. The low-level
 `personal:server:init`/`update` commands, raw
 `docker compose` mutation, manual database migration/restore, volume deletion
 and Docker Desktop factory reset are not supported substitutes.
+
+For a new Linux test installation use only
+`bash scripts/Install-CharityPilot.sh`. Linux failed-install resume,
+replacement-host restore and version-bound update/rollback remain supervised
+engineering work; preserve exact state and source rather than improvising.
 
 Private remote access currently means the exact `.ts.net` HTTPS origin managed
 by Tailscale Serve. Tailscale Funnel, Cloudflare Tunnel, router forwarding and
@@ -102,6 +114,10 @@ addresses, private hostnames, filesystem usernames, container environment,
 tokens, cookie values, secrets, recovery-set paths and charity records. Never
 paste raw `docker inspect`, environment, installation-state, location-pointer,
 runtime-health, database or document output into a public issue.
+
+For Linux also include the distribution, kernel, architecture and Docker Engine
+and Compose versions, but never include Docker inspection output containing
+environment values or private network/host information.
 
 This open-source project does not promise an always-available help desk,
 managed hosting, emergency data recovery or legal/governance advice. Keep an

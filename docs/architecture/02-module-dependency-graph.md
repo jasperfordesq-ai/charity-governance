@@ -1,6 +1,6 @@
 # Module & Dependency Graph
 
-This document maps the CharityPilot API's internal module structure: how the twelve route groups registered in `apps/api/src/server.ts` delegate to service modules in `apps/api/src/services/`, which of the 27 Prisma models those services touch, and which middleware guards gate each group. It also describes the `@charitypilot/shared` package boundary and the cross-module coupling between shared services and utilities.
+This document maps the CharityPilot API's internal module structure: how the twelve route groups registered in `apps/api/src/server.ts` delegate to service modules in `apps/api/src/services/`, which of the current 33 Prisma models those services touch, and which middleware guards gate each group. It also describes the `@charitypilot/shared` package boundary and the cross-module coupling between shared services and utilities.
 
 ## Route group registration
 

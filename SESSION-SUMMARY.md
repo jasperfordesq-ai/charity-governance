@@ -1,5 +1,10 @@
 # Session summary — frontend provable trust (the web reliability ledger)
 
+> **Historical record:** this describes an earlier branch/session, not the
+> current checkout, branch, test totals or release status. Use `AGENTS.md`,
+> `docs/agent-continuation-handoff.md` and generated current reports for active
+> work.
+
 **Branch:** `frontend/provable-trust` (off `master`). **Not** pushed, **not** merged.
 
 ## What this session did

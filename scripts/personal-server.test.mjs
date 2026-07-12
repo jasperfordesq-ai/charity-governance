@@ -315,6 +315,10 @@ function runAt(root, args, executor, output, processEnv = {}, runtimeOptions = {
     spawnSyncImpl: executor.spawn,
     randomBytesImpl: runtimeOptions.randomBytesImpl ?? deterministicRandomBytes,
     now: runtimeOptions.now ?? (() => new Date(NOW)),
+    // This suite models the supported Windows + Docker Desktop profile.
+    // Keep the host platform deterministic when the tests run on Linux CI;
+    // Linux-host behaviour has its own personal-server-linux.test.mjs suite.
+    hostPlatform: runtimeOptions.hostPlatform ?? 'win32',
     writeOutput: (value) => output.push(value),
   });
 }
@@ -1542,6 +1546,7 @@ test('guarded decommission deletion tolerates an already-absent exact volume', (
     {
       dryRun: false,
       repoRoot: 'C:\\protected-source',
+      hostPlatform: 'win32',
       processEnv: {},
       spawnSyncImpl: executor.spawn,
       writeOutput: () => {},
@@ -3231,6 +3236,7 @@ test('live lifecycle verifies the local Docker boundary once before Compose', ()
       args: ['stop'],
       repoRoot: root,
       processEnv: { COMPOSE_PROFILES: 'maintenance' },
+      hostPlatform: 'win32',
       spawnSyncImpl: executor.spawn,
       randomBytesImpl: deterministicRandomBytes,
       now: () => new Date(NOW),
@@ -3260,6 +3266,7 @@ test('live lifecycle never contacts a remote Docker endpoint discovered from con
         args: ['stop'],
         repoRoot: root,
         processEnv: {},
+        hostPlatform: 'win32',
         spawnSyncImpl: executor.spawn,
         randomBytesImpl: deterministicRandomBytes,
         now: () => new Date(NOW),
