@@ -975,7 +975,39 @@ const port = process.env.CHARITYPILOT_PERSONAL_SERVER_PORT;
 const origin = process.env.CHARITYPILOT_PERSONAL_SERVER_ORIGIN;
 const email = process.env.PERSONAL_SERVER_OWNER_EMAIL;
 const password = process.env.PERSONAL_SERVER_OWNER_PASSWORD;
-const response = await fetch('http://127.0.0.1:' + port + '/api/v1/auth/login', {
+const base = 'http://127.0.0.1:' + port;
+const deadline = Date.now() + 30000;
+let frontDoorReady = false;
+while (Date.now() < deadline) {
+  try {
+    const remaining = Math.max(1, deadline - Date.now());
+    const readiness = await fetch(base + '/login', {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(Math.min(3000, remaining)),
+    });
+    await readiness.arrayBuffer();
+    if (readiness.status === 200) {
+      frontDoorReady = true;
+      break;
+    }
+    if (![502, 503, 504].includes(readiness.status)) {
+      console.error('Personal-server host front door returned unexpected HTTP ' + readiness.status);
+      process.exit(1);
+    }
+  } catch {
+    // Docker Desktop can report the container healthy before its Windows
+    // loopback forwarding socket is accepting connections. Retry only this
+    // unauthenticated readiness request; the credential POST remains one-shot.
+  }
+  if (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+if (!frontDoorReady) {
+  console.error('Personal-server host front door did not become reachable within 30 seconds');
+  process.exit(1);
+}
+const response = await fetch(base + '/api/v1/auth/login', {
   method: 'POST',
   headers: { 'content-type': 'application/json', origin },
   body: JSON.stringify({ email, password }),

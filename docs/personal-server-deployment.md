@@ -1006,6 +1006,11 @@ npm run personal:server -- help
   clock and stale cookies. Never disable secure cookies, CSRF/origin or CORS.
 - If it is slow, prove the running stack is `compose.personal-server.yml`, not
   the development stack, and inspect host/Docker CPU, memory and disk.
+- The installer waits up to 30 seconds for Docker Desktop's Windows loopback
+  forwarding socket after internal container health, using only an
+  unauthenticated `/login` readiness request before its one-shot credential
+  proof. If that bounded wait still fails, preserve the stopped failed state
+  and use the documented installer resume; do not start Compose manually.
 - If an update fails, preserve `pending-update.json`, both sources, recovery
   sets and exact output. Do not rerun initialization or migrations.
 - If state is `restoring`, keep writers stopped and preserve both selected and

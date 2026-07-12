@@ -913,6 +913,11 @@ test('successful init stores no owner password and prints it only after every ch
     assert.equal(loginVerification.command.includes(match[1]), false);
     assert.equal(loginVerification.options.env.PERSONAL_SERVER_OWNER_PASSWORD, match[1]);
     assert.equal(loginVerification.options.env.PERSONAL_SERVER_OWNER_EMAIL, 'owner@example.org');
+    const verificationSource = loginVerification.command.at(-1);
+    assert.ok(verificationSource.indexOf("base + '/login'") < verificationSource.indexOf("base + '/api/v1/auth/login'"));
+    assert.match(verificationSource, /deadline = Date\.now\(\) \+ 30000/u);
+    assert.match(verificationSource, /\[502, 503, 504\]\.includes\(readiness\.status\)/u);
+    assert.equal((verificationSource.match(/\/api\/v1\/auth\/login/gu) ?? []).length, 1);
 
     const commands = commandText(executor.calls);
     assert.ok(commands.indexOf('--profile personal-init build migrate') < commands.indexOf('--profile personal-init build api'));
