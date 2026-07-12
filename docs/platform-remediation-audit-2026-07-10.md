@@ -1043,7 +1043,7 @@ Acceptance:
 
 ### P0-10 - Complete backup and recovery for metadata and document bytes
 
-Status: `IN_PROGRESS` overall; repository proof tooling is `CI_VERIFIED`
+Status: `IN_PROGRESS` overall; repository proof tooling is `LOCALLY_VERIFIED`
 
 Evidence:
 
@@ -1091,19 +1091,11 @@ Repository remediation on 2026-07-11:
   `d2d1c63842bad568fae76ae4af4a1e75d621d0a8ee79bc77e3d7cab985f50df1`.
   The temporary database, containers, and artifacts were removed. This is local
   implementation evidence, not production-provider or production-restore proof.
-- Final-tree local verification includes a green root `npm test`, API ordinary
-  tests `706 / 706` plus the isolated real-PostgreSQL migration proof `1 / 1`,
-  web `351 / 351`, production tooling `746` passed / `0` failed / `2` Windows
-  symbolic-link privilege skips (`748` total), and local-Docker tooling `44 / 44`.
-  The secret/SAST scan passed across `597` files, and the two Linux-specific
-  descriptor/identity regressions passed in a read-only `node:22-alpine` run.
-- Implementation SHA `3fd11894ec17006bb2cbea75f36e6f0f4bd2cc8c` through final
-  verification SHA `0c5b795ec2cbc906a119f7ffd52bd552519d232c` passed exact-SHA
-  CI run `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29163982047`
-  and managed E2E run
-  `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29163982033`.
-  This verifies repository tooling only; it does not fabricate production
-  database, object-store, restore-operator, RPO/RTO, or provider evidence.
+- Final-tree local verification includes `npm run test:production-check` at `745`
+  passed / `0` failed / `2` Windows symbolic-link privilege skips (`747` total),
+  database checker `32 / 32`, database helper `39` passed / `1` Windows skip,
+  API production-environment validation `51 / 51`, and generated platform-audit
+  freshness. Exact commit and CI evidence will be added after push.
 
 Required result:
 
@@ -1180,19 +1172,19 @@ Status: `CI_VERIFIED`
 
 ### P1-04 - Document deletion retry lifecycle
 
-Status: `CI_VERIFIED`
+Status: `LOCALLY_VERIFIED`; exact-SHA CI re-verification is pending after the
+scheduled-job smoke assertion is refreshed for the expanded cleanup summary
 
 - Add bounded attempts, exponential backoff, `nextAttemptAt`, terminal/dead-letter
   state, idempotency, alerting, and operator recovery.
 - Prevent malformed or permanently forbidden objects from alerting hourly
   forever.
 - Implementation is published through
-  `8c573e3d0ea3729293201b32e14bafc7d4365ae0`. Its earlier managed E2E run
-  `29159686871` passed, while CI run `29159686841` exposed the stale
-  scheduled-job cleanup-summary assertion. The refreshed assertion and the
-  isolated live-migration test phase are included in final verification SHA
-  `0c5b795ec2cbc906a119f7ffd52bd552519d232c`, which passed CI run
-  `29163982047` and managed E2E run `29163982033`.
+  `8c573e3d0ea3729293201b32e14bafc7d4365ae0`. Managed E2E run
+  `29159686871` passed; CI run `29159686841` reached the scheduled-job smoke and
+  then failed only because its grep still expected the older cleanup summary.
+  The updated workflow assertion is locally verified but must pass on the next
+  exact pushed SHA before this item can become `CI_VERIFIED`.
 
 ### P1-05 - Sanitized root-cause diagnostics
 
@@ -1398,6 +1390,13 @@ Local verification:
   `https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29168177757`
   both passed for that SHA. E2E passed `113 / 113` runner contracts and
   `105 / 105` browser scenarios in `3.6m`.
+Original audit acceptance wording retained from the stashed 2026-07-11 working
+snapshot:
+
+- Prevent board term end before appointment, fundraising end before start,
+  contradictory induction/conduct booleans and dates, and `FILED` states without
+  filing dates.
+- Add database constraints where safe and shared/API validation everywhere.
 
 ## P2: Release Engineering and Production Operations
 
@@ -1486,7 +1485,7 @@ Local verification:
 
 ### P2-12 - Production restore evidence consistency
 
-Status: `CI_VERIFIED` for the repository contract; external proof remains under
+Status: `LOCALLY_VERIFIED` for the repository contract; external proof remains under
 P0-10
 
 - Sentinel-based production instructions have been removed. The canonical flow
@@ -1496,9 +1495,6 @@ P0-10
 - Workflow, runbook, launch-status, generated-audit, checker JSON, and launch
   evidence contracts now share the same commands, exclusions, recovery-set/dump
   cross-bindings, and no-production-write semantics.
-- Final verification SHA `0c5b795ec2cbc906a119f7ffd52bd552519d232c`
-  passed CI run `29163982047` and managed E2E run `29163982033`; this does not
-  replace the real provider/operator restore evidence still required by P0-10.
 
 - Reconcile the runbook's sentinel requirement with the helper's remote safety
   guard.

@@ -1,5 +1,9 @@
 # CharityPilot Full Product Revamp Implementation Plan
 
+> **Historical implementation plan:** retained for product-design provenance.
+> Current remediation status and acceptance evidence live in the active audit
+> and continuation handoff.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver a polished, intuitive, source-cited, production-grade CharityPilot experience for Irish registered charities across UI, product workflow, backend trust boundaries, and governance compliance content.

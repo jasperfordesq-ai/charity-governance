@@ -2,7 +2,7 @@
 
 Generated: 2026-07-12
 
-Branch: `unknown`
+Branch: `codex/linux-private-server-profile`
 
 Generation note: repository state is intentionally live-only; run `npm run launch:status -- --json` from the release checkout before collecting launch evidence. Use `node scripts/platform-completion-audit.mjs --json` for machine-readable route, backend, launch, compliance, and next-action data without rewriting this Markdown ledger.
 
@@ -13,10 +13,10 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Area | Current state | Next action |
 | --- | --- | --- |
 | Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 80 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | You have not created a production environment file yet. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| API/backend | 12 route groups scanned with route-local guard heuristics and 81 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| Launch operations | .env.production exists but 18 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 39 web unit test files, 80 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 39 web unit test files, 81 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -374,7 +374,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 287 | public/partial by design | 15 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 287 | public/partial by design | 16 | preserve current guard and tenant boundary |
 | `billing` | `apps/api/src/routes/billing/index.ts` | 96 | auth, owner actions | 7 | preserve current guard and tenant boundary |
 | `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
 | `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
@@ -397,12 +397,22 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
 - Solicitor/governance/privacy review and external penetration test are required before real charity data.
 
-Local-state note: This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.
+Local-state note: This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json has not been created yet.
-- Create it with:  npm run check:production:evidence:init
+- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 89.
+- approvedForLaunch: false
+- finalSignoff: pending
+- Final approval roles approved: 0 / 5
+- Release binding: Launch evidence is not bound to a concrete release artifact identity (7 field(s) missing or placeholder).
+- Next incomplete checks:
+  - releaseGate.check-production (pending)
+  - releaseGate.github-environment (missing)
+  - releaseGate.github-secret-store (missing)
+  - releaseGate.deploy-preflight (pending)
+  - releaseGate.deploy-production (pending)
+- Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
 - Strict validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Strict validation JSON: `npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 
@@ -523,15 +533,68 @@ Local-state note: This generated section reflects local non-committed files. Thi
 
 ### Local Production Environment State
 
-- Phase: `NO_ENV`
-- You have not created a production environment file yet.
-- This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.
+- Phase: `ENV_INCOMPLETE`
+- .env.production exists but 18 production value issue(s) still need resolution.
+- This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
 
 ### Launch Progress Summary
 
-- Production values complete: 0 / 27 (27 remaining)
-- Strict launch gates complete: 0 / 121 (121 remaining, 0% complete)
+- Production values complete: 9 / 27 (18 remaining)
+- Launch evidence checks complete: 9/89 evidence checks (80 remaining)
+- Final signoffs approved: 0 / 5 (5 remaining)
+- Strict launch gates complete: 18 / 121 (103 remaining, 14.9% complete)
 - approvedForLaunch: false
+
+### Local Production Environment Issues
+
+The local non-committed production env still has 18 unresolved value issue(s):
+
+- `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` (missing): Value is missing from .env.production or the approved production secret source.
+- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` (missing): Value is missing from .env.production or the approved production secret source.
+- `TRUSTED_PROXY_ADDRESSES` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `DATABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_SECRET_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_WEBHOOK_SECRET` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_ESSENTIALS_YEARLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_COMPLETE_MONTHLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `STRIPE_COMPLETE_YEARLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `RESEND_API_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `SUPABASE_SERVICE_ROLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `ERROR_ALERT_WEBHOOK_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_API_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_WEB_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
+- `CHARITYPILOT_MIGRATION_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
+
+Grouped by source:
+
+- Hosting, DNS, TLS, and proxy:
+  - `TRUSTED_PROXY_ADDRESSES`: Reverse-proxy IP/CIDR in front of the API (Step 4)
+- PostgreSQL:
+  - `DATABASE_URL`: Managed production PostgreSQL URL with sslmode=verify-full and target_session_attrs=read-write (Step 3)
+  - `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST`: Exact managed PostgreSQL hostname authorized for audited document-deletion recovery (Step 3)
+- Stripe billing:
+  - `STRIPE_SECRET_KEY`: Stripe live secret key from the Stripe secret store (Step 2)
+  - `STRIPE_WEBHOOK_SECRET`: Stripe live webhook signing secret from the Stripe dashboard (Step 2)
+  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Stripe live publishable key from the Stripe dashboard (Step 2)
+  - `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`: Stripe live Essentials monthly recurring price ID (Step 2)
+  - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Stripe live Essentials yearly recurring price ID (Step 2)
+  - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Stripe live Complete monthly recurring price ID (Step 2)
+  - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Stripe live Complete yearly recurring price ID (Step 2)
+  - `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`: Pinned live Stripe billing portal configuration ID (Step 2)
+- Resend email:
+  - `RESEND_API_KEY`: Resend production API key from the secret store (Step 2)
+- Supabase storage:
+  - `SUPABASE_URL`: API-only Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)
+  - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
+- Observability:
+  - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)
+- Release image promotion:
+  - `CHARITYPILOT_API_IMAGE`: Digest-pinned API image ref from release-image-digests.env (Step 6)
+  - `CHARITYPILOT_WEB_IMAGE`: Digest-pinned web image ref from release-image-digests.env (Step 6)
+  - `CHARITYPILOT_MIGRATION_IMAGE`: Digest-pinned migration image ref from release-image-digests.env (Step 6)
 
 ## Irish Compliance Source Posture
 

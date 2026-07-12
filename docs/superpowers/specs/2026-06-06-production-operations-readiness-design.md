@@ -1,5 +1,8 @@
 # Production Operations Readiness Design
 
+> **Historical design snapshot:** checkout, branch and readiness statements below
+> describe the date of authorship and are not current operator evidence.
+
 ## Purpose
 
 CharityPilot now has a trustworthy repository release gate, but the remaining production-readiness blockers are operational. The next slice will turn those external blockers into concrete evidence requirements, templates, and operator checklists that can be used to complete launch without committing secrets or pretending that infrastructure has already been provisioned.

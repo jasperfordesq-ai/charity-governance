@@ -2,7 +2,7 @@
 
 Date checked: 2026-07-09
 
-Last updated: 2026-07-10 (targeted annual-reporting and accounting-source recheck)
+Last updated: 2026-07-12 (targeted legislation/CRO link and currency recheck)
 
 Purpose: source inventory for a review-ready Irish charity governance product. This log is not legal advice and must not be used to claim CharityPilot gives legal certainty or replaces solicitor, accountant, safeguarding, employment, data-protection, or governance review.
 
@@ -10,6 +10,13 @@ Purpose: source inventory for a review-ready Irish charity governance product. T
 
 - Official sources were rechecked by web search/browsing on 2026-07-09.
 - The annual accounting and audit wording was rechecked on 2026-07-10. Section 50 refers to an amount that may be prescribed; the Irish Statute Book's current statutory-instrument list does not list an instrument made under section 50. The accounting and annual-report amendments in sections 17 to 19 of the Charities (Amendment) Act 2024 are not yet commenced, and the Regulator's Charities SORP material describes that regime as proposed. The unsupported income-band table was removed from the public article; accountant and solicitor approval remains external launch evidence.
+- On 2026-07-12 the Law Reform Commission revised Charities Act page reported
+  that its consolidation was updated to 22 April 2026 and current with known
+  in-force changes as of 2 July 2026. The CRO annual-return page and DPC
+  accountability page remained reachable. The Charities Regulator governance
+  page rejected the automated retrieval, so its substantive content was not
+  re-certified in this documentation pass; professional/legal review and a
+  manual regulator-source check remain required before launch.
 - Charities Regulator direct automated fetches returned 403 for several pages, but official Charities Regulator URLs and snippets were confirmed through search results for the Governance Code, toolkit/templates, Compliance Record Form, Annual Report guidance, and trustee guidance.
 - Irish Statute Book commencement table was updated to 24 June 2026 and still shows mixed commenced and not-yet-commenced Charities (Amendment) Act 2024 sections.
 - Law Reform Commission revised Charities Act 2009 page was updated to 22 April 2026 and states that changes known to be in force as of 2 July 2026 are reflected.

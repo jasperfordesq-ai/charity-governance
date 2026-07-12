@@ -1,5 +1,10 @@
 # Session summary — provable reliability (the trust ledger)
 
+> **Historical record:** this describes an earlier branch/session and its
+> then-current guarantee totals. It is retained for provenance, not as current
+> repository or release evidence. Use `docs/RELIABILITY.md` and the active
+> continuation handoff for current status.
+
 **Branch:** `reliability/provable-trust` (5 commits, **not pushed, not merged**).
 **Goal:** make CharityPilot's reliability *provable and regression-proof* — turn the
 behaviours that would lose customer trust if they broke into automated tests + a single

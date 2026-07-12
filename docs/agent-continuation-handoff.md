@@ -4,6 +4,22 @@ Last updated: 2026-07-12
 
 This document exists so a new Codex, Claude, or other coding agent can continue the same CharityPilot production-completion goal without relying on chat memory or a pasted prompt.
 
+## 2026-07-12 private Linux host profile
+
+A separate `private-linux-server` host profile now preserves the option to run
+the compiled single-charity appliance on an inexpensive x86-64 Linux VM. It
+adds `scripts/Install-CharityPilot.sh`, a Linux preflight, a local Unix-socket
+Docker boundary, Linux permission enforcement, release metadata and the
+authoritative `docs/personal-server-deployment-linux.md` runbook. It reuses the
+existing Caddy/Next.js/Fastify/PostgreSQL topology and encrypted recovery engine;
+the Windows and strict public-production profiles remain intact.
+
+Repository contracts are implemented, but Linux has no live certification yet.
+Do not claim it ready for irreplaceable records until a clean VM install,
+reboot/login, Tailscale director access, off-host recovery, different-VM restore,
+failed-resume/replacement wrappers, version-bound update/rollback and exact-SHA
+Linux release acceptance pass. The Windows readiness score does not transfer.
+
 ## Active Full-Platform Remediation Audit
 
 Before selecting production-completion work, read:
@@ -309,6 +325,11 @@ The detailed issue contract remains in
   Parent item P1-07 remains open for MFA, breached-password policy, and the
   remaining reviewed account/ownership-recovery policy.
 
+The retained 2026-07-11 stashed working snapshot predated these later P0-10,
+P1-04, P1-09, and P1-07A checkpoints. Its historical production-tooling count
+corrections remain in the verification chronology below; this newer security
+and recovery evidence remains authoritative for the 2026-07-12 handoff.
+
 P0-03 is not live-provider proof. Before production enablement, the billing
 owner must inventory and reconcile Stripe customer/subscription history,
 confirm at most one non-terminal subscription per organisation/customer,
@@ -347,17 +368,18 @@ Local personal-use safety before heavy work:
   disposable tenant/app tables.
 - This local safety gate does not replace production provider, deployed HTTPS, legal, pentest, backup/restore, or final signoff evidence.
 
-### Compiled one-charity personal server added on 2026-07-11
+### Compiled one-charity personal server profiles
 
-The user's immediate operating goal is now explicitly separate from the public
-SaaS launch: run CharityPilot for one charity on a trusted Windows computer,
-with optional private access for named directors, while retaining the existing
-multi-organisation/provider/public-production work for a later VM or commercial
-deployment.
+The user's immediate operating goal is explicitly separate from the public SaaS
+launch: run CharityPilot for one charity on a trusted Windows host or a
+supervised x86-64 Linux VM, with optional private access for named directors,
+while retaining the existing multi-organisation/provider/public-production work
+for a later commercial deployment.
 
-The implemented front door is **Caddy**. Windows is only the host; Docker
-Desktop/WSL 2 runs Caddy, the compiled Next.js server, the compiled Fastify API,
-PostgreSQL and the document volume. Caddy alone publishes
+The implemented front door is **Caddy**. Windows uses Docker Desktop/WSL 2;
+Linux uses the local native Docker Unix socket. Both run Caddy, the compiled
+Next.js server, the compiled Fastify API, PostgreSQL and the document volume.
+Caddy alone publishes
 `127.0.0.1:8080`, routes `/api/v1/*` to Fastify and all other paths to Next.js.
 There is no IIS dependency, no API/database host port, no source bind mount and
 no development watcher in this profile. Tailscale Serve may terminate private
@@ -368,12 +390,17 @@ Source-of-truth files:
 
 - `docs/personal-server-deployment.md` - complete Windows/Tailscale/accounts/
   lifecycle/backup/recovery/security/VM-migration runbook;
+- `docs/personal-server-deployment-linux.md` - supervised Linux installation,
+  security, operation and outstanding live-acceptance contract;
 - `compose.personal-server.yml` and `caddy/Caddyfile.personal-server` - isolated
   compiled runtime;
 - `.env.personal-server.example` - non-secret field contract; the generated
   `.env.personal-server` is Git-ignored;
-- `scripts/personal-server.mjs` - supported `init`, `start`, `status`, `stop`,
-  `backup`, `update`, `reset-link`, and emergency `reset-password` operations;
+- `scripts/Install-CharityPilot.ps1` and `scripts/Install-CharityPilot.sh` -
+  host-specific first-install entry points within their documented support
+  boundaries;
+- `scripts/personal-server.mjs` - internal/shared lifecycle for start, status,
+  stop, backup, recovery, account reset and guarded maintenance operations;
 - API `personal-server` env/initializer/account utilities - fail-closed private
   startup, empty-database one-charity initialization, manual invitation and
   hash-only one-hour reset links; and
@@ -490,7 +517,11 @@ current GitHub metadata, and the expanded 89-check evidence schema:
   `b2138acfe0b7b7a9127a14667f10a771982a0e3b`; CI run `29185333589` passed in
   `8m24s` and managed E2E run `29185333588` passed in `6m41s` with `105 / 105`
   browser scenarios. This closes P1-07A repository publication only.
-  Older `823`, `791`,
+- The preceding local production-tooling checkpoint retained from the stashed
+  working snapshot was:
+  `npm run test:production-check` passed on 2026-07-11 with `746` checks
+  passed, `0` failed, and `2` Windows-only symbolic-link privilege skips (`748`
+  total). Older `823`, `791`,
   `746`, `745`, `548 / 548`, `546 / 546`, `545 / 545`, `544 / 544`, `494 / 494`, `488 / 488`, `396 / 396`, `352 / 352`,
   `338 / 338`, and `339 / 339` entries in the verification chronology below are historical
   counts from earlier commits, not the current gate size.
@@ -884,8 +915,8 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 352/352 production-tooling checks during the
     latest handoff refresh.
-  - Historical count; the latest 2026-07-11 local production-tooling gate passed
-    746 checks with 0 failures and 2 Windows-only symbolic-link privilege skips
+  - Historical count; the 2026-07-11 local production-tooling gate passed 746
+    checks with 0 failures and 2 Windows-only symbolic-link privilege skips
     (748 total).
 - `npm run audit:platform:check`
   - Passed on 2026-07-09 after the same browser-QA diagnostic hardening.
@@ -938,9 +969,9 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing after
     the same changes and the GitHub production environment evidence gate.
-    Historical count; the 2026-07-11 local production-tooling gate passed 745
+    Historical count; the 2026-07-11 local production-tooling gate passed 746
     checks with 0 failures and 2 Windows-only symbolic-link privilege skips
-    (747 total).
+    (748 total).
 
 - `npm test -w @charitypilot/web`
   - 220 web tests passed after public attribution, shared auth status icons, and shared auth loading-state polish.
@@ -953,18 +984,18 @@ Recently successful checks in this workstream:
 - `npm run test:production-check`
   - Passed on 2026-07-09 with 338/338 production-tooling checks passing.
   - Covers production validators, launch evidence validation, provider checker contracts, deployment tooling, backup/restore tooling, and CI/release workflow guards.
-  - Historical count; the 2026-07-11 local production-tooling gate passed 745
+  - Historical count; the 2026-07-11 local production-tooling gate passed 746
     checks with 0 failures and 2 Windows-only symbolic-link privilege skips
-    (747 total).
+    (748 total).
 - `npm run lint -w @charitypilot/web`
   - Passed after the shared blog empty-state and compliance save-status primitive cleanup.
 - `npm run build -w @charitypilot/web`
   - Passed after the same shared-state cleanup.
 - `npm run test:production-check`
   - Passed again with 338/338 production-tooling checks after launch-evidence, release-ready, continuation-doc, and GitHub secret-store checker hardening.
-  - Historical count; the 2026-07-11 local production-tooling gate passed 745
+  - Historical count; the 2026-07-11 local production-tooling gate passed 746
     checks with 0 failures and 2 Windows-only symbolic-link privilege skips
-    (747 total).
+    (748 total).
 - Focused launch-evidence tests
   - Passed after the evidence hardening updates.
 - Web wiring tests

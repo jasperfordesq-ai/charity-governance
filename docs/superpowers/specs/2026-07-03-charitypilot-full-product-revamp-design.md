@@ -1,5 +1,8 @@
 # CharityPilot Full Product Revamp Design
 
+> **Historical design snapshot:** retained for provenance. It does not override
+> the active remediation ledger, current implementation or release evidence.
+
 ## Purpose
 
 CharityPilot should become a polished, intuitive, trustworthy, production-grade Irish charity governance platform. The revamp should improve the whole product experience, not only isolated screens: first-class light and dark modes, accessible UI, coherent workflows, source-cited governance content, and backend behaviour that reinforces evidence-led compliance.

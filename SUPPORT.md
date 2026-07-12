@@ -6,7 +6,7 @@ Start with:
 
 - [`README.md`](README.md) for the supported deployment choices;
 - [`docs/personal-server-deployment.md`](docs/personal-server-deployment.md) for
-  the private Windows installation and operating runbook; and
+  the private Windows installation and operating runbook;
 - [`docs/personal-server-deployment-linux.md`](docs/personal-server-deployment-linux.md)
   for the supervised private x86-64 Linux profile; and
 - [`docs/personal-server-readiness-scorecard.md`](docs/personal-server-readiness-scorecard.md)

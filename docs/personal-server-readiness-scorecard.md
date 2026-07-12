@@ -61,7 +61,7 @@ store important records.
 
 ### Test evidence for this baseline
 
-- the personal-server contract suite passed 156/156 on 2026-07-12;
+- the personal-server contract suite passed 160/160 on 2026-07-12;
 - production checks passed 830 with two intentional skips, the PostgreSQL
   backup slice passed 43 with one Windows symlink-privilege skip, and lint,
   compiled builds, secret scanning and SAST passed;

@@ -1,5 +1,9 @@
 # Reliability goal — an autonomous brief for provable trust
 
+> **Historical prompt artifact:** this brief explains the origin of the trust
+> ledger. It is not the current execution report; use `RELIABILITY.md` and the
+> current CI/E2E result for present evidence.
+
 This file holds a ready-to-run, all-day autonomous brief. Paste the fenced
 `GOAL` block below as the prompt for a fresh autonomous session (or a scheduled /
 background run) when you want to harden the platform's reliability.
@@ -51,7 +55,7 @@ GROUND TRUTH (do not relitigate, do not re-verify):
 - Foundation already exists: docs/ARCHITECTURE.md (the system map) and e2e/ (Playwright,
   5 passing happy-path journeys). Build ON these.
 - Stack: Turborepo — apps/api (Fastify 5, 12 route groups, 16 services, Prisma, jobs),
-  apps/web (Next 16), packages/shared (Zod). 22 Prisma models, organisationId tenant
+  apps/web (Next 16), packages/shared (Zod). 33 Prisma models, organisationId tenant
   scoping, role guards (OWNER/ADMIN/MEMBER), plan gating (ESSENTIALS/COMPLETE), graceful
   503 degradation when Stripe/Supabase/Resend are absent.
   Local stack: docker compose -f compose.yml -f compose.local.yml up

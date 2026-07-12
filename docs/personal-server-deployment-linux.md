@@ -1,5 +1,7 @@
 # Private Personal Server on Linux
 
+Last reviewed: 2026-07-12
+
 ## Status and scope
 
 The `private-linux-server` host profile runs the same compiled, single-charity

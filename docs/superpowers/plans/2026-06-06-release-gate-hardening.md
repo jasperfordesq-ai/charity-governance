@@ -1,5 +1,9 @@
 # Release Gate Hardening Implementation Plan
 
+> **Historical implementation plan:** retained for provenance. Current commands,
+> gates and status live in the active runbooks, package scripts and generated
+> reports.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make CharityPilot's local and CI release gates deterministic, truthful, and aligned with the current `master` branch before external production provisioning begins.

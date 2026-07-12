@@ -12,31 +12,31 @@ focused, source-grounded reference under [`docs/architecture/`](architecture/). 
 non-trivial claim in those documents carries a `file:line` citation and was
 independently fact-checked; the diagrams are GitHub-renderable Mermaid.
 
-> **Verification:** the base map was written and mechanically fact-checked against
-> commit `7fcd404` on 2026-06-20. Security-remediation sections have changed since
-> that snapshot; current behavior is described in the linked lifecycle, billing,
-> and storage references, but old line-number citations can drift. Re-run the
-> documentation checks for the final release ref before treating every citation as
-> release evidence.
+> **Verification:** the map was rechecked for top-level topology, dependency,
+> route-group, model-count and deployment-profile drift on 2026-07-12. Detailed
+> source line citations originated in the 2026-06-20 architecture pass and can
+> move as implementation changes; revalidate citations against the final release
+> ref before treating them as release evidence.
 
-## Deployment profiles and the Windows web server
+## Deployment profiles and the web server
 
 The repository has three deliberately separate operating paths:
 
 | Profile | Purpose | Front door | Runtime behavior |
 | --- | --- | --- | --- |
 | Local development | Source editing and disposable local testing | Direct loopback development ports | `next dev`, `tsx watch`, source mounts, migrations/seeding in the local Compose flow |
-| Personal server | One charity on a trusted Windows computer | **Caddy** on loopback, optionally reached through private Tailscale Serve HTTPS | Compiled Next.js and Fastify images, persistent PostgreSQL/documents, no routine migration or seed, no public providers |
+| Personal server | One charity on a trusted Windows or supervised x86-64 Linux host | **Caddy** on loopback, optionally reached through private Tailscale Serve HTTPS | Compiled Next.js and Fastify images, persistent PostgreSQL/documents, no routine migration or seed, no public providers |
 | Public production | Future hosted commercial service | Production TLS/hosting boundary | Canonical public origins, managed providers, release evidence and the full launch gate |
 
-Windows itself is not the application web server and IIS is not used. In the
-personal-server profile, Docker Desktop/WSL 2 runs Caddy, Next.js, Fastify and
-PostgreSQL. Caddy is the sole published front door:
+The host operating system is not the application web server: IIS, Apache and
+nginx are not used. Docker Desktop/WSL 2 on Windows or native Docker Engine on
+Linux runs Caddy, Next.js, Fastify and PostgreSQL. Caddy is the sole published
+front door:
 
 ```mermaid
 flowchart LR
     Browser["Director browser"] --> Tail["Tailscale private HTTPS (optional)"]
-    Tail --> Loopback["Windows loopback :8080"]
+    Tail --> Loopback["Host loopback :8080"]
     Loopback --> Caddy["Caddy web front door"]
     Caddy -->|"/api/v1/*"| Fastify["Fastify API"]
     Caddy -->|"all other paths"| Next["Compiled Next.js server"]
@@ -52,12 +52,14 @@ bridge, while Fastify remains on the internal bridge and trusts only Caddy's
 exact `172.30.250.10` address. Caddy deliberately trusts no incoming
 `X-Forwarded-*` values because local loopback and Tailscale Serve share the same
 Docker gateway; its reverse proxy replaces those values instead of allowing a
-local process to spoof a client address. Caddy's Windows port is still bound
+local process to spoof a client address. Caddy's host port is still bound
 only to loopback. The configured private origin remains authoritative for
 Next.js redirects, CSP and server-side refresh requests across that HTTP hop.
 The database, API and Next.js ports are not published. See
-[Personal Server Deployment on Windows](personal-server-deployment.md) for the
-complete operating and recovery contract.
+[Personal Server Deployment on Windows](personal-server-deployment.md) or
+[Private Personal Server on Linux](personal-server-deployment-linux.md) for the
+host-specific operating and recovery contract. Linux remains supervised testing
+until the live gates in the readiness scorecard pass.
 
 ## Component diagram
 
@@ -115,8 +117,8 @@ path — is in [System Overview](architecture/01-system-overview.md)._
 | # | Document | What it covers |
 |---|---|---|
 | 1 | [System Overview](architecture/01-system-overview.md) | Workspaces, runtime topology and ports, how the web app reaches the API, external integrations, the scheduled-jobs path, and the component diagram. |
-| 2 | [Module & Dependency Graph](architecture/02-module-dependency-graph.md) | The 12 route groups → 16 services → 22 Prisma models, per-group endpoint/service/model/guard table, the `@charitypilot/shared` boundary, and cross-module coupling. |
-| 3 | [Data Model Reference](architecture/03-data-model.md) | All 22 Prisma models, key fields, relations, enums, the `organisationId` tenant-isolation pattern, composite unique constraints, indexes and cascade behaviour. |
+| 2 | [Module & Dependency Graph](architecture/02-module-dependency-graph.md) | The 12 route groups and their service/model/guard dependencies, the `@charitypilot/shared` boundary, and cross-module coupling. |
+| 3 | [Data Model Reference](architecture/03-data-model.md) | All 33 Prisma models and 39 enums, key fields, relations, the `organisationId` tenant-isolation pattern, composite unique constraints, indexes and cascade behaviour. |
 | 4 | [Request Lifecycle, Middleware & Auth](architecture/04-request-lifecycle.md) | The Fastify plugin/middleware pipeline in order, and the auth/session model (cookie JWT access token + hashed rotating refresh sessions). |
 | 5 | [Billing & Subscription Flow](architecture/05-billing.md) | Stripe tiers and price IDs, checkout/portal, webhook handling and idempotency, the subscription status model, and feature gating. |
 | 6 | [Document Storage Flow](architecture/06-document-storage.md) | Supabase private bucket vs local filesystem driver, authenticated proxy downloads, and the deletion-reconciliation model. |

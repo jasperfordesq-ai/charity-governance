@@ -32,7 +32,7 @@ A [Turborepo](https://turbo.build/) monorepo with three workspaces:
 
 > **Full architecture map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the complete,
 > source-grounded system map — component diagram, the module/dependency graph (route
-> groups → services → Prisma models), the 22-model data model, the request lifecycle and
+> groups → services → Prisma models), the 33-model data model, the request lifecycle and
 > auth/session model, billing, document storage, the reminder scheduler, the governance
 > domain, the frontend, and the config/two-gate model. Every non-trivial claim carries a
 > `file:line` citation.

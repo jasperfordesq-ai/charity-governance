@@ -5,7 +5,7 @@
 CharityPilot has not yet published a versioned personal-server release. A clean
 `master` checkout with successful repository CI may be evaluated only as a
 supervised testing snapshot; it is not a published release and is not evidence
-that the private Windows profile has reached 100/100 installation readiness.
+that either private host profile has reached complete installation readiness.
 
 After releases begin, a named `personal-v*` asset becomes supported only after
 its release workflow and clean-host acceptance evidence succeed. The latest
@@ -26,8 +26,8 @@ the Linux profile is supervised testing only. Root operation, ARM hosts, remote
 or TCP Docker endpoints and ambient Docker/BuildKit overrides fail closed.
 
 This policy does not turn the public/commercial production profile into a
-launched service. The private Windows profile and the future public service have
-separate deployment and evidence requirements.
+launched service. The private Windows/Linux host profiles and the future public
+service have separate deployment and evidence requirements.
 
 ## Report a vulnerability privately
 
