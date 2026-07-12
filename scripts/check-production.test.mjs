@@ -5238,6 +5238,10 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
     jobSmokeStep,
     'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js',
   );
+  const recoveryControlBindRun = dockerRunForCommand(
+    jobSmokeStep,
+    'await bindAuthRecoveryControlForRuntime(prisma);',
+  );
   const schedulerRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/production-scheduler.js');
 
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
@@ -5246,6 +5250,31 @@ test('CI smoke-runs production API scheduled job entrypoints inside the Docker i
   assert.match(jobSmokeStep, /postgres@sha256:[a-f0-9]{64}/);
   assert.doesNotMatch(jobSmokeStep, /postgres:16\.4-alpine/);
   assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(recoveryControlBindRun, /--entrypoint node/);
+  assert.match(recoveryControlBindRun, /bindAuthRecoveryControlForRuntime/);
+  assert.match(recoveryControlBindRun, /Authentication recovery control bound for scheduled job smoke\./);
+  assert.match(recoveryControlBindRun, /-e NODE_ENV=production/);
+  assert.match(recoveryControlBindRun, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
+  assert.match(recoveryControlBindRun, /-e CI=true/);
+  assert.match(recoveryControlBindRun, /-e GITHUB_ACTIONS=true/);
+  assert.match(
+    recoveryControlBindRun,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
+  assert.match(
+    recoveryControlBindRun,
+    /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/,
+  );
+  assert.ok(
+    jobSmokeStep.indexOf('npx prisma migrate deploy --schema apps/api/prisma/schema.prisma') <
+      jobSmokeStep.indexOf('await bindAuthRecoveryControlForRuntime(prisma);'),
+    'the fresh scheduled-job database must migrate before recovery control is bound',
+  );
+  assert.ok(
+    jobSmokeStep.indexOf('await bindAuthRecoveryControlForRuntime(prisma);') <
+      jobSmokeStep.indexOf('charitypilot-api-ci node dist/jobs/production-scheduler.js'),
+    'the fresh scheduled-job database must bind recovery control before worker startup',
+  );
   for (const run of [deadlineRun, cleanupRun, schedulerRun]) {
     assert.match(run, /-e NODE_ENV=production/);
     assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
@@ -5773,12 +5802,41 @@ test('release workflow smoke-runs production API scheduled job entrypoints befor
     jobSmokeStep,
     'charitypilot-api-ci node dist/jobs/cleanup-document-storage.js',
   );
+  const recoveryControlBindRun = dockerRunForCommand(
+    jobSmokeStep,
+    'await bindAuthRecoveryControlForRuntime(prisma);',
+  );
   const schedulerRun = dockerRunForCommand(jobSmokeStep, 'charitypilot-api-ci node dist/jobs/production-scheduler.js');
 
   assert.match(workflow, /name:\s+Smoke API Docker scheduled jobs/);
   assert.match(jobSmokeStep, /charitypilot_job_smoke/);
   assert.match(jobSmokeStep, /CREATE DATABASE charitypilot_job_smoke OWNER charitypilot/);
   assert.match(jobSmokeStep, /npx prisma migrate deploy --schema apps\/api\/prisma\/schema\.prisma/);
+  assert.match(recoveryControlBindRun, /--entrypoint node/);
+  assert.match(recoveryControlBindRun, /bindAuthRecoveryControlForRuntime/);
+  assert.match(recoveryControlBindRun, /Authentication recovery control bound for scheduled job smoke\./);
+  assert.match(recoveryControlBindRun, /-e NODE_ENV=production/);
+  assert.match(recoveryControlBindRun, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);
+  assert.match(recoveryControlBindRun, /-e CI=true/);
+  assert.match(recoveryControlBindRun, /-e GITHUB_ACTIONS=true/);
+  assert.match(
+    recoveryControlBindRun,
+    /-e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/,
+  );
+  assert.match(
+    recoveryControlBindRun,
+    /-e DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@127\.0\.0\.1:5432\/charitypilot_job_smoke/,
+  );
+  assert.ok(
+    jobSmokeStep.indexOf('npx prisma migrate deploy --schema apps/api/prisma/schema.prisma') <
+      jobSmokeStep.indexOf('await bindAuthRecoveryControlForRuntime(prisma);'),
+    'the fresh scheduled-job database must migrate before recovery control is bound',
+  );
+  assert.ok(
+    jobSmokeStep.indexOf('await bindAuthRecoveryControlForRuntime(prisma);') <
+      jobSmokeStep.indexOf('charitypilot-api-ci node dist/jobs/production-scheduler.js'),
+    'the fresh scheduled-job database must bind recovery control before worker startup',
+  );
   for (const run of [deadlineRun, cleanupRun, schedulerRun]) {
     assert.match(run, /-e NODE_ENV=production/);
     assert.match(run, /-e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true/);

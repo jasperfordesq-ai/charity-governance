@@ -326,6 +326,27 @@ jobs:
           DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
             npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 
+          docker run --rm --network host \
+            -e NODE_ENV=production \
+            -e CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE=true \
+            -e CI=true \
+            -e GITHUB_ACTIONS=true \
+            -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e DATABASE_URL=postgresql://charitypilot:charitypilot_ci@127.0.0.1:5432/charitypilot_job_smoke \
+            --entrypoint node \
+            charitypilot-api-ci \
+            --input-type=module -e '
+              import { PrismaClient } from "@prisma/client";
+              import { bindAuthRecoveryControlForRuntime } from "./dist/services/auth-recovery-control.js";
+              const prisma = new PrismaClient();
+              try {
+                await bindAuthRecoveryControlForRuntime(prisma);
+                console.log("Authentication recovery control bound for scheduled job smoke.");
+              } finally {
+                await prisma.$disconnect();
+              }
+            '
+
           deadline_output="$(mktemp)"
           docker run --rm --network host \
             -e NODE_ENV=production \
