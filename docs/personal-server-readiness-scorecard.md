@@ -40,12 +40,11 @@ release/live score is 100/100 and every critical gate is complete.
 ## Current named baseline: 2026-07-12 code baseline and live evidence
 
 This baseline records the restore repair beginning at
-`c5175eef1ba9ad0c3c9e46371c26165701c4d6a3`, subsequent supported-host
-preflight checks and the live evidence gathered against them. The cited
-`c5175ee` runs prove that restore slice; later descendant changes require their
-own exact-SHA CI. Unrelated pre-existing local full-platform edits are outside
-this score. This is not a Release, not clean-host acceptance and not permission
-to store important records.
+`c5175eef1ba9ad0c3c9e46371c26165701c4d6a3`, the supported-host preflight gate
+at `bdedfc36c01d2ec139de0c3ed90d7a2d518787cc`, and the live evidence gathered
+against them. Unrelated pre-existing local full-platform edits are outside this
+score. This is not a Release, not clean-host acceptance and not permission to
+store important records.
 
 | Area | Max | Repository coverage | Release/live certification | Current evidence and remaining gap |
 | --- | ---: | --- | ---: | --- |
@@ -69,6 +68,9 @@ to store important records.
 - exact commit `c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` passed canonical
   [CI](https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29194766905)
   and [managed E2E](https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29194766923);
+- exact commit `bdedfc36c01d2ec139de0c3ed90d7a2d518787cc` passed canonical
+  [CI](https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29195993512)
+  and [managed E2E](https://github.com/jasperfordesq-ai/charity-governance/actions/runs/29195993511);
 - a real Windows/Docker proof streamed a custom-format dump into a read-only-root
   PostgreSQL target through the committed helper, recovered the exact synthetic
   row and removed every uniquely labelled disposable resource; and
@@ -93,6 +95,50 @@ to store important records.
 - Tailscale is not installed on this host; and
 - no reboot, second-device, off-host, previous-release update or live guarded
   restore evidence exists.
+
+### What remains on the coding side
+
+At `bdedfc3` there is no known open code-contract defect in the personal-server
+profile. That is a test-backed repository status, not a claim that the platform
+is install-ready. The next clean-host exercises may expose another defect; any
+such defect becomes coding work and must be fixed, reviewed and rerun before its
+gate can close.
+
+The repository-coverage column is intentionally qualitative. Assigning a second
+numeric implementation percentage would create false precision and could be
+mistaken for readiness. The one authoritative progress figure is the
+release/live score: **31/100**.
+
+The remaining 69 points are:
+
+- 14 points: publish and install the immutable named Windows release on a clean
+  supported host;
+- 6 points: prove the final compiled runtime, isolation and post-reboot start;
+- 11 points: prove real Owner and separate-director private access, invitation,
+  login and offboarding;
+- 16 points: complete off-host encrypted recovery, full-stack rehearsal,
+  guarded restore and blank replacement-host recovery;
+- 9 points: prove previous-to-current update, rollback, injected-failure
+  recovery and terminal decommission;
+- 6 points: prove real host operations, reboot/startup and monitored backup; and
+- 7 points: bind the published release and every live result into the final
+  clean-tree, exact-SHA certification record.
+
+These are not safely replaceable with more unit tests or documentation.
+
+### Current workstation certification blocker
+
+The 2026-07-12 workstation audit records Windows 11 Home 25H2 build 26200, which
+passes the supported-host build gate, but no Windows Sandbox, Hyper-V Manager,
+VirtualBox, VMware or QEMU installation. Its only Docker Desktop daemon contains
+the preserved failed certification attempt: phase `failed` from
+`initialized-backup-pending`, five stopped containers, two networks, two
+volumes, one protected pointer and one recovery directory.
+
+That state cannot be deleted, renamed or rebound merely to make a second install
+pass. The next acceptance attempt requires a genuinely blank Windows 11 24H2+
+computer or VM with a fresh Docker Desktop daemon. Until that external state is
+available, the clean-install and downstream live gates cannot be executed.
 
 The previous 58/100 figure is retired because it mixed implementation progress
 with live certification. Use the two named scores above instead.

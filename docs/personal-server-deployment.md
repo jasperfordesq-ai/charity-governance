@@ -17,11 +17,13 @@ At this review point:
 - the personal-server contract suite passed 156/156 checks; production checks
   passed 830 with two intentional platform skips; lint, compiled builds,
   secret scanning and SAST passed;
-- exact commit `c5175eef1ba9ad0c3c9e46371c26165701c4d6a3` has green canonical CI
-  and managed E2E runs;
-- on Windows Docker Desktop, that commit streamed a real PostgreSQL
-  custom-format dump through `docker exec -i pg_restore` into a container with
-  a read-only root filesystem and recovered the exact synthetic proof row;
+- latest verified commit `bdedfc36c01d2ec139de0c3ed90d7a2d518787cc` has green
+  canonical CI and managed E2E runs, including the supported Windows-build
+  preflight gate;
+- on Windows Docker Desktop, restore-fix commit `c5175ee` streamed a real
+  PostgreSQL custom-format dump through `docker exec -i pg_restore` into a
+  container with a read-only root filesystem and recovered the exact synthetic
+  proof row;
 - no `personal-v*` tag or GitHub Release has been published;
 - the exact release-workflow Administration-read environment secret has not yet
   been configured;
