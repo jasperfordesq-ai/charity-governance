@@ -31,6 +31,11 @@ test('Windows installer is checkout-independent and uses the supported wrappers'
 });
 
 test('installer supports no-write preflight and dry-run paths before state creation', () => {
+  assert.match(
+    installer,
+    /\$restoreOnlyValues\s*=\s*@\(\s*@\(\$RecoveryKeyFile,\s*\$SourceOrigin,\s*\$Confirm,\s*\$OwnerPasswordFile\)\s*\|\s*Where-Object[\s\S]*?\n\)/u,
+    'PowerShell 5.1 must materialize an empty restore-only pipeline as an array before reading Count',
+  );
   const preflightIndex = installer.indexOf("$preflightOutput =");
   const preflightOnlyIndex = installer.indexOf('if ($PreflightOnly)');
   const dryRunIndex = installer.indexOf('if ($DryRun)', preflightIndex + 1);

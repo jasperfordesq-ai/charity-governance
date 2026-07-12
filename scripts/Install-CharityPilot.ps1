@@ -34,8 +34,10 @@ if ($PreflightOnly -and $DryRun) {
 }
 
 $replacementRestore = -not [string]::IsNullOrWhiteSpace($RestoreRecoverySet)
-$restoreOnlyValues = @($RecoveryKeyFile, $SourceOrigin, $Confirm, $OwnerPasswordFile) |
-    Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+$restoreOnlyValues = @(
+    @($RecoveryKeyFile, $SourceOrigin, $Confirm, $OwnerPasswordFile) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+)
 if (-not $replacementRestore -and $restoreOnlyValues.Count -gt 0) {
     throw '-RecoveryKeyFile, -SourceOrigin, -Confirm and -OwnerPasswordFile are valid only with -RestoreRecoverySet.'
 }
