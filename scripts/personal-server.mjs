@@ -1626,7 +1626,7 @@ function validatedQuiescenceAvailability(running, label) {
 
 function verifyContainerId(value) {
   const id = value.trim();
-  if (!/^[a-f0-9]{12,64}$/u.test(id)) throw new Error('Could not resolve exactly one personal-server database container');
+  if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error('Could not resolve exactly one full personal-server database container ID');
   return id;
 }
 
@@ -1668,6 +1668,10 @@ function personalDatabaseUrl(values, databaseName = values.POSTGRES_DB, host = '
   return `postgresql://${values.POSTGRES_USER}:${encodeURIComponent(values.POSTGRES_PASSWORD)}@${host}:5432/${databaseName}`;
 }
 
+function personalDatabaseProofUrl(values, databaseName = values.POSTGRES_DB) {
+  return personalDatabaseUrl(values, databaseName, '127.0.0.1');
+}
+
 function parseAllowlistedJson(value, label) {
   try {
     const parsed = JSON.parse(value.trim());
@@ -1678,8 +1682,8 @@ function parseAllowlistedJson(value, label) {
   }
 }
 
-function databaseProofEnvironment(values, context, databaseName = values.POSTGRES_DB, host = 'db') {
-  const databaseUrl = personalDatabaseUrl(values, databaseName, host);
+function databaseProofEnvironment(values, context, databaseName = values.POSTGRES_DB) {
+  const databaseUrl = personalDatabaseProofUrl(values, databaseName);
   if (!context.dryRun && !context.dockerEndpoint) {
     throw new Error('Database proof requires the verified local Docker endpoint');
   }
@@ -1692,14 +1696,15 @@ function databaseProofEnvironment(values, context, databaseName = values.POSTGRE
   };
 }
 
-function captureDatabaseIdentity(values, context, { databaseName, host, network = INTERNAL_NETWORK } = {}) {
-  const proofEnvironment = databaseProofEnvironment(values, context, databaseName, host);
+function captureDatabaseIdentity(values, context, { databaseName, sourceContainerId } = {}) {
+  const proofEnvironment = databaseProofEnvironment(values, context, databaseName);
+  const containerId = context.dryRun ? '<db-container-id>' : verifyContainerId(sourceContainerId ?? '');
   if (context.dryRun) {
     runCommand([
       process.execPath,
       'scripts/postgres-backup.mjs',
       'source-identity',
-      `--docker-network=${network}`,
+      `--source-container-id=${containerId}`,
       '--json',
     ], context, { env: proofEnvironment.env, secrets: [proofEnvironment.databaseUrl, values.POSTGRES_PASSWORD] });
     return '0'.repeat(64);
@@ -1708,7 +1713,7 @@ function captureDatabaseIdentity(values, context, { databaseName, host, network 
     process.execPath,
     'scripts/postgres-backup.mjs',
     'source-identity',
-    `--docker-network=${network}`,
+    `--source-container-id=${containerId}`,
     '--json',
   ], context, {
     capture: true,
@@ -1733,18 +1738,18 @@ function createExactDatabaseProof({
   outputDirectory,
   context,
   databaseName,
-  host,
-  network = INTERNAL_NETWORK,
+  sourceContainerId,
   dumpFile = 'database.dump',
   reportFile = 'database.restore-proof.json',
 }) {
-  const sourceIdentity = captureDatabaseIdentity(values, context, { databaseName, host, network });
-  const proofEnvironment = databaseProofEnvironment(values, context, databaseName, host);
+  const containerId = context.dryRun ? '<db-container-id>' : verifyContainerId(sourceContainerId ?? '');
+  const sourceIdentity = captureDatabaseIdentity(values, context, { databaseName, sourceContainerId: containerId });
+  const proofEnvironment = databaseProofEnvironment(values, context, databaseName);
   runCommand([
     process.execPath,
     'scripts/postgres-backup.mjs',
     'prove-restore',
-    `--docker-network=${network}`,
+    `--source-container-id=${containerId}`,
     `--recovery-set-id=${recoverySetId}`,
     `--expected-source-database-identity-sha256=${sourceIdentity}`,
     `--output-dir=${outputDirectory}`,
@@ -1867,8 +1872,19 @@ function dryRunBackup(values, backupRoot, context, encryptionKey, {
   const archivePath = join(setDir, 'documents.tar');
   runningServices(context);
   runCommand([...composePrefix(context), 'stop', ...WRITER_SERVICES], context);
-  runCommand([...composePrefix(context), 'ps', '--all', '-q', 'db'], context);
-  createExactDatabaseProof({ values, recoverySetId: id, outputDirectory: setDir, context });
+  const sourceContainerId = inspectPersonalServiceContainer(
+    'db',
+    DATABASE_VOLUME,
+    '/var/lib/postgresql/data',
+    context,
+  );
+  createExactDatabaseProof({
+    values,
+    recoverySetId: id,
+    outputDirectory: setDir,
+    context,
+    sourceContainerId,
+  });
   runCommand(['docker', 'volume', 'inspect', DOCUMENT_VOLUME], context);
   runCommandToFile(documentArchiveCommand(), archivePath, context);
   if (encryptionKey) {
@@ -1963,12 +1979,18 @@ function performBackup(options, context, { leaveWritersStopped = false, recovery
       databaseStartedForBackup = true;
     }
 
-    verifyContainerId(runCommand([...composePrefix(context), 'ps', '--all', '-q', 'db'], context, { capture: true }));
+    const sourceContainerId = inspectPersonalServiceContainer(
+      'db',
+      DATABASE_VOLUME,
+      '/var/lib/postgresql/data',
+      context,
+    );
     const databaseProof = createExactDatabaseProof({
       values,
       recoverySetId: id,
       outputDirectory: incompleteDir,
       context,
+      sourceContainerId,
     });
     if (!existsSync(dumpPath) || statSync(dumpPath).size <= 0) throw new Error('Database backup artifact is missing or empty');
 
@@ -3467,7 +3489,12 @@ function restoreVerifiedRecoveryIntoRuntime(verified, values, context) {
     context,
     { replaceDatabase: true },
   );
-  proveRestoredDatabaseContent({ verified, values, host: 'db', network: INTERNAL_NETWORK, context });
+  proveRestoredDatabaseContent({
+    verified,
+    values,
+    sourceContainerId: targets.databaseContainer,
+    context,
+  });
   populateDocumentVolume(DOCUMENT_VOLUME, verified.documentsPath, context, { clearExisting: true });
 }
 
@@ -3963,7 +3990,12 @@ function rollback(options, context) {
 }
 
 function parseDockerInspect(output, label) {
-  const value = parseAllowlistedJson(output, label);
+  let value;
+  try {
+    value = JSON.parse(output.trim());
+  } catch {
+    throw new Error(`${label} returned invalid JSON`);
+  }
   if (!Array.isArray(value)) throw new Error(`${label} did not return an array`);
   if (value.length !== 1 || !value[0] || typeof value[0] !== 'object') {
     throw new Error(`${label} did not resolve exactly one object`);
@@ -4662,7 +4694,7 @@ const RECOVERY_API_ENV_NAMES = [
   'SELF_REGISTRATION_ENABLED', 'SEED_LOCAL_ADMIN', 'SEED_DEMO_WORKSPACE',
 ];
 
-function proveRestoredDatabaseContent({ verified, values, host, network, context, proofToken }) {
+function proveRestoredDatabaseContent({ verified, values, sourceContainerId, context, proofToken }) {
   if (proofToken !== undefined && !/^[a-f0-9]{12}$/u.test(proofToken)) {
     throw new Error('Post-restore proof token is invalid');
   }
@@ -4689,8 +4721,7 @@ function proveRestoredDatabaseContent({ verified, values, host, network, context
         : `restored-${randomHex(8, context.randomBytesImpl)}`,
       outputDirectory: proofDirectory,
       context,
-      host,
-      network,
+      sourceContainerId,
       dumpFile: 'restored.database.dump',
       reportFile: 'restored.database.proof.json',
     });
@@ -4844,7 +4875,7 @@ function runDisposableApplicationRehearsal(
     databaseVolumeCreated = true;
     runCommand(['docker', 'volume', 'create', '--label', rehearsalLabel, documentVolume], context);
     documentVolumeCreated = true;
-    runCommand([
+    const databaseContainerIdOutput = runCommand([
       'docker', 'run', '-d', '--name', databaseContainer, '--pull', 'never',
       '--label', rehearsalLabel,
       '--network', network, '--network-alias', 'db', '--read-only',
@@ -4852,11 +4883,18 @@ function runDisposableApplicationRehearsal(
       '--mount', `type=volume,src=${databaseVolume},dst=/var/lib/postgresql/data`,
       '-e', 'POSTGRES_DB', '-e', 'POSTGRES_USER', '-e', 'POSTGRES_PASSWORD',
       POSTGRES_IMAGE,
-    ], context, { env: databaseEnv, secrets: [values.POSTGRES_PASSWORD] });
+    ], context, {
+      capture: true,
+      env: databaseEnv,
+      secrets: [values.POSTGRES_PASSWORD],
+    });
     databaseStarted = true;
+    const databaseContainerId = context.dryRun
+      ? '<db-container-id>'
+      : verifyContainerId(databaseContainerIdOutput);
     waitForRecoveryDatabase(databaseContainer, values, context);
     restoreDatabaseDump(databaseContainer, verified.databasePath ?? '<verified-database-dump>', values, context, { replaceDatabase: false });
-    proveRestoredDatabaseContent({ verified, values, host: 'db', network, context, proofToken: token });
+    proveRestoredDatabaseContent({ verified, values, sourceContainerId: databaseContainerId, context, proofToken: token });
     populateDocumentVolume(documentVolume, documentsPath, context, {
       clearExisting: false,
       loaderName: resources.documentLoader,
@@ -5279,7 +5317,12 @@ function bootstrapRestore(options, context) {
       context,
       { replaceDatabase: true },
     );
-    proveRestoredDatabaseContent({ verified, values, host: 'db', network: INTERNAL_NETWORK, context });
+    proveRestoredDatabaseContent({
+      verified,
+      values,
+      sourceContainerId: targets.databaseContainer,
+      context,
+    });
     runCommand([...composePrefix(context), '--profile', 'maintenance', 'run', '--rm', 'migrate'], context);
     const authRecoveryRebind = rebindReplacementHostAuthRecovery({
       values,
@@ -5460,8 +5503,7 @@ function restore(options, context) {
       proveSelectedDatabaseFingerprint: () => proveRestoredDatabaseContent({
         verified,
         values,
-        host: 'db',
-        network: INTERNAL_NETWORK,
+        sourceContainerId: targets.databaseContainer,
         context,
       }),
       migrateCurrentSchema: () => runCommand([

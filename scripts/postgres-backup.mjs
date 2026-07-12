@@ -217,6 +217,7 @@ Restore sentinel options:
 Production-safe source identity options:
   --database-url=<url>         Read-only source URL. Defaults to DATABASE_URL.
   --docker-network=<name>      Docker network for the read-only tools container.
+  --source-container-id=<id>   Exact local source container ID; uses its network namespace.
   --temp-file-limit-mb=<mb>    Session temp-file cap (64-2048). Default: 1024.
   --json                       Emit one allowlisted JSON result line.
   --dry-run                    Render the read-only capture without claiming evidence.
@@ -224,6 +225,7 @@ Production-safe source identity options:
 Production-safe restore proof options:
   --database-url=<url>         Read-only source URL. Defaults to DATABASE_URL.
   --docker-network=<name>      Docker network for the read-only source tools container.
+  --source-container-id=<id>   Exact local source container ID; uses its network namespace.
   --recovery-set-id=<id>       External recovery-set identifier (3-128 safe characters).
   --expected-source-database-identity-sha256=<sha256>
                                Independently captured source identity digest.
@@ -243,9 +245,11 @@ const COMMAND_OPTIONS = new Map([
   ])],
   ['seed-restore-sentinel', new Set(['database-url', 'docker-network', 'dry-run', 'help'])],
   ['verify-restore', new Set(['dump-file', 'expect-operational-sentinel', 'dry-run', 'help'])],
-  ['source-identity', new Set(['database-url', 'docker-network', 'temp-file-limit-mb', 'json', 'dry-run', 'help'])],
+  ['source-identity', new Set([
+    'database-url', 'docker-network', 'source-container-id', 'temp-file-limit-mb', 'json', 'dry-run', 'help',
+  ])],
   ['prove-restore', new Set([
-    'database-url', 'docker-network', 'recovery-set-id', 'expected-source-database-identity-sha256',
+    'database-url', 'docker-network', 'source-container-id', 'recovery-set-id', 'expected-source-database-identity-sha256',
     'output-dir', 'output-file', 'report-file', 'temp-file-limit-mb', 'dry-run', 'help',
   ])],
 ]);
@@ -591,21 +595,34 @@ function requireRecoverySetId(value) {
   return value;
 }
 
-function sourceEndpointIdentitySha256(databaseUrl) {
+export function sourceEndpointIdentitySha256(databaseUrl, { sourceContainerId } = {}) {
   const parsed = new URL(databaseUrl);
   const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
   const userName = decodeURIComponent(parsed.username);
   if (!parsed.hostname || !databaseName || !userName) {
     throw new Error('DATABASE_URL must include a host, database name, and user for source identity capture');
   }
-  const canonical = [
-    'charitypilot-source-endpoint-identity/v1',
-    parsed.protocol.toLowerCase(),
-    parsed.hostname.toLowerCase(),
-    parsed.port || '5432',
-    databaseName,
-    userName,
-  ].join('\n');
+  const validatedSourceContainerId = sourceContainerId === undefined
+    ? undefined
+    : requireSourceContainerId(sourceContainerId);
+  const canonical = validatedSourceContainerId
+    ? [
+      'charitypilot-source-container-endpoint-identity/v1',
+      validatedSourceContainerId,
+      parsed.protocol.toLowerCase(),
+      parsed.hostname.toLowerCase(),
+      parsed.port || '5432',
+      databaseName,
+      userName,
+    ].join('\n')
+    : [
+      'charitypilot-source-endpoint-identity/v1',
+      parsed.protocol.toLowerCase(),
+      parsed.hostname.toLowerCase(),
+      parsed.port || '5432',
+      databaseName,
+      userName,
+    ].join('\n');
   return sha256Text(canonical);
 }
 
@@ -2230,8 +2247,8 @@ function parseIdentityCapture(stdout) {
   return match[1];
 }
 
-function captureSourceIdentity({ databaseUrl, dockerNetwork, tempFileLimitMb, dryRun }) {
-  const endpointIdentitySha256 = sourceEndpointIdentitySha256(databaseUrl);
+function captureSourceIdentity({ databaseUrl, dockerNetwork, sourceContainerId, tempFileLimitMb, dryRun }) {
+  const endpointIdentitySha256 = sourceEndpointIdentitySha256(databaseUrl, { sourceContainerId });
   const containerName = proofContainerName('source-identity');
   const captureDir = dryRun ? undefined : mkdtempSync(join(tmpdir(), 'charitypilot-source-identity-'));
   const rawReportName = captureDir ? 'identity.txt' : '';
@@ -2264,13 +2281,18 @@ function sourceIdentity(options) {
   const dryRun = isEnabled(options, 'dry-run');
   const json = isEnabled(options, 'json');
   const databaseUrl = optionString(options, 'database-url') ?? process.env.DATABASE_URL;
-  const dockerNetwork = validateDockerNetwork(optionString(options, 'docker-network'));
   const tempFileLimitMb = proofTempFileLimitMb(options);
   if (!databaseUrl) throw new Error('DATABASE_URL or --database-url is required for source-identity');
-  validateProofSourceDatabaseUrl(databaseUrl);
+  const { dockerNetwork, sourceContainerId } = resolveProofSource(options, databaseUrl);
   const helperImplementation = requireHelperImplementationBinding(captureHelperImplementationBinding());
 
-  const sourceDatabaseIdentitySha256 = captureSourceIdentity({ databaseUrl, dockerNetwork, tempFileLimitMb, dryRun });
+  const sourceDatabaseIdentitySha256 = captureSourceIdentity({
+    databaseUrl,
+    dockerNetwork,
+    sourceContainerId,
+    tempFileLimitMb,
+    dryRun,
+  });
   assertHelperImplementationUnchanged(helperImplementation, 'during source identity capture');
   if (dryRun) {
     console.log('Source database identity dry run rendered; no identity was captured.');
@@ -2715,14 +2737,13 @@ async function proveRestore(options) {
   }
   const databaseUrl = optionString(options, 'database-url') ?? process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL or --database-url is required for prove-restore');
-  validateProofSourceDatabaseUrl(databaseUrl);
+  const { dockerNetwork, sourceContainerId } = resolveProofSource(options, databaseUrl);
   const helperImplementation = requireHelperImplementationBinding(captureHelperImplementationBinding());
   const recoverySetId = requireRecoverySetId(optionString(options, 'recovery-set-id'));
   const expectedSourceDatabaseIdentitySha256 = requireSha256(
     optionString(options, 'expected-source-database-identity-sha256'),
     '--expected-source-database-identity-sha256',
   );
-  const dockerNetwork = validateDockerNetwork(optionString(options, 'docker-network'));
   const tempFileLimitMb = proofTempFileLimitMb(options);
   const outputDir = requireProofOutputDirectory(options, { dryRun });
   const outputDirIdentity = protectedDirectoryIdentity(outputDir);
@@ -2748,7 +2769,7 @@ async function proveRestore(options) {
   const sourceRawPath = join(outputDir, sourceRawName);
   const restoredRawPath = join(outputDir, restoredRawName);
   const stagedReportPath = join(outputDir, stagedReportName);
-  const sourceEndpointSha256 = sourceEndpointIdentitySha256(databaseUrl);
+  const sourceEndpointSha256 = sourceEndpointIdentitySha256(databaseUrl, { sourceContainerId });
   const restoreContainerName = proofContainerName('isolated-restore');
   const restorePassword = randomBytes(32).toString('base64url');
   const restoreEndpointSha256 = sha256Text([
@@ -3121,6 +3142,61 @@ function validateDatabaseUrl(databaseUrl) {
     }
     throw new Error('DATABASE_URL must be a valid PostgreSQL connection URL');
   }
+}
+
+function requireSourceContainerId(value) {
+  if (!/^[a-f0-9]{64}$/.test(value ?? '')) {
+    throw new Error('--source-container-id must be one exact lowercase 64-character Docker container ID');
+  }
+  return value;
+}
+
+function validateContainerProofSourceDatabaseUrl(databaseUrl) {
+  validateDatabaseUrl(databaseUrl);
+  const parsed = new URL(databaseUrl);
+  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+  const userName = decodeURIComponent(parsed.username);
+  const password = decodeURIComponent(parsed.password);
+  if (
+    parsed.protocol !== 'postgresql:' ||
+    parsed.hostname !== '127.0.0.1' ||
+    parsed.port !== '5432' ||
+    !userName ||
+    !password ||
+    !databaseName ||
+    databaseName.includes('/') ||
+    databaseUrl.includes('?') ||
+    databaseUrl.includes('#') ||
+    parsed.searchParams.size !== 0 ||
+    parsed.hash ||
+    /[\u0000-\u001f\u007f]/.test(databaseName + userName + password)
+  ) {
+    throw new Error(
+      'Container proof/source URL must be exact PostgreSQL loopback 127.0.0.1:5432 with one user, password, database, and no parameters or fragment',
+    );
+  }
+  return parsed;
+}
+
+function resolveProofSource(options, databaseUrl) {
+  const requestedDockerNetwork = validateDockerNetwork(optionString(options, 'docker-network'));
+  const requestedSourceContainerId = optionString(options, 'source-container-id');
+  if (requestedSourceContainerId === undefined) {
+    validateProofSourceDatabaseUrl(databaseUrl);
+    return {
+      dockerNetwork: requestedDockerNetwork,
+      sourceContainerId: undefined,
+    };
+  }
+  if (requestedDockerNetwork !== undefined) {
+    throw new Error('--source-container-id and --docker-network are mutually exclusive');
+  }
+  const sourceContainerId = requireSourceContainerId(requestedSourceContainerId);
+  validateContainerProofSourceDatabaseUrl(databaseUrl);
+  return {
+    dockerNetwork: `container:${sourceContainerId}`,
+    sourceContainerId,
+  };
 }
 
 function validateProofSourceDatabaseUrl(databaseUrl) {

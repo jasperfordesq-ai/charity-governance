@@ -59,6 +59,7 @@ import {
   recordAuthRecoveryRotationAuthorityStart,
   recordAuthRecoveryRotationBackup,
 } from './personal-server-auth-recovery-rotation.mjs';
+import { runPostgresBackupFromArgs } from './postgres-backup.mjs';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
@@ -263,13 +264,43 @@ function fakeExecutor(handler = () => null, { recordDockerBoundary = false } = {
         : executable === 'docker' && args[0] === 'version'
           ? '1.54\n'
           : null;
+    const localPostgresContainerOutput = executable === 'docker' &&
+      args[0] === 'run' &&
+      args.includes('-d') &&
+      args.some((value) => /^postgres(?::[^@]+)?@sha256:[a-f0-9]{64}$/u.test(value))
+      ? `${'d'.repeat(64)}\n`
+      : null;
+    const localDatabaseInspectionOutput = executable === 'docker' &&
+      args.includes('inspect') &&
+      args.includes('d'.repeat(64))
+      ? `${JSON.stringify([{
+        Id: 'd'.repeat(64),
+        Name: '/charitypilot-personal-server-db-1',
+        Config: {
+          Labels: {
+            'com.docker.compose.project': 'charitypilot-personal-server',
+            'com.docker.compose.service': 'db',
+          },
+        },
+        Mounts: [{
+          Type: 'volume',
+          Name: 'charitypilot-personal-server-db',
+          Destination: '/var/lib/postgresql/data',
+        }],
+      }])}\n`
+      : null;
     if (boundaryOutput !== null && !recordDockerBoundary) {
       return { status: 0, stdout: boundaryOutput, stderr: '' };
     }
     calls.push(call);
-    return handler(call, calls) ?? (boundaryOutput !== null
+    const handled = handler(call, calls);
+    return handled ?? (boundaryOutput !== null
       ? { status: 0, stdout: boundaryOutput, stderr: '' }
-      : { status: 0, stdout: '', stderr: '' });
+      : localPostgresContainerOutput !== null
+        ? { status: 0, stdout: localPostgresContainerOutput, stderr: '' }
+        : localDatabaseInspectionOutput !== null
+          ? { status: 0, stdout: localDatabaseInspectionOutput, stderr: '' }
+          : { status: 0, stdout: '', stderr: '' });
   };
   return { calls, spawn };
 }
@@ -609,7 +640,7 @@ function fullAuthRecoveryRotationExecutor() {
       return { status: 0, stdout: 'db\napi\nweb\ncaddy\n', stderr: '' };
     }
     if (text.includes('ps --all -q db')) {
-      return { status: 0, stdout: 'abcdef1234567890\n', stderr: '' };
+      return { status: 0, stdout: `${'d'.repeat(64)}\n`, stderr: '' };
     }
     if (text.includes('postgres-backup.mjs source-identity')) {
       return {
@@ -2003,12 +2034,47 @@ test('backup dry-run shows quiesce, database verification, document copy, and ve
     assert.equal(executor.calls.length, 0);
     assert.ok(text.indexOf('stop caddy web api') < text.indexOf('postgres-backup.mjs source-identity'));
     assert.ok(text.indexOf('postgres-backup.mjs source-identity') < text.indexOf('postgres-backup.mjs prove-restore'));
+    assert.equal((text.match(/--source-container-id=<db-container-id>/gu) ?? []).length, 2);
+    assert.doesNotMatch(text, /postgres-backup\.mjs (?:source-identity|prove-restore).*--docker-network=/u);
     assert.ok(text.indexOf('prove-restore') < text.indexOf(`volume inspect charitypilot-personal-server-documents`));
     assert.ok(text.indexOf('volume inspect') < text.indexOf('documents.tar'));
     assert.ok(text.indexOf('documents.tar') < text.lastIndexOf('up -d --no-build --wait'));
     assert.doesNotMatch(text, /J{32}|R{32}|a{64}/u);
     assert.equal(existsSync(join(root, '.charitypilot-backups')), false);
   });
+});
+
+test('rendered personal database proof URL passes the real helper only with one exact source container ID', async () => {
+  const config = validConfig();
+  const databaseUrl = `postgresql://${config.postgresUser}:${config.postgresPassword}` +
+    `@127.0.0.1:5432/${config.postgresDatabase}`;
+  const helperEnvironment = Object.fromEntries(Object.entries({
+    PATH: process.env.PATH,
+    Path: process.env.Path,
+    SystemRoot: process.env.SystemRoot,
+    WINDIR: process.env.WINDIR,
+    TEMP: process.env.TEMP ?? tmpdir(),
+    TMP: process.env.TMP ?? tmpdir(),
+  }).filter(([, value]) => typeof value === 'string' && value.length > 0));
+  const accepted = await runPostgresBackupFromArgs([
+    'source-identity',
+    `--database-url=${databaseUrl}`,
+    `--source-container-id=${'d'.repeat(64)}`,
+    '--json',
+    '--dry-run',
+  ], helperEnvironment);
+  assert.equal(accepted.status, 0, accepted.stderr);
+  assert.match(accepted.stdout, new RegExp(`--network container:${'d'.repeat(64)}`, 'u'));
+  assert.doesNotMatch(accepted.stdout + accepted.stderr, new RegExp(config.postgresPassword, 'u'));
+
+  const rejected = await runPostgresBackupFromArgs([
+    'source-identity',
+    `--database-url=${databaseUrl}`,
+    '--json',
+    '--dry-run',
+  ], helperEnvironment);
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /Loopback proof\/source URLs must use the exact disposable database contract/u);
 });
 
 test('backup failure restores previously running services and removes incomplete recovery data', () => {
@@ -2019,7 +2085,7 @@ test('backup failure restores previously running services and removes incomplete
       if (text.includes('ps --status running --services')) {
         return { status: 0, stdout: 'db\napi\nweb\ncaddy\n', stderr: '' };
       }
-      if (text.includes('ps --all -q db')) return { status: 0, stdout: 'abcdef1234567890\n', stderr: '' };
+      if (text.includes('ps --all -q db')) return { status: 0, stdout: `${'d'.repeat(64)}\n`, stderr: '' };
       if (text.includes('postgres-backup.mjs source-identity')) return { status: 1, stdout: '', stderr: 'identity failed' };
       return null;
     });
@@ -2032,6 +2098,9 @@ test('backup failure restores previously running services and removes incomplete
     );
     const nestedProof = executor.calls.find((call) => call.command.includes('scripts/postgres-backup.mjs'));
     assert.equal(nestedProof.options.env.DOCKER_HOST, 'npipe:////./pipe/dockerDesktopLinuxEngine');
+    assert.match(nestedProof.command.join(' '), new RegExp(`--source-container-id=${'d'.repeat(64)}`, 'u'));
+    assert.match(nestedProof.options.env.DATABASE_URL, /@127\.0\.0\.1:5432\/charitypilot_personal_server$/u);
+    assert.doesNotMatch(nestedProof.options.env.DATABASE_URL, /@db:/u);
     assert.equal(Object.keys(nestedProof.options.env).some((name) => /^(?:DOCKER_CONTEXT|DOCKER_API_VERSION|DOCKER_TLS|DOCKER_CERT_PATH|DOCKER_BUILDKIT|BUILDKIT_|BUILDX_)/iu.test(name)), false);
     const commands = commandText(executor.calls);
     assert.ok(commands.indexOf('stop caddy web api') < commands.lastIndexOf('up -d --no-build --no-deps --wait'));
@@ -3012,6 +3081,28 @@ test('interrupted auth recovery rotation blocks runtime start while status remai
     assert.match(statusOutput.join(''), /auth-recovery-rotating/u);
     assert.match(statusOutput.join(''), /rotation checkpoint: unknown/u);
     assert.equal(statusExecutor.calls.length, 0);
+  });
+});
+
+test('successful backup binds identity and restore proof to the same exact database container', () => {
+  withWorkspace((root) => {
+    const backupRoot = join(root, '.charitypilot-backups', 'personal-server');
+    const { executor } = fullAuthRecoveryRotationExecutor();
+    runAt(root, ['backup', `--output-dir=${backupRoot}`], executor, [], {
+      DOCKER_CONTEXT: 'desktop-linux',
+      COMPOSE_PROFILES: 'maintenance',
+    });
+    const proofCalls = executor.calls.filter((call) => call.command.includes('scripts/postgres-backup.mjs'));
+    assert.equal(proofCalls.length, 2);
+    for (const call of proofCalls) {
+      assert.match(call.command.join(' '), new RegExp(`--source-container-id=${'d'.repeat(64)}`, 'u'));
+      assert.doesNotMatch(call.command.join(' '), /--docker-network=/u);
+      assert.match(call.options.env.DATABASE_URL, /@127\.0\.0\.1:5432\/charitypilot_personal_server$/u);
+      assert.doesNotMatch(call.options.env.DATABASE_URL, /@db:/u);
+    }
+    assert.match(proofCalls[0].command.join(' '), /source-identity/u);
+    assert.match(proofCalls[1].command.join(' '), /prove-restore/u);
+    assert.equal(readdirSync(backupRoot).filter((name) => !name.startsWith('.')).length, 1);
   });
 });
 

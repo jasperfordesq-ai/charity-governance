@@ -29,6 +29,7 @@ import {
   preflightOutputFilesystemCapacity,
   redactPostgresTranscript,
   runPostgresBackupFromArgs,
+  sourceEndpointIdentitySha256,
   nextDumpByteCount,
   shouldScavengeProofContainer,
 } from './postgres-backup.mjs';
@@ -675,6 +676,7 @@ test('postgres backup CLI rejects duplicate, empty, unknown, boolean-value, and 
     [['backup', '--surprise=value', '--dry-run'], /Unknown option --surprise for backup/],
     [['backup', '--dry-run=true'], /--dry-run does not accept a value/],
     [['source-identity', '--dump-file=x', '--dry-run'], /Unknown option --dump-file for source-identity/],
+    [['backup', `--source-container-id=${'a'.repeat(64)}`, '--dry-run'], /Unknown option --source-container-id for backup/],
     [['verify-restore', '--database-url=postgresql:\/\/u:p@localhost\/db', '--dry-run'], /Unknown option --database-url for verify-restore/],
   ];
   for (const [args, expected] of cases) {
@@ -871,6 +873,90 @@ test('source identity dry run is remote-safe, read-only, parseable by contract, 
   assert.doesNotMatch(result.stdout, /identity-user|identity-secret|db\.charitypilot\.ie|postgresql:\/\//);
   assert.doesNotMatch(result.stdout, /"ok":true|Source database identity SHA-256:/);
   assert.deepEqual(readdirSync(repoRoot).filter((name) => name.includes('source-identity')), []);
+});
+
+test('source identity binds an explicit full local source container without weakening remote TLS rules', async () => {
+  const sourceContainerId = 'a'.repeat(64);
+  const databaseUrl = 'postgresql://proof-user:proof-password@127.0.0.1:5432/charitypilot_personal_server';
+  const result = await runBackupCli([
+    'source-identity',
+    `--database-url=${databaseUrl}`,
+    `--source-container-id=${sourceContainerId}`,
+    '--json',
+    '--dry-run',
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, new RegExp(`--network container:${sourceContainerId}`, 'u'));
+  assert.match(result.stdout, /BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY/u);
+  assert.doesNotMatch(result.stdout + result.stderr, /proof-user|proof-password|postgresql:\/\//u);
+  assert.notEqual(
+    sourceEndpointIdentitySha256(databaseUrl, { sourceContainerId }),
+    sourceEndpointIdentitySha256(databaseUrl, { sourceContainerId: 'b'.repeat(64) }),
+  );
+  assert.notEqual(
+    sourceEndpointIdentitySha256(databaseUrl, { sourceContainerId }),
+    sourceEndpointIdentitySha256(databaseUrl),
+  );
+});
+
+test('local source-container proof mode rejects ambiguous IDs, routing, and non-exact loopback URLs', async () => {
+  const sourceContainerId = 'a'.repeat(64);
+  const base = 'postgresql://proof-user:proof-password@127.0.0.1:5432/charitypilot_personal_server';
+  const cases = [
+    { args: [`--database-url=${base}`, '--source-container-id=abcdef123456'], error: /exact lowercase 64-character/u },
+    { args: [`--database-url=${base}`, `--source-container-id=${'A'.repeat(64)}`], error: /exact lowercase 64-character/u },
+    { args: [`--database-url=${base}`, `--source-container-id=${sourceContainerId}`, '--docker-network=internal'], error: /mutually exclusive/u },
+    { args: ['--database-url=postgresql://proof-user:proof-password@db:5432/charitypilot_personal_server', `--source-container-id=${sourceContainerId}`], error: /exact PostgreSQL loopback/u },
+    { args: ['--database-url=postgresql://proof-user:proof-password@localhost:5432/charitypilot_personal_server', `--source-container-id=${sourceContainerId}`], error: /exact PostgreSQL loopback/u },
+    { args: ['--database-url=postgresql://proof-user:proof-password@127.0.0.1/charitypilot_personal_server', `--source-container-id=${sourceContainerId}`], error: /exact PostgreSQL loopback/u },
+    { args: ['--database-url=postgresql://proof-user@127.0.0.1:5432/charitypilot_personal_server', `--source-container-id=${sourceContainerId}`], error: /exact PostgreSQL loopback/u },
+    { args: [`--database-url=${base}?sslmode=disable`, `--source-container-id=${sourceContainerId}`], error: /no parameters or fragment/u },
+    { args: [`--database-url=${base}#other`, `--source-container-id=${sourceContainerId}`], error: /no parameters or fragment/u },
+    { args: [`--database-url=${base}?`, `--source-container-id=${sourceContainerId}`], error: /no parameters or fragment/u },
+    { args: [`--database-url=${base}#`, `--source-container-id=${sourceContainerId}`], error: /no parameters or fragment/u },
+  ];
+  for (const { args, error } of cases) {
+    const result = await runBackupCli(['source-identity', ...args, '--dry-run']);
+    assert.equal(result.status, 1, args.join(' '));
+    assert.match(result.stderr, error);
+    assert.doesNotMatch(result.stdout + result.stderr, /proof-user|proof-password|postgresql:\/\//u);
+  }
+
+  const stillRemote = await runBackupCli([
+    'source-identity',
+    '--database-url=postgresql://proof-user:proof-password@db:5432/charitypilot_personal_server',
+    '--docker-network=internal',
+    '--dry-run',
+  ]);
+  assert.equal(stillRemote.status, 1);
+  assert.match(stillRemote.stderr, /verify-full/u);
+});
+
+test('prove-restore uses the same exact local source container and a distinct isolated restore target', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-container-proof-dry-run-'));
+  const sourceContainerId = 'c'.repeat(64);
+  try {
+    const result = await runBackupCli([
+      'prove-restore',
+      '--database-url=postgresql://proof-user:proof-password@127.0.0.1:5432/charitypilot_personal_server',
+      `--source-container-id=${sourceContainerId}`,
+      '--recovery-set-id=personal-server-regression-proof',
+      `--expected-source-database-identity-sha256=${digest('a')}`,
+      `--output-dir=${tempDir}`,
+      '--output-file=database.dump',
+      '--report-file=database.restore-proof.json',
+      '--dry-run',
+    ]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, new RegExp(`--network container:${sourceContainerId}`, 'u'));
+    assert.match(result.stdout, /--network container:charitypilot-isolated-restore-/u);
+    assert.doesNotMatch(result.stdout + result.stderr, /proof-user|proof-password|postgresql:\/\//u);
+    assert.deepEqual(readdirSync(tempDir), []);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('proof/source URLs reject libpq routing overrides, duplicate parameters, and ambiguous identities', async () => {
