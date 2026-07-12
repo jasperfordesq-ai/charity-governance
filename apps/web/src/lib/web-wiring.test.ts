@@ -1985,9 +1985,16 @@ test('marketing landing workflow signals use shared status panel styling', () =>
   assert.match(page, /className=\{statusPanelClassName\('neutral', 'p-4'\)\}/);
   assert.match(page, /className=\{statusPanelClassName\('neutral', 'shadow-sm'\)\}/);
   assert.match(page, /className=\{statusPanelClassName\('neutral', 'p-5 shadow-sm'\)\}/);
+  assert.match(page, /className=\{statusPanelClassName\('neutral', 'border-2 shadow-sm'\)\}/);
+  assert.match(page, /className=\{statusPanelClassName\('brand', 'relative overflow-visible border-2 shadow-md'\)\}/);
+  assert.match(page, /className=\{statusPanelClassName\('neutral', 'group overflow-hidden'\)\}/);
   assert.doesNotMatch(page, /rounded-lg border border-gray-200 bg-gray-50 p-4/);
   assert.doesNotMatch(page, /border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900/);
   assert.doesNotMatch(page, /rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/);
+  assert.doesNotMatch(page, /border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950/);
+  assert.doesNotMatch(page, /border-2 border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950/);
+  assert.doesNotMatch(page, /relative overflow-visible border-2 border-teal-primary bg-white shadow-md dark:border-teal-bright dark:bg-gray-950/);
+  assert.doesNotMatch(page, /group overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800/);
 });
 
 test('marketing features cards use shared status panel styling', () => {

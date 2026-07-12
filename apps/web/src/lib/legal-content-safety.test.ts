@@ -82,7 +82,7 @@ test('annual-reporting guide shows dated primary sources and limitations', () =>
 
 test('annual-reporting source log agrees with the visible commencement warning', () => {
   assert.match(sourceLog, /^Date checked: 2026-07-09$/m);
-  assert.match(sourceLog, /^Last updated: 2026-07-10 \(targeted annual-reporting and accounting-source recheck\)$/m);
+  assert.match(sourceLog, /^Last updated: 2026-07-12 \(targeted legislation\/CRO link and currency recheck\)$/m);
   assert.match(sourceLog, /Annual accounting and audit status check[\s\S]*2026-07-10/);
   assert.match(sourceLog, /sections 17 to 19[\s\S]*not yet commenced/i);
   assert.match(sourceLog, /does not list an instrument made under section 50/i);
