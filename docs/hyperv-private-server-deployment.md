@@ -204,27 +204,64 @@ routine operator action in this profile; monitor free space instead.
 
 ## Deploying a new commit
 
+> **Do not do this.** Advancing the checkout silently destroys your ability to
+> restore. Verified by deliberate test, 2026-08-09 — details below.
+
 There is **no sanctioned update path for this profile yet**.
 `personal:server:update` is version-bound and requires a signed release archive
 and an update receipt; no `personal-v*` release has been published, so it cannot
 run. The Linux documentation is explicit that upgrades are supervised engineering
 work and that improvising one by pulling source is not supported.
 
-If you deploy anyway, do it defensively. A workable order:
+### Why improvising a deploy breaks restore
 
-1. refuse unless protected state is `ready`
-2. refuse any source that is dirty or not an ancestor of canonical `origin/master`
-3. take and verify a full recovery set **before** touching anything, and record it
-   as the rollback point
-4. run the read-only preflight against the new commit; revert the checkout if it
-   fails, before the runtime is touched
-5. rebuild images, apply migrations, restart
-6. re-run the runtime-health attestation, and stop loudly on failure naming the
-   rollback set
+A recovery set records its source identity from the **protected installation
+state**, not from the working checkout. That record is written at install time,
+and only the sanctioned `update` command advances it.
 
-Treat every such deployment as supervised. Migration failure after step 5 leaves
-the runtime inconsistent, and restoring the pre-deploy recovery set is the only
-recovery.
+So `git checkout <newer-commit>` leaves protected state pinned to the install
+commit while the source moves ahead. `personal:server:restore` then aborts with:
+
+```text
+Retained Git rollback source is dirty or no longer at the recorded revision
+```
+
+`assertRetainedSourceIdentity` requires `git status --porcelain=v1
+--untracked-files=all` to be **empty** and `HEAD` to equal the commit recorded in
+protected state. A deployed checkout satisfies neither.
+
+**The failure is invisible until you need it.** After such a deploy the services
+are healthy, the runtime-health attestation passes, HTTPS serves normally, and
+backups continue to succeed and verify. Nothing indicates a problem. You discover
+it at the worst possible moment — when you attempt a restore during an incident.
+
+Note also that the restore does most of its work *before* reaching this check: it
+verifies the set, rehearses it in disposable containers, stops writers, writes a
+preservation backup and restarts services. Only then does it refuse. The refusal
+is safe — no data is altered — but it is late.
+
+### If it has already happened
+
+Re-pin the checkout to the commit recorded in protected state:
+
+```bash
+grep -o '"revision"[^,]*' ~/.local/share/charitypilot/personal-server/install-state.json
+cd ~/charity-governance
+git reset --hard <that-revision>     # must end on master with a clean tree
+```
+
+`personal-server-certify.mjs` requires branch `master`, a clean worktree and the
+canonical remote — but **not** that `HEAD` equals `origin/master`. So a checkout
+pinned behind `origin/master` still passes attestation, and restore works again.
+
+### Supported ways to ship a change
+
+1. Wait for the Linux release updater (open work).
+2. Reinstall on the new commit and carry data across with `bootstrap-restore`
+   using `--source-origin` / `--origin`.
+
+Both are heavier than a deploy. That is the current cost of the profile being
+provisional, and it is a smaller cost than unrestorable backups.
 
 ---
 
@@ -241,9 +278,20 @@ Inherited from the profile, and not fixed by running it in a VM:
 - Off-host recovery, replacement-host recovery, update and rollback have not been
   executed and accepted on this profile
 
-Reboot survival **has** been demonstrated: with `restart=unless-stopped` on the
-Compose services, Docker enabled at boot, and the VM set to auto-start, the full
-stack returns healthy after both guest and host restarts with no intervention.
+Two gates **have** been demonstrated on this arrangement:
+
+- **Reboot survival.** With `restart=unless-stopped` on the Compose services,
+  Docker enabled at boot and the VM set to auto-start, the full stack returns
+  healthy after guest and host restarts with no intervention.
+- **Guarded restore on the current host.** Tested against real data: a known
+  value was altered in the live database, then `personal:server:restore` was run
+  against a prior recovery set. The set was verified, rehearsed in disposable
+  containers, the current state preserved to a new set, and the altered value
+  correctly reverted. `lastRestore` was recorded and the phase returned to
+  `ready`. Backups taken by this profile are genuinely restorable.
+
+Neither of these is a substitute for the off-host and replacement-host recovery
+gates, which remain unexecuted.
 
 Keep `recovery-key.hex` off the host, separate from the recovery sets it
 protects. Losing it makes every recovery set permanently unrestorable.
