@@ -1,0 +1,249 @@
+# CharityPilot on a Hyper-V VM (private Linux server)
+
+Last reviewed: 2026-08-09
+
+How to run the `private-linux-server` profile in a Hyper-V virtual machine on a
+Windows workstation, reached privately over Tailscale. This is a **supervised
+testing** deployment: see [Known gaps](#known-gaps) before trusting it with real
+charity records.
+
+This document complements
+[`personal-server-deployment-linux.md`](personal-server-deployment-linux.md),
+which remains the authority on the profile itself. This one covers only what is
+specific to the Hyper-V + Tailscale arrangement.
+
+---
+
+## Why a VM rather than the Windows profile
+
+The Windows `personal-server` profile requires Docker Desktop on the workstation
+itself, and explicitly does not promise unattended boot before a Windows user
+signs in. A Hyper-V VM configured with `AutomaticStartAction = Start` boots with
+the host, before any interactive logon, and runs Docker Engine natively rather
+than through Docker Desktop. It also keeps the charity's data on a dedicated
+machine boundary rather than sharing the workstation's Docker daemon.
+
+---
+
+## Topology
+
+```text
+Windows host
+  └── Hyper-V VM  (Ubuntu 24.04 LTS, auto-starts with host)
+        ├── tailscaled ──── Tailscale Serve, tailnet-only HTTPS
+        │                     https://charitypilot.<your-tailnet>.ts.net
+        │                       └── proxies to 127.0.0.1:8080
+        └── Docker Engine
+              └── Caddy (binds 127.0.0.1:8080 ONLY)
+                    ├── /api/v1/*  → Fastify API
+                    └── everything else → Next.js
+                          └── PostgreSQL + document volume
+```
+
+Nothing listens on the VM's network interface. Caddy binds loopback only; the
+sole route in is Tailscale Serve, which is restricted to the tailnet. **Funnel
+must stay off** — it would publish the server to the open internet.
+
+---
+
+## Host requirements
+
+- Windows 11 24H2+ with Hyper-V enabled (Pro or Enterprise; Home lacks Hyper-V)
+- 8 GB RAM and 4 vCPU free for the guest; 80 GB disk
+- A Tailscale account, with the Windows host also joined to the tailnet
+
+The guest requirements are unchanged from the Linux profile: Ubuntu 24.04 LTS,
+dedicated non-root operator, Node 22, the exact npm from `packageManager`, local
+Docker Engine and Compose.
+
+---
+
+## Provisioning the guest
+
+Any standard Ubuntu 24.04 Server install works. Points worth knowing if you
+automate it:
+
+- **Ubuntu's autoinstall always stops for confirmation** unless `autoinstall` is
+  on the *kernel command line*. A cloud-init NoCloud seed disk delivers the
+  configuration but cannot set a kernel argument, so an otherwise-unattended
+  build will sit at `Continue with autoinstall? (yes|no)` forever. Either rebuild
+  the ISO with the kernel argument, drive the answer with Hyper-V's synthetic
+  keyboard, or answer it once by hand.
+- **Ubuntu's LVM layout claims only about half the disk.** Reclaim the rest
+  before installing anything:
+  ```bash
+  sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv && sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
+  ```
+- **Set `AutomaticCheckpointsEnabled = $false`** on the VM. Client Hyper-V enables
+  automatic checkpoints by default, which leaves a server permanently running off
+  a differencing disk.
+
+---
+
+## Networking: use a stable name, never an IP
+
+Hyper-V's Default Switch is a NAT `/20` whose DHCP leases **change on every VM
+reboot**. Anything referencing a bare IP will break the first time the guest
+restarts.
+
+Install mDNS in the guest so it has a stable name on the host network:
+
+```bash
+sudo apt-get install -y avahi-daemon libnss-mdns
+```
+
+The guest is then reachable as `<hostname>.local` from the Windows host
+regardless of its current lease.
+
+---
+
+## Tailscale
+
+Join the guest to the tailnet and publish the loopback port over tailnet-only
+HTTPS:
+
+```bash
+sudo tailscale up --hostname=charitypilot
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8080
+sudo tailscale serve status     # confirm "(tailnet only)"
+```
+
+> **Do not pass `--accept-dns=false`.** MagicDNS must be enabled or the guest
+> cannot resolve its own `.ts.net` name, and the installer's final runtime-health
+> attestation — which fetches the configured origin — fails with `fetch failed`.
+> That failure lands the install in a phase Linux cannot resume (see below).
+
+Confirm HTTPS certificates are available for the tailnet before installing:
+
+```bash
+sudo tailscale cert --cert-file /tmp/t.crt --key-file /tmp/t.key charitypilot.<your-tailnet>.ts.net
+```
+
+---
+
+## Installing
+
+Configure Serve **before** installing. The origin is written into protected state
+at install time and there is no command to change it afterwards.
+
+```bash
+bash scripts/Install-CharityPilot.sh \
+  --owner-email you@example.org \
+  --owner-name "Your Name" \
+  --organisation-name "Your Charity" \
+  --origin https://charitypilot.<your-tailnet>.ts.net \
+  --port 8080
+```
+
+A successful run ends with `runtime-health attestation passed`,
+`Origin class: tailscale-private-https`, and protected state phase `ready`.
+
+### Verify the install reached `ready`
+
+```bash
+grep -o '"phase"[^,]*' ~/.local/share/charitypilot/personal-server/install-state.json
+```
+
+This matters more than it looks. **`restore`, `rollback`, `update`,
+`decommission` and auth-recovery rotation all refuse to run unless the phase is
+`ready`.** An installation stuck in `initialized-backup-pending` can still take
+backups but **cannot restore them**, which is close to worthless.
+
+The Linux installer has no `--resume-failed` wrapper, so a part-completed install
+cannot be driven forward, and `decommission` refuses because it too requires
+`ready`. Recovery from that state means removing the Compose resources directly,
+archiving the protected state, and installing again:
+
+```bash
+docker compose --project-name charitypilot-personal-server \
+  --env-file ~/.local/share/charitypilot/personal-server/.env.personal-server \
+  -f compose.personal-server.yml down -v --remove-orphans
+mv ~/.local/share/charitypilot/personal-server ~/.local/share/charitypilot/personal-server.archived
+mv ~/.local/state/charitypilot ~/.local/state/charitypilot.archived
+```
+
+Archive rather than delete — the recovery key in that tree is the only thing that
+can decrypt its recovery sets.
+
+---
+
+## Changing the origin later
+
+`--origin` is fixed at install time, but the origin **can** be rebound during a
+replacement-host restore, which preserves the Owner account and all data:
+
+```bash
+node scripts/personal-server.mjs bootstrap-restore-plan \
+  --recovery-set=<path> \
+  --source-origin=<old-origin> \
+  --origin=<new-origin> \
+  --port=<port> \
+  --encryption-key-file=<absolute-path>
+```
+
+Run the `-plan` variant first. This is the supported route once real records
+exist; a fresh install is only appropriate while the database is still empty.
+
+---
+
+## Scheduled backups
+
+`personal:server:backup` quiesces writers, proves database identity, reconciles
+document metadata, encrypts with AES-256-GCM and verifies before restarting
+services. It needs no privileges beyond the operator's Docker access, so a plain
+user crontab is sufficient:
+
+```cron
+30 3 * * * $HOME/bin/charitypilot-backup.sh >/dev/null 2>&1
+```
+
+Do not automate pruning of recovery sets. Deleting recovery artifacts is not a
+routine operator action in this profile; monitor free space instead.
+
+---
+
+## Deploying a new commit
+
+There is **no sanctioned update path for this profile yet**.
+`personal:server:update` is version-bound and requires a signed release archive
+and an update receipt; no `personal-v*` release has been published, so it cannot
+run. The Linux documentation is explicit that upgrades are supervised engineering
+work and that improvising one by pulling source is not supported.
+
+If you deploy anyway, do it defensively. A workable order:
+
+1. refuse unless protected state is `ready`
+2. refuse any source that is dirty or not an ancestor of canonical `origin/master`
+3. take and verify a full recovery set **before** touching anything, and record it
+   as the rollback point
+4. run the read-only preflight against the new commit; revert the checkout if it
+   fails, before the runtime is touched
+5. rebuild images, apply migrations, restart
+6. re-run the runtime-health attestation, and stop loudly on failure naming the
+   rollback set
+
+Treat every such deployment as supervised. Migration failure after step 5 leaves
+the runtime inconsistent, and restoring the pre-deploy recovery set is the only
+recovery.
+
+---
+
+## Known gaps
+
+Inherited from the profile, and not fixed by running it in a VM:
+
+- Release readiness is tracked in
+  [`personal-server-readiness-scorecard.md`](personal-server-readiness-scorecard.md)
+  and is **not** at a level that supports production use
+- The Linux profile is provisional: failed-install resume, the replacement-host
+  wrapper and a release updater are all open work
+- No versioned release exists; a clean `master` clone is a supervised test route
+- Off-host recovery, replacement-host recovery, update and rollback have not been
+  executed and accepted on this profile
+
+Reboot survival **has** been demonstrated: with `restart=unless-stopped` on the
+Compose services, Docker enabled at boot, and the VM set to auto-start, the full
+stack returns healthy after both guest and host restarts with no intervention.
+
+Keep `recovery-key.hex` off the host, separate from the recovery sets it
+protects. Losing it makes every recovery set permanently unrestorable.
