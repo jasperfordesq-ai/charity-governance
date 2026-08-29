@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { apiErrorMessage } from '@/lib/errors';
+import { authFailureNotice, type AuthFailureNotice } from '@/lib/auth-error-message';
 import { loginSchema, firstSchemaError } from '@/lib/form-schemas';
 import { safeNextPath } from '@/lib/safe-next-path';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<AuthFailureNotice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -31,11 +31,11 @@ export default function LoginPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    setError(null);
 
     const issue = firstSchemaError(loginSchema, { email, password });
     if (issue) {
-      setError(issue);
+      setError({ message: issue });
       return;
     }
     setIsLoading(true);
@@ -44,7 +44,10 @@ export default function LoginPage() {
       const user = await login(email, password);
       router.push(loginDestination(user));
     } catch (err: unknown) {
-      setError(apiErrorMessage(err, 'Invalid email or password. Please try again.'));
+      // The credentials fallback is only reachable once the server has actually
+      // answered: an origin rejection (403 INVALID_ORIGIN, or a CORS-blocked
+      // response with no readable body) never reaches the credential check.
+      setError(authFailureNotice(err, 'Invalid email or password. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +71,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <FormAlert>{error}</FormAlert>
+              <FormAlert title={error.title}>{error.message}</FormAlert>
             )}
 
               <Input

@@ -4,7 +4,7 @@ import { Suspense, useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { Check, CircleAlert } from 'lucide-react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { authFailureNotice, type AuthFailureNotice } from '@/lib/auth-error-message';
 import { resetPasswordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
@@ -20,7 +20,7 @@ function ResetPasswordForm() {
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<AuthFailureNotice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -30,23 +30,23 @@ function ResetPasswordForm() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    setError(null);
     setResetLinkRejected(false);
 
     // Same reset-password rule the server enforces (uppercase + lowercase + digit).
     const pwIssue = resetPasswordIssue(password);
     if (pwIssue) {
-      setError(pwIssue);
+      setError({ message: pwIssue });
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError({ message: 'Passwords do not match.' });
       return;
     }
 
     if (!token) {
-      setError('No reset token found. Please request a new password reset link.');
+      setError({ message: 'No reset token found. Please request a new password reset link.' });
       return;
     }
 
@@ -62,7 +62,10 @@ function ResetPasswordForm() {
       setResetLinkRejected(
         (err as { response?: { data?: { code?: unknown } } })?.response?.data?.code === 'INVALID_RESET_TOKEN',
       );
-      setError(apiErrorMessage(err, 'Something went wrong. The link may have expired.'));
+      // "The link may have expired" is only an honest guess once the server has
+      // answered. An origin rejection or an unanswered request must not be
+      // reported as a dead reset link.
+      setError(authFailureNotice(err, 'Something went wrong. The link may have expired.'));
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +138,7 @@ function ResetPasswordForm() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
                     <div className="space-y-2">
-                      <FormAlert title={resetLinkRejected ? 'Reset link not accepted' : undefined}>{error}</FormAlert>
+                      <FormAlert title={resetLinkRejected ? 'Reset link not accepted' : error.title}>{error.message}</FormAlert>
                       {resetLinkRejected && !personalServer ? (
                         <Link href="/forgot-password" className="text-sm font-semibold text-teal-primary hover:underline dark:text-teal-bright">
                           Request a new reset link

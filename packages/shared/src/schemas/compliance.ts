@@ -36,7 +36,7 @@ export const upsertComplianceRecordSchema = z.object({
 });
 
 export const complianceQuerySchema = z.object({
-  year: z.coerce.number().int().min(2018).max(2100),
+  year: z.coerce.number().int().min(2018).max(2100).optional(),
 });
 
 export const upsertComplianceSignoffSchema = z

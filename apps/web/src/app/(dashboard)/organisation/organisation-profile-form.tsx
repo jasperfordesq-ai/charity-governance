@@ -76,6 +76,8 @@ type OrganisationProfileFormProps = {
   setLastUnanimousAnnualMemberResolutionDate: (value: string) => void;
   setLegalFormConfirmed: (value: boolean) => void;
   setMemberCount: (value: string) => void;
+  constitutionPermitsWrittenResolutions: 'true' | 'false' | '';
+  setConstitutionPermitsWrittenResolutions: (value: 'true' | 'false' | '') => void;
   setName: (value: string) => void;
   setRcnNumber: (value: string) => void;
   setRegisteredAddress: (value: string) => void;
@@ -132,6 +134,8 @@ export function OrganisationProfileForm({
   setLastUnanimousAnnualMemberResolutionDate,
   setLegalFormConfirmed,
   setMemberCount,
+  constitutionPermitsWrittenResolutions,
+  setConstitutionPermitsWrittenResolutions,
   setName,
   setRcnNumber,
   setRegisteredAddress,
@@ -327,6 +331,26 @@ export function OrganisationProfileForm({
                   isReadOnly={!canManage}
                   aria-describedby="member-count-hint"
                 />
+                <div>
+                  <Select
+                    label="Constitution permits written resolutions (s.175(3))"
+                    selectedKeys={constitutionPermitsWrittenResolutions ? new Set([constitutionPermitsWrittenResolutions]) : new Set()}
+                    placeholder="Not confirmed"
+                    isDisabled={!canManage}
+                    classNames={{ value: 'text-gray-700 dark:text-gray-300' }}
+                    aria-describedby="cpwr-hint"
+                    onSelectionChange={(keys) => {
+                      const value = Array.from(keys)[0] as 'true' | 'false' | undefined;
+                      setConstitutionPermitsWrittenResolutions(value ?? '');
+                    }}
+                  >
+                    <SelectItem key="true">Yes — constitution permits (e.g. Art. 20)</SelectItem>
+                    <SelectItem key="false">No — constitution excludes or is silent</SelectItem>
+                  </Select>
+                  <FormHint id="cpwr-hint">
+                    When the sole member and constitution both permit it (s.175(3) Companies Act 2014), a unanimous written resolution may discharge the AGM obligation. Confirming eligibility removes the professional review flag from the deadline.
+                  </FormHint>
+                </div>
                 <Input
                   label="CRO Annual Return Date (ARD)"
                   type="date"

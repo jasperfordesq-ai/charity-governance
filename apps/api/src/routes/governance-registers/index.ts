@@ -35,6 +35,11 @@ function validationError(reply: FastifyReply, err: ZodError) {
   return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
 }
 
+function reportingYear(query: unknown): number {
+  const { year } = complianceQuerySchema.parse(query);
+  return year ?? new Date().getFullYear();
+}
+
 export async function governanceRegisterRoutes(app: FastifyInstance) {
   const service = new GovernanceRegisterService(app.prisma);
 
@@ -44,7 +49,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.get('/summary', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.summary(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
@@ -202,7 +207,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.get('/annual-report', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.getAnnualReportReadiness(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
@@ -222,7 +227,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.get('/financial-controls', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.getFinancialControlReview(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);

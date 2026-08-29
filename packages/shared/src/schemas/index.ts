@@ -8,4 +8,6 @@ export * from "./document.js";
 export * from "./deadline.js";
 export * from "./billing.js";
 export * from "./governance-registers.js";
+export * from "./governing-acts.js";
+export * from "./members.js";
 export * from "./team.js";

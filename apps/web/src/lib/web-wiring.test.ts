@@ -61,6 +61,29 @@ test('team surfaces the server\'s specific error message (apiErrorMessage), not 
   assert.ok(src.includes('apiErrorMessage'));
 });
 
+test('credential screens classify auth failures instead of blaming the credentials', () => {
+  // An origin rejection (403 INVALID_ORIGIN, or a CORS-blocked response the
+  // browser cannot read) is refused before the credential or token check runs.
+  // A fallback that asserts a cause — bad password, expired link — must not be
+  // reachable for those, so these pages route failures through the classifier.
+  const routes = [
+    '(auth)/login/page.tsx',
+    '(auth)/forgot-password/page.tsx',
+    '(auth)/reset-password/page.tsx',
+  ];
+
+  for (const route of routes) {
+    const src = app(route);
+    assert.match(src, /from '@\/lib\/auth-error-message'/, `${route} must import the auth failure classifier`);
+    assert.match(src, /authFailureNotice\(/, `${route} must classify the failure before rendering it`);
+    assert.doesNotMatch(
+      src,
+      /setError\(apiErrorMessage\(/,
+      `${route} must not send a raw apiErrorMessage fallback straight to the alert`,
+    );
+  }
+});
+
 test('profile-triggered workflows treat missing organisation profiles as setup state', () => {
   const consumers = [
     'documents/use-documents-workflow.ts',

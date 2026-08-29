@@ -59,6 +59,7 @@ export function useOrganisationWorkflow() {
   const [lastActualAgmDate, setLastActualAgmDate] = useState('');
   const [lastUnanimousAnnualMemberResolutionDate, setLastUnanimousAnnualMemberResolutionDate] = useState('');
   const [memberCount, setMemberCount] = useState('');
+  const [constitutionPermitsWrittenResolutions, setConstitutionPermitsWrittenResolutionsState] = useState<'true' | 'false' | ''>('');
   const [conditionalObligationProfile, setConditionalObligationProfile] = useState<ConditionalObligationProfile>(
     EMPTY_CONDITIONAL_OBLIGATION_PROFILE,
   );
@@ -88,6 +89,13 @@ export function useOrganisationWorkflow() {
       toCivilDate(org.lastUnanimousAnnualMemberResolutionDate) ?? '',
     );
     setMemberCount(org.memberCount === null ? '' : String(org.memberCount));
+    setConstitutionPermitsWrittenResolutionsState(
+      org.constitutionPermitsWrittenResolutions === true
+        ? 'true'
+        : org.constitutionPermitsWrittenResolutions === false
+          ? 'false'
+          : '',
+    );
     setConditionalObligationProfile(normaliseConditionalObligationProfile(org.conditionalObligationProfile));
     setIsDirty(false);
     setSaved(false);
@@ -138,6 +146,7 @@ export function useOrganisationWorkflow() {
     legalForm,
     legalFormConfirmed,
     memberCount,
+    constitutionPermitsWrittenResolutions,
     name,
     rcnNumber,
     registeredAddress,
@@ -301,6 +310,20 @@ export function useOrganisationWorkflow() {
       }
       if (memberCount !== originalMemberCount) body.memberCount = memberCount ? Number(memberCount) : null;
 
+      const originalCPWR = org.constitutionPermitsWrittenResolutions === true
+        ? 'true'
+        : org.constitutionPermitsWrittenResolutions === false
+          ? 'false'
+          : '';
+      if (constitutionPermitsWrittenResolutions !== originalCPWR) {
+        body.constitutionPermitsWrittenResolutions =
+          constitutionPermitsWrittenResolutions === 'true'
+            ? true
+            : constitutionPermitsWrittenResolutions === 'false'
+              ? false
+              : null;
+      }
+
       const parsed = updateOrganisationSchema.safeParse(body);
       if (!parsed.success) {
         setSaveError(parsed.error.issues[0]?.message ?? 'Please check the organisation profile fields.');
@@ -339,6 +362,7 @@ export function useOrganisationWorkflow() {
     charitablePurpose,
     completionItems,
     complexity,
+    constitutionPermitsWrittenResolutions,
     complexityModal,
     conditionalObligationProfile,
     contactEmail,
@@ -388,6 +412,9 @@ export function useOrganisationWorkflow() {
     },
     setLegalFormConfirmed: (value: boolean) => { if (canManage) setLegalFormConfirmed(value); },
     setMemberCount: (value: string) => { if (canManage) setMemberCount(value); },
+    setConstitutionPermitsWrittenResolutions: (value: 'true' | 'false' | '') => {
+      if (canManage) setConstitutionPermitsWrittenResolutionsState(value);
+    },
     setName: (value: string) => { if (canManage) setName(value); },
     setRcnNumber: (value: string) => { if (canManage) setRcnNumber(value); },
     setRegisteredAddress: (value: string) => { if (canManage) setRegisteredAddress(value); },

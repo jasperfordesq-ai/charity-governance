@@ -28,6 +28,16 @@ const API_URL = getApiBaseUrl({
   NEXT_PUBLIC_CHARITYPILOT_E2E_MODE: process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE,
 });
 
+// The exact origin this browser bundle was built to call. Auth screens compare it
+// with the page origin so an origin rejection is not reported as a bad password.
+export const configuredApiOrigin: string | undefined = (() => {
+  try {
+    return new URL(API_URL).origin;
+  } catch {
+    return undefined;
+  }
+})();
+
 function redirectToLoginOnProtectedRoute() {
   if (typeof window === 'undefined' || !isProtectedAppPath(window.location.pathname)) {
     return;

@@ -16,6 +16,8 @@ import { billingRoutes } from './routes/billing/index.js';
 import { exportRoutes } from './routes/export/index.js';
 import { dashboardRoutes } from './routes/dashboard/index.js';
 import { governanceRegisterRoutes } from './routes/governance-registers/index.js';
+import { governingActRoutes } from './routes/governing-acts/index.js';
+import { memberRoutes } from './routes/members/index.js';
 import { teamRoutes } from './routes/team/index.js';
 import { healthRoutes } from './routes/health/index.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
@@ -80,8 +82,19 @@ await app.register(billingRoutes, { prefix: '/api/v1/billing' });
 await app.register(exportRoutes, { prefix: '/api/v1/export' });
 await app.register(dashboardRoutes, { prefix: '/api/v1/dashboard' });
 await app.register(governanceRegisterRoutes, { prefix: '/api/v1/governance-registers' });
+await app.register(governingActRoutes, { prefix: '/api/v1/governing-acts' });
+await app.register(memberRoutes, { prefix: '/api/v1/members' });
 await app.register(teamRoutes, { prefix: '/api/v1/team' });
 await app.register(healthRoutes, { prefix: '/api/v1/health' });
+
+// Short-path alias: tell callers the right prefix rather than 404ing silently
+app.get('/api/v1/risks', (_req, reply) => {
+  reply.status(404).send({
+    error: 'Not found',
+    code: 'PATH_MOVED',
+    message: 'Use /api/v1/governance-registers/risks',
+  });
+});
 
 // Health check
 

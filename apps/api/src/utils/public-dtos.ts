@@ -27,6 +27,7 @@ export type PublicOrganisationSource = Pick<
   | 'lastActualAgmDate'
   | 'lastUnanimousAnnualMemberResolutionDate'
   | 'memberCount'
+  | 'constitutionPermitsWrittenResolutions'
   | 'updatedAt'
 > & {
   conditionalObligationProfile: unknown;
@@ -78,6 +79,7 @@ export const publicOrganisationSelect = {
   lastActualAgmDate: true,
   lastUnanimousAnnualMemberResolutionDate: true,
   memberCount: true,
+  constitutionPermitsWrittenResolutions: true,
   conditionalObligationProfile: true,
   updatedAt: true,
 } satisfies Record<keyof PublicOrganisationSource, true>;
@@ -124,6 +126,7 @@ export function publicOrganisation(organisation: PublicOrganisationSource): Publ
       organisation.lastUnanimousAnnualMemberResolutionDate,
     ),
     memberCount: organisation.memberCount,
+    constitutionPermitsWrittenResolutions: organisation.constitutionPermitsWrittenResolutions ?? null,
     conditionalObligationProfile: publicConditionalObligationProfile(organisation.conditionalObligationProfile),
     updatedAt: organisation.updatedAt.toISOString(),
   };

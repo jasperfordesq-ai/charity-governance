@@ -84,6 +84,8 @@ export function validateBoardMemberCompleteState(value: unknown) {
   return boardMemberCompleteStateSchema.parse(value);
 }
 
+const directorAppointmentKindValues = ['BOARD', 'MEMBERS'] as const;
+
 const boardMemberInputSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   role: z.string().min(1, 'Role is required').max(100),
@@ -94,6 +96,11 @@ const boardMemberInputSchema = z.object({
   conductSignedDate: dateInputSchema.optional(),
   inductionCompleted: z.boolean().optional(),
   inductionDate: dateInputSchema.optional(),
+  dateOfBirth: dateInputSchema.optional(),
+  residentialAddress: z.string().max(500).optional(),
+  otherDirectorships: z.string().max(1000).optional(),
+  formerNames: z.string().max(500).optional(),
+  appointmentKind: z.enum(directorAppointmentKindValues).optional(),
 });
 
 export const createBoardMemberSchema = boardMemberInputSchema.superRefine(
@@ -120,6 +127,11 @@ const boardMemberPatchSchema = z.object({
   conductSignedDate: dateInputSchema.nullable().optional(),
   inductionCompleted: z.boolean().optional(),
   inductionDate: dateInputSchema.nullable().optional(),
+  dateOfBirth: dateInputSchema.nullable().optional(),
+  residentialAddress: z.string().max(500).nullable().optional(),
+  otherDirectorships: z.string().max(1000).nullable().optional(),
+  formerNames: z.string().max(500).nullable().optional(),
+  appointmentKind: z.enum(directorAppointmentKindValues).nullable().optional(),
 });
 
 export const updateBoardMemberSchema = boardMemberPatchSchema.superRefine(

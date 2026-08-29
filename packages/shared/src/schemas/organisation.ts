@@ -67,6 +67,7 @@ export const updateOrganisationSchema = z.object({
     .max(MAX_ORGANISATION_MEMBER_COUNT)
     .nullable()
     .optional(),
+  constitutionPermitsWrittenResolutions: z.boolean().nullable().optional(),
   conditionalObligationProfile: conditionalObligationProfileSchema
     .nullable()
     .optional(),

@@ -45,6 +45,8 @@
     "src/lib/url-security.test.ts",
     "src/lib/errors.ts",
     "src/lib/errors.test.ts",
+    "src/lib/auth-error-message.ts",
+    "src/lib/auth-error-message.test.ts",
     "src/lib/governance-permissions.ts",
     "src/lib/governance-permissions.test.ts",
     "src/lib/governance-role-affordances.test.ts",

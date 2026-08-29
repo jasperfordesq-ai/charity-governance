@@ -14,6 +14,11 @@ import { handleError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
 import { ZodError } from 'zod';
 
+function reportingYear(query: unknown): number {
+  const { year } = complianceQuerySchema.parse(query);
+  return year ?? new Date().getFullYear();
+}
+
 export async function complianceRoutes(app: FastifyInstance) {
   const service = new ComplianceService(app.prisma);
 
@@ -50,7 +55,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /records?year=2026 — all compliance records for reporting year
   app.get('/records', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.getRecords(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) {
@@ -63,7 +68,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /records/:standardId?year=2026 — single compliance record
   app.get<{ Params: { standardId: string } }>('/records/:standardId', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       const record = await service.getRecord(request.user.organisationId, request.params.standardId, year);
       return sendSuccess(reply, record);
     } catch (err) {
@@ -106,7 +111,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /summary?year=2026 — compliance score summary
   app.get('/summary', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.getSummary(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) {
@@ -119,7 +124,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /approval-readiness?year=2026 - records, evidence, profile facts, and prompts for board approval readiness
   app.get('/approval-readiness', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.getApprovalReadiness(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) {
@@ -132,7 +137,7 @@ export async function complianceRoutes(app: FastifyInstance) {
   // GET /signoff?year=2026 - board approval status for the annual Compliance Record
   app.get('/signoff', async (request, reply) => {
     try {
-      const { year } = complianceQuerySchema.parse(request.query);
+      const year = reportingYear(request.query);
       return sendSuccess(reply, await service.getSignoff(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) {

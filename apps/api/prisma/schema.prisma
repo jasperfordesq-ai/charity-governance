@@ -301,6 +301,28 @@ enum DeadlineSupersessionReason {
   LEGACY_MIGRATION
 }
 
+enum GoverningActKind {
+  BOARD_MEETING
+  DIRECTORS_WRITTEN_RESOLUTION
+  MEMBER_WRITTEN_RESOLUTION
+  ANNUAL_GENERAL_MEETING
+  EXTRAORDINARY_GENERAL_MEETING
+}
+
+enum GoverningActStatus {
+  SCHEDULED
+  HELD
+  DRAFT
+  CIRCULATED
+  APPROVED
+  SUPERSEDED
+}
+
+enum DirectorAppointmentKind {
+  BOARD
+  MEMBERS
+}
+
 model Organisation {
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -322,6 +344,7 @@ model Organisation {
   lastActualAgmDate                       DateTime?                   @db.Date
   lastUnanimousAnnualMemberResolutionDate DateTime?                   @db.Date
   memberCount                             Int?
+  constitutionPermitsWrittenResolutions   Boolean?
   conditionalObligationProfile            Json?
   lifecycleStatus                         OrganisationLifecycleStatus @default(ACTIVE)
   lifecycleChangedAt                      DateTime                    @default(now())
@@ -344,6 +367,8 @@ model Organisation {
   financialControlReviews     FinancialControlReview[]
   teamInvites                 TeamInvite[]
   deadlineReminderLogs        DeadlineReminderLog[]
+  governingActs               GoverningAct[]
+  members                     Member[]
   subscription                Subscription?
   billingCheckoutAttempt      BillingCheckoutAttempt?
   billingAuthorityGrants      BillingAuthorityGrant[]
@@ -733,6 +758,11 @@ model BoardMember {
   conductSignedDate  DateTime?
   inductionCompleted Boolean          @default(false)
   inductionDate      DateTime?
+  dateOfBirth        DateTime?        @db.Date
+  residentialAddress String?
+  otherDirectorships String?
+  formerNames        String?
+  appointmentKind    DirectorAppointmentKind?
   conflictRecords    ConflictRecord[]
 
   createdAt DateTime @default(now())
@@ -753,10 +783,13 @@ model Document {
   fileSize             Int
   mimeType             String
   version              Int              @default(1)
-  owner                String?
-  approvedDate         DateTime?
-  nextReviewDate       DateTime?
-  boardMinuteReference String?
+  owner                  String?
+  approvedDate           DateTime?
+  nextReviewDate         DateTime?
+  boardMinuteReference   String?
+  approvalAsserted       Boolean    @default(false)
+  approvedByResolutionId String?
+  approvedByResolution   Resolution? @relation(fields: [approvedByResolutionId], references: [id])
 
   uploadedById String?
   uploadedBy   User?   @relation("UploadedBy", fields: [uploadedById], references: [id])
@@ -1112,4 +1145,68 @@ model StripeWebhookEvent {
   createdAt   DateTime @default(now())
 
   @@index([processedAt])
+}
+
+model GoverningAct {
+  id              String             @id @default(cuid())
+  organisationId  String
+  organisation    Organisation       @relation(fields: [organisationId], references: [id])
+  kind            GoverningActKind
+  status          GoverningActStatus @default(SCHEDULED)
+  actDate         DateTime           @db.Date
+  reference       String
+  title           String
+  statutoryBasis  String?
+  approvedAtActId String?
+  approvedAtAct   GoverningAct?      @relation("MinuteApproval", fields: [approvedAtActId], references: [id])
+  approvedByThisAct GoverningAct[]   @relation("MinuteApproval")
+  approvedAt      DateTime?
+  documentId      String?
+  notes           String?
+
+  resolutions Resolution[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organisationId, reference])
+  @@index([organisationId])
+  @@index([organisationId, actDate])
+}
+
+model Resolution {
+  id               String       @id @default(cuid())
+  organisationId   String
+  governingActId   String
+  governingAct     GoverningAct @relation(fields: [governingActId], references: [id])
+  itemNumber       String?
+  text             String
+  carried          Boolean      @default(true)
+  abstentions      String?
+  conflictRecordId String?
+
+  approvedDocuments Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+  @@index([governingActId])
+}
+
+model Member {
+  id                String       @id @default(cuid())
+  organisationId    String
+  organisation      Organisation @relation(fields: [organisationId], references: [id])
+  name              String
+  address           String?
+  dateEntered       DateTime     @db.Date
+  dateCeased        DateTime?    @db.Date
+  retentionDeleteAt DateTime?    @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organisationId])
+  @@index([organisationId, dateCeased])
 }

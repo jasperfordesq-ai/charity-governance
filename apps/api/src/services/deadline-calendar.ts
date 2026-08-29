@@ -31,6 +31,13 @@ export type OrganisationCalendarProfile = {
   lastUnanimousAnnualMemberResolutionDate: string | null;
   croAnnualReturnDate: string | null;
   croAnnualReturnDateConfirmedAt: Date | string | null;
+  /**
+   * Whether the organisation's constitution expressly permits the s.175(3)/s.193
+   * sole-member written-resolution dispensation (s.1208 allows exclusion). When
+   * true and memberCount === 1, the eligibility check passes without requiring
+   * professional review for the question of whether an AGM may be skipped.
+   */
+  constitutionPermitsWrittenResolutions?: boolean | null;
 };
 
 export type GeneratedDeadlineSource = {
@@ -242,8 +249,14 @@ export function deriveIrishGovernanceDeadlines(profile: OrganisationCalendarProf
     let unadjustedDueDate: string;
     let rule: string;
     if (soleMemberResolutionIsLatest) {
-      unadjustedDueDate = addCalendarMonthsClamp(lastResolutionDate!, 12);
-      rule = 'sole-member-written-resolution-plus-12-month-internal-review-cadence';
+      // s.193(4): a written resolution is deemed passed at a meeting held on the
+      // date of the last signature. The s.175(1) limits therefore run from it
+      // exactly as they run from an actual AGM — the earlier of 15 months and
+      // 31 December of the following calendar year.
+      const fifteenMonthDate = addCalendarMonthsClamp(lastResolutionDate!, 15);
+      const calendarYearCap = `${String(yearOf(lastResolutionDate!) + 1).padStart(4, '0')}-12-31`;
+      unadjustedDueDate = minCivilDate(fifteenMonthDate, calendarYearCap);
+      rule = 'earlier-of-sole-member-resolution-plus-15-months-and-end-of-following-calendar-year';
     } else if (lastActualAgmDate) {
       const fifteenMonthDate = addCalendarMonthsClamp(lastActualAgmDate, 15);
       const calendarYearCap = `${String(yearOf(lastActualAgmDate) + 1).padStart(4, '0')}-12-31`;
@@ -253,55 +266,70 @@ export function deriveIrishGovernanceDeadlines(profile: OrganisationCalendarProf
       unadjustedDueDate = addCalendarMonthsClamp(incorporationDate!, 18);
       rule = 'incorporation-plus-18-months';
     }
-    const dueDate = soleMemberResolutionIsLatest
-      ? unadjustedDueDate
-      : adjustIrishCompaniesActDeadlineToWorkingDay(unadjustedDueDate);
+    const dueDate = adjustIrishCompaniesActDeadlineToWorkingDay(unadjustedDueDate);
+
+    // s.175(4): where a thing required to be done at an AGM is dealt with in a
+    // sole-member written resolution, the AGM requirement "shall be regarded as
+    // having been complied with". The resolution does not become an AGM, but it
+    // discharges the obligation. Eligibility conditions (s.1202/s.1208/s.175(3)):
+    // memberCount === 1, constitution does not exclude written resolutions, and
+    // no change of statutory auditor is proposed.
+    const eligibilityKnown =
+      soleMemberResolutionIsLatest &&
+      profile.memberCount === 1 &&
+      profile.constitutionPermitsWrittenResolutions === true;
 
     deadlines.push(buildSpec({
       kind: 'COMPANY_ANNUAL_MEMBER_ACTION',
       key: GENERATED_DEADLINE_KEYS.COMPANY_ANNUAL_MEMBER_ACTION,
       title: 'Annual general meeting / member-action review',
-      description:
-        'Calculated review date based on the confirmed CLG profile and its recorded incorporation, actual AGM, or eligible sole-member written-resolution evidence. A written resolution is never treated as an AGM and requires professional eligibility and evidence review.',
+      description: soleMemberResolutionIsLatest
+        ? eligibilityKnown
+          ? 'Deadline calculated from the recorded sole-member written resolution under s.175(3) Companies Act 2014. ' +
+            'The resolution discharges the AGM obligation for items dealt with in it (s.175(4)). ' +
+            'Confirm that no change of statutory auditor is proposed (s.175(3)(c)) before relying on it.'
+          : 'Calculated review date based on the recorded sole-member written resolution. ' +
+            'Verify eligibility: memberCount must be 1 (s.1202), the constitution must not exclude written resolutions (s.1208), ' +
+            'and no change of statutory auditor may be proposed (s.175(3)(c)).'
+        : 'Calculated review date based on the confirmed CLG profile and its recorded incorporation or last actual AGM. ' +
+          'Confirm applicability with the company secretary or solicitor.',
       dueDate,
       ruleVersion: GENERATED_DEADLINE_RULE_VERSION,
-      sources: soleMemberResolutionIsLatest
-        ? [source.annualMeeting, source.clgMeetingApplication]
-        : [
-            source.annualMeeting,
-            source.clgMeetingApplication,
-            source.companiesActPeriods,
-            source.publicHolidays,
-            source.publicHolidays2022,
-          ],
+      sources: [
+        source.annualMeeting,
+        source.clgMeetingApplication,
+        source.companiesActPeriods,
+        source.publicHolidays,
+        source.publicHolidays2022,
+      ],
       inputs: {
         incorporationDate,
         lastActualAgmDate,
         lastUnanimousAnnualMemberResolutionDate: lastResolutionDate,
         memberCount: profile.memberCount,
+        constitutionPermitsWrittenResolutions: profile.constitutionPermitsWrittenResolutions ?? null,
         legalForm: profile.legalForm,
         legalFormConfirmed: true,
         rule,
         unadjustedDueDate,
-        workingDayRuleSet: soleMemberResolutionIsLatest
-          ? null
-          : IRISH_COMPANIES_ACT_WORKING_DAY_RULESET_VERSION,
+        workingDayRuleSet: IRISH_COMPANIES_ACT_WORKING_DAY_RULESET_VERSION,
         monthArithmetic: 'calendar-months-with-missing-day-clamped-to-month-end',
       },
-      professionalReviewRequired: true,
+      professionalReviewRequired: !eligibilityKnown,
       warnings: [
         'The calendar-year cap is a derived conservative planning calculation from the annual and 15-month requirements.',
-        ...(soleMemberResolutionIsLatest
-          ? []
-          : ['A Saturday, Sunday or Irish public-holiday expiry is advanced under Companies Act 2014 section 3.']),
-        'Do not record a unanimous written resolution as an actual AGM.',
+        'A Saturday, Sunday or Irish public-holiday expiry is advanced under Companies Act 2014 section 3.',
         ...(soleMemberResolutionIsLatest
           ? [
-              'The 12-month sole-member written-resolution date is an internal review cadence, not a statutory deadline calculation.',
-              'Confirm sole-member eligibility and every section 175(3) condition with the company secretary or solicitor before relying on a written resolution.',
+              'The resolution discharges the AGM obligation for items dealt with in it (s.175(4)) but does not itself become an AGM.',
+              ...(eligibilityKnown
+                ? []
+                : [
+                    'Confirm sole-member eligibility and every s.175(3) condition with the company secretary or solicitor.',
+                    'A CLG with two or more members cannot use the s.175(3) dispensation.',
+                  ]),
             ]
-          : []),
-        'A CLG with two or more members cannot use the section 175(3) dispensation; verify member count and constitution.',
+          : ['A CLG with two or more members cannot use the section 175(3) dispensation; verify member count and constitution.']),
       ],
     }));
   }

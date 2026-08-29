@@ -33,7 +33,9 @@ export async function exportRoutes(app: FastifyInstance) {
 
   const sendComplianceReport = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { year, version, snapshotId } = complianceExportQuerySchema.parse(request.query);
+      const parsed = complianceExportQuerySchema.parse(request.query);
+      const year = parsed.year ?? new Date().getFullYear();
+      const { version, snapshotId } = parsed;
       if (version === 'approved' || snapshotId) {
         return await sendApprovedComplianceSnapshot(
           app,

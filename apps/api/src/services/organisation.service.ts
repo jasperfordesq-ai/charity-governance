@@ -19,6 +19,7 @@ const CALENDAR_UPDATE_FIELDS = [
   'lastActualAgmDate',
   'lastUnanimousAnnualMemberResolutionDate',
   'memberCount',
+  'constitutionPermitsWrittenResolutions',
 ] as const;
 
 function isRetryableTransactionConflict(error: unknown) {

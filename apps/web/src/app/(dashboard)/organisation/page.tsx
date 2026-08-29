@@ -43,6 +43,7 @@ export default function OrganisationPage() {
     legalFormOptions,
     name,
     memberCount,
+    constitutionPermitsWrittenResolutions,
     org,
     purposeOptions,
     profileSaveStatus,
@@ -63,6 +64,7 @@ export default function OrganisationPage() {
     setLastUnanimousAnnualMemberResolutionDate,
     setLegalFormConfirmed,
     setMemberCount,
+    setConstitutionPermitsWrittenResolutions,
     setName,
     setRcnNumber,
     setRegisteredAddress,
@@ -142,6 +144,8 @@ export default function OrganisationPage() {
         legalFormOptions={legalFormOptions}
         name={name}
         memberCount={memberCount}
+        constitutionPermitsWrittenResolutions={constitutionPermitsWrittenResolutions}
+        setConstitutionPermitsWrittenResolutions={setConstitutionPermitsWrittenResolutions}
         purposeOptions={purposeOptions}
         profileSaveStatus={profileSaveStatus}
         rcnNumber={rcnNumber}

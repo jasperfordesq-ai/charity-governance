@@ -13,7 +13,7 @@ import {
 
 type DeadlinePrisma = Pick<
   Prisma.TransactionClient,
-  'deadline' | 'deadlineReminderLog' | 'organisation' | '$queryRaw'
+  'deadline' | 'deadlineReminderLog' | 'organisation' | 'member' | '$queryRaw'
 >;
 
 type DeadlineWithGeneration = Deadline & {
@@ -347,6 +347,7 @@ export class DeadlineService {
         legalFormConfirmedAt: true,
         incorporationDate: true,
         memberCount: true,
+        constitutionPermitsWrittenResolutions: true,
         lastActualAgmDate: true,
         lastUnanimousAnnualMemberResolutionDate: true,
         croAnnualReturnDate: true,
@@ -354,12 +355,22 @@ export class DeadlineService {
       },
     });
 
+    // Derive member count from the register when populated; fall back to the
+    // manually entered memberCount when no Member rows exist yet.
+    const registeredMemberCount = await this.prisma.member.count({
+      where: { organisationId, dateCeased: null },
+    });
+    const effectiveMemberCount = registeredMemberCount > 0
+      ? registeredMemberCount
+      : organisation.memberCount;
+
     const desired = deriveIrishGovernanceDeadlines({
       financialYearEnd: nullableCivilDateFromPrisma(organisation.financialYearEnd),
       legalForm: organisation.legalForm,
       legalFormConfirmedAt: organisation.legalFormConfirmedAt,
       incorporationDate: nullableCivilDateFromPrisma(organisation.incorporationDate),
-      memberCount: organisation.memberCount,
+      memberCount: effectiveMemberCount,
+      constitutionPermitsWrittenResolutions: organisation.constitutionPermitsWrittenResolutions,
       lastActualAgmDate: nullableCivilDateFromPrisma(organisation.lastActualAgmDate),
       lastUnanimousAnnualMemberResolutionDate: nullableCivilDateFromPrisma(
         organisation.lastUnanimousAnnualMemberResolutionDate,

@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { Mail } from 'lucide-react';
 import { api } from '@/lib/api';
-import { apiErrorMessage } from '@/lib/errors';
+import { authFailureNotice, type AuthFailureNotice } from '@/lib/auth-error-message';
 import { forgotPasswordSchema, firstSchemaError } from '@/lib/form-schemas';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { authCardClassName } from '@/components/ui/auth-card-loading';
@@ -15,7 +15,7 @@ import type { PasswordRecoveryAcceptedResponse } from '@charitypilot/shared';
 export default function ForgotPasswordPage() {
   const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
   const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<AuthFailureNotice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -44,11 +44,11 @@ export default function ForgotPasswordPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    setError(null);
 
     const issue = firstSchemaError(forgotPasswordSchema, { email });
     if (issue) {
-      setError(issue);
+      setError({ message: issue });
       return;
     }
     setIsLoading(true);
@@ -60,7 +60,7 @@ export default function ForgotPasswordPage() {
       });
       setIsSuccess(true);
     } catch (err: unknown) {
-      setError(apiErrorMessage(err, 'Something went wrong. Please try again.'));
+      setError(authFailureNotice(err, 'Something went wrong. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +95,7 @@ export default function ForgotPasswordPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
-                    <FormAlert>{error}</FormAlert>
+                    <FormAlert title={error.title}>{error.message}</FormAlert>
                   )}
 
                   <Input

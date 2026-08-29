@@ -258,6 +258,7 @@ export interface OrganisationResponse {
   lastActualAgmDate: string | null;
   lastUnanimousAnnualMemberResolutionDate: string | null;
   memberCount: number | null;
+  constitutionPermitsWrittenResolutions: boolean | null;
   conditionalObligationProfile: ConditionalObligationProfile | null;
   updatedAt: string;
 }
@@ -283,6 +284,7 @@ export interface UpdateOrganisationRequest {
   lastActualAgmDate?: string | null;
   lastUnanimousAnnualMemberResolutionDate?: string | null;
   memberCount?: number | null;
+  constitutionPermitsWrittenResolutions?: boolean | null;
   conditionalObligationProfile?: ConditionalObligationProfile | null;
 }
 
