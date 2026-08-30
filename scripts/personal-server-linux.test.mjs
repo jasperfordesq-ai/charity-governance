@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -85,4 +86,63 @@ test('Linux installer preserves the private appliance and recovery gates', () =>
   assert.match(installer, /personal:server:certify/u);
   assert.match(installer, /write_state ready/u);
   assert.doesNotMatch(installer, /docker compose|docker volume rm|docker system prune/u);
+});
+
+// ── replacement-host restore ────────────────────────────────────────────────
+// Ported from Install-CharityPilot.ps1, which had this mode while the Linux
+// installer did not - so a Linux host had no data-preserving deploy at all.
+
+function runInstaller(args) {
+  return spawnSync('bash', [resolve(repositoryRoot, 'scripts/Install-CharityPilot.sh'), ...args], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  });
+}
+
+test('Linux installer exposes the replacement-host restore contract', () => {
+  const installer = readFileSync(resolve(repositoryRoot, 'scripts/Install-CharityPilot.sh'), 'utf8');
+  for (const flag of ['--restore-recovery-set', '--recovery-key-file', '--source-origin', '--confirm', '--owner-password-file']) {
+    assert.match(installer, new RegExp(flag.replace(/-/gu, '\-'), 'u'), `${flag} must be accepted`);
+  }
+  // The plan authenticates the set before any state is created, and the
+  // installer must refuse a confirmation that does not match it.
+  assert.match(installer, /bootstrap-restore-plan/u);
+  assert.match(installer, /charitypilot-personal-replacement-restore-plan\/v1/u);
+  assert.match(installer, /personal:server:bootstrap-restore/u);
+  // bootstrap-restore refuses unless protected state already says so.
+  assert.match(installer, /write_state restore-prepared/u);
+  assert.match(installer, /replacement-restore/u);
+  // A ready installation must not keep claiming a restore is under way.
+  assert.match(installer, /write_state ready '' clear/u);
+});
+
+test('Linux installer adopts the supplied recovery key instead of minting one', () => {
+  const installer = readFileSync(resolve(repositoryRoot, 'scripts/Install-CharityPilot.sh'), 'utf8');
+  // A recovery set cannot be opened without the key that sealed it, so the
+  // replacement branch must copy the supplied key, never generate a fresh one.
+  const replacementBranch = installer.slice(
+    installer.indexOf('if $replacement_restore; then\n  # Adopt the supplied key'),
+    installer.indexOf('else\n  RECOVERY_KEY='),
+  );
+  assert.ok(replacementBranch.length > 0, 'the key-adoption branch must exist');
+  assert.doesNotMatch(replacementBranch, /randomBytes/u, 'must not mint a key for a replacement host');
+  assert.match(replacementBranch, /SUPPLIED_KEY/u);
+  assert.match(installer, /\^\[0-9a-f\]\{64\}\$/u, 'the supplied key must be format-checked');
+});
+
+test('Linux installer rejects unsafe replacement-restore argument combinations', () => {
+  const cases = [
+    [['--source-origin', 'https://x', '--preflight-only'], /valid only with --restore-recovery-set/u],
+    [['--recovery-key-file', '/etc/hostname', '--preflight-only'], /valid only with --restore-recovery-set/u],
+    [['--restore-recovery-set', tmpdir(), '--preflight-only'], /requires --recovery-key-file and --source-origin/u],
+    [
+      ['--restore-recovery-set', tmpdir(), '--recovery-key-file', '/etc/hostname', '--source-origin', 'https://x'],
+      /requires the exact --confirm value/u,
+    ],
+  ];
+  for (const [args, expected] of cases) {
+    const result = runInstaller(args);
+    assert.equal(result.status, 2, `${args.join(' ')} must exit 2`);
+    assert.match(result.stderr, expected);
+  }
 });
