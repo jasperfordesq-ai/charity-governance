@@ -201,11 +201,22 @@ export class AuthService {
     if (user.lifecycleStatus !== 'ACTIVE') {
       throw new AppError(403, 'ACCOUNT_SUSPENDED', 'This account is no longer active. Contact your organisation administrator.');
     }
-    if (user.organisation.lifecycleStatus === 'SUSPENDED') {
-      throw new AppError(403, 'ORGANISATION_SUSPENDED', 'This organisation is suspended. Contact support to restore access.');
-    }
-    if (user.organisation.lifecycleStatus === 'CLOSED') {
-      throw new AppError(403, 'ORGANISATION_CLOSED', 'This organisation is closed. Contact support if you believe this is wrong.');
+    if (user.organisation.lifecycleStatus !== 'ACTIVE') {
+      if (user.organisation.lifecycleStatus === 'SUSPENDED') {
+        throw new AppError(403, 'ORGANISATION_SUSPENDED', 'This organisation is suspended. Contact support to restore access.');
+      }
+      if (user.organisation.lifecycleStatus === 'CLOSED') {
+        throw new AppError(403, 'ORGANISATION_CLOSED', 'This organisation is closed. Contact support if you believe this is wrong.');
+      }
+      // Fail closed for any lifecycle value beyond the two named above. This arm
+      // is unreachable while OrganisationLifecycleStatus has only ACTIVE,
+      // SUSPENDED, and CLOSED members, but it keeps this check aligned with its
+      // neighbours (hasActiveLifecycle, rotateSessionTokens), both of which deny
+      // by default rather than allow-list a fixed set of "bad" states. Do not
+      // delete it as dead code: it is what stops login from silently granting a
+      // session to a future lifecycle value that every other authenticated route
+      // would reject.
+      throw new AppError(403, 'ORGANISATION_UNAVAILABLE', 'This organisation is not available. Contact support.');
     }
 
     // Bind issuance to the exact bcrypt credential checked above. The session

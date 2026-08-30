@@ -63,6 +63,22 @@ test('a suspended user in an active organisation is told about the account', asy
   assert.equal(codeOf(err), 'ACCOUNT_SUSPENDED');
 });
 
+test('a removed user in an active organisation is told about the account', async () => {
+  const service = await serviceFor('REMOVED', 'ACTIVE');
+  const err = await service.login({ email: 'user@example.org', password: PASSWORD }).catch((e: unknown) => e);
+  assert.equal(statusOf(err), 403);
+  assert.equal(codeOf(err), 'ACCOUNT_SUSPENDED');
+});
+
+test('an organisation lifecycle value outside ACTIVE/SUSPENDED/CLOSED denies by default', async () => {
+  // Proves the fail-closed default-deny arm, not a real enum value: the point is
+  // that a future lifecycle state must not silently fall through to a session.
+  const service = await serviceFor('ACTIVE', 'PENDING_REVIEW');
+  const err = await service.login({ email: 'user@example.org', password: PASSWORD }).catch((e: unknown) => e);
+  assert.equal(statusOf(err), 403);
+  assert.equal(codeOf(err), 'ORGANISATION_UNAVAILABLE');
+});
+
 test('an unknown email is still a generic 401', async () => {
   const service = new AuthService({ user: { findUnique: async () => null } } as never);
   const err = await service.login({ email: 'nobody@example.org', password: PASSWORD }).catch((e: unknown) => e);
