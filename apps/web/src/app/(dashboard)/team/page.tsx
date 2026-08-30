@@ -20,7 +20,6 @@ import { TeamReasonModal } from './team-reason-modal';
 import { TeamSessionsModal } from './team-sessions-modal';
 import { TeamSecurityAuditPanel } from './team-security-audit-panel';
 import { actionContent, apiErrorCode, replaceWithLoginAfterServerRevocation, type GovernanceAction } from './team-page-helpers';
-import { useInviteLinkReissue } from './use-invite-link-reissue';
 import { useTeamSessions } from './use-team-sessions';
 
 const IS_PERSONAL_SERVER = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
@@ -338,8 +337,6 @@ export default function TeamPage() {
     setError,
   });
 
-  const { reissueInviteLink, reissuingInviteId } = useInviteLinkReissue({ setManualInviteUrl, setMessage, setError });
-
   const teamMutationStatus: 'idle' | 'saving' | 'saved' | 'error' =
     saving || revokeInviteId || roleUpdateMemberId || governanceSaving || sessionSavingId ? 'saving' : 'idle';
 
@@ -392,11 +389,9 @@ export default function TeamPage() {
           inviteMember={inviteMember}
           inviteRoleHint={inviteRoleHint}
           manualInviteUrl={manualInviteUrl}
-          onDismissManualInvite={() => setManualInviteUrl(null)}
+          setManualInviteUrl={setManualInviteUrl}
           permissionDisabledReason={permissionDisabledReason}
           managementDisabled={managementDisabled}
-          reissueInviteLink={reissueInviteLink}
-          reissuingInviteId={reissuingInviteId}
           revokeInvite={revokeInvite}
           revokeInviteId={revokeInviteId}
           role={role}

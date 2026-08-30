@@ -137,11 +137,7 @@ test('a failed session inventory never masquerades as an empty history', () => {
 
 test('the Team route stays within the platform page-size quality gate', () => {
   const page = team('page.tsx');
-  // Raised 449 -> 453 for the invite-link reissue action. The gate exists to
-  // keep logic out of the route, not to freeze it: the handler itself lives in
-  // use-invite-link-reissue.ts, and only the import, the hook call and two
-  // props landed here. Extract before raising this again.
-  assert.ok(page.split(/\r?\n/).length <= 453, 'Team page must stay at or below 453 lines');
+  assert.ok(page.split(/\r?\n/).length <= 449, 'Team page must stay at or below 449 lines');
   assert.match(page, /useTeamSessions\(\{/);
 });
 

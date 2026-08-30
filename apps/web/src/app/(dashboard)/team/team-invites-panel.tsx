@@ -1,6 +1,6 @@
 'use client';
 
-import type { FormEvent } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { Button, Input, Select, SelectItem } from '@heroui/react';
 import type { TeamResponse } from '@charitypilot/shared';
 import { UserRole } from '@charitypilot/shared';
@@ -11,6 +11,7 @@ import { FieldGroup, FormHint } from '@/components/ui/forms';
 import { EmptyState, PermissionHint } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { ROLE_META, formatDate, inviteStatus } from './team-display';
+import { useInviteLinkReissue } from './use-invite-link-reissue';
 import { CopyLinkButton } from '@/components/copy-link-button';
 
 export function TeamInvitesPanel({
@@ -22,11 +23,9 @@ export function TeamInvitesPanel({
   inviteMember,
   inviteRoleHint,
   manualInviteUrl,
-  onDismissManualInvite,
+  setManualInviteUrl,
   permissionDisabledReason,
   managementDisabled,
-  reissueInviteLink,
-  reissuingInviteId,
   revokeInvite,
   revokeInviteId,
   role,
@@ -43,11 +42,9 @@ export function TeamInvitesPanel({
   inviteMember: (event: FormEvent) => void;
   inviteRoleHint: string;
   manualInviteUrl: string | null;
-  onDismissManualInvite: () => void;
+  setManualInviteUrl: Dispatch<SetStateAction<string | null>>;
   permissionDisabledReason: string;
   managementDisabled: boolean;
-  reissueInviteLink: (inviteId: string) => void;
-  reissuingInviteId: string | null;
   revokeInvite: (inviteId: string) => void;
   revokeInviteId: string | null;
   role: UserRole.ADMIN | UserRole.MEMBER;
@@ -56,6 +53,9 @@ export function TeamInvitesPanel({
   setRole: (role: UserRole.ADMIN | UserRole.MEMBER) => void;
   team: TeamResponse | null;
 }) {
+  const { reissueInviteLink, reissuingInviteId, reissueError } =
+    useInviteLinkReissue(setManualInviteUrl);
+
   return (
     <div className="space-y-5">
       <form
@@ -115,13 +115,17 @@ export function TeamInvitesPanel({
             />
             <CopyLinkButton url={manualInviteUrl} />
           </div>
-          <Button type="button" size="sm" variant="flat" onPress={onDismissManualInvite}>
+          <Button type="button" size="sm" variant="flat" onPress={() => setManualInviteUrl(null)}>
             Dismiss link
           </Button>
         </AppSection>
       ) : null}
 
-      <AppSection title="Pending invites" description="Pending invites can be revoked by owners or admins until accepted or expired.">
+      <AppSection
+        title="Pending invites"
+        description="Pending invites can be revoked by owners or admins until accepted or expired. A replacement link can be issued if the original was lost; issuing one stops the previous link working."
+      >
+        {reissueError ? <FormHint tone="danger">{reissueError}</FormHint> : null}
         {!team?.invites.length ? (
           <EmptyState
             title="No team invites yet"
