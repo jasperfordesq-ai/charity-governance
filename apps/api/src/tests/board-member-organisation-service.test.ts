@@ -240,6 +240,10 @@ function orgPrisma(opts: { org?: Record<string, unknown> | null; updateResult?: 
         };
       },
     },
+    // Register of Members: empty, so the calendar falls back to memberCount.
+    member: {
+      count: async (args: unknown) => { calls.push({ name: 'member.count', args }); return 0; },
+    },
     deadline: {
       findMany: async () => [],
       create: async () => ({}),

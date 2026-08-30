@@ -35,6 +35,7 @@ const PUBLIC_ORG_KEYS = [
   'lastActualAgmDate',
   'lastUnanimousAnnualMemberResolutionDate',
   'memberCount',
+  'constitutionPermitsWrittenResolutions',
   'conditionalObligationProfile',
   'updatedAt',
 ] as const;

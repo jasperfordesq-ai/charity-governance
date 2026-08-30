@@ -102,6 +102,8 @@ test('clearing organisation profile dates supersedes generated deadlines without
         croAnnualReturnDateConfirmedAt: null,
       }),
     },
+    // Register of Members: empty, so the calendar falls back to memberCount.
+    member: { count: async () => 0 },
     deadline: {
       findMany: async () => [{
         id: 'generated-1',

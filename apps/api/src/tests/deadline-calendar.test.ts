@@ -65,7 +65,12 @@ test('later AGM planning takes the earlier 15-month and following-calendar-year 
   assert.equal(action?.dueDate, '2026-12-31');
   assert.equal(action?.inputs.lastActualAgmDate, '2025-11-30');
   assert.equal(action?.inputs.lastUnanimousAnnualMemberResolutionDate, '2026-06-30');
-  assert.match(action?.warnings.join(' ') ?? '', /Do not record a unanimous written resolution as an actual AGM/);
+  // With two members the s.175(3) dispensation is unavailable, so the written
+  // resolution cannot advance the calculation and the warning says why.
+  assert.match(
+    action?.warnings.join(' ') ?? '',
+    /A CLG with two or more members cannot use the section 175\(3\) dispensation/,
+  );
 });
 
 test('Companies Act working-day adjustment also applies to the first AGM planning limit', () => {
@@ -80,7 +85,11 @@ test('Companies Act working-day adjustment also applies to the first AGM plannin
   assert.equal(action?.dueDate, '2026-03-02');
 });
 
-test('a newer sole-member written resolution advances only an explicitly non-statutory review cadence', () => {
+// s.193(4) deems a written resolution passed at a meeting held on the date of
+// the last signature, so the s.175(1) limits run from it exactly as they run
+// from an actual AGM: the earlier of 15 months and 31 December of the following
+// calendar year. This replaced a flat +12-month "review cadence".
+test('a newer sole-member written resolution runs the AGM limits from the resolution date', () => {
   const deadlines = deriveIrishGovernanceDeadlines(profile({
     legalForm: 'CLG',
     legalFormConfirmedAt: '2026-07-10T00:00:00Z',
@@ -91,9 +100,22 @@ test('a newer sole-member written resolution advances only an explicitly non-sta
   }));
   const action = deadlines.find((item) => item.kind === 'COMPANY_ANNUAL_MEMBER_ACTION');
 
-  assert.equal(action?.dueDate, '2027-06-30');
-  assert.equal(action?.inputs.rule, 'sole-member-written-resolution-plus-12-month-internal-review-cadence');
-  assert.match(action?.warnings.join(' ') ?? '', /internal review cadence, not a statutory deadline/i);
+  // 2026-06-30 + 15 months = 2027-09-30, earlier than the 2027-12-31 cap.
+  assert.equal(action?.dueDate, '2027-09-30');
+  assert.equal(
+    action?.inputs.rule,
+    'earlier-of-sole-member-resolution-plus-15-months-and-end-of-following-calendar-year',
+  );
+  // The resolution discharges the AGM obligation under s.175(4) without itself
+  // becoming an AGM - the distinction the warning has to preserve.
+  assert.match(
+    action?.warnings.join(' ') ?? '',
+    /discharges the AGM obligation .*\(s\.175\(4\)\) but does not itself become an AGM/,
+  );
+  // Eligibility is unconfirmed here (constitutionPermitsWrittenResolutions is
+  // unset), so it must still demand professional review.
+  assert.equal(action?.professionalReviewRequired, true);
+  assert.match(action?.warnings.join(' ') ?? '', /Confirm sole-member eligibility/);
 });
 
 test('written resolutions do not advance the AGM calculation for multi-member or unknown-member CLGs', () => {
