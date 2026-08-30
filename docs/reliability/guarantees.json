@@ -5044,11 +5044,11 @@
     "surface": "web",
     "group": "web-export",
     "concern": "tenant-isolation",
-    "guarantee": "Export and board sign-off carry only a reporting year (server-validated), never an org id; authenticated report blobs preserve the no-script CSP inside the rendered document as well as on the HTTP response.",
+    "guarantee": "Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via an httpOnly session cookie (withCredentials: true), never a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header.",
     "status": "covered",
     "testType": "unit",
     "testFile": "apps/web/src/lib/tenant-isolation.test.ts",
-    "testTitle": "the API client is cookie-based (withCredentials), so the org is resolved from the session",
+    "testTitle": "every API client (tenant and owner) is cookie-based, with no JS-readable auth token",
     "gapDescription": "",
     "proposedTitle": ""
   },

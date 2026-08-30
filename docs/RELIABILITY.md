@@ -24,9 +24,9 @@ Generated: 2026-08-30 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 405/406 covered guarantees verified against a passing/linked test, 1 broken link(s).
+**Linkage:** 406/406 covered guarantees verified against a passing/linked test.
 
-**Linkage check: INCOMPLETE**
+**Linkage check: COMPLETE**
 
 ## How to verify
 
@@ -691,7 +691,7 @@ _5 guarantees - covered 5_
 | Auth & session integrity | Report generation uses the authenticated API client so an expired access token can refresh before an opener-isolated popup receives the report blob; blocked, closed and failed popups are handled without leaking an opener or object URL. | covered | `opens the popup synchronously, severs its opener, then navigates to the authenticated blob`<br/><sub>lib/authenticated-report-open.test.ts</sub> |
 | State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | State integrity / no data loss | A board sign-off response owns only the exact local draft generation it submitted, so an older response cannot replace newer edits or report them as Saved. | covered | `a save response only owns the exact draft generation it submitted`<br/><sub>lib/compliance-approval-ui.test.ts</sub> |
-| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; authenticated report blobs preserve the no-script CSP inside the rendered document as well as on the HTTP response. | covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+| Tenant isolation | Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via an httpOnly session cookie (withCredentials: true), never a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header. | covered | `every API client (tenant and owner) is cookie-based, with no JS-readable auth token`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### regulator - `/regulator`
 
