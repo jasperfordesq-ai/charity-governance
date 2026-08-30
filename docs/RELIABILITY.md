@@ -12,13 +12,21 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-07-12 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-08-30 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
 | API | 302 | 0 | 0 | 14 | 316 |
 | Web | 104 | 0 | 0 | 6 | 110 |
 | **Total** | **406** | **0** | **0** | **20** | **426** |
+
+**API suite:** 923 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+
+**Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
+
+**Linkage:** 405/406 covered guarantees verified against a passing/linked test, 1 broken link(s).
+
+**Linkage check: INCOMPLETE**
 
 ## How to verify
 
@@ -110,7 +118,7 @@ _20 guarantees - covered 19  n/a 1_
 | At-least-once / idempotency | Compliance record writes use a serializable organisation lock plus revision compare-and-swap: two different clients cannot both commit from one revision, while an exact stale retry/no-op returns the durable row without another revision or audit event. | covered | `record revisions reject stale changes while allowing an exact ambiguous retry`<br/><sub>compliance-concurrency.test.ts</sub> |
 | Input validation | PUT /records/:standardId rejects a malformed body (e.g. reportingYear out of [2018,2100], a non-enum status, or an over-5000-char text field) with 400 {code:'VALIDATION_ERROR'} and does NOT call complianceRecord.upsert. | covered | `PUT /records rejects an invalid body before writing`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | PUT /signoff enforces the superRefine rule: status 'APPROVED' without boardMeetingDate/minuteReference/approvedByName returns 400 {code:'VALIDATION_ERROR'} and does NOT call complianceSignoff.upsert; an invalid status enum or a non-ISO boardMeetingDate is also 400. | covered | `PUT /signoff requires approval evidence when status is APPROVED`<br/><sub>compliance-reliability.test.ts</sub> |
-| Input validation | GET endpoints that require ?year reject a missing or non-numeric/out-of-range year with 400 {code:'VALIDATION_ERROR'} (complianceQuerySchema), not a 500. | covered | `compliance year-scoped reads reject a missing or invalid year`<br/><sub>compliance-reliability.test.ts</sub> |
+| Input validation | Year-scoped GET endpoints default a missing ?year to the current reporting year, and reject a non-numeric/out-of-range year with 400 {code:'VALIDATION_ERROR'} (complianceQuerySchema), not a 500. | covered | `compliance year-scoped reads default a missing year and reject an invalid one`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | GET /principles/:principleId returns 404 {code:'PRINCIPLE_NOT_FOUND'} for an unknown principle id (rather than 500 or leaking null). | covered | `GET /principles/:id returns 404 for an unknown principle`<br/><sub>compliance-reliability.test.ts</sub> |
 | Subscription / plan gating | subscriptionGuard blocks compliance routes for trial-expired / past-due-grace-expired / inactive subscriptions with the matching 403 code (TRIAL_EXPIRED \| PAST_DUE_GRACE_EXPIRED \| SUBSCRIPTION_INACTIVE \| NO_SUBSCRIPTION). | covered | `compliance routes are blocked when the subscription is not in good standing`<br/><sub>compliance-reliability.test.ts</sub> |
 | Subscription / plan gating | When the organisation has no subscription row, every scope-resolving compliance read/write (getRecords/getRecord/getSummary/getPrinciplesForOrganisation/upsertRecord) throws AppError 403 {code:'NO_SUBSCRIPTION'} before any compliance table is touched. | covered | `compliance writes are refused (and not persisted) without a subscription`<br/><sub>compliance-reliability.test.ts</sub> |
@@ -250,7 +258,7 @@ _12 guarantees - covered 11  n/a 1_
 | Authorization boundary | A request with no/invalid/expired token, a revoked session, or a missing user is rejected by authGuard with 401 {code:'UNAUTHORIZED'} before the export handler runs; an authenticated but email-unverified user is rejected with 403 {code:'EMAIL_NOT_VERIFIED'}. | covered | `export rejects missing token, revoked session, and unverified email`<br/><sub>export-reliability.test.ts</sub> |
 | Graceful degradation | The export does not depend on Stripe/Supabase/Resend at request time (no checkout, storage, or email call), so it stays available when those externals are down; conversely if the org row is missing, organisation.findUniqueOrThrow surfaces a clean error via handleError (404/500) rather than leaking a stack. | n/a | _The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The only error path is Prisma findUniqueOrT_ |
 | Graceful degradation | A changed snapshot payload, hash, tenant, year, sequence, format, or approval timestamp fails closed without rendering stored report content; a working report never applies a stale approval to changed live evidence. | covered | `approved export fails closed when retained evidence or metadata does not match its hashes`<br/><sub>export-snapshot.test.ts</sub> |
-| Input validation | GET /compliance-record with a malformed, missing, out-of-range, or oversized year (e.g. year=abc, year omitted, year=1999, year=99999) returns 400 {code:'VALIDATION_ERROR'} (never a 500 or stack leak) and the report HTML / organisation lookup is never reached for the invalid value. | covered | `export rejects malformed year with 400 VALIDATION_ERROR`<br/><sub>export-reliability.test.ts</sub> |
+| Input validation | GET /compliance-record with a malformed, out-of-range, or oversized year (e.g. year=abc, year=1999, year=99999) returns 400 {code:'VALIDATION_ERROR'} (never a 500 or stack leak) and the report HTML / organisation lookup is never reached for the invalid value. An omitted year is not an invalid value: it defaults to the current reporting year and produces a normal export. | covered | `export rejects malformed year with 400 VALIDATION_ERROR`<br/><sub>export-reliability.test.ts</sub> |
 | Input validation | User-supplied compliance/register text (e.g. standard titles, actionTaken, evidence, explanationIfNA, trusteeName, matter, mitigation, complaint summary, controls) is HTML-escaped via escapeHtml/simpleTable before being embedded in the exported report, so a stored '<script>' or '"' in a record cannot break out of its cell or inject markup into the generated HTML. | covered | `export HTML-escapes stored record and register values`<br/><sub>export-reliability.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is ESSENTIALS (or anything other than COMPLETE) never invokes loadGovernanceRegisters: none of conflictRecord/riskRecord/complaintRecord/fundraisingRecord/annualReportReadiness/financialControlReview findMany/findUnique are called, and the response body contains no 'Governance registers' heading nor any register data. | covered | `Essentials exports do not include Complete-only governance registers`<br/><sub>export-csp.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is COMPLETE DOES read and embed the governance registers: loadGovernanceRegisters runs and the response body includes the 'Governance registers' heading plus the org's conflict/risk/complaint/fundraising rows. | covered | `Complete plan exports include governance registers`<br/><sub>export-reliability.test.ts</sub> |
