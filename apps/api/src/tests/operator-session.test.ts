@@ -19,10 +19,29 @@ function sessionStore() {
           rows[id] = { id, operatorId: data.operatorId, tokenHash: data.tokenHash, revokedAt: null, expiresAt: data.expiresAt };
           return rows[id];
         },
-        findFirst: async ({ where }: { where: { tokenHash: string } }) =>
-          Object.values(rows).find(
-            (r) => r.tokenHash === where.tokenHash && r.revokedAt === null && r.expiresAt > new Date(),
-          ) ?? null,
+        findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+          return (
+            Object.values(rows).find((r) => {
+              if (where.tokenHash && r.tokenHash !== (where.tokenHash as string)) return false;
+              if (where.revokedAt === null && r.revokedAt !== null) return false;
+              const expiresAtGt = (where.expiresAt as Record<string, Date> | undefined)?.gt;
+              if (expiresAtGt && r.expiresAt <= expiresAtGt) return false;
+              return true;
+            }) ?? null
+          );
+        },
+        updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          let count = 0;
+          Object.values(rows).forEach((r) => {
+            if (where.tokenHash && r.tokenHash !== (where.tokenHash as string)) return;
+            if (where.revokedAt === null && r.revokedAt !== null) return;
+            const expiresAtGt = (where.expiresAt as Record<string, Date> | undefined)?.gt;
+            if (expiresAtGt && r.expiresAt <= expiresAtGt) return;
+            Object.assign(r, data);
+            count++;
+          });
+          return { count };
+        },
         update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           Object.assign(rows[where.id], data);
           return rows[where.id];
@@ -58,7 +77,10 @@ test('a revoked refresh token cannot be rotated again', async () => {
   const first = await issueOperatorSession(prisma, 'op-1');
   await rotateOperatorSession(prisma, first.refreshToken);
 
-  await assert.rejects(() => rotateOperatorSession(prisma, first.refreshToken), /INVALID_OPERATOR_REFRESH/);
+  await assert.rejects(
+    () => rotateOperatorSession(prisma, first.refreshToken),
+    (err: unknown) => err instanceof Error && err.message === 'Invalid or expired session',
+  );
 });
 
 test('logging out revokes the session', async () => {
@@ -73,4 +95,19 @@ test('logging out revokes the session', async () => {
 test('revoking an unknown token is a no-op rather than an error', async () => {
   const { prisma } = sessionStore();
   await assert.doesNotReject(() => revokeOperatorSession(prisma, 'not-a-real-token'));
+});
+
+test('an expired but not revoked refresh token cannot be rotated', async () => {
+  const { prisma, rows } = sessionStore();
+  const tokens = await issueOperatorSession(prisma, 'op-1');
+
+  const stored = Object.values(rows)[0];
+  stored.expiresAt = new Date(Date.now() - 1000); // expire it
+
+  const initialRowCount = Object.keys(rows).length;
+  await assert.rejects(
+    () => rotateOperatorSession(prisma, tokens.refreshToken),
+    (err: unknown) => err instanceof Error && err.message === 'Invalid or expired session',
+  );
+  assert.equal(Object.keys(rows).length, initialRowCount, 'no new session should be created');
 });

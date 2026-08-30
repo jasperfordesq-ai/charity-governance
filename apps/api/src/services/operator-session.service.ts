@@ -43,20 +43,23 @@ export async function rotateOperatorSession(
   prisma: PrismaClient,
   refreshToken: string,
 ): Promise<OperatorTokens> {
-  const existing = await prisma.platformOperatorSession.findFirst({
-    where: { tokenHash: hashOperatorToken(refreshToken), revokedAt: null, expiresAt: { gt: new Date() } },
+  const now = new Date();
+  const tokenHash = hashOperatorToken(refreshToken);
+
+  const claimed = await prisma.platformOperatorSession.updateMany({
+    where: { tokenHash, revokedAt: null, expiresAt: { gt: now } },
+    data: { revokedAt: now },
   });
 
-  if (!existing) {
-    throw new AppError(401, 'INVALID_OPERATOR_REFRESH', 'INVALID_OPERATOR_REFRESH');
+  if (claimed.count !== 1) {
+    throw new AppError(401, 'INVALID_OPERATOR_REFRESH', 'Invalid or expired session');
   }
 
-  await prisma.platformOperatorSession.update({
-    where: { id: existing.id },
-    data: { revokedAt: new Date() },
+  const existing = await prisma.platformOperatorSession.findFirst({
+    where: { tokenHash },
   });
 
-  return issueOperatorSession(prisma, existing.operatorId);
+  return issueOperatorSession(prisma, existing!.operatorId);
 }
 
 export async function revokeOperatorSession(
