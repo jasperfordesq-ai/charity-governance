@@ -3,6 +3,7 @@ import { z, ZodError } from 'zod';
 import { handleError } from '../../utils/errors.js';
 import { requirePlatformOperator } from '../../middleware/owner-auth.js';
 import { listTenants, getTenant, transitionTenantLifecycle } from '../../services/owner-tenants.service.js';
+import { provisionTenant } from '../../services/owner-provisioning.service.js';
 
 const listQuerySchema = z.object({
   q: z.string().trim().min(1).max(200).optional(),
@@ -61,6 +62,28 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
         operator: request.operator,
       });
       reply.send({ tenant });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+        return;
+      }
+      handleError(reply, err);
+    }
+  });
+
+  const provisionBodySchema = z.object({
+    organisationName: z.string().trim().min(1).max(200),
+    ownerName: z.string().trim().min(1).max(200),
+    ownerEmail: z.string().email().max(254),
+    plan: z.enum(['ESSENTIALS', 'COMPLETE']),
+    trialDays: z.number().int().min(1).max(365),
+  });
+
+  app.post('/tenants', async (request, reply) => {
+    try {
+      const body = provisionBodySchema.parse(request.body);
+      const result = await provisionTenant(app.prisma, body);
+      reply.status(201).send(result);
     } catch (err) {
       if (err instanceof ZodError) {
         reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
