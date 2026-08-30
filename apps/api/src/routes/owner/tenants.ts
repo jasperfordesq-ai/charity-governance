@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z, ZodError } from 'zod';
 import { handleError } from '../../utils/errors.js';
 import { requirePlatformOperator } from '../../middleware/owner-auth.js';
-import { listTenants, getTenant } from '../../services/owner-tenants.service.js';
+import { listTenants, getTenant, transitionTenantLifecycle } from '../../services/owner-tenants.service.js';
 
 const listQuerySchema = z.object({
   q: z.string().trim().min(1).max(200).optional(),
@@ -30,6 +30,33 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
       reply.send({ tenant: await getTenant(app.prisma, id) });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+        return;
+      }
+      handleError(reply, err);
+    }
+  });
+
+  const lifecycleBodySchema = z.object({
+    action: z.enum(['SUSPEND', 'REACTIVATE', 'CLOSE']),
+    reason: z.string().trim().min(1).max(1000),
+    expectedLifecycleVersion: z.number().int().min(1),
+  });
+
+  app.post('/tenants/:id/lifecycle', async (request, reply) => {
+    try {
+      const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
+      const body = lifecycleBodySchema.parse(request.body);
+      const tenant = await transitionTenantLifecycle(app.prisma, {
+        tenantId: id,
+        action: body.action,
+        reason: body.reason,
+        expectedLifecycleVersion: body.expectedLifecycleVersion,
+        operator: request.operator,
+      });
+      reply.send({ tenant });
     } catch (err) {
       if (err instanceof ZodError) {
         reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });

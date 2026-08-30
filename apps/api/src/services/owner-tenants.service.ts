@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 
 // This file holds the ONLY unscoped Organisation reads in the codebase. No
@@ -100,4 +100,100 @@ export async function getTenant(prisma: PrismaClient, id: string): Promise<Tenan
     throw new AppError(404, 'TENANT_NOT_FOUND', 'Organisation not found');
   }
   return toSummary(row);
+}
+
+export type TenantLifecycleAction = 'SUSPEND' | 'REACTIVATE' | 'CLOSE';
+
+// CLOSED is deliberately terminal here. Leaving it is a deliberate shell
+// operation, because that is where data-retention obligations begin.
+const ALLOWED_TRANSITIONS: Record<TenantLifecycleAction, { from: TenantLifecycleStatus[]; to: TenantLifecycleStatus }> = {
+  SUSPEND: { from: ['ACTIVE'], to: 'SUSPENDED' },
+  REACTIVATE: { from: ['SUSPENDED'], to: 'ACTIVE' },
+  CLOSE: { from: ['ACTIVE', 'SUSPENDED'], to: 'CLOSED' },
+};
+
+const AUDIT_TYPE: Record<TenantLifecycleAction, string> = {
+  SUSPEND: 'ORGANISATION_SUSPENDED',
+  REACTIVATE: 'ORGANISATION_REACTIVATED',
+  CLOSE: 'ORGANISATION_CLOSED',
+};
+
+export async function transitionTenantLifecycle(
+  prisma: PrismaClient,
+  input: {
+    tenantId: string;
+    action: TenantLifecycleAction;
+    reason: string;
+    expectedLifecycleVersion: number;
+    operator: { id: string; email: string };
+  },
+): Promise<TenantSummary> {
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new AppError(400, 'REASON_REQUIRED', 'A reason is required for a lifecycle change');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // Lock the row first, exactly as jobs/recover-team-ownership.ts does, so a
+    // concurrent transition cannot interleave between the read and the write.
+    const locked = (await tx.$queryRaw(
+      Prisma.sql`SELECT "id", "lifecycleStatus", "lifecycleVersion" FROM "Organisation" WHERE "id" = ${input.tenantId} FOR UPDATE`,
+    )) as { id: string; lifecycleStatus: TenantLifecycleStatus; lifecycleVersion: number }[];
+
+    const current = locked[0];
+    if (!current) {
+      throw new AppError(404, 'TENANT_NOT_FOUND', 'Organisation not found');
+    }
+
+    if (current.lifecycleVersion !== input.expectedLifecycleVersion) {
+      throw new AppError(
+        409,
+        'TENANT_LIFECYCLE_CONFLICT',
+        'This organisation changed since you loaded it. Reload and try again.',
+      );
+    }
+
+    const transition = ALLOWED_TRANSITIONS[input.action];
+    if (!transition.from.includes(current.lifecycleStatus)) {
+      throw new AppError(
+        409,
+        'TENANT_TRANSITION_NOT_ALLOWED',
+        `Cannot ${input.action.toLowerCase()} an organisation that is ${current.lifecycleStatus}`,
+      );
+    }
+
+    await tx.organisation.update({
+      where: { id: input.tenantId },
+      data: {
+        lifecycleStatus: transition.to,
+        lifecycleVersion: { increment: 1 },
+        lifecycleChangedAt: new Date(),
+      },
+    });
+
+    await tx.securityAuditEvent.create({
+      data: {
+        organisationId: input.tenantId,
+        type: AUDIT_TYPE[input.action] as never,
+        actorKind: 'SUPPORT',
+        actorUserId: null,
+        actorLabel: input.operator.email,
+        subjectLabel: `Organisation ${input.tenantId}`,
+        reason,
+        context: {
+          operatorId: input.operator.id,
+          previousStatus: current.lifecycleStatus,
+          newStatus: transition.to,
+          lifecycleVersion: current.lifecycleVersion,
+        },
+      },
+    });
+
+    const row = (await tx.organisation.findUnique({
+      where: { id: input.tenantId },
+      select: tenantSelect,
+    })) as unknown as TenantRow;
+
+    return toSummary(row);
+  });
 }
