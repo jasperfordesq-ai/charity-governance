@@ -8,8 +8,15 @@ import { apiErrorMessage } from '@/lib/errors';
 
 type Action = 'SUSPEND' | 'REACTIVATE' | 'CLOSE';
 
-function isConflictError(error: unknown): boolean {
-  return (error as { response?: { status?: unknown } })?.response?.status === 409;
+// A 409 is also returned for TENANT_TRANSITION_NOT_ALLOWED (e.g. trying to suspend an
+// already-closed organisation), which has its own accurate server message. Only the
+// version-mismatch conflict should be replaced with the "reload" message — keying on the
+// specific error code, not the status code, so that other message isn't clobbered.
+function isLifecycleVersionConflict(error: unknown): boolean {
+  return (
+    (error as { response?: { status?: unknown; data?: { code?: unknown } } })?.response?.status === 409 &&
+    (error as { response?: { data?: { code?: unknown } } }).response?.data?.code === 'TENANT_LIFECYCLE_CONFLICT'
+  );
 }
 
 export default function OwnerTenantDetailPage() {
@@ -43,7 +50,7 @@ export default function OwnerTenantDetailPage() {
       // version we sent is stale. Never present that as a generic failure: the
       // operator needs to know to reload before trying again, or they will keep
       // retrying against data that no longer matches what's on screen.
-      if (isConflictError(err)) {
+      if (isLifecycleVersionConflict(err)) {
         setError('This tenant was changed by another operator since you loaded this page. Reload the page and try again.');
       } else {
         setError(apiErrorMessage(err, 'That change could not be applied.'));

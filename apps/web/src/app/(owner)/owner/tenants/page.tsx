@@ -22,7 +22,10 @@ export default function OwnerTenantsPage() {
       ownerApi
         .listTenants(q ? { q } : {})
         .then((result) => {
-          if (!cancelled) setTenants(result.tenants);
+          if (!cancelled) {
+            setTenants(result.tenants);
+            setError(null);
+          }
         })
         .catch(() => {
           if (!cancelled) setError('Could not load tenants.');
