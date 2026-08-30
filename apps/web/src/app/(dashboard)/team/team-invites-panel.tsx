@@ -25,6 +25,8 @@ export function TeamInvitesPanel({
   onDismissManualInvite,
   permissionDisabledReason,
   managementDisabled,
+  reissueInviteLink,
+  reissuingInviteId,
   revokeInvite,
   revokeInviteId,
   role,
@@ -44,6 +46,8 @@ export function TeamInvitesPanel({
   onDismissManualInvite: () => void;
   permissionDisabledReason: string;
   managementDisabled: boolean;
+  reissueInviteLink: (inviteId: string) => void;
+  reissuingInviteId: string | null;
   revokeInvite: (inviteId: string) => void;
   revokeInviteId: string | null;
   role: UserRole.ADMIN | UserRole.MEMBER;
@@ -143,17 +147,29 @@ export function TeamInvitesPanel({
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Expires {formatDate(invite.expiresAt)}</p>
                       {active && canInvite ? (
-                        <Button
-                          size="sm"
-                          variant="flat"
-                          color="danger"
-                          onPress={() => revokeInvite(invite.id)}
-                          isLoading={revokeInviteId === invite.id}
-                          isDisabled={managementDisabled || Boolean(revokeInviteId) || saving}
-                          aria-label={`Revoke invitation for ${invite.email}`}
-                        >
-                          Revoke
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            onPress={() => reissueInviteLink(invite.id)}
+                            isLoading={reissuingInviteId === invite.id}
+                            isDisabled={managementDisabled || Boolean(revokeInviteId) || Boolean(reissuingInviteId) || saving}
+                            aria-label={`Create a new invitation link for ${invite.email}`}
+                          >
+                            New link
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            color="danger"
+                            onPress={() => revokeInvite(invite.id)}
+                            isLoading={revokeInviteId === invite.id}
+                            isDisabled={managementDisabled || Boolean(revokeInviteId) || Boolean(reissuingInviteId) || saving}
+                            aria-label={`Revoke invitation for ${invite.email}`}
+                          >
+                            Revoke
+                          </Button>
+                        </div>
                       ) : active ? (
                         <PermissionHint>
                           {permissionDisabledReason}

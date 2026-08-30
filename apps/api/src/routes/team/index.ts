@@ -85,6 +85,21 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
+    authedApp.post('/invites/:id/link', async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        return await service.reissueLink(
+          request.user.organisationId,
+          id,
+          request.user.userId,
+          request.user.role,
+          request.id,
+        );
+      } catch (err) {
+        handleError(reply, err);
+      }
+    });
+
     authedApp.delete('/invites/:id', async (request, reply) => {
       try {
         const { id } = request.params as { id: string };

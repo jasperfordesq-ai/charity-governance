@@ -144,6 +144,20 @@ function inviteAccepted() {
   return { message: TEAM_INVITE_ACCEPTED_MESSAGE };
 }
 
+/**
+ * Audit labels carry operator-supplied text. Replace C0/C1 control characters
+ * with spaces and bound the length so a crafted name cannot corrupt log output.
+ */
+function sanitiseAuditLabel(value: string, maxLength = 160): string {
+  const cleaned = Array.from(value)
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 0x20 || code === 0x7f ? ' ' : character;
+    })
+    .join('');
+  return cleaned.trim().slice(0, maxLength).trim();
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
@@ -477,6 +491,134 @@ export class TeamService {
     }
 
     return inviteAccepted();
+  }
+
+  /**
+   * Reissue the one-time invitation link for a still-pending invite.
+   *
+   * The link is shown only once, at creation, and the token is stored hashed,
+   * so an operator who loses it has no way back to it. Without this the only
+   * recourse is revoking a perfectly good invite and creating a replacement.
+   *
+   * Personal-server only: on hosted deployments the link goes out by email and
+   * must not be handed back over the API. Reissuing mints a fresh bearer
+   * credential and invalidates the previous one, so it is audited.
+   */
+  async reissueLink(
+    organisationId: string,
+    inviteId: string,
+    actorId: string,
+    actorRole: UserRole,
+    requestId?: string,
+  ) {
+    ensureCanInvite(actorRole);
+
+    if (!isPersonalServerDeployment()) {
+      throw new AppError(
+        400,
+        'MANUAL_INVITE_LINK_UNAVAILABLE',
+        'Invitation links are delivered by email on this deployment',
+      );
+    }
+
+    const inviteToken = crypto.randomBytes(32).toString('base64url');
+    const manualInviteUrl = personalServerManualInviteUrl(inviteToken);
+    if (!manualInviteUrl) {
+      throw new AppError(
+        500,
+        'PERSONAL_SERVER_ORIGIN_INVALID',
+        'Personal server invite origin is not configured safely',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const organisations = await tx.$queryRaw<Array<{ id: string; lifecycleStatus: string }>>`
+        SELECT "id", "lifecycleStatus"
+        FROM "Organisation"
+        WHERE "id" = ${organisationId}
+        FOR UPDATE
+      `;
+      if (!organisations[0] || organisations[0].lifecycleStatus !== 'ACTIVE') {
+        throw new AppError(409, 'ORGANISATION_INACTIVE', 'This organisation is not active');
+      }
+
+      const actors = await tx.$queryRaw<Array<{
+        id: string;
+        name: string;
+        role: UserRole;
+        lifecycleStatus: string;
+      }>>`
+        SELECT "id", "name", "role", "lifecycleStatus"
+        FROM "User"
+        WHERE "id" = ${actorId}
+          AND "organisationId" = ${organisationId}
+        FOR UPDATE
+      `;
+      const actor = actors[0];
+      if (!actor || actor.lifecycleStatus !== 'ACTIVE') {
+        throw new AppError(403, 'FORBIDDEN', 'Your membership cannot reissue invitations');
+      }
+      ensureCanInvite(actor.role);
+
+      const invites = await tx.$queryRaw<Array<{
+        id: string;
+        email: string;
+        role: UserRole;
+        acceptedAt: Date | null;
+        revokedAt: Date | null;
+        expiresAt: Date;
+      }>>`
+        SELECT "id", "email", "role", "acceptedAt", "revokedAt", "expiresAt"
+        FROM "TeamInvite"
+        WHERE "id" = ${inviteId}
+          AND "organisationId" = ${organisationId}
+        FOR UPDATE
+      `;
+      const invite = invites[0];
+      if (!invite) throw new AppError(404, 'INVITE_NOT_FOUND', 'Invite not found');
+      if (invite.acceptedAt) {
+        throw new AppError(400, 'INVITE_ACCEPTED', 'Accepted invites have no link to reissue');
+      }
+      if (invite.revokedAt) {
+        throw new AppError(409, 'INVITE_ALREADY_REVOKED', 'Revoked invites have no link to reissue');
+      }
+      if (invite.expiresAt.getTime() <= Date.now()) {
+        throw new AppError(409, 'INVITE_EXPIRED', 'This invite has expired; create a new one');
+      }
+
+      // The expiry deliberately does not move: reissuing recovers a lost link,
+      // it does not extend how long the invitation stays open.
+      const updated = await tx.teamInvite.updateMany({
+        where: { id: invite.id, organisationId, acceptedAt: null, revokedAt: null },
+        data: { token: hashOpaqueToken(inviteToken) },
+      });
+      if (updated.count !== 1) {
+        throw new AppError(
+          409,
+          'INVITE_STATE_CONFLICT',
+          'This invite changed while its link was being reissued',
+        );
+      }
+
+      await tx.securityAuditEvent.create({
+        data: {
+          organisationId,
+          type: 'INVITE_LINK_REISSUED',
+          actorKind: 'USER',
+          actorUserId: actor.id,
+          actorLabel: sanitiseAuditLabel(actor.name) || 'CharityPilot user',
+          subjectLabel: sanitiseAuditLabel(`Invitation for ${invite.email}`),
+          reason: 'Manual invitation link reissued; the previous link no longer works',
+          requestId: sanitiseAuditLabel(requestId ?? '', 128) || undefined,
+          context: {
+            inviteId: invite.id,
+            invitedRole: invite.role,
+          },
+        },
+      });
+
+      return { message: PERSONAL_SERVER_INVITE_CREATED_MESSAGE, manualInviteUrl };
+    });
   }
 
   async revoke(

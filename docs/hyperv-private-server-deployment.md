@@ -254,15 +254,49 @@ git reset --hard <that-revision>     # must end on master with a clean tree
 canonical remote — but **not** that `HEAD` equals `origin/master`. So a checkout
 pinned behind `origin/master` still passes attestation, and restore works again.
 
+### Recovery sets cannot carry data across a commit change
+
+Read this before planning any deploy, because the obvious idea does not work.
+
+`validateReplacementRestoreSourceBinding` requires the commit sealed into the
+recovery set to equal the **restoring installation's** recorded revision:
+
+```js
+(expected.kind === 'clean-git' && application.source.commitSha !== expected.commitSha)
+  -> 'Replacement-host recovery source does not match the exact authenticated backup source'
+```
+
+A set taken at commit A therefore restores only onto an installation recorded at
+commit A. Install at commit B and it is refused. There is no `--adopt-source`
+flag; the option surface is origin, port, set, key and confirmation only.
+
+**So replacement-restore moves data to a new *host*, not to new *code*.** It is
+disaster recovery. It is not a deploy mechanism, and describing it as one — as
+an earlier revision of this document did — sends you down a path that ends in a
+refusal after you have already built the replacement machine.
+
 ### Supported ways to ship a change
 
-1. Wait for the Linux release updater (open work).
-2. Reinstall on the new commit and carry data across with `bootstrap-restore`
-   using `--source-origin` / `--origin`. This route is now rehearsed end to end
-   — see [Known gaps](#known-gaps) — and it is the one to use.
+1. Wait for the Linux release updater (open work). This is the real fix: the
+   `personal-vX.Y.Z` adoption path in `assertCleanGitReleaseAdoption` already
+   exists and requires the target commit to descend from the installed one, but
+   it needs a published release identity, which the git-install profile has not
+   got.
+2. Blue/green with an explicit data migration: build a second host, fresh-install
+   at the new commit against an empty database (fully sanctioned), then move the
+   data across with `pg_dump`/`pg_restore` plus the documents volume, apply
+   migrations, and verify by row count and file reconciliation before cutting
+   over. The one-time copy is outside the recovery-set attestation, so the
+   verification is what stands in for it. The old host stays untouched and
+   running throughout, which is the property that makes this safe.
 
 Both are heavier than a deploy. That is the current cost of the profile being
 provisional, and it is a smaller cost than unrestorable backups.
+
+Note that a non-loopback origin makes the installer run **full** certification,
+which probes the live private HTTPS endpoint. The tailnet name must therefore
+already resolve to the new host before its install can complete — which forces
+the name swap to happen mid-cutover rather than after it.
 
 ---
 

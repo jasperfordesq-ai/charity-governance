@@ -215,6 +215,7 @@ enum SecurityAuditEventType {
   ORGANISATION_REACTIVATED
   ORGANISATION_CLOSED
   INVITE_REVOKED
+  INVITE_LINK_REISSUED
 }
 
 enum PasswordRecoverySource {

@@ -119,8 +119,13 @@ export function useMinuteBookWorkflow() {
         api.get('/governing-acts'),
         api.get('/governing-acts/voids'),
       ]);
-      setActs((actsRes.data?.data ?? []) as GoverningAct[]);
-      setVoids((voidsRes.data?.data ?? []) as GoverningActVoidRecord[]);
+      // The axios interceptor in lib/api.ts already unwraps { data: [...] },
+      // so actsRes.data is normally the array itself and actsRes.data.data is
+      // undefined. Without the second fallback the whole minute book renders
+      // empty while the API returns 200 with every record. Every other page in
+      // the app uses this same three-step pattern; this one was missing it.
+      setActs((actsRes.data?.data ?? actsRes.data ?? []) as GoverningAct[]);
+      setVoids((voidsRes.data?.data ?? voidsRes.data ?? []) as GoverningActVoidRecord[]);
     } catch (err) {
       setLoadError(messageFrom(err, 'The minute book could not be loaded.'));
     } finally {
