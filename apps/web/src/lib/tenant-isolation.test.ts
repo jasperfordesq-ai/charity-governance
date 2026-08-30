@@ -61,7 +61,14 @@ test('no API request carries an organisation id as a query or path parameter', (
 });
 
 test('the only editable dynamic route segment is the global principleId (a content id, not a tenant id)', () => {
-  const dynamicSegments = appFiles
+  // The (owner) route group is the platform-owner console: a separately authenticated
+  // (Path-scoped charitypilot_owner_* cookies, its own axios client in lib/owner-api.ts)
+  // operator tool, not a tenant session. Its [id] segment addresses which tenant an
+  // operator is administering — that cross-tenant lookup is the feature, not a leak — so
+  // it is exempt from this guard, which is about a *tenant's own* session never sourcing
+  // its organisation id from an editable URL param.
+  const tenantFacingFiles = appFiles.filter((f) => !f.includes('(owner)'));
+  const dynamicSegments = tenantFacingFiles
     .map((f) => f.match(/\[([^\]]+)\]/g) || [])
     .flat()
     .map((s) => s.slice(1, -1));
