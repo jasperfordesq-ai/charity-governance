@@ -1248,3 +1248,35 @@ model GoverningActVoid {
   @@index([organisationId])
   @@index([organisationId, voidedAt])
 }
+
+enum OperatorLifecycleStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model PlatformOperator {
+  id              String                  @id @default(cuid())
+  email           String                  @unique
+  name            String
+  passwordHash    String
+  lifecycleStatus OperatorLifecycleStatus @default(ACTIVE)
+
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+
+  sessions  PlatformOperatorSession[]
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @updatedAt
+}
+
+model PlatformOperatorSession {
+  id         String           @id @default(cuid())
+  operatorId String
+  operator   PlatformOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  tokenHash  String           @unique
+  revokedAt  DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime         @default(now())
+
+  @@index([operatorId, revokedAt, expiresAt])
+}
