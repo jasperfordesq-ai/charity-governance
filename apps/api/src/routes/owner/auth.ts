@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z, ZodError } from 'zod';
@@ -113,26 +114,38 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
 
         const operator = await app.prisma.platformOperator.findFirst({
           where: { resetToken: tokenHash, resetTokenExpiry: { gt: new Date() } },
-          select: { id: true, email: true },
+          select: { id: true },
         });
 
         if (!operator) {
           throw new AppError(400, 'INVALID_RESET_TOKEN', 'That link is invalid or has expired.');
         }
 
-        await app.prisma.platformOperator.update({
-          where: { id: operator.id },
-          data: {
-            passwordHash: await bcrypt.hash(body.password, 10),
-            resetToken: null,
-            resetTokenExpiry: null,
-          },
-        });
+        const passwordHash = await bcrypt.hash(body.password, 10);
 
-        // Any session established before a credential change must not survive it.
-        await app.prisma.platformOperatorSession.updateMany({
-          where: { operatorId: operator.id, revokedAt: null },
-          data: { revokedAt: new Date() },
+        // Password write and session revocation commit or fail together, and
+        // the write is re-conditioned on the token still matching so a second
+        // concurrent request carrying the same (already-consumed) token loses
+        // cleanly instead of performing a second password write.
+        await app.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          const updated = await tx.platformOperator.updateMany({
+            where: { id: operator.id, resetToken: tokenHash },
+            data: {
+              passwordHash,
+              resetToken: null,
+              resetTokenExpiry: null,
+            },
+          });
+
+          if (updated.count !== 1) {
+            throw new AppError(400, 'INVALID_RESET_TOKEN', 'That link is invalid or has expired.');
+          }
+
+          // Any session established before a credential change must not survive it.
+          await tx.platformOperatorSession.updateMany({
+            where: { operatorId: operator.id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
         });
 
         reply.send({ message: 'Password set. You can now sign in.' });
