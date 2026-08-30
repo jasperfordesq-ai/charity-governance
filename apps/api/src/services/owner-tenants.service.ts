@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient, type SecurityAuditEventType } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 
 // This file holds the ONLY unscoped Organisation reads in the codebase. No
@@ -112,11 +112,11 @@ const ALLOWED_TRANSITIONS: Record<TenantLifecycleAction, { from: TenantLifecycle
   CLOSE: { from: ['ACTIVE', 'SUSPENDED'], to: 'CLOSED' },
 };
 
-const AUDIT_TYPE: Record<TenantLifecycleAction, string> = {
+const AUDIT_TYPE = {
   SUSPEND: 'ORGANISATION_SUSPENDED',
   REACTIVATE: 'ORGANISATION_REACTIVATED',
   CLOSE: 'ORGANISATION_CLOSED',
-};
+} as const satisfies Record<TenantLifecycleAction, SecurityAuditEventType>;
 
 export async function transitionTenantLifecycle(
   prisma: PrismaClient,
@@ -174,7 +174,7 @@ export async function transitionTenantLifecycle(
     await tx.securityAuditEvent.create({
       data: {
         organisationId: input.tenantId,
-        type: AUDIT_TYPE[input.action] as never,
+        type: AUDIT_TYPE[input.action],
         actorKind: 'SUPPORT',
         actorUserId: null,
         actorLabel: input.operator.email,
@@ -184,7 +184,7 @@ export async function transitionTenantLifecycle(
           operatorId: input.operator.id,
           previousStatus: current.lifecycleStatus,
           newStatus: transition.to,
-          lifecycleVersion: current.lifecycleVersion,
+          previousLifecycleVersion: current.lifecycleVersion,
         },
       },
     });

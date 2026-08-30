@@ -82,6 +82,43 @@ test('suspending writes the status and the audit event together', async () => {
   assert.equal(audit.reason, 'Non-payment after dunning');
 });
 
+test('reactivating a suspended tenant restores ACTIVE and audits ORGANISATION_REACTIVATED', async () => {
+  const { prisma, calls } = prismaStub({ lifecycleStatus: 'SUSPENDED', lifecycleVersion: 4 });
+  await transitionTenantLifecycle(prisma, {
+    tenantId: 'org-1',
+    action: 'REACTIVATE',
+    reason: 'Payment received, account reinstated',
+    expectedLifecycleVersion: 4,
+    operator: OPERATOR,
+  });
+
+  assert.equal(calls.updates.length, 1);
+  assert.equal(calls.updates[0].lifecycleStatus, 'ACTIVE');
+  assert.equal(calls.audits.length, 1);
+  const audit = calls.audits[0];
+  assert.equal(audit.type, 'ORGANISATION_REACTIVATED');
+  assert.equal(audit.actorKind, 'SUPPORT');
+  assert.equal(audit.actorUserId, null);
+  assert.equal(audit.actorLabel, 'owner@example.org');
+  assert.equal(audit.reason, 'Payment received, account reinstated');
+});
+
+test('closing an active tenant sets CLOSED and audits ORGANISATION_CLOSED', async () => {
+  const { prisma, calls } = prismaStub({ lifecycleStatus: 'ACTIVE', lifecycleVersion: 1 });
+  await transitionTenantLifecycle(prisma, {
+    tenantId: 'org-1',
+    action: 'CLOSE',
+    reason: 'Charity dissolved; retention window begins',
+    expectedLifecycleVersion: 1,
+    operator: OPERATOR,
+  });
+
+  assert.equal(calls.updates.length, 1);
+  assert.equal(calls.updates[0].lifecycleStatus, 'CLOSED');
+  assert.equal(calls.audits.length, 1);
+  assert.equal(calls.audits[0].type, 'ORGANISATION_CLOSED');
+});
+
 test('a version mismatch is refused before any write', async () => {
   const { prisma, calls } = prismaStub({ lifecycleStatus: 'ACTIVE', lifecycleVersion: 5 });
   await assert.rejects(
@@ -128,6 +165,7 @@ test('an empty reason is refused', async () => {
     (e: unknown) => codeOf(e) === 'REASON_REQUIRED',
   );
   assert.equal(calls.updates.length, 0);
+  assert.equal(calls.audits.length, 0);
 });
 
 test('a closed tenant cannot be reopened from the console', async () => {
@@ -144,6 +182,7 @@ test('a closed tenant cannot be reopened from the console', async () => {
     (e: unknown) => codeOf(e) === 'TENANT_TRANSITION_NOT_ALLOWED',
   );
   assert.equal(calls.updates.length, 0);
+  assert.equal(calls.audits.length, 0);
 });
 
 test('suspending an already suspended tenant is refused', async () => {
@@ -160,4 +199,5 @@ test('suspending an already suspended tenant is refused', async () => {
     (e: unknown) => codeOf(e) === 'TENANT_TRANSITION_NOT_ALLOWED',
   );
   assert.equal(calls.updates.length, 0, 'no write may happen on a disallowed transition');
+  assert.equal(calls.audits.length, 0, 'no audit event may be written on a disallowed transition');
 });

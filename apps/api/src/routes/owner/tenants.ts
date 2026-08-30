@@ -41,7 +41,11 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
 
   const lifecycleBodySchema = z.object({
     action: z.enum(['SUSPEND', 'REACTIVATE', 'CLOSE']),
-    reason: z.string().trim().min(1).max(1000),
+    // Deliberately NOT .trim()'d here: a whitespace-only reason must still
+    // reach transitionTenantLifecycle so its own trim-and-reject guard is the
+    // one that produces REASON_REQUIRED, rather than Zod's min(1) rejecting
+    // it first as a generic VALIDATION_ERROR.
+    reason: z.string().min(1).max(1000),
     expectedLifecycleVersion: z.number().int().min(1),
   });
 
