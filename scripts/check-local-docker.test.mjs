@@ -949,8 +949,8 @@ test('platform audit JSON command is read-only and machine-readable', () => {
 
   assert.equal(payload.auditCommands.json, 'node scripts/platform-completion-audit.mjs --json');
   assert.match(payload.legalPosture, /not legal advice/);
-  assert.equal(payload.counts.routes, 26);
-  assert.equal(payload.counts.p0Routes, 15);
+  assert.equal(payload.counts.routes, 27);
+  assert.equal(payload.counts.p0Routes, 16);
   assert.equal(payload.counts.oversizedRouteFiles, 0);
   assert.ok(payload.routeAudit.some((route) => route.route === '/dashboard' && route.priority === 'P0'));
   assert.ok(payload.apiAndBackendAudit.some((routeGroup) => routeGroup.group === 'documents'));

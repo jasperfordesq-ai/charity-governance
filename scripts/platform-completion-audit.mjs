@@ -32,6 +32,7 @@ const routePriorities = new Map([
   ['/documents', 'P0'],
   ['/deadlines', 'P0'],
   ['/board', 'P0'],
+  ['/minute-book', 'P0'],
   ['/registers', 'P0'],
   ['/regulator', 'P0'],
   ['/organisation', 'P0'],
