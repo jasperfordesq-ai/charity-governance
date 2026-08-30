@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'tenant-secret-owner-routes-test';
@@ -145,4 +147,25 @@ test('a configured owner origin allowlist rejects other origins', async () => {
   } finally {
     delete process.env.OWNER_ALLOWED_ORIGINS;
   }
+});
+
+test('API server wires the owner JWT boot guard ahead of route registration, gated by personal-server mode', () => {
+  const serverSource = readFileSync(join(process.cwd(), 'src', 'server.ts'), 'utf8');
+
+  assert.match(
+    serverSource,
+    /if\s*\(!isPersonalServerDeployment\(\)\)\s*{\s*assertOwnerJwtSecretConfigured\(\);\s*}/,
+  );
+
+  const guardIndex = serverSource.search(/if\s*\(!isPersonalServerDeployment\(\)\)/);
+  const firstRouteRegistrationIndex = serverSource.indexOf(
+    "await app.register(authRoutes, { prefix: '/api/v1/auth' });",
+  );
+
+  assert.ok(guardIndex > -1, 'expected the personal-server guard to be present');
+  assert.ok(firstRouteRegistrationIndex > -1, 'expected the auth route registration to be present');
+  assert.ok(
+    guardIndex < firstRouteRegistrationIndex,
+    'expected the owner JWT boot guard to run before route registrations',
+  );
 });

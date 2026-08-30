@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z, ZodError } from 'zod';
 import { AppError, handleError } from '../../utils/errors.js';
-import { bodyIdentifierRateLimit } from '../../utils/identifier-rate-limit.js';
+import { bodyIdentifierRateLimit, refreshTokenRateLimit } from '../../utils/identifier-rate-limit.js';
 import {
   issueOperatorSession,
   rotateOperatorSession,
@@ -62,27 +62,35 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/auth/refresh', async (request, reply) => {
-    try {
-      const refreshToken = getOwnerRefreshTokenFromRequest(request);
-      if (!refreshToken) {
-        throw new AppError(401, 'INVALID_OPERATOR_REFRESH', 'Missing session');
+  app.post(
+    '/auth/refresh',
+    { config: { rateLimit: refreshTokenRateLimit(5) } },
+    async (request, reply) => {
+      try {
+        const refreshToken = getOwnerRefreshTokenFromRequest(request);
+        if (!refreshToken) {
+          throw new AppError(401, 'INVALID_OPERATOR_REFRESH', 'Missing session');
+        }
+        const tokens = await rotateOperatorSession(app.prisma, refreshToken);
+        setOwnerCookies(reply, tokens);
+        reply.send({ ok: true });
+      } catch (err) {
+        clearOwnerCookies(reply);
+        handleError(reply, err);
       }
-      const tokens = await rotateOperatorSession(app.prisma, refreshToken);
-      setOwnerCookies(reply, tokens);
-      reply.send({ ok: true });
-    } catch (err) {
-      clearOwnerCookies(reply);
-      handleError(reply, err);
-    }
-  });
+    },
+  );
 
-  app.post('/auth/logout', async (request, reply) => {
-    const refreshToken = getOwnerRefreshTokenFromRequest(request);
-    if (refreshToken) await revokeOperatorSession(app.prisma, refreshToken);
-    clearOwnerCookies(reply);
-    reply.send({ message: 'Signed out' });
-  });
+  app.post(
+    '/auth/logout',
+    { config: { rateLimit: refreshTokenRateLimit(10) } },
+    async (request, reply) => {
+      const refreshToken = getOwnerRefreshTokenFromRequest(request);
+      if (refreshToken) await revokeOperatorSession(app.prisma, refreshToken);
+      clearOwnerCookies(reply);
+      reply.send({ message: 'Signed out' });
+    },
+  );
 
   app.get('/auth/me', { preHandler: [requirePlatformOperator] }, async (request, reply) => {
     reply.send({ operator: request.operator });
