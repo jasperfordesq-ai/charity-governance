@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isPersonalServerDeployment } from '../../utils/personal-server.js';
 import { ownerAuthRoutes } from './auth.js';
+import { ownerTenantRoutes } from './tenants.js';
 
 // Optional extra tightening: when OWNER_ALLOWED_ORIGINS is set, the console
 // answers only requests from those origins, so it can be moved behind Tailscale
@@ -33,4 +34,5 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
 
   ownerOriginGuard(app);
   await app.register(ownerAuthRoutes);
+  await app.register(ownerTenantRoutes);
 }
