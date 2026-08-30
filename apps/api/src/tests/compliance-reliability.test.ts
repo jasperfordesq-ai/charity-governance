@@ -640,20 +640,29 @@ test('PUT /signoff requires approval evidence when status is APPROVED', async ()
 
 // ── compliance-input-validation-14 ──
 
-test('compliance year-scoped reads reject a missing or invalid year', async () => {
+test('compliance year-scoped reads default a missing year and reject an invalid one', async () => {
+  // A missing year is no longer a validation failure: it defaults to the
+  // current reporting year server-side. Only a malformed year is rejected.
+  const defaulting = await buildComplianceApp({
+    complianceRecord: { findMany: async () => [] },
+  });
+  try {
+    const missing = await defaulting.inject({
+      method: 'GET', url: '/records',
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.notEqual(missing.statusCode, 400, 'an omitted year must not be a validation failure');
+    assert.doesNotMatch(missing.body, /Internal server error/i);
+  } finally {
+    await defaulting.close();
+  }
+
   const app = await buildComplianceApp({
     complianceRecord: {
       findMany: async () => { throw new Error('must not query records for an invalid year'); },
     },
   });
   try {
-    const missing = await app.inject({
-      method: 'GET', url: '/records',
-      headers: { authorization: tokenFor('ADMIN') },
-    });
-    assert.equal(missing.statusCode, 400);
-    assert.equal(missing.json().code, 'VALIDATION_ERROR');
-
     const nonNumeric = await app.inject({
       method: 'GET', url: '/summary?year=abcd',
       headers: { authorization: tokenFor('ADMIN') },

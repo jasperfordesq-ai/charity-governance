@@ -61,6 +61,9 @@ function buildService(options: {
   organisation?: ReturnType<typeof organisation>;
   updateManyCount?: number;
   updateError?: unknown;
+  /** Active rows in the Register of Members. 0 means the register is empty, so
+   *  the calendar falls back to the hand-entered Organisation.memberCount. */
+  activeMemberCount?: number;
 } = {}) {
   const calls: Call[] = [];
   const found = options.found === undefined ? deadline() : options.found;
@@ -73,6 +76,12 @@ function buildService(options: {
       findUniqueOrThrow: async (args: unknown) => {
         calls.push({ name: 'organisation.findUniqueOrThrow', args });
         return options.organisation ?? organisation();
+      },
+    },
+    member: {
+      count: async (args: unknown) => {
+        calls.push({ name: 'member.count', args });
+        return options.activeMemberCount ?? 0;
       },
     },
     deadline: {

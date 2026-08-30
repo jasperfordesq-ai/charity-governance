@@ -429,7 +429,9 @@ test('export rejects missing token, revoked session, and unverified email', asyn
 });
 
 test('export rejects malformed year with 400 VALIDATION_ERROR', async () => {
-  const invalidYears = ['abc', '1999', '99999', ''];
+  // An omitted year is no longer rejected - it defaults to the current
+  // reporting year. That is asserted separately below.
+  const invalidYears = ['abc', '1999', '99999'];
 
   for (const yearValue of invalidYears) {
     let orgLookupCalled = false;
@@ -446,11 +448,9 @@ test('export rejects malformed year with 400 VALIDATION_ERROR', async () => {
     });
 
     try {
-      // An empty string represents the omitted-year case (?year=).
-      const url = yearValue === '' ? '/compliance-record' : `/compliance-record?year=${yearValue}`;
       const response = await app.inject({
         method: 'GET',
-        url,
+        url: `/compliance-record?year=${yearValue}`,
         headers: { authorization: tokenFor() },
       });
 
@@ -461,6 +461,40 @@ test('export rejects malformed year with 400 VALIDATION_ERROR', async () => {
     } finally {
       await app.close();
     }
+  }
+});
+
+test('export with no year defaults to the current reporting year rather than failing', async () => {
+  let orgLookupCalled = false;
+  // A full organisation record: an omitted year now produces a real export, so
+  // the fake has to satisfy the renderer rather than only the validator.
+  const organisation = emptyOrganisation();
+  const app = await buildApp({
+    ...authModels(),
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: {
+      findUniqueOrThrow: async () => {
+        orgLookupCalled = true;
+        return organisation.findUniqueOrThrow();
+      },
+    },
+    ...emptyComplianceReads(),
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-record',
+      headers: { authorization: tokenFor() },
+    });
+
+    // Deliberate change: the year is optional and defaults server-side, so an
+    // omitted year is a normal request rather than a validation failure.
+    assert.equal(response.statusCode, 200, 'an omitted year must produce an export');
+    assert.doesNotMatch(response.body, /Internal server error/i);
+    assert.equal(orgLookupCalled, true, 'an omitted year must still reach the export');
+  } finally {
+    await app.close();
   }
 });
 

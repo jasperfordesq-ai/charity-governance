@@ -85,6 +85,13 @@ test('updateOrganisation regenerates derived deadlines inside the same Prisma tr
         return fullOrgRecord({ financialYearEnd: new Date('2026-12-31T00:00:00.000Z') });
       },
     },
+    // Register of Members: empty, so the calendar falls back to memberCount.
+    member: {
+      count: async () => {
+        calls.push('tx.member.count');
+        return 0;
+      },
+    },
     deadline: {
       findMany: async () => {
         calls.push('tx.deadline.findMany');
@@ -327,6 +334,7 @@ test('revoking a calendar confirmation supersedes the affected generated occurre
       },
       findUniqueOrThrow: async () => unconfirmed,
     },
+    member: { count: async () => 0 },
     deadline: {
       findMany: async () => [currentDeadline],
       update: async (args: { data: Record<string, unknown> }) => {
