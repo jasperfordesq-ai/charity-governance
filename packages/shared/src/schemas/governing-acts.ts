@@ -93,9 +93,26 @@ export const setDocumentApprovalSchema = z
   });
 
 export const governingActQuerySchema = z.object({
+  // Omitted year means EVERY year. A minute book that silently shows only the
+  // current year is how a false record goes unnoticed; callers that want one
+  // year must ask for it.
   year: z.coerce.number().int().min(2000).max(2200).optional(),
   kind: z.enum(governingActKindValues).optional(),
   status: z.enum(governingActStatusValues).optional(),
+});
+
+/**
+ * Removing a governing act destroys a statutory record, so the reason is
+ * mandatory and has to be a sentence someone can be held to - not "wrong" or
+ * "oops". It is retained in the audit trail alongside a full snapshot.
+ */
+export const voidGoverningActSchema = z.object({
+  expectedUpdatedAt: z.string(),
+  reason: z
+    .string()
+    .trim()
+    .min(20, 'Give a reason of at least 20 characters explaining why this record is being removed')
+    .max(2000),
 });
 
 export type CreateGoverningActRequest = z.infer<typeof createGoverningActSchema>;
@@ -104,3 +121,4 @@ export type CreateResolutionRequest = z.infer<typeof createResolutionSchema>;
 export type UpdateResolutionRequest = z.infer<typeof updateResolutionSchema>;
 export type SetDocumentApprovalRequest = z.infer<typeof setDocumentApprovalSchema>;
 export type GoverningActQuery = z.infer<typeof governingActQuerySchema>;
+export type VoidGoverningActRequest = z.infer<typeof voidGoverningActSchema>;

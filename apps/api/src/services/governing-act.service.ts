@@ -4,8 +4,15 @@ import type {
   CreateResolutionRequest,
   UpdateResolutionRequest,
   GoverningActQuery,
+  VoidGoverningActRequest,
 } from '@charitypilot/shared';
-import type { GoverningAct, GoverningActStatus, PrismaClient, Resolution } from '@prisma/client';
+import type {
+  GoverningAct,
+  GoverningActStatus,
+  GoverningActVoid,
+  PrismaClient,
+  Resolution,
+} from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 
 const toDate = (value?: string | null) => (value ? new Date(value) : null);
@@ -55,16 +62,24 @@ export class GoverningActService {
   constructor(private readonly prisma: PrismaClient) {}
 
   async list(organisationId: string, query: GoverningActQuery): Promise<GoverningAct[]> {
-    const year = query.year ?? new Date().getFullYear();
+    // No year means the whole minute book. Defaulting to the current year hides
+    // older acts by accident, and an act nobody looks at is an act nobody checks.
+    const yearFilter =
+      query.year === undefined
+        ? {}
+        : {
+            actDate: {
+              gte: new Date(`${query.year}-01-01`),
+              lte: new Date(`${query.year}-12-31`),
+            },
+          };
+
     return this.prisma.governingAct.findMany({
       where: {
         organisationId,
         ...(query.kind ? { kind: query.kind } : {}),
         ...(query.status ? { status: query.status } : {}),
-        actDate: {
-          gte: new Date(`${year}-01-01`),
-          lte: new Date(`${year}-12-31`),
-        },
+        ...yearFilter,
       },
       include: { resolutions: true },
       orderBy: [{ actDate: 'asc' }, { reference: 'asc' }],
@@ -318,6 +333,148 @@ export class GoverningActService {
         ...(approvedByResolutionId !== undefined ? { approvedByResolutionId } : {}),
         ...(approvalAsserted !== undefined ? { approvalAsserted } : {}),
       },
+    });
+  }
+
+  /**
+   * Permanently remove a governing act and its resolutions, retaining a full
+   * snapshot in the audit trail.
+   *
+   * Marking a false record SUPERSEDED is not enough: it still reads as an act
+   * that genuinely occurred, and anyone scanning the minute book sees a real
+   * entry. A fabricated statutory record has to be removable.
+   *
+   * It refuses when removal would damage a surviving record - if another act
+   * cites this one as the meeting that approved its minutes, or if a document's
+   * approval evidence hangs off one of its resolutions. Those links must be
+   * dealt with deliberately first, not severed as a side effect.
+   */
+  async voidAct(
+    organisationId: string,
+    id: string,
+    userId: string,
+    data: VoidGoverningActRequest,
+  ): Promise<GoverningActVoid> {
+    const expectedInstant = new Date(data.expectedUpdatedAt);
+
+    // Resolve the actor from the user record rather than a token claim, so the
+    // audit trail records who the system believes they are.
+    const actor = await this.prisma.user.findFirst({
+      where: { id: userId, organisationId },
+      select: { id: true, email: true },
+    });
+    if (!actor) throw new AppError(403, 'ACTOR_NOT_FOUND', 'Acting user not found in this organisation');
+
+    const act = await this.prisma.governingAct.findFirst({
+      where: { id, organisationId },
+      include: { resolutions: true },
+    });
+    if (!act) throw govActNotFound();
+    if (act.updatedAt.getTime() !== expectedInstant.getTime()) {
+      throw new AppError(
+        409,
+        'GOVERNING_ACT_UPDATE_CONFLICT',
+        'This record changed since it was loaded. Refresh and review the latest values.',
+      );
+    }
+
+    // Another act's minutes were approved at this one - removing it would leave
+    // that approval pointing at nothing.
+    const dependents = await this.prisma.governingAct.findMany({
+      where: { organisationId, approvedAtActId: id },
+      select: { reference: true },
+    });
+    if (dependents.length > 0) {
+      throw new AppError(
+        422,
+        'GOVERNING_ACT_HAS_DEPENDENTS',
+        `Cannot remove ${act.reference}: it is recorded as the meeting that approved the minutes of ` +
+          `${dependents.map((d) => d.reference).join(', ')}. Clear that link on those acts first.`,
+      );
+    }
+
+    // A document's approval evidence points at one of this act's resolutions.
+    const resolutionIds = act.resolutions.map((r) => r.id);
+    if (resolutionIds.length > 0) {
+      const evidencedDocuments = await this.prisma.document.findMany({
+        where: { organisationId, approvedByResolutionId: { in: resolutionIds } },
+        select: { name: true },
+      });
+      if (evidencedDocuments.length > 0) {
+        throw new AppError(
+          422,
+          'GOVERNING_ACT_EVIDENCES_DOCUMENTS',
+          `Cannot remove ${act.reference}: its resolutions are the recorded approval for ` +
+            `${evidencedDocuments.map((d) => d.name).join(', ')}. Detach that approval first.`,
+        );
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const record = await tx.governingActVoid.create({
+        data: {
+          organisationId,
+          reference: act.reference,
+          kind: act.kind,
+          status: act.status,
+          actDate: act.actDate,
+          title: act.title,
+          statutoryBasis: act.statutoryBasis,
+          notes: act.notes,
+          resolutionCount: act.resolutions.length,
+          snapshot: {
+            act: {
+              id: act.id,
+              kind: act.kind,
+              status: act.status,
+              actDate: act.actDate.toISOString(),
+              reference: act.reference,
+              title: act.title,
+              statutoryBasis: act.statutoryBasis,
+              approvedAtActId: act.approvedAtActId,
+              approvedAt: act.approvedAt ? act.approvedAt.toISOString() : null,
+              documentId: act.documentId,
+              notes: act.notes,
+              createdAt: act.createdAt.toISOString(),
+              updatedAt: act.updatedAt.toISOString(),
+            },
+            resolutions: act.resolutions.map((r) => ({
+              id: r.id,
+              itemNumber: r.itemNumber,
+              text: r.text,
+              carried: r.carried,
+              abstentions: r.abstentions,
+              conflictRecordId: r.conflictRecordId,
+              createdAt: r.createdAt.toISOString(),
+            })),
+          },
+          reason: data.reason,
+          voidedByUserId: actor.id,
+          voidedByEmail: actor.email,
+        },
+      });
+
+      await tx.resolution.deleteMany({ where: { governingActId: id, organisationId } });
+
+      const removed = await tx.governingAct.deleteMany({
+        where: { id, organisationId, updatedAt: expectedInstant },
+      });
+      if (removed.count !== 1) {
+        throw new AppError(
+          409,
+          'GOVERNING_ACT_UPDATE_CONFLICT',
+          'This record changed while it was being removed. Nothing was deleted.',
+        );
+      }
+
+      return record;
+    });
+  }
+
+  async listVoids(organisationId: string): Promise<GoverningActVoid[]> {
+    return this.prisma.governingActVoid.findMany({
+      where: { organisationId },
+      orderBy: { voidedAt: 'desc' },
     });
   }
 

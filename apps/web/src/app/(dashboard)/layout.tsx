@@ -22,6 +22,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  NotebookPen,
   ShieldCheck,
   UserRoundCog,
   UsersRound,
@@ -67,6 +68,11 @@ const NAV_ITEMS = [
     href: '/board',
     label: 'Board',
     icon: <UsersRound className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+  },
+  {
+    href: '/minute-book',
+    label: 'Minute Book',
+    icon: <NotebookPen className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
     href: '/registers',

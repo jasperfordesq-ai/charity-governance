@@ -4,6 +4,7 @@ export const PROTECTED_APP_PREFIXES = [
   '/regulator',
   '/documents',
   '/board',
+  '/minute-book',
   '/registers',
   '/deadlines',
   '/organisation',

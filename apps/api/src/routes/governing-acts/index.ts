@@ -7,10 +7,12 @@ import {
   updateResolutionSchema,
   setDocumentApprovalSchema,
   governingActQuerySchema,
+  voidGoverningActSchema,
   type CreateGoverningActRequest,
   type UpdateGoverningActRequest,
   type CreateResolutionRequest,
   type UpdateResolutionRequest,
+  type VoidGoverningActRequest,
 } from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
@@ -102,6 +104,30 @@ export async function governingActRoutes(app: FastifyInstance) {
       }
     },
   );
+
+  // ── Void (permanent removal, audited) ───────────────────────────────────────
+
+  // Static path first so it is never captured by /:id.
+  app.get('/voids', async (request, reply) => {
+    try {
+      return sendSuccess(reply, await service.listVoids(request.user.organisationId));
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/:id/void', { preHandler: [requireAdmin] }, async (request, reply) => {
+    try {
+      const data = voidGoverningActSchema.parse(request.body) as VoidGoverningActRequest;
+      return sendSuccess(
+        reply,
+        await service.voidAct(request.user.organisationId, request.params.id, request.user.userId, data),
+      );
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      handleError(reply, err);
+    }
+  });
 
   // ── Board Submissions ───────────────────────────────────────────────────────
 
