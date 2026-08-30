@@ -155,3 +155,44 @@ test('a non-axios failure keeps the existing fallback behaviour and never throws
     assert.equal(notice.message, CREDENTIALS_FALLBACK);
   }
 });
+
+test('a suspended organisation gets a lifecycle title and the server message', () => {
+  const error = axiosError({
+    status: 403,
+    data: { error: 'This organisation is suspended. Contact support to restore access.', code: 'ORGANISATION_SUSPENDED' },
+  });
+  const notice = authFailureNotice(error, CREDENTIALS_FALLBACK, PERSONAL_SERVER_MATCH);
+  assert.equal(notice.title, 'This organisation is suspended');
+  assert.match(notice.message, /suspended/);
+});
+
+test('a closed organisation gets a lifecycle title and the server message', () => {
+  const error = axiosError({
+    status: 403,
+    data: { error: 'This organisation is closed. Please contact us.', code: 'ORGANISATION_CLOSED' },
+  });
+  const notice = authFailureNotice(error, CREDENTIALS_FALLBACK, PERSONAL_SERVER_MATCH);
+  assert.equal(notice.title, 'This organisation is closed');
+  assert.match(notice.message, /closed/);
+});
+
+test('an account suspension gets a lifecycle title and the server message', () => {
+  const error = axiosError({
+    status: 403,
+    data: { error: 'This account is no longer active.', code: 'ACCOUNT_SUSPENDED' },
+  });
+  const notice = authFailureNotice(error, CREDENTIALS_FALLBACK, PERSONAL_SERVER_MATCH);
+  assert.equal(notice.title, 'This account is no longer active');
+  assert.match(notice.message, /no longer active/);
+});
+
+test('origin rejection still wins over the lifecycle codes', () => {
+  const error = axiosError({
+    status: 403,
+    data: { error: 'Invalid request origin', code: 'INVALID_ORIGIN' },
+  });
+  const notice = authFailureNotice(error, CREDENTIALS_FALLBACK, PERSONAL_SERVER_MATCH);
+  // Should get the origin title, not a lifecycle title
+  assert.equal(notice.title, 'Wrong address for this server');
+  assert.notEqual(notice.title, 'This organisation is suspended');
+});
