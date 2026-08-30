@@ -368,6 +368,7 @@ model Organisation {
   teamInvites                 TeamInvite[]
   deadlineReminderLogs        DeadlineReminderLog[]
   governingActs               GoverningAct[]
+  governingActVoids           GoverningActVoid[]
   members                     Member[]
   subscription                Subscription?
   billingCheckoutAttempt      BillingCheckoutAttempt?
@@ -1209,4 +1210,40 @@ model Member {
 
   @@index([organisationId])
   @@index([organisationId, dateCeased])
+}
+
+/// Audit trail for governing acts removed from the minute book.
+///
+/// A fabricated or erroneous statutory record must be removable, not merely
+/// relabelled - a SUPERSEDED row still reads as a real act that once existed.
+/// Deleting one is itself a governance event, so the full record is snapshotted
+/// here first, with who removed it and why. Nothing is ever silently destroyed.
+model GoverningActVoid {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  // Snapshot of the removed act, kept readable without parsing JSON.
+  reference       String
+  kind            String
+  status          String
+  actDate         DateTime @db.Date
+  title           String
+  statutoryBasis  String?
+  notes           String?
+  resolutionCount Int      @default(0)
+
+  /// Complete snapshot of the act and its resolutions as they were at removal.
+  snapshot Json
+
+  // Who removed it, when, and why.
+  reason         String
+  voidedByUserId String
+  voidedByEmail  String
+  voidedAt       DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([organisationId])
+  @@index([organisationId, voidedAt])
 }
