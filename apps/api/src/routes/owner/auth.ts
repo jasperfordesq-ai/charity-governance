@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z, ZodError } from 'zod';
 import { AppError, handleError } from '../../utils/errors.js';
@@ -95,4 +96,53 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/auth/me', { preHandler: [requirePlatformOperator] }, async (request, reply) => {
     reply.send({ operator: request.operator });
   });
+
+  const setPasswordSchema = z.object({
+    token: z.string().min(1).max(200),
+    password: z.string().min(12).max(200),
+  });
+
+  app.post(
+    '/auth/set-password',
+    { config: { rateLimit: bodyIdentifierRateLimit(['token']) } },
+    async (request, reply) => {
+      try {
+        const body = setPasswordSchema.parse(request.body);
+        // The column holds a sha256 hash, never the raw token from the link.
+        const tokenHash = crypto.createHash('sha256').update(body.token).digest('hex');
+
+        const operator = await app.prisma.platformOperator.findFirst({
+          where: { resetToken: tokenHash, resetTokenExpiry: { gt: new Date() } },
+          select: { id: true, email: true },
+        });
+
+        if (!operator) {
+          throw new AppError(400, 'INVALID_RESET_TOKEN', 'That link is invalid or has expired.');
+        }
+
+        await app.prisma.platformOperator.update({
+          where: { id: operator.id },
+          data: {
+            passwordHash: await bcrypt.hash(body.password, 10),
+            resetToken: null,
+            resetTokenExpiry: null,
+          },
+        });
+
+        // Any session established before a credential change must not survive it.
+        await app.prisma.platformOperatorSession.updateMany({
+          where: { operatorId: operator.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+
+        reply.send({ message: 'Password set. You can now sign in.' });
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send({ error: 'Password must be at least 12 characters.', code: 'VALIDATION_ERROR' });
+          return;
+        }
+        handleError(reply, err);
+      }
+    },
+  );
 }
