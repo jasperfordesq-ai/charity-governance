@@ -16,15 +16,15 @@ Generated: 2026-08-30 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 302 | 0 | 0 | 14 | 316 |
+| API | 304 | 0 | 0 | 14 | 318 |
 | Web | 104 | 0 | 0 | 6 | 110 |
-| **Total** | **406** | **0** | **0** | **20** | **426** |
+| **Total** | **408** | **0** | **0** | **20** | **428** |
 
-**API suite:** 923 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 924 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 406/406 covered guarantees verified against a passing/linked test.
+**Linkage:** 408/408 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (316 guarantees)
+## API surface - the matrix (318 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -378,11 +378,13 @@ _15 guarantees - covered 12  n/a 3_
 
 ### owner console - `/api/v1/owner`
 
-_11 guarantees - covered 11_
+_13 guarantees - covered 13_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
-| Auth & session integrity | An owner token is rejected by every tenant route and a tenant token by every owner route; a token forged with JWT_SECRET but owner claims is rejected because the verifier uses OWNER_JWT_SECRET. | covered | `a token signed with the tenant secret but operator claims is rejected`<br/><sub>owner-jwt.test.ts</sub> |
+| Auth & session integrity | A token forged with the tenant secret (JWT_SECRET) but owner-shaped claims is rejected by the operator verifier (verifyOperatorAccessToken), because it requires OWNER_JWT_SECRET — proving isolation comes from the secret, not merely the claim shape. | covered | `a token signed with the tenant secret but operator claims is rejected`<br/><sub>owner-jwt.test.ts</sub> |
+| Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard every owner route registers — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every owner route rather than only the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
+| Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard every tenant route registers — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every tenant route rather than only the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
@@ -691,7 +693,7 @@ _5 guarantees - covered 5_
 | Auth & session integrity | Report generation uses the authenticated API client so an expired access token can refresh before an opener-isolated popup receives the report blob; blocked, closed and failed popups are handled without leaking an opener or object URL. | covered | `opens the popup synchronously, severs its opener, then navigates to the authenticated blob`<br/><sub>lib/authenticated-report-open.test.ts</sub> |
 | State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | State integrity / no data loss | A board sign-off response owns only the exact local draft generation it submitted, so an older response cannot replace newer edits or report them as Saved. | covered | `a save response only owns the exact draft generation it submitted`<br/><sub>lib/compliance-approval-ui.test.ts</sub> |
-| Tenant isolation | Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via an httpOnly session cookie (withCredentials: true), never a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header. | covered | `every API client (tenant and owner) is cookie-based, with no JS-readable auth token`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+| Tenant isolation | Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via the session cookie (withCredentials: true) rather than a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header. (The cookie itself is set HttpOnly/SameSite=lax/Secure server-side — proven separately on the API surface, not by this client-side test.) | covered | `every API client (tenant and owner) is cookie-based, with no JS-readable auth token`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### regulator - `/regulator`
 

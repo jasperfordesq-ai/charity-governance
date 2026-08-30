@@ -4,12 +4,13 @@ import { test } from 'node:test';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'tenant-secret-owner-mw-test';
 process.env.OWNER_JWT_SECRET = 'owner-secret-owner-mw-test';
 
-const [{ default: Fastify }, { requirePlatformOperator }, { signOperatorAccessToken }, { signAccessToken }] =
+const [{ default: Fastify }, { requirePlatformOperator }, { signOperatorAccessToken }, { signAccessToken }, { authGuard }] =
   await Promise.all([
     import('fastify'),
     import('../middleware/owner-auth.js'),
     import('../utils/owner-jwt.js'),
     import('../utils/jwt.js'),
+    import('../middleware/auth.js'),
   ]);
 
 function appWith(operatorRow: unknown, sessionRow: unknown) {
@@ -60,6 +61,55 @@ test('a tenant token is rejected', async () => {
   const res = await app.inject({ method: 'GET', url: '/probe', headers: { authorization: `Bearer ${tenantToken}` } });
   assert.equal(res.statusCode, 401);
   assert.equal(res.json().code, 'OWNER_UNAUTHORIZED');
+  await app.close();
+});
+
+test('an owner token is rejected by the tenant authGuard', async () => {
+  // Converse of the test above: the tenant-side authGuard must reject a REAL,
+  // validly-signed owner token, not just a malformed one. This only proves the
+  // two-secret isolation if the two secrets actually differ in this process —
+  // pin that precondition explicitly so a misconfigured env (e.g. both unset,
+  // or accidentally equal) could never make this pass for the wrong reason.
+  assert.ok(process.env.JWT_SECRET, 'JWT_SECRET must be configured for this test to mean anything');
+  assert.ok(process.env.OWNER_JWT_SECRET, 'OWNER_JWT_SECRET must be configured for this test to mean anything');
+  assert.notEqual(
+    process.env.JWT_SECRET,
+    process.env.OWNER_JWT_SECRET,
+    'JWT_SECRET and OWNER_JWT_SECRET must differ for this test to prove anything about isolation',
+  );
+
+  let sessionLookupRan = false;
+  let userLookupRan = false;
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    authSession: {
+      findFirst: async () => {
+        sessionLookupRan = true;
+        return { id: 's-1' };
+      },
+    },
+    user: {
+      findUnique: async () => {
+        userLookupRan = true;
+        return { id: 'u-1', organisationId: 'org-1', role: 'OWNER', emailVerified: true };
+      },
+    },
+  } as never);
+  app.get('/tenant-probe', { preHandler: [authGuard] }, async (request) => ({
+    userId: (request as { user?: { userId: string } }).user?.userId,
+  }));
+
+  const ownerToken = signOperatorAccessToken({ operatorId: 'op-1', sessionId: 's-1' });
+  const res = await app.inject({
+    method: 'GET',
+    url: '/tenant-probe',
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.json().code, 'UNAUTHORIZED');
+  assert.equal(sessionLookupRan, false, 'authGuard must reject an owner token by signature alone, before any session lookup');
+  assert.equal(userLookupRan, false, 'authGuard must reject an owner token by signature alone, before any user lookup');
   await app.close();
 });
 
