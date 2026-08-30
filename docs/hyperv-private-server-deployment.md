@@ -258,7 +258,8 @@ pinned behind `origin/master` still passes attestation, and restore works again.
 
 1. Wait for the Linux release updater (open work).
 2. Reinstall on the new commit and carry data across with `bootstrap-restore`
-   using `--source-origin` / `--origin`.
+   using `--source-origin` / `--origin`. This route is now rehearsed end to end
+   — see [Known gaps](#known-gaps) — and it is the one to use.
 
 Both are heavier than a deploy. That is the current cost of the profile being
 provisional, and it is a smaller cost than unrestorable backups.
@@ -272,13 +273,12 @@ Inherited from the profile, and not fixed by running it in a VM:
 - Release readiness is tracked in
   [`personal-server-readiness-scorecard.md`](personal-server-readiness-scorecard.md)
   and is **not** at a level that supports production use
-- The Linux profile is provisional: failed-install resume, the replacement-host
-  wrapper and a release updater are all open work
+- The Linux profile is provisional: failed-install resume and a release updater
+  are open work
 - No versioned release exists; a clean `master` clone is a supervised test route
-- Off-host recovery, replacement-host recovery, update and rollback have not been
-  executed and accepted on this profile
+- Update and rollback have not been executed and accepted on this profile
 
-Two gates **have** been demonstrated on this arrangement:
+Three gates **have** been demonstrated on this arrangement:
 
 - **Reboot survival.** With `restart=unless-stopped` on the Compose services,
   Docker enabled at boot and the VM set to auto-start, the full stack returns
@@ -289,9 +289,31 @@ Two gates **have** been demonstrated on this arrangement:
   containers, the current state preserved to a new set, and the altered value
   correctly reverted. `lastRestore` was recorded and the phase returned to
   `ready`. Backups taken by this profile are genuinely restorable.
+- **Off-host and replacement-host recovery.** Rehearsed end to end on a
+  disposable VM: install, seed with marker records, back up, copy the recovery
+  set and key off-host, then **destroy the host completely** — VM, virtual
+  disks, SSH key, console password and the on-host recovery key — rebuild a bare
+  machine and restore onto it with `Install-CharityPilot.sh
+  --restore-recovery-set`. The marker fingerprint returned byte-identical, the
+  supplied recovery key was adopted rather than replaced, `restoreOperation`
+  cleared, phase reached `ready` and all four services came up healthy.
 
-Neither of these is a substitute for the off-host and replacement-host recovery
-gates, which remain unexecuted.
+  Two defects had to be fixed first, and anyone running an older checkout still
+  has them: the Linux installer had no replacement-restore mode at all, and
+  `bootstrap-restore` asserted its Docker networks were absent immediately after
+  `compose run` had created them — so replacement-host restore could not
+  complete **on any platform**, Windows included.
+
+  Two rules the rehearsal established, both by failing first:
+
+  1. **Run the whole sequence at one commit.** Restore refuses a recovery set
+     whose recorded source differs from the restoring code, and refuses a
+     checkout that has moved off the recorded revision. Both guards are correct.
+     Do not patch a host mid-restore — rebuild and start again at the new commit.
+  2. **Bootstrap and install in separate SSH sessions.** Bootstrap adds the
+     operator to the `docker` group, which the session that ran it does not yet
+     have. Installing in that same session produces Docker preflight failures
+     that look serious and mean nothing.
 
 Keep `recovery-key.hex` off the host, separate from the recovery sets it
 protects. Losing it makes every recovery set permanently unrestorable.

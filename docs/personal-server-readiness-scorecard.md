@@ -154,20 +154,55 @@ Caddy/Next.js/Fastify/PostgreSQL plus encrypted-recovery topology.
 Linux readiness is **implemented but not live-certified**. It has no 100/100
 claim and is limited to supervised testing with replaceable data until:
 
-- [ ] a clean Ubuntu 24.04 x86-64 VM installs using only
-      `scripts/Install-CharityPilot.sh`;
+- [x] a clean Ubuntu 24.04 x86-64 VM installs using only
+      `scripts/Install-CharityPilot.sh` — 2026-08-30, after
+      `bootstrap-charitypilot.sh` provisions Docker and the operator account;
 - [ ] local Docker socket, Caddy-only loopback publication, Owner login and
       post-reboot login pass;
 - [ ] exact private Tailscale Serve access passes from a second director device;
-- [ ] an encrypted off-host set and separate key restore on another blank VM;
-- [ ] Linux failed-resume, replacement-host, update and rollback wrappers exist
-      and pass live acceptance;
+- [x] an encrypted off-host set and separate key restore on another blank VM —
+      2026-08-30, see [Linux replacement-host rehearsal](#linux-replacement-host-rehearsal-2026-08-30);
+- [x] a Linux replacement-host wrapper exists and passes live acceptance —
+      `scripts/Install-CharityPilot.sh --restore-recovery-set`, 2026-08-30;
+- [ ] Linux failed-resume, update and rollback wrappers exist and pass live
+      acceptance;
 - [ ] scheduled backup monitoring and disk/security-update operations pass;
 - [ ] Linux CI passes at the exact release SHA; and
 - [ ] an immutable published release archive passes Linux acceptance.
 
 Windows points and Windows live restore evidence must not be credited to Linux.
 See [`personal-server-deployment-linux.md`](personal-server-deployment-linux.md).
+
+### Linux replacement-host rehearsal, 2026-08-30
+
+Run on a disposable Hyper-V VM with throwaway data, at a single commit
+(`8588c9b`) throughout. Sequence: install on a bare Ubuntu 24.04 host, seed
+three marker records, back up, copy the recovery set **and** the separate key
+off-host, then destroy the host completely — VM, virtual disks, SSH key, console
+password and the on-host `recovery-key.hex` — provision a new bare machine, and
+restore onto it with `Install-CharityPilot.sh --restore-recovery-set`.
+
+Result: marker fingerprint `8dc2f05cfd9f79cc377ef4764352db1e` before and after,
+identical; the supplied recovery key adopted rather than regenerated;
+`restoreOperation` cleared; phase `ready`; `api`, `caddy`, `db` and `web` all
+healthy.
+
+Two defects were found and fixed in the course of it, both now on `master`:
+
+- the Linux installer had no replacement-restore mode, so the documented
+  recovery route was unreachable on this profile (`cee0a06`);
+- `bootstrap-restore` asserted its Docker project networks were absent
+  immediately after `compose run` had created them. Replacement-host restore
+  therefore could not complete **on any platform**, Windows included. Measured
+  directly: 0 project networks before image preparation, 2 after (`8588c9b`).
+
+The second defect means Windows replacement-host evidence recorded before
+`8588c9b` describes code that could not have passed, and should be re-taken.
+
+What this rehearsal does **not** cover: it ran over loopback, not Tailscale
+Serve; no second-device access, invitation or offboarding was exercised; no
+reboot-survival or scheduled-backup monitoring was tested on the replacement
+host; and it used a git checkout, not a published release archive.
 
 The previous 58/100 figure is retired because it mixed implementation progress
 with live certification. Use the two named scores above instead.
