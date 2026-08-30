@@ -16,9 +16,9 @@ Generated: 2026-07-12 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 291 | 0 | 0 | 14 | 305 |
+| API | 302 | 0 | 0 | 14 | 316 |
 | Web | 104 | 0 | 0 | 6 | 110 |
-| **Total** | **395** | **0** | **0** | **20** | **415** |
+| **Total** | **406** | **0** | **0** | **20** | **426** |
 
 ## How to verify
 
@@ -47,7 +47,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (305 guarantees)
+## API surface - the matrix (316 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -367,6 +367,24 @@ _15 guarantees - covered 12  n/a 3_
 | Observability | GET /api/v1/health/readiness with a valid x-charitypilot-readiness-key returns 200 {status:'ready'} and checks={database:true, billingConfigured:true, emailConfigured:true, storageConfigured:true, storageBucketReachable:true} ONLY when every one of the five dependency probes resolves truthy. | covered | `authenticated readiness reports ready when every dependency is healthy`<br/><sub>health-reliability.test.ts</sub> |
 | Subscription / plan gating | N/A — health and readiness are infrastructure probes deliberately outside the subscription/plan model; they carry no requireCompletePlan or subscriptionGuard and must remain reachable regardless of any tenant's plan state. | n/a | _The routes are registered with no auth/subscription/plan guards (server.ts line 81 registers healthRoutes with only a prefix). Gating readiness behind a subscription would defeat its purpose, so plan-_ |
 | Tenant isolation | N/A — neither health endpoint reads or mutates any organisation-scoped resource; the readiness probe only runs an unparameterised SELECT 1 and config/reachability checks, so there is no organisationId surface and no cross-org leak is possible. | n/a | _No request.user, no organisationId, and no Prisma model query that returns tenant data — the only DB call is prisma.$queryRaw`SELECT 1`. There is nothing for an org-A user to read of org B here._ |
+
+### owner console - `/api/v1/owner`
+
+_11 guarantees - covered 11_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Auth & session integrity | An owner token is rejected by every tenant route and a tenant token by every owner route; a token forged with JWT_SECRET but owner claims is rejected because the verifier uses OWNER_JWT_SECRET. | covered | `a token signed with the tenant secret but operator claims is rejected`<br/><sub>owner-jwt.test.ts</sub> |
+| Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
+| Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
+| At-least-once / idempotency | transitionTenantLifecycle with a stale expectedLifecycleVersion throws 409 TENANT_LIFECYCLE_CONFLICT and performs no update and no audit write. | covered | `a version mismatch is refused before any write`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| At-least-once / idempotency | The lifecycle update and its SecurityAuditEvent are created inside one $transaction, so a failed transition leaves no orphan audit event. | covered | `suspending writes the status and the audit event together`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| Input validation | assertOwnerJwtSecretConfigured throws when OWNER_JWT_SECRET is unset or equals JWT_SECRET, so a deployment cannot silently collapse the two-secret isolation. | covered | `the boot guard rejects a secret equal to JWT_SECRET`<br/><sub>owner-jwt.test.ts</sub> |
+| Input validation | A wrong password against a SUSPENDED organisation returns generic 401 INVALID_CREDENTIALS; only a correct password returns 403 ORGANISATION_SUSPENDED. | covered | `a wrong password against a SUSPENDED organisation stays generic`<br/><sub>login-suspension-disclosure.test.ts</sub> |
+| Input validation | An unknown email still performs the dummy bcrypt comparison and returns generic 401. | covered | `an unknown email is still a generic 401`<br/><sub>login-suspension-disclosure.test.ts</sub> |
+| Input validation | Provisioning with an already-registered email throws 409 EMAIL_ALREADY_REGISTERED and creates no organisation, diverging deliberately from register()'s anti-enumeration silence. | covered | `a duplicate email returns 409 and creates nothing`<br/><sub>owner-provisioning.test.ts</sub> |
+| Input validation | An unknown operator email at owner login costs the same bcrypt work and returns the same 401 as a wrong password. | covered | `an unknown operator email is indistinguishable from a wrong password`<br/><sub>owner-auth-routes.test.ts</sub> |
 
 ### cross-cutting - auth & session integrity
 
