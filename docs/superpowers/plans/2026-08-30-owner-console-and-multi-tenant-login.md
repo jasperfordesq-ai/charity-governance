@@ -429,20 +429,34 @@ export async function rotateOperatorSession(
   prisma: PrismaClient,
   refreshToken: string,
 ): Promise<OperatorTokens> {
-  const existing = await prisma.platformOperatorSession.findFirst({
-    where: { tokenHash: hashOperatorToken(refreshToken), revokedAt: null, expiresAt: { gt: new Date() } },
+  const tokenHash = hashOperatorToken(refreshToken);
+  const now = new Date();
+
+  // Claiming the row must be ATOMIC. A findFirst-then-update would let two
+  // concurrent calls carrying the same refresh token both pass the read before
+  // either wrote, minting two live sessions from one token — exactly the replay
+  // this rotation exists to prevent. updateMany's affected count is the gate:
+  // only one caller can transition revokedAt from null.
+  const claimed = await prisma.platformOperatorSession.updateMany({
+    where: { tokenHash, revokedAt: null, expiresAt: { gt: now } },
+    data: { revokedAt: now },
   });
 
-  if (!existing) {
+  if (claimed.count !== 1) {
     throw new AppError(401, 'INVALID_OPERATOR_REFRESH', 'Invalid or expired session');
   }
 
-  await prisma.platformOperatorSession.update({
-    where: { id: existing.id },
-    data: { revokedAt: new Date() },
+  // Safe to read unfiltered now: we hold the claim on this row.
+  const claimedSession = await prisma.platformOperatorSession.findFirst({
+    where: { tokenHash },
+    select: { operatorId: true },
   });
 
-  return issueOperatorSession(prisma, existing.operatorId);
+  if (!claimedSession) {
+    throw new AppError(401, 'INVALID_OPERATOR_REFRESH', 'Invalid or expired session');
+  }
+
+  return issueOperatorSession(prisma, claimedSession.operatorId);
 }
 
 export async function revokeOperatorSession(
