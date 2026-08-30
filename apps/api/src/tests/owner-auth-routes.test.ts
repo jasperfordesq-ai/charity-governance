@@ -214,9 +214,17 @@ test('owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped
       const clearRes = await prodApp.inject({ method: 'GET', url: '/clear' });
       const clearCookies = clearRes.headers['set-cookie'];
       const clearList = (Array.isArray(clearCookies) ? clearCookies : [clearCookies ?? '']) as string[];
-      const clearJoined = clearList.join('\n');
-      assert.ok(clearList.length >= 2);
-      assert.ok(/Max-Age=0/i.test(clearJoined) || /Expires=Thu, 01 Jan 1970/i.test(clearJoined));
+      const clearedAccess = clearList.find((c) => c.startsWith('charitypilot_owner_access=')) ?? '';
+      const clearedRefresh = clearList.find((c) => c.startsWith('charitypilot_owner_refresh=')) ?? '';
+      // Check each cookie individually by name, not just somewhere in the joined response --
+      // a regression that expired only one of the two cookies must fail this test.
+      for (const cookieStr of [clearedAccess, clearedRefresh]) {
+        assert.ok(cookieStr, 'expected both owner cookies to be present in the clear response');
+        assert.ok(
+          /Max-Age=0/i.test(cookieStr) || /Expires=Thu, 01 Jan 1970/i.test(cookieStr),
+          `expected an expiry marker (Max-Age=0 or epoch Expires) in ${cookieStr}`,
+        );
+      }
     } finally {
       await prodApp.close();
     }

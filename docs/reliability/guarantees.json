@@ -5080,7 +5080,7 @@
     "surface": "web",
     "group": "web-export",
     "concern": "tenant-isolation",
-    "guarantee": "Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via the session cookie (withCredentials: true) rather than a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header. (The cookie itself is set HttpOnly/SameSite=lax/Secure server-side — proven separately on the API surface, not by this client-side test.)",
+    "guarantee": "Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via the session cookie (withCredentials: true) rather than a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header. (The cookie itself is set HttpOnly/SameSite=lax/Secure server-side — proven for the tenant cookie by 'auth cookies are HttpOnly, SameSite=lax, and Secure in production' and for the owner cookie by 'owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner', both on the API surface, not by this client-side test.)",
     "status": "covered",
     "testType": "unit",
     "testFile": "apps/web/src/lib/tenant-isolation.test.ts",
