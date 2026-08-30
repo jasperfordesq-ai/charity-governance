@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { test } from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'tenant-secret-provisioning-test';
 process.env.OWNER_JWT_SECRET = 'owner-secret-provisioning-test';
 
-const [{ provisionTenant }] = await Promise.all([import('../services/owner-provisioning.service.js')]);
+const [{ provisionTenant }, { Prisma }] = await Promise.all([
+  import('../services/owner-provisioning.service.js'),
+  import('@prisma/client'),
+]);
 
 const codeOf = (err: unknown) => (err as { code?: string })?.code;
 
-function prismaStub(existingUsersByEmail: Record<string, unknown> = {}) {
+function prismaStub(
+  existingUsersByEmail: Record<string, unknown> = {},
+  options: { userCreateError?: unknown } = {},
+) {
   const calls = { orgs: 0, users: [] as Record<string, unknown>[], subs: [] as Record<string, unknown>[] };
   const tx = {
     user: {
@@ -18,6 +25,7 @@ function prismaStub(existingUsersByEmail: Record<string, unknown> = {}) {
       // must catch.
       findUnique: async ({ where }: { where: { email: string } }) => existingUsersByEmail[where.email] ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        if (options.userCreateError) throw options.userCreateError;
         calls.users.push(data);
         return { id: 'u-1', ...data };
       },
@@ -59,6 +67,13 @@ test('provisioning creates org, OWNER user and subscription', async () => {
   assert.equal(calls.subs[0].plan, 'ESSENTIALS');
   assert.equal(calls.subs[0].status, 'TRIALING');
   assert.ok(result.verifyToken.length > 0);
+
+  // Only the sha256 HASH of the verify token may be persisted; the raw token
+  // is returned to the caller and never stored. A regression that stored the
+  // raw token (or stored nothing distinguishable from it) must fail this.
+  const storedVerifyToken = calls.users[0].verifyToken;
+  assert.notEqual(storedVerifyToken, result.verifyToken);
+  assert.equal(storedVerifyToken, crypto.createHash('sha256').update(result.verifyToken).digest('hex'));
 });
 
 test('the operator never supplies a password and none is usable', async () => {
@@ -81,6 +96,26 @@ test('a duplicate email returns 409 and creates nothing', async () => {
   );
   assert.equal(calls.orgs, 0, 'no partial organisation may be created');
   assert.equal(calls.users.length, 0);
+});
+
+test('a concurrent duplicate email (caught only by the DB unique constraint) still returns 409, not a raw 500', async () => {
+  // Under READ COMMITTED, two concurrent provisionTenant calls for the same
+  // email can both pass the pre-check's tx.user.findUnique before either
+  // commits. The loser's tx.user.create then violates User.email's unique
+  // constraint and Prisma raises a P2002 PrismaClientKnownRequestError, not
+  // an AppError. That must be caught and rethrown as the same 409 the
+  // pre-check produces, not left to escape as an unhandled 500.
+  const uniqueConstraintError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: 'test',
+    meta: { target: 'User_email_key' },
+  });
+  const { prisma } = prismaStub({}, { userCreateError: uniqueConstraintError });
+
+  await assert.rejects(
+    () => provisionTenant(prisma, INPUT),
+    (err: unknown) => codeOf(err) === 'EMAIL_ALREADY_REGISTERED',
+  );
 });
 
 test('a different existing email does not block provisioning', async () => {

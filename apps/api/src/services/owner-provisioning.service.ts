@@ -1,9 +1,17 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { hashOpaqueToken } from './session-tokens.js';
 
 const VERIFY_TOKEN_HOURS = 48;
+
+// auth.service.ts has an equivalent isUniqueConstraintError(), but it is not
+// exported, so this mirrors its implementation rather than reaching into that
+// module's private surface.
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
 
 export async function provisionTenant(
   prisma: PrismaClient,
@@ -21,7 +29,7 @@ export async function provisionTenant(
 
   const email = input.ownerEmail.trim().toLowerCase();
   const verifyToken = crypto.randomBytes(32).toString('base64url');
-  const verifyTokenHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
+  const verifyTokenHash = hashOpaqueToken(verifyToken);
 
   // The operator never chooses another person's credential: a random secret is
   // hashed and discarded, and the owner sets a real password via the link.
@@ -44,19 +52,33 @@ export async function provisionTenant(
 
     const organisation = await tx.organisation.create({ data: { name: input.organisationName } });
 
-    const user = await tx.user.create({
-      data: {
-        email,
-        name: input.ownerName,
-        passwordHash,
-        role: 'OWNER',
-        organisationId: organisation.id,
-        emailVerified: false,
-        verifyToken: verifyTokenHash,
-        verifyTokenExpiry,
-      },
-      select: { id: true },
-    });
+    // The pre-check above narrows the common case, but under READ COMMITTED
+    // two concurrent provisionTenant calls for the same email can both pass
+    // it before either commits. The loser's create then violates User.email's
+    // unique constraint (P2002) — that must surface as the same 409 the
+    // pre-check produces, not a raw 500, since the transaction still rolls
+    // back cleanly and no partial organisation is left behind.
+    let user: { id: string };
+    try {
+      user = await tx.user.create({
+        data: {
+          email,
+          name: input.ownerName,
+          passwordHash,
+          role: 'OWNER',
+          organisationId: organisation.id,
+          emailVerified: false,
+          verifyToken: verifyTokenHash,
+          verifyTokenExpiry,
+        },
+        select: { id: true },
+      });
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw new AppError(409, 'EMAIL_ALREADY_REGISTERED', 'That email already belongs to an account');
+      }
+      throw err;
+    }
 
     await tx.subscription.create({
       data: { organisationId: organisation.id, plan: input.plan, status: 'TRIALING', trialEndsAt },
