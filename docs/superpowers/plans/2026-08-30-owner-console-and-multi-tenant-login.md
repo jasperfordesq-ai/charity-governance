@@ -80,8 +80,8 @@ Expected: a new folder under `prisma/migrations/`, and `CREATE TABLE "PlatformOp
 
 - [ ] **Step 3: Verify no existing table was altered**
 
-Run: `cd apps/api && grep -E "ALTER TABLE|DROP" prisma/migrations/*_add_platform_operator/migration.sql`
-Expected: no output. This migration must be purely additive — if it emits `ALTER TABLE` against `User` or `Organisation`, the schema edit was wrong.
+Run: `cd apps/api && grep -E 'ALTER TABLE "(User|Organisation|Subscription|SecurityAuditEvent)"|DROP' prisma/migrations/*_add_platform_operator/migration.sql`
+Expected: no output. Prisma legitimately emits `ALTER TABLE "PlatformOperatorSession" ADD CONSTRAINT … FOREIGN KEY` for the operator→session relation; that is additive and expected. What must NOT appear is any `ALTER TABLE` against an existing tenant table, or any `DROP`.
 
 - [ ] **Step 4: Regenerate the client and typecheck**
 
