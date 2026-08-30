@@ -6,14 +6,21 @@ import { test } from 'node:test';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'tenant-secret-owner-routes-test';
 process.env.OWNER_JWT_SECRET = 'owner-secret-owner-routes-test';
 
-const [{ default: Fastify }, { default: cookie }, { default: rateLimit }, bcrypt, { ownerRoutes }] =
-  await Promise.all([
-    import('fastify'),
-    import('@fastify/cookie'),
-    import('@fastify/rate-limit'),
-    import('bcryptjs'),
-    import('../routes/owner/index.js'),
-  ]);
+const [
+  { default: Fastify },
+  { default: cookie },
+  { default: rateLimit },
+  bcrypt,
+  { ownerRoutes },
+  { setOwnerCookies, clearOwnerCookies },
+] = await Promise.all([
+  import('fastify'),
+  import('@fastify/cookie'),
+  import('@fastify/rate-limit'),
+  import('bcryptjs'),
+  import('../routes/owner/index.js'),
+  import('../utils/owner-cookies.js'),
+]);
 
 const PASSWORD = 'correct-horse-battery-staple';
 
@@ -168,4 +175,74 @@ test('API server wires the owner JWT boot guard ahead of route registration, gat
     guardIndex < firstRouteRegistrationIndex,
     'expected the owner JWT boot guard to run before route registrations',
   );
+});
+
+test('owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner', async () => {
+  // Mirrors the tenant equivalent ('auth cookies are HttpOnly, SameSite=lax, and Secure in
+  // production' in auth-session-reliability.test.ts) for the higher-privilege owner cookie,
+  // which previously had no test asserting anything beyond its name and Path.
+  const originalEnv = process.env.NODE_ENV;
+  try {
+    // Production: cookies must carry Secure.
+    process.env.NODE_ENV = 'production';
+    const prodApp = Fastify({ logger: false });
+    await prodApp.register(cookie);
+    prodApp.get('/set', async (_request, reply) => {
+      setOwnerCookies(reply as never, { accessToken: 'a', refreshToken: 'r' });
+      reply.send({ ok: true });
+    });
+    prodApp.get('/clear', async (_request, reply) => {
+      clearOwnerCookies(reply as never);
+      reply.send({ ok: true });
+    });
+
+    try {
+      const setRes = await prodApp.inject({ method: 'GET', url: '/set' });
+      const setCookies = setRes.headers['set-cookie'];
+      const prodList = (Array.isArray(setCookies) ? setCookies : [setCookies ?? '']) as string[];
+      const access = prodList.find((c) => c.startsWith('charitypilot_owner_access=')) ?? '';
+      const refresh = prodList.find((c) => c.startsWith('charitypilot_owner_refresh=')) ?? '';
+
+      for (const cookieStr of [access, refresh]) {
+        assert.ok(/HttpOnly/i.test(cookieStr), `expected HttpOnly in ${cookieStr}`);
+        assert.ok(/SameSite=Lax/i.test(cookieStr), `expected SameSite=Lax in ${cookieStr}`);
+        assert.ok(/Secure/i.test(cookieStr), `expected Secure in ${cookieStr}`);
+        assert.ok(cookieStr.toLowerCase().includes('path=/api/v1/owner'), `expected Path=/api/v1/owner in ${cookieStr}`);
+        assert.match(cookieStr, /Max-Age=\d+/i, `expected Max-Age in ${cookieStr}`);
+      }
+
+      const clearRes = await prodApp.inject({ method: 'GET', url: '/clear' });
+      const clearCookies = clearRes.headers['set-cookie'];
+      const clearList = (Array.isArray(clearCookies) ? clearCookies : [clearCookies ?? '']) as string[];
+      const clearJoined = clearList.join('\n');
+      assert.ok(clearList.length >= 2);
+      assert.ok(/Max-Age=0/i.test(clearJoined) || /Expires=Thu, 01 Jan 1970/i.test(clearJoined));
+    } finally {
+      await prodApp.close();
+    }
+
+    // Non-production: Secure must be absent (do not weaken the production assertion above
+    // to accommodate this path — both are asserted, separately, like the tenant test does).
+    delete process.env.NODE_ENV;
+    const devApp = Fastify({ logger: false });
+    await devApp.register(cookie);
+    devApp.get('/set', async (_request, reply) => {
+      setOwnerCookies(reply as never, { accessToken: 'a', refreshToken: 'r' });
+      reply.send({ ok: true });
+    });
+    try {
+      const devRes = await devApp.inject({ method: 'GET', url: '/set' });
+      const devCookies = devRes.headers['set-cookie'];
+      const devList = (Array.isArray(devCookies) ? devCookies : [devCookies ?? '']) as string[];
+      for (const cookieStr of devList) {
+        assert.ok(/HttpOnly/i.test(cookieStr));
+        assert.equal(/Secure/i.test(cookieStr), false, `Secure must be absent outside production in ${cookieStr}`);
+      }
+    } finally {
+      await devApp.close();
+    }
+  } finally {
+    if (originalEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalEnv;
+  }
 });

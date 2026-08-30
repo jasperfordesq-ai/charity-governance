@@ -16,15 +16,15 @@ Generated: 2026-08-30 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 304 | 0 | 0 | 14 | 318 |
+| API | 305 | 0 | 0 | 14 | 319 |
 | Web | 104 | 0 | 0 | 6 | 110 |
-| **Total** | **408** | **0** | **0** | **20** | **428** |
+| **Total** | **409** | **0** | **0** | **20** | **429** |
 
-**API suite:** 924 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 925 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 408/408 covered guarantees verified against a passing/linked test.
+**Linkage:** 409/409 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (318 guarantees)
+## API surface - the matrix (319 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -378,13 +378,14 @@ _15 guarantees - covered 12  n/a 3_
 
 ### owner console - `/api/v1/owner`
 
-_13 guarantees - covered 13_
+_14 guarantees - covered 14_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
 | Auth & session integrity | A token forged with the tenant secret (JWT_SECRET) but owner-shaped claims is rejected by the operator verifier (verifyOperatorAccessToken), because it requires OWNER_JWT_SECRET — proving isolation comes from the secret, not merely the claim shape. | covered | `a token signed with the tenant secret but operator claims is rejected`<br/><sub>owner-jwt.test.ts</sub> |
-| Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard every owner route registers — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every owner route rather than only the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
-| Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard every tenant route registers — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every tenant route rather than only the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
+| Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every route guarded by requirePlatformOperator, not merely the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
+| Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every route guarded by authGuard, not merely the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
+| Auth & session integrity | setOwnerCookies marks both the owner access and refresh cookies HttpOnly, SameSite=lax, scoped to /api/v1/owner, and Secure in production (absent outside it); clearOwnerCookies expires both. | covered | `owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
