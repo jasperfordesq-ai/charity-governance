@@ -2609,7 +2609,7 @@ test('full-application rehearsal proves Caddy privacy headers and private compil
   assert.match(source, /pageBody\.includes\('Welcome back'\).*pageBody\.includes\('private CharityPilot server'\)/su);
 });
 
-test('replacement-host bootstrap dry-run rehearses before exact blank target creation and never initializes an Owner', () => {
+test('replacement-host bootstrap dry-run proves a blank host, then rehearses, then creates the exact target, and never initializes an Owner', () => {
   withWorkspace((root) => {
     const fixture = createRecoveryFixture(root, {
       encrypted: true,
@@ -2660,12 +2660,19 @@ test('replacement-host bootstrap dry-run rehearses before exact blank target cre
     const targetRebindDryRun = rebindMatches[2]?.index ?? -1;
     const targetRebindExecute = rebindMatches[3]?.index ?? -1;
     const revoke = text.indexOf('revoke-all-restored-sessions');
+    // The blank-host proof must come FIRST. It is read-only (docker ls), and
+    // everything after it - image preparation especially - runs Compose commands
+    // that materialise this project’s networks and volumes. Asserting absence
+    // after them could never pass, which made replacement-host restore fail on
+    // every platform. Rehearsal still precedes creation of the real target.
     assert.ok(
-      rehearsal >= 0 && rehearsal < rehearsalRebindDryRun &&
-        rehearsalRebindDryRun < rehearsalRebindExecute && rehearsalRebindExecute < absence &&
-        absence < projectNetworkAbsence &&
+      absence >= 0 && absence < projectNetworkAbsence &&
         projectNetworkAbsence < internalNetworkAbsence &&
-        internalNetworkAbsence < edgeNetworkAbsence && edgeNetworkAbsence < targetCreate &&
+        internalNetworkAbsence < edgeNetworkAbsence &&
+        edgeNetworkAbsence < rehearsal &&
+        rehearsal < rehearsalRebindDryRun &&
+        rehearsalRebindDryRun < rehearsalRebindExecute &&
+        rehearsalRebindExecute < targetCreate &&
         targetCreate < restore && restore < targetRebindDryRun &&
         targetRebindDryRun < targetRebindExecute && targetRebindExecute < revoke,
       JSON.stringify({

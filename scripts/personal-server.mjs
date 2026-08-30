@@ -5345,6 +5345,17 @@ function bootstrapRestore(options, context) {
       },
     });
 
+    // The blank-host proof has to precede every Compose invocation. Image
+    // preparation runs `compose run`, which materialises this project's networks
+    // and volumes, so asserting their absence afterwards could never pass and
+    // replacement-host restore failed on every platform. The stronger guarantee -
+    // that the restore target is genuinely empty rather than merely missing - is
+    // enforced below by createPersonalBootstrapTargets, which proves the database
+    // has no tables and the document volume has no files.
+    assertPersonalBootstrapResourcesAbsent(context);
+    // Image preparation creates project resources, so every failure from here on
+    // must reach the fail-closed cleanup.
+    resourceCreationAttempted = true;
     preparePinnedRuntimeImages(context);
     buildImagesSequentially(context);
     const ownerPassword = readOwnerPasswordProofFile(options);
@@ -5355,8 +5366,6 @@ function bootstrapRestore(options, context) {
         manifestSha256: recoveryManifestSha256,
       },
     });
-    assertPersonalBootstrapResourcesAbsent(context);
-    resourceCreationAttempted = true;
     const targets = createPersonalBootstrapTargets(values, context);
     restoreDatabaseDump(
       targets.databaseContainer,

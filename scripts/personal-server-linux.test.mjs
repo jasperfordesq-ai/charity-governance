@@ -146,3 +146,26 @@ test('Linux installer rejects unsafe replacement-restore argument combinations',
     assert.match(result.stderr, expected);
   }
 });
+
+test('replacement-host restore proves the host is blank before Compose creates anything', () => {
+  // preparePinnedRuntimeImages runs `docker compose run`, which materialises the
+  // project's networks and volumes. Asserting their absence AFTER that could
+  // never pass, so bootstrap-restore failed on every platform and
+  // replacement-host recovery was impossible. Verified against a live host on
+  // 2026-08-30: 0 networks before `compose run`, 2 after.
+  const source = readFileSync(resolve(repositoryRoot, 'scripts/personal-server.mjs'), 'utf8');
+  const assertAt = source.lastIndexOf('assertPersonalBootstrapResourcesAbsent(context);');
+  const prepareAt = source.lastIndexOf('preparePinnedRuntimeImages(context);');
+  const flagAt = source.lastIndexOf('resourceCreationAttempted = true;');
+  assert.ok(assertAt > 0 && prepareAt > 0 && flagAt > 0, 'all three call sites must exist');
+  assert.ok(
+    assertAt < prepareAt,
+    'the blank-host assertion must run before image preparation creates project resources',
+  );
+  // Image preparation creates resources, so anything failing after it must reach
+  // the fail-closed cleanup rather than leaving networks and volumes behind.
+  assert.ok(
+    flagAt < prepareAt,
+    'resourceCreationAttempted must be set before the first resource-creating step',
+  );
+});
