@@ -20,6 +20,7 @@ const SENSITIVE_AUTH_PATHS = new Set([
   "/reset-password",
   "/verify-email",
   "/accept-invite",
+  "/owner/set-password",
 ]);
 const ISOLATED_E2E_MODE = "local-disposable";
 

@@ -1,15 +1,16 @@
 'use client';
 
 import { Suspense, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Button, Card, CardBody, Input } from '@heroui/react';
 import axios from 'axios';
 import { configuredApiOrigin } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 
 function SetPasswordForm() {
   const router = useRouter();
-  const token = useSearchParams().get('token') ?? '';
+  const { token, isReady } = useSensitiveQueryToken();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -26,6 +27,16 @@ function SetPasswordForm() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  if (!isReady) {
+    return (
+      <Card>
+        <CardBody className="gap-4">
+          <p>Loading…</p>
+        </CardBody>
+      </Card>
+    );
   }
 
   return (
