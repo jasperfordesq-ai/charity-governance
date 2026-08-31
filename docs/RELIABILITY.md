@@ -16,15 +16,15 @@ Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 318 | 0 | 0 | 14 | 332 |
+| API | 326 | 0 | 0 | 14 | 340 |
 | Web | 106 | 0 | 0 | 6 | 112 |
-| **Total** | **424** | **0** | **0** | **20** | **444** |
+| **Total** | **432** | **0** | **0** | **20** | **452** |
 
-**API suite:** 980 passing, 0 failing. **Web suite:** 397 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1111 passing, 0 failing. **Web suite:** 397 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 424/424 covered guarantees verified against a passing/linked test.
+**Linkage:** 432/432 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (332 guarantees)
+## API surface - the matrix (340 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -378,7 +378,7 @@ _15 guarantees - covered 12  n/a 3_
 
 ### owner console - `/api/v1/owner`
 
-_14 guarantees - covered 14_
+_15 guarantees - covered 15_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -386,6 +386,7 @@ _14 guarantees - covered 14_
 | Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every route guarded by requirePlatformOperator, not merely the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every route guarded by authGuard, not merely the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Auth & session integrity | setOwnerCookies marks both the owner access and refresh cookies HttpOnly, SameSite=lax, scoped to /api/v1/owner, and Secure in production (absent outside it); clearOwnerCookies expires both. | covered | `owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner`<br/><sub>owner-auth-routes.test.ts</sub> |
+| Auth & session integrity | buildOperatorSetPasswordLink, the sole composition site for owner bootstrap set-password links, puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers. | covered | `the bootstrap link carries its token in the fragment, never the query string`<br/><sub>create-platform-operator.test.ts</sub> |
 | Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
@@ -512,6 +513,18 @@ _10 guarantees - covered 10_
 | State integrity / no data loss | Provisioning a tenant with billing='comped' creates its subscription with status ACTIVE and trialEndsAt null. | covered | `comped billing creates ACTIVE with null trialEndsAt`<br/><sub>owner-provisioning.test.ts</sub> |
 | Authorization boundary | Only the allowlisted appliance-lifecycle source files reference isPersonalServerDeployment(); behavioural code must key on the capability axis in utils/deployment-profile.ts instead. | covered | `only allowlisted appliance-lifecycle files reference isPersonalServerDeployment`<br/><sub>deployment-profile-structure.test.ts</sub> |
 | Authorization boundary | No file under src/routes/ or src/services/, other than the allowlisted appliance-lifecycle files, references CHARITYPILOT_DEPLOYMENT_MODE directly. | covered | `no route or service file outside the allowlist references CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>deployment-profile-structure.test.ts</sub> |
+| Auth & session integrity | Adding the CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN override vars did not loosen the default: with neither var set, production env validation still requires FRONTEND_URL to equal the canonical https://app.charitypilot.ie origin. | covered | `defaults unchanged: canonical charitypilot.ie origins still required with no new vars`<br/><sub>deployment-origins-env.test.ts</sub> |
+| Observability | The deadline-reminders job's own env validator honours CHARITYPILOT_ERROR_ALERTS symmetrically: set to none it does not require ERROR_ALERT_WEBHOOK_URL, and set to webhook it still requires ERROR_ALERT_WEBHOOK_URL to be configured. | covered | `job validator (deadline reminders): alerts=none both directions`<br/><sub>deployment-origins-env.test.ts</sub> |
+
+### bluegreen
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| State integrity / no data loss | gateMigrations reports ok:false and records the finding in blocked[] when a pending migration matches a destructive-class pattern (e.g. DROP TABLE) and --allow-destructive-migration was not passed. | covered | `gateMigrations: ok is false when something is blocked and allowDestructive is not set`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
+| State integrity / no data loss | Passing allowDestructive flips gateMigrations' ok to true but does not clear or shrink the blocked list — the same findings are also recorded verbatim in overridden, so what was permitted stays visible after the fact. | covered | `gateMigrations: allowDestructive flips ok true while preserving the blocked list in overridden`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
+| Graceful degradation | When the post-cutover public smoke test fails, the deploy engine restores the previous active-upstreams file, reloads Caddy, restarts the scheduler on the old commit, and re-verifies the front door reports the OLD commit before returning failure — traffic is never left pointed at a colour that failed its own public smoke test. | covered | `deploy: public smoke failure restores upstreams, reloads, and re-verifies the OLD commit`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| At-least-once / idempotency | The cutover lock is released on every tested deploy abort path (preflight failure, a blocked migration, and a migration-run failure), so a failed deploy never leaves a stale lock blocking the next deploy or rollback attempt. | covered | `lock is released on every abort path`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | runRestoreDrill restores the backup into a throwaway scratch container reached only by docker run/exec — it never issues a docker compose command, never targets the compose db service or the charitypilot-bluegreen-db container family, and never carries a DSN whose host is db, so the drill cannot touch the live database. | covered | `runRestoreDrill restores into a throwaway container, never the live db, and passes clean`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
 
 ---
 

@@ -137,6 +137,22 @@ function runApiSuite() {
   return runNodeTest(API_DIR, 'dist/tests/*.test.js');
 }
 
+// Task 9: a handful of "api" surface guarantees are proven by the blue-green
+// deploy engine's own root-level scripts/*.test.mjs suites (plain ESM, no
+// tsc compile step) rather than by anything under apps/api/dist/tests. Only
+// the files that currently carry a cited testTitle are run here — this is
+// linkage verification, not a general invitation to fold every scripts/*
+// suite into the api-surface pass set.
+const BLUEGREEN_SCRIPT_TESTS = [
+  'scripts/bluegreen-deploy.test.mjs',
+  'scripts/bluegreen/migration-gate.test.mjs',
+  'scripts/bluegreen/backup.test.mjs',
+];
+
+function runBluegreenScriptsSuite() {
+  return runNodeTest(ROOT, BLUEGREEN_SCRIPT_TESTS);
+}
+
 function runWebSuite() {
   // tsconfig.test.json emits into this dedicated tree. Start from an empty tree
   // so a removed test title cannot falsely satisfy the reliability ledger.
@@ -354,6 +370,13 @@ if (!NO_RUN) {
   const wantWeb = (!SURFACE_ARG || SURFACE_ARG === 'web') && webUnitCovered.length > 0;
 
   const api = wantApi ? parseResults(runApiSuite()) : null;
+  if (api) {
+    const scripts = parseResults(runBluegreenScriptsSuite());
+    for (const t of scripts.pass) api.pass.add(t);
+    for (const t of scripts.fail) api.fail.add(t);
+    api.passN += scripts.passN;
+    api.failN += scripts.failN;
+  }
   const web = wantWeb ? parseResults(runWebSuite()) : null;
   const e2eTitles = readE2eTitles();
 

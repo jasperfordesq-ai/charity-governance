@@ -5438,5 +5438,101 @@
     "testTitle": "billing copy does not promise unverified proration or route existing subscriptions through Checkout",
     "proposedTitle": "",
     "gapDescription": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-1",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "gateMigrations reports ok:false and records the finding in blocked[] when a pending migration matches a destructive-class pattern (e.g. DROP TABLE) and --allow-destructive-migration was not passed.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen/migration-gate.test.mjs",
+    "testTitle": "gateMigrations: ok is false when something is blocked and allowDestructive is not set",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-2",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "Passing allowDestructive flips gateMigrations' ok to true but does not clear or shrink the blocked list — the same findings are also recorded verbatim in overridden, so what was permitted stays visible after the fact.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen/migration-gate.test.mjs",
+    "testTitle": "gateMigrations: allowDestructive flips ok true while preserving the blocked list in overridden",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-graceful-degradation-1",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "graceful-degradation",
+    "guarantee": "When the post-cutover public smoke test fails, the deploy engine restores the previous active-upstreams file, reloads Caddy, restarts the scheduler on the old commit, and re-verifies the front door reports the OLD commit before returning failure — traffic is never left pointed at a colour that failed its own public smoke test.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "deploy: public smoke failure restores upstreams, reloads, and re-verifies the OLD commit",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-idempotency-1",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "idempotency",
+    "guarantee": "The cutover lock is released on every tested deploy abort path (preflight failure, a blocked migration, and a migration-run failure), so a failed deploy never leaves a stale lock blocking the next deploy or rollback attempt.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "lock is released on every abort path",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-3",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "runRestoreDrill restores the backup into a throwaway scratch container reached only by docker run/exec — it never issues a docker compose command, never targets the compose db service or the charitypilot-bluegreen-db container family, and never carries a DSN whose host is db, so the drill cannot touch the live database.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen/backup.test.mjs",
+    "testTitle": "runRestoreDrill restores into a throwaway container, never the live db, and passes clean",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "deployment-profile-auth-session-3",
+    "surface": "api",
+    "group": "deployment-profile",
+    "concern": "auth-session",
+    "guarantee": "Adding the CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN override vars did not loosen the default: with neither var set, production env validation still requires FRONTEND_URL to equal the canonical https://app.charitypilot.ie origin.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/deployment-origins-env.test.ts",
+    "testTitle": "defaults unchanged: canonical charitypilot.ie origins still required with no new vars",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "deployment-profile-observability-1",
+    "surface": "api",
+    "group": "deployment-profile",
+    "concern": "observability",
+    "guarantee": "The deadline-reminders job's own env validator honours CHARITYPILOT_ERROR_ALERTS symmetrically: set to none it does not require ERROR_ALERT_WEBHOOK_URL, and set to webhook it still requires ERROR_ALERT_WEBHOOK_URL to be configured.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/deployment-origins-env.test.ts",
+    "testTitle": "job validator (deadline reminders): alerts=none both directions",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "owner-auth-session-5",
+    "surface": "api",
+    "group": "owner",
+    "concern": "auth-session",
+    "guarantee": "buildOperatorSetPasswordLink, the sole composition site for owner bootstrap set-password links, puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/create-platform-operator.test.ts",
+    "testTitle": "the bootstrap link carries its token in the fragment, never the query string",
+    "gapDescription": "",
+    "proposedTitle": ""
   }
 ]

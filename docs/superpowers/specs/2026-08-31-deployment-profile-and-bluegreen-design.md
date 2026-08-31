@@ -331,13 +331,23 @@ container boot — and P2's Preflight phase ("axis env validation", deploy
 phase 1, which runs the same `validateRuntimeEnv()`) — fails closed on this
 VM's env file before Sequence step 4 ever brings a colour up.
 
-This is not yet solved: P2's axis-aware preflight (the "Axis-aware
-environment validation" section above only widens `validateProductionEnv`'s
-*provider* requirements, not its *origin* pinning) must additionally relax
-the origin/webhook checks keyed on the deployment's actual configured
-origins, not the hardcoded canonical hosted ones — before P3's Sequence
-below can proceed past step 4. Sequence step 1–3 do not depend on this;
-step 4 (bringing up the blue colour) does.
+**Resolved by Task 1.** `validateProductionEnv` (and the deadline-reminders
+job's own `validateDeadlineRemindersEnv`) now accept two override vars,
+`CHARITYPILOT_CANONICAL_WEB_ORIGIN` / `CHARITYPILOT_CANONICAL_API_ORIGIN`:
+when set, the exact-origin check pins `FRONTEND_URL` /
+`NEXT_PUBLIC_API_URL` to the configured origin (e.g. the Tailscale Serve
+origin) instead of the hardcoded `https://app.charitypilot.ie` /
+`https://api.charitypilot.ie`; with neither var set, every hosted-SaaS
+install keeps today's exact origins unchanged
+(`apps/api/src/tests/deployment-origins-env.test.ts`, "defaults unchanged:
+canonical charitypilot.ie origins still required with no new vars"). The
+public-webhook requirement is relaxed the same way: `CHARITYPILOT_ERROR_ALERTS=none`
+drops the `ERROR_ALERT_WEBHOOK_URL` requirement in both the API boot
+validator and the job validator, symmetrically (same test file, "job
+validator (deadline reminders): alerts=none both directions"). Sequence
+step 4 (bringing up the blue colour) is therefore unblocked on this VM's
+env file: set both canonical-origin vars to the Tailscale Serve origin and
+`CHARITYPILOT_ERROR_ALERTS=none` if no public alert receiver exists.
 
 ## Sequence
 
