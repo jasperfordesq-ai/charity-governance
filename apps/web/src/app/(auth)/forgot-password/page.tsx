@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
               Ask your server owner for a reset link
             </h1>
             <p className="mb-6 leading-relaxed text-gray-700 dark:text-gray-300">
-              Email recovery is disabled on this private CharityPilot server. Contact the
+              Email recovery is disabled on this server. Contact the
               trusted host operator through your usual verified channel; they can issue a
               one-time password-reset link without asking for your current password.
             </p>

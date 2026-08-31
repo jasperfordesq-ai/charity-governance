@@ -1,7 +1,8 @@
 // Web mirror of apps/api/src/utils/deployment-profile.ts — same four capability
-// axes, exposed to the browser bundle. The shape differs from the API version
-// for one reason: Next.js only inlines `process.env.NEXT_PUBLIC_*` at build
-// time when it appears as a literal, static property access
+// axes, exposed to both the browser bundle and this app's Node-runtime server
+// code (proxy.ts). The shape differs from the API version for one reason:
+// Next.js only inlines `process.env.NEXT_PUBLIC_*` in the CLIENT bundle at
+// build time when it appears as a literal, static property access
 // (`process.env.NEXT_PUBLIC_X`). A dynamic lookup — `env[name]`, or an env
 // object passed in as a parameter and indexed by a variable — is never
 // replaced, so it would read `undefined` in the shipped client bundle no
@@ -10,14 +11,19 @@
 // site and hands the already-read value to `pick`, instead of a shared helper
 // doing `env[name]`.
 //
-// MODE (and the APPLIANCE flag derived from it) is read once, at module load.
-// In a real Next.js build this is exactly the constant the bundler inlines —
-// NEXT_PUBLIC_* values are fixed for the life of a built bundle — so
-// evaluating it once here mirrors production behaviour exactly. Nothing
-// behavioural should key on NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly
-// any more; key on an axis exported from this module instead.
-const MODE = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;
-const APPLIANCE = MODE === 'personal-server';
+// The appliance check is read FRESH on every call (isAppliance(), inside
+// pick()) rather than cached at module load. A cached module-level constant
+// would be indistinguishable from a fresh read in the browser bundle — either
+// way NEXT_PUBLIC_* is inlined to a fixed literal at build time — but this
+// module is also require()'d directly by proxy.ts, which runs in the Node
+// server runtime across many requests in one long-lived process. Caching the
+// mode at first import would freeze it as of whichever request happened to
+// load the module first, silently ignoring the actual (fixed, real)
+// environment for the rest of that process's life. Reading fresh costs one
+// property lookup and is correct in both contexts.
+function isAppliance(): boolean {
+  return process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+}
 
 function pick<T extends string>(
   raw: string | undefined,
@@ -25,7 +31,7 @@ function pick<T extends string>(
   applianceDefault: T,
   standardDefault: T,
 ): T {
-  if (raw === undefined) return APPLIANCE ? applianceDefault : standardDefault;
+  if (raw === undefined) return isAppliance() ? applianceDefault : standardDefault;
   if (!(allowed as readonly string[]).includes(raw)) {
     throw new Error(`Invalid deployment-profile value: ${raw}`);
   }

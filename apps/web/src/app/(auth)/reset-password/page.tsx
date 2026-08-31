@@ -111,7 +111,7 @@ function ResetPasswordForm() {
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Reset link required</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
                   {manualLinkOnly
-                    ? 'This private server needs a valid one-time link from its trusted host operator. Ask the operator through your usual verified channel.'
+                    ? 'This server needs a valid one-time link from its trusted host operator. Ask the operator through your usual verified channel.'
                     : 'This page needs a valid one-time password-reset link. Request a new link to continue securely.'}
                 </p>
                 <div className="flex flex-col items-center gap-4">

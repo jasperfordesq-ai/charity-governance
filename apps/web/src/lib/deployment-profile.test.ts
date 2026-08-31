@@ -1,18 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import {
+  webTenancyIsMulti,
+  webRegistrationIsOpen,
+  webEmailDelivery,
+  webBillingMode,
+} from './deployment-profile';
 
-// deployment-profile.ts caches MODE/APPLIANCE at module load — a deliberate
-// mirror of how Next.js inlines process.env.NEXT_PUBLIC_* once, at build time
-// (see the comment at the top of that file). Exercising both the
-// appliance-derived and standard-derived defaults in one test process means
-// forcing a fresh module evaluation per scenario: a plain top-level `import`
-// would reuse whichever MODE was captured by the first evaluation. Node's
-// CommonJS require cache is keyed by resolved path, so deleting that cache
-// entry before each `require` forces the module to re-read `process.env`.
-const MODULE_PATH = require.resolve('./deployment-profile');
-
+// deployment-profile.ts reads process.env fresh on every call (see the
+// comment at the top of that file) rather than caching anything at module
+// load — required so proxy.ts (a long-lived Node server process handling
+// many requests) sees the real, current environment rather than whatever was
+// present when the module first loaded. That means a plain save/restore
+// around process.env, with no module-cache tricks, is enough to exercise
+// every scenario in this one process — mirroring Task 1's API-side cases.
 type Axis = Record<string, string | undefined>;
-type DeploymentProfileModule = typeof import('./deployment-profile');
 
 const AXIS_KEYS = [
   'NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE',
@@ -22,68 +24,63 @@ const AXIS_KEYS = [
   'NEXT_PUBLIC_CHARITYPILOT_BILLING',
 ] as const;
 
-function withEnv<T>(vars: Axis, fn: (mod: DeploymentProfileModule) => T): T {
+function withEnv<T>(vars: Axis, fn: () => T): T {
   const saved: Axis = {};
   for (const key of AXIS_KEYS) saved[key] = process.env[key];
   for (const key of AXIS_KEYS) delete process.env[key];
   Object.assign(process.env, vars);
-  delete require.cache[MODULE_PATH];
   try {
-    // Forced fresh reload; see the comment above `MODULE_PATH`.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./deployment-profile') as DeploymentProfileModule;
-    return fn(mod);
+    return fn();
   } finally {
     for (const key of AXIS_KEYS) {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
-    delete require.cache[MODULE_PATH];
   }
 }
 
 test('appliance defaults: single tenancy, closed registration, manual links, no billing', () => {
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server' }, (mod) => {
-    assert.equal(mod.webTenancyIsMulti(), false);
-    assert.equal(mod.webRegistrationIsOpen(), false);
-    assert.equal(mod.webEmailDelivery(), 'manual-link');
-    assert.equal(mod.webBillingMode(), 'none');
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server' }, () => {
+    assert.equal(webTenancyIsMulti(), false);
+    assert.equal(webRegistrationIsOpen(), false);
+    assert.equal(webEmailDelivery(), 'manual-link');
+    assert.equal(webBillingMode(), 'none');
   });
 });
 
 test('standard-mode defaults: multi tenancy, open registration, provider email, stripe billing', () => {
-  withEnv({}, (mod) => {
-    assert.equal(mod.webTenancyIsMulti(), true);
-    assert.equal(mod.webRegistrationIsOpen(), true);
-    assert.equal(mod.webEmailDelivery(), 'provider');
-    assert.equal(mod.webBillingMode(), 'stripe');
+  withEnv({}, () => {
+    assert.equal(webTenancyIsMulti(), true);
+    assert.equal(webRegistrationIsOpen(), true);
+    assert.equal(webEmailDelivery(), 'provider');
+    assert.equal(webBillingMode(), 'stripe');
   });
 });
 
 test('explicit values override the mode-derived default in both directions', () => {
   withEnv(
     { NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'multi' },
-    (mod) => assert.equal(mod.webTenancyIsMulti(), true),
+    () => assert.equal(webTenancyIsMulti(), true),
   );
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'single' }, (mod) => assert.equal(mod.webTenancyIsMulti(), false));
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'single' }, () => assert.equal(webTenancyIsMulti(), false));
 
   withEnv(
     { NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: 'open' },
-    (mod) => assert.equal(mod.webRegistrationIsOpen(), true),
+    () => assert.equal(webRegistrationIsOpen(), true),
   );
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: 'closed' }, (mod) => assert.equal(mod.webRegistrationIsOpen(), false));
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: 'closed' }, () => assert.equal(webRegistrationIsOpen(), false));
 
   withEnv(
     { NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'provider' },
-    (mod) => assert.equal(mod.webEmailDelivery(), 'provider'),
+    () => assert.equal(webEmailDelivery(), 'provider'),
   );
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'manual-link' }, (mod) => assert.equal(mod.webEmailDelivery(), 'manual-link'));
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'manual-link' }, () => assert.equal(webEmailDelivery(), 'manual-link'));
 
   withEnv(
     { NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_BILLING: 'stripe' },
-    (mod) => assert.equal(mod.webBillingMode(), 'stripe'),
+    () => assert.equal(webBillingMode(), 'stripe'),
   );
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_BILLING: 'none' }, (mod) => assert.equal(mod.webBillingMode(), 'none'));
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_BILLING: 'none' }, () => assert.equal(webBillingMode(), 'none'));
 });
 
 test('the private-VM combination is representable', () => {
@@ -94,35 +91,35 @@ test('the private-VM combination is representable', () => {
       NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'manual-link',
       NEXT_PUBLIC_CHARITYPILOT_BILLING: 'none',
     },
-    (mod) => {
-      assert.equal(mod.webTenancyIsMulti(), true);
-      assert.equal(mod.webRegistrationIsOpen(), false);
-      assert.equal(mod.webEmailDelivery(), 'manual-link');
-      assert.equal(mod.webBillingMode(), 'none');
+    () => {
+      assert.equal(webTenancyIsMulti(), true);
+      assert.equal(webRegistrationIsOpen(), false);
+      assert.equal(webEmailDelivery(), 'manual-link');
+      assert.equal(webBillingMode(), 'none');
     },
   );
 });
 
 test('an invalid axis value throws loudly', () => {
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'both' }, (mod) => {
-    assert.throws(() => mod.webTenancyIsMulti(), /Invalid deployment-profile value: both/);
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'both' }, () => {
+    assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value: both/);
   });
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: 'yes' }, (mod) => {
-    assert.throws(() => mod.webRegistrationIsOpen(), /Invalid deployment-profile value: yes/);
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: 'yes' }, () => {
+    assert.throws(() => webRegistrationIsOpen(), /Invalid deployment-profile value: yes/);
   });
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'smtp' }, (mod) => {
-    assert.throws(() => mod.webEmailDelivery(), /Invalid deployment-profile value: smtp/);
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'smtp' }, () => {
+    assert.throws(() => webEmailDelivery(), /Invalid deployment-profile value: smtp/);
   });
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_BILLING: 'paypal' }, (mod) => {
-    assert.throws(() => mod.webBillingMode(), /Invalid deployment-profile value: paypal/);
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_BILLING: 'paypal' }, () => {
+    assert.throws(() => webBillingMode(), /Invalid deployment-profile value: paypal/);
   });
 });
 
 test('whitespace or empty values are rejected, not treated as unset', () => {
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: ' multi' }, (mod) => {
-    assert.throws(() => mod.webTenancyIsMulti(), /Invalid deployment-profile value/);
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: ' multi' }, () => {
+    assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value/);
   });
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: '' }, (mod) => {
-    assert.throws(() => mod.webTenancyIsMulti(), /Invalid deployment-profile value/);
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: '' }, () => {
+    assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value/);
   });
 });

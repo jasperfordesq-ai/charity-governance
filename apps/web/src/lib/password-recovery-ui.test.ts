@@ -19,7 +19,7 @@ test('forgot-password stays enumeration-neutral and does not couple public recov
   assert.doesNotMatch(page, />\{email\}<\/span>/);
   assert.match(page, /from '@\/lib\/deployment-profile'/);
   assert.match(page, /webEmailDelivery\(\) === 'manual-link'/);
-  assert.match(page, /Email recovery is disabled on this private CharityPilot server/);
+  assert.match(page, /Email recovery is disabled on this server/);
   assert.match(page, /trusted host operator/);
 });
 

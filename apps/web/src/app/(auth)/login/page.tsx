@@ -120,7 +120,7 @@ export default function LoginPage() {
 
               {manualLinkOnly ? (
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Ask the server owner for an account or password-reset link. Public registration and email recovery are disabled on this private server.
+                  Password-reset links are issued directly by the operator on this server, rather than emailed automatically. Ask them through your usual verified channel.
                 </p>
               ) : (
                 <div className="flex justify-end">

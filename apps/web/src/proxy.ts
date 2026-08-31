@@ -5,6 +5,11 @@ import {
   getServerApiBaseUrl,
   isPersonalServerProduction,
 } from "./lib/api-config";
+import {
+  webBillingMode,
+  webEmailDelivery,
+  webRegistrationIsOpen,
+} from "./lib/deployment-profile";
 import { isProtectedAppPath } from "./lib/protected-routes";
 
 const AUTH_COOKIE_NAMES = [
@@ -511,16 +516,37 @@ export async function proxy(request: NextRequest) {
   const nonce = createNonce();
   const csp = createRequestContentSecurityPolicy(request, nonce);
 
-  if (isPersonalServerProduction({
-    NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
-      process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
-  })) {
-    const destination = pathname === "/" || pathname === "/register" || pathname === "/forgot-password"
-      ? "/login"
-      : pathname === "/billing"
-        ? "/dashboard"
-        : null;
+  // Root: there is exactly one org on a personal server, so a public
+  // marketing home page never applies — this is the appliance's shape, not a
+  // capability axis, so it stays keyed on the deployment mode.
+  if (
+    pathname === "/" &&
+    isPersonalServerProduction({
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
+        process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+    })
+  ) {
+    const redirectUrl = externalRequestUrl(request);
+    redirectUrl.pathname = "/login";
+    redirectUrl.search = "";
+    return addContentSecurityPolicy(NextResponse.redirect(redirectUrl), csp);
+  }
+
+  // These three routes each gate on the capability they actually depend on,
+  // not the deployment mode: a multi-tenant install with registration closed
+  // (or billing disabled, or no provider email) must hide the same routes an
+  // appliance does, for the same reason. Only meaningful in production, where
+  // the built bundle's NEXT_PUBLIC_* axis values are fixed and real.
+  if (process.env.NODE_ENV === "production") {
+    const destination =
+      pathname === "/register" && !webRegistrationIsOpen()
+        ? "/login"
+        : pathname === "/forgot-password" && webEmailDelivery() !== "provider"
+          ? "/login"
+          : pathname === "/billing" && webBillingMode() !== "stripe"
+            ? "/dashboard"
+            : null;
     if (destination) {
       const redirectUrl = externalRequestUrl(request);
       redirectUrl.pathname = destination;

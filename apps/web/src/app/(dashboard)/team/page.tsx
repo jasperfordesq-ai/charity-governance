@@ -23,12 +23,11 @@ import { TeamSecurityAuditPanel } from './team-security-audit-panel';
 import { actionContent, apiErrorCode, replaceWithLoginAfterServerRevocation, type GovernanceAction } from './team-page-helpers';
 import { useTeamSessions } from './use-team-sessions';
 
-const MANUAL_INVITE_LINKS = webEmailDelivery() === 'manual-link'; // email axis, not deployment mode
-
 export default function TeamPage() {
   useDocumentTitle('Team');
   const router = useRouter();
   const { user } = useAuth();
+  const manualInviteLinks = webEmailDelivery() === 'manual-link'; // email axis, not deployment mode
   const [team, setTeam] = useState<TeamResponse | null>(null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole.ADMIN | UserRole.MEMBER>(UserRole.MEMBER);
@@ -179,13 +178,13 @@ export default function TeamPage() {
 
     try {
       const { data } = await api.post<{ accepted: boolean; manualInviteUrl?: string }>('/team/invites', { email, role });
-      const inviteUrl = MANUAL_INVITE_LINKS && typeof data.manualInviteUrl === 'string' ? data.manualInviteUrl : null;
+      const inviteUrl = manualInviteLinks && typeof data.manualInviteUrl === 'string' ? data.manualInviteUrl : null;
       setManualInviteUrl(inviteUrl);
       setEmail('');
       setRole(UserRole.MEMBER);
       setMessage(inviteUrl
         ? 'Invitation created. Copy the private link below and send it through a trusted channel.'
-        : MANUAL_INVITE_LINKS
+        : manualInviteLinks
           ? 'No new invitation link was issued. Revoke an existing pending invite before creating a replacement.'
           : 'Invite sent. CharityPilot will record whether the email was delivered when reminders are configured.');
       await fetchTeam();
