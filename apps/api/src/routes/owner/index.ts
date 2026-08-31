@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { isPersonalServerDeployment } from '../../utils/personal-server.js';
+import { isMultiTenant } from '../../utils/deployment-profile.js';
 import { ownerAuthRoutes } from './auth.js';
 import { ownerTenantRoutes } from './tenants.js';
 
@@ -28,9 +28,9 @@ function ownerOriginGuard(app: FastifyInstance): void {
 }
 
 export async function ownerRoutes(app: FastifyInstance): Promise<void> {
-  // Single-charity installs must not expose a platform console at all. Returning
-  // before registering anything means every owner path 404s naturally.
-  if (isPersonalServerDeployment()) return;
+  // Single-tenant deployments must not expose a platform console at all.
+  // Returning before registering anything means every owner path 404s.
+  if (!isMultiTenant()) return;
 
   ownerOriginGuard(app);
   await app.register(ownerAuthRoutes);
