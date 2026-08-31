@@ -1130,3 +1130,65 @@ test('M6: --detach acquires then releases the probe lock before spawning', async
 
   rmSync(stateDir, { recursive: true, force: true });
 });
+
+test('I2 (fix round 2): a writeState failure right after cutover reports the switched-but-unrecorded state explicitly', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i2-writestate-failure-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('blue'));
+
+  // The re-reviewer's EISDIR technique: pre-create state.json.tmp as a
+  // DIRECTORY so lib.mjs's writeState (writeFileSync then renameSync) fails
+  // synchronously the moment it tries to write the tmp file.
+  mkdirSync(join(stateDir, 'state.json.tmp'), { recursive: true });
+
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+
+  // (a) the switch/reload happened BEFORE the writeState failure.
+  const validateCall = calls.find((call) => call.command.includes('caddy') && call.command.includes('validate'));
+  const reloadCall = calls.find((call) => call.command.includes('caddy') && call.command.includes('reload'));
+  const publicSmokeCall = calls.find((call) => call.command[0] === 'wget');
+  assert.ok(validateCall, 'caddy validate must have run before the writeState failure');
+  assert.ok(reloadCall, 'caddy reload must have run before the writeState failure');
+  assert.ok(publicSmokeCall, 'the public smoke wget must have run (and passed) before the writeState failure');
+  const upstreamContent = readFileSync(join(stateDir, 'active-upstreams.caddy'), 'utf8');
+  assert.equal(upstreamContent, libModule.renderUpstreams('green'), 'the live upstream file must already be rewritten to the new (target) colour — proof the switch really happened before the writeState failure');
+
+  // (b) the message names the switch, the target colour, and the commit —
+  // actionable from the message text alone.
+  assert.match(outcome.stderr, /ALREADY been switched/);
+  assert.match(outcome.stderr, /green/);
+  assert.match(outcome.stderr, new RegExp(TARGET_COMMIT));
+  assert.match(outcome.stderr, /state\.json still names blue/);
+  assert.match(outcome.stderr, /DO NOT run another deploy/);
+  assert.match(outcome.stderr, /activeColor: 'green'/);
+  assert.match(outcome.stderr, new RegExp(`commit: '${TARGET_COMMIT}'`));
+
+  // (c) no raw, unexplained EISDIR-only crash — the message is the crafted
+  // one above, not a bare filesystem error, and the process returned a
+  // normal result rather than throwing all the way out.
+  assert.doesNotMatch(outcome.stderr, /^EISDIR/m);
+
+  // state.json must still (wrongly, but knowably) say blue — proving the
+  // hazard is real and that we are reporting it rather than silently
+  // "fixing" it by some other path.
+  const state = libModule.readState(stateDir);
+  assert.equal(state.activeColor, 'blue');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});

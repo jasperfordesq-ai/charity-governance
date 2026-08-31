@@ -1019,14 +1019,41 @@ async function executeDeploy(deps) {
   // already sending real traffic to the new one (the next deploy would
   // then target the LIVE colour and could recreate serving containers).
   // State-write is not itself a phase; it happens here, before phase 13.
-  writeState(resolvedStateDir, {
-    activeColor: target,
-    commit: targetCommit,
-    previousColor: oldColor,
-    previousCommit: oldCommit,
-    deployedAt: now().toISOString(),
-    rollbackable: !destructiveOverrideUsed,
-  });
+  //
+  // Fix round 2 (I2's last window): this write itself can fail (disk full,
+  // a stray state.json.tmp DIRECTORY left behind causing EISDIR on the
+  // rename, permissions, ...) — AFTER traffic has already been switched
+  // and verified. A bare filesystem error here would abort with a message
+  // naming neither the fact that traffic already moved nor what state.json
+  // still (wrongly) says. Guard it explicitly and say both, verbatim,
+  // so the operator can act on the message alone without re-deriving
+  // anything from logs.
+  try {
+    writeState(resolvedStateDir, {
+      activeColor: target,
+      commit: targetCommit,
+      previousColor: oldColor,
+      previousCommit: oldCommit,
+      deployedAt: now().toISOString(),
+      rollbackable: !destructiveOverrideUsed,
+    });
+  } catch (error) {
+    try {
+      writeDeployStatus(
+        resolvedStateDir,
+        'state-write-failed',
+        `traffic already switched to ${target}@${targetCommit} but writeState failed: ${redact(error)}`,
+      );
+    } catch {
+      // Best-effort; the return below carries the actionable message
+      // regardless of whether this log write itself succeeded.
+    }
+    return result(
+      1,
+      unknownAppliedWarning,
+      `Traffic has ALREADY been switched to ${target} (commit ${targetCommit}) and verified, but recording state failed (${redact(error)}). state.json still names ${oldColor ?? 'none'}. DO NOT run another deploy until state is corrected: write { activeColor: '${target}', commit: '${targetCommit}' } manually or fix the underlying filesystem issue and re-run 'status'.\n`,
+    );
+  }
 
   // Phase 13: jobs
   writeDeployStatus(resolvedStateDir, 'jobs', `starting scheduler on ${targetCommit}`);
