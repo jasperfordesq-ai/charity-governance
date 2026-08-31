@@ -118,7 +118,7 @@ comped data instead.
 Document storage keeps its existing independent axis
 (`DOCUMENT_STORAGE_DRIVER`), untouched.
 
-Exports: `isMultiTenant()`, `isRegistrationOpen()`, `emailDeliveryMode()`.
+Exports: `isMultiTenant()`, `isRegistrationOpen()`, `emailDeliveryMode()`, `billingMode()`.
 An explicit env var wins; otherwise the default derives from
 `CHARITYPILOT_DEPLOYMENT_MODE`. Invalid values fail loudly at boot.
 
@@ -136,7 +136,7 @@ validation, and the appliance web build/proxy profile.
 | `server.ts` `OWNER_JWT_SECRET` boot guard | mode | `isMultiTenant()` |
 | `password-recovery.service.ts` manual reset link | mode | *stays keyed on `isPersonalServerDeployment()` — its use selects audit labels describing the appliance operator flow (`SUPPORT`/`'Personal-server operator'`), which is lifecycle identity, not an email-delivery behaviour. The user-facing email-axis behaviour lives in the provider-email endpoint gate instead.* |
 | `team.service.ts` manual invite link | mode | `emailDeliveryMode() === 'manual-link'` |
-| `routes/health` provider-readiness checks | mode | email axis (billing readiness keyed on Stripe config presence) |
+| `routes/health` provider-readiness checks | mode | `emailDeliveryMode() === 'manual-link'` exempts email readiness; `billingMode() === 'none'` exempts billing readiness |
 | Web (`NEXT_PUBLIC_…` checks in login, forgot/reset password, dashboard nav, marketing) | one mode var | per-axis `NEXT_PUBLIC_` variants, chosen by each check's true reason (copy/links → email axis; nav/register CTAs → tenancy/registration axes) |
 
 ## Axis-aware environment validation
