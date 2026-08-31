@@ -24,7 +24,7 @@ import {
   bodyIdentifierRateLimit,
   refreshTokenRateLimit,
 } from "../../utils/identifier-rate-limit.js";
-import { isPersonalServerDeployment } from "../../utils/personal-server.js";
+import { isRegistrationOpen, emailDeliveryMode } from "../../utils/deployment-profile.js";
 
 function formatZodError(error: ZodError) {
   return {
@@ -37,11 +37,14 @@ function formatZodError(error: ZodError) {
   };
 }
 
-async function personalServerProviderAuthGuard(
+// Email-axis gate: these endpoints exist to send provider email. Under
+// manual-link delivery they are hidden entirely (404, not 403) — the
+// appliance's long-standing behaviour, now keyed on the axis that means it.
+async function providerEmailAuthGuard(
   _request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  if (!isPersonalServerDeployment()) return;
+  if (emailDeliveryMode() === "provider") return;
   reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
 }
 
@@ -55,7 +58,7 @@ export async function authRoutes(app: FastifyInstance) {
     "/register",
     { config: { rateLimit: bodyIdentifierRateLimit(["email"]) } },
     async (request, reply) => {
-      if (isPersonalServerDeployment()) {
+      if (!isRegistrationOpen()) {
         reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
         return;
       }
@@ -197,7 +200,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post(
     "/forgot-password",
     {
-      preHandler: [personalServerProviderAuthGuard],
+      preHandler: [providerEmailAuthGuard],
       config: { rateLimit: bodyIdentifierRateLimit(["email"]) },
     },
     async (request, reply) => {
@@ -222,7 +225,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post(
     "/resend-verification",
     {
-      preHandler: [personalServerProviderAuthGuard, authIdentityGuard],
+      preHandler: [providerEmailAuthGuard, authIdentityGuard],
       config: { rateLimit: authCredentialRateLimit() },
     },
     async (request, reply) => {
