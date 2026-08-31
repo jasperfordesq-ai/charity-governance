@@ -310,6 +310,35 @@ The VM's new env file sets: `CHARITYPILOT_TENANCY=multi`,
 from `JWT_SECRET`), `OWNER_CONSOLE_ORIGIN=<the Tailscale origin>`, and drops
 every Supabase/Resend/Stripe variable.
 
+## Named prerequisite: `validateProductionEnv` still pins the hosted origins
+
+This VM is `CHARITYPILOT_TENANCY=multi` with no
+`CHARITYPILOT_DEPLOYMENT_MODE=personal-server` — it is not the appliance
+validation branch, so `validateRuntimeEnv()` runs `validateProductionEnv()`
+(apps/api/src/utils/env.ts), unchanged by anything in P1. That validator
+today:
+
+- pins `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` to the exact canonical hosted
+  origins (`canonicalOriginRole: 'web' | 'api'` ⇒
+  `https://app.charitypilot.ie` / `https://api.charitypilot.ie`, checked by
+  strict origin equality), and
+- requires a public `ERROR_ALERT_WEBHOOK_URL` (`requirePublicHost: true`).
+
+The target VM can satisfy neither: its web/API origins are the Tailscale
+Serve origin, not the canonical hosted ones, and there is no requirement that
+its alert webhook receiver be publicly reachable. As written, `blue`
+container boot — and P2's Preflight phase ("axis env validation", deploy
+phase 1, which runs the same `validateRuntimeEnv()`) — fails closed on this
+VM's env file before Sequence step 4 ever brings a colour up.
+
+This is not yet solved: P2's axis-aware preflight (the "Axis-aware
+environment validation" section above only widens `validateProductionEnv`'s
+*provider* requirements, not its *origin* pinning) must additionally relax
+the origin/webhook checks keyed on the deployment's actual configured
+origins, not the hardcoded canonical hosted ones — before P3's Sequence
+below can proceed past step 4. Sequence step 1–3 do not depend on this;
+step 4 (bringing up the blue colour) does.
+
 ## Sequence
 
 1. Final appliance backup via the proven `charitypilot-backup.sh`, copied
