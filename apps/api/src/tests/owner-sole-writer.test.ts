@@ -32,7 +32,10 @@ test('only the owner tenants service writes Organisation.lifecycleStatus', async
     if (ALLOWED.has(relative)) continue;
 
     const source = await readFile(file, 'utf8');
-    const writesViaPrisma = /organisation\.update\s*\(\s*\{[\s\S]{0,400}?lifecycleStatus/.test(source);
+    // update/updateMany/upsert/create: updateMany is the most natural way to bulk-write
+    // this field, and upsert/create can set it on write too — all four must be caught,
+    // not just the single-row update() this used to check alone.
+    const writesViaPrisma = /organisation\.(update|updateMany|upsert|create)\s*\(\s*\{[\s\S]{0,400}?lifecycleStatus/.test(source);
     const writesViaSql = /UPDATE\s+"Organisation"[\s\S]{0,200}?lifecycleStatus/i.test(source);
     if (writesViaPrisma || writesViaSql) offenders.push(relative);
   }
