@@ -29,6 +29,8 @@ FROM deps AS build
 WORKDIR /app
 ARG DATABASE_URL=postgresql://charitypilot:charitypilot@localhost:5432/charitypilot
 ENV DATABASE_URL=$DATABASE_URL
+ARG CHARITYPILOT_BUILD_COMMIT
+ENV CHARITYPILOT_BUILD_COMMIT=$CHARITYPILOT_BUILD_COMMIT
 COPY tsconfig.base.json turbo.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
