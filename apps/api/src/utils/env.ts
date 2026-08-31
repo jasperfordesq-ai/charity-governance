@@ -8,8 +8,13 @@ import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-prof
 export { isConfiguredSecret } from './secrets.js';
 
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
-const CANONICAL_PRODUCTION_WEB_ORIGIN = 'https://app.charitypilot.ie';
-const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
+// Defaults only. CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN
+// (see canonicalOrigin below) let a non-charitypilot.ie deployment (e.g. the
+// private VM, reached over a Tailscale/VPN hostname) override these; with
+// both vars unset or empty, every hosted-SaaS install keeps today's exact
+// hardcoded origins byte-for-byte.
+const DEFAULT_CANONICAL_WEB_ORIGIN = 'https://app.charitypilot.ie';
+const DEFAULT_CANONICAL_API_ORIGIN = 'https://api.charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 const MIN_AUTH_RECOVERY_SECRET_LENGTH = 43;
@@ -26,6 +31,53 @@ function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
     process.env.CI === 'true' &&
     process.env.GITHUB_ACTIONS === 'true'
   );
+}
+
+// Empty string counts as unset (P1 fix-wave convention: Docker ARG/ENV pairs
+// and similar templating can only express "unset" as ''), not as an error.
+function canonicalOrigin(role: 'web' | 'api', issues: string[]): string {
+  const name = role === 'web' ? 'CHARITYPILOT_CANONICAL_WEB_ORIGIN' : 'CHARITYPILOT_CANONICAL_API_ORIGIN';
+  const fallback = role === 'web' ? DEFAULT_CANONICAL_WEB_ORIGIN : DEFAULT_CANONICAL_API_ORIGIN;
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.origin !== raw) {
+      issues.push(`${name} must be an exact https origin (no path, no trailing slash)`);
+      return fallback;
+    }
+    return url.origin;
+  } catch {
+    issues.push(`${name} must be a valid https origin`);
+    return fallback;
+  }
+}
+
+function errorAlertsMode(issues: string[]): 'webhook' | 'none' {
+  const raw = process.env.CHARITYPILOT_ERROR_ALERTS;
+  if (raw === undefined || raw === '') return 'webhook';
+  if (raw !== 'webhook' && raw !== 'none') {
+    issues.push(`CHARITYPILOT_ERROR_ALERTS must be webhook | none (got ${JSON.stringify(raw)})`);
+    return 'webhook';
+  }
+  return raw;
+}
+
+// The runtime already degrades gracefully when the webhook is unconfigured:
+// shouldSendErrorAlert (error-alerts.service.ts) returns false whenever
+// ERROR_ALERT_WEBHOOK_URL isn't a configured secret, so sendErrorAlert is
+// already a no-op in that case. No runtime/service change is needed to
+// support CHARITYPILOT_ERROR_ALERTS=none — this only relaxes BOOT-TIME
+// validation (this function, called from all four validators below) to stop
+// demanding a webhook that the deployment has deliberately opted out of. If
+// the var IS set under alerts=none anyway, its shape is still validated
+// (an operator who bothered to set it gets real feedback on typos).
+function requireErrorAlertWebhook(issues: string[]): void {
+  const mode = errorAlertsMode(issues);
+  if (mode === 'none' && !isConfiguredSecret(process.env.ERROR_ALERT_WEBHOOK_URL)) {
+    return;
+  }
+  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 }
 
 function requireConfiguredEnv(name: string, issues: string[]): string | undefined {
@@ -67,17 +119,27 @@ function validateUrlValue(
     if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
       issues.push(`${name} must be an origin-only URL in production`);
     }
-    if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
-      issues.push(`${name} must use an approved CharityPilot production hostname`);
-    }
+    // A canonical-origin override (CHARITYPILOT_CANONICAL_WEB_ORIGIN /
+    // _API_ORIGIN) is deliberately allowed to sit outside the
+    // charitypilot.ie zone (e.g. a Tailscale hostname for the private VM).
+    // When one is configured, the exact-origin match below is a strictly
+    // narrower check than "hostname is under the approved public host root"
+    // — so it fully replaces that gate for this field, rather than stacking
+    // an incompatible extra restriction on top of it. With no override (the
+    // default), canonicalOverridden is false and requireApprovedPublicHost
+    // behaves exactly as before.
+    let canonicalOverridden = false;
     if (options.canonicalOriginRole) {
-      const expected = options.canonicalOriginRole === 'web'
-        ? CANONICAL_PRODUCTION_WEB_ORIGIN
-        : CANONICAL_PRODUCTION_API_ORIGIN;
-      const label = options.canonicalOriginRole === 'api' ? 'API' : 'web';
+      const role = options.canonicalOriginRole;
+      const label = role === 'api' ? 'API' : 'web';
+      const expected = canonicalOrigin(role, issues);
+      canonicalOverridden = expected !== (role === 'web' ? DEFAULT_CANONICAL_WEB_ORIGIN : DEFAULT_CANONICAL_API_ORIGIN);
       if (url.origin !== expected) {
         issues.push(`${name} must use the canonical production ${label} origin ${expected}`);
       }
+    }
+    if (options.requireApprovedPublicHost && !canonicalOverridden && !isApprovedPublicHostname(url.hostname)) {
+      issues.push(`${name} must use an approved CharityPilot production hostname`);
     }
     if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
       issues.push(`${name} must use a public, non-local URL in production`);
@@ -503,7 +565,7 @@ export function validateDocumentStorageCleanupEnv(): void {
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
   requireProductionDocumentStorageDriver(issues);
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues(
     'DOCUMENT_STORAGE_CLEANUP_ENV_INVALID',
@@ -527,7 +589,7 @@ export function validateDeadlineRemindersEnv(): void {
   });
   requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues(
     'DEADLINE_REMINDERS_ENV_INVALID',
@@ -551,7 +613,7 @@ export function validateAuthDeliveryEnv(): void {
   });
   requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
   requireApprovedEmailSender('EMAIL_FROM', issues);
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireErrorAlertWebhook(issues);
   requireAuthRecoverySecret(issues);
   validateAuthDeliveryNumericEnv(issues);
 
@@ -645,7 +707,7 @@ export function validateProductionEnv(): void {
     requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
     requireProductionDocumentStorageDriver(issues);
   }
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);
 }
