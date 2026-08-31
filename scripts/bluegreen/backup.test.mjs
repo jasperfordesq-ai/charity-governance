@@ -22,6 +22,10 @@ function makeTempDir(prefix) {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
+function commandLine(command) {
+  return command.join(' ');
+}
+
 // -----------------------------------------------------------------------------
 // Pure functions
 // -----------------------------------------------------------------------------
@@ -150,7 +154,7 @@ test('retentionPlan accepts epoch-ms mtimes and returns an empty plan when nothi
   assert.deepEqual(result, []);
 });
 
-test('compareRowCensus matches identical censuses and flags a mismatch with expected/actual', async () => {
+test('compareRowCensus matches identical censuses and flags a mismatch with expected/actual/drift', async () => {
   const { compareRowCensus } = await loadBackupModule();
 
   const clean = compareRowCensus({ Organisation: 3, User: 5 }, { Organisation: 3, User: 5 });
@@ -158,24 +162,37 @@ test('compareRowCensus matches identical censuses and flags a mismatch with expe
 
   const dirty = compareRowCensus({ Organisation: 3, User: 5 }, { Organisation: 2, User: 5 });
   assert.equal(dirty.ok, false);
-  assert.deepEqual(dirty.mismatches, [{ table: 'Organisation', expected: 3, actual: 2 }]);
+  assert.deepEqual(dirty.mismatches, [{ table: 'Organisation', expected: 3, actual: 2, drift: -1 }]);
 
   const missingOnActualSide = compareRowCensus({ Organisation: 3 }, {});
   assert.equal(missingOnActualSide.ok, false);
-  assert.deepEqual(missingOnActualSide.mismatches, [{ table: 'Organisation', expected: 3, actual: null }]);
+  assert.deepEqual(missingOnActualSide.mismatches, [{ table: 'Organisation', expected: 3, actual: null, drift: null }]);
 
   const extraOnActualSide = compareRowCensus({}, { Organisation: 3 });
   assert.equal(extraOnActualSide.ok, false);
-  assert.deepEqual(extraOnActualSide.mismatches, [{ table: 'Organisation', expected: null, actual: 3 }]);
+  assert.deepEqual(extraOnActualSide.mismatches, [{ table: 'Organisation', expected: null, actual: 3, drift: null }]);
+});
+
+test('compareRowCensus honours a positive tolerance and still flags drift beyond it', async () => {
+  const { compareRowCensus } = await loadBackupModule();
+
+  const withinTolerance = compareRowCensus({ Organisation: 3 }, { Organisation: 4 }, 1);
+  assert.deepEqual(withinTolerance, { ok: true, mismatches: [] });
+
+  const beyondTolerance = compareRowCensus({ Organisation: 3 }, { Organisation: 5 }, 1);
+  assert.equal(beyondTolerance.ok, false);
+  assert.deepEqual(beyondTolerance.mismatches, [{ table: 'Organisation', expected: 3, actual: 5, drift: 2 }]);
+
+  // A missing-on-one-side table is never "within tolerance" — there's no
+  // magnitude to compare against, so it always mismatches regardless of
+  // the tolerance value.
+  const missingStillMismatches = compareRowCensus({ Organisation: 3 }, {}, 100);
+  assert.equal(missingStillMismatches.ok, false);
 });
 
 // -----------------------------------------------------------------------------
 // runBackup — through an injected recording runCommand (no real docker)
 // -----------------------------------------------------------------------------
-
-function commandLine(command) {
-  return command.join(' ');
-}
 
 function makeBackupRecordingRunCommand({ dumpBytes, tarBytes, censusStdout, hashListingStdout }) {
   const calls = [];
@@ -202,7 +219,7 @@ function makeBackupRecordingRunCommand({ dumpBytes, tarBytes, censusStdout, hash
   return { runCommand, calls };
 }
 
-test('runBackup pg_dumps -Fc against the compose db service and redirects into the plan dump file', async () => {
+test('runBackup takes the row census before pg_dump, uses -Fc against the compose db service, and redirects into the plan dump file', async () => {
   const { runBackup } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-backup-test-');
   try {
@@ -225,8 +242,12 @@ test('runBackup pg_dumps -Fc against the compose db service and redirects into t
 
     const { plan, manifest } = await runBackup(ctx);
 
-    const dumpCall = calls.find((c) => commandLine(c.command).includes('pg_dump'));
-    assert.ok(dumpCall, 'pg_dump command must be recorded');
+    const censusIndex = calls.findIndex((c) => commandLine(c.command).includes('query_to_xml'));
+    const dumpIndex = calls.findIndex((c) => commandLine(c.command).includes('pg_dump'));
+    assert.ok(censusIndex !== -1 && dumpIndex !== -1);
+    assert.ok(censusIndex < dumpIndex, 'the row census must be taken BEFORE pg_dump to minimise the live-serving race window');
+
+    const dumpCall = calls[dumpIndex];
     assert.ok(dumpCall.command.includes('-Fc'), 'pg_dump must use -Fc');
     assert.ok(dumpCall.command.includes('db'), 'pg_dump must target the compose db service');
     assert.ok(dumpCall.command.includes('docker'));
@@ -234,6 +255,11 @@ test('runBackup pg_dumps -Fc against the compose db service and redirects into t
     assert.ok(dumpCall.command.includes('exec'));
     assert.equal(dumpCall.options.outputFile, plan.dumpFile, 'pg_dump stdout must redirect into the plan dump file');
     assert.equal(dumpCall.options.env.BLUEGREEN_ENV_FILE, ctx.envFile);
+
+    const hashCall = calls.find((c) => commandLine(c.command).includes('sha256sum'));
+    assert.match(commandLine(hashCall.command), /find \. -type f -print0/);
+    assert.match(commandLine(hashCall.command), /xargs -0 -r sha256sum --/);
+    assert.match(commandLine(hashCall.command), /set -o pipefail/);
 
     assert.equal(readFileSync(plan.dumpFile).toString(), dumpBytes.toString());
     assert.equal(readFileSync(plan.documentsTar).toString(), tarBytes.toString());
@@ -244,8 +270,13 @@ test('runBackup pg_dumps -Fc against the compose db service and redirects into t
     assert.equal(dumpEntry.sha256, expectedDumpSha256);
     assert.equal(dumpEntry.bytes, dumpBytes.length);
 
+    const tarEntry = manifest.entries.find((e) => e.path === 'documents.tar');
+    assert.ok(tarEntry, 'manifest must record the documents tar artifact itself, not just its contents');
+    assert.equal(tarEntry.sha256, sha256Hex(tarBytes));
+    assert.equal(tarEntry.bytes, tarBytes.length);
+
     assert.deepEqual(
-      manifest.entries.filter((e) => e.path !== 'database.dump').map((e) => e.path).sort(),
+      manifest.entries.filter((e) => e.path !== 'database.dump' && e.path !== 'documents.tar').map((e) => e.path).sort(),
       ['org/doc.pdf', 'org/sub/other.pdf'],
     );
 
@@ -267,7 +298,7 @@ test('runBackup honours a different composeArgs/envFile/databaseName by changing
     const { runCommand, calls } = makeBackupRecordingRunCommand({
       dumpBytes: Buffer.from('d'),
       tarBytes: Buffer.from('t'),
-      censusStdout: '',
+      censusStdout: 'custom_table=1\n',
       hashListingStdout: '',
     });
 
@@ -292,17 +323,73 @@ test('runBackup honours a different composeArgs/envFile/databaseName by changing
   }
 });
 
+test('runBackup rejects a live census that parses to zero tables', async () => {
+  const { runBackup } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-backup-test-');
+  try {
+    const { runCommand } = makeBackupRecordingRunCommand({
+      dumpBytes: Buffer.from('d'),
+      tarBytes: Buffer.from('t'),
+      censusStdout: '',
+      hashListingStdout: '',
+    });
+
+    await assert.rejects(
+      () =>
+        runBackup({
+          runCommand,
+          stateDir,
+          envFile: '/deploy/env/production.env',
+          composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+          now: () => new Date('2026-08-31T10:00:00.000Z'),
+        }),
+      /zero tables/,
+    );
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runBackup rejects psql noise/error output rather than treating it as an empty census', async () => {
+  const { runBackup } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-backup-test-');
+  try {
+    const { runCommand } = makeBackupRecordingRunCommand({
+      dumpBytes: Buffer.from('d'),
+      tarBytes: Buffer.from('t'),
+      censusStdout: '(0 rows)\nERROR: permission denied\n',
+      hashListingStdout: '',
+    });
+
+    await assert.rejects(
+      () =>
+        runBackup({
+          runCommand,
+          stateDir,
+          envFile: '/deploy/env/production.env',
+          composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+          now: () => new Date('2026-08-31T10:00:00.000Z'),
+        }),
+      /unparseable line/,
+    );
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // runRestoreDrill — through an injected recording runCommand (no real docker)
 // -----------------------------------------------------------------------------
 
-function writeFixtureBackup(stateDir) {
+function writeFixtureBackup(stateDir, { rowCensus = { Organisation: 3, User: 5 } } = {}) {
   const dumpBytes = Buffer.from('fixture-dump-bytes-for-drill');
+  const tarBytes = Buffer.from('fixture-tar-bytes-for-drill');
   const documentEntries = [
     { path: 'org/doc.pdf', sha256: 'aaaa1111', bytes: 10 },
     { path: 'org/sub/other.pdf', sha256: 'bbbb2222', bytes: 20 },
   ];
   const dumpEntry = { path: 'database.dump', sha256: sha256Hex(dumpBytes), bytes: dumpBytes.length };
+  const tarEntry = { path: 'documents.tar', sha256: sha256Hex(tarBytes), bytes: tarBytes.length };
   const now = new Date('2026-08-31T09:00:00.000Z');
 
   const plan = {
@@ -313,16 +400,16 @@ function writeFixtureBackup(stateDir) {
   };
   mkdirSync(plan.dir, { recursive: true });
   writeFileSync(plan.dumpFile, dumpBytes);
-  writeFileSync(plan.documentsTar, Buffer.from('fixture-tar-bytes'));
+  writeFileSync(plan.documentsTar, tarBytes);
 
   const manifest = {
     format: 'charitypilot-bluegreen-backup-manifest/v1',
-    meta: { commit: 'deadbeef', activeColor: 'blue', createdAt: now.toISOString(), rowCensus: { Organisation: 3, User: 5 } },
-    entries: [dumpEntry, ...documentEntries],
+    meta: { commit: 'deadbeef', activeColor: 'blue', createdAt: now.toISOString(), rowCensus },
+    entries: [dumpEntry, tarEntry, ...documentEntries],
   };
   writeFileSync(plan.manifestFile, JSON.stringify(manifest, null, 2));
 
-  return { plan, manifest, documentEntries, dumpEntry };
+  return { plan, manifest, documentEntries, dumpEntry, tarEntry };
 }
 
 function makeDrillRecordingRunCommand({
@@ -339,11 +426,14 @@ function makeDrillRecordingRunCommand({
       throw new Error(`injected failure for: ${line}`);
     }
 
+    if (command[0] === 'docker' && command[1] === 'logs') {
+      return { stdout: 'fixture initdb/postgres log output\n' };
+    }
     if (command.includes('run') && command.includes('-d')) {
       return { stdout: '' }; // start container
     }
     if (line.includes('pg_isready')) {
-      return { stdout: '' };
+      return { stdout: '' }; // in-container readiness poll loop
     }
     if (line.includes('pg_restore')) {
       return { stdout: '' };
@@ -364,10 +454,27 @@ function makeDrillRecordingRunCommand({
 
 function assertNeverTouchesLiveDb(calls) {
   for (const { command } of calls) {
-    assert.ok(!command.includes('compose'), `drill command must never use docker compose: ${commandLine(command)}`);
-    assert.ok(!command.includes('db'), `drill command must never target the live db service: ${commandLine(command)}`);
-    assert.ok(!commandLine(command).includes('compose.bluegreen.yml'), 'drill command must never reference the bluegreen compose file');
+    const line = commandLine(command);
+    assert.ok(!command.includes('compose'), `drill command must never use docker compose: ${line}`);
+    assert.ok(!command.includes('db'), `drill command must never target the live db service: ${line}`);
+    assert.ok(!line.includes('compose.bluegreen.yml'), 'drill command must never reference the bluegreen compose file');
+    assert.ok(
+      !command.some((token) => /charitypilot-bluegreen-db/.test(token)),
+      `drill command must never reference the compose db container-name family: ${line}`,
+    );
+    assert.ok(
+      !command.some((token) => /postgresql:\/\/[^@]*@db(?::\d+)?\//.test(token)),
+      `drill command must never carry a DSN whose host is "db": ${line}`,
+    );
   }
+}
+
+function teardownCallsOf(calls) {
+  return calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
+}
+
+function logsCallsOf(calls) {
+  return calls.filter((c) => c.command[0] === 'docker' && c.command[1] === 'logs');
 }
 
 test('runRestoreDrill restores into a throwaway container, never the live db, and passes clean', async () => {
@@ -394,6 +501,7 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
     assert.deepEqual(result.manifestVerification, { ok: true, missing: [], mismatched: [], extra: [] });
 
     assertNeverTouchesLiveDb(calls);
+    assert.equal(logsCallsOf(calls).length, 0, 'docker logs must never run on the clean path');
 
     const startCall = calls.find((c) => c.command.includes('run') && c.command.includes('-d'));
     assert.ok(startCall, 'must start a scratch container');
@@ -401,7 +509,30 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
     const containerName = startCall.command[nameIndex + 1];
     assert.match(containerName, /^charitypilot-bluegreen-drill-/);
 
-    const teardownCalls = calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
+    // The data directory must be an anonymous volume (bare container path,
+    // no host source, no artificial size cap) rather than a size-capped
+    // tmpfs.
+    const dataVolumeIndex = startCall.command.indexOf('/var/lib/postgresql/data');
+    assert.ok(dataVolumeIndex > 0, 'drill container must mount an anonymous volume for the data directory');
+    assert.equal(startCall.command[dataVolumeIndex - 1], '-v');
+    assert.ok(!commandLine(startCall.command).includes('tmpfs'), 'drill container must not use a size-capped tmpfs for the data directory');
+    assert.ok(!commandLine(startCall.command).includes('size='), 'drill container must not cap the data directory size');
+
+    const readinessCall = calls.find((c) => commandLine(c.command).includes('pg_isready'));
+    assert.match(commandLine(readinessCall.command), /seq 1 120/);
+    assert.match(commandLine(readinessCall.command), /pg_isready/);
+    assert.match(commandLine(readinessCall.command), /sleep 1/);
+
+    const restoreCall = calls.find((c) => commandLine(c.command).includes('pg_restore'));
+    assert.ok(restoreCall.command.includes('--exit-on-error'), 'pg_restore must use --exit-on-error');
+    assert.ok(restoreCall.command.includes('--single-transaction'), 'pg_restore must use --single-transaction');
+
+    const hashCall = calls.find((c) => commandLine(c.command).includes('tar -xf'));
+    assert.match(commandLine(hashCall.command), /find \. -type f -print0/);
+    assert.match(commandLine(hashCall.command), /xargs -0 -r sha256sum --/);
+    assert.match(commandLine(hashCall.command), /set -o pipefail/);
+
+    const teardownCalls = teardownCallsOf(calls);
     assert.equal(teardownCalls.length, 1, 'teardown must run exactly once');
     assert.ok(teardownCalls[0].command.includes(containerName));
   } finally {
@@ -409,7 +540,7 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
   }
 });
 
-test('runRestoreDrill tears down the scratch container even when a step throws', async () => {
+test('runRestoreDrill tears down the scratch container even when a step throws, and collects docker logs first', async () => {
   const { runRestoreDrill } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
   try {
@@ -429,14 +560,21 @@ test('runRestoreDrill tears down the scratch container even when a step throws',
     await assert.rejects(() => runRestoreDrill(ctx), /injected failure for.*pg_restore/);
 
     assertNeverTouchesLiveDb(calls);
-    const teardownCalls = calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
-    assert.equal(teardownCalls.length, 1, 'teardown must still run after a mid-drill failure');
+
+    const failIndex = calls.findIndex((c) => commandLine(c.command).includes('pg_restore'));
+    const logsIndex = calls.findIndex((c) => c.command[0] === 'docker' && c.command[1] === 'logs');
+    const teardownIndex = calls.findIndex((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
+
+    assert.equal(logsCallsOf(calls).length, 1, 'docker logs must run exactly once on a failed drill');
+    assert.equal(teardownCallsOf(calls).length, 1, 'teardown must still run after a mid-drill failure');
+    assert.ok(failIndex < logsIndex, 'docker logs must be collected AFTER the failing step');
+    assert.ok(logsIndex < teardownIndex, 'docker logs must be collected BEFORE teardown');
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
-test('runRestoreDrill fails on a row census mismatch and still tears down', async () => {
+test('runRestoreDrill fails on a row census mismatch, reports drift, collects logs, and still tears down', async () => {
   const { runRestoreDrill } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
   try {
@@ -456,10 +594,49 @@ test('runRestoreDrill fails on a row census mismatch and still tears down', asyn
       plan,
     };
 
-    await assert.rejects(() => runRestoreDrill(ctx), /row census mismatch/);
+    await assert.rejects(() => runRestoreDrill(ctx), /row census mismatch.*Organisation expected=3 actual=2 drift=-1/s);
 
-    const teardownCalls = calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
-    assert.equal(teardownCalls.length, 1, 'teardown must still run after a census mismatch');
+    assert.equal(logsCallsOf(calls).length, 1);
+    assert.equal(teardownCallsOf(calls).length, 1, 'teardown must still run after a census mismatch');
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill honours BLUEGREEN_DRILL_CENSUS_TOLERANCE from ctx.env', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan, documentEntries } = writeFixtureBackup(stateDir);
+    const documentHashStdout = documentEntries.map((e) => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n') + '\n';
+
+    // Drift of +1 on Organisation: rejected at the default tolerance (0),
+    // accepted once BLUEGREEN_DRILL_CENSUS_TOLERANCE=1 is set.
+    const rowCensusStdout = 'Organisation=4\nUser=5\n';
+
+    const strict = makeDrillRecordingRunCommand({ rowCensusStdout, documentHashStdout });
+    await assert.rejects(
+      () =>
+        runRestoreDrill({
+          runCommand: strict.runCommand,
+          stateDir,
+          envFile: '/deploy/env/production.env',
+          composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+          plan,
+        }),
+      /row census mismatch/,
+    );
+
+    const tolerant = makeDrillRecordingRunCommand({ rowCensusStdout, documentHashStdout });
+    const result = await runRestoreDrill({
+      runCommand: tolerant.runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      plan,
+      env: { ...process.env, BLUEGREEN_DRILL_CENSUS_TOLERANCE: '1' },
+    });
+    assert.equal(result.ok, true);
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
@@ -486,8 +663,8 @@ test('runRestoreDrill fails when a restored document hash mismatches the manifes
 
     await assert.rejects(() => runRestoreDrill(ctx), /manifest verification failed/);
 
-    const teardownCalls = calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
-    assert.equal(teardownCalls.length, 1, 'teardown must still run after a manifest verification failure');
+    assert.equal(logsCallsOf(calls).length, 1);
+    assert.equal(teardownCallsOf(calls).length, 1, 'teardown must still run after a manifest verification failure');
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
@@ -513,8 +690,7 @@ test('runRestoreDrill fails when a document is missing from the restored tar', a
 
     await assert.rejects(() => runRestoreDrill(ctx), /manifest verification failed/);
 
-    const teardownCalls = calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
-    assert.equal(teardownCalls.length, 1);
+    assert.equal(teardownCallsOf(calls).length, 1);
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
@@ -540,8 +716,147 @@ test('runRestoreDrill fails when an extra document appears in the restored tar',
 
     await assert.rejects(() => runRestoreDrill(ctx), /manifest verification failed/);
 
-    const teardownCalls = calls.filter((c) => c.command.includes('rm') && c.command.includes('-f') && c.command.includes('-v'));
-    assert.equal(teardownCalls.length, 1);
+    assert.equal(teardownCallsOf(calls).length, 1);
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill refuses a manifest with no entries before touching docker at all', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan } = writeFixtureBackup(stateDir);
+    writeFileSync(
+      plan.manifestFile,
+      JSON.stringify({
+        format: 'charitypilot-bluegreen-backup-manifest/v1',
+        meta: { commit: 'deadbeef', activeColor: 'blue', createdAt: 'now', rowCensus: { Organisation: 3 } },
+        entries: [],
+      }),
+    );
+
+    const { runCommand, calls } = makeDrillRecordingRunCommand({});
+
+    await assert.rejects(
+      () =>
+        runRestoreDrill({
+          runCommand,
+          stateDir,
+          envFile: '/deploy/env/production.env',
+          composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+          plan,
+        }),
+      /no entries/,
+    );
+    assert.equal(calls.length, 0, 'must never invoke docker for a manifest with no entries');
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill refuses a manifest with an absent row census before touching docker at all', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan, manifest } = writeFixtureBackup(stateDir);
+    const { rowCensus: _dropped, ...restMeta } = manifest.meta;
+    writeFileSync(plan.manifestFile, JSON.stringify({ ...manifest, meta: restMeta }));
+
+    const { runCommand, calls } = makeDrillRecordingRunCommand({});
+
+    await assert.rejects(
+      () =>
+        runRestoreDrill({
+          runCommand,
+          stateDir,
+          envFile: '/deploy/env/production.env',
+          composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+          plan,
+        }),
+      /empty or absent row census/,
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill refuses a manifest with an empty ({}) row census before touching docker at all', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan, manifest } = writeFixtureBackup(stateDir);
+    writeFileSync(plan.manifestFile, JSON.stringify({ ...manifest, meta: { ...manifest.meta, rowCensus: {} } }));
+
+    const { runCommand, calls } = makeDrillRecordingRunCommand({});
+
+    await assert.rejects(
+      () =>
+        runRestoreDrill({
+          runCommand,
+          stateDir,
+          envFile: '/deploy/env/production.env',
+          composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+          plan,
+        }),
+      /empty or absent row census/,
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill rejects a restored-db census that parses to zero tables (still tears down and logs)', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan, documentEntries } = writeFixtureBackup(stateDir);
+    const documentHashStdout = documentEntries.map((e) => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n') + '\n';
+
+    const { runCommand, calls } = makeDrillRecordingRunCommand({ rowCensusStdout: '', documentHashStdout });
+
+    const ctx = {
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      plan,
+    };
+
+    await assert.rejects(() => runRestoreDrill(ctx), /zero tables/);
+
+    assert.equal(logsCallsOf(calls).length, 1);
+    assert.equal(teardownCallsOf(calls).length, 1);
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill rejects psql noise/error output from the restored db rather than treating it as empty', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan, documentEntries } = writeFixtureBackup(stateDir);
+    const documentHashStdout = documentEntries.map((e) => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n') + '\n';
+
+    const { runCommand, calls } = makeDrillRecordingRunCommand({
+      rowCensusStdout: '(0 rows)\nERROR: permission denied\n',
+      documentHashStdout,
+    });
+
+    const ctx = {
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      plan,
+    };
+
+    await assert.rejects(() => runRestoreDrill(ctx), /unparseable line/);
+
+    assert.equal(teardownCallsOf(calls).length, 1);
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
