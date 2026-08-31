@@ -292,15 +292,19 @@ test('validateProductionEnv rejects copied Supabase project-ref placeholders', (
   );
 });
 
-test('validateProductionEnv rejects local document storage in production', () => {
-  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local' });
+test('validateProductionEnv requires a local storage path when local storage is selected', () => {
+  // DOCUMENT_STORAGE_DRIVER=local is now a valid axis choice for a
+  // self-contained deployment (see deployment-profile-env-validation.test.ts);
+  // it is no longer unconditionally rejected. This still guards that picking
+  // local storage without configuring where files land is caught.
+  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local', LOCAL_FILE_STORAGE_DIR: undefined });
 
   assert.throws(
     () => validateProductionEnv(),
     (error: unknown) =>
       error instanceof AppError &&
       Array.isArray(error.details) &&
-      error.details.includes('DOCUMENT_STORAGE_DRIVER must not be local in production; use Supabase document storage'),
+      error.details.includes('LOCAL_FILE_STORAGE_DIR must be an absolute non-root filesystem path'),
   );
 });
 

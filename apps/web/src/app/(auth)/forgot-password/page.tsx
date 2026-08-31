@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { Mail } from 'lucide-react';
 import { api } from '@/lib/api';
 import { authFailureNotice, type AuthFailureNotice } from '@/lib/auth-error-message';
+import { webEmailDelivery } from '@/lib/deployment-profile';
 import { forgotPasswordSchema, firstSchemaError } from '@/lib/form-schemas';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
 import { authCardClassName } from '@/components/ui/auth-card-loading';
@@ -13,13 +14,15 @@ import { FormAlert } from '@/components/ui/form-alert';
 import type { PasswordRecoveryAcceptedResponse } from '@charitypilot/shared';
 
 export default function ForgotPasswordPage() {
-  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+  // Disabled here for the actual reason: no provider is configured to send the
+  // email, not because of the deployment mode as such.
+  const manualLinkOnly = webEmailDelivery() === 'manual-link';
   const [email, setEmail] = useState('');
   const [error, setError] = useState<AuthFailureNotice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  if (personalServer) {
+  if (manualLinkOnly) {
     return (
       <div className="w-full max-w-md min-w-0">
         <Card className={authCardClassName}>
@@ -29,7 +32,7 @@ export default function ForgotPasswordPage() {
               Ask your server owner for a reset link
             </h1>
             <p className="mb-6 leading-relaxed text-gray-700 dark:text-gray-300">
-              Email recovery is disabled on this private CharityPilot server. Contact the
+              Email recovery is disabled on this server. Contact the
               trusted host operator through your usual verified channel; they can issue a
               one-time password-reset link without asking for your current password.
             </p>

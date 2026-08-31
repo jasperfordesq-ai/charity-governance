@@ -1,21 +1,27 @@
 import type { MetadataRoute } from 'next';
 import { ALL_POSTS } from '@/lib/blog';
 import { absoluteSiteUrl } from '@/lib/site-origin';
+import { webBillingMode, webRegistrationIsOpen } from '@/lib/deployment-profile';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
   if (personalServer) return [];
 
+  // /pricing only exists to advertise when there's a Stripe billing surface;
+  // /register only makes sense to crawl when registration is actually open.
+  const billingEnabled = webBillingMode() !== 'none';
+  const registrationOpen = webRegistrationIsOpen();
+
   const staticPages = [
     { url: absoluteSiteUrl(), lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 1 },
     { url: absoluteSiteUrl('/features'), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.8 },
-    { url: absoluteSiteUrl('/pricing'), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.8 },
+    ...(billingEnabled ? [{ url: absoluteSiteUrl('/pricing'), lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.8 }] : []),
     { url: absoluteSiteUrl('/blog'), lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 0.7 },
     { url: absoluteSiteUrl('/about'), lastModified: new Date(), changeFrequency: 'yearly' as const, priority: 0.5 },
     { url: absoluteSiteUrl('/privacy'), lastModified: new Date(), changeFrequency: 'yearly' as const, priority: 0.3 },
     { url: absoluteSiteUrl('/terms'), lastModified: new Date(), changeFrequency: 'yearly' as const, priority: 0.3 },
     { url: absoluteSiteUrl('/login'), lastModified: new Date(), changeFrequency: 'yearly' as const, priority: 0.4 },
-    { url: absoluteSiteUrl('/register'), lastModified: new Date(), changeFrequency: 'yearly' as const, priority: 0.6 },
+    ...(registrationOpen ? [{ url: absoluteSiteUrl('/register'), lastModified: new Date(), changeFrequency: 'yearly' as const, priority: 0.6 }] : []),
   ];
 
   const blogPosts = ALL_POSTS.map((post) => ({

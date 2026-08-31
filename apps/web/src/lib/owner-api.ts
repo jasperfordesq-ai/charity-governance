@@ -126,9 +126,14 @@ export const ownerApi = {
     ownerName: string;
     ownerEmail: string;
     plan: 'ESSENTIALS' | 'COMPLETE';
-    trialDays: number;
+    billing: 'trial' | 'comped';
+    trialDays?: number;
   }) {
     const { data } = await client.post('/tenants', body);
-    return data as { organisationId: string; userId: string };
+    return data as {
+      organisationId: string;
+      userId: string;
+      links?: { setPassword: string; verifyEmail: string };
+    };
   },
 };

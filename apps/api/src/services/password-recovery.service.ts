@@ -5,6 +5,7 @@ import { MAX_ACCOUNT_EMAIL_LENGTH } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
 import { isPersonalServerDeployment } from '../utils/personal-server.js';
+import { emailDeliveryMode } from '../utils/deployment-profile.js';
 import {
   AUTH_RECOVERY_KEY_VERSION,
   canonicalizePasswordRecoveryAddress,
@@ -577,7 +578,14 @@ export class PasswordRecoveryService {
         select: { id: true },
       });
 
-      if (!personalServerReset) {
+      // Enqueue is delivery behaviour, not audit behaviour — key it on the
+      // email-delivery axis, not on deployment mode. A manual-link
+      // deployment has no automated channel to deliver this notice through:
+      // every enqueue there would fail 3 delivery attempts and land REJECTED
+      // as guaranteed noise. (The audit event and its SUPPORT/SYSTEM labels
+      // above stay keyed on isPersonalServerDeployment() — that's a lifecycle
+      // distinction, not a delivery one.)
+      if (emailDeliveryMode() === 'provider') {
         await tx.authSecurityEmailOutbox.create({
           data: {
             kind: 'PASSWORD_RESET_COMPLETED_NOTICE',

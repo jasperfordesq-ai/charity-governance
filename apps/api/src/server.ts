@@ -22,7 +22,7 @@ import { teamRoutes } from './routes/team/index.js';
 import { healthRoutes } from './routes/health/index.js';
 import { ownerRoutes } from './routes/owner/index.js';
 import { assertOwnerJwtSecretConfigured } from './utils/owner-jwt.js';
-import { isPersonalServerDeployment } from './utils/personal-server.js';
+import { isMultiTenant } from './utils/deployment-profile.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
 import { AuthEmailDeliveryService } from './services/auth-email-delivery.service.js';
 import { bindAuthRecoveryControlForRuntime } from './services/auth-recovery-control.js';
@@ -75,7 +75,7 @@ await app.register(prismaPlugin);
 
 // A deployment that serves the owner console must have a distinct owner secret.
 // Collapsing the two secrets would silently remove the isolation the console relies on.
-if (!isPersonalServerDeployment()) {
+if (isMultiTenant()) {
   assertOwnerJwtSecretConfigured();
 }
 

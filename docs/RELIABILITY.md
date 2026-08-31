@@ -16,15 +16,15 @@ Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 305 | 0 | 0 | 14 | 319 |
-| Web | 104 | 0 | 0 | 6 | 110 |
-| **Total** | **409** | **0** | **0** | **20** | **429** |
+| API | 318 | 0 | 0 | 14 | 332 |
+| Web | 106 | 0 | 0 | 6 | 112 |
+| **Total** | **424** | **0** | **0** | **20** | **444** |
 
-**API suite:** 930 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 980 passing, 0 failing. **Web suite:** 397 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 409/409 covered guarantees verified against a passing/linked test.
+**Linkage:** 424/424 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (319 guarantees)
+## API surface - the matrix (332 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -495,9 +495,27 @@ _10 guarantees - covered 10_
 | Graceful degradation | Invalid or missing Stripe webhook signatures are rejected with a 4xx client error (400 INVALID_STRIPE_SIGNATURE / MISSING_STRIPE_SIGNATURE) and never a 500, so a malformed/forged webhook degrades cleanly without mutating subscriptions. | covered | `invalid Stripe webhook signatures return a client error`<br/><sub>billing-reminders-hardening.test.ts</sub> |
 | Observability | The authenticated /readiness endpoint reflects real per-dependency health: it returns 503 not_ready (with the offending check flag false) when any single dependency — database, billing config, email config, storage config, or storage bucket reachability — is unhealthy, and 200 ready only when all pass. | covered | `readiness reports 503 not_ready with billingConfigured false when Stripe env is unconfigured`<br/><sub>degradation-reliability.test.ts</sub> |
 
+### deployment-profile
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Authorization boundary | In personal-server mode with no capability-axis vars set, both /register and /forgot-password stay 404, exactly as before the axis split. | covered | `APPLIANCE COMPATIBILITY: personal-server mode with no axis vars behaves exactly as today`<br/><sub>deployment-profile-auth-gates.test.ts</sub> |
+| Authorization boundary | In personal-server mode with CHARITYPILOT_TENANCY unset, the owner console stays absent (404), exactly as before the axis split. | covered | `APPLIANCE COMPATIBILITY: personal-server mode, no axis vars => console absent`<br/><sub>deployment-profile-tenancy.test.ts</sub> |
+| Authorization boundary | With no CHARITYPILOT_DEPLOYMENT_MODE and no capability-axis vars set, both /register and /forgot-password remain reachable (not 404), matching pre-axis-split default-mode behaviour. | covered | `DEFAULT COMPATIBILITY: no mode, no axis vars => both endpoints reachable`<br/><sub>deployment-profile-auth-gates.test.ts</sub> |
+| Authorization boundary | With no CHARITYPILOT_DEPLOYMENT_MODE and no CHARITYPILOT_TENANCY set, the owner console stays live behind its auth guard (401, not 404), matching pre-axis-split default-mode behaviour. | covered | `DEFAULT COMPATIBILITY: no mode, no axis vars => console present`<br/><sub>deployment-profile-tenancy.test.ts</sub> |
+| Authorization boundary | When CHARITYPILOT_REGISTRATION=closed, POST /register returns 404 before any Prisma call is reached. | covered | `registration closed => register 404s before any DB call`<br/><sub>deployment-profile-auth-gates.test.ts</sub> |
+| Authorization boundary | When CHARITYPILOT_EMAIL_DELIVERY=manual-link, POST /forgot-password returns 404; with provider email delivery the same route remains reachable. | covered | `manual-link email => forgot-password 404s; provider email => reachable`<br/><sub>deployment-profile-auth-gates.test.ts</sub> |
+| Authorization boundary | When CHARITYPILOT_TENANCY=single in default mode, the owner console routes are not registered (404). | covered | `single tenancy in DEFAULT mode disables the owner console`<br/><sub>deployment-profile-tenancy.test.ts</sub> |
+| Auth & session integrity | When CHARITYPILOT_TENANCY resolves to multi (including the unset default), production env validation requires OWNER_JWT_SECRET to be present and rejects it when equal to JWT_SECRET. | covered | `multi tenancy still requires OWNER_JWT_SECRET distinct from JWT_SECRET`<br/><sub>deployment-profile-env-validation.test.ts</sub> |
+| Input validation | Production env validation passes with local document storage, manual-link email delivery, and no billing configured, and raises no SUPABASE/RESEND/EMAIL_FROM/STRIPE issue in that configuration. | covered | `self-contained config passes: storage local, email manual-link, billing none`<br/><sub>deployment-profile-env-validation.test.ts</sub> |
+| Auth & session integrity | Under manual-link email delivery, tenant provisioning sends no mail and returns the set-password and verify-email links with their tokens in the URL fragment; the raw token in each link hashes to the value actually persisted on the corresponding recovery/verification record. | covered | `manual-link: no emails are sent and both links are returned in the fragment form`<br/><sub>owner-provisioning.test.ts</sub> |
+| State integrity / no data loss | Provisioning a tenant with billing='comped' creates its subscription with status ACTIVE and trialEndsAt null. | covered | `comped billing creates ACTIVE with null trialEndsAt`<br/><sub>owner-provisioning.test.ts</sub> |
+| Authorization boundary | Only the allowlisted appliance-lifecycle source files reference isPersonalServerDeployment(); behavioural code must key on the capability axis in utils/deployment-profile.ts instead. | covered | `only allowlisted appliance-lifecycle files reference isPersonalServerDeployment`<br/><sub>deployment-profile-structure.test.ts</sub> |
+| Authorization boundary | No file under src/routes/ or src/services/, other than the allowlisted appliance-lifecycle files, references CHARITYPILOT_DEPLOYMENT_MODE directly. | covered | `no route or service file outside the allowlist references CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>deployment-profile-structure.test.ts</sub> |
+
 ---
 
-## Web surface - the matrix (110 guarantees)
+## Web surface - the matrix (112 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -506,7 +524,7 @@ _10 guarantees - covered 10_
 
 ### platform - proxy / CSP / API client / session refresh
 
-_49 guarantees - covered 49_
+_51 guarantees - covered 51_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -540,6 +558,8 @@ _49 guarantees - covered 49_
 | Auth & session integrity | The protected-path matcher catches percent-encoded variants before Next normalisation, so an encoded deep link cannot dodge the auth gate. | covered | `matches encoded dashboard application routes before Next normalisation`<br/><sub>lib/protected-routes.test.ts</sub> |
 | Auth & session integrity | The protected-path matcher does not over-match public, auth, or similarly-named routes (no false redirects). | covered | `does not match public, auth, or similarly named routes`<br/><sub>lib/protected-routes.test.ts</sub> |
 | Auth & session integrity | A login ?next= value is honoured only for a same-origin protected app path. | covered | `allows same-origin protected app next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
+| deployment-profile | All four NEXT_PUBLIC_CHARITYPILOT_* capability-axis env vars set to the empty string derive their mode default rather than throwing, so a Docker build that omits the corresponding build args (every existing build) does not fail `next build` or throw at render. | covered | `all NEXT_PUBLIC_CHARITYPILOT_* axis vars set to the empty string derive defaults without throwing (Docker build-arg regression pin)`<br/><sub>lib/deployment-profile.test.ts</sub> |
+| deployment-profile | Only an explicit allowlist of files may reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly; every other file in apps/web/src must key behaviour on a capability axis (webTenancyIsMulti / webRegistrationIsOpen / webEmailDelivery / webBillingMode) instead of the raw deployment mode. | covered | `only allowlisted files reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>lib/deployment-profile-structure.test.ts</sub> |
 | Graceful degradation | A webpack chunk-load failure (stale deploy) is recognised as recoverable. | covered | `recognises webpack chunk load failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | A dynamic-import failure is recognised as recoverable. | covered | `recognises dynamic import failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | Unrelated runtime errors are NOT treated as chunk failures (no spurious reloads). | covered | `ignores unrelated runtime errors`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |

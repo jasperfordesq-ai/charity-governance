@@ -15,6 +15,13 @@ import { apiErrorMessage } from './errors';
 //      layer (usually at the preflight) and axios reports a request with NO
 //      response at all. This is the shape seen through an SSH tunnel to a
 //      Tailscale-hosted private server.
+//
+// Deliberately kept on MODE, not re-keyed to a capability axis: this describes
+// the appliance's single-origin topology (web and API served from ONE public
+// origin), which is what makes a page/API origin mismatch diagnostic at all.
+// A multi-tenant deployment is legitimately cross-origin (web + api.* hosts),
+// so the same comparison would prove nothing there regardless of which axis
+// values it runs with — it is a deployment-shape fact, not a capability.
 const PERSONAL_SERVER_DEPLOYMENT =
   process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
 

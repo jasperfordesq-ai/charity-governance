@@ -14,7 +14,15 @@ const NAV_LINKS = [
   { href: '/login', label: 'Sign in' },
 ];
 
-export function MobileNav({ personalServer = false }: { personalServer?: boolean }) {
+export function MobileNav({
+  pricingVisible = true,
+  registrationOpen = true,
+}: {
+  /** Is there a Stripe billing surface to point the Pricing link at? */
+  pricingVisible?: boolean;
+  /** Can a visitor actually sign up? */
+  registrationOpen?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const navId = 'marketing-mobile-navigation';
 
@@ -42,7 +50,7 @@ export function MobileNav({ personalServer = false }: { personalServer?: boolean
       {open && (
         <div className="absolute top-16 inset-x-0 bg-white border-y border-gray-200 shadow-lg z-50 dark:border-gray-800 dark:bg-gray-900">
           <nav id={navId} className="max-w-7xl mx-auto px-4 py-4 space-y-1" aria-label="Mobile navigation">
-            {NAV_LINKS.filter((link) => !personalServer || link.href !== '/pricing').map((link) => (
+            {NAV_LINKS.filter((link) => pricingVisible || link.href !== '/pricing').map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -54,11 +62,11 @@ export function MobileNav({ personalServer = false }: { personalServer?: boolean
             ))}
             <div className="pt-2 px-4">
               <Link
-                href={personalServer ? '/login' : '/register'}
+                href={registrationOpen ? '/register' : '/login'}
                 onClick={() => setOpen(false)}
                 className={primaryActionButtonClasses('block w-full rounded-md py-3 text-center font-semibold transition-colors')}
               >
-                {personalServer ? 'Open workspace' : 'Start free trial'}
+                {registrationOpen ? 'Start free trial' : 'Open workspace'}
               </Link>
             </div>
           </nav>

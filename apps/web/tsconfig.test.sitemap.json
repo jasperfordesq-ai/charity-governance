@@ -1,0 +1,28 @@
+// Isolated from tsconfig.test.json on purpose: sitemap.ts imports `MetadataRoute`
+// from 'next', and Next's ambient types/global.d.ts declares
+// `NodeJS.ProcessEnv.NODE_ENV` as readonly. TypeScript merges global ambient
+// declarations across an entire compiled program, so if sitemap.ts shared a
+// program with the rest of the suite, every other test file's
+// `process.env.NODE_ENV = ...` (client-logger.test.ts, url-security.test.ts,
+// proxy.test.ts) would fail to compile. Compiling this file as its own
+// program keeps that pollution contained to the one file that actually needs
+// Next's types.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "./.test-dist-sitemap",
+    "rootDir": "./src",
+    "sourceMap": false
+  },
+  "include": [
+    "src/app/sitemap.ts",
+    "src/app/sitemap.test.ts"
+  ]
+}

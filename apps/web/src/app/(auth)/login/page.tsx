@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { authFailureNotice, type AuthFailureNotice } from '@/lib/auth-error-message';
+import { webEmailDelivery, webRegistrationIsOpen } from '@/lib/deployment-profile';
 import { loginSchema, firstSchemaError } from '@/lib/form-schemas';
 import { safeNextPath } from '@/lib/safe-next-path';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
@@ -27,7 +28,12 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+  // Two separate reasons hid behind one flag: whether reset is self-service
+  // (email axis) and whether new orgs can sign up (registration axis). A
+  // single-tenant install with provider email configured needs the former
+  // false and the latter true, which one MODE-keyed flag could never express.
+  const manualLinkOnly = webEmailDelivery() === 'manual-link';
+  const registrationOpen = webRegistrationIsOpen();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,7 +69,7 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-950 dark:text-white">Welcome back</h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              {personalServer
+              {manualLinkOnly
                 ? 'Sign in to your charity\'s private CharityPilot server'
                 : 'Sign in to your CharityPilot account'}
             </p>
@@ -112,9 +118,9 @@ export default function LoginPage() {
                 }
               />
 
-              {personalServer ? (
+              {manualLinkOnly ? (
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Ask the server owner for an account or password-reset link. Public registration and email recovery are disabled on this private server.
+                  Password-reset links are issued directly by the operator on this server, rather than emailed automatically. Ask them through your usual verified channel.
                 </p>
               ) : (
                 <div className="flex justify-end">
@@ -135,7 +141,7 @@ export default function LoginPage() {
               </Button>
           </form>
 
-          {!personalServer ? (
+          {registrationOpen ? (
             <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-300">
               Don&apos;t have an account?{' '}
               <Link href="/register" className="text-teal-primary dark:text-teal-bright font-semibold hover:underline">

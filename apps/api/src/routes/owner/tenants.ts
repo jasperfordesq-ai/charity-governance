@@ -71,13 +71,23 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  const provisionBodySchema = z.object({
-    organisationName: z.string().trim().min(1).max(200),
-    ownerName: z.string().trim().min(1).max(200),
-    ownerEmail: z.string().email().max(254),
-    plan: z.enum(['ESSENTIALS', 'COMPLETE']),
-    trialDays: z.number().int().min(1).max(365),
-  });
+  const provisionBodySchema = z
+    .object({
+      organisationName: z.string().trim().min(1).max(200),
+      ownerName: z.string().trim().min(1).max(200),
+      ownerEmail: z.string().email().max(254),
+      plan: z.enum(['ESSENTIALS', 'COMPLETE']),
+      billing: z.enum(['trial', 'comped']).default('trial'),
+      trialDays: z.number().int().min(1).max(365).optional(),
+    })
+    .superRefine((body, ctx) => {
+      if (body.billing === 'trial' && body.trialDays === undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['trialDays'], message: 'trialDays is required for trial billing' });
+      }
+      if (body.billing === 'comped' && body.trialDays !== undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['trialDays'], message: 'trialDays is not allowed for comped billing' });
+      }
+    });
 
   app.post('/tenants', async (request, reply) => {
     try {

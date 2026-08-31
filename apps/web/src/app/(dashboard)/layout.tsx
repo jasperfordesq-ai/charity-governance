@@ -4,6 +4,7 @@ import { cloneElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
+import { webBillingMode } from '@/lib/deployment-profile';
 import Link from 'next/link';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { LegalAttribution } from '@/components/legal-attribution';
@@ -120,10 +121,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const sidebarRef = useRef<HTMLElement>(null);
   const sidebarId = 'dashboard-primary-navigation';
   const navInteractive = isDesktopNav || sidebarOpen;
+  // The footer label below is appliance branding, not a capability check — it
+  // stays keyed on the deployment mode (see deployment-profile.ts).
   const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
-  const visibleNavItems = personalServer
-    ? NAV_ITEMS.filter((item) => item.href !== '/billing')
-    : NAV_ITEMS;
+  // Billing nav item: shown only when there is a Stripe billing surface to
+  // show. The Team item is tenancy-agnostic and every other item is available
+  // regardless of axis, so billing is the only trim here.
+  const billingEnabled = webBillingMode() !== 'none';
+  const visibleNavItems = billingEnabled
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => item.href !== '/billing');
 
   const closeSidebar = useCallback((restoreFocus = false) => {
     setSidebarOpen(false);
@@ -306,6 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Sidebar footer */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
           <div className="text-xs text-gray-400 dark:text-gray-400 text-center space-y-1">
+            {/* Appliance branding — lifecycle, not a capability axis. Keep on MODE. */}
             <p>{personalServer ? 'CharityPilot private server' : 'CharityPilot v1.0'}</p>
             <LegalAttribution className="leading-5" />
             <p className="hidden lg:block">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-[10px] font-mono">?</kbd> for shortcuts</p>

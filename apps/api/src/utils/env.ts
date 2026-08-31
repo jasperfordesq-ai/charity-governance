@@ -1,7 +1,9 @@
 import { isIP } from 'node:net';
+import { posix, win32 } from 'node:path';
 import { AppError } from './errors.js';
 import { parsePort } from './port.js';
 import { isConfiguredSecret } from './secrets.js';
+import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-profile.js';
 
 export { isConfiguredSecret } from './secrets.js';
 
@@ -11,6 +13,12 @@ const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 const MIN_AUTH_RECOVERY_SECRET_LENGTH = 43;
+const LOCAL_STORAGE_DRIVER = 'local';
+// Mirrors personal-server-env.ts's CONTROL_CHARACTERS exactly, so both
+// validators demand the same shape from a local storage path. Duplicated
+// rather than imported: personal-server-env.ts imports validateProductionEnv
+// from this module, so importing back would be circular.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
 
 function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
   return (
@@ -414,6 +422,26 @@ function requireProductionDocumentStorageDriver(issues: string[]) {
   }
 }
 
+// Mirrors validatePersonalServerEnv's requireAbsoluteLocalStoragePath path
+// check (personal-server-env.ts) so a self-contained multi-tenant deployment
+// demands the same local storage path shape as the single-tenant appliance.
+// The driver-equals-local check itself isn't repeated here: this is only
+// reached from validateProductionEnv's own DOCUMENT_STORAGE_DRIVER === local
+// branch, so it's already established.
+function requireLocalStoragePath(issues: string[]): void {
+  const value = process.env.LOCAL_FILE_STORAGE_DIR;
+  if (
+    !value ||
+    value.trim() !== value ||
+    CONTROL_CHARACTERS.test(value) ||
+    (!posix.isAbsolute(value) && !win32.isAbsolute(value)) ||
+    value === posix.parse(value).root ||
+    value === win32.parse(value).root
+  ) {
+    issues.push('LOCAL_FILE_STORAGE_DIR must be an absolute non-root filesystem path');
+  }
+}
+
 function hostMatchesCookieDomain(hostname: string, cookieDomain: string): boolean {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -550,13 +578,15 @@ export function validateProductionEnv(): void {
   requireMinLength('READINESS_API_KEY', 32, issues);
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
-  requireMinLength('OWNER_JWT_SECRET', 32, issues);
-  if (
-    process.env.OWNER_JWT_SECRET &&
-    process.env.JWT_SECRET &&
-    process.env.OWNER_JWT_SECRET === process.env.JWT_SECRET
-  ) {
-    issues.push('OWNER_JWT_SECRET must be distinct from JWT_SECRET');
+  if (isMultiTenant()) {
+    requireMinLength('OWNER_JWT_SECRET', 32, issues);
+    if (
+      process.env.OWNER_JWT_SECRET &&
+      process.env.JWT_SECRET &&
+      process.env.OWNER_JWT_SECRET === process.env.JWT_SECRET
+    ) {
+      issues.push('OWNER_JWT_SECRET must be distinct from JWT_SECRET');
+    }
   }
   requireAuthRecoverySecret(issues);
   requireAccessTokenExpiry(issues);
@@ -576,37 +606,45 @@ export function validateProductionEnv(): void {
   });
   requireAuthCookieDomain(issues);
 
-  requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
-  requirePrefix('STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
-  requirePrefix('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
-  requirePrefix('STRIPE_ESSENTIALS_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
-  requirePrefix('STRIPE_COMPLETE_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
-  requirePrefix('STRIPE_COMPLETE_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
-  requirePrefix(
-    'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
-    'bpc_',
-    'Stripe billing portal configuration ID',
-    issues,
-  );
+  if (billingMode() === 'stripe') {
+    requirePrefix('STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
+    requirePrefix('STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
+    requirePrefix('STRIPE_ESSENTIALS_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+    requirePrefix('STRIPE_ESSENTIALS_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+    requirePrefix('STRIPE_COMPLETE_MONTHLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+    requirePrefix('STRIPE_COMPLETE_YEARLY_PRICE_ID', 'price_', 'Stripe price ID', issues);
+    requirePrefix(
+      'STRIPE_BILLING_PORTAL_CONFIGURATION_ID',
+      'bpc_',
+      'Stripe billing portal configuration ID',
+      issues,
+    );
 
-  const stripePriceIds = [
-    process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID,
-    process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID,
-    process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID,
-    process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID,
-  ].filter((value): value is string => Boolean(value));
-  if (new Set(stripePriceIds).size !== stripePriceIds.length) {
-    issues.push('Stripe price IDs must be distinct for each plan and billing interval');
+    const stripePriceIds = [
+      process.env.STRIPE_ESSENTIALS_MONTHLY_PRICE_ID,
+      process.env.STRIPE_ESSENTIALS_YEARLY_PRICE_ID,
+      process.env.STRIPE_COMPLETE_MONTHLY_PRICE_ID,
+      process.env.STRIPE_COMPLETE_YEARLY_PRICE_ID,
+    ].filter((value): value is string => Boolean(value));
+    if (new Set(stripePriceIds).size !== stripePriceIds.length) {
+      issues.push('Stripe price IDs must be distinct for each plan and billing interval');
+    }
   }
 
-  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
-  requireApprovedEmailSender('EMAIL_FROM', issues);
+  if (emailDeliveryMode() === 'provider') {
+    requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+    requireApprovedEmailSender('EMAIL_FROM', issues);
+  }
   validateAuthDeliveryNumericEnv(issues);
 
-  requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
-  requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
-  requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
-  requireProductionDocumentStorageDriver(issues);
+  if (process.env.DOCUMENT_STORAGE_DRIVER === LOCAL_STORAGE_DRIVER) {
+    requireLocalStoragePath(issues);
+  } else {
+    requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
+    requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
+    requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+    requireProductionDocumentStorageDriver(issues);
+  }
   requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 
   throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);

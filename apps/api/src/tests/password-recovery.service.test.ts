@@ -401,6 +401,53 @@ test('personal-server reset records operator audit evidence without an undeliver
   }
 });
 
+// The outbox enqueue is keyed on the email-delivery axis (delivery
+// behaviour), not on deployment mode: a non-appliance deployment that has
+// explicitly opted into manual-link delivery has no automated channel to
+// send this notice through, so it must not enqueue one that would only fail
+// 3 delivery attempts and land REJECTED.
+test('a non-appliance manual-link deployment does not enqueue the reset-completed notice', async () => {
+  const previousDelivery = process.env.CHARITYPILOT_EMAIL_DELIVERY;
+  process.env.CHARITYPILOT_EMAIL_DELIVERY = 'manual-link';
+  try {
+    const harness = resetHarness('M'.repeat(43));
+    const service = new PasswordRecoveryService(harness.prisma as never);
+    await service.resetPassword('M'.repeat(43), 'NewPassword1', {
+      ipAddress: '198.51.100.20',
+      requestId: 'manual-link-reset',
+    });
+
+    const audit = harness.mutations.audit as { actorKind: string };
+    // Audit labelling stays keyed on deployment mode, not email delivery:
+    // this is a non-appliance deployment, so the actor is still SYSTEM.
+    assert.equal(audit.actorKind, 'SYSTEM');
+    assert.equal(harness.mutations.outbox, undefined);
+  } finally {
+    if (previousDelivery === undefined) delete process.env.CHARITYPILOT_EMAIL_DELIVERY;
+    else process.env.CHARITYPILOT_EMAIL_DELIVERY = previousDelivery;
+  }
+});
+
+test('a non-appliance provider-email deployment enqueues the reset-completed notice', async () => {
+  const previousDelivery = process.env.CHARITYPILOT_EMAIL_DELIVERY;
+  process.env.CHARITYPILOT_EMAIL_DELIVERY = 'provider';
+  try {
+    const harness = resetHarness('R'.repeat(43));
+    const service = new PasswordRecoveryService(harness.prisma as never);
+    await service.resetPassword('R'.repeat(43), 'NewPassword1', {
+      ipAddress: '198.51.100.21',
+      requestId: 'provider-reset',
+    });
+
+    const outbox = harness.mutations.outbox as Record<string, unknown>;
+    assert.equal(outbox.kind, 'PASSWORD_RESET_COMPLETED_NOTICE');
+    assert.equal(outbox.deliveryState, 'PENDING');
+  } finally {
+    if (previousDelivery === undefined) delete process.env.CHARITYPILOT_EMAIL_DELIVERY;
+    else process.env.CHARITYPILOT_EMAIL_DELIVERY = previousDelivery;
+  }
+});
+
 test('reset-password rejects a p109-shaped User slot when no P107A ledger row exists', async () => {
   let legacyUserLookupCalled = false;
   let rawCall = 0;

@@ -59,15 +59,3 @@ export function personalServerAllowsInsecureCookies(env: DeploymentEnv = process
   const origin = getPersonalServerOrigin(env);
   return Boolean(origin && origin.protocol === 'http:' && isExactLoopbackHttpOrigin(origin.origin));
 }
-
-export function personalServerManualInviteUrl(
-  token: string,
-  env: DeploymentEnv = process.env,
-): string | null {
-  const origin = getPersonalServerOrigin(env);
-  if (!origin || !token) return null;
-
-  const inviteUrl = new URL('/accept-invite', origin);
-  inviteUrl.hash = new URLSearchParams({ token }).toString();
-  return inviteUrl.toString();
-}

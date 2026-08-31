@@ -156,15 +156,15 @@ test('a configured owner origin allowlist rejects other origins', async () => {
   }
 });
 
-test('API server wires the owner JWT boot guard ahead of route registration, gated by personal-server mode', () => {
+test('API server wires the owner JWT boot guard ahead of route registration, gated by tenancy', () => {
   const serverSource = readFileSync(join(process.cwd(), 'src', 'server.ts'), 'utf8');
 
   assert.match(
     serverSource,
-    /if\s*\(!isPersonalServerDeployment\(\)\)\s*{\s*assertOwnerJwtSecretConfigured\(\);\s*}/,
+    /if\s*\(isMultiTenant\(\)\)\s*{\s*assertOwnerJwtSecretConfigured\(\);\s*}/,
   );
 
-  const guardIndex = serverSource.search(/if\s*\(!isPersonalServerDeployment\(\)\)/);
+  const guardIndex = serverSource.search(/if\s*\(isMultiTenant\(\)\)/);
   const firstRouteRegistrationIndex = serverSource.indexOf(
     "await app.register(authRoutes, { prefix: '/api/v1/auth' });",
   );
