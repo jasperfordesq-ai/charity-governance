@@ -318,3 +318,14 @@ design eroding as the codebase grows.
   the public internet, so correctness of `requirePlatformOperator` and the
   deployment gate carries real weight. The origin allowlist exists so the surface
   can be moved behind Tailscale later without redesign.
+- **No refresh-token-family replay detection on the owner side.** Owner refresh
+  tokens are single-use and rotated on every `/auth/refresh` call
+  (`rotateOperatorSession` in `operator-session.service.ts`), but unlike the tenant
+  side (`session-tokens.ts`, which revokes the whole session family and records
+  `revocationReason: 'REFRESH_REUSE'` on reuse), the owner side does not track
+  token families at all. A stolen owner refresh token used alongside the
+  legitimate operator's session is not detected: it just races the legitimate
+  session for the next rotation, and whichever caller presents the current token
+  first wins while the other 401s. Closing this gap needs a schema change (a
+  family identifier on `PlatformOperatorSession`) and its own design; it is
+  follow-up work, not part of this change.

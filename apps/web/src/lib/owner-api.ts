@@ -15,9 +15,18 @@ const client = axios.create({
 // Single-flight refresh, exactly as lib/api.ts does for the tenant client: the owner
 // access cookie expires after 30 minutes (see apps/api/.../owner-cookies.ts), so any
 // session that outlives one page still needs this. If several requests 401 at once they
-// must share one refresh call — concurrent callers presenting the same rotated,
-// single-use refresh token would otherwise trip reuse detection and revoke the whole
-// operator session.
+// must share one refresh call — the owner refresh token is single-use, so concurrent
+// callers presenting it independently would each rotate it out from under the others:
+// only one call would succeed and every other caller would 401 and be redirected to
+// login, even though the session itself was fine.
+//
+// Unlike the tenant side (services/session-tokens.ts), rotateOperatorSession
+// (services/operator-session.service.ts) does not implement refresh-token-family
+// replay detection: a stolen owner refresh token used alongside the legitimate
+// operator's session is not currently detected or revoked, it just races the
+// legitimate session for the next rotation. Single-flighting here only prevents this
+// client from tripping over its own concurrent requests; it is not a substitute for
+// that missing detection. See the spec's Accepted Risks section.
 let refreshPromise: Promise<void> | null = null;
 
 function refreshOwnerSession(): Promise<void> {
