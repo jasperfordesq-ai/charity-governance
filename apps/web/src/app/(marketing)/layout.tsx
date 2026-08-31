@@ -4,10 +4,18 @@ import { MobileNav } from './MobileNav';
 import { BackToTop } from '@/components/back-to-top';
 import { LegalAttribution } from '@/components/legal-attribution';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
+import { webBillingMode, webRegistrationIsOpen } from '@/lib/deployment-profile';
 import { ShieldCheck } from 'lucide-react';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
+  // Appliance branding for the footer paragraph below is lifecycle copy, not a
+  // capability check — it stays keyed on the deployment mode.
   const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+  // Pricing link/nav item: there's a Stripe billing surface to point at only
+  // when billing is enabled.
+  const billingEnabled = webBillingMode() !== 'none';
+  // Register CTA: can a visitor actually sign up here?
+  const registrationOpen = webRegistrationIsOpen();
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -36,7 +44,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               >
                 Features
               </Link>
-              {!personalServer ? (
+              {billingEnabled ? (
                 <Link
                   href="/pricing"
                   className="text-gray-600 dark:text-gray-300 hover:text-teal-primary dark:hover:text-teal-bright transition-colors text-sm font-medium"
@@ -66,15 +74,15 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
 
             {/* Desktop CTA */}
             <Link
-              href={personalServer ? '/login' : '/register'}
+              href={registrationOpen ? '/register' : '/login'}
               className={primaryActionButtonClasses('hidden items-center rounded-md px-5 py-2.5 text-sm font-semibold transition-colors md:inline-flex')}
             >
-              {personalServer ? 'Open workspace' : 'Start free trial'}
+              {registrationOpen ? 'Start free trial' : 'Open workspace'}
             </Link>
 
             {/* Mobile hamburger */}
             <div className="dark:[&_button]:text-gray-300 dark:[&_button:hover]:bg-gray-800 dark:[&_button:hover]:text-gray-100 dark:[&_.absolute]:bg-gray-950 dark:[&_.absolute]:border-gray-800 dark:[&_nav>a]:text-gray-200 dark:[&_nav>a:hover]:bg-gray-900">
-              <MobileNav personalServer={personalServer} />
+              <MobileNav pricingVisible={billingEnabled} registrationOpen={registrationOpen} />
             </div>
           </div>
         </div>
@@ -114,7 +122,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                     Features
                   </Link>
                 </li>
-                {!personalServer ? (
+                {billingEnabled ? (
                   <li>
                     <Link href="/pricing" className="hover:text-white dark:hover:text-teal-bright transition-colors">
                       Pricing

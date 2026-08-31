@@ -7,10 +7,12 @@ import { apiErrorMessage } from '@/lib/errors';
 /**
  * Reissue the one-time invitation link for a pending invite.
  *
- * On the personal-server profile the link is never emailed: it is shown once
- * when the invite is created and the token is stored hashed, so an operator who
- * navigates away cannot read it back. Reissuing mints a replacement and
- * invalidates the previous link, which is why the server audits it.
+ * When email delivery is manual-link (webEmailDelivery() === 'manual-link' in
+ * @/lib/deployment-profile — team/page.tsx's MANUAL_INVITE_LINKS), the invite
+ * link is never emailed: it is shown once when the invite is created and the
+ * token is stored hashed, so an operator who navigates away cannot read it
+ * back. Reissuing mints a replacement and invalidates the previous link,
+ * which is why the server audits it.
  *
  * Failure is reported locally rather than through the page-level banner so the
  * message appears beside the button that caused it.

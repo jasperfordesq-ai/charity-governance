@@ -5,6 +5,7 @@ import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { Check, CircleAlert } from 'lucide-react';
 import { api } from '@/lib/api';
 import { authFailureNotice, type AuthFailureNotice } from '@/lib/auth-error-message';
+import { webEmailDelivery } from '@/lib/deployment-profile';
 import { resetPasswordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
 import { primaryActionButtonClasses } from '@/components/ui/action-button';
@@ -16,7 +17,9 @@ import type { PasswordResetResponse } from '@charitypilot/shared';
 
 function ResetPasswordForm() {
   const { token, isReady } = useSensitiveQueryToken();
-  const personalServer = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
+  // Copy variant is about whether the link was operator-issued or emailed,
+  // i.e. email delivery, not the deployment mode as such.
+  const manualLinkOnly = webEmailDelivery() === 'manual-link';
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -107,12 +110,12 @@ function ResetPasswordForm() {
                 <AuthStatusIcon icon={CircleAlert} tone="danger" />
                 <h1 className="text-2xl font-bold text-gray-950 dark:text-white mb-2">Reset link required</h1>
                 <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
-                  {personalServer
+                  {manualLinkOnly
                     ? 'This private server needs a valid one-time link from its trusted host operator. Ask the operator through your usual verified channel.'
                     : 'This page needs a valid one-time password-reset link. Request a new link to continue securely.'}
                 </p>
                 <div className="flex flex-col items-center gap-4">
-                  {!personalServer ? (
+                  {!manualLinkOnly ? (
                     <Link
                       href="/forgot-password"
                       className={primaryActionButtonClasses('inline-flex items-center justify-center rounded-lg px-8 py-2.5 font-semibold transition-colors')}
@@ -139,7 +142,7 @@ function ResetPasswordForm() {
                   {error && (
                     <div className="space-y-2">
                       <FormAlert title={resetLinkRejected ? 'Reset link not accepted' : error.title}>{error.message}</FormAlert>
-                      {resetLinkRejected && !personalServer ? (
+                      {resetLinkRejected && !manualLinkOnly ? (
                         <Link href="/forgot-password" className="text-sm font-semibold text-teal-primary hover:underline dark:text-teal-bright">
                           Request a new reset link
                         </Link>
