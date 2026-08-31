@@ -33,24 +33,55 @@ function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
   );
 }
 
+function canonicalOriginEnvName(role: 'web' | 'api'): string {
+  return role === 'web' ? 'CHARITYPILOT_CANONICAL_WEB_ORIGIN' : 'CHARITYPILOT_CANONICAL_API_ORIGIN';
+}
+
+function canonicalOriginDefault(role: 'web' | 'api'): string {
+  return role === 'web' ? DEFAULT_CANONICAL_WEB_ORIGIN : DEFAULT_CANONICAL_API_ORIGIN;
+}
+
+type CanonicalOriginOverride =
+  | { kind: 'unset' }
+  | { kind: 'invalid'; message: string }
+  | { kind: 'valid'; origin: string; hostname: string };
+
 // Empty string counts as unset (P1 fix-wave convention: Docker ARG/ENV pairs
 // and similar templating can only express "unset" as ''), not as an error.
-function canonicalOrigin(role: 'web' | 'api', issues: string[]): string {
-  const name = role === 'web' ? 'CHARITYPILOT_CANONICAL_WEB_ORIGIN' : 'CHARITYPILOT_CANONICAL_API_ORIGIN';
-  const fallback = role === 'web' ? DEFAULT_CANONICAL_WEB_ORIGIN : DEFAULT_CANONICAL_API_ORIGIN;
+// Pure parse, no side effects — callers decide whether/how to surface an
+// invalid override as an issue (resolveCanonicalOrigin does; the auth-cookie
+// -domain check below reads only the valid case and stays silent, since a
+// sibling requireUrl(..., { canonicalOriginRole }) call already reports the
+// same invalid override once).
+function parseCanonicalOriginOverride(role: 'web' | 'api'): CanonicalOriginOverride {
+  const name = canonicalOriginEnvName(role);
   const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
+  if (raw === undefined || raw === '') return { kind: 'unset' };
   try {
     const url = new URL(raw);
     if (url.protocol !== 'https:' || url.origin !== raw) {
-      issues.push(`${name} must be an exact https origin (no path, no trailing slash)`);
-      return fallback;
+      return { kind: 'invalid', message: `${name} must be an exact https origin (no path, no trailing slash)` };
     }
-    return url.origin;
+    return { kind: 'valid', origin: url.origin, hostname: normaliseHostname(url.hostname) };
   } catch {
-    issues.push(`${name} must be a valid https origin`);
-    return fallback;
+    return { kind: 'invalid', message: `${name} must be a valid https origin` };
   }
+}
+
+function resolveCanonicalOrigin(role: 'web' | 'api', issues: string[]): { origin: string; overridden: boolean } {
+  const parsed = parseCanonicalOriginOverride(role);
+  if (parsed.kind === 'valid') return { origin: parsed.origin, overridden: true };
+  if (parsed.kind === 'invalid') issues.push(parsed.message);
+  return { origin: canonicalOriginDefault(role), overridden: false };
+}
+
+// Silent variant for requireAuthCookieDomain: it needs the configured
+// override's hostname (when validly overridden) without re-pushing the
+// invalid-override issue a sibling requireUrl(..., { canonicalOriginRole })
+// call already reported for the same variable.
+function canonicalOriginHostnameIfValid(role: 'web' | 'api'): string | undefined {
+  const parsed = parseCanonicalOriginOverride(role);
+  return parsed.kind === 'valid' ? parsed.hostname : undefined;
 }
 
 function errorAlertsMode(issues: string[]): 'webhook' | 'none' {
@@ -107,6 +138,11 @@ function validateUrlValue(
     requirePublicHost?: boolean;
     canonicalOriginRole?: 'web' | 'api';
   },
+  // Resolved once per requireUrl call (see below), not once per
+  // comma-separated value: canonicalOrigin resolution can push an issue for
+  // a malformed override, and re-resolving per value would duplicate that
+  // issue once per entry in a multi-value FRONTEND_URL.
+  resolvedCanonical?: { origin: string; overridden: boolean },
 ) {
   try {
     const url = new URL(value);
@@ -126,19 +162,19 @@ function validateUrlValue(
     // narrower check than "hostname is under the approved public host root"
     // — so it fully replaces that gate for this field, rather than stacking
     // an incompatible extra restriction on top of it. With no override (the
-    // default), canonicalOverridden is false and requireApprovedPublicHost
-    // behaves exactly as before.
-    let canonicalOverridden = false;
-    if (options.canonicalOriginRole) {
-      const role = options.canonicalOriginRole;
-      const label = role === 'api' ? 'API' : 'web';
-      const expected = canonicalOrigin(role, issues);
-      canonicalOverridden = expected !== (role === 'web' ? DEFAULT_CANONICAL_WEB_ORIGIN : DEFAULT_CANONICAL_API_ORIGIN);
-      if (url.origin !== expected) {
-        issues.push(`${name} must use the canonical production ${label} origin ${expected}`);
+    // default), resolvedCanonical.overridden is false and
+    // requireApprovedPublicHost behaves exactly as before.
+    if (options.canonicalOriginRole && resolvedCanonical) {
+      const label = options.canonicalOriginRole === 'api' ? 'API' : 'web';
+      if (url.origin !== resolvedCanonical.origin) {
+        issues.push(`${name} must use the canonical production ${label} origin ${resolvedCanonical.origin}`);
       }
     }
-    if (options.requireApprovedPublicHost && !canonicalOverridden && !isApprovedPublicHostname(url.hostname)) {
+    if (
+      options.requireApprovedPublicHost &&
+      !resolvedCanonical?.overridden &&
+      !isApprovedPublicHostname(url.hostname)
+    ) {
       issues.push(`${name} must use an approved CharityPilot production hostname`);
     }
     if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
@@ -170,8 +206,12 @@ function requireUrl(
     return;
   }
 
+  const resolvedCanonical = options.canonicalOriginRole
+    ? resolveCanonicalOrigin(options.canonicalOriginRole, issues)
+    : undefined;
+
   for (const urlValue of values) {
-    validateUrlValue(name, urlValue, issues, options);
+    validateUrlValue(name, urlValue, issues, options, resolvedCanonical);
   }
 }
 
@@ -531,7 +571,22 @@ function requireAuthCookieDomain(issues: string[]) {
   }
 
   const normalizedCookieDomain = cookieDomain.toLowerCase().replace(/^\./, '');
-  if (!isApprovedPublicHostname(normalizedCookieDomain)) {
+  // A canonical-origin override doesn't just relax FRONTEND_URL/
+  // NEXT_PUBLIC_API_URL's own approved-host gate (see validateUrlValue) — it
+  // must also let AUTH_COOKIE_DOMAIN cover the CONFIGURED origins'
+  // hostnames, or a split-hostname override could never construct a
+  // passing AUTH_COOKIE_DOMAIN at all. With no override (the default), both
+  // canonicalOriginHostnameIfValid calls return undefined and this is
+  // exactly isApprovedPublicHostname as before.
+  const webOverrideHostname = canonicalOriginHostnameIfValid('web');
+  const apiOverrideHostname = canonicalOriginHostnameIfValid('api');
+  const coversOverride = (hostname: string | undefined) =>
+    hostname !== undefined && hostMatchesCookieDomain(hostname, normalizedCookieDomain);
+  if (
+    !isApprovedPublicHostname(normalizedCookieDomain) &&
+    !coversOverride(webOverrideHostname) &&
+    !coversOverride(apiOverrideHostname)
+  ) {
     issues.push('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname');
     return;
   }

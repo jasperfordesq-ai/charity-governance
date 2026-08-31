@@ -250,3 +250,63 @@ test('job validator (deadline reminders): alerts=none both directions', () => {
     `expected an ERROR_ALERT_WEBHOOK_URL issue under the webhook mode, got: ${JSON.stringify(issues)}`,
   );
 });
+
+// Round-1 review finding 1: requireAuthCookieDomain's approved-hostname gate
+// hardcoded the charitypilot.ie root, so a split-hostname canonical-origin
+// override (distinct web/api hostnames) could never construct a passing
+// AUTH_COOKIE_DOMAIN — the whole cookie-domain check was a dead end for
+// exactly the deployment shape this task exists to unblock.
+
+test('auth cookie domain: no override, unapproved domain still rejected with today\'s message', () => {
+  hostedEnv({ AUTH_COOKIE_DOMAIN: '.attacker.example' });
+
+  const issues = issuesOf(() => validateProductionEnv());
+  assert.ok(
+    issues.includes('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname'),
+    `expected today's approved-hostname issue, got: ${JSON.stringify(issues)}`,
+  );
+});
+
+test('auth cookie domain: split-hostname override covered by AUTH_COOKIE_DOMAIN passes', () => {
+  hostedEnv({
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://web.tail1234.ts.net',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://api.tail1234.ts.net',
+    FRONTEND_URL: 'https://web.tail1234.ts.net',
+    NEXT_PUBLIC_API_URL: 'https://api.tail1234.ts.net',
+    AUTH_COOKIE_DOMAIN: '.tail1234.ts.net',
+  });
+
+  assert.deepEqual(issuesOf(() => validateProductionEnv()), []);
+});
+
+test('auth cookie domain: split-hostname override, domain covering neither is rejected naming the variable', () => {
+  hostedEnv({
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://web.tail1234.ts.net',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://api.tail1234.ts.net',
+    FRONTEND_URL: 'https://web.tail1234.ts.net',
+    NEXT_PUBLIC_API_URL: 'https://api.tail1234.ts.net',
+    AUTH_COOKIE_DOMAIN: '.attacker.example',
+  });
+
+  const issues = issuesOf(() => validateProductionEnv());
+  assert.ok(
+    issues.includes('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname'),
+    `expected AUTH_COOKIE_DOMAIN to be named, got: ${JSON.stringify(issues)}`,
+  );
+});
+
+// Round-1 review finding 2: canonicalOrigin() was resolved once per
+// comma-separated FRONTEND_URL value, so a malformed override duplicated its
+// issue once per entry. Now resolved once per requireUrl call.
+test('an invalid canonical origin override reports its issue once, not once per comma-separated FRONTEND_URL entry', () => {
+  deadlineRemindersEnv({
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://bad',
+    FRONTEND_URL: 'https://app.charitypilot.ie,https://admin.charitypilot.ie',
+  });
+
+  const issues = issuesOf(() => validateDeadlineRemindersEnv());
+  const matches = issues.filter(
+    (issue) => issue === 'CHARITYPILOT_CANONICAL_WEB_ORIGIN must be an exact https origin (no path, no trailing slash)',
+  );
+  assert.equal(matches.length, 1, `expected exactly one occurrence, got: ${JSON.stringify(issues)}`);
+});
