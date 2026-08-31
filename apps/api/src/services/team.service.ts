@@ -6,10 +6,7 @@ import { EmailService } from './email.service.js';
 import { hashOpaqueToken, issueSessionTokensInTransaction } from './session-tokens.js';
 import { publicOrganisationSelect, type PublicOrganisationSource } from '../utils/public-dtos.js';
 import { hasSubscriptionAccess } from '../utils/subscription-access.js';
-import {
-  isPersonalServerDeployment,
-  personalServerManualInviteUrl,
-} from '../utils/personal-server.js';
+import { emailDeliveryMode, manualInviteUrl } from '../utils/deployment-profile.js';
 
 interface InviteTeamMemberData {
   email: string;
@@ -368,14 +365,14 @@ export class TeamService {
 
     const email = normalizeEmail(data.email);
     const inviteToken = crypto.randomBytes(32).toString('base64url');
-    const manualInviteUrl = isPersonalServerDeployment()
-      ? personalServerManualInviteUrl(inviteToken)
+    const manualLink = emailDeliveryMode() === 'manual-link'
+      ? manualInviteUrl(inviteToken)
       : null;
-    if (isPersonalServerDeployment() && !manualInviteUrl) {
+    if (emailDeliveryMode() === 'manual-link' && !manualLink) {
       throw new AppError(
         500,
-        'PERSONAL_SERVER_ORIGIN_INVALID',
-        'Personal server invite origin is not configured safely',
+        'MANUAL_INVITE_ORIGIN_INVALID',
+        'No safe origin is configured for manual invite links',
       );
     }
     const client = this.prisma as unknown as TeamInviteClient;
@@ -477,8 +474,8 @@ export class TeamService {
     }
 
     if (inviteEmailPayload) {
-      if (manualInviteUrl) {
-        return { message: PERSONAL_SERVER_INVITE_CREATED_MESSAGE, manualInviteUrl };
+      if (manualLink) {
+        return { message: PERSONAL_SERVER_INVITE_CREATED_MESSAGE, manualInviteUrl: manualLink };
       }
 
       void this.emailService.sendTeamInvite(
@@ -500,8 +497,8 @@ export class TeamService {
    * so an operator who loses it has no way back to it. Without this the only
    * recourse is revoking a perfectly good invite and creating a replacement.
    *
-   * Personal-server only: on hosted deployments the link goes out by email and
-   * must not be handed back over the API. Reissuing mints a fresh bearer
+   * Manual-link deployments only: when invites go out by email the link must
+   * not be handed back over the API. Reissuing mints a fresh bearer
    * credential and invalidates the previous one, so it is audited.
    */
   async reissueLink(
@@ -513,7 +510,7 @@ export class TeamService {
   ) {
     ensureCanInvite(actorRole);
 
-    if (!isPersonalServerDeployment()) {
+    if (emailDeliveryMode() !== 'manual-link') {
       throw new AppError(
         400,
         'MANUAL_INVITE_LINK_UNAVAILABLE',
@@ -522,12 +519,12 @@ export class TeamService {
     }
 
     const inviteToken = crypto.randomBytes(32).toString('base64url');
-    const manualInviteUrl = personalServerManualInviteUrl(inviteToken);
-    if (!manualInviteUrl) {
+    const manualLink = manualInviteUrl(inviteToken);
+    if (!manualLink) {
       throw new AppError(
         500,
-        'PERSONAL_SERVER_ORIGIN_INVALID',
-        'Personal server invite origin is not configured safely',
+        'MANUAL_INVITE_ORIGIN_INVALID',
+        'No safe origin is configured for manual invite links',
       );
     }
 
@@ -617,7 +614,7 @@ export class TeamService {
         },
       });
 
-      return { message: PERSONAL_SERVER_INVITE_CREATED_MESSAGE, manualInviteUrl };
+      return { message: PERSONAL_SERVER_INVITE_CREATED_MESSAGE, manualInviteUrl: manualLink };
     });
   }
 
