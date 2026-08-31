@@ -33,6 +33,38 @@ test('drop-table does not block a commented-out DROP TABLE (block comment)', () 
 });
 
 // ---------------------------------------------------------------------------
+// String-literal-aware stripping (minor 7, reviewer-verified P5/P9 classes)
+// ---------------------------------------------------------------------------
+
+test('a "--" inside a string literal does not start a comment that swallows a real DROP TABLE after it', () => {
+  // P9: naive `--`-strips-to-end-of-line would treat everything after the
+  // literal's "--" as commented out, hiding the real DROP TABLE statement
+  // that follows on the same line.
+  const sql = 'INSERT INTO "log" ("msg") VALUES (\'note -- see ticket\'); DROP TABLE "Foo";';
+  const { blocked } = lintMigrationSql('m1', sql);
+  assert.ok(blockIds(blocked).includes('drop-table'), 'the real DROP TABLE after the literal must still block');
+});
+
+test('the literal text "DROP TABLE" inside a string does not block (behaviour change: it used to)', () => {
+  // P5: before string literals were masked, this literal's contents were
+  // live text to the regexes, so `lintMigrationSql` would previously have
+  // reported a drop-table block here. Masking string-literal contents fixes
+  // that false positive — this test pins the NEW (correct) behaviour.
+  const sql = 'INSERT INTO "log" ("msg") VALUES (\'remember to DROP TABLE the old snapshot script tonight\');';
+  const { blocked } = lintMigrationSql('m1', sql);
+  assert.equal(blockIds(blocked).includes('drop-table'), false);
+});
+
+test('an escaped quote inside a string literal does not end the literal early', () => {
+  // If '' (escaped quote) were mistaken for the closing quote, the rest of
+  // the literal — including its "DROP TABLE" text — would spill out as live
+  // SQL and wrongly block.
+  const sql = `INSERT INTO "log" ("msg") VALUES ('it''s time to DROP TABLE the archive');`;
+  const { blocked } = lintMigrationSql('m1', sql);
+  assert.equal(blockIds(blocked).includes('drop-table'), false);
+});
+
+// ---------------------------------------------------------------------------
 // drop-column
 // ---------------------------------------------------------------------------
 
@@ -108,6 +140,108 @@ test('alter-column-type does not block ALTER COLUMN ... SET DEFAULT (no TYPE cha
   assert.equal(blockIds(blocked).includes('alter-column-type'), false);
 });
 
+test('alter-column-type blocks the Prisma spelling ALTER COLUMN ... SET DATA TYPE', () => {
+  const { blocked } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ALTER COLUMN "bar" SET DATA TYPE TEXT;',
+  );
+  assert.ok(blockIds(blocked).includes('alter-column-type'));
+});
+
+// --- R1-R4: multi-statement near-misses (reviewer-verified false-block class) ---
+// Every one of these pairs an unrelated ALTER TABLE ... ALTER COLUMN in one
+// statement with an allowed-vocabulary statement afterwards. Before the R1
+// fix (bounding every bridging gap to `[^;]`), the second statement's TYPE
+// token — from CREATE TYPE, ALTER TYPE, or a column literally named "type"
+// — could bridge back into the first statement's ALTER COLUMN and produce a
+// false alter-column-type block. These must all pass completely clean.
+
+test('R1: ALTER COLUMN ... SET DEFAULT followed by an unrelated CREATE TYPE ... AS ENUM passes clean', () => {
+  const { blocked } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ALTER COLUMN "bar" SET DEFAULT 5;\n' +
+      'CREATE TYPE "FooKind" AS ENUM (\'A\', \'B\');',
+  );
+  assert.equal(blockIds(blocked).includes('alter-column-type'), false);
+});
+
+test('R2: ALTER COLUMN ... SET DEFAULT followed by an unrelated ALTER TYPE ... ADD VALUE passes clean', () => {
+  const { blocked } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ALTER COLUMN "bar" SET DEFAULT 5;\n' +
+      'ALTER TYPE "FooKind" ADD VALUE IF NOT EXISTS \'C\';',
+  );
+  assert.equal(blockIds(blocked).includes('alter-column-type'), false);
+});
+
+test('R3: ALTER COLUMN ... SET DEFAULT followed by an unrelated ADD COLUMN "type" passes clean', () => {
+  const { blocked } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ALTER COLUMN "bar" SET DEFAULT 5;\n' +
+      'ALTER TABLE "Baz" ADD COLUMN "type" TEXT;',
+  );
+  assert.equal(blockIds(blocked).includes('alter-column-type'), false);
+});
+
+test('R4: two unrelated ALTER TABLE statements, only the second touching ALTER COLUMN ... TYPE, blocks only via that statement', () => {
+  const { blocked } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ADD COLUMN "type" TEXT;\n' +
+      'ALTER TABLE "Bar" ALTER COLUMN "baz" TYPE TEXT;',
+  );
+  // This one SHOULD block (the second statement is a genuine type change) —
+  // proves the fix narrows the match to the real statement rather than
+  // disabling the rule outright.
+  assert.ok(blockIds(blocked).includes('alter-column-type'));
+});
+
+// --- R5: multi-clause ALTER TABLE with the destructive clause past the old
+// unbounded window's reach (reviewer-verified false-ALLOW class) ---
+
+test('R5: drop-column still blocks when DROP COLUMN sits after 8 ADD COLUMN clauses in one ALTER TABLE', () => {
+  const sql =
+    'ALTER TABLE "Foo"\n' +
+    '    ADD COLUMN "c1" TEXT,\n' +
+    '    ADD COLUMN "c2" TEXT,\n' +
+    '    ADD COLUMN "c3" TEXT,\n' +
+    '    ADD COLUMN "c4" TEXT,\n' +
+    '    ADD COLUMN "c5" TEXT,\n' +
+    '    ADD COLUMN "c6" TEXT,\n' +
+    '    ADD COLUMN "c7" TEXT,\n' +
+    '    ADD COLUMN "c8" TEXT,\n' +
+    '    DROP COLUMN "legacy";';
+  const { blocked } = lintMigrationSql('m1', sql);
+  assert.ok(blockIds(blocked).includes('drop-column'));
+});
+
+test('R5: set-not-null still blocks when SET NOT NULL sits after 8 ADD COLUMN clauses in one ALTER TABLE', () => {
+  const sql =
+    'ALTER TABLE "Foo"\n' +
+    '    ADD COLUMN "c1" TEXT,\n' +
+    '    ADD COLUMN "c2" TEXT,\n' +
+    '    ADD COLUMN "c3" TEXT,\n' +
+    '    ADD COLUMN "c4" TEXT,\n' +
+    '    ADD COLUMN "c5" TEXT,\n' +
+    '    ADD COLUMN "c6" TEXT,\n' +
+    '    ADD COLUMN "c7" TEXT,\n' +
+    '    ADD COLUMN "c8" TEXT,\n' +
+    '    ALTER COLUMN "legacy" SET NOT NULL;';
+  const { blocked } = lintMigrationSql('m1', sql);
+  assert.ok(blockIds(blocked).includes('set-not-null'));
+});
+
+test('drop-column does not bridge into a later unrelated statement past its own semicolon', () => {
+  // A safe ALTER TABLE followed by an unrelated DROP COLUMN in a *different*
+  // table's statement must block via that second statement, not make the
+  // first ALTER TABLE look like the source of the match — proving the gap
+  // is truly statement-bounded, not just "narrower".
+  const { blocked } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ADD COLUMN "bar" TEXT;\nALTER TABLE "Baz" DROP COLUMN "qux";',
+  );
+  assert.ok(blockIds(blocked).includes('drop-column'));
+});
+
 // ---------------------------------------------------------------------------
 // set-not-null
 // ---------------------------------------------------------------------------
@@ -150,6 +284,23 @@ test('CREATE INDEX CONCURRENTLY passes with no warning', () => {
   );
   assert.deepEqual(blocked, []);
   assert.equal(blockIds(warned).includes('create-index-non-concurrent'), false);
+});
+
+// ---------------------------------------------------------------------------
+// drop-index-non-concurrent (WARN, not BLOCK) — symmetric with
+// create-index-non-concurrent
+// ---------------------------------------------------------------------------
+
+test('drop-index-non-concurrent warns on plain DROP INDEX, and does not block', () => {
+  const { blocked, warned } = lintMigrationSql('m1', 'DROP INDEX "Foo_bar_idx";');
+  assert.ok(blockIds(warned).includes('drop-index-non-concurrent'));
+  assert.deepEqual(blocked, []);
+});
+
+test('DROP INDEX CONCURRENTLY passes with no warning', () => {
+  const { blocked, warned } = lintMigrationSql('m1', 'DROP INDEX CONCURRENTLY "Foo_bar_idx";');
+  assert.deepEqual(blocked, []);
+  assert.equal(blockIds(warned).includes('drop-index-non-concurrent'), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -282,9 +433,34 @@ test('gateMigrations: aggregates findings across multiple pending migrations', (
   assert.equal(result.warned[0].migration, 'm1');
 });
 
+test('gateMigrations: a pending entry with undefined sql becomes an unreadable-migration BLOCK, never clean', () => {
+  const result = gateMigrations([{ name: 'm1', sql: undefined }]);
+  assert.equal(result.ok, false);
+  assert.equal(result.blocked.length, 1);
+  assert.equal(result.blocked[0].id, 'unreadable-migration');
+  assert.equal(result.blocked[0].migration, 'm1');
+});
+
+test('gateMigrations: a pending entry with null sql also becomes an unreadable-migration BLOCK', () => {
+  const result = gateMigrations([{ name: 'm1', sql: null }]);
+  assert.equal(result.ok, false);
+  assert.equal(result.blocked[0].id, 'unreadable-migration');
+});
+
+test('gateMigrations: unreadable-migration can still be overridden like any other block', () => {
+  const result = gateMigrations([{ name: 'm1', sql: undefined }], { allowDestructive: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.overridden.length, 1);
+  assert.equal(result.overridden[0].id, 'unreadable-migration');
+});
+
 // ---------------------------------------------------------------------------
 // pendingMigrations
 // ---------------------------------------------------------------------------
+
+// NOTE (interface change, R1 fix round): pendingMigrations now returns
+// `{ pending, unknownApplied }` instead of a bare array. See task-6-report.md
+// for the full rationale — the orchestrator (Task 8) consumes this shape.
 
 test('pendingMigrations returns dir names minus applied, sorted', () => {
   const dir = mkdtempSync(join(tmpdir(), 'migration-gate-test-'));
@@ -296,9 +472,10 @@ test('pendingMigrations returns dir names minus applied, sorted', () => {
     writeFileSync(join(dir, 'migration_lock.toml'), ''); // non-directory entry, ignored
 
     const applied = ['20250101000000_first'];
-    const pending = pendingMigrations(dir, applied);
+    const { pending, unknownApplied } = pendingMigrations(dir, applied);
 
     assert.deepEqual(pending, ['20250601000000_second', '20260101000000_third']);
+    assert.deepEqual(unknownApplied, []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -310,22 +487,58 @@ test('pendingMigrations returns everything when nothing is applied yet', () => {
     mkdirSync(join(dir, '20260101000000_b'));
     mkdirSync(join(dir, '20250101000000_a'));
 
-    const pending = pendingMigrations(dir, []);
+    const { pending, unknownApplied } = pendingMigrations(dir, []);
 
     assert.deepEqual(pending, ['20250101000000_a', '20260101000000_b']);
+    assert.deepEqual(unknownApplied, []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('pendingMigrations returns empty array when everything is applied', () => {
+test('pendingMigrations returns empty pending when everything is applied', () => {
   const dir = mkdtempSync(join(tmpdir(), 'migration-gate-test-'));
   try {
     mkdirSync(join(dir, '20260101000000_a'));
 
-    const pending = pendingMigrations(dir, ['20260101000000_a']);
+    const { pending, unknownApplied } = pendingMigrations(dir, ['20260101000000_a']);
 
     assert.deepEqual(pending, []);
+    assert.deepEqual(unknownApplied, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('pendingMigrations surfaces applied names with no matching directory as unknownApplied, not pending', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'migration-gate-test-'));
+  try {
+    mkdirSync(join(dir, '20250101000000_a'));
+
+    // The live db reports a migration applied that this checkout doesn't
+    // have on disk at all (e.g. a rollback deploy serving an older release
+    // than what most recently ran against the db). It must never appear in
+    // pending (there's no migration.sql to even read), but it must also not
+    // be silently dropped on the floor.
+    const applied = ['20250101000000_a', '20260601000000_future_migration'];
+    const { pending, unknownApplied } = pendingMigrations(dir, applied);
+
+    assert.deepEqual(pending, []);
+    assert.deepEqual(unknownApplied, ['20260601000000_future_migration']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('pendingMigrations sorts unknownApplied too', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'migration-gate-test-'));
+  try {
+    mkdirSync(join(dir, '20250101000000_a'));
+
+    const applied = ['20250101000000_a', '20270101000000_z', '20260101000000_m'];
+    const { unknownApplied } = pendingMigrations(dir, applied);
+
+    assert.deepEqual(unknownApplied, ['20260101000000_m', '20270101000000_z']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -356,24 +569,19 @@ test('the real add_platform_operator migration passes the gate with no blocks', 
 });
 
 test('the real add_owner_provisioned_recovery_source migration (ADD VALUE) passes the gate', () => {
-  const migrationDir = join(
+  // Deliberately NOT try/catch-ENOENT-and-return here: if this migration is
+  // ever renamed or removed, this test must fail loudly, not go quiet. A
+  // swallowed ENOENT is a fixture that silently stops testing anything.
+  const migrationPath = join(
     repoRoot,
     'apps',
     'api',
     'prisma',
     'migrations',
     '20260831000000_add_owner_provisioned_recovery_source',
+    'migration.sql',
   );
-  let sql;
-  try {
-    sql = readFileSync(join(migrationDir, 'migration.sql'), 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      // Migration doesn't exist in this checkout; nothing to assert.
-      return;
-    }
-    throw err;
-  }
+  const sql = readFileSync(migrationPath, 'utf8');
 
   const result = gateMigrations([
     { name: '20260831000000_add_owner_provisioned_recovery_source', sql },
@@ -382,4 +590,58 @@ test('the real add_owner_provisioned_recovery_source migration (ADD VALUE) passe
   assert.equal(result.ok, true);
   assert.deepEqual(result.blocked, []);
   assert.deepEqual(result.warned, [], 'a pure ALTER TYPE ... ADD VALUE migration should not even warn');
+});
+
+test('the real add_deadline_calendar_lifecycle migration blocks with rename-column, alter-column-type, and set-not-null', () => {
+  // The blocking-side real fixture: a migration with genuine destructive
+  // clauses (RENAME COLUMN, ALTER COLUMN ... TYPE, and multiple
+  // ALTER COLUMN ... SET NOT NULL, each many clauses into a large
+  // multi-statement file) must still be caught by the R1-fixed,
+  // statement-bounded regexes — not just stay quiet on safe files.
+  const migrationPath = join(
+    repoRoot,
+    'apps',
+    'api',
+    'prisma',
+    'migrations',
+    '20260710190000_add_deadline_calendar_lifecycle',
+    'migration.sql',
+  );
+  const sql = readFileSync(migrationPath, 'utf8');
+
+  const result = gateMigrations([
+    { name: '20260710190000_add_deadline_calendar_lifecycle', sql },
+  ]);
+
+  assert.equal(result.ok, false);
+  const ids = new Set(result.blocked.map((f) => f.id));
+  assert.ok(ids.has('rename-column'), 'expected rename-column to be blocked');
+  assert.ok(ids.has('alter-column-type'), 'expected alter-column-type to be blocked');
+  assert.ok(ids.has('set-not-null'), 'expected set-not-null to be blocked');
+});
+
+test('the real add_password_recovery_integrity migration passes with no truncate block (pinned forever)', () => {
+  // This migration's only "TRUNCATE" is a trigger event specifier —
+  // `BEFORE TRUNCATE ON "AuthRecoveryRetiredSecret"` — guarding AGAINST
+  // truncation, not performing one. Before the R1 fix, the unanchored
+  // \bTRUNCATE\b rule blocked this file; it must never regress.
+  const migrationPath = join(
+    repoRoot,
+    'apps',
+    'api',
+    'prisma',
+    'migrations',
+    '20260712013000_add_password_recovery_integrity',
+    'migration.sql',
+  );
+  const sql = readFileSync(migrationPath, 'utf8');
+  assert.match(sql, /BEFORE\s+TRUNCATE\s+ON/i, 'fixture assumption: the trigger event specifier is present');
+
+  const result = gateMigrations([
+    { name: '20260712013000_add_password_recovery_integrity', sql },
+  ]);
+
+  assert.equal(result.ok, true);
+  const ids = result.blocked.map((f) => f.id);
+  assert.equal(ids.includes('truncate'), false, 'a BEFORE TRUNCATE ON trigger guard must never trip the truncate rule');
 });
