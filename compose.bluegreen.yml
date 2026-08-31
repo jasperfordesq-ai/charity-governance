@@ -177,6 +177,10 @@ services:
       target: runner
       args:
         NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        # Widens the Dockerfile's build-time origin check (apps/web/Dockerfile:32-ish)
+        # past its hosted-only default: this one-origin topology's canonical API
+        # origin IS the front door, so the override equals BLUEGREEN_ORIGIN.
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
         CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
     restart: unless-stopped
     depends_on:
@@ -219,6 +223,10 @@ services:
       target: runner
       args:
         NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        # Widens the Dockerfile's build-time origin check (apps/web/Dockerfile:32-ish)
+        # past its hosted-only default: this one-origin topology's canonical API
+        # origin IS the front door, so the override equals BLUEGREEN_ORIGIN.
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
         CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
     restart: unless-stopped
     depends_on:

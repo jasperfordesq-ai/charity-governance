@@ -80,6 +80,26 @@ test('web build args bake the single front-door origin into NEXT_PUBLIC_API_URL'
   }
 });
 
+test('web build args also widen the Dockerfile origin check via the canonical-API-origin override', () => {
+  for (const svc of ['web-blue', 'web-green']) {
+    const section = serviceSection(svc);
+    const canonicalArg = section.match(
+      /args:[\s\S]*?NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: (\$\{BLUEGREEN_ORIGIN:\?[^}]*\})/,
+    );
+    const originArg = section.match(/args:[\s\S]*?NEXT_PUBLIC_API_URL: (\$\{BLUEGREEN_ORIGIN:\?[^}]*\})/);
+    assert.ok(
+      canonicalArg,
+      `${svc} must pass NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN as a build arg (widens the Dockerfile's hosted-only origin check)`,
+    );
+    assert.ok(originArg, `${svc} must pass NEXT_PUBLIC_API_URL as a build arg`);
+    assert.equal(
+      canonicalArg[1],
+      originArg[1],
+      `${svc}: the canonical-API-origin override must equal the same BLUEGREEN_ORIGIN used for NEXT_PUBLIC_API_URL (one-origin topology)`,
+    );
+  }
+});
+
 test('no api or web service publishes a host port; Caddy proxies by container DNS name', () => {
   for (const service of ['api-blue', 'api-green', 'web-blue', 'web-green']) {
     assert.doesNotMatch(serviceSection(service), /^\s*ports:/m, `${service} must not publish ports`);
