@@ -1,6 +1,7 @@
 import { posix, win32 } from 'node:path';
 import { AppError } from './errors.js';
 import { validateProductionEnv } from './env.js';
+import { assertDeploymentProfile } from './deployment-profile.js';
 import { parsePort } from './port.js';
 import { isConfiguredSecret } from './secrets.js';
 import {
@@ -144,6 +145,17 @@ export function validatePersonalServerEnv(): void {
 }
 
 export function validateRuntimeEnv(): void {
+  // assertDeploymentProfile() runs first, in BOTH branches: it fails at
+  // boot, naming the invalid variable, instead of letting an invalid or
+  // incoherent axis combination boot fine and blow up on first use (today
+  // CHARITYPILOT_REGISTRATION=yes boots fine and 500s the first /register;
+  // on the appliance three of the four axes are never read at boot at all).
+  // Appliance defaults (single/closed/manual-link/none) and standard
+  // defaults (multi/open/provider/stripe) are both internally coherent, so
+  // no existing install — appliance or standard, unmodified — can be broken
+  // by adding this check.
+  assertDeploymentProfile();
+
   if (isPersonalServerDeployment()) {
     validatePersonalServerEnv();
     return;

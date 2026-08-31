@@ -61,6 +61,43 @@ export function billingMode(env: DeploymentEnv = process.env): 'stripe' | 'none'
   return axis(env, 'CHARITYPILOT_BILLING', ['stripe', 'none'] as const, 'none', 'stripe');
 }
 
+// Boot-time validation for the whole profile. Two jobs:
+//
+// 1. Call every axis function so an invalid value fails HERE, at boot, with
+//    the variable named — not later, on whichever request first reads that
+//    axis. Today CHARITYPILOT_REGISTRATION=yes boots fine and only 500s the
+//    first /register; on the appliance, three of the four axes are never
+//    read at boot at all, so a typo there is invisible until something
+//    exercises the affected path.
+// 2. Refuse two combinations that are individually valid per-axis but
+//    incoherent together. Appliance defaults (single/closed/manual-link/none)
+//    and standard defaults (multi/open/provider/stripe) are both internally
+//    coherent, so adding this cannot break any existing install that hasn't
+//    hand-overridden an axis into one of these two contradictions.
+export function assertDeploymentProfile(env: DeploymentEnv = process.env): void {
+  const multiTenant = isMultiTenant(env);
+  const registrationOpen = isRegistrationOpen(env);
+  const emailDelivery = emailDeliveryMode(env);
+  billingMode(env);
+
+  if (registrationOpen && emailDelivery === 'manual-link') {
+    throw new Error(
+      'FATAL: CHARITYPILOT_REGISTRATION=open with CHARITYPILOT_EMAIL_DELIVERY=manual-link is not a coherent ' +
+        'deployment profile: self-serve signups need a verification email, but manual-link mode never sends ' +
+        'one automatically. Close registration (CHARITYPILOT_REGISTRATION=closed) or switch to provider email ' +
+        'delivery (CHARITYPILOT_EMAIL_DELIVERY=provider).',
+    );
+  }
+
+  if (!multiTenant && registrationOpen) {
+    throw new Error(
+      'FATAL: CHARITYPILOT_TENANCY=single with CHARITYPILOT_REGISTRATION=open is not a coherent deployment ' +
+        'profile: register creates a NEW organisation per signup, which contradicts single tenancy. Close ' +
+        'registration (CHARITYPILOT_REGISTRATION=closed) or switch to multi tenancy (CHARITYPILOT_TENANCY=multi).',
+    );
+  }
+}
+
 // Where manually surfaced links point. In appliance mode the validated
 // personal-server origin (exact-origin match between FRONTEND_URL and
 // NEXT_PUBLIC_API_URL, HTTPS-DNS or exact loopback-http) is the ONLY
