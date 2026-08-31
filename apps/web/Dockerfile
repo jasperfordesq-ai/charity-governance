@@ -15,8 +15,20 @@ COPY scripts/next-build-fs-retry.cjs scripts/next-build-fs-retry.cjs
 COPY scripts/clean-next-export.cjs scripts/clean-next-export.cjs
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=public-production
+# Capability axes (optional — absent args preserve mode-derived defaults at
+# runtime). Must be supplied here, not only at container-run time: these are
+# NEXT_PUBLIC_* vars, so Next.js inlines whatever value is present at build
+# into the client bundle; anything set only afterwards is invisible to it.
+ARG NEXT_PUBLIC_CHARITYPILOT_TENANCY
+ARG NEXT_PUBLIC_CHARITYPILOT_REGISTRATION
+ARG NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY
+ARG NEXT_PUBLIC_CHARITYPILOT_BILLING
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=$NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE
+ENV NEXT_PUBLIC_CHARITYPILOT_TENANCY=$NEXT_PUBLIC_CHARITYPILOT_TENANCY
+ENV NEXT_PUBLIC_CHARITYPILOT_REGISTRATION=$NEXT_PUBLIC_CHARITYPILOT_REGISTRATION
+ENV NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY=$NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY
+ENV NEXT_PUBLIC_CHARITYPILOT_BILLING=$NEXT_PUBLIC_CHARITYPILOT_BILLING
 RUN node -e "const value=process.env.NEXT_PUBLIC_API_URL;const mode=process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;const fail=(message)=>{console.error(message);process.exit(1)};let url;try{url=new URL(value)}catch{fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL')};if(url.origin!==value.replace(/\/+$/,'')||url.username||url.password)fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL');const host=url.hostname.toLowerCase().replace(/^\[|\]$/g,'');if(mode==='personal-server'){const loopback=host==='localhost'||host==='127.0.0.1'||host==='::1';if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))fail('personal-server NEXT_PUBLIC_API_URL must use https:// or exact loopback http://')}else if(url.protocol!=='https:'||host!=='api.charitypilot.ie'){fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL and must use the canonical API origin https://api.charitypilot.ie')}"
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
