@@ -141,7 +141,9 @@ async function main(): Promise<void> {
     const action = reissueArg ? 'Reissued reset token for' : 'Created platform operator';
     process.stdout.write(`${action} ${operatorId} (${emailArg}).\n`);
     process.stdout.write(`Set-password link (valid ${RESET_TOKEN_HOURS}h, shown once):\n`);
-    process.stdout.write(`${origin}/owner/set-password?token=${resetToken}\n`);
+    const url = new URL('/owner/set-password', origin);
+    url.hash = new URLSearchParams({ token: resetToken }).toString();
+    process.stdout.write(`${url.toString()}\n`);
   } finally {
     await prisma.$disconnect();
   }
