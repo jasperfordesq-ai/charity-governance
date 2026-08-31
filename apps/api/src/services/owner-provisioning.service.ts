@@ -5,6 +5,7 @@ import { AppError } from '../utils/errors.js';
 import { hashOpaqueToken } from './session-tokens.js';
 import { EmailService } from './email.service.js';
 import { SECURITY_EMAIL_TEMPLATE_VERSION } from './security-email-templates.js';
+import { emailDeliveryMode, manualAuthLinkUrl } from '../utils/deployment-profile.js';
 
 const VERIFY_TOKEN_HOURS = 48;
 // PasswordRecoveryRequest_timeline_check (migrations/20260712013000_add_password_recovery_integrity)
@@ -36,12 +37,27 @@ export async function provisionTenant(
     ownerName: string;
     ownerEmail: string;
     plan: 'ESSENTIALS' | 'COMPLETE';
-    trialDays: number;
+    // Route schema (routes/owner/tenants.ts) enforces the pairing —
+    // trialDays required iff billing === 'trial', forbidden for 'comped' —
+    // before this service is ever reached. The service still guards the
+    // 'trial' arm itself (INVALID_TRIAL_DAYS below) for any direct caller
+    // that bypasses the route, e.g. this file's own tests.
+    billing?: 'trial' | 'comped';
+    trialDays?: number;
   },
   emailService: OwnerProvisioningEmailService = new EmailService(),
-): Promise<{ organisationId: string; userId: string }> {
-  if (!Number.isInteger(input.trialDays) || input.trialDays < 1) {
-    throw new AppError(400, 'INVALID_TRIAL_DAYS', 'Trial length must be at least one day');
+): Promise<{
+  organisationId: string;
+  userId: string;
+  links?: { setPassword: string; verifyEmail: string };
+}> {
+  const billing = input.billing ?? 'trial';
+  let trialEndsAt: Date | null = null;
+  if (billing === 'trial') {
+    if (!Number.isInteger(input.trialDays) || (input.trialDays as number) < 1) {
+      throw new AppError(400, 'INVALID_TRIAL_DAYS', 'Trial length must be at least one day');
+    }
+    trialEndsAt = new Date(Date.now() + (input.trialDays as number) * 24 * 60 * 60 * 1000);
   }
 
   const email = input.ownerEmail.trim().toLowerCase();
@@ -70,9 +86,30 @@ export async function provisionTenant(
   const unusablePassword = crypto.randomBytes(32).toString('base64url');
   const passwordHash = await bcrypt.hash(unusablePassword, 10);
 
-  const trialEndsAt = new Date(Date.now() + input.trialDays * 24 * 60 * 60 * 1000);
   const verifyTokenExpiry = new Date(Date.now() + VERIFY_TOKEN_HOURS * 60 * 60 * 1000);
   const resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_HOURS * 60 * 60 * 1000);
+
+  // Under manual-link, no email provider exists on this deployment: the
+  // links themselves ARE the delivery mechanism. If no safe origin is
+  // configured, the links cannot be delivered at all, so no tenant may be
+  // created — this check runs BEFORE the transaction, fail-closed, exactly
+  // like the appliance's manual-invite links (manualLinkOrigin's contract).
+  // Tokens already exist at this point (generated above) purely so the link
+  // strings can be computed and validated up front; nothing is persisted
+  // yet.
+  let manualLinks: { setPassword: string; verifyEmail: string } | null = null;
+  if (emailDeliveryMode() === 'manual-link') {
+    const setPassword = manualAuthLinkUrl('/reset-password', resetToken);
+    const verifyEmail = manualAuthLinkUrl('/verify-email', verifyToken);
+    if (!setPassword || !verifyEmail) {
+      throw new AppError(
+        500,
+        'MANUAL_LINK_ORIGIN_INVALID',
+        'No safe origin is configured for manual links',
+      );
+    }
+    manualLinks = { setPassword, verifyEmail };
+  }
 
   const created = await prisma.$transaction(async (tx) => {
     // The duplicate check happens INSIDE the transaction, alongside the
@@ -116,7 +153,11 @@ export async function provisionTenant(
     }
 
     await tx.subscription.create({
-      data: { organisationId: organisation.id, plan: input.plan, status: 'TRIALING', trialEndsAt },
+      data: billing === 'comped'
+        // The appliance's own shape for a non-expiring subscription: ACTIVE
+        // with no trial end. subscriptionGuard honours the data as-is.
+        ? { organisationId: organisation.id, plan: input.plan, status: 'ACTIVE', trialEndsAt: null }
+        : { organisationId: organisation.id, plan: input.plan, status: 'TRIALING', trialEndsAt },
     });
 
     const now = new Date();
@@ -141,6 +182,14 @@ export async function provisionTenant(
     return { organisationId: organisation.id, userId: user.id };
   });
 
+  if (manualLinks) {
+    // No email provider exists on this deployment. The links are surfaced
+    // ONCE to the authenticated platform operator in the 201 response — the
+    // same trust decision as the appliance's manual invite links. Tokens
+    // ride the URL fragment, which never reaches server logs or proxies.
+    return { organisationId: created.organisationId, userId: created.userId, links: manualLinks };
+  }
+
   // Sent only after the transaction commits: a rolled-back provision (a
   // concurrent duplicate email, for instance) must never trigger mail for an
   // organisation that does not exist. Fire-and-forget, matching
@@ -153,5 +202,5 @@ export async function provisionTenant(
     templateVersion: SECURITY_EMAIL_TEMPLATE_VERSION,
   });
 
-  return created;
+  return { organisationId: created.organisationId, userId: created.userId };
 }

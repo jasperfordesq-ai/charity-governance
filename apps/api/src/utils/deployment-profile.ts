@@ -76,10 +76,21 @@ function manualLinkOrigin(env: DeploymentEnv): URL | null {
   }
 }
 
-export function manualInviteUrl(token: string, env: DeploymentEnv = process.env): string | null {
+// Generalised over manualInviteUrl: any one-time auth link (invite,
+// password-set, email-verify) built the same way — validated origin, token
+// riding the fragment, never the query string.
+export function manualAuthLinkUrl(
+  path: '/reset-password' | '/verify-email' | '/accept-invite',
+  token: string,
+  env: DeploymentEnv = process.env,
+): string | null {
   const origin = manualLinkOrigin(env);
   if (!origin || !token) return null;
-  const inviteUrl = new URL('/accept-invite', origin);
-  inviteUrl.hash = new URLSearchParams({ token }).toString();
-  return inviteUrl.toString();
+  const url = new URL(path, origin);
+  url.hash = new URLSearchParams({ token }).toString();
+  return url.toString();
+}
+
+export function manualInviteUrl(token: string, env: DeploymentEnv = process.env): string | null {
+  return manualAuthLinkUrl('/accept-invite', token, env);
 }
