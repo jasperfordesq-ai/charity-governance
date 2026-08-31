@@ -1,4 +1,5 @@
 import { PERSONAL_SERVER_DEPLOYMENT_MODE, getPersonalServerOrigin } from './personal-server.js';
+import { getPrimaryFrontendOrigin } from './frontend-origin.js';
 
 // The capability axes. One deployment "mode" used to imply all of these at
 // once, which made multi-tenant-with-local-providers unrepresentable. Each
@@ -116,7 +117,12 @@ function manualLinkOrigin(env: DeploymentEnv): URL | null {
   const frontend = env.FRONTEND_URL;
   if (!frontend) return null;
   try {
-    const url = new URL(frontend);
+    // FRONTEND_URL may be a comma-separated list (multiple approved web
+    // origins); getPrimaryFrontendOrigin picks the first non-empty entry.
+    // Passing the raw, possibly comma-separated value straight to `new URL`
+    // would always throw on more than one origin, silently returning null
+    // even when a perfectly valid first origin exists.
+    const url = new URL(getPrimaryFrontendOrigin(frontend));
     return url.protocol === 'https:' || url.protocol === 'http:' ? url : null;
   } catch {
     return null;

@@ -66,8 +66,12 @@ export async function provisionTenant(
   const verifyTokenHash = hashOpaqueToken(verifyToken);
 
   // A second one-time token, alongside the verify token, that lets the
-  // provisioned owner set a real password. Hash stored, raw emailed — the
-  // same shape as the verify token above. It resolves through the ordinary
+  // provisioned owner set a real password. Hash stored — only its digest is
+  // ever persisted, same as the verify token above. Where the raw token goes
+  // depends on emailDeliveryMode(): under provider it is emailed
+  // (sendPasswordRecoveryEmail below); under manual-link there is no email
+  // provider, so it is surfaced once as a URL in the response instead (see
+  // manualLinks below). It resolves through the ordinary
   // /reset-password page (services/password-recovery.service.ts's
   // resetPassword, which looks a PasswordRecoveryRequest row up by the sha256
   // of the presented token — hashOpaqueToken and that lookup's

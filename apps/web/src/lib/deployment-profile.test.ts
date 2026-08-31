@@ -100,27 +100,27 @@ test('the private-VM combination is representable', () => {
   );
 });
 
-test('an invalid axis value throws loudly', () => {
+test('an invalid axis value throws loudly and names the variable', () => {
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'both' }, () => {
-    assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value: both/);
+    assert.throws(() => webTenancyIsMulti(), /FATAL: NEXT_PUBLIC_CHARITYPILOT_TENANCY.*"both"/);
   });
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: 'yes' }, () => {
-    assert.throws(() => webRegistrationIsOpen(), /Invalid deployment-profile value: yes/);
+    assert.throws(() => webRegistrationIsOpen(), /FATAL: NEXT_PUBLIC_CHARITYPILOT_REGISTRATION.*"yes"/);
   });
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: 'smtp' }, () => {
-    assert.throws(() => webEmailDelivery(), /Invalid deployment-profile value: smtp/);
+    assert.throws(() => webEmailDelivery(), /FATAL: NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY.*"smtp"/);
   });
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_BILLING: 'paypal' }, () => {
-    assert.throws(() => webBillingMode(), /Invalid deployment-profile value: paypal/);
+    assert.throws(() => webBillingMode(), /FATAL: NEXT_PUBLIC_CHARITYPILOT_BILLING.*"paypal"/);
   });
 });
 
 test('whitespace values are rejected, not treated as unset', () => {
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: ' multi' }, () => {
-    assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value/);
+    assert.throws(() => webTenancyIsMulti(), /FATAL: NEXT_PUBLIC_CHARITYPILOT_TENANCY/);
   });
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'mutli' }, () => {
-    assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value/);
+    assert.throws(() => webTenancyIsMulti(), /FATAL: NEXT_PUBLIC_CHARITYPILOT_TENANCY/);
   });
 });
 

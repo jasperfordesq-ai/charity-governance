@@ -5388,6 +5388,32 @@
     "gapDescription": ""
   },
   {
+    "id": "web-platform-deployment-profile-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "deployment-profile",
+    "guarantee": "All four NEXT_PUBLIC_CHARITYPILOT_* capability-axis env vars set to the empty string derive their mode default rather than throwing, so a Docker build that omits the corresponding build args (every existing build) does not fail `next build` or throw at render.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/deployment-profile.test.ts",
+    "testTitle": "all NEXT_PUBLIC_CHARITYPILOT_* axis vars set to the empty string derive defaults without throwing (Docker build-arg regression pin)",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-deployment-profile-2",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "deployment-profile",
+    "guarantee": "Only an explicit allowlist of files may reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly; every other file in apps/web/src must key behaviour on a capability axis (webTenancyIsMulti / webRegistrationIsOpen / webEmailDelivery / webBillingMode) instead of the raw deployment mode.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/deployment-profile-structure.test.ts",
+    "testTitle": "only allowlisted files reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
     "id": "web-billing-authz-boundary-1",
     "surface": "web",
     "group": "web-billing",

@@ -183,6 +183,16 @@ test('manualInviteUrl falls back to FRONTEND_URL outside appliance mode', () => 
   assert.equal(url, 'https://charitypilot.tail.example.ts.net/accept-invite#token=tok123');
 });
 
+test('manualInviteUrl outside appliance mode uses the first origin of a comma-separated FRONTEND_URL', () => {
+  // FRONTEND_URL can list multiple approved web origins. A raw `new URL()`
+  // on the whole comma-separated string would throw and always return null;
+  // routing through getPrimaryFrontendOrigin picks the first entry instead.
+  const url = manualInviteUrl('tok123', {
+    FRONTEND_URL: 'https://charitypilot.tail.example.ts.net,https://second.example.ts.net',
+  });
+  assert.equal(url, 'https://charitypilot.tail.example.ts.net/accept-invite#token=tok123');
+});
+
 test('manualInviteUrl returns null with no usable origin, and never puts the token in the query string', () => {
   assert.equal(manualInviteUrl('tok123', {}), null);
   const url = manualInviteUrl('tok123', { FRONTEND_URL: 'https://x.example' });

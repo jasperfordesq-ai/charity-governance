@@ -36,6 +36,7 @@ function isAppliance(): boolean {
 }
 
 function pick<T extends string>(
+  name: string,
   raw: string | undefined,
   allowed: readonly T[],
   applianceDefault: T,
@@ -43,19 +44,21 @@ function pick<T extends string>(
 ): T {
   if (raw === undefined || raw === '') return isAppliance() ? applianceDefault : standardDefault;
   if (!(allowed as readonly string[]).includes(raw)) {
-    throw new Error(`Invalid deployment-profile value: ${raw}`);
+    throw new Error(
+      `FATAL: ${name} must be one of ${allowed.join(' | ')} (got ${JSON.stringify(raw)})`,
+    );
   }
   return raw as T;
 }
 
 export const webTenancyIsMulti = (): boolean =>
-  pick(process.env.NEXT_PUBLIC_CHARITYPILOT_TENANCY, ['multi', 'single'] as const, 'single', 'multi') === 'multi';
+  pick('NEXT_PUBLIC_CHARITYPILOT_TENANCY', process.env.NEXT_PUBLIC_CHARITYPILOT_TENANCY, ['multi', 'single'] as const, 'single', 'multi') === 'multi';
 
 export const webRegistrationIsOpen = (): boolean =>
-  pick(process.env.NEXT_PUBLIC_CHARITYPILOT_REGISTRATION, ['open', 'closed'] as const, 'closed', 'open') === 'open';
+  pick('NEXT_PUBLIC_CHARITYPILOT_REGISTRATION', process.env.NEXT_PUBLIC_CHARITYPILOT_REGISTRATION, ['open', 'closed'] as const, 'closed', 'open') === 'open';
 
 export const webEmailDelivery = (): 'provider' | 'manual-link' =>
-  pick(process.env.NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY, ['provider', 'manual-link'] as const, 'manual-link', 'provider');
+  pick('NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY', process.env.NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY, ['provider', 'manual-link'] as const, 'manual-link', 'provider');
 
 export const webBillingMode = (): 'stripe' | 'none' =>
-  pick(process.env.NEXT_PUBLIC_CHARITYPILOT_BILLING, ['stripe', 'none'] as const, 'none', 'stripe');
+  pick('NEXT_PUBLIC_CHARITYPILOT_BILLING', process.env.NEXT_PUBLIC_CHARITYPILOT_BILLING, ['stripe', 'none'] as const, 'none', 'stripe');

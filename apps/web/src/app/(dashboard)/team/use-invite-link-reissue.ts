@@ -8,7 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
  * Reissue the one-time invitation link for a pending invite.
  *
  * When email delivery is manual-link (webEmailDelivery() === 'manual-link' in
- * @/lib/deployment-profile — team/page.tsx's MANUAL_INVITE_LINKS), the invite
+ * @/lib/deployment-profile — team/page.tsx's manualInviteLinks), the invite
  * link is never emailed: it is shown once when the invite is created and the
  * token is stored hashed, so an operator who navigates away cannot read it
  * back. Reissuing mints a replacement and invalidates the previous link,

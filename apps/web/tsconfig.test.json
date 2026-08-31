@@ -26,6 +26,7 @@
     "src/lib/content-security-policy.test.ts",
     "src/lib/deployment-profile.ts",
     "src/lib/deployment-profile.test.ts",
+    "src/lib/deployment-profile-structure.test.ts",
     "src/lib/chunk-load-recovery.ts",
     "src/lib/chunk-load-recovery.test.ts",
     "src/lib/compliance-autosave-queue.ts",

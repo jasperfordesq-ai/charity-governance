@@ -17,14 +17,14 @@ Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
 | API | 318 | 0 | 0 | 14 | 332 |
-| Web | 104 | 0 | 0 | 6 | 110 |
-| **Total** | **422** | **0** | **0** | **20** | **442** |
+| Web | 106 | 0 | 0 | 6 | 112 |
+| **Total** | **424** | **0** | **0** | **20** | **444** |
 
-**API suite:** 969 passing, 0 failing. **Web suite:** 394 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 980 passing, 0 failing. **Web suite:** 397 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 422/422 covered guarantees verified against a passing/linked test.
+**Linkage:** 424/424 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -515,7 +515,7 @@ _10 guarantees - covered 10_
 
 ---
 
-## Web surface - the matrix (110 guarantees)
+## Web surface - the matrix (112 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -524,7 +524,7 @@ _10 guarantees - covered 10_
 
 ### platform - proxy / CSP / API client / session refresh
 
-_49 guarantees - covered 49_
+_51 guarantees - covered 51_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -558,6 +558,8 @@ _49 guarantees - covered 49_
 | Auth & session integrity | The protected-path matcher catches percent-encoded variants before Next normalisation, so an encoded deep link cannot dodge the auth gate. | covered | `matches encoded dashboard application routes before Next normalisation`<br/><sub>lib/protected-routes.test.ts</sub> |
 | Auth & session integrity | The protected-path matcher does not over-match public, auth, or similarly-named routes (no false redirects). | covered | `does not match public, auth, or similarly named routes`<br/><sub>lib/protected-routes.test.ts</sub> |
 | Auth & session integrity | A login ?next= value is honoured only for a same-origin protected app path. | covered | `allows same-origin protected app next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
+| deployment-profile | All four NEXT_PUBLIC_CHARITYPILOT_* capability-axis env vars set to the empty string derive their mode default rather than throwing, so a Docker build that omits the corresponding build args (every existing build) does not fail `next build` or throw at render. | covered | `all NEXT_PUBLIC_CHARITYPILOT_* axis vars set to the empty string derive defaults without throwing (Docker build-arg regression pin)`<br/><sub>lib/deployment-profile.test.ts</sub> |
+| deployment-profile | Only an explicit allowlist of files may reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly; every other file in apps/web/src must key behaviour on a capability axis (webTenancyIsMulti / webRegistrationIsOpen / webEmailDelivery / webBillingMode) instead of the raw deployment mode. | covered | `only allowlisted files reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>lib/deployment-profile-structure.test.ts</sub> |
 | Graceful degradation | A webpack chunk-load failure (stale deploy) is recognised as recoverable. | covered | `recognises webpack chunk load failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | A dynamic-import failure is recognised as recoverable. | covered | `recognises dynamic import failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
 | Graceful degradation | Unrelated runtime errors are NOT treated as chunk failures (no spurious reloads). | covered | `ignores unrelated runtime errors`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |
