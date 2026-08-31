@@ -1,5 +1,8 @@
-import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
+
+// fs is called via the default export (the mutable CJS module object) so tests can stub the rename step
+const { readFileSync, writeFileSync, mkdirSync } = fs;
 
 export const COLORS = ['blue', 'green'];
 
@@ -41,7 +44,7 @@ export function writeState(stateDir, state) {
   writeFileSync(tmpFile, JSON.stringify(state, null, 2));
 
   // Atomic rename
-  renameSync(tmpFile, stateFile);
+  fs.renameSync(tmpFile, stateFile);
 }
 
 export function renderUpstreams(color) {
@@ -142,5 +145,5 @@ export function writeDeployStatus(stateDir, phase, detail) {
   writeFileSync(tmpFile, JSON.stringify(status, null, 2));
 
   // Atomic rename
-  renameSync(tmpFile, statusFile);
+  fs.renameSync(tmpFile, statusFile);
 }

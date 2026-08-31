@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import * as fs from 'node:fs';
+import fs from 'node:fs';
 import { readFileSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -122,49 +122,62 @@ test('writeState and readState round-trip state data', () => {
   }
 });
 
-test('writeState uses atomic rename (tmp written before rename, verified by examining file write order)', () => {
+test('writeState atomicity: tmp file fully written before rename, survives rename failure', () => {
   const scratchDir = mkdtempSync(join(tmpdir(), 'bluegreen-test-'));
   try {
     const stateDir = scratchDir;
     const originalState = { activeColor: 'blue', commit: 'abc123', deployedAt: '2026-08-31T12:00:00Z' };
 
-    // Write an initial state
+    // Write initial state and capture its bytes
     writeState(stateDir, originalState);
-
-    // Verify the pattern: writeState creates a tmp file in the same directory as target
     const stateFile = join(stateDir, 'state.json');
-    const tmpFile = join(stateDir, 'state.json.tmp');
+    const beforeBytes = readFileSync(stateFile, 'utf8');
 
-    // Verify tmp and final paths are in the same directory (atomic rename guarantee)
-    assert.equal(dirname(tmpFile), dirname(stateFile));
+    // Stub renameSync to inject failure and capture call details
+    const realRename = fs.renameSync;
+    const calls = [];
 
-    // Verify successful write has no tmp remnant
     try {
-      readFileSync(tmpFile);
-      assert.fail('No temp file should exist after successful write');
-    } catch (err) {
-      assert.equal(err.code, 'ENOENT');
+      fs.renameSync = (from, to) => {
+        // Capture rename call with tmp file content at time of call
+        calls.push({
+          from,
+          to,
+          tmpContent: fs.readFileSync(from, 'utf8'),
+        });
+        throw new Error('injected rename failure');
+      };
+
+      const newState = { activeColor: 'green', commit: 'def456', deployedAt: '2026-08-31T13:00:00Z' };
+
+      // Attempt write with stubbed renameSync
+      assert.throws(() => writeState(stateDir, newState), /injected rename failure/);
+
+      // Verify rename was called exactly once
+      assert.equal(calls.length, 1, 'renameSync must be called exactly once');
+
+      // Verify paths: tmp in same dir as final, both correct
+      const tmpFile = join(stateDir, 'state.json.tmp');
+      assert.equal(calls[0].from, tmpFile, 'first arg must be tmp file path');
+      assert.equal(calls[0].to, stateFile, 'second arg must be final file path');
+      assert.equal(dirname(calls[0].from), dirname(calls[0].to), 'tmp and final must be in same directory');
+
+      // Verify tmp file was FULLY written before rename was attempted
+      const tmpState = JSON.parse(calls[0].tmpContent);
+      assert.deepEqual(tmpState, newState, 'tmp file must contain fully-written new state');
+
+      // Verify original file is UNTOUCHED (rename never happened)
+      const afterBytes = readFileSync(stateFile, 'utf8');
+      assert.equal(afterBytes, beforeBytes, 'original file must be untouched when rename fails');
+    } finally {
+      fs.renameSync = realRename;
     }
 
-    // Verify that round-trip preserves state (tmp file was fully written before being renamed)
+    // Verify normal write works again after restore
+    const finalState = { activeColor: 'purple', commit: 'xyz789', deployedAt: '2026-08-31T14:00:00Z' };
+    writeState(stateDir, finalState);
     const result = readState(stateDir);
-    assert.deepEqual(result, originalState);
-
-    // Update state and verify atomicity pattern holds
-    const newState = { activeColor: 'green', commit: 'def456', deployedAt: '2026-08-31T13:00:00Z' };
-    writeState(stateDir, newState);
-
-    // Still no tmp file after successful rename
-    try {
-      readFileSync(tmpFile);
-      assert.fail('No temp file should exist after atomic write');
-    } catch (err) {
-      assert.equal(err.code, 'ENOENT');
-    }
-
-    // State round-trips correctly (proving tmp file was fully written before rename)
-    const updated = readState(stateDir);
-    assert.deepEqual(updated, newState);
+    assert.deepEqual(result, finalState);
   } finally {
     rmSync(scratchDir, { recursive: true });
   }
@@ -304,49 +317,60 @@ test('writeDeployStatus caps history at 50 entries', () => {
   }
 });
 
-test('writeDeployStatus uses atomic rename (tmp written before rename, verified by examining file order)', () => {
+test('writeDeployStatus atomicity: tmp file fully written before rename, survives rename failure', () => {
   const scratchDir = mkdtempSync(join(tmpdir(), 'bluegreen-test-'));
   try {
     const stateDir = scratchDir;
 
-    // Write initial status
+    // Write initial status and capture its bytes
     writeDeployStatus(stateDir, 'phase1', 'detail1');
-    const initialStatus = deployStatus(stateDir);
-    assert.equal(initialStatus.phase, 'phase1');
-
-    // Verify the pattern: tmp and final paths are in the same directory
     const statusFile = join(stateDir, 'deploy-status.json');
-    const tmpFile = join(stateDir, 'deploy-status.json.tmp');
-    assert.equal(dirname(tmpFile), dirname(statusFile), 'tmp and final paths must be in same directory for atomic rename');
+    const beforeBytes = readFileSync(statusFile, 'utf8');
 
-    // Verify successful write has no tmp remnant
+    // Stub renameSync to inject failure and capture call details
+    const realRename = fs.renameSync;
+    const calls = [];
+
     try {
-      readFileSync(tmpFile);
-      assert.fail('No temp file should exist after successful write');
-    } catch (err) {
-      assert.equal(err.code, 'ENOENT');
+      fs.renameSync = (from, to) => {
+        // Capture rename call with tmp file content at time of call
+        calls.push({
+          from,
+          to,
+          tmpContent: fs.readFileSync(from, 'utf8'),
+        });
+        throw new Error('injected rename failure');
+      };
+
+      // Attempt write with stubbed renameSync
+      assert.throws(() => writeDeployStatus(stateDir, 'phase2', 'detail2'), /injected rename failure/);
+
+      // Verify rename was called exactly once
+      assert.equal(calls.length, 1, 'renameSync must be called exactly once');
+
+      // Verify paths: tmp in same dir as final, both correct
+      const tmpFile = join(stateDir, 'deploy-status.json.tmp');
+      assert.equal(calls[0].from, tmpFile, 'first arg must be tmp file path');
+      assert.equal(calls[0].to, statusFile, 'second arg must be final file path');
+      assert.equal(dirname(calls[0].from), dirname(calls[0].to), 'tmp and final must be in same directory');
+
+      // Verify tmp file was FULLY written before rename was attempted
+      const tmpStatus = JSON.parse(calls[0].tmpContent);
+      assert.equal(tmpStatus.phase, 'phase2', 'tmp file must contain new phase');
+      assert.equal(tmpStatus.history.length, 2, 'tmp file must have appended history entry');
+
+      // Verify original file is UNTOUCHED (rename never happened)
+      const afterBytes = readFileSync(statusFile, 'utf8');
+      assert.equal(afterBytes, beforeBytes, 'original file must be untouched when rename fails');
+    } finally {
+      fs.renameSync = realRename;
     }
 
-    // Verify that round-trip preserves status (tmp file was fully written before being renamed)
+    // Verify normal write works again after restore
+    writeDeployStatus(stateDir, 'phase3', 'detail3');
     const result = deployStatus(stateDir);
-    assert.equal(result.phase, 'phase1');
-    assert.equal(result.history.length, 1);
-
-    // Write another status and verify atomicity pattern holds
-    writeDeployStatus(stateDir, 'phase2', 'detail2');
-
-    // Still no tmp file after successful rename
-    try {
-      readFileSync(tmpFile);
-      assert.fail('No temp file should exist after atomic write');
-    } catch (err) {
-      assert.equal(err.code, 'ENOENT');
-    }
-
-    // Status round-trips correctly (proving tmp file was fully written before rename)
-    const updated = deployStatus(stateDir);
-    assert.equal(updated.phase, 'phase2');
-    assert.equal(updated.history.length, 2);
+    assert.equal(result.phase, 'phase3');
+    assert.equal(result.history.length, 2); // Original phase1 + new phase3
   } finally {
     rmSync(scratchDir, { recursive: true });
   }
