@@ -52,7 +52,18 @@ test('an invalid axis value throws loudly and names the variable', () => {
   assert.throws(() => billingMode({ CHARITYPILOT_BILLING: 'paypal' }), /CHARITYPILOT_BILLING/);
 });
 
-test('whitespace or empty values are rejected, not treated as unset', () => {
+test('whitespace values are rejected, not treated as unset', () => {
   assert.throws(() => isMultiTenant({ CHARITYPILOT_TENANCY: ' multi' }), /CHARITYPILOT_TENANCY/);
-  assert.throws(() => isMultiTenant({ CHARITYPILOT_TENANCY: '' }), /CHARITYPILOT_TENANCY/);
+  assert.throws(() => isMultiTenant({ CHARITYPILOT_TENANCY: 'mutli' }), /CHARITYPILOT_TENANCY/);
+});
+
+test('empty string is treated as unset and derives the mode default (Docker ARG/ENV cannot express unset)', () => {
+  assert.equal(isMultiTenant({ CHARITYPILOT_TENANCY: '' }), true);
+  assert.equal(isMultiTenant({ ...APPLIANCE, CHARITYPILOT_TENANCY: '' }), false);
+  assert.equal(isRegistrationOpen({ CHARITYPILOT_REGISTRATION: '' }), true);
+  assert.equal(isRegistrationOpen({ ...APPLIANCE, CHARITYPILOT_REGISTRATION: '' }), false);
+  assert.equal(emailDeliveryMode({ CHARITYPILOT_EMAIL_DELIVERY: '' }), 'provider');
+  assert.equal(emailDeliveryMode({ ...APPLIANCE, CHARITYPILOT_EMAIL_DELIVERY: '' }), 'manual-link');
+  assert.equal(billingMode({ CHARITYPILOT_BILLING: '' }), 'stripe');
+  assert.equal(billingMode({ ...APPLIANCE, CHARITYPILOT_BILLING: '' }), 'none');
 });

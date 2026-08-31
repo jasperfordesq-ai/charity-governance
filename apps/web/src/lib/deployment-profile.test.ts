@@ -115,11 +115,57 @@ test('an invalid axis value throws loudly', () => {
   });
 });
 
-test('whitespace or empty values are rejected, not treated as unset', () => {
+test('whitespace values are rejected, not treated as unset', () => {
   withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: ' multi' }, () => {
     assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value/);
   });
-  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: '' }, () => {
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: 'mutli' }, () => {
     assert.throws(() => webTenancyIsMulti(), /Invalid deployment-profile value/);
   });
+});
+
+test('empty string is treated as unset and derives the mode default (Docker ARG/ENV cannot express unset)', () => {
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_TENANCY: '' }, () => {
+    assert.equal(webTenancyIsMulti(), true);
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_TENANCY: '' }, () => {
+    assert.equal(webTenancyIsMulti(), false);
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: '' }, () => {
+    assert.equal(webRegistrationIsOpen(), true);
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: '' }, () => {
+    assert.equal(webRegistrationIsOpen(), false);
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: '' }, () => {
+    assert.equal(webEmailDelivery(), 'provider');
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: '' }, () => {
+    assert.equal(webEmailDelivery(), 'manual-link');
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_BILLING: '' }, () => {
+    assert.equal(webBillingMode(), 'stripe');
+  });
+  withEnv({ NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', NEXT_PUBLIC_CHARITYPILOT_BILLING: '' }, () => {
+    assert.equal(webBillingMode(), 'none');
+  });
+});
+
+test('all NEXT_PUBLIC_CHARITYPILOT_* axis vars set to the empty string derive defaults without throwing (Docker build-arg regression pin)', () => {
+  withEnv(
+    {
+      NEXT_PUBLIC_CHARITYPILOT_TENANCY: '',
+      NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: '',
+      NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: '',
+      NEXT_PUBLIC_CHARITYPILOT_BILLING: '',
+    },
+    () => {
+      assert.doesNotThrow(() => {
+        assert.equal(webTenancyIsMulti(), true);
+        assert.equal(webRegistrationIsOpen(), true);
+        assert.equal(webEmailDelivery(), 'provider');
+        assert.equal(webBillingMode(), 'stripe');
+      });
+    },
+  );
 });

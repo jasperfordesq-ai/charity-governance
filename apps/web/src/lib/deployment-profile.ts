@@ -21,6 +21,16 @@
 // load the module first, silently ignoring the actual (fixed, real)
 // environment for the rest of that process's life. Reading fresh costs one
 // property lookup and is correct in both contexts.
+//
+// An empty string is ALSO treated as unset (⇒ derive the default), not as an
+// error. Docker `ARG X` / `ENV X=$X` pairs (see apps/web/Dockerfile) have no
+// way to express "unset" — an ARG that isn't passed at build time makes the
+// ENV value the empty string, not absent. Every build that doesn't pass these
+// build args (which is every build today) would otherwise fail `next build`
+// (the prerendered sitemap route reads these at build time) or throw at
+// render in the shipped client bundle. Whitespace-only and misspelled values
+// are NOT treated as unset — those still throw; only exactly '' derives the
+// default.
 function isAppliance(): boolean {
   return process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE === 'personal-server';
 }
@@ -31,7 +41,7 @@ function pick<T extends string>(
   applianceDefault: T,
   standardDefault: T,
 ): T {
-  if (raw === undefined) return isAppliance() ? applianceDefault : standardDefault;
+  if (raw === undefined || raw === '') return isAppliance() ? applianceDefault : standardDefault;
   if (!(allowed as readonly string[]).includes(raw)) {
     throw new Error(`Invalid deployment-profile value: ${raw}`);
   }

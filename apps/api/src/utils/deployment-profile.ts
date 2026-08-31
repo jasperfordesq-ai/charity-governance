@@ -6,6 +6,16 @@ import { PERSONAL_SERVER_DEPLOYMENT_MODE, getPersonalServerOrigin } from './pers
 // CHARITYPILOT_DEPLOYMENT_MODE so every existing install keeps today's
 // behaviour without setting anything.
 //
+// An empty string is ALSO treated as unset (⇒ derive the default), not as an
+// error. That's not leniency for its own sake: Docker `ARG X` / `ENV X=$X`
+// pairs (see apps/web/Dockerfile) have no way to express "unset" — an ARG
+// that isn't passed at build time makes the ENV value the empty string, not
+// absent. Every build that doesn't pass these build args (which is every
+// build today) would otherwise fail `next build` (the prerendered sitemap
+// route reads one of these at build time) or throw at render in the shipped
+// client bundle. Whitespace-only and misspelled values are NOT treated as
+// unset — those still throw; only exactly '' derives the default.
+//
 // isPersonalServerDeployment() still exists — for the appliance LIFECYCLE
 // only (installer jobs, recovery machinery, appliance env validation).
 // Nothing behavioural should key on it any more; key on an axis here.
@@ -24,7 +34,7 @@ function axis<T extends string>(
   standardDefault: T,
 ): T {
   const raw = env[name];
-  if (raw === undefined) {
+  if (raw === undefined || raw === '') {
     return isApplianceMode(env) ? applianceDefault : standardDefault;
   }
   if (!(allowed as readonly string[]).includes(raw)) {
