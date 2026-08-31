@@ -29,8 +29,6 @@ FROM deps AS build
 WORKDIR /app
 ARG DATABASE_URL=postgresql://charitypilot:charitypilot@localhost:5432/charitypilot
 ENV DATABASE_URL=$DATABASE_URL
-ARG CHARITYPILOT_BUILD_COMMIT
-ENV CHARITYPILOT_BUILD_COMMIT=$CHARITYPILOT_BUILD_COMMIT
 COPY tsconfig.base.json turbo.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
@@ -52,8 +50,10 @@ RUN npm ci --omit=dev --omit=peer --workspace @charitypilot/api --workspace @cha
 
 FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runner
 WORKDIR /app
+ARG CHARITYPILOT_BUILD_COMMIT
 ENV NODE_ENV=production
 ENV PORT=3002
+ENV CHARITYPILOT_BUILD_COMMIT=$CHARITYPILOT_BUILD_COMMIT
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/node_modules/.prisma ./node_modules/.prisma
