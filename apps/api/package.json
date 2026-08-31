@@ -22,7 +22,8 @@
     "jobs:rotate-auth-recovery-secret": "node dist/jobs/rotate-auth-recovery-secret.js",
     "jobs:recover-document-storage-deletion": "node dist/jobs/recover-document-storage-deletion.js",
     "jobs:recover-team-ownership": "node dist/jobs/recover-team-ownership.js",
-    "jobs:reconcile-billing-authority": "node dist/jobs/reconcile-billing-authority.js"
+    "jobs:reconcile-billing-authority": "node dist/jobs/reconcile-billing-authority.js",
+    "jobs:create-platform-operator": "node dist/jobs/create-platform-operator.js"
   },
   "dependencies": {
     "@charitypilot/shared": "*",

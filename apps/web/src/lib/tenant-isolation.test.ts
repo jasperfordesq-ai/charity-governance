@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 // Concern: tenant isolation (UI). The #1 multi-tenant trust guarantee is that the app
 // never lets a user choose which organisation's data they see. Org context must come
@@ -26,11 +26,19 @@ function walk(dir: string): string[] {
 const appFiles = walk(APP);
 const allSrc = appFiles.map((f) => ({ f, src: readFileSync(f, 'utf8') }));
 
-test('the API client is cookie-based (withCredentials), so the org is resolved from the session', () => {
-  const api = readFileSync(join(SRC, 'lib', 'api.ts'), 'utf8');
-  assert.match(api, /withCredentials:\s*true/);
-  // No bearer/access token is ever read from JS storage and attached as a header.
-  assert.ok(!/localStorage\.getItem\(['"`](access|token|authToken)/.test(api), 'no JS-readable auth token');
+test('every API client (tenant and owner) is cookie-based, with no JS-readable auth token', () => {
+  // owner-api.ts is a strictly higher-privilege client than api.ts (it can suspend or close
+  // any charity on the platform), so it gets the same scrutiny as the tenant client — not a
+  // pass because it lives outside the (dashboard)/(auth) tree this file otherwise walks.
+  for (const file of ['api.ts', 'owner-api.ts']) {
+    const src = readFileSync(join(SRC, 'lib', file), 'utf8');
+    assert.match(src, /withCredentials:\s*true/, `${file} must send credentials via cookie, not a header`);
+    // No bearer/access token is ever read from JS storage and attached as a header.
+    assert.ok(
+      !/localStorage\.getItem\(['"`](access|token|authToken)/.test(src),
+      `${file}: no JS-readable auth token`,
+    );
+  }
 });
 
 test('no page sources an organisation id from a URL param (useParams / useSearchParams / query)', () => {
@@ -61,17 +69,52 @@ test('no API request carries an organisation id as a query or path parameter', (
 });
 
 test('the only editable dynamic route segment is the global principleId (a content id, not a tenant id)', () => {
-  const dynamicSegments = appFiles
-    .map((f) => f.match(/\[([^\]]+)\]/g) || [])
-    .flat()
-    .map((s) => s.slice(1, -1));
-  const unique = [...new Set(dynamicSegments)].sort();
+  // The (owner) route group is the platform-owner console: a separately authenticated
+  // (Path-scoped charitypilot_owner_* cookies, its own axios client in lib/owner-api.ts)
+  // operator tool whose job is to look up an arbitrary tenant by id — that cross-tenant
+  // lookup is the feature, not the leak this guard protects against on the tenant side.
+  //
+  // The carve-out below is PINNED, not a blanket exemption. A route group name is invisible
+  // in the URL — e.g. app/(owner)/compliance/[organisationId]/page.tsx would be served at
+  // /compliance/<editable-id> for ordinary tenant users, even though the file lives under
+  // (owner)/. So "is under (owner)" must never be treated as "is the owner console": we
+  // assert the owner-side segment set is exactly the one tenant-lookup id we expect (a new
+  // or different segment fails loudly), AND that every routable file under (owner) is
+  // actually served under /owner, so (owner) can never become a hiding place for a
+  // tenant-facing route.
+  const segmentsOf = (files: string[]) => [
+    ...new Set(files.flatMap((f) => (f.match(/\[([^\]]+)\]/g) || []).map((s) => s.slice(1, -1)))),
+  ].sort();
+
+  const ownerFiles = appFiles.filter((f) => f.includes('(owner)'));
+  const tenantFiles = appFiles.filter((f) => !ownerFiles.includes(f));
+
   // principleId references a global governance principle (seeded reference data shared by
   // all orgs); slug is a public marketing blog segment. No [organisationId]/[orgId]/[id].
-  for (const seg of unique) {
+  assert.deepEqual(
+    segmentsOf(tenantFiles),
+    ['principleId', 'slug'],
+    'a new tenant-facing dynamic route segment appeared — tenant data must never be addressed by an editable id',
+  );
+
+  // Today the owner console has exactly one dynamic segment: tenants/[id]. If this ever
+  // grows (e.g. a nested [somethingId]), update this pin deliberately rather than let it
+  // slide by unnoticed.
+  assert.deepEqual(
+    segmentsOf(ownerFiles),
+    ['id'],
+    'the owner console dynamic-segment set changed — update this pin deliberately if intended',
+  );
+
+  // Only page.tsx/route.ts files actually serve a URL; layout.tsx and friends do not have a
+  // path of their own, so they are irrelevant to "is this served under /owner".
+  const ownerRoutableFiles = ownerFiles.filter(
+    (f) => f.endsWith(`${sep}page.tsx`) || f.endsWith(`${sep}route.ts`),
+  );
+  for (const f of ownerRoutableFiles) {
     assert.ok(
-      ['principleId', 'slug'].includes(seg),
-      `unexpected dynamic route segment [${seg}] — tenant data must never be addressed by an editable id`,
+      f.includes(`${sep}owner${sep}`),
+      `${f} is a route inside the (owner) group but is not actually served under /owner`,
     );
   }
 });

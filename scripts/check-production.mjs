@@ -36,6 +36,7 @@ const REQUIRED = [
   'DATABASE_URL',
   'DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST',
   'JWT_SECRET',
+  'OWNER_JWT_SECRET',
   'AUTH_RECOVERY_SECRET',
   'FRONTEND_URL',
   'STRIPE_SECRET_KEY',
@@ -653,7 +654,7 @@ function redactPreflightTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|OWNER_JWT_SECRET|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
@@ -748,6 +749,7 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   requireRefreshTokenTtlDays(env, issues);
 
   requireProductionSecretStrength(env, 'JWT_SECRET', issues);
+  requireProductionSecretStrength(env, 'OWNER_JWT_SECRET', issues);
   requireProductionSecretStrength(env, 'READINESS_API_KEY', issues);
   requireProductionSecretStrength(env, 'AUTH_RECOVERY_SECRET', issues, 43);
   requireCanonicalAuthRecoverySecret(env, issues);
@@ -757,6 +759,10 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
     [envValue(env, 'JWT_SECRET'), envValue(env, 'READINESS_API_KEY')].includes(authRecoverySecret)
   ) {
     issues.push('AUTH_RECOVERY_SECRET must be distinct from JWT_SECRET and READINESS_API_KEY');
+  }
+  const ownerJwtSecret = envValue(env, 'OWNER_JWT_SECRET');
+  if (ownerJwtSecret && ownerJwtSecret === envValue(env, 'JWT_SECRET')) {
+    issues.push('OWNER_JWT_SECRET must be distinct from JWT_SECRET');
   }
   const securityEmailTimeoutRaw = envValue(env, 'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS');
   const staleAuthDeliveryRaw = envValue(env, 'AUTH_DELIVERY_STALE_SENDING_MS');

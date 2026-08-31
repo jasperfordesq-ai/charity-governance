@@ -12,13 +12,21 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-07-12 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 291 | 0 | 0 | 14 | 305 |
+| API | 305 | 0 | 0 | 14 | 319 |
 | Web | 104 | 0 | 0 | 6 | 110 |
-| **Total** | **395** | **0** | **0** | **20** | **415** |
+| **Total** | **409** | **0** | **0** | **20** | **429** |
+
+**API suite:** 930 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+
+**Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
+
+**Linkage:** 409/409 covered guarantees verified against a passing/linked test.
+
+**Linkage check: COMPLETE**
 
 ## How to verify
 
@@ -47,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (305 guarantees)
+## API surface - the matrix (319 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -110,7 +118,7 @@ _20 guarantees - covered 19  n/a 1_
 | At-least-once / idempotency | Compliance record writes use a serializable organisation lock plus revision compare-and-swap: two different clients cannot both commit from one revision, while an exact stale retry/no-op returns the durable row without another revision or audit event. | covered | `record revisions reject stale changes while allowing an exact ambiguous retry`<br/><sub>compliance-concurrency.test.ts</sub> |
 | Input validation | PUT /records/:standardId rejects a malformed body (e.g. reportingYear out of [2018,2100], a non-enum status, or an over-5000-char text field) with 400 {code:'VALIDATION_ERROR'} and does NOT call complianceRecord.upsert. | covered | `PUT /records rejects an invalid body before writing`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | PUT /signoff enforces the superRefine rule: status 'APPROVED' without boardMeetingDate/minuteReference/approvedByName returns 400 {code:'VALIDATION_ERROR'} and does NOT call complianceSignoff.upsert; an invalid status enum or a non-ISO boardMeetingDate is also 400. | covered | `PUT /signoff requires approval evidence when status is APPROVED`<br/><sub>compliance-reliability.test.ts</sub> |
-| Input validation | GET endpoints that require ?year reject a missing or non-numeric/out-of-range year with 400 {code:'VALIDATION_ERROR'} (complianceQuerySchema), not a 500. | covered | `compliance year-scoped reads reject a missing or invalid year`<br/><sub>compliance-reliability.test.ts</sub> |
+| Input validation | Year-scoped GET endpoints default a missing ?year to the current reporting year, and reject a non-numeric/out-of-range year with 400 {code:'VALIDATION_ERROR'} (complianceQuerySchema), not a 500. | covered | `compliance year-scoped reads default a missing year and reject an invalid one`<br/><sub>compliance-reliability.test.ts</sub> |
 | Input validation | GET /principles/:principleId returns 404 {code:'PRINCIPLE_NOT_FOUND'} for an unknown principle id (rather than 500 or leaking null). | covered | `GET /principles/:id returns 404 for an unknown principle`<br/><sub>compliance-reliability.test.ts</sub> |
 | Subscription / plan gating | subscriptionGuard blocks compliance routes for trial-expired / past-due-grace-expired / inactive subscriptions with the matching 403 code (TRIAL_EXPIRED \| PAST_DUE_GRACE_EXPIRED \| SUBSCRIPTION_INACTIVE \| NO_SUBSCRIPTION). | covered | `compliance routes are blocked when the subscription is not in good standing`<br/><sub>compliance-reliability.test.ts</sub> |
 | Subscription / plan gating | When the organisation has no subscription row, every scope-resolving compliance read/write (getRecords/getRecord/getSummary/getPrinciplesForOrganisation/upsertRecord) throws AppError 403 {code:'NO_SUBSCRIPTION'} before any compliance table is touched. | covered | `compliance writes are refused (and not persisted) without a subscription`<br/><sub>compliance-reliability.test.ts</sub> |
@@ -250,7 +258,7 @@ _12 guarantees - covered 11  n/a 1_
 | Authorization boundary | A request with no/invalid/expired token, a revoked session, or a missing user is rejected by authGuard with 401 {code:'UNAUTHORIZED'} before the export handler runs; an authenticated but email-unverified user is rejected with 403 {code:'EMAIL_NOT_VERIFIED'}. | covered | `export rejects missing token, revoked session, and unverified email`<br/><sub>export-reliability.test.ts</sub> |
 | Graceful degradation | The export does not depend on Stripe/Supabase/Resend at request time (no checkout, storage, or email call), so it stays available when those externals are down; conversely if the org row is missing, organisation.findUniqueOrThrow surfaces a clean error via handleError (404/500) rather than leaking a stack. | n/a | _The export handler makes only Prisma reads — it never calls Stripe, Supabase storage, or Resend — so the 503-on-external-outage concern has no surface here. The only error path is Prisma findUniqueOrT_ |
 | Graceful degradation | A changed snapshot payload, hash, tenant, year, sequence, format, or approval timestamp fails closed without rendering stored report content; a working report never applies a stale approval to changed live evidence. | covered | `approved export fails closed when retained evidence or metadata does not match its hashes`<br/><sub>export-snapshot.test.ts</sub> |
-| Input validation | GET /compliance-record with a malformed, missing, out-of-range, or oversized year (e.g. year=abc, year omitted, year=1999, year=99999) returns 400 {code:'VALIDATION_ERROR'} (never a 500 or stack leak) and the report HTML / organisation lookup is never reached for the invalid value. | covered | `export rejects malformed year with 400 VALIDATION_ERROR`<br/><sub>export-reliability.test.ts</sub> |
+| Input validation | GET /compliance-record with a malformed, out-of-range, or oversized year (e.g. year=abc, year=1999, year=99999) returns 400 {code:'VALIDATION_ERROR'} (never a 500 or stack leak) and the report HTML / organisation lookup is never reached for the invalid value. An omitted year is not an invalid value: it defaults to the current reporting year and produces a normal export. | covered | `export rejects malformed year with 400 VALIDATION_ERROR`<br/><sub>export-reliability.test.ts</sub> |
 | Input validation | User-supplied compliance/register text (e.g. standard titles, actionTaken, evidence, explanationIfNA, trusteeName, matter, mitigation, complaint summary, controls) is HTML-escaped via escapeHtml/simpleTable before being embedded in the exported report, so a stored '<script>' or '"' in a record cannot break out of its cell or inject markup into the generated HTML. | covered | `export HTML-escapes stored record and register values`<br/><sub>export-reliability.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is ESSENTIALS (or anything other than COMPLETE) never invokes loadGovernanceRegisters: none of conflictRecord/riskRecord/complaintRecord/fundraisingRecord/annualReportReadiness/financialControlReview findMany/findUnique are called, and the response body contains no 'Governance registers' heading nor any register data. | covered | `Essentials exports do not include Complete-only governance registers`<br/><sub>export-csp.test.ts</sub> |
 | Subscription / plan gating | GET /compliance-record for an org whose subscription.plan is COMPLETE DOES read and embed the governance registers: loadGovernanceRegisters runs and the response body includes the 'Governance registers' heading plus the org's conflict/risk/complaint/fundraising rows. | covered | `Complete plan exports include governance registers`<br/><sub>export-reliability.test.ts</sub> |
@@ -367,6 +375,27 @@ _15 guarantees - covered 12  n/a 3_
 | Observability | GET /api/v1/health/readiness with a valid x-charitypilot-readiness-key returns 200 {status:'ready'} and checks={database:true, billingConfigured:true, emailConfigured:true, storageConfigured:true, storageBucketReachable:true} ONLY when every one of the five dependency probes resolves truthy. | covered | `authenticated readiness reports ready when every dependency is healthy`<br/><sub>health-reliability.test.ts</sub> |
 | Subscription / plan gating | N/A — health and readiness are infrastructure probes deliberately outside the subscription/plan model; they carry no requireCompletePlan or subscriptionGuard and must remain reachable regardless of any tenant's plan state. | n/a | _The routes are registered with no auth/subscription/plan guards (server.ts line 81 registers healthRoutes with only a prefix). Gating readiness behind a subscription would defeat its purpose, so plan-_ |
 | Tenant isolation | N/A — neither health endpoint reads or mutates any organisation-scoped resource; the readiness probe only runs an unparameterised SELECT 1 and config/reachability checks, so there is no organisationId surface and no cross-org leak is possible. | n/a | _No request.user, no organisationId, and no Prisma model query that returns tenant data — the only DB call is prisma.$queryRaw`SELECT 1`. There is nothing for an org-A user to read of org B here._ |
+
+### owner console - `/api/v1/owner`
+
+_14 guarantees - covered 14_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Auth & session integrity | A token forged with the tenant secret (JWT_SECRET) but owner-shaped claims is rejected by the operator verifier (verifyOperatorAccessToken), because it requires OWNER_JWT_SECRET — proving isolation comes from the secret, not merely the claim shape. | covered | `a token signed with the tenant secret but operator claims is rejected`<br/><sub>owner-jwt.test.ts</sub> |
+| Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every route guarded by requirePlatformOperator, not merely the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
+| Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every route guarded by authGuard, not merely the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
+| Auth & session integrity | setOwnerCookies marks both the owner access and refresh cookies HttpOnly, SameSite=lax, scoped to /api/v1/owner, and Secure in production (absent outside it); clearOwnerCookies expires both. | covered | `owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner`<br/><sub>owner-auth-routes.test.ts</sub> |
+| Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
+| Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
+| At-least-once / idempotency | transitionTenantLifecycle with a stale expectedLifecycleVersion throws 409 TENANT_LIFECYCLE_CONFLICT and performs no update and no audit write. | covered | `a version mismatch is refused before any write`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| At-least-once / idempotency | The lifecycle update and its SecurityAuditEvent are created inside one $transaction, so a failed transition leaves no orphan audit event. | covered | `a failed audit-event write rolls back the status change, not just the audit event`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| Input validation | assertOwnerJwtSecretConfigured throws when OWNER_JWT_SECRET is unset or equals JWT_SECRET, so a deployment cannot silently collapse the two-secret isolation. | covered | `the boot guard rejects a secret equal to JWT_SECRET`<br/><sub>owner-jwt.test.ts</sub> |
+| Input validation | A wrong password against a SUSPENDED organisation returns generic 401 INVALID_CREDENTIALS; only a correct password returns 403 ORGANISATION_SUSPENDED. | covered | `a wrong password against a SUSPENDED organisation stays generic`<br/><sub>login-suspension-disclosure.test.ts</sub> |
+| Input validation | An unknown email still performs the dummy bcrypt comparison and returns generic 401. | covered | `an unknown email is still a generic 401`<br/><sub>login-suspension-disclosure.test.ts</sub> |
+| Input validation | Provisioning with an already-registered email throws 409 EMAIL_ALREADY_REGISTERED and creates no organisation, diverging deliberately from register()'s anti-enumeration silence. | covered | `a duplicate email returns 409 and creates nothing`<br/><sub>owner-provisioning.test.ts</sub> |
+| Input validation | An unknown operator email at owner login costs the same bcrypt work and returns the same 401 as a wrong password. | covered | `an unknown operator email is indistinguishable from a wrong password`<br/><sub>owner-auth-routes.test.ts</sub> |
 
 ### cross-cutting - auth & session integrity
 
@@ -665,7 +694,7 @@ _5 guarantees - covered 5_
 | Auth & session integrity | Report generation uses the authenticated API client so an expired access token can refresh before an opener-isolated popup receives the report blob; blocked, closed and failed popups are handled without leaking an opener or object URL. | covered | `opens the popup synchronously, severs its opener, then navigates to the authenticated blob`<br/><sub>lib/authenticated-report-open.test.ts</sub> |
 | State integrity / no data loss | Board sign-off save is guarded against double-submit and, when status=APPROVED, requires meeting date + minute reference + approver name before saving. | covered | `export/page.tsx guards its primary mutation against double-submit (isLoading)`<br/><sub>lib/web-wiring.test.ts</sub> |
 | State integrity / no data loss | A board sign-off response owns only the exact local draft generation it submitted, so an older response cannot replace newer edits or report them as Saved. | covered | `a save response only owns the exact draft generation it submitted`<br/><sub>lib/compliance-approval-ui.test.ts</sub> |
-| Tenant isolation | Export and board sign-off carry only a reporting year (server-validated), never an org id; authenticated report blobs preserve the no-script CSP inside the rendered document as well as on the HTTP response. | covered | `the API client is cookie-based (withCredentials), so the org is resolved from the session`<br/><sub>lib/tenant-isolation.test.ts</sub> |
+| Tenant isolation | Both the tenant API client (lib/api.ts) and the higher-privilege owner API client (lib/owner-api.ts) send credentials via the session cookie (withCredentials: true) rather than a JS-readable token; neither ever reads a bearer/access/auth token out of localStorage to attach as a header. (The cookie itself is set HttpOnly/SameSite=lax/Secure server-side — proven for the tenant cookie by 'auth cookies are HttpOnly, SameSite=lax, and Secure in production' and for the owner cookie by 'owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner', both on the API surface, not by this client-side test.) | covered | `every API client (tenant and owner) is cookie-based, with no JS-readable auth token`<br/><sub>lib/tenant-isolation.test.ts</sub> |
 
 ### regulator - `/regulator`
 

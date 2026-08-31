@@ -58,6 +58,7 @@ const API_GROUP_ORDER = [
   ['governance-registers', 'governance-registers - `/api/v1/governance-registers`'],
   ['team', 'team - `/api/v1/team`'],
   ['health', 'health - `/api/v1/health`'],
+  ['owner', 'owner console - `/api/v1/owner`'],
   ['x-auth-session', 'cross-cutting - auth & session integrity'],
   ['x-idempotency', 'cross-cutting - idempotency & jobs'],
   ['x-observability', 'cross-cutting - observability'],

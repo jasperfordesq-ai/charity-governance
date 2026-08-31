@@ -1,0 +1,15 @@
+-- The platform-owner console's hand-provisioning endpoint (owner-provisioning.service.ts)
+-- issues the newly created tenant owner a password-reset link the same way
+-- personal-server operator resets do (jobs/personal-server-account.ts): by
+-- inserting a PasswordRecoveryRequest row directly, bypassing the self-service
+-- rate-limited request path, since there is no anonymous-attacker risk to defend
+-- against when a trusted, authenticated operator provisions a known account.
+-- That needs its own source label rather than being folded into
+-- PERSONAL_SERVER_OPERATOR (which is specifically the single-charity appliance
+-- flow) or SELF_SERVICE_EMAIL (which implies self-service, rate-limited, public
+-- entry). A mislabeled source would misrepresent the audit trail.
+--
+-- ALTER TYPE ... ADD VALUE is permitted inside a transaction on PostgreSQL 12+
+-- provided the new value is not used in the same transaction; this migration
+-- only declares it.
+ALTER TYPE "PasswordRecoverySource" ADD VALUE IF NOT EXISTS 'OWNER_PROVISIONED';

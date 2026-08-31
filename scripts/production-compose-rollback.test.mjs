@@ -128,6 +128,7 @@ function productionEnv(overrides = {}) {
       "postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write",
     DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST: "db.charitypilot.ie",
     JWT_SECRET: "J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5",
+    OWNER_JWT_SECRET: "Z3wF6vNq9Rx2mLp8Bh5Ty7cKd1Uae0Ss",
     AUTH_RECOVERY_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     FRONTEND_URL: "https://app.charitypilot.ie",
     AUTH_COOKIE_DOMAIN: ".charitypilot.ie",

@@ -62,6 +62,16 @@ export const UNREACHABLE_TITLE = 'No answer from the server';
 export const UNREACHABLE_MESSAGE =
   'The server gave no answer, so the details you submitted were not checked. Check that the server is running and reachable, then try again.';
 
+export const ACCOUNT_SUSPENDED_TITLE = 'This account is no longer active';
+export const ORGANISATION_SUSPENDED_TITLE = 'This organisation is suspended';
+export const ORGANISATION_CLOSED_TITLE = 'This organisation is closed';
+
+const LIFECYCLE_TITLES: Record<string, string> = {
+  ACCOUNT_SUSPENDED: ACCOUNT_SUSPENDED_TITLE,
+  ORGANISATION_SUSPENDED: ORGANISATION_SUSPENDED_TITLE,
+  ORGANISATION_CLOSED: ORGANISATION_CLOSED_TITLE,
+};
+
 type ErrorResponse = {
   status?: unknown;
   data?: { code?: unknown } | null;
@@ -147,7 +157,11 @@ export function authFailureNotice(
       return { title: ORIGIN_UNREACHABLE_TITLE, message: ORIGIN_UNREACHABLE_MESSAGE };
     case 'unreachable':
       return { title: UNREACHABLE_TITLE, message: UNREACHABLE_MESSAGE };
-    default:
-      return { message: apiErrorMessage(error, fallback) };
+    default: {
+      const code = errorResponse(error)?.data?.code;
+      const title = typeof code === 'string' ? LIFECYCLE_TITLES[code] : undefined;
+      // The server's own message is authoritative here; the title only frames it.
+      return title ? { title, message: apiErrorMessage(error, fallback) } : { message: apiErrorMessage(error, fallback) };
+    }
   }
 }

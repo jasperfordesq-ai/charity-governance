@@ -20,6 +20,9 @@ import { governingActRoutes } from './routes/governing-acts/index.js';
 import { memberRoutes } from './routes/members/index.js';
 import { teamRoutes } from './routes/team/index.js';
 import { healthRoutes } from './routes/health/index.js';
+import { ownerRoutes } from './routes/owner/index.js';
+import { assertOwnerJwtSecretConfigured } from './utils/owner-jwt.js';
+import { isPersonalServerDeployment } from './utils/personal-server.js';
 import { DeadlineRemindersService } from './services/deadline-reminders.service.js';
 import { AuthEmailDeliveryService } from './services/auth-email-delivery.service.js';
 import { bindAuthRecoveryControlForRuntime } from './services/auth-recovery-control.js';
@@ -70,6 +73,12 @@ await app.register(multipart, {
 
 await app.register(prismaPlugin);
 
+// A deployment that serves the owner console must have a distinct owner secret.
+// Collapsing the two secrets would silently remove the isolation the console relies on.
+if (!isPersonalServerDeployment()) {
+  assertOwnerJwtSecretConfigured();
+}
+
 // Routes
 
 await app.register(authRoutes, { prefix: '/api/v1/auth' });
@@ -86,6 +95,7 @@ await app.register(governingActRoutes, { prefix: '/api/v1/governing-acts' });
 await app.register(memberRoutes, { prefix: '/api/v1/members' });
 await app.register(teamRoutes, { prefix: '/api/v1/team' });
 await app.register(healthRoutes, { prefix: '/api/v1/health' });
+await app.register(ownerRoutes, { prefix: '/api/v1/owner' });
 
 // Short-path alias: tell callers the right prefix rather than 404ing silently
 app.get('/api/v1/risks', (_req, reply) => {

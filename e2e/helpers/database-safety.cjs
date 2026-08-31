@@ -130,6 +130,8 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "Subscription",
   "BillingCheckoutAttempt",
   "StripeWebhookEvent",
+  "PlatformOperator",
+  "PlatformOperatorSession",
 ]);
 
 const PUBLIC_TABLE_INVENTORY_SQL = `
