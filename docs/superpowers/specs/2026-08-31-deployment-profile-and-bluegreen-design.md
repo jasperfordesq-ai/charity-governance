@@ -107,6 +107,13 @@ that interprets configuration into capabilities:
 | Tenancy | `CHARITYPILOT_TENANCY` | `multi` \| `single` | `single` | `multi` |
 | Registration | `CHARITYPILOT_REGISTRATION` | `open` \| `closed` | `closed` | `open` |
 | Email delivery | `CHARITYPILOT_EMAIL_DELIVERY` | `provider` \| `manual-link` | `manual-link` | `provider` |
+| Billing | `CHARITYPILOT_BILLING` | `stripe` \| `none` | `none` | `stripe` |
+
+The billing axis is a recorded deviation from the first draft, which keyed
+billing readiness on "Stripe config presence" — circular, since a
+presence-keyed check can never fail. `none` exempts billing from health
+readiness and hides the tenant billing page; subscriptions are handled with
+comped data instead.
 
 Document storage keeps its existing independent axis
 (`DOCUMENT_STORAGE_DRIVER`), untouched.
@@ -127,7 +134,7 @@ validation, and the appliance web build/proxy profile.
 | `routes/auth/index.ts` register 404 gate | mode | `isRegistrationOpen()` |
 | `routes/owner/index.ts` console gate | mode | `isMultiTenant()` |
 | `server.ts` `OWNER_JWT_SECRET` boot guard | mode | `isMultiTenant()` |
-| `password-recovery.service.ts` manual reset link | mode | `emailDeliveryMode() === 'manual-link'` |
+| `password-recovery.service.ts` manual reset link | mode | *stays keyed on `isPersonalServerDeployment()` — its use selects audit labels describing the appliance operator flow (`SUPPORT`/`'Personal-server operator'`), which is lifecycle identity, not an email-delivery behaviour. The user-facing email-axis behaviour lives in the provider-email endpoint gate instead.* |
 | `team.service.ts` manual invite link | mode | `emailDeliveryMode() === 'manual-link'` |
 | `routes/health` provider-readiness checks | mode | email axis (billing readiness keyed on Stripe config presence) |
 | Web (`NEXT_PUBLIC_…` checks in login, forgot/reset password, dashboard nav, marketing) | one mode var | per-axis `NEXT_PUBLIC_` variants, chosen by each check's true reason (copy/links → email axis; nav/register CTAs → tenancy/registration axes) |
@@ -367,6 +374,10 @@ state.
 
 # Accepted Risks
 
+- **Forgot-password stays disabled (404) under `manual-link`.** A tenant on
+  the self-contained VM who forgets their password needs the platform
+  operator; the console has no per-tenant reset-link reissue yet. Follow-up
+  work, deliberately out of P1.
 - **No reuse detection on owner refresh tokens** (pre-existing, recorded in
   the owner console spec) — unchanged here; the console becoming reachable on
   the VM makes the planned follow-up more relevant, not less.
