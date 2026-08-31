@@ -92,7 +92,11 @@ const PERSONAL_NETWORK_IDENTITIES = Object.freeze({
     gateway: '172.30.251.1',
   }),
 });
-const DOCUMENT_ARCHIVE_IMAGE = 'alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc';
+// Exported so other scripts needing a digest-pinned, no-shell-surprises
+// alpine image for a one-shot documents-volume container (e.g.
+// scripts/bluegreen/backup.mjs) import this constant instead of retyping
+// the digest — a retyped copy drifts the moment either one changes.
+export const DOCUMENT_ARCHIVE_IMAGE = 'alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc';
 const POSTGRES_IMAGE = 'postgres:16.4-alpine@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const CADDY_IMAGE = 'caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648';
 const REQUIRED_RUNTIME_SERVICES = ['db', 'api', 'web', 'caddy'];
