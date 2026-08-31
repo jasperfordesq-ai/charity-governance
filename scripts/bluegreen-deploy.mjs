@@ -1221,14 +1221,41 @@ async function executeRollback(deps) {
   }
 
   writeDeployStatus(resolvedStateDir, 'rollback-record', 'writing rollback state');
-  writeState(resolvedStateDir, {
-    activeColor: previousColor,
-    commit: previousCommit,
-    previousColor: currentColor,
-    previousCommit: currentCommit,
-    deployedAt: now().toISOString(),
-    rollbackable: true,
-  });
+  // Fix round 3 (I2's last window, rollback side): same hazard as the
+  // deploy path's post-cutover writeState — traffic has ALREADY been
+  // rolled back to previousColor and verified by the smoke check above,
+  // so a bare writeState failure here (EISDIR from a stray
+  // state.json.tmp directory, disk full, permissions, ...) must not abort
+  // with a raw filesystem error that names neither fact. Guard it exactly
+  // like the deploy path: best-effort status entry, then an explicit,
+  // operator-actionable message naming the verified colour and commit
+  // verbatim.
+  try {
+    writeState(resolvedStateDir, {
+      activeColor: previousColor,
+      commit: previousCommit,
+      previousColor: currentColor,
+      previousCommit: currentCommit,
+      deployedAt: now().toISOString(),
+      rollbackable: true,
+    });
+  } catch (error) {
+    try {
+      writeDeployStatus(
+        resolvedStateDir,
+        'state-write-failed',
+        `traffic already rolled back to ${previousColor}@${previousCommit} but writeState failed: ${redact(error)}`,
+      );
+    } catch {
+      // Best-effort; the return below carries the actionable message
+      // regardless of whether this log write itself succeeded.
+    }
+    return result(
+      1,
+      '',
+      `Traffic has ALREADY been rolled back to ${previousColor} (commit ${previousCommit}) and verified, but recording state failed (${redact(error)}). state.json still names ${currentColor ?? 'none'}. DO NOT deploy until state is corrected: write { activeColor: '${previousColor}', commit: '${previousCommit}' } manually or fix the underlying filesystem issue and re-run 'status'.\n`,
+    );
+  }
 
   return result(0, `Blue-green rollback completed: ${previousColor} is now live at ${previousCommit}.\n`);
 }

@@ -1192,3 +1192,75 @@ test('I2 (fix round 2): a writeState failure right after cutover reports the swi
 
   rmSync(stateDir, { recursive: true, force: true });
 });
+
+test('I2 (fix round 3, rollback side): a writeState failure right after rollback verification reports the switched-but-unrecorded state explicitly', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i2-rollback-writestate-failure-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'green',
+    commit: TARGET_COMMIT,
+    previousColor: 'blue',
+    previousCommit: OLD_COMMIT,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('green'));
+
+  // The re-reviewer's EISDIR technique, applied to the rollback path: a
+  // pre-created state.json.tmp DIRECTORY makes lib.mjs's writeState throw
+  // synchronously the moment it tries to write the tmp file.
+  mkdirSync(join(stateDir, 'state.json.tmp'), { recursive: true });
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('ps') && command.includes('-a')) {
+        return { stdout: 'api-blue   Up\nweb-blue   Up\n' };
+      }
+      if (command[0] === 'wget') {
+        return { stdout: readinessBody(OLD_COMMIT) };
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['rollback', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+
+  // (a) the rollback's reload happened BEFORE the writeState failure.
+  const validateCall = calls.find((call) => call.command.includes('caddy') && call.command.includes('validate'));
+  const reloadCall = calls.find((call) => call.command.includes('caddy') && call.command.includes('reload'));
+  const publicSmokeCall = calls.find((call) => call.command[0] === 'wget');
+  assert.ok(validateCall, 'caddy validate must have run before the writeState failure');
+  assert.ok(reloadCall, 'caddy reload must have run before the writeState failure');
+  assert.ok(publicSmokeCall, 'the post-rollback smoke wget must have run (and passed) before the writeState failure');
+  const upstreamContent = readFileSync(join(stateDir, 'active-upstreams.caddy'), 'utf8');
+  assert.equal(
+    upstreamContent,
+    libModule.renderUpstreams('blue'),
+    'the live upstream file must already be rewritten to the previous (rolled-back-to) colour — proof the rollback switch really happened before the writeState failure',
+  );
+
+  // (b) the message names the colour traffic was verified on and its
+  // commit, verbatim, actionable from the message text alone.
+  assert.match(outcome.stderr, /ALREADY been rolled back/);
+  assert.match(outcome.stderr, /blue/);
+  assert.match(outcome.stderr, new RegExp(OLD_COMMIT));
+  assert.match(outcome.stderr, /state\.json still names green/);
+  assert.match(outcome.stderr, /DO NOT deploy until state is corrected/);
+  assert.match(outcome.stderr, /activeColor: 'blue'/);
+  assert.match(outcome.stderr, new RegExp(`commit: '${OLD_COMMIT}'`));
+
+  // (c) no raw, unexplained EISDIR-only crash.
+  assert.doesNotMatch(outcome.stderr, /^EISDIR/m);
+
+  // state.json must still (wrongly, but knowably) say green.
+  const state = libModule.readState(stateDir);
+  assert.equal(state.activeColor, 'green');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
