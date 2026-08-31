@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Chip, Input, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow } from '@heroui/react';
+import { Button, Chip, Input, Table, TableBody, TableCell, TableColumn, TableHeader, TableRow } from '@heroui/react';
 import { ownerApi, type TenantSummary } from '@/lib/owner-api';
 
 const STATUS_COLOR = {
@@ -39,7 +39,12 @@ export default function OwnerTenantsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Tenants</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold">Tenants</h1>
+        <Button as={Link} href="/owner/tenants/new" color="primary">
+          Provision tenant
+        </Button>
+      </div>
       <Input placeholder="Search name, RCN, CRO or owner email" value={q} onValueChange={setQ} />
       {error ? <p className="text-danger">{error}</p> : null}
       <Table aria-label="Tenants">

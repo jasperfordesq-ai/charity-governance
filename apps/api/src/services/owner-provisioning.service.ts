@@ -3,8 +3,24 @@ import bcrypt from 'bcryptjs';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { hashOpaqueToken } from './session-tokens.js';
+import { EmailService } from './email.service.js';
+import { SECURITY_EMAIL_TEMPLATE_VERSION } from './security-email-templates.js';
 
 const VERIFY_TOKEN_HOURS = 48;
+// PasswordRecoveryRequest_timeline_check (migrations/20260712013000_add_password_recovery_integrity)
+// caps every recovery row's expiresAt at createdAt + 1 hour, matching
+// RESET_EXPIRY_MS in password-recovery.service.ts. If this link expires before
+// the new owner opens it, the existing self-service "Forgot password" flow at
+// /forgot-password works for this account the same as any other.
+const RESET_TOKEN_HOURS = 1;
+
+// The subset of EmailService this module calls. Kept narrow and structural
+// (not `EmailService` itself) so tests can inject a plain stub without
+// constructing the real class.
+export type OwnerProvisioningEmailService = Pick<
+  EmailService,
+  'sendWelcomeEmail' | 'sendEmailVerification' | 'sendPasswordRecoveryEmail'
+>;
 
 // auth.service.ts has an equivalent isUniqueConstraintError(), but it is not
 // exported, so this mirrors its implementation rather than reaching into that
@@ -22,14 +38,32 @@ export async function provisionTenant(
     plan: 'ESSENTIALS' | 'COMPLETE';
     trialDays: number;
   },
-): Promise<{ organisationId: string; userId: string; verifyToken: string }> {
+  emailService: OwnerProvisioningEmailService = new EmailService(),
+): Promise<{ organisationId: string; userId: string }> {
   if (!Number.isInteger(input.trialDays) || input.trialDays < 1) {
     throw new AppError(400, 'INVALID_TRIAL_DAYS', 'Trial length must be at least one day');
   }
 
   const email = input.ownerEmail.trim().toLowerCase();
+  const ownerName = input.ownerName;
   const verifyToken = crypto.randomBytes(32).toString('base64url');
   const verifyTokenHash = hashOpaqueToken(verifyToken);
+
+  // A second one-time token, alongside the verify token, that lets the
+  // provisioned owner set a real password. Hash stored, raw emailed — the
+  // same shape as the verify token above. It resolves through the ordinary
+  // /reset-password page (services/password-recovery.service.ts's
+  // resetPassword, which looks a PasswordRecoveryRequest row up by the sha256
+  // of the presented token — hashOpaqueToken and that lookup's
+  // hashPasswordRecoveryToken are the same sha256-hex digest). This bypasses
+  // the self-service request-a-reset rate-limited entry point on purpose:
+  // there is no anonymous-attacker enumeration risk to defend against when a
+  // trusted, authenticated operator is issuing a link for an account it just
+  // created, and jobs/personal-server-account.ts's issuePersonalServerResetLink
+  // establishes the same direct-insert pattern for an equivalent operator-only
+  // case.
+  const resetToken = crypto.randomBytes(32).toString('base64url');
+  const resetTokenHash = hashOpaqueToken(resetToken);
 
   // The operator never chooses another person's credential: a random secret is
   // hashed and discarded, and the owner sets a real password via the link.
@@ -38,6 +72,7 @@ export async function provisionTenant(
 
   const trialEndsAt = new Date(Date.now() + input.trialDays * 24 * 60 * 60 * 1000);
   const verifyTokenExpiry = new Date(Date.now() + VERIFY_TOKEN_HOURS * 60 * 60 * 1000);
+  const resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_HOURS * 60 * 60 * 1000);
 
   const created = await prisma.$transaction(async (tx) => {
     // The duplicate check happens INSIDE the transaction, alongside the
@@ -63,7 +98,7 @@ export async function provisionTenant(
       user = await tx.user.create({
         data: {
           email,
-          name: input.ownerName,
+          name: ownerName,
           passwordHash,
           role: 'OWNER',
           organisationId: organisation.id,
@@ -84,8 +119,39 @@ export async function provisionTenant(
       data: { organisationId: organisation.id, plan: input.plan, status: 'TRIALING', trialEndsAt },
     });
 
+    const now = new Date();
+    await tx.passwordRecoveryRequest.create({
+      data: {
+        source: 'OWNER_PROVISIONED',
+        organisationId: organisation.id,
+        userId: user.id,
+        tokenHash: resetTokenHash,
+        recipientEmail: email,
+        recipientName: ownerName,
+        deliveryTemplateVersion: SECURITY_EMAIL_TEMPLATE_VERSION,
+        deliveryState: 'ACCEPTED',
+        deliveryFinalizedAt: now,
+        deliveryAttemptCount: 0,
+        expiresAt: resetTokenExpiry,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
     return { organisationId: organisation.id, userId: user.id };
   });
 
-  return { ...created, verifyToken };
+  // Sent only after the transaction commits: a rolled-back provision (a
+  // concurrent duplicate email, for instance) must never trigger mail for an
+  // organisation that does not exist. Fire-and-forget, matching
+  // AuthService.register — email delivery failure must not fail provisioning,
+  // which already succeeded and committed.
+  void emailService.sendWelcomeEmail(email, ownerName, input.organisationName);
+  void emailService.sendEmailVerification(email, ownerName, verifyToken);
+  void emailService.sendPasswordRecoveryEmail(email, ownerName, resetToken, {
+    idempotencyKey: crypto.randomUUID(),
+    templateVersion: SECURITY_EMAIL_TEMPLATE_VERSION,
+  });
+
+  return created;
 }

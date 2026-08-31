@@ -222,6 +222,7 @@ enum PasswordRecoverySource {
   SELF_SERVICE_EMAIL
   LEGACY_USER_SLOT
   PERSONAL_SERVER_OPERATOR
+  OWNER_PROVISIONED
 }
 
 enum PasswordRecoveryDeliveryState {

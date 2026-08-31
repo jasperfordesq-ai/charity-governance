@@ -66,7 +66,7 @@ All enums are declared at the top of the schema.
 | `AuthSessionRevocationReason` | logout, rotation/reuse/expiry, password/member/ownership/admin/user revocation reasons | `AuthSession.revocationReason` |
 | `SecurityAuditActorKind` | `USER`, `SUPPORT`, `SYSTEM` | `SecurityAuditEvent.actorKind` |
 | `SecurityAuditEventType` | unchanged member/invite/role/ownership/session transitions | `SecurityAuditEvent.type`; reset completion is stored compatibly as truthful `ALL_SESSIONS_REVOKED` plus trusted immutable context and projected as the virtual API label `PASSWORD_RESET_COMPLETED` |
-| `PasswordRecoverySource` | `SELF_SERVICE_EMAIL`, `LEGACY_USER_SLOT`, `PERSONAL_SERVER_OPERATOR` | `PasswordRecoveryRequest.source` |
+| `PasswordRecoverySource` | `SELF_SERVICE_EMAIL`, `LEGACY_USER_SLOT`, `PERSONAL_SERVER_OPERATOR`, `OWNER_PROVISIONED` | `PasswordRecoveryRequest.source` |
 | `PasswordRecoveryDeliveryState` | `SUPPRESSED`, `PENDING`, `SENDING`, `ACCEPTED`, `REJECTED`, `UNCERTAIN` | `PasswordRecoveryRequest.deliveryState` |
 | `PasswordRecoverySuppressionReason` | no eligible account, durable rate limit, outstanding-link limit | `PasswordRecoveryRequest.suppressionReason` |
 | `PasswordRecoveryTerminationReason` | reset completed, delivery rejected, key unavailable/rotated, account inactive, expired | `PasswordRecoveryRequest.terminationReason` |

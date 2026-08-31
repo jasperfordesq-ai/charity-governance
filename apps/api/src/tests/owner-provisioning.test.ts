@@ -11,12 +11,43 @@ const [{ provisionTenant }, { Prisma }] = await Promise.all([
 ]);
 
 const codeOf = (err: unknown) => (err as { code?: string })?.code;
+const sha256 = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
+
+function emailServiceStub() {
+  const calls = {
+    welcome: [] as unknown[][],
+    verification: [] as unknown[][],
+    passwordRecovery: [] as unknown[][],
+  };
+  return {
+    calls,
+    emailService: {
+      sendWelcomeEmail: async (...args: unknown[]) => {
+        calls.welcome.push(args);
+        return true;
+      },
+      sendEmailVerification: async (...args: unknown[]) => {
+        calls.verification.push(args);
+        return true;
+      },
+      sendPasswordRecoveryEmail: async (...args: unknown[]) => {
+        calls.passwordRecovery.push(args);
+        return { outcome: 'ACCEPTED', providerMessageId: 'test-message-id' } as const;
+      },
+    },
+  };
+}
 
 function prismaStub(
   existingUsersByEmail: Record<string, unknown> = {},
   options: { userCreateError?: unknown } = {},
 ) {
-  const calls = { orgs: 0, users: [] as Record<string, unknown>[], subs: [] as Record<string, unknown>[] };
+  const calls = {
+    orgs: 0,
+    users: [] as Record<string, unknown>[],
+    subs: [] as Record<string, unknown>[],
+    recoveryRequests: [] as Record<string, unknown>[],
+  };
   const tx = {
     user: {
       // Honours the where clause it is given: a stub that ignored where.email
@@ -43,6 +74,12 @@ function prismaStub(
         return data;
       },
     },
+    passwordRecoveryRequest: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        calls.recoveryRequests.push(data);
+        return data;
+      },
+    },
   };
   return { calls, prisma: { $transaction: async (fn: (t: unknown) => unknown) => fn(tx) } as never };
 }
@@ -57,7 +94,8 @@ const INPUT = {
 
 test('provisioning creates org, OWNER user and subscription', async () => {
   const { prisma, calls } = prismaStub();
-  const result = await provisionTenant(prisma, INPUT);
+  const { emailService } = emailServiceStub();
+  const result = await provisionTenant(prisma, INPUT, emailService);
 
   assert.equal(calls.orgs, 1);
   assert.equal(calls.users.length, 1);
@@ -66,19 +104,68 @@ test('provisioning creates org, OWNER user and subscription', async () => {
   assert.equal(calls.subs.length, 1);
   assert.equal(calls.subs[0].plan, 'ESSENTIALS');
   assert.equal(calls.subs[0].status, 'TRIALING');
-  assert.ok(result.verifyToken.length > 0);
+  assert.equal(result.organisationId, 'org-1');
+  assert.equal(result.userId, 'u-1');
+  assert.equal((result as { verifyToken?: unknown }).verifyToken, undefined, 'raw tokens must not be returned once the emails carry them');
+});
+
+test('the verify token is hashed at rest, and the raw token emailed matches that hash', async () => {
+  const { prisma, calls } = prismaStub();
+  const { emailService, calls: emailCalls } = emailServiceStub();
+  await provisionTenant(prisma, INPUT, emailService);
+
+  assert.equal(emailCalls.verification.length, 1);
+  const [to, name, rawVerifyToken] = emailCalls.verification[0] as [string, string, string];
+  assert.equal(to, 'ada@example.org');
+  assert.equal(name, 'Ada Lovelace');
 
   // Only the sha256 HASH of the verify token may be persisted; the raw token
-  // is returned to the caller and never stored. A regression that stored the
-  // raw token (or stored nothing distinguishable from it) must fail this.
-  const storedVerifyToken = calls.users[0].verifyToken;
-  assert.notEqual(storedVerifyToken, result.verifyToken);
-  assert.equal(storedVerifyToken, crypto.createHash('sha256').update(result.verifyToken).digest('hex'));
+  // is emailed and never stored. A regression that stored the raw token (or
+  // stored nothing distinguishable from it) must fail this.
+  const storedVerifyToken = calls.users[0].verifyToken as string;
+  assert.notEqual(storedVerifyToken, rawVerifyToken);
+  assert.equal(storedVerifyToken, sha256(rawVerifyToken));
+});
+
+test('a password-reset token is issued in the same transaction, hashed at rest, and the raw token emailed matches that hash', async () => {
+  const { prisma, calls } = prismaStub();
+  const { emailService, calls: emailCalls } = emailServiceStub();
+  await provisionTenant(prisma, INPUT, emailService);
+
+  assert.equal(calls.recoveryRequests.length, 1, 'the reset token must be issued inside the same transaction as the user/org/subscription writes');
+  const request = calls.recoveryRequests[0];
+  assert.equal(request.source, 'OWNER_PROVISIONED');
+  assert.equal(request.organisationId, 'org-1');
+  assert.equal(request.userId, 'u-1');
+  assert.equal(request.deliveryState, 'ACCEPTED');
+
+  assert.equal(emailCalls.passwordRecovery.length, 1);
+  const [to, name, rawResetToken] = emailCalls.passwordRecovery[0] as [string, string, string];
+  assert.equal(to, 'ada@example.org');
+  assert.equal(name, 'Ada Lovelace');
+
+  const storedResetTokenHash = request.tokenHash as string;
+  assert.notEqual(storedResetTokenHash, rawResetToken);
+  // hashOpaqueToken (used here) and hashPasswordRecoveryToken (used by the
+  // consuming /auth/reset-password endpoint) are both plain sha256 hex
+  // digests, so this proves the link that gets emailed will actually resolve.
+  assert.equal(storedResetTokenHash, sha256(rawResetToken));
+  assert.match(rawResetToken, /^[A-Za-z0-9_-]{43}$/, 'must match the canonical reset-token shape resetPassword() requires');
+});
+
+test('the welcome email is sent with the organisation name', async () => {
+  const { prisma } = prismaStub();
+  const { emailService, calls: emailCalls } = emailServiceStub();
+  await provisionTenant(prisma, INPUT, emailService);
+
+  assert.equal(emailCalls.welcome.length, 1);
+  assert.deepEqual(emailCalls.welcome[0], ['ada@example.org', 'Ada Lovelace', 'New Charity']);
 });
 
 test('the operator never supplies a password and none is usable', async () => {
   const { prisma, calls } = prismaStub();
-  await provisionTenant(prisma, INPUT);
+  const { emailService } = emailServiceStub();
+  await provisionTenant(prisma, INPUT, emailService);
   const created = calls.users[0];
   assert.equal(typeof created.passwordHash, 'string');
   assert.notEqual(created.passwordHash, '');
@@ -90,12 +177,17 @@ test('a duplicate email returns 409 and creates nothing', async () => {
   // prevent enumeration. For a trusted operator that would silently no-op, so
   // the owner path must fail loudly instead.
   const { prisma, calls } = prismaStub({ 'ada@example.org': { id: 'u-existing' } });
+  const { emailService, calls: emailCalls } = emailServiceStub();
   await assert.rejects(
-    () => provisionTenant(prisma, INPUT),
+    () => provisionTenant(prisma, INPUT, emailService),
     (err: unknown) => codeOf(err) === 'EMAIL_ALREADY_REGISTERED',
   );
   assert.equal(calls.orgs, 0, 'no partial organisation may be created');
   assert.equal(calls.users.length, 0);
+  assert.equal(calls.recoveryRequests.length, 0);
+  assert.equal(emailCalls.welcome.length, 0, 'a rejected provision must never send mail');
+  assert.equal(emailCalls.verification.length, 0);
+  assert.equal(emailCalls.passwordRecovery.length, 0);
 });
 
 test('a concurrent duplicate email (caught only by the DB unique constraint) still returns 409, not a raw 500', async () => {
@@ -111,9 +203,10 @@ test('a concurrent duplicate email (caught only by the DB unique constraint) sti
     meta: { target: 'User_email_key' },
   });
   const { prisma } = prismaStub({}, { userCreateError: uniqueConstraintError });
+  const { emailService } = emailServiceStub();
 
   await assert.rejects(
-    () => provisionTenant(prisma, INPUT),
+    () => provisionTenant(prisma, INPUT, emailService),
     (err: unknown) => codeOf(err) === 'EMAIL_ALREADY_REGISTERED',
   );
 });
@@ -122,7 +215,8 @@ test('a different existing email does not block provisioning', async () => {
   // Proves the stub (and the service) actually filter on where.email rather
   // than blocking on the mere presence of any existing user row.
   const { prisma, calls } = prismaStub({ 'someone-else@example.org': { id: 'u-existing' } });
-  const result = await provisionTenant(prisma, INPUT);
+  const { emailService } = emailServiceStub();
+  const result = await provisionTenant(prisma, INPUT, emailService);
 
   assert.equal(calls.orgs, 1);
   assert.equal(calls.users.length, 1);
@@ -131,14 +225,16 @@ test('a different existing email does not block provisioning', async () => {
 
 test('a non-canonical email is normalised before the duplicate check', async () => {
   const { prisma, calls } = prismaStub();
-  await provisionTenant(prisma, { ...INPUT, ownerEmail: '  Ada@Example.ORG ' });
+  const { emailService } = emailServiceStub();
+  await provisionTenant(prisma, { ...INPUT, ownerEmail: '  Ada@Example.ORG ' }, emailService);
   assert.equal(calls.users[0].email, 'ada@example.org');
 });
 
 test('trial days must be positive', async () => {
   const { prisma } = prismaStub();
+  const { emailService } = emailServiceStub();
   await assert.rejects(
-    () => provisionTenant(prisma, { ...INPUT, trialDays: 0 }),
+    () => provisionTenant(prisma, { ...INPUT, trialDays: 0 }, emailService),
     (err: unknown) => codeOf(err) === 'INVALID_TRIAL_DAYS',
   );
 });

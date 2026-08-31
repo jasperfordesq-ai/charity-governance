@@ -129,6 +129,6 @@ export const ownerApi = {
     trialDays: number;
   }) {
     const { data } = await client.post('/tenants', body);
-    return data as { organisationId: string; userId: string; verifyToken: string };
+    return data as { organisationId: string; userId: string };
   },
 };
