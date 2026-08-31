@@ -164,6 +164,20 @@ test('manualInviteUrl uses the personal-server origin in appliance mode', () => 
   assert.equal(url, 'https://charitypilot.tail.example.ts.net/accept-invite#token=tok123');
 });
 
+test('manualInviteUrl in appliance mode is fail-closed: a misconfigured personal-server origin never falls back to raw FRONTEND_URL', () => {
+  // FRONTEND_URL and NEXT_PUBLIC_API_URL are both well-formed on their own,
+  // and FRONTEND_URL alone would resolve to a perfectly usable origin outside
+  // appliance mode — but they disagree, so getPersonalServerOrigin's
+  // exact-origin check rejects the pair. That rejection must stick: no
+  // fallback to the raw FRONTEND_URL is allowed in appliance mode.
+  const url = manualInviteUrl('tok123', {
+    CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+    FRONTEND_URL: 'https://charitypilot.tail.example.ts.net',
+    NEXT_PUBLIC_API_URL: 'https://some-other-origin.example.ts.net',
+  });
+  assert.equal(url, null);
+});
+
 test('manualInviteUrl falls back to FRONTEND_URL outside appliance mode', () => {
   const url = manualInviteUrl('tok123', { FRONTEND_URL: 'https://charitypilot.tail.example.ts.net' });
   assert.equal(url, 'https://charitypilot.tail.example.ts.net/accept-invite#token=tok123');

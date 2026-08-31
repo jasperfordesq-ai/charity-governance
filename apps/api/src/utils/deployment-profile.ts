@@ -52,13 +52,20 @@ export function billingMode(env: DeploymentEnv = process.env): 'stripe' | 'none'
 }
 
 // Where manually surfaced links point. In appliance mode the validated
-// personal-server origin wins (its parsing enforces origin-exactness);
-// otherwise FRONTEND_URL — required by production env validation — is the
-// tenant web origin. The token rides the URL FRAGMENT, never the query
+// personal-server origin (exact-origin match between FRONTEND_URL and
+// NEXT_PUBLIC_API_URL, HTTPS-DNS or exact loopback-http) is the ONLY
+// acceptable origin: this path is deliberately fail-closed. A misconfigured
+// appliance — mismatched FRONTEND_URL/NEXT_PUBLIC_API_URL, an IP-address
+// origin, a non-exact loopback, a trailing slash, anything
+// getPersonalServerOrigin's validation exists to catch — yields null rather
+// than silently falling back to a raw, unvalidated FRONTEND_URL. Outside
+// appliance mode, FRONTEND_URL — required by production env validation — is
+// the tenant web origin. The token rides the URL FRAGMENT, never the query
 // string: fragments do not reach servers, proxies, or access logs.
 function manualLinkOrigin(env: DeploymentEnv): URL | null {
-  const personal = getPersonalServerOrigin(env);
-  if (personal) return personal;
+  if (isApplianceMode(env)) {
+    return getPersonalServerOrigin(env);
+  }
   const frontend = env.FRONTEND_URL;
   if (!frontend) return null;
   try {
