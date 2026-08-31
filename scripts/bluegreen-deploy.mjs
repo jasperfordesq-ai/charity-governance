@@ -114,6 +114,18 @@ const DOCUMENTS_ARTIFACT_NAME = 'documents.tar';
 const MANIFEST_ARTIFACT_NAME = 'manifest.json';
 const APPLIED_MIGRATIONS_SQL =
   'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL';
+// C1 fix: a fresh database has no "_prisma_migrations" relation yet (every
+// first-ever deploy, including Task 10's local acceptance run and the
+// owner's real VM cutover). A bare SELECT against it errors with "relation
+// ... does not exist" (confirmed against real postgres:16-alpine). Guarded
+// two-step, mirroring production-p109-restored-database-probe.mjs's own
+// TO_REGCLASS use: probe existence first (TO_REGCLASS never throws), skip
+// the real query entirely when the relation is absent. The JS-level catch
+// below is belt-and-braces in case the probe itself ever surfaces a
+// relation-missing-shaped error some other way.
+const PRISMA_MIGRATIONS_EXISTS_PROBE_SQL =
+  "SELECT TO_REGCLASS('public.\"_prisma_migrations\"') IS NOT NULL";
+const RELATION_MISSING_PATTERN = /relation\s+.*_prisma_migrations.*\s+does not exist/i;
 
 function usage() {
   return [
@@ -285,6 +297,22 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
     }
   }
 
+  // I4 fix: without READINESS_API_KEY every readiness call is a guaranteed
+  // 401 that only surfaces at phase 10 (candidate-smoke), AFTER migrations
+  // have already applied — far too late to be a cheap preflight catch.
+  if (!fileEnv.READINESS_API_KEY || !fileEnv.READINESS_API_KEY.trim()) {
+    issues.push('READINESS_API_KEY is required (candidate/public smoke cannot authenticate without it)');
+  }
+  if (!fileEnv.BLUEGREEN_ORIGIN || !fileEnv.BLUEGREEN_ORIGIN.trim()) {
+    issues.push('BLUEGREEN_ORIGIN is required (the web build and the canonical-origin check both need it)');
+  }
+  const frontPortValue = fileEnv.BLUEGREEN_FRONT_PORT;
+  if (frontPortValue !== undefined && frontPortValue !== '' && !/^\d+$/.test(frontPortValue)) {
+    issues.push(
+      `BLUEGREEN_FRONT_PORT must be a positive integer port number when set; got ${JSON.stringify(frontPortValue)}`,
+    );
+  }
+
   return issues;
 }
 
@@ -361,6 +389,60 @@ function parsePsqlList(stdout) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+// C1 fix: probe-then-query. TO_REGCLASS never throws for a missing
+// relation, so the probe itself is always safe; the JS-level catch is
+// belt-and-braces in case a relation-missing error surfaces some other
+// way. Returns [] (never throws) when the table does not exist yet —
+// exactly the state of every first-ever deploy's database.
+async function fetchAppliedMigrationNames(run, deployEnv) {
+  const probeCommand = [
+    ...composePrefix(),
+    'exec',
+    '-T',
+    'db',
+    'psql',
+    '-U',
+    DEFAULT_DATABASE_USER,
+    '-d',
+    DEFAULT_DATABASE_NAME,
+    '-tA',
+    '-c',
+    PRISMA_MIGRATIONS_EXISTS_PROBE_SQL,
+  ];
+  let tableExists;
+  try {
+    const probe = await run(probeCommand, deployEnv);
+    tableExists = (probe.stdout ?? '').trim() === 't';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (RELATION_MISSING_PATTERN.test(message)) {
+      tableExists = false;
+    } else {
+      throw error;
+    }
+  }
+  if (!tableExists) return [];
+
+  const appliedResult = await run(
+    [
+      ...composePrefix(),
+      'exec',
+      '-T',
+      'db',
+      'psql',
+      '-U',
+      DEFAULT_DATABASE_USER,
+      '-d',
+      DEFAULT_DATABASE_NAME,
+      '-tA',
+      '-c',
+      APPLIED_MIGRATIONS_SQL,
+    ],
+    deployEnv,
+  );
+  return parsePsqlList(appliedResult.stdout);
 }
 
 function readMigrationBatch(migrationsDir, names) {
@@ -477,9 +559,22 @@ export async function runBluegreenDeployFromArgs(
     );
   }
 
+  const composeArgs = ['-f', COMPOSE_FILE, '-p', PROJECT_NAME];
+  const cutoverLockPath = join(resolvedStateDir, 'cutover.lock');
+
   if (options.detach) {
+    // M6 fix: probe the lock in the FOREGROUND before spawning — acquire
+    // then immediately release, so contention fails loudly here rather
+    // than silently inside the detached child (whose failure the caller
+    // would only discover by tailing the log later).
     try {
       mkdirSync(resolvedStateDir, { recursive: true });
+      const probeLock = acquireCutoverLock({ lockPath: cutoverLockPath });
+      releaseCutoverLock(probeLock);
+    } catch (error) {
+      return result(1, '', `Blue-green ${options.command} failed before detaching: ${redact(error)}\n`);
+    }
+    try {
       const stamp = now().toISOString().replace(/[:.]/g, '-');
       const logPath = join(resolvedStateDir, `deploy-${stamp}.log`);
       const logFd = openSync(logPath, 'a');
@@ -496,9 +591,6 @@ export async function runBluegreenDeployFromArgs(
       return result(1, '', `Blue-green ${options.command} could not detach: ${redact(error)}\n`);
     }
   }
-
-  const composeArgs = ['-f', COMPOSE_FILE, '-p', PROJECT_NAME];
-  const cutoverLockPath = join(resolvedStateDir, 'cutover.lock');
 
   let ownedLock = null;
   try {
@@ -656,7 +748,27 @@ async function executeDeploy(deps) {
   // Phase 4: worktree
   writeDeployStatus(resolvedStateDir, 'worktree', `preparing release worktree for ${targetCommit}`);
   const releaseDir = releaseDirFor(resolvedStateDir, targetCommit);
-  if (!existsSync(releaseDir)) {
+  // M5 fix: a reused worktree directory might belong to a DIFFERENT commit
+  // (an interrupted prior attempt, or a name collision) — verify it and
+  // remove+recreate rather than silently building the wrong source.
+  if (existsSync(releaseDir)) {
+    let existingHead = '';
+    try {
+      const check = await run(['git', '-C', releaseDir, 'rev-parse', 'HEAD']);
+      existingHead = (check.stdout ?? '').trim();
+    } catch {
+      existingHead = '';
+    }
+    if (existingHead !== targetCommit) {
+      try {
+        await run(['git', 'worktree', 'remove', releaseDir, '--force']);
+      } catch {
+        // Best-effort; rmSync below covers a worktree git no longer tracks.
+      }
+      rmSync(releaseDir, { recursive: true, force: true });
+      await run(['git', 'worktree', 'add', releaseDir, targetCommit]);
+    }
+  } else {
     mkdirSync(dirname(releaseDir), { recursive: true });
     await run(['git', 'worktree', 'add', releaseDir, targetCommit]);
   }
@@ -677,26 +789,10 @@ async function executeDeploy(deps) {
   await run([...composePrefix({ projectDirectory: releaseDir }), '--profile', target, 'build'], deployEnv);
 
   // Phase 6: gate
-  writeDeployStatus(resolvedStateDir, 'gate', 'checking migration safety');
   await run([...composePrefix(), 'up', '-d', '--wait', 'db'], deployEnv);
-  const appliedResult = await run(
-    [
-      ...composePrefix(),
-      'exec',
-      '-T',
-      'db',
-      'psql',
-      '-U',
-      DEFAULT_DATABASE_USER,
-      '-d',
-      DEFAULT_DATABASE_NAME,
-      '-tA',
-      '-c',
-      APPLIED_MIGRATIONS_SQL,
-    ],
-    deployEnv,
-  );
-  const appliedNames = parsePsqlList(appliedResult.stdout);
+  // C1 fix: fetchAppliedMigrationNames survives a fresh database with no
+  // "_prisma_migrations" relation yet (every first-ever deploy).
+  const appliedNames = await fetchAppliedMigrationNames(run, deployEnv);
   const migrationsDir = join(releaseDir, ...MIGRATIONS_RELATIVE);
   const { pending, unknownApplied } = pendingMigrations(migrationsDir, appliedNames);
   const migrationBatch = readMigrationBatch(migrationsDir, pending);
@@ -704,8 +800,15 @@ async function executeDeploy(deps) {
   let unknownAppliedWarning = '';
   if (unknownApplied.length > 0) {
     unknownAppliedWarning = `WARNING: the live database has ${unknownApplied.length} applied migration(s) this release's checkout does not contain (${unknownApplied.join(', ')}) — this release is OLDER than the database, which is expected during a rollback-style deploy.\n`;
-    writeDeployStatus(resolvedStateDir, 'gate', unknownAppliedWarning.trim());
   }
+  // M1 fix: a single deduped 'gate' status entry (never two writes for the
+  // same phase) carrying the full picture, including the unknownApplied
+  // warning inline rather than as a second write.
+  writeDeployStatus(
+    resolvedStateDir,
+    'gate',
+    `checked migration safety: ${pending.length} pending, ${gate.blocked.length} blocked, ${gate.warned.length} warned${unknownApplied.length > 0 ? `; ${unknownAppliedWarning.trim()}` : ''}`,
+  );
   if (!gate.ok) {
     const findings = gate.blocked
       .map((finding) => `- [${finding.id}] ${finding.migration}: ${finding.excerpt}`)
@@ -729,7 +832,7 @@ async function executeDeploy(deps) {
   } catch (error) {
     const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
     try {
-      if (oldColor) await run([...composePrefix(), 'up', '-d', 'scheduler'], oldEnv);
+      if (oldColor) await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], oldEnv);
     } catch {
       // Best-effort restart; the original migration error is what matters.
     }
@@ -775,10 +878,27 @@ async function executeDeploy(deps) {
       deployEnv,
     );
   } catch (error) {
+    // I5 fix: candidate-smoke failure previously left the scheduler
+    // stopped (it was stopped at quiesce/phase 7) even though the old
+    // colour is still what serves traffic. Restart it on the old tag —
+    // same recovery as a migrate failure. M2: skip cleanly on a first
+    // deploy, where there is no old colour to restart anything on.
+    let recoveryNote = '';
+    if (oldColor) {
+      try {
+        const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
+        await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], oldEnv);
+        recoveryNote = ` Jobs were restarted on the old tag (${oldCommit}).`;
+      } catch (restartError) {
+        recoveryNote = ` Restarting jobs on the old tag also failed: ${redact(restartError)}.`;
+      }
+    } else {
+      recoveryNote = ' No previous colour to revert to (first deploy).';
+    }
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: candidate smoke test failed on the ${target} colour: ${redact(error)}. Traffic was never switched; the old colour remains live.\n`,
+      `Blue-green deploy failed: candidate smoke test failed on the ${target} colour: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}\n`,
     );
   }
 
@@ -806,10 +926,24 @@ async function executeDeploy(deps) {
     } catch {
       // Best-effort restore reload; the original reload error is what matters.
     }
+    // I5 fix: same as candidate-smoke — the scheduler was stopped at
+    // quiesce and is never otherwise restarted on this failure path.
+    let recoveryNote = '';
+    if (oldColor) {
+      try {
+        const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
+        await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], oldEnv);
+        recoveryNote = ` Jobs were restarted on the old tag (${oldCommit}).`;
+      } catch (restartError) {
+        recoveryNote = ` Restarting jobs on the old tag also failed: ${redact(restartError)}.`;
+      }
+    } else {
+      recoveryNote = ' No previous colour to revert to (first deploy).';
+    }
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: Caddy reload failed while switching to ${target}: ${redact(error)}. The previous upstream file was restored and reloaded; traffic was never switched.\n`,
+      `Blue-green deploy failed: Caddy reload failed while switching to ${target}: ${redact(error)}. The previous upstream file was restored and reloaded; traffic was never switched.${recoveryNote}\n`,
     );
   }
 
@@ -833,6 +967,18 @@ async function executeDeploy(deps) {
       );
     }
   } catch (error) {
+    // M2 fix: a first deploy has no old colour to revert to at all — the
+    // old code still attempted a caddy restore-and-reload plus a
+    // reverify-against-the-old-commit wget, both meaningless (and
+    // confusing: "expected the old commit null") when there is no old
+    // colour. Skip the whole revert block with a clear message instead.
+    if (!oldColor) {
+      return result(
+        1,
+        unknownAppliedWarning,
+        `Blue-green deploy failed: public smoke test failed after switching to ${target}: ${redact(error)}. No previous colour to revert to (first deploy) — traffic remains on ${target}, which failed its own public smoke test; inspect manually before retrying.\n`,
+      );
+    }
     if (previousUpstreams !== null) writeFileSync(deps.activeUpstreamsPath, previousUpstreams);
     let revertError = '';
     try {
@@ -841,7 +987,7 @@ async function executeDeploy(deps) {
         deployEnv,
       );
       const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
-      if (oldColor) await run([...composePrefix(), 'up', '-d', 'scheduler'], oldEnv);
+      if (oldColor) await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], oldEnv);
       const reverify = await run(
         [
           'wget',
@@ -866,20 +1012,13 @@ async function executeDeploy(deps) {
     );
   }
 
-  // Phase 13: jobs
-  writeDeployStatus(resolvedStateDir, 'jobs', `starting scheduler on ${targetCommit}`);
-  await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], deployEnv);
-
-  // Phase 14: retire
-  if (oldColor) {
-    writeDeployStatus(resolvedStateDir, 'retire', `stopping ${oldColor} (containers kept)`);
-    await run([...composePrefix(), 'stop', `api-${oldColor}`, `web-${oldColor}`], deployEnv);
-  } else {
-    writeDeployStatus(resolvedStateDir, 'retire', 'no previous colour to retire (first deploy)');
-  }
-
-  // Phase 15: record
-  writeDeployStatus(resolvedStateDir, 'record', 'writing deploy state');
+  // I2 fix: state.json must become truthful the INSTANT traffic is
+  // actually serving ${target} — the moment public smoke passes, not 15
+  // lines later at "record". A failure in jobs/retire below must never
+  // leave state.json pointing at the retiring old colour while Caddy is
+  // already sending real traffic to the new one (the next deploy would
+  // then target the LIVE colour and could recreate serving containers).
+  // State-write is not itself a phase; it happens here, before phase 13.
   writeState(resolvedStateDir, {
     activeColor: target,
     commit: targetCommit,
@@ -888,6 +1027,39 @@ async function executeDeploy(deps) {
     deployedAt: now().toISOString(),
     rollbackable: !destructiveOverrideUsed,
   });
+
+  // Phase 13: jobs
+  writeDeployStatus(resolvedStateDir, 'jobs', `starting scheduler on ${targetCommit}`);
+  try {
+    await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], deployEnv);
+  } catch (error) {
+    return result(
+      1,
+      unknownAppliedWarning,
+      `Blue-green deploy failed after cutover: starting the scheduler on ${targetCommit} failed: ${redact(error)}. Traffic is serving ${target} and state is recorded; scheduler restart/retire incomplete — inspect with status, re-run jobs manually or rollback.\n`,
+    );
+  }
+
+  // Phase 14: retire
+  if (oldColor) {
+    writeDeployStatus(resolvedStateDir, 'retire', `stopping ${oldColor} (containers kept)`);
+    try {
+      await run([...composePrefix(), 'stop', `api-${oldColor}`, `web-${oldColor}`], deployEnv);
+    } catch (error) {
+      return result(
+        1,
+        unknownAppliedWarning,
+        `Blue-green deploy failed after cutover: stopping the old colour (${oldColor}) failed: ${redact(error)}. Traffic is serving ${target} and state is recorded; scheduler restart/retire incomplete — inspect with status, re-run jobs manually or rollback.\n`,
+      );
+    }
+  } else {
+    writeDeployStatus(resolvedStateDir, 'retire', 'no previous colour to retire (first deploy)');
+  }
+
+  // Phase 15: record (state was already written above, right after
+  // public smoke succeeded — see the I2 note; this phase now only prunes
+  // retained backups).
+  writeDeployStatus(resolvedStateDir, 'record', 'state already recorded after public smoke; pruning backups');
   pruneBackups(resolvedStateDir, now());
 
   return result(0, `${unknownAppliedWarning}Blue-green deploy completed: ${target} is now live at ${targetCommit}.\n`);
@@ -934,7 +1106,9 @@ async function executeRollback(deps) {
     greenTag,
     activeTag: previousCommit,
   });
-
+  // M4 fix: executeRollback previously wrote no deploy-status entries at
+  // all. Every step below now logs one, mirroring the deploy path.
+  writeDeployStatus(resolvedStateDir, 'rollback-verify', `checking ${previousColor} containers exist`);
   const psResult = await run([...composePrefix(), 'ps', '-a'], rollbackEnv);
   if (!(psResult.stdout ?? '').includes(`api-${previousColor}`)) {
     return result(
@@ -944,6 +1118,7 @@ async function executeRollback(deps) {
     );
   }
 
+  writeDeployStatus(resolvedStateDir, 'rollback-switch', `pointing Caddy at ${previousColor}`);
   const previousUpstreams = existsSync(deps.activeUpstreamsPath) ? readFileSync(deps.activeUpstreamsPath, 'utf8') : null;
   writeFileSync(deps.activeUpstreamsPath, renderUpstreams(previousColor));
   try {
@@ -971,33 +1146,54 @@ async function executeRollback(deps) {
       `Blue-green rollback failed: Caddy reload failed: ${redact(error)}. The previous upstream file was restored.\n`,
     );
   }
-
+  writeDeployStatus(resolvedStateDir, 'rollback-jobs', `starting ${previousColor} containers and scheduler on ${previousCommit}`);
   await run([...composePrefix(), 'up', '-d', `api-${previousColor}`, `web-${previousColor}`], rollbackEnv);
   await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], rollbackEnv);
 
+  // I3 fix: a failed post-rollback smoke check (command failure OR an
+  // observed commit that doesn't match) previously just returned an error
+  // with no record, while Caddy may already be pointing at the previous
+  // colour — a "half-rolled with no record" state. Never flip state.json
+  // in this branch; log a dedicated 'rollback-uncertain' status entry
+  // naming the observed vs expected commit and say so explicitly.
+  writeDeployStatus(resolvedStateDir, 'rollback-smoke', 'verifying traffic through the front door');
+  const smokeCommand = [
+    'wget',
+    '-qO-',
+    '--header',
+    `${READINESS_HEADER}: ${readinessKey(fileEnv)}`,
+    `http://127.0.0.1:${frontPort(fileEnv)}${READINESS_PATH}`,
+  ];
+  let smokeBody;
   try {
-    const publicSmoke = await run(
-      [
-        'wget',
-        '-qO-',
-        '--header',
-        `${READINESS_HEADER}: ${readinessKey(fileEnv)}`,
-        `http://127.0.0.1:${frontPort(fileEnv)}${READINESS_PATH}`,
-      ],
-      rollbackEnv,
-    );
-    const body = JSON.parse(publicSmoke.stdout || '{}');
-    if (body.buildCommit !== previousCommit) {
-      throw new Error(
-        `rollback readiness reported buildCommit=${JSON.stringify(body.buildCommit)}, expected ${previousCommit}`,
-      );
-    }
+    const publicSmoke = await run(smokeCommand, rollbackEnv);
+    smokeBody = JSON.parse(publicSmoke.stdout || '{}');
   } catch (error) {
-    return result(1, '', `Blue-green rollback failed: public smoke test after rollback failed: ${redact(error)}.\n`);
+    writeDeployStatus(resolvedStateDir, 'rollback-uncertain', `post-rollback smoke command failed: ${redact(error)}`);
+    return result(
+      1,
+      '',
+      `Blue-green rollback failed: public smoke test after rollback failed: ${redact(error)}. State uncertain — traffic may be on ${previousColor} serving an unexpected commit; inspect manually.\n`,
+    );
+  }
+  if (smokeBody.buildCommit !== previousCommit) {
+    writeDeployStatus(
+      resolvedStateDir,
+      'rollback-uncertain',
+      `observed=${JSON.stringify(smokeBody.buildCommit)} expected=${previousCommit}`,
+    );
+    return result(
+      1,
+      '',
+      `Blue-green rollback failed: post-rollback verification observed buildCommit=${JSON.stringify(smokeBody.buildCommit)} but expected ${previousCommit}. State uncertain — traffic may be on ${previousColor} serving an unexpected commit; inspect manually.\n`,
+    );
+  }
+  if (currentColor) {
+    writeDeployStatus(resolvedStateDir, 'rollback-retire', `stopping ${currentColor}`);
+    await run([...composePrefix(), 'stop', `api-${currentColor}`, `web-${currentColor}`], rollbackEnv);
   }
 
-  if (currentColor) await run([...composePrefix(), 'stop', `api-${currentColor}`, `web-${currentColor}`], rollbackEnv);
-
+  writeDeployStatus(resolvedStateDir, 'rollback-record', 'writing rollback state');
   writeState(resolvedStateDir, {
     activeColor: previousColor,
     commit: previousCommit,

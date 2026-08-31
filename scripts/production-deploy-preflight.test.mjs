@@ -76,6 +76,7 @@ test('deploy transcript redaction removes production secret fragments', () => {
     'ERROR_ALERT_WEBHOOK_URL=https://hooks.example/alert?token=secret-token',
     'Authorization: Bearer configured-service-role-key',
     'apikey=configured-service-role-key',
+    'exec -T api-blue wget -qO- --header x-charitypilot-readiness-key: r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF http://127.0.0.1:3002/api/v1/health/readiness',
   ].join('\n');
 
   const redacted = redactProductionDeployTranscript(transcript);
@@ -89,6 +90,8 @@ test('deploy transcript redaction removes production secret fragments', () => {
   assert.match(redacted, /Bearer \[redacted\]/);
   assert.match(redacted, /apikey=\[redacted\]/);
   assert.doesNotMatch(redacted, /user:secret|sk_live_superSecret|whsec_superSecret|re_superSecret|secret-token|configured-service-role-key/);
+  assert.match(redacted, /x-charitypilot-readiness-key: \[redacted\]/);
+  assert.doesNotMatch(redacted, /r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF/);
 });
 
 test('deploy preflight requires the exact reviewed P1-07A database compatibility line', async (context) => {

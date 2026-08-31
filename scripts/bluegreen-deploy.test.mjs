@@ -102,6 +102,18 @@ function makeFakeRunCommand({ targetCommit = TARGET_COMMIT, appliedMigrations = 
       return { stdout: `${targetCommit}\n` };
     }
     if (command[0] === 'git' && command[1] === 'worktree') return { stdout: '' };
+    // M5: the worktree-reuse check runs `git -C <dir> rev-parse HEAD`; report
+    // it as already matching the target commit so tests that pre-seed a
+    // release directory (seedMigrationsDir) don't get wiped and recreated.
+    if (command[0] === 'git' && command[1] === '-C' && command[3] === 'rev-parse' && command[4] === 'HEAD') {
+      return { stdout: `${targetCommit}\n` };
+    }
+    // C1: the gate probes existence first (TO_REGCLASS) before running the
+    // real applied-migrations SELECT — the probe must report the table
+    // exists ('t') so the real query below actually runs in tests.
+    if (joined.includes('psql') && joined.includes('TO_REGCLASS')) {
+      return { stdout: 't' };
+    }
     if (joined.includes('psql') && joined.includes('_prisma_migrations')) {
       return { stdout: appliedMigrations.map((name) => `${name}\n`).join('') };
     }
@@ -604,6 +616,517 @@ test('status: reports "no deploy state found" before any deploy has run', async 
 
   assert.equal(outcome.status, 0, outcome.stderr);
   assert.match(outcome.stdout, /No deploy state found/);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1 (coordinator review) — new pinned tests
+// ---------------------------------------------------------------------------
+
+test('C1: gate survives a fresh database with no _prisma_migrations relation yet', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-fresh-db-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, [
+    { name: '20260101000000_init', sql: 'CREATE TABLE "Foo" (id serial primary key);' },
+  ]);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      const joined = command.join(' ');
+      if (joined.includes('psql') && joined.includes('TO_REGCLASS')) {
+        return { stdout: 'f' };
+      }
+      if (joined.includes('psql') && joined.includes('_prisma_migrations') && !joined.includes('TO_REGCLASS')) {
+        throw new Error('the real applied-migrations query must never run against a missing table');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const realQueryRan = calls.some((call) => {
+    const joined = call.command.join(' ');
+    return joined.includes('_prisma_migrations') && !joined.includes('TO_REGCLASS');
+  });
+  assert.equal(realQueryRan, false, 'the real applied-migrations query must never run when the probe reports the table missing');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('C1: a probe that itself throws a relation-missing error is treated as a fresh database, not an abort', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-fresh-db-throw-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      const joined = command.join(' ');
+      if (joined.includes('psql') && joined.includes('TO_REGCLASS')) {
+        return new Error('ERROR:  relation "_prisma_migrations" does not exist');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I2: a failure starting the scheduler (phase 13) still records the target colour as active', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-phase13-failure-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('blue'));
+
+  const { deps } = baseDeps({
+    stateDir,
+    overrides: (command, options) => {
+      if (
+        command.includes('up') &&
+        command.includes('scheduler') &&
+        options.env?.BLUEGREEN_ACTIVE_TAG === TARGET_COMMIT
+      ) {
+        return new Error('scheduler failed to start');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Traffic is serving green and state is recorded/);
+  assert.match(outcome.stderr, /scheduler restart\/retire incomplete/);
+
+  const state = libModule.readState(stateDir);
+  assert.equal(state.activeColor, 'green', 'state must already say green is active even though jobs failed');
+  assert.equal(state.commit, TARGET_COMMIT);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I2: a failure stopping the old colour (phase 14) still records the target colour as active', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-phase14-failure-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('blue'));
+
+  const { deps } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('stop') && command.includes('api-blue') && command.includes('web-blue')) {
+        return new Error('stop failed: container busy');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Traffic is serving green and state is recorded/);
+  assert.match(outcome.stderr, /stopping the old colour \(blue\) failed/);
+
+  const state = libModule.readState(stateDir);
+  assert.equal(state.activeColor, 'green', 'state must already say green is active even though retire failed');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I3: a post-rollback verification mismatch leaves state unflipped and logs rollback-uncertain', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-rollback-uncertain-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'green',
+    commit: TARGET_COMMIT,
+    previousColor: 'blue',
+    previousCommit: OLD_COMMIT,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+
+  const { deps } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('ps') && command.includes('-a')) {
+        return { stdout: 'api-blue   Up\nweb-blue   Up\n' };
+      }
+      if (command[0] === 'wget') {
+        return { stdout: readinessBody('some-other-unexpected-commit') };
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['rollback', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /State uncertain/);
+  assert.match(outcome.stderr, /observed buildCommit=.*some-other-unexpected-commit/);
+  assert.match(outcome.stderr, /expected/);
+
+  const state = libModule.readState(stateDir);
+  assert.equal(state.activeColor, 'green', 'state must NOT flip when the rollback re-verify mismatches');
+  assert.equal(state.commit, TARGET_COMMIT);
+
+  const status = libModule.deployStatus(stateDir);
+  assert.ok(
+    status.history.some((entry) => entry.phase === 'rollback-uncertain'),
+    'a rollback-uncertain status entry must be recorded',
+  );
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I3: a post-rollback smoke command failure also leaves state unflipped and logs rollback-uncertain', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-rollback-uncertain-cmd-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'green',
+    commit: TARGET_COMMIT,
+    previousColor: 'blue',
+    previousCommit: OLD_COMMIT,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+
+  const { deps } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('ps') && command.includes('-a')) {
+        return { stdout: 'api-blue   Up\n' };
+      }
+      if (command[0] === 'wget') {
+        return new Error('connection refused');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['rollback', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /State uncertain/);
+
+  const state = libModule.readState(stateDir);
+  assert.equal(state.activeColor, 'green');
+
+  const status = libModule.deployStatus(stateDir);
+  assert.ok(status.history.some((entry) => entry.phase === 'rollback-uncertain'));
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I4: preflightIssues requires READINESS_API_KEY and BLUEGREEN_ORIGIN; BLUEGREEN_FRONT_PORT is optional-but-numeric', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = join(tmpdir(), 'bluegreen-preflight-issues.env');
+  const baseFileEnv = {
+    DATABASE_URL: 'postgresql://u:p@db:5432/charitypilot',
+    BLUEGREEN_ENV_FILE: envFilePath,
+    FRONTEND_URL: 'https://app.charitypilot.ie',
+    READINESS_API_KEY: 'a-real-readiness-key',
+    BLUEGREEN_ORIGIN: 'https://app.charitypilot.ie',
+  };
+
+  const clean = preflightIssues({ fileEnv: baseFileEnv, resolvedEnvFilePath: envFilePath });
+  assert.equal(clean.some((issue) => issue.includes('READINESS_API_KEY')), false);
+  assert.equal(clean.some((issue) => issue.includes('BLUEGREEN_ORIGIN')), false);
+  assert.equal(clean.some((issue) => issue.includes('BLUEGREEN_FRONT_PORT')), false);
+
+  const noKey = preflightIssues({
+    fileEnv: { ...baseFileEnv, READINESS_API_KEY: '' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(noKey.some((issue) => issue.includes('READINESS_API_KEY is required')));
+
+  const noOrigin = preflightIssues({
+    fileEnv: { ...baseFileEnv, BLUEGREEN_ORIGIN: '' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(noOrigin.some((issue) => issue.includes('BLUEGREEN_ORIGIN is required')));
+
+  const numericPort = preflightIssues({
+    fileEnv: { ...baseFileEnv, BLUEGREEN_FRONT_PORT: '8080' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(numericPort.some((issue) => issue.includes('BLUEGREEN_FRONT_PORT')), false);
+
+  const badPort = preflightIssues({
+    fileEnv: { ...baseFileEnv, BLUEGREEN_FRONT_PORT: 'not-a-port' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(badPort.some((issue) => issue.includes('BLUEGREEN_FRONT_PORT must be a positive integer')));
+});
+
+test('I4: deploy preflight actually refuses before any command runs when READINESS_API_KEY is missing', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-preflight-no-key-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { READINESS_API_KEY: '' });
+
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /READINESS_API_KEY is required/);
+  assert.equal(calls.length, 0, 'no docker/git command may run before preflight passes');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I5: candidate smoke failure restarts jobs on the OLD tag with --wait', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i5-candidate-smoke-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('blue'));
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      const joined = command.join(' ');
+      if (joined.includes('exec') && joined.includes('api-green') && joined.includes('readiness')) {
+        return { stdout: readinessBody('wrong-commit') };
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /candidate smoke test failed/);
+  assert.match(outcome.stderr, /Jobs were restarted on the old tag/);
+
+  const restart = calls.find(
+    (call) =>
+      call.command.includes('up') &&
+      call.command.includes('--wait') &&
+      call.command.includes('scheduler') &&
+      call.env?.BLUEGREEN_ACTIVE_TAG === OLD_COMMIT,
+  );
+  assert.ok(restart, 'scheduler must be restarted with --wait on the OLD tag after a candidate-smoke failure');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I5: Caddy reload failure at switch restarts jobs on the OLD tag with --wait', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i5-reload-failure-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const activeUpstreamsPath = join(stateDir, 'active-upstreams.caddy');
+  writeFileSync(activeUpstreamsPath, libModule.renderUpstreams('blue'));
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('caddy') && command.includes('reload')) {
+        const priorReloads = calls.filter((c) => c.command.includes('reload')).length;
+        if (priorReloads === 1) return new Error('caddy: reload failed, config error');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Caddy reload failed while switching/);
+  assert.match(outcome.stderr, /Jobs were restarted on the old tag/);
+
+  const restart = calls.find(
+    (call) =>
+      call.command.includes('up') &&
+      call.command.includes('--wait') &&
+      call.command.includes('scheduler') &&
+      call.env?.BLUEGREEN_ACTIVE_TAG === OLD_COMMIT,
+  );
+  assert.ok(restart, 'scheduler must be restarted with --wait on the OLD tag after a reload failure');
+
+  const restoredContent = readFileSync(activeUpstreamsPath, 'utf8');
+  assert.equal(restoredContent, libModule.renderUpstreams('blue'));
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('M2: public smoke failure on a first deploy skips the revert block with a clear message', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-m2-first-deploy-smoke-fail-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command[0] === 'wget') return { stdout: readinessBody('wrong-commit') };
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /No previous colour to revert to \(first deploy\)/);
+  assert.match(outcome.stderr, /inspect manually before retrying/);
+
+  const wgetCalls = calls.filter((call) => call.command[0] === 'wget');
+  assert.equal(wgetCalls.length, 1, 'only the original public smoke wget runs — no re-verify attempt on a first deploy');
+  const reloadCalls = calls.filter((call) => call.command.includes('reload'));
+  assert.equal(reloadCalls.length, 1, 'only the switch-time reload runs — no revert reload on a first deploy');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('M5: a reused release worktree belonging to a different commit is removed and recreated', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-m5-worktree-mismatch-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  const migrationsDir = seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command[0] === 'git' && command[1] === '-C' && command[3] === 'rev-parse' && command[4] === 'HEAD') {
+        return { stdout: `${'c'.repeat(40)}\n` };
+      }
+      if (command[0] === 'git' && command[1] === 'worktree' && command[2] === 'add') {
+        mkdirSync(migrationsDir, { recursive: true });
+        return { stdout: '' };
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const removeCall = calls.find((call) => call.command.includes('worktree') && call.command.includes('remove'));
+  assert.ok(removeCall, 'a worktree belonging to a different commit must be removed');
+  const addCall = calls.find((call) => call.command.includes('worktree') && call.command.includes('add'));
+  assert.ok(addCall, 'the worktree must be recreated at the target commit');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('M6: --detach lock contention fails loudly in the foreground and never spawns', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-m6-detach-contended-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+
+  let spawnCalled = false;
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir, '--detach'], {
+    processEnv: { PATH: process.env.PATH ?? '' },
+    acquireCutoverLock: () => {
+      throw new Error('production cutover lock is already held by process 4242');
+    },
+    releaseCutoverLock: () => {},
+    spawnDetached: () => {
+      spawnCalled = true;
+      return {};
+    },
+    now: () => new Date('2026-08-31T12:00:00.000Z'),
+  });
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /failed before detaching/);
+  assert.match(outcome.stderr, /already held/);
+  assert.equal(spawnCalled, false, 'must never spawn the detached child when the lock is contended');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('M6: --detach acquires then releases the probe lock before spawning', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-m6-detach-clean-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+
+  const order = [];
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir, '--detach'], {
+    processEnv: { PATH: process.env.PATH ?? '' },
+    acquireCutoverLock: () => {
+      order.push('acquire');
+      return { fake: true };
+    },
+    releaseCutoverLock: (lock) => {
+      assert.ok(lock);
+      order.push('release');
+    },
+    spawnDetached: () => {
+      order.push('spawn');
+      return {};
+    },
+    now: () => new Date('2026-08-31T12:00:00.000Z'),
+  });
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.deepEqual(order, ['acquire', 'release', 'spawn'], 'the probe lock must release before the child spawns');
+  assert.match(outcome.stdout, /Deploying in the background/);
 
   rmSync(stateDir, { recursive: true, force: true });
 });

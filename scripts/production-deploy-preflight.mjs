@@ -196,6 +196,7 @@ export function redactProductionDeployTranscript(value) {
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(/apikey[=:]\s*[A-Za-z0-9._~+/=-]+/gi, 'apikey=[redacted]')
     .replace(/([?&](?:token|signature|key|apikey|access_token|refresh_token)=)[^&\s'")]+/gi, '$1[redacted]')
+    .replace(/(x-charitypilot-readiness-key:\s*)\S+/gi, '$1[redacted]')
     .replace(/[A-Za-z0-9._%+-]+:[^@\s'")]+@/g, '[redacted-credentials]@');
 }
 
