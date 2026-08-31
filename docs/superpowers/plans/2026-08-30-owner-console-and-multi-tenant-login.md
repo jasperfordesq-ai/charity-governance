@@ -2434,7 +2434,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'tenant-secret-disclosure-test';
-process.env.RESEND_API_KEY = process.env.RESEND_API_KEY ?? 're_disclosure_test_key';
+process.env.RESEND_API_KEY = process.env.RESEND_API_KEY ?? 'resend-test-key-placeholder';
 process.env.EMAIL_FROM = process.env.EMAIL_FROM ?? 'noreply@example.org';
 
 const [{ AuthService }, bcrypt] = await Promise.all([
