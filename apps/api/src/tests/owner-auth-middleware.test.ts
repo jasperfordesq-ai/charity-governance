@@ -32,7 +32,19 @@ function appWith(operatorRow: unknown, sessionRow: unknown) {
         return sessionRow;
       },
     },
-    platformOperator: { findUnique: async () => operatorRow },
+    platformOperator: {
+      // Honours the where clause it is given, consistent with every other
+      // stub on this branch: a stub that ignored where.id would let a
+      // mismatched operator id pass silently, which is exactly the bug this
+      // must catch.
+      findUnique: async (opts: any) => {
+        if (!operatorRow) return null;
+        const where = opts?.where || {};
+        const operator = operatorRow as any;
+        if (where.id && operator.id !== where.id) return null;
+        return operatorRow;
+      },
+    },
   } as never);
   app.get('/probe', { preHandler: [requirePlatformOperator] }, async (request) => ({
     operatorId: (request as { operator?: { id: string } }).operator?.id,

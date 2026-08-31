@@ -20,7 +20,7 @@ function ownerOriginGuard(app: FastifyInstance): void {
     // browser-origin-protection plugin already covers unsafe methods there.
     if (!origin) return;
     if (!configured.includes(origin)) {
-      reply
+      return reply
         .status(403)
         .send({ error: 'Request origin is not allowed for the owner console.', code: 'OWNER_ORIGIN_REJECTED' });
     }
