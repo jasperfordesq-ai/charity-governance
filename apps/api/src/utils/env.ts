@@ -550,6 +550,14 @@ export function validateProductionEnv(): void {
   requireMinLength('READINESS_API_KEY', 32, issues);
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
+  requireMinLength('OWNER_JWT_SECRET', 32, issues);
+  if (
+    process.env.OWNER_JWT_SECRET &&
+    process.env.JWT_SECRET &&
+    process.env.OWNER_JWT_SECRET === process.env.JWT_SECRET
+  ) {
+    issues.push('OWNER_JWT_SECRET must be distinct from JWT_SECRET');
+  }
   requireAuthRecoverySecret(issues);
   requireAccessTokenExpiry(issues);
   requireRefreshTokenTtlDays(issues);

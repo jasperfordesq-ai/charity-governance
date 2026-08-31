@@ -21,10 +21,17 @@ function ownerSecret(): string {
   return value;
 }
 
+const MIN_OWNER_JWT_SECRET_LENGTH = 32;
+
 export function assertOwnerJwtSecretConfigured(env: NodeJS.ProcessEnv = process.env): void {
   const secret = env.OWNER_JWT_SECRET;
   if (!secret) {
     throw new Error('FATAL: OWNER_JWT_SECRET must be set when the owner console is enabled.');
+  }
+  if (secret.length < MIN_OWNER_JWT_SECRET_LENGTH) {
+    throw new Error(
+      `FATAL: OWNER_JWT_SECRET must be at least ${MIN_OWNER_JWT_SECRET_LENGTH} characters; this secret alone gates platform-wide tenant control.`,
+    );
   }
   if (secret === env.JWT_SECRET) {
     throw new Error('FATAL: OWNER_JWT_SECRET must not equal JWT_SECRET; the two-secret isolation would be lost.');

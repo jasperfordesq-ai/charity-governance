@@ -12,7 +12,7 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-08-30 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
@@ -20,7 +20,7 @@ Generated: 2026-08-30 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 104 | 0 | 0 | 6 | 110 |
 | **Total** | **409** | **0** | **0** | **20** | **429** |
 
-**API suite:** 925 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 926 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 

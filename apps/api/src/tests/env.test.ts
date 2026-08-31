@@ -35,6 +35,7 @@ function setCompleteProductionEnv(overrides: Record<string, string | undefined> 
     READINESS_API_KEY: 'configured-readiness-key-32-chars',
     DATABASE_URL: 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write',
     JWT_SECRET: 'a'.repeat(40),
+    OWNER_JWT_SECRET: 'b'.repeat(40),
     AUTH_RECOVERY_SECRET: AUTH_RECOVERY_TEST_SECRET,
     FRONTEND_URL: 'https://app.charitypilot.ie',
     AUTH_COOKIE_DOMAIN: '.charitypilot.ie',
@@ -99,6 +100,7 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
   process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
   process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.OWNER_JWT_SECRET = 'b'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
   process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
@@ -1161,6 +1163,7 @@ test('validateProductionEnv allows local database URLs only for GitHub Actions p
   process.env.READINESS_API_KEY = 'configured-readiness-key-32-chars';
   process.env.DATABASE_URL = 'postgresql://user:pass@127.0.0.1:5432/charitypilot';
   process.env.JWT_SECRET = 'a'.repeat(40);
+  process.env.OWNER_JWT_SECRET = 'b'.repeat(40);
   process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
   process.env.AUTH_COOKIE_DOMAIN = '.charitypilot.ie';
   process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';

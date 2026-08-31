@@ -53,15 +53,30 @@ test('the boot guard rejects a missing secret', () => {
   );
 });
 
-test('the boot guard rejects a secret equal to JWT_SECRET', () => {
+test('the boot guard rejects a secret shorter than the JWT_SECRET floor', () => {
   assert.throws(
-    () => assertOwnerJwtSecretConfigured({ JWT_SECRET: 'same', OWNER_JWT_SECRET: 'same' } as NodeJS.ProcessEnv),
+    () =>
+      assertOwnerJwtSecretConfigured({
+        JWT_SECRET: 'tenant-secret-for-owner-jwt-test',
+        OWNER_JWT_SECRET: 'too-short',
+      } as NodeJS.ProcessEnv),
+    /OWNER_JWT_SECRET must be at least 32 characters/,
+  );
+});
+
+test('the boot guard rejects a secret equal to JWT_SECRET', () => {
+  const same = 'same-secret-repeated-across-both-owner-and-tenant';
+  assert.throws(
+    () => assertOwnerJwtSecretConfigured({ JWT_SECRET: same, OWNER_JWT_SECRET: same } as NodeJS.ProcessEnv),
     /must not equal JWT_SECRET/,
   );
 });
 
 test('the boot guard accepts distinct secrets', () => {
   assert.doesNotThrow(() =>
-    assertOwnerJwtSecretConfigured({ JWT_SECRET: 'a', OWNER_JWT_SECRET: 'b' } as NodeJS.ProcessEnv),
+    assertOwnerJwtSecretConfigured({
+      JWT_SECRET: 'tenant-secret-for-owner-jwt-test',
+      OWNER_JWT_SECRET: 'owner-secret-for-owner-jwt-test-32',
+    } as NodeJS.ProcessEnv),
   );
 });

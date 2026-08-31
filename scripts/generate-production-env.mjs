@@ -19,6 +19,7 @@ const repoRoot = resolve(scriptsDir, '..');
 // Keys this tool can safely auto-generate: opaque random secrets only.
 export const AUTO_GENERATED_KEYS = [
   'JWT_SECRET',
+  'OWNER_JWT_SECRET',
   'READINESS_API_KEY',
   'AUTH_RECOVERY_SECRET',
 ];

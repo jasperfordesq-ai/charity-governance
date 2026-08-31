@@ -136,6 +136,7 @@ const FORBIDDEN_AMBIENT_LOCAL_KEYS = Object.freeze([
   "E2E_BOOTSTRAP_PASSWORD",
   "E2E_DATABASE_RUNNER_PASSWORD",
   "E2E_JWT_SECRET",
+  "E2E_OWNER_JWT_SECRET",
   "E2E_AUTH_RECOVERY_SECRET",
   "E2E_READINESS_API_KEY",
   "E2E_AUTH_COOKIE_DOMAIN",
@@ -235,6 +236,7 @@ export function createLocalRunIdentity(overrides = {}) {
   const runnerPassword = overrides.runnerPassword ?? generatedSecret();
   const bootstrapPassword = overrides.bootstrapPassword ?? generatedSecret();
   const jwtSecret = overrides.jwtSecret ?? generatedSecret(48);
+  const ownerJwtSecret = overrides.ownerJwtSecret ?? generatedSecret(48);
   const authRecoverySecret =
     overrides.authRecoverySecret ?? generatedSecret(32);
   const readinessKey = overrides.readinessKey ?? generatedSecret(32);
@@ -257,6 +259,7 @@ export function createLocalRunIdentity(overrides = {}) {
     bootstrapPassword,
     runnerPassword,
     jwtSecret,
+    ownerJwtSecret,
     authRecoverySecret,
     readinessKey,
     databaseUrl,
@@ -265,6 +268,7 @@ export function createLocalRunIdentity(overrides = {}) {
       E2E_DATABASE_RUNNER_PASSWORD: runnerPassword,
       E2E_DATABASE_INSTANCE_ID: instanceId,
       E2E_JWT_SECRET: jwtSecret,
+      E2E_OWNER_JWT_SECRET: ownerJwtSecret,
       E2E_AUTH_RECOVERY_SECRET: authRecoverySecret,
       E2E_READINESS_API_KEY: readinessKey,
       E2E_APP_IMAGE: `${projectName}-app:local`,
@@ -291,6 +295,7 @@ export function createLocalRunIdentity(overrides = {}) {
       runnerPassword,
       encodeURIComponent(runnerPassword),
       jwtSecret,
+      ownerJwtSecret,
       authRecoverySecret,
       readinessKey,
       databaseUrl,
@@ -456,6 +461,7 @@ export function ambientSecretCandidates(env) {
     env.E2E_DATABASE_URL,
     env.E2E_READINESS_API_KEY,
     env.E2E_JWT_SECRET,
+    env.E2E_OWNER_JWT_SECRET,
     env.E2E_AUTH_RECOVERY_SECRET,
     env.E2E_OWNER_EMAIL,
     env.E2E_OWNER_PASSWORD,
@@ -815,6 +821,7 @@ export function expectedLocalServiceEnvironments(identity) {
       HOST: "0.0.0.0",
       JWT_EXPIRY: "15m",
       JWT_SECRET: composeEnv.E2E_JWT_SECRET,
+      OWNER_JWT_SECRET: composeEnv.E2E_OWNER_JWT_SECRET,
       AUTH_RECOVERY_SECRET: composeEnv.E2E_AUTH_RECOVERY_SECRET,
       LOCAL_FILE_STORAGE_DIR: "/var/lib/charitypilot-e2e-documents",
       NEXT_TELEMETRY_DISABLED: "1",

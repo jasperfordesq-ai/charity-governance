@@ -201,6 +201,7 @@ jobs:
             -e READINESS_API_KEY=ci-readiness-key-with-enough-entropy \
             -e "DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write" \
             -e JWT_SECRET=ci-production-jwt-secret-with-enough-entropy \
+            -e OWNER_JWT_SECRET=ci-production-owner-jwt-secret-with-entropy \
             -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
@@ -241,6 +242,7 @@ jobs:
             -e CI=true \
             -e GITHUB_ACTIONS=true \
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
+            -e OWNER_JWT_SECRET=ci-smoke-owner-jwt-secret-with-enough-entropy \
             -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
