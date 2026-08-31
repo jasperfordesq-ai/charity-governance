@@ -2922,7 +2922,7 @@
     "guarantee": "The lifecycle update and its SecurityAuditEvent are created inside one $transaction, so a failed transition leaves no orphan audit event.",
     "status": "covered",
     "testFile": "apps/api/src/tests/owner-tenant-lifecycle.test.ts",
-    "testTitle": "suspending writes the status and the audit event together",
+    "testTitle": "a failed audit-event write rolls back the status change, not just the audit event",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"

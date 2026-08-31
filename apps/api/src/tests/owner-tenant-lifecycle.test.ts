@@ -185,6 +185,61 @@ test('a closed tenant cannot be reopened from the console', async () => {
   assert.equal(calls.audits.length, 0);
 });
 
+test('a failed audit-event write rolls back the status change, not just the audit event', async () => {
+  // The stub `prismaStub` above models `$transaction` as a bare pass-through
+  // (`async (fn) => fn(tx)`), which cannot express rollback at all: it proves
+  // both calls happened, nothing about what happens if one of them fails. This
+  // test models real transactional semantics instead — writes made through
+  // `tx` are staged, and only become visible on the "committed" state after
+  // the transaction callback resolves; if it throws, nothing staged survives.
+  // A regression that moved the audit-event write outside the transaction
+  // (so the status change could commit on its own before the audit write is
+  // even attempted) would make this test fail: `committed.lifecycleStatus`
+  // would already read 'SUSPENDED' by the time the rejection is observed.
+  const committed = { lifecycleStatus: 'ACTIVE', lifecycleVersion: 1 };
+  let committedAuditCount = 0;
+
+  const prisma = {
+    $transaction: async (fn: (t: unknown) => unknown) => {
+      const staged = { updates: [] as Record<string, unknown>[], audits: 0 };
+      const tx = {
+        $queryRaw: async () => [{ id: 'org-1', ...committed }],
+        organisation: {
+          update: async ({ data }: { data: Record<string, unknown> }) => {
+            staged.updates.push(data);
+            return { id: 'org-1' };
+          },
+        },
+        securityAuditEvent: {
+          create: async () => {
+            throw new Error('simulated audit event write failure');
+          },
+        },
+      };
+      const result = await fn(tx);
+      // Only reached if the callback resolved: a real $transaction never
+      // exposes staged writes to the outside world until this point.
+      for (const update of staged.updates) Object.assign(committed, update);
+      committedAuditCount += staged.audits;
+      return result;
+    },
+  } as never;
+
+  await assert.rejects(() =>
+    transitionTenantLifecycle(prisma, {
+      tenantId: 'org-1',
+      action: 'SUSPEND',
+      reason: 'Non-payment after dunning',
+      expectedLifecycleVersion: 1,
+      operator: OPERATOR,
+    }),
+  );
+
+  assert.equal(committed.lifecycleStatus, 'ACTIVE', 'the status change must not survive a failed audit-event write');
+  assert.equal(committed.lifecycleVersion, 1);
+  assert.equal(committedAuditCount, 0);
+});
+
 test('suspending an already suspended tenant is refused', async () => {
   const { prisma, calls } = prismaStub({ lifecycleStatus: 'SUSPENDED', lifecycleVersion: 2 });
   await assert.rejects(

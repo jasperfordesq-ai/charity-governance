@@ -20,7 +20,7 @@ Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 104 | 0 | 0 | 6 | 110 |
 | **Total** | **409** | **0** | **0** | **20** | **429** |
 
-**API suite:** 929 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 930 passing, 0 failing. **Web suite:** 388 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
@@ -390,7 +390,7 @@ _14 guarantees - covered 14_
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
 | At-least-once / idempotency | transitionTenantLifecycle with a stale expectedLifecycleVersion throws 409 TENANT_LIFECYCLE_CONFLICT and performs no update and no audit write. | covered | `a version mismatch is refused before any write`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
-| At-least-once / idempotency | The lifecycle update and its SecurityAuditEvent are created inside one $transaction, so a failed transition leaves no orphan audit event. | covered | `suspending writes the status and the audit event together`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
+| At-least-once / idempotency | The lifecycle update and its SecurityAuditEvent are created inside one $transaction, so a failed transition leaves no orphan audit event. | covered | `a failed audit-event write rolls back the status change, not just the audit event`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Input validation | assertOwnerJwtSecretConfigured throws when OWNER_JWT_SECRET is unset or equals JWT_SECRET, so a deployment cannot silently collapse the two-secret isolation. | covered | `the boot guard rejects a secret equal to JWT_SECRET`<br/><sub>owner-jwt.test.ts</sub> |
 | Input validation | A wrong password against a SUSPENDED organisation returns generic 401 INVALID_CREDENTIALS; only a correct password returns 403 ORGANISATION_SUSPENDED. | covered | `a wrong password against a SUSPENDED organisation stays generic`<br/><sub>login-suspension-disclosure.test.ts</sub> |
 | Input validation | An unknown email still performs the dummy bcrypt comparison and returns generic 401. | covered | `an unknown email is still a generic 401`<br/><sub>login-suspension-disclosure.test.ts</sub> |
