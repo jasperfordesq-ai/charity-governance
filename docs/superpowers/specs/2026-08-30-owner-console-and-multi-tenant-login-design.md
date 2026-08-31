@@ -168,9 +168,21 @@ rather than accepting a password as an argument, and refuses to run unless
 ### Deployment gating
 
 `registerOwnerRoutes` returns before registering anything when
-`isPersonalServerDeployment()` is true, and the `(owner)` route group is excluded
-from the personal-server web build. Single-charity installs never expose the
-surface.
+`isPersonalServerDeployment()` is true (`routes/owner/index.ts`), so every
+`/api/v1/owner/*` path 404s on a personal-server deployment exactly like any
+other unregistered route. This is the whole of the gating: the `(owner)` route
+group is NOT excluded from the personal-server web build. That was
+considered and rejected — every other personal-server-specific behaviour in
+this codebase (`proxy.ts`'s redirects for `/`, `/register`, `/forgot-password`,
+`/billing`; `next.config.ts`'s CSP branch) is a runtime check keyed on
+`NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE`, not a build-time tree exclusion;
+introducing the latter just for `(owner)` would be a new, one-off build
+mechanism for marginal benefit, since the pages are already fully inert
+without a reachable API: every form in them posts to `/api/v1/owner/...`,
+which 404s, so nothing renders real tenant data and no action succeeds. A
+personal-server install that somehow navigates to `/owner/tenants` sees a
+console shell that cannot do anything. API-side gating is sufficient on its
+own; the web pages are unreachable-in-effect, not merely unlinked.
 
 ### Boot-time configuration guard
 
