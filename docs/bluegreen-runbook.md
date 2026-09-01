@@ -263,3 +263,7 @@ deployment target already uses, pointed at this same command.
 <!-- Task 10 acceptance-run marker (2026-09-01): trivial docs touch used as
      the Step-2 redeploy commit for the local acceptance cycle's blue->green
      cutover proof. Safe to keep or drop. -->
+
+<!-- Task 10 acceptance-run-3 marker (2026-09-01): trivial docs touch used as
+     the Step-2 redeploy commit for the local acceptance cycle's blue->green
+     cutover proof, run after the Caddy admin-socket fix. Safe to keep or drop. -->
