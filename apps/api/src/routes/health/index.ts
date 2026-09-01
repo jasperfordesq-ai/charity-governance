@@ -227,10 +227,14 @@ export async function healthRoutes(app: FastifyInstance) {
       checks.storageConfigured &&
       checks.storageBucketReachable;
 
+    // Empty string ⇒ null: follows the repo's empty-equals-unset convention for env vars
+    const buildCommit = process.env.CHARITYPILOT_BUILD_COMMIT || null;
+
     return reply.status(ready ? 200 : 503).send({
       status: ready ? 'ready' : 'not_ready',
       checks,
       timestamp: new Date().toISOString(),
+      buildCommit,
     });
   });
 }

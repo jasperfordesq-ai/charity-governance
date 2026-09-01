@@ -3,6 +3,14 @@ const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
 export const ISOLATED_E2E_MODE = 'local-disposable';
 export const ISOLATED_E2E_BROWSER_API_ORIGIN = 'http://127.0.0.1:3302';
 const ISOLATED_E2E_INTERNAL_API_ORIGIN = 'http://api:3302';
+// Blue-green single-origin topology: NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN
+// (the public front-door override) is not reachable from inside the container
+// network (it is published only on the host, via Caddy), so the internal
+// server-to-server hop is pinned to the colour-matched api-<colour> Docker
+// service name instead, mirroring the personal-server/isolated-E2E exact-pin
+// precedent below.
+const BLUEGREEN_API_BLUE_INTERNAL_ORIGIN = 'http://api-blue:3002';
+const BLUEGREEN_API_GREEN_INTERNAL_ORIGIN = 'http://api-green:3002';
 export const PERSONAL_SERVER_MODE = 'personal-server';
 export const PERSONAL_SERVER_INTERNAL_API_ORIGIN = 'http://api:3002';
 
@@ -11,6 +19,7 @@ export type ApiEnv = {
   NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE?: string;
   NEXT_PUBLIC_API_URL?: string;
   NEXT_PUBLIC_CHARITYPILOT_E2E_MODE?: string;
+  NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN?: string;
   NODE_ENV?: string;
 };
 
@@ -40,7 +49,7 @@ export function getApiBaseUrl(env: ApiEnv = process.env): string {
       } else if (isPersonalServerProduction(env)) {
         validatePersonalServerBrowserApiUrl(normalizedUrl);
       } else {
-        validateProductionApiUrl(normalizedUrl);
+        validateProductionApiUrl(normalizedUrl, env);
       }
     }
 
@@ -109,13 +118,62 @@ function validateIsolatedE2eBrowserApiUrl(value: string): void {
   }
 }
 
-function validateProductionApiUrl(value: string): void {
+// Mirrors apps/web/Dockerfile's build-time RUN check (the already-reviewed
+// semantics), with one deliberate divergence: this function trims the raw
+// override before using it, so a leading/trailing-whitespace-padded
+// NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN is accepted here, whereas the
+// Dockerfile's RUN check compares the untrimmed raw value against the parsed
+// URL's origin and rejects any such padding — the build gate is strictly
+// tighter on whitespace than this runtime check. Otherwise the same
+// semantics: an empty-or-unset override (P1 convention: '' counts as unset,
+// since Docker ARG/ENV pairs can only express "unset" as an empty string)
+// keeps every hosted-SaaS install pinned byte-for-byte to the hardcoded
+// canonical origin below. A validly-shaped override widens the check for a
+// non-hosted target (blue-green single-origin topology, a private-VM
+// Tailscale hostname) whose own NEXT_PUBLIC_API_URL must then equal that
+// override's origin exactly.
+function validateProductionApiUrl(value: string, env: ApiEnv): void {
   let url: URL;
 
   try {
     url = new URL(value);
   } catch {
     throw new Error('NEXT_PUBLIC_API_URL must be a valid URL in production');
+  }
+
+  const canonicalOverride = env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN?.trim();
+
+  if (canonicalOverride) {
+    let overrideUrl: URL;
+
+    try {
+      overrideUrl = new URL(canonicalOverride);
+    } catch {
+      throw new Error('NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must be a valid origin');
+    }
+
+    if (overrideUrl.origin !== canonicalOverride || overrideUrl.username || overrideUrl.password) {
+      throw new Error(
+        'NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must be an origin-only URL (no path, no trailing slash, no credentials)',
+      );
+    }
+
+    const secureOverride = overrideUrl.protocol === 'https:';
+    const exactLoopbackHttpOverride =
+      overrideUrl.protocol === 'http:' && isLoopbackHostname(overrideUrl.hostname);
+    if (!secureOverride && !exactLoopbackHttpOverride) {
+      throw new Error(
+        'NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must use https:// or exact loopback http://',
+      );
+    }
+
+    if (value !== overrideUrl.origin) {
+      throw new Error(
+        `NEXT_PUBLIC_API_URL must equal the configured canonical API origin ${overrideUrl.origin} (set via NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN)`,
+      );
+    }
+
+    return;
   }
 
   if (url.protocol !== 'https:') {
@@ -151,7 +209,24 @@ function validateServerApiUrl(value: string, env: ApiEnv): void {
       return;
     }
 
-    validateProductionApiUrl(value);
+    // Blue-green (or any other non-personal, non-isolated-E2E deployment
+    // whose web app validates NEXT_PUBLIC_API_URL against a canonical-origin
+    // override): the override is the PUBLIC front-door origin, reachable only
+    // from outside the container network via the host's reverse proxy, so a
+    // server-to-server call inside the web container can never reach it.
+    // When the override is set, accept the colour-matched internal api-<colour>
+    // Docker service name exactly instead — mirroring the personal-server/
+    // isolated-E2E exact-pin precedent above. Any other value (override set or
+    // not) falls through to the existing canonical-origin check unchanged.
+    const canonicalOverride = env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN?.trim();
+    if (
+      canonicalOverride &&
+      (value === BLUEGREEN_API_BLUE_INTERNAL_ORIGIN || value === BLUEGREEN_API_GREEN_INTERNAL_ORIGIN)
+    ) {
+      return;
+    }
+
+    validateProductionApiUrl(value, env);
     return;
   }
 

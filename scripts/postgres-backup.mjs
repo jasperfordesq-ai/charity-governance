@@ -26,7 +26,11 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const DEFAULT_POSTGRES_IMAGE = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
+// Exported so every other script that needs the repository-approved,
+// digest-pinned postgres tools image (e.g. scripts/bluegreen/backup.mjs)
+// imports this constant instead of retyping the digest — a retyped copy
+// drifts the moment either one changes.
+export const DEFAULT_POSTGRES_IMAGE = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const APPROVED_POSTGRES_IMAGE_DIGEST_SHA256 = '5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const HELPER_IMPLEMENTATION_FORMAT = 'charitypilot-postgres-proof-helper/v1';
 const HELPER_IMPLEMENTATION_REPOSITORY_URL = 'https://github.com/jasperfordesq-ai/charity-governance';

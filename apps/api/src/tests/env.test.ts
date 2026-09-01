@@ -201,6 +201,33 @@ test('validateAuthDeliveryEnv accepts bounded scheduler configuration and reject
   );
 });
 
+test('validateAuthDeliveryEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM', () => {
+  setCompleteProductionEnv({
+    CHARITYPILOT_EMAIL_DELIVERY: 'manual-link',
+    RESEND_API_KEY: undefined,
+    EMAIL_FROM: undefined,
+  });
+
+  assert.doesNotThrow(() => validateAuthDeliveryEnv());
+});
+
+test('validateAuthDeliveryEnv still requires RESEND_API_KEY/EMAIL_FROM under explicit provider mode (byte-identical to the unset/default path)', () => {
+  setCompleteProductionEnv({
+    CHARITYPILOT_EMAIL_DELIVERY: 'provider',
+    RESEND_API_KEY: undefined,
+    EMAIL_FROM: undefined,
+  });
+
+  assert.throws(
+    () => validateAuthDeliveryEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('RESEND_API_KEY is missing or still contains a placeholder value') &&
+      error.details.includes('EMAIL_FROM is missing or still contains a placeholder value'),
+  );
+});
+
 test('validateProductionEnv requires exact authenticated read-write PostgreSQL routing', async (t) => {
   const cases = [
     {
@@ -518,6 +545,37 @@ test('validateDeadlineRemindersEnv rejects missing production job alert webhook'
       error instanceof AppError &&
       Array.isArray(error.details) &&
       error.details.includes('ERROR_ALERT_WEBHOOK_URL is missing or still contains a placeholder value'),
+  );
+});
+
+test('validateDeadlineRemindersEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.CHARITYPILOT_EMAIL_DELIVERY = 'manual-link';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  delete process.env.RESEND_API_KEY;
+  delete process.env.EMAIL_FROM;
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
+
+  assert.doesNotThrow(() => validateDeadlineRemindersEnv());
+});
+
+test('validateDeadlineRemindersEnv still requires RESEND_API_KEY/EMAIL_FROM under explicit provider mode (byte-identical to the unset/default path)', () => {
+  process.env.NODE_ENV = 'production';
+  process.env.CHARITYPILOT_EMAIL_DELIVERY = 'provider';
+  process.env.DATABASE_URL = 'postgresql://user:pass@example.com:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
+  process.env.FRONTEND_URL = 'https://app.charitypilot.ie';
+  delete process.env.RESEND_API_KEY;
+  delete process.env.EMAIL_FROM;
+  process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
+
+  assert.throws(
+    () => validateDeadlineRemindersEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('RESEND_API_KEY is missing or still contains a placeholder value') &&
+      error.details.includes('EMAIL_FROM is missing or still contains a placeholder value'),
   );
 });
 

@@ -1,0 +1,28 @@
+{
+	# Zero-downtime `caddy reload` (scripts/bluegreen-deploy.mjs's switch/
+	# rollback paths) needs a live admin API to push the new config to —
+	# `admin off` (the original T4 hardening) leaves no listener at all, so
+	# every deploy's reload call fails and the cutover can never complete.
+	# A unix socket on the container's own /tmp tmpfs keeps the admin API
+	# reachable from inside the container (where reload runs, via `docker
+	# compose exec`) while staying invisible to the compose network and the
+	# host — no TCP port, nothing to publish, nothing else can reach it.
+	admin unix//tmp/caddy-admin.sock
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	encode zstd gzip
+	header {
+		-Server
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
+
+	import /etc/caddy/active-upstreams.caddy
+
+	log {
+		output stdout
+		format json
+	}
+}

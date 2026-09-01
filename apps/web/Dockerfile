@@ -23,13 +23,32 @@ ARG NEXT_PUBLIC_CHARITYPILOT_TENANCY
 ARG NEXT_PUBLIC_CHARITYPILOT_REGISTRATION
 ARG NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY
 ARG NEXT_PUBLIC_CHARITYPILOT_BILLING
+# Build-stage override of the canonical hosted API origin the line-32(ish)
+# RUN check pins NEXT_PUBLIC_API_URL to (default https://api.charitypilot.ie).
+# Re-exposed via ENV below, alongside the other NEXT_PUBLIC_* vars, for
+# symmetry/documentation only — NOT because it is what makes `next build`
+# see the value: a Docker ARG is already an environment variable for every
+# RUN instruction in this same stage (including the RUN check below and the
+# `next build` step further down), with or without this ENV line. The two
+# hops that actually make this override reach a running container are both
+# in compose.bluegreen.yml: (1) passing this ARG as a build arg at all, so
+# Next inlines it into apps/web/src/lib/api.ts's literal
+# process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN reference for the
+# client bundle, and (2) ALSO setting it in web-blue/web-green's runtime
+# `environment:` block, because apps/web/src/proxy.ts calls
+# getApiBaseUrl()/getServerApiBaseUrl() with no arguments (default parameter
+# = the live process.env at request time) — a plain object reference like
+# that is never build-time-inlined, so those call sites need the real
+# container environment, not just a baked-in bundle constant.
+ARG NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=$NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE
 ENV NEXT_PUBLIC_CHARITYPILOT_TENANCY=$NEXT_PUBLIC_CHARITYPILOT_TENANCY
 ENV NEXT_PUBLIC_CHARITYPILOT_REGISTRATION=$NEXT_PUBLIC_CHARITYPILOT_REGISTRATION
 ENV NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY=$NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY
 ENV NEXT_PUBLIC_CHARITYPILOT_BILLING=$NEXT_PUBLIC_CHARITYPILOT_BILLING
-RUN node -e "const value=process.env.NEXT_PUBLIC_API_URL;const mode=process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;const fail=(message)=>{console.error(message);process.exit(1)};let url;try{url=new URL(value)}catch{fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL')};if(url.origin!==value.replace(/\/+$/,'')||url.username||url.password)fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL');const host=url.hostname.toLowerCase().replace(/^\[|\]$/g,'');if(mode==='personal-server'){const loopback=host==='localhost'||host==='127.0.0.1'||host==='::1';if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))fail('personal-server NEXT_PUBLIC_API_URL must use https:// or exact loopback http://')}else if(url.protocol!=='https:'||host!=='api.charitypilot.ie'){fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL and must use the canonical API origin https://api.charitypilot.ie')}"
+ENV NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN=$NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN
+RUN node -e "const value=process.env.NEXT_PUBLIC_API_URL;const mode=process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;const canonicalOverride=process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN;const fail=(message)=>{console.error(message);process.exit(1)};let url;try{url=new URL(value)}catch{fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL')};if(url.origin!==value.replace(/\/+$/,'')||url.username||url.password)fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL');const host=url.hostname.toLowerCase().replace(/^\[|\]$/g,'');const isLoopbackHost=(h)=>h==='localhost'||h==='127.0.0.1'||h==='::1';if(mode==='personal-server'){const loopback=isLoopbackHost(host);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))fail('personal-server NEXT_PUBLIC_API_URL must use https:// or exact loopback http://')}else if(canonicalOverride!==undefined&&canonicalOverride!==''){let overrideUrl;try{overrideUrl=new URL(canonicalOverride)}catch{fail('NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must be a valid origin')};if(overrideUrl.origin!==canonicalOverride||overrideUrl.username||overrideUrl.password)fail('NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must be an origin-only URL (no path, no trailing slash, no credentials)');const overrideHost=overrideUrl.hostname.toLowerCase().replace(/^\[|\]$/g,'');const overrideLoopback=isLoopbackHost(overrideHost);if(overrideUrl.protocol!=='https:'&&!(overrideUrl.protocol==='http:'&&overrideLoopback))fail('NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must use https:// or exact loopback http://');if(value.replace(/\/+$/,'')!==overrideUrl.origin)fail('NEXT_PUBLIC_API_URL must equal the configured canonical API origin '+overrideUrl.origin+' (set via NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN)')}else if(url.protocol!=='https:'||host!=='api.charitypilot.ie'){fail('NEXT_PUBLIC_API_URL must be an origin-only CharityPilot production URL and must use the canonical API origin https://api.charitypilot.ie')}"
 RUN npm run build -w @charitypilot/shared
 RUN npm run build -w @charitypilot/web
 RUN rm -rf apps/web/.next/cache \
@@ -54,8 +73,10 @@ RUN npm ci --omit=dev --omit=peer --workspace @charitypilot/web --workspace @cha
 
 FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runner
 WORKDIR /app
+ARG CHARITYPILOT_BUILD_COMMIT
 ENV NODE_ENV=production
 ENV PORT=3003
+ENV CHARITYPILOT_BUILD_COMMIT=$CHARITYPILOT_BUILD_COMMIT
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared/package.json ./packages/shared/package.json

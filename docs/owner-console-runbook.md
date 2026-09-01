@@ -58,7 +58,7 @@ shown once:
 ```text
 Created platform operator <operator-id> (owner@example.org).
 Set-password link (valid 24h, shown once):
-https://console.example.org/owner/set-password?token=<token>
+https://console.example.org/owner/set-password#token=<token>
 ```
 
 Share this link with the operator through your usual verified out-of-band

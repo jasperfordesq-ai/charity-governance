@@ -12,19 +12,19 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 318 | 0 | 0 | 14 | 332 |
-| Web | 106 | 0 | 0 | 6 | 112 |
-| **Total** | **424** | **0** | **0** | **20** | **444** |
+| API | 334 | 0 | 0 | 14 | 348 |
+| Web | 112 | 0 | 0 | 6 | 118 |
+| **Total** | **446** | **0** | **0** | **20** | **466** |
 
-**API suite:** 980 passing, 0 failing. **Web suite:** 397 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1142 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 424/424 covered guarantees verified against a passing/linked test.
+**Linkage:** 446/446 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (332 guarantees)
+## API surface - the matrix (348 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -378,7 +378,7 @@ _15 guarantees - covered 12  n/a 3_
 
 ### owner console - `/api/v1/owner`
 
-_14 guarantees - covered 14_
+_16 guarantees - covered 16_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -386,6 +386,8 @@ _14 guarantees - covered 14_
 | Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every route guarded by requirePlatformOperator, not merely the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every route guarded by authGuard, not merely the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Auth & session integrity | setOwnerCookies marks both the owner access and refresh cookies HttpOnly, SameSite=lax, scoped to /api/v1/owner, and Secure in production (absent outside it); clearOwnerCookies expires both. | covered | `owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner`<br/><sub>owner-auth-routes.test.ts</sub> |
+| Auth & session integrity | buildOperatorSetPasswordLink puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers. | covered | `the bootstrap link carries its token in the fragment, never the query string`<br/><sub>create-platform-operator.test.ts</sub> |
+| Auth & session integrity | buildOperatorSetPasswordLink is the sole place in create-platform-operator.ts that constructs the /owner/set-password URL — main() and the --reissue path cannot quietly grow a second, untested link composition. | covered | `buildOperatorSetPasswordLink is the sole composition site for set-password links`<br/><sub>create-platform-operator.test.ts</sub> |
 | Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
@@ -508,14 +510,33 @@ _10 guarantees - covered 10_
 | Authorization boundary | When CHARITYPILOT_TENANCY=single in default mode, the owner console routes are not registered (404). | covered | `single tenancy in DEFAULT mode disables the owner console`<br/><sub>deployment-profile-tenancy.test.ts</sub> |
 | Auth & session integrity | When CHARITYPILOT_TENANCY resolves to multi (including the unset default), production env validation requires OWNER_JWT_SECRET to be present and rejects it when equal to JWT_SECRET. | covered | `multi tenancy still requires OWNER_JWT_SECRET distinct from JWT_SECRET`<br/><sub>deployment-profile-env-validation.test.ts</sub> |
 | Input validation | Production env validation passes with local document storage, manual-link email delivery, and no billing configured, and raises no SUPABASE/RESEND/EMAIL_FROM/STRIPE issue in that configuration. | covered | `self-contained config passes: storage local, email manual-link, billing none`<br/><sub>deployment-profile-env-validation.test.ts</sub> |
+| Input validation | The deadline-reminders job env validator (validateDeadlineRemindersEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM. | covered | `validateDeadlineRemindersEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM`<br/><sub>env.test.ts</sub> |
+| Input validation | The deadline-reminders job env validator (validateDeadlineRemindersEnv) still requires RESEND_API_KEY/EMAIL_FROM under an explicit provider email-delivery mode, mirroring validateProductionEnv's identical gate. | covered | `validateDeadlineRemindersEnv still requires RESEND_API_KEY/EMAIL_FROM under explicit provider mode (byte-identical to the unset/default path)`<br/><sub>env.test.ts</sub> |
+| Input validation | The auth-delivery job env validator (validateAuthDeliveryEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM. | covered | `validateAuthDeliveryEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM`<br/><sub>env.test.ts</sub> |
+| Input validation | The auth-delivery job env validator (validateAuthDeliveryEnv) still requires RESEND_API_KEY/EMAIL_FROM under an explicit provider email-delivery mode, mirroring validateProductionEnv's identical gate. | covered | `validateAuthDeliveryEnv still requires RESEND_API_KEY/EMAIL_FROM under explicit provider mode (byte-identical to the unset/default path)`<br/><sub>env.test.ts</sub> |
 | Auth & session integrity | Under manual-link email delivery, tenant provisioning sends no mail and returns the set-password and verify-email links with their tokens in the URL fragment; the raw token in each link hashes to the value actually persisted on the corresponding recovery/verification record. | covered | `manual-link: no emails are sent and both links are returned in the fragment form`<br/><sub>owner-provisioning.test.ts</sub> |
 | State integrity / no data loss | Provisioning a tenant with billing='comped' creates its subscription with status ACTIVE and trialEndsAt null. | covered | `comped billing creates ACTIVE with null trialEndsAt`<br/><sub>owner-provisioning.test.ts</sub> |
 | Authorization boundary | Only the allowlisted appliance-lifecycle source files reference isPersonalServerDeployment(); behavioural code must key on the capability axis in utils/deployment-profile.ts instead. | covered | `only allowlisted appliance-lifecycle files reference isPersonalServerDeployment`<br/><sub>deployment-profile-structure.test.ts</sub> |
 | Authorization boundary | No file under src/routes/ or src/services/, other than the allowlisted appliance-lifecycle files, references CHARITYPILOT_DEPLOYMENT_MODE directly. | covered | `no route or service file outside the allowlist references CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>deployment-profile-structure.test.ts</sub> |
+| Auth & session integrity | Adding the CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN override vars did not loosen the default: with neither var set, production env validation still requires FRONTEND_URL to equal the canonical https://app.charitypilot.ie origin. | covered | `defaults unchanged: canonical charitypilot.ie origins still required with no new vars`<br/><sub>deployment-origins-env.test.ts</sub> |
+| Observability | The deadline-reminders job's own env validator honours CHARITYPILOT_ERROR_ALERTS symmetrically: set to none it does not require ERROR_ALERT_WEBHOOK_URL, and set to webhook it still requires ERROR_ALERT_WEBHOOK_URL to be configured. | covered | `job validator (deadline reminders): alerts=none both directions`<br/><sub>deployment-origins-env.test.ts</sub> |
+
+### bluegreen
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| State integrity / no data loss | gateMigrations reports ok:false and records the finding in blocked[] when a pending migration matches a destructive-class pattern (e.g. DROP TABLE) and --allow-destructive-migration was not passed. | covered | `gateMigrations: ok is false when something is blocked and allowDestructive is not set`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
+| State integrity / no data loss | Passing allowDestructive flips gateMigrations' ok to true but does not clear or shrink the blocked list — the same findings are also recorded verbatim in overridden, so what was permitted stays visible after the fact. | covered | `gateMigrations: allowDestructive flips ok true while preserving the blocked list in overridden`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
+| Graceful degradation | When the post-cutover public smoke test fails, the deploy engine restores the previous active-upstreams file, reloads Caddy, restarts the scheduler on the old commit, and re-verifies the front door reports the OLD commit before returning failure — traffic is never left pointed at a colour that failed its own public smoke test. | covered | `deploy: public smoke failure restores upstreams, reloads, and re-verifies the OLD commit`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| At-least-once / idempotency | The cutover lock is released on every tested deploy abort path (preflight failure, a blocked migration, and a migration-run failure), so a failed deploy never leaves a stale lock blocking the next deploy or rollback attempt. | covered | `lock is released on every abort path`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | runRestoreDrill restores the backup into a throwaway scratch container reached only by docker run/exec — it never issues a docker compose command, never targets the compose db service or the charitypilot-bluegreen-db container family, and never carries a DSN whose host is db, so the drill cannot touch the live database. | covered | `runRestoreDrill restores into a throwaway container, never the live db, and passes clean`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
+| Graceful degradation | A failure starting the target colour's containers (phase 9, `up -d --wait`) during a deploy restarts the scheduler on the OLD tag, so jobs are never left stopped even though the old colour is what keeps serving. | covered | `I1: phase 9 (up) failure restarts jobs on the OLD tag with --wait`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | Rollback brings the previous colour's containers up and confirmed healthy (`up -d --wait`) BEFORE reloading Caddy onto them, so traffic can never be pointed at containers that were never confirmed healthy. | covered | `I2: rollback brings the previous colour up (with --wait) BEFORE reloading Caddy onto it`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | runRestoreDrill refuses a documents tar containing zero files when the restored database reports Document rows > 0, rather than passing vacuously against a manifest that also recorded zero document entries. | covered | `runRestoreDrill refuses a documents tar with zero files when the restored database reports Document rows > 0`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
 
 ---
 
-## Web surface - the matrix (112 guarantees)
+## Web surface - the matrix (118 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -524,7 +545,7 @@ _10 guarantees - covered 10_
 
 ### platform - proxy / CSP / API client / session refresh
 
-_51 guarantees - covered 51_
+_57 guarantees - covered 57_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -552,6 +573,12 @@ _51 guarantees - covered 51_
 | Auth & session integrity | When a sensitive token was the only query parameter, the leftover "?" marker is removed too. | covered | `removes the query marker when sensitive parameters were the only query parameters`<br/><sub>lib/url-security.test.ts</sub> |
 | Auth & session integrity | The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge. | covered | `server-side protected route refresh sends the deployed web Origin required by the API origin guard`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | An expired/cleared session on a protected route is redirected to login rather than flashing stale data or crashing. | covered | `an expired/cleared session is redirected to login, not left on a protected page` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
+| Auth & session integrity | With NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN unset, the hosted origin https://api.charitypilot.ie is still accepted byte-identically in production. | covered | `with the canonical-API-origin override unset, the hosted origin is accepted byte-identically`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | An empty-string NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN counts as unset (P1 convention), so the hosted-only canonical check still applies rather than being bypassed by an empty override. | covered | `an empty-string canonical-API-origin override behaves as unset (P1 convention)`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A validly-shaped https NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override is accepted when NEXT_PUBLIC_API_URL equals it exactly, widening production validation past the hosted-only default. | covered | `a matching canonical-API-origin override accepts a non-hosted https origin`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | An exact-loopback http:// NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override is accepted when NEXT_PUBLIC_API_URL equals it exactly. | covered | `a matching canonical-API-origin override accepts exact loopback http`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A malformed NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override (carrying a path, a trailing slash, or credentials, or otherwise unparseable) is rejected rather than silently accepted. | covered | `a malformed canonical-API-origin override (path, trailing slash, or credentials) is rejected`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | When a validly-shaped canonical-API-origin override is set, a NEXT_PUBLIC_API_URL that does not equal it exactly is still rejected. | covered | `NEXT_PUBLIC_API_URL that does not equal a set canonical-API-origin override is rejected`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | In local Docker the edge auth check validates against the internal API origin, not the public host. | covered | `local Docker server-side protected route validation uses the internal API origin`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | Edge protected-route validation fails closed (treats the user as unauthenticated) for an unapproved production API origin rather than trusting it. | covered | `server-side protected route validation fails closed for unapproved production API origins`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | The protected-path matcher recognises every dashboard app route that requires an auth cookie. | covered | `matches dashboard application routes that require an auth cookie`<br/><sub>lib/protected-routes.test.ts</sub> |

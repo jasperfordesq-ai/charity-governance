@@ -1,0 +1,427 @@
+# =============================================================================
+# CharityPilot - Blue-Green Deploy Topology
+# =============================================================================
+#
+# Colour-scoped services live behind Compose profiles: `api-blue`/`web-blue`
+# under the `blue` profile, `api-green`/`web-green` under `green`. Only one
+# colour is normally up at a time; `scripts/bluegreen-deploy.mjs` (a later
+# task) drives builds, migration, cutover and retirement of the idle colour.
+#
+# Everything else is a SINGLETON with no profile at all (always in scope,
+# regardless of which colour profile is selected): the shared Postgres `db`,
+# the Caddy front door, the long-running `scheduler`, the one-shot
+# `deadline-reminders` / `document-storage-cleanup` / one-shot
+# `auth-recovery-secret-rotation` maintenance jobs, and the one-shot `migrate`
+# runner. The engine targets these by name directly (`run migrate`, `exec
+# scheduler`, ...) without needing to also pass a `--profile` flag for them.
+#
+# The scheduler/job singletons and the one-shot migrate runner track
+# BLUEGREEN_ACTIVE_TAG rather than a colour-specific tag: they are not
+# duplicated per colour, so the engine points this one shared tag at whichever
+# commit is presently the deploy target (see docs in task-4-report.md for the
+# full rationale) and restarts them on it after migration and cutover.
+#
+# Volumes `bluegreen-db` / `bluegreen-documents` below are PLAIN named
+# volumes for local/dev/hosted use. A later task (P3, the VM cutover) swaps
+# in the appliance's own EXTERNAL volumes (`personal-server-db`,
+# `personal-server-documents`) via a separate Compose override file passed
+# alongside this one on the `-f` flag chain — NEVER by editing this file —
+# so that a cutover changes running processes, never the underlying data.
+#
+# Every service that needs application configuration reads it from
+# `env_file: ${BLUEGREEN_ENV_FILE:?...}`, a single file supplied by whichever
+# deployment (hosted, private VM, local dev cycle) is invoking the engine.
+# This file intentionally carries none of this compose file's own topology
+# decisions (deployment mode, tenancy, provider axis, ...) so the same
+# compose file works unmodified across deployment targets.
+# =============================================================================
+
+name: charitypilot-bluegreen
+
+x-json-logging: &json-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-security: &service-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  db:
+    image: postgres:16.4-alpine@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c
+    restart: unless-stopped
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    volumes:
+      - bluegreen-db:/var/lib/postgresql/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=16m
+    networks:
+      - bluegreen-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: 128m
+    logging: *json-logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+
+  api-blue:
+    profiles:
+      - blue
+    image: charitypilot-bluegreen-api:${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+      args:
+        CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
+    restart: unless-stopped
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      HOST: 0.0.0.0
+      ENABLE_IN_PROCESS_JOBS: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    volumes:
+      - bluegreen-documents:/data/documents
+    networks:
+      - bluegreen-internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3002/api/v1/health/readiness',{headers:{'x-charitypilot-readiness-key':process.env.READINESS_API_KEY||''}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 30s
+    logging: *json-logging
+    <<: *service-security
+
+  api-green:
+    profiles:
+      - green
+    image: charitypilot-bluegreen-api:${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+      args:
+        CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
+    restart: unless-stopped
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      HOST: 0.0.0.0
+      ENABLE_IN_PROCESS_JOBS: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    volumes:
+      - bluegreen-documents:/data/documents
+    networks:
+      - bluegreen-internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3002/api/v1/health/readiness',{headers:{'x-charitypilot-readiness-key':process.env.READINESS_API_KEY||''}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 30s
+    logging: *json-logging
+    <<: *service-security
+
+  web-blue:
+    profiles:
+      - blue
+    image: charitypilot-bluegreen-web:${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        # Widens the Dockerfile's build-time origin check (apps/web/Dockerfile:32-ish)
+        # past its hosted-only default: this one-origin topology's canonical API
+        # origin IS the front door, so the override equals BLUEGREEN_ORIGIN.
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
+    restart: unless-stopped
+    depends_on:
+      api-blue:
+        condition: service_healthy
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+      PORT: "3003"
+      HOST: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Runtime twin of the build arg above: apps/web/src/lib/api-config.ts's
+      # validateProductionApiUrl reads this at request time (default param =
+      # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
+      # so it must carry the identical value here, not just at build time.
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Colour-matched internal hop: the public front-door override above
+      # (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN) is unreachable from
+      # inside this container network, so server-to-server calls are pinned
+      # to this colour's own api-blue service instead — see
+      # apps/web/src/lib/api-config.ts's validateServerApiUrl. Colour-matched
+      # (not cross-colour) so a candidate deploy's public smoke also exercises
+      # that candidate's own api, never the other colour's.
+      CHARITYPILOT_INTERNAL_API_URL: http://api-blue:3002
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks:
+      - bluegreen-internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3003/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 20s
+    logging: *json-logging
+    <<: *service-security
+
+  web-green:
+    profiles:
+      - green
+    image: charitypilot-bluegreen-web:${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        # Widens the Dockerfile's build-time origin check (apps/web/Dockerfile:32-ish)
+        # past its hosted-only default: this one-origin topology's canonical API
+        # origin IS the front door, so the override equals BLUEGREEN_ORIGIN.
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
+    restart: unless-stopped
+    depends_on:
+      api-green:
+        condition: service_healthy
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+      PORT: "3003"
+      HOST: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Runtime twin of the build arg above: apps/web/src/lib/api-config.ts's
+      # validateProductionApiUrl reads this at request time (default param =
+      # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
+      # so it must carry the identical value here, not just at build time.
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Colour-matched internal hop: the public front-door override above
+      # (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN) is unreachable from
+      # inside this container network, so server-to-server calls are pinned
+      # to this colour's own api-green service instead — see
+      # apps/web/src/lib/api-config.ts's validateServerApiUrl. Colour-matched
+      # (not cross-colour) so a candidate deploy's public smoke also exercises
+      # that candidate's own api, never the other colour's.
+      CHARITYPILOT_INTERNAL_API_URL: http://api-green:3002
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks:
+      - bluegreen-internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3003/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 20s
+    logging: *json-logging
+    <<: *service-security
+
+  migrate:
+    image: charitypilot-bluegreen-migrations:${BLUEGREEN_ACTIVE_TAG:?Set BLUEGREEN_ACTIVE_TAG to the commit currently being migrated}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migration-runner
+    command: ["migrate", "deploy", "--schema", "prisma/schema.prisma"]
+    restart: "no"
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    networks:
+      - bluegreen-internal
+    logging: *json-logging
+    <<: *service-security
+
+  scheduler:
+    image: charitypilot-bluegreen-api:${BLUEGREEN_ACTIVE_TAG:?Set BLUEGREEN_ACTIVE_TAG to the currently active colour's built commit}
+    pull_policy: never
+    command: ["node", "dist/jobs/production-scheduler.js"]
+    stop_grace_period: 60s
+    restart: unless-stopped
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    networks:
+      - bluegreen-internal
+    logging: *json-logging
+    <<: *service-security
+
+  deadline-reminders:
+    image: charitypilot-bluegreen-api:${BLUEGREEN_ACTIVE_TAG:?Set BLUEGREEN_ACTIVE_TAG to the currently active colour's built commit}
+    pull_policy: never
+    command: ["node", "dist/jobs/send-deadline-reminders.js"]
+    restart: "no"
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    networks:
+      - bluegreen-internal
+    logging: *json-logging
+    <<: *service-security
+
+  document-storage-cleanup:
+    image: charitypilot-bluegreen-api:${BLUEGREEN_ACTIVE_TAG:?Set BLUEGREEN_ACTIVE_TAG to the currently active colour's built commit}
+    pull_policy: never
+    command: ["node", "dist/jobs/cleanup-document-storage.js"]
+    restart: "no"
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    networks:
+      - bluegreen-internal
+    logging: *json-logging
+    <<: *service-security
+
+  auth-recovery-secret-rotation:
+    image: charitypilot-bluegreen-api:${BLUEGREEN_ACTIVE_TAG:?Set BLUEGREEN_ACTIVE_TAG to the currently active colour's built commit}
+    pull_policy: never
+    command: ["node", "dist/jobs/rotate-auth-recovery-secret.js"]
+    restart: "no"
+    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    networks:
+      - bluegreen-internal
+    logging: *json-logging
+    <<: *service-security
+
+  caddy:
+    image: caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BLUEGREEN_FRONT_PORT:-8080}:8080"
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    user: "1000:1000"
+    cap_add:
+      # The official binary carries this file capability. Keeping it in the
+      # bounding set is required even though this profile listens on 8080.
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /config:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+      - /data:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - ./caddy/Caddyfile.bluegreen:/etc/caddy/Caddyfile:ro
+      - ./caddy/active-upstreams.caddy:/etc/caddy/active-upstreams.caddy:ro
+    networks:
+      - bluegreen-internal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *json-logging
+    <<: *service-security
+
+volumes:
+  bluegreen-db:
+    name: charitypilot-bluegreen-db
+  bluegreen-documents:
+    name: charitypilot-bluegreen-documents
+
+networks:
+  bluegreen-internal:
+    name: charitypilot-bluegreen-internal
+    driver: bridge

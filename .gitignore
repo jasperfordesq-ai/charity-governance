@@ -67,3 +67,7 @@ e2e/.auth/
 .reliability-*.json
 .reliability-*.txt
 .claude/
+
+# Blue-green deploy engine state and generated Caddy upstreams
+.bluegreen/
+caddy/active-upstreams.caddy

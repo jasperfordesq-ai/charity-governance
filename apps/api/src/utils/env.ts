@@ -8,8 +8,13 @@ import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-prof
 export { isConfiguredSecret } from './secrets.js';
 
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
-const CANONICAL_PRODUCTION_WEB_ORIGIN = 'https://app.charitypilot.ie';
-const CANONICAL_PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
+// Defaults only. CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN
+// (see canonicalOrigin below) let a non-charitypilot.ie deployment (e.g. the
+// private VM, reached over a Tailscale/VPN hostname) override these; with
+// both vars unset or empty, every hosted-SaaS install keeps today's exact
+// hardcoded origins byte-for-byte.
+const DEFAULT_CANONICAL_WEB_ORIGIN = 'https://app.charitypilot.ie';
+const DEFAULT_CANONICAL_API_ORIGIN = 'https://api.charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 const MIN_AUTH_RECOVERY_SECRET_LENGTH = 43;
@@ -26,6 +31,84 @@ function isCiProductionSmokeLocalDatabaseAllowed(): boolean {
     process.env.CI === 'true' &&
     process.env.GITHUB_ACTIONS === 'true'
   );
+}
+
+function canonicalOriginEnvName(role: 'web' | 'api'): string {
+  return role === 'web' ? 'CHARITYPILOT_CANONICAL_WEB_ORIGIN' : 'CHARITYPILOT_CANONICAL_API_ORIGIN';
+}
+
+function canonicalOriginDefault(role: 'web' | 'api'): string {
+  return role === 'web' ? DEFAULT_CANONICAL_WEB_ORIGIN : DEFAULT_CANONICAL_API_ORIGIN;
+}
+
+type CanonicalOriginOverride =
+  | { kind: 'unset' }
+  | { kind: 'invalid'; message: string }
+  | { kind: 'valid'; origin: string; hostname: string };
+
+// Empty string counts as unset (P1 fix-wave convention: Docker ARG/ENV pairs
+// and similar templating can only express "unset" as ''), not as an error.
+// Pure parse, no side effects — callers decide whether/how to surface an
+// invalid override as an issue (resolveCanonicalOrigin does; the auth-cookie
+// -domain check below reads only the valid case and stays silent, since a
+// sibling requireUrl(..., { canonicalOriginRole }) call already reports the
+// same invalid override once).
+function parseCanonicalOriginOverride(role: 'web' | 'api'): CanonicalOriginOverride {
+  const name = canonicalOriginEnvName(role);
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return { kind: 'unset' };
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.origin !== raw) {
+      return { kind: 'invalid', message: `${name} must be an exact https origin (no path, no trailing slash)` };
+    }
+    return { kind: 'valid', origin: url.origin, hostname: normaliseHostname(url.hostname) };
+  } catch {
+    return { kind: 'invalid', message: `${name} must be a valid https origin` };
+  }
+}
+
+function resolveCanonicalOrigin(role: 'web' | 'api', issues: string[]): { origin: string; overridden: boolean } {
+  const parsed = parseCanonicalOriginOverride(role);
+  if (parsed.kind === 'valid') return { origin: parsed.origin, overridden: true };
+  if (parsed.kind === 'invalid') issues.push(parsed.message);
+  return { origin: canonicalOriginDefault(role), overridden: false };
+}
+
+// Silent variant for requireAuthCookieDomain: it needs the configured
+// override's hostname (when validly overridden) without re-pushing the
+// invalid-override issue a sibling requireUrl(..., { canonicalOriginRole })
+// call already reported for the same variable.
+function canonicalOriginHostnameIfValid(role: 'web' | 'api'): string | undefined {
+  const parsed = parseCanonicalOriginOverride(role);
+  return parsed.kind === 'valid' ? parsed.hostname : undefined;
+}
+
+function errorAlertsMode(issues: string[]): 'webhook' | 'none' {
+  const raw = process.env.CHARITYPILOT_ERROR_ALERTS;
+  if (raw === undefined || raw === '') return 'webhook';
+  if (raw !== 'webhook' && raw !== 'none') {
+    issues.push(`CHARITYPILOT_ERROR_ALERTS must be webhook | none (got ${JSON.stringify(raw)})`);
+    return 'webhook';
+  }
+  return raw;
+}
+
+// The runtime already degrades gracefully when the webhook is unconfigured:
+// shouldSendErrorAlert (error-alerts.service.ts) returns false whenever
+// ERROR_ALERT_WEBHOOK_URL isn't a configured secret, so sendErrorAlert is
+// already a no-op in that case. No runtime/service change is needed to
+// support CHARITYPILOT_ERROR_ALERTS=none — this only relaxes BOOT-TIME
+// validation (this function, called from all four validators below) to stop
+// demanding a webhook that the deployment has deliberately opted out of. If
+// the var IS set under alerts=none anyway, its shape is still validated
+// (an operator who bothered to set it gets real feedback on typos).
+function requireErrorAlertWebhook(issues: string[]): void {
+  const mode = errorAlertsMode(issues);
+  if (mode === 'none' && !isConfiguredSecret(process.env.ERROR_ALERT_WEBHOOK_URL)) {
+    return;
+  }
+  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
 }
 
 function requireConfiguredEnv(name: string, issues: string[]): string | undefined {
@@ -55,6 +138,11 @@ function validateUrlValue(
     requirePublicHost?: boolean;
     canonicalOriginRole?: 'web' | 'api';
   },
+  // Resolved once per requireUrl call (see below), not once per
+  // comma-separated value: canonicalOrigin resolution can push an issue for
+  // a malformed override, and re-resolving per value would duplicate that
+  // issue once per entry in a multi-value FRONTEND_URL.
+  resolvedCanonical?: { origin: string; overridden: boolean },
 ) {
   try {
     const url = new URL(value);
@@ -67,17 +155,27 @@ function validateUrlValue(
     if (options.requireOrigin && (url.pathname !== '/' || url.search || url.hash)) {
       issues.push(`${name} must be an origin-only URL in production`);
     }
-    if (options.requireApprovedPublicHost && !isApprovedPublicHostname(url.hostname)) {
-      issues.push(`${name} must use an approved CharityPilot production hostname`);
-    }
-    if (options.canonicalOriginRole) {
-      const expected = options.canonicalOriginRole === 'web'
-        ? CANONICAL_PRODUCTION_WEB_ORIGIN
-        : CANONICAL_PRODUCTION_API_ORIGIN;
+    // A canonical-origin override (CHARITYPILOT_CANONICAL_WEB_ORIGIN /
+    // _API_ORIGIN) is deliberately allowed to sit outside the
+    // charitypilot.ie zone (e.g. a Tailscale hostname for the private VM).
+    // When one is configured, the exact-origin match below is a strictly
+    // narrower check than "hostname is under the approved public host root"
+    // — so it fully replaces that gate for this field, rather than stacking
+    // an incompatible extra restriction on top of it. With no override (the
+    // default), resolvedCanonical.overridden is false and
+    // requireApprovedPublicHost behaves exactly as before.
+    if (options.canonicalOriginRole && resolvedCanonical) {
       const label = options.canonicalOriginRole === 'api' ? 'API' : 'web';
-      if (url.origin !== expected) {
-        issues.push(`${name} must use the canonical production ${label} origin ${expected}`);
+      if (url.origin !== resolvedCanonical.origin) {
+        issues.push(`${name} must use the canonical production ${label} origin ${resolvedCanonical.origin}`);
       }
+    }
+    if (
+      options.requireApprovedPublicHost &&
+      !resolvedCanonical?.overridden &&
+      !isApprovedPublicHostname(url.hostname)
+    ) {
+      issues.push(`${name} must use an approved CharityPilot production hostname`);
     }
     if (options.requirePublicHost && !isPublicHost(url.hostname) && !isLocalHost(url.hostname)) {
       issues.push(`${name} must use a public, non-local URL in production`);
@@ -108,8 +206,12 @@ function requireUrl(
     return;
   }
 
+  const resolvedCanonical = options.canonicalOriginRole
+    ? resolveCanonicalOrigin(options.canonicalOriginRole, issues)
+    : undefined;
+
   for (const urlValue of values) {
-    validateUrlValue(name, urlValue, issues, options);
+    validateUrlValue(name, urlValue, issues, options, resolvedCanonical);
   }
 }
 
@@ -469,7 +571,34 @@ function requireAuthCookieDomain(issues: string[]) {
   }
 
   const normalizedCookieDomain = cookieDomain.toLowerCase().replace(/^\./, '');
-  if (!isApprovedPublicHostname(normalizedCookieDomain)) {
+  // A canonical-origin override doesn't just relax FRONTEND_URL/
+  // NEXT_PUBLIC_API_URL's own approved-host gate (see validateUrlValue) — it
+  // must also let AUTH_COOKIE_DOMAIN cover the CONFIGURED origins'
+  // hostnames, or a split-hostname override could never construct a
+  // passing AUTH_COOKIE_DOMAIN at all. With no override (the default), both
+  // canonicalOriginHostnameIfValid calls return undefined and this is
+  // exactly isApprovedPublicHostname as before.
+  const webOverrideHostname = canonicalOriginHostnameIfValid('web');
+  const apiOverrideHostname = canonicalOriginHostnameIfValid('api');
+  // M3 fix: hostMatchesCookieDomain alone accepts ANY suffix relationship,
+  // including a registrable parent as shallow as a bare TLD-like single
+  // label (AUTH_COOKIE_DOMAIN=example would otherwise cover
+  // vm.tailnet.example). Tightened: an exact match to the override
+  // hostname is always fine; a suffix match is only fine when the cookie
+  // domain itself contains at least one dot (so it can never be a bare
+  // top-level label) — the override hostname then necessarily has at
+  // least one additional label beyond it, which is exactly what
+  // `endsWith('.' + cookieDomain)` already proves.
+  const coversOverride = (hostname: string | undefined) => {
+    if (hostname === undefined) return false;
+    if (hostname === normalizedCookieDomain) return true;
+    return normalizedCookieDomain.includes('.') && hostname.endsWith(`.${normalizedCookieDomain}`);
+  };
+  if (
+    !isApprovedPublicHostname(normalizedCookieDomain) &&
+    !coversOverride(webOverrideHostname) &&
+    !coversOverride(apiOverrideHostname)
+  ) {
     issues.push('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname');
     return;
   }
@@ -503,7 +632,7 @@ export function validateDocumentStorageCleanupEnv(): void {
   requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
   requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
   requireProductionDocumentStorageDriver(issues);
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues(
     'DOCUMENT_STORAGE_CLEANUP_ENV_INVALID',
@@ -525,9 +654,20 @@ export function validateDeadlineRemindersEnv(): void {
     requireApprovedPublicHost: true,
     canonicalOriginRole: 'web',
   });
-  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
-  requireApprovedEmailSender('EMAIL_FROM', issues);
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  // Deadline reminders/auth-delivery emails have no manual-link fallback
+  // at the point of sending (unlike password-recovery/team-invite flows,
+  // which show a link in the UI instead of emailing) — but a manual-link
+  // deployment never even attempts to send through this path (see
+  // DeadlineRemindersService.sendDueReminders and password-recovery
+  // .service.ts's PASSWORD_RESET_COMPLETED_NOTICE enqueue, both keyed on
+  // this same axis), so requiring provider credentials here regardless of
+  // mode would only block a deployment that will never use them. Mirrors
+  // validateProductionEnv's identical gate exactly.
+  if (emailDeliveryMode() === 'provider') {
+    requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+    requireApprovedEmailSender('EMAIL_FROM', issues);
+  }
+  requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues(
     'DEADLINE_REMINDERS_ENV_INVALID',
@@ -549,9 +689,20 @@ export function validateAuthDeliveryEnv(): void {
     requireApprovedPublicHost: true,
     canonicalOriginRole: 'web',
   });
-  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
-  requireApprovedEmailSender('EMAIL_FROM', issues);
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  // Deadline reminders/auth-delivery emails have no manual-link fallback
+  // at the point of sending (unlike password-recovery/team-invite flows,
+  // which show a link in the UI instead of emailing) — but a manual-link
+  // deployment never even attempts to send through this path (see
+  // DeadlineRemindersService.sendDueReminders and password-recovery
+  // .service.ts's PASSWORD_RESET_COMPLETED_NOTICE enqueue, both keyed on
+  // this same axis), so requiring provider credentials here regardless of
+  // mode would only block a deployment that will never use them. Mirrors
+  // validateProductionEnv's identical gate exactly.
+  if (emailDeliveryMode() === 'provider') {
+    requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+    requireApprovedEmailSender('EMAIL_FROM', issues);
+  }
+  requireErrorAlertWebhook(issues);
   requireAuthRecoverySecret(issues);
   validateAuthDeliveryNumericEnv(issues);
 
@@ -645,7 +796,7 @@ export function validateProductionEnv(): void {
     requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
     requireProductionDocumentStorageDriver(issues);
   }
-  requireUrl('ERROR_ALERT_WEBHOOK_URL', issues, { requireHttps: true, requirePublicHost: true });
+  requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);
 }
