@@ -316,6 +316,31 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
   return issues;
 }
 
+// Every host binary this orchestrator spawns directly on the HOST — never
+// via `docker compose exec`, which runs inside a container using whatever
+// that image already provides. docker itself (every composePrefix() call),
+// git (status/fetch/rev-parse/worktree), and wget (the public-facing smoke
+// tests that hit the front door from OUTSIDE any container: deploy's
+// public-smoke, its revert-reverify, and rollback's post-rollback smoke).
+// A missing one used to surface only as an opaque, generic "failed with
+// exit code unknown" deep into the run (phase 12, AFTER traffic had already
+// switched) instead of failing fast here. Extend this list whenever a new
+// host-level run([...]) call introduces a new binary — the structural test
+// in bluegreen-deploy.test.mjs fails loudly if one is missed.
+export const REQUIRED_HOST_BINARIES = ['docker', 'git', 'wget'];
+
+export async function missingHostBinaries(runCommand) {
+  const missing = [];
+  for (const binary of REQUIRED_HOST_BINARIES) {
+    try {
+      await runCommand([binary, '--version']);
+    } catch {
+      missing.push(binary);
+    }
+  }
+  return missing;
+}
+
 // ---------------------------------------------------------------------------
 // Compose command builders
 // ---------------------------------------------------------------------------
@@ -665,6 +690,20 @@ async function executeDeploy(deps) {
   // Phase 1: preflight
   writeDeployStatus(resolvedStateDir, 'preflight', 'validating deployment env and git state');
   const issues = preflightIssues({ fileEnv, resolvedEnvFilePath });
+  // Only probe once the cheap, pure env checks above already pass — no
+  // command (not even a harmless `--version` probe) may run while a
+  // known-bad env file would refuse the deploy anyway (I4's own
+  // "no docker/git command may run before preflight passes" invariant).
+  // Still runs BEFORE any real git/docker/wget call is attempted: catches a
+  // missing host binary here instead of deep into the run (the acceptance-
+  // run defect — a missing host wget surfaced only at phase 12, AFTER
+  // traffic had already switched).
+  if (issues.length === 0) {
+    const missingBinaries = await missingHostBinaries(runCommand);
+    if (missingBinaries.length > 0) {
+      issues.push(`Required host binaries not found on PATH: ${missingBinaries.join(', ')}`);
+    }
+  }
   if (issues.length > 0) {
     return result(1, '', `Blue-green deploy preflight failed:\n${issues.map((issue) => `- ${issue}`).join('\n')}\n`);
   }

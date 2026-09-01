@@ -120,7 +120,12 @@ function makeFakeRunCommand({ targetCommit = TARGET_COMMIT, appliedMigrations = 
     if (joined.includes('exec') && /api-(blue|green)/.test(joined) && joined.includes('readiness')) {
       return { stdout: readinessBody(targetCommit) };
     }
-    if (command[0] === 'wget') {
+    // Fix round 4: [binary, '--version'] is the preflight's host-binary
+    // probe (missingHostBinaries), not a real wget invocation — exclude it
+    // here so it falls through to the generic success default below unless
+    // a test's own override deliberately fails it (a missing binary is
+    // exercised by its own dedicated test via a narrower runCommand stub).
+    if (command[0] === 'wget' && command[1] !== '--version') {
       return { stdout: readinessBody(targetCommit) };
     }
     return { stdout: '' };
@@ -353,7 +358,9 @@ test('deploy: public smoke failure restores upstreams, reloads, and re-verifies 
   const { deps, calls } = baseDeps({
     stateDir,
     overrides: (command, options) => {
-      if (command[0] === 'wget') {
+      // command[1] !== '--version' excludes the preflight's host-binary
+      // probe (fix round 4) from this count — it isn't a real smoke call.
+      if (command[0] === 'wget' && command[1] !== '--version') {
         publicSmokeCallCount += 1;
         // First public-smoke call (through the front door, ACTIVE_TAG=target)
         // fails; the re-verify call (ACTIVE_TAG=old commit) must succeed
@@ -1032,7 +1039,7 @@ test('M2: public smoke failure on a first deploy skips the revert block with a c
   assert.match(outcome.stderr, /No previous colour to revert to \(first deploy\)/);
   assert.match(outcome.stderr, /inspect manually before retrying/);
 
-  const wgetCalls = calls.filter((call) => call.command[0] === 'wget');
+  const wgetCalls = calls.filter((call) => call.command[0] === 'wget' && call.command[1] !== '--version');
   assert.equal(wgetCalls.length, 1, 'only the original public smoke wget runs — no re-verify attempt on a first deploy');
   const reloadCalls = calls.filter((call) => call.command.includes('reload'));
   assert.equal(reloadCalls.length, 1, 'only the switch-time reload runs — no revert reload on a first deploy');
@@ -1292,4 +1299,97 @@ test('fix round 3: every caddy reload invocation carries the unix-socket admin a
       `caddy reload invocation is missing --address unix//tmp/caddy-admin.sock: ${line.trim()}`,
     );
   }
+});
+
+// -----------------------------------------------------------------------------
+// Fix round 4: a missing host binary (wget, discovered by acceptance run 3 at
+// phase 12 — AFTER traffic had already switched) must fail fast in the phase-1
+// preflight instead of surfacing as an opaque failure deep into the run.
+// -----------------------------------------------------------------------------
+
+test('fix round 4: every host-level (non-containerized) binary spawn is covered by REQUIRED_HOST_BINARIES', async () => {
+  const deployModule = await loadDeployModule();
+  const source = readFileSync(deployScriptPath, 'utf8');
+
+  // Host-level invocations start their argv array directly with the binary
+  // literal (`run(['git', ...`, or `run(wgetVarName` where wgetVarName was
+  // declared as `const wgetVarName = ['wget', ...`) — anything spawned via
+  // `docker compose exec` runs INSIDE the container instead (its array
+  // starts with the `...composePrefix()` spread, never a bare literal), and
+  // needs no host binary of its own beyond docker itself.
+  const found = new Set();
+
+  const inlineRe = /\brun\(\s*\[\s*'([a-zA-Z0-9_.-]+)'/g;
+  let match;
+  while ((match = inlineRe.exec(source))) found.add(match[1]);
+
+  const constArrayRe = /const (\w+) = \[\s*\n?\s*'([a-zA-Z0-9_.-]+)'/g;
+  while ((match = constArrayRe.exec(source))) {
+    const [, varName, binary] = match;
+    if (source.includes(`run(${varName}`)) found.add(binary);
+  }
+
+  // docker is used exclusively via the composePrefix() spread, so it never
+  // appears as a literal array-starting token — require it explicitly.
+  found.add('docker');
+
+  const covered = new Set(deployModule.REQUIRED_HOST_BINARIES);
+  const uncovered = [...found].filter((binary) => !covered.has(binary));
+  assert.deepEqual(
+    uncovered,
+    [],
+    `host binaries invoked but not covered by REQUIRED_HOST_BINARIES: ${uncovered.join(', ')} — add them to the preflight's binary list`,
+  );
+  assert.ok(found.has('git'), 'sanity: the detector must actually find git usage, not silently match nothing');
+  assert.ok(found.has('wget'), 'sanity: the detector must actually find wget usage, not silently match nothing');
+});
+
+test('fix round 4: missingHostBinaries reports exactly the binaries whose probe fails (stub honours the binary argument)', async () => {
+  const deployModule = await loadDeployModule();
+  const probed = [];
+  const runCommand = async (command) => {
+    probed.push(command[0]);
+    // Only wget is "missing" here — the stub inspects which binary was
+    // actually asked for rather than blindly succeeding/failing every call.
+    if (command[0] === 'wget') throw new Error('spawn wget ENOENT');
+    return { stdout: '' };
+  };
+
+  const missing = await deployModule.missingHostBinaries(runCommand);
+
+  assert.deepEqual(probed.sort(), [...deployModule.REQUIRED_HOST_BINARIES].sort());
+  assert.deepEqual(missing, ['wget']);
+});
+
+test('fix round 4: deploy preflight fails fast naming the missing host binary, before any real git/docker call', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-missing-binary-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      // Only the wget --version probe fails; docker/git probes and anything
+      // else still succeed via the harness defaults if reached (they must
+      // not be reached at all past the first failing probe's report).
+      if (command[0] === 'wget' && command[1] === '--version') {
+        return new Error('spawn wget ENOENT');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Blue-green deploy preflight failed/);
+  assert.match(outcome.stderr, /Required host binaries not found on PATH: wget/);
+
+  // Fails fast: no real git/docker command (status, fetch, worktree, ...)
+  // ever ran — only the three --version probes.
+  const realCalls = calls.filter((call) => !(call.command.length === 2 && call.command[1] === '--version'));
+  assert.deepEqual(realCalls, [], 'no real command may run once a required host binary is reported missing');
+
+  rmSync(stateDir, { recursive: true, force: true });
 });
