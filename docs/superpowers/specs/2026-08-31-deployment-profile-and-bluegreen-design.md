@@ -310,7 +310,7 @@ The VM's new env file sets: `CHARITYPILOT_TENANCY=multi`,
 from `JWT_SECRET`), `OWNER_CONSOLE_ORIGIN=<the Tailscale origin>`, and drops
 every Supabase/Resend/Stripe variable.
 
-## Named prerequisite: `validateProductionEnv` still pins the hosted origins
+## Named prerequisite (resolved by P2 Task 1): `validateProductionEnv` origin/webhook pinning
 
 This VM is `CHARITYPILOT_TENANCY=multi` with no
 `CHARITYPILOT_DEPLOYMENT_MODE=personal-server` — it is not the appliance

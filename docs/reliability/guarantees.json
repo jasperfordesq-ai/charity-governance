@@ -5528,10 +5528,22 @@
     "surface": "api",
     "group": "owner",
     "concern": "auth-session",
-    "guarantee": "buildOperatorSetPasswordLink, the sole composition site for owner bootstrap set-password links, puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers.",
+    "guarantee": "buildOperatorSetPasswordLink puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers.",
     "status": "covered",
     "testFile": "apps/api/src/tests/create-platform-operator.test.ts",
     "testTitle": "the bootstrap link carries its token in the fragment, never the query string",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "owner-auth-session-6",
+    "surface": "api",
+    "group": "owner",
+    "concern": "auth-session",
+    "guarantee": "buildOperatorSetPasswordLink is the sole place in create-platform-operator.ts that constructs the /owner/set-password URL — main() and the --reissue path cannot quietly grow a second, untested link composition.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/create-platform-operator.test.ts",
+    "testTitle": "buildOperatorSetPasswordLink is the sole composition site for set-password links",
     "gapDescription": "",
     "proposedTitle": ""
   }

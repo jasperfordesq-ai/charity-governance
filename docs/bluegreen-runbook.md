@@ -5,7 +5,7 @@ The blue-green engine (`scripts/bluegreen-deploy.mjs`, driving
 colour-scoped deploy: `api`/`web` run twice (`blue`/`green`), Postgres and
 Caddy are shared singletons, and cutover is a Caddy upstream-file swap plus
 graceful reload — never a container restart on the front door. It follows
-the same operational conventions as `docs/production-deploy-runbook.md`
+the same operational conventions as `docs/production-runbook.md`
 (cutover lock, transcript redaction, `--detach` for a backgrounded run) but
 owns its own state directory, env file, and compose project
 (`charitypilot-bluegreen`) so it never collides with the production
@@ -62,7 +62,7 @@ own numbering) and is **not** covered by anything in this repo yet.
 ## Invocation
 
 From the operator's machine, staging-style (mirrors
-`docs/production-deploy-runbook.md`'s own SSH pattern):
+`docs/production-runbook.md`'s own SSH pattern):
 
 ```bash
 ssh cpops@charitypilot "cd /opt/charitypilot && sudo npm run bluegreen:deploy -- --env-file /path/to/bluegreen.env --detach"

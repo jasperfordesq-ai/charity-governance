@@ -16,15 +16,15 @@ Generated: 2026-08-31 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 326 | 0 | 0 | 14 | 340 |
+| API | 327 | 0 | 0 | 14 | 341 |
 | Web | 106 | 0 | 0 | 6 | 112 |
-| **Total** | **432** | **0** | **0** | **20** | **452** |
+| **Total** | **433** | **0** | **0** | **20** | **453** |
 
 **API suite:** 1111 passing, 0 failing. **Web suite:** 397 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 432/432 covered guarantees verified against a passing/linked test.
+**Linkage:** 433/433 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (340 guarantees)
+## API surface - the matrix (341 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -378,7 +378,7 @@ _15 guarantees - covered 12  n/a 3_
 
 ### owner console - `/api/v1/owner`
 
-_15 guarantees - covered 15_
+_16 guarantees - covered 16_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -386,7 +386,8 @@ _15 guarantees - covered 15_
 | Auth & session integrity | A real tenant access token presented to requirePlatformOperator — the shared preHandler guard — is rejected with 401 OWNER_UNAUTHORIZED, which is what makes this true of every route guarded by requirePlatformOperator, not merely the one route this test exercises. | covered | `a tenant token is rejected`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Auth & session integrity | A real, validly-signed owner access token presented to authGuard — the shared preHandler guard — is rejected with 401 UNAUTHORIZED before any session or user lookup runs, which is what makes this true of every route guarded by authGuard, not merely the one route this test exercises. | covered | `an owner token is rejected by the tenant authGuard`<br/><sub>owner-auth-middleware.test.ts</sub> |
 | Auth & session integrity | setOwnerCookies marks both the owner access and refresh cookies HttpOnly, SameSite=lax, scoped to /api/v1/owner, and Secure in production (absent outside it); clearOwnerCookies expires both. | covered | `owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner`<br/><sub>owner-auth-routes.test.ts</sub> |
-| Auth & session integrity | buildOperatorSetPasswordLink, the sole composition site for owner bootstrap set-password links, puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers. | covered | `the bootstrap link carries its token in the fragment, never the query string`<br/><sub>create-platform-operator.test.ts</sub> |
+| Auth & session integrity | buildOperatorSetPasswordLink puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers. | covered | `the bootstrap link carries its token in the fragment, never the query string`<br/><sub>create-platform-operator.test.ts</sub> |
+| Auth & session integrity | buildOperatorSetPasswordLink is the sole place in create-platform-operator.ts that constructs the /owner/set-password URL — main() and the --reissue path cannot quietly grow a second, untested link composition. | covered | `buildOperatorSetPasswordLink is the sole composition site for set-password links`<br/><sub>create-platform-operator.test.ts</sub> |
 | Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
