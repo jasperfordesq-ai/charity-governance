@@ -274,6 +274,33 @@ function isExactHttpsOrigin(value) {
   }
 }
 
+// Micro-round fix: mirrors apps/web/src/lib/api-config.ts's
+// isLoopbackHostname exactly (normalises IPv6 brackets, checks against the
+// three exact loopback forms).
+function isLoopbackHostname(hostname) {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function isExactLoopbackHttpOrigin(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' && url.origin === value && isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// Micro-round fix: the canonical-origin overrides are https-only EXCEPT
+// when BLUEGREEN_ORIGIN itself is loopback — that's what marks this whole
+// deployment as local/scratch (the web layer's own build-time override
+// already has this exact leniency for the same reason). Any other
+// BLUEGREEN_ORIGIN keeps the strict https-only rule.
+function isValidCanonicalOrigin(value, allowLoopbackHttp) {
+  if (isExactHttpsOrigin(value)) return true;
+  return allowLoopbackHttp && isExactLoopbackHttpOrigin(value);
+}
+
 /**
  * Deploy-critical preflight validation over the parsed env file. Pure —
  * takes the already-resolved env file path and its parsed contents.
@@ -298,30 +325,40 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
 
   const frontendHost = hostnameOf(fileEnv.FRONTEND_URL ?? '');
   if (frontendHost && !isApprovedCharityPilotHostname(frontendHost)) {
+    // Micro-round fix: BLUEGREEN_ORIGIN itself being an exact loopback
+    // origin is what marks this whole deployment as local/scratch — only
+    // then may the canonical-origin overrides ALSO be an exact loopback
+    // http:// origin, mirroring the web layer's own local-acceptance
+    // leniency (apps/web/src/lib/api-config.ts's validateProductionApiUrl).
+    // Any other BLUEGREEN_ORIGIN (including unset) keeps the strict
+    // https-only rule.
+    const blueGreenOriginHostname = hostnameOf(fileEnv.BLUEGREEN_ORIGIN ?? '');
+    const allowLoopbackHttp = blueGreenOriginHostname !== null && isLoopbackHostname(blueGreenOriginHostname);
+    const shapeMessage = (name) =>
+      `${name} must be an exact https origin (no path, no trailing slash, no credentials)` +
+      (allowLoopbackHttp ? ', or an exact loopback http:// origin (BLUEGREEN_ORIGIN is itself loopback)' : '');
+
     if (!fileEnv.CHARITYPILOT_CANONICAL_WEB_ORIGIN) {
       issues.push(
         'CHARITYPILOT_CANONICAL_WEB_ORIGIN is required when FRONTEND_URL is not a charitypilot.ie hostname',
       );
-    } else if (!isExactHttpsOrigin(fileEnv.CHARITYPILOT_CANONICAL_WEB_ORIGIN)) {
+    } else if (!isValidCanonicalOrigin(fileEnv.CHARITYPILOT_CANONICAL_WEB_ORIGIN, allowLoopbackHttp)) {
       // M1 fix: was a bare truthiness check — a malformed value (a path, a
       // trailing slash, credentials, http://, or an unparseable string)
       // used to sail through preflight and only fail deep into the run
       // (e.g. web build/boot). Mirrors env.ts's own
       // parseCanonicalOriginOverride: must parse as a URL whose origin
       // equals the raw string exactly (rules out path/trailing-slash/
-      // credentials) and use https://.
-      issues.push(
-        'CHARITYPILOT_CANONICAL_WEB_ORIGIN must be an exact https origin (no path, no trailing slash, no credentials)',
-      );
+      // credentials) and use https:// — except for the loopback exception
+      // above.
+      issues.push(shapeMessage('CHARITYPILOT_CANONICAL_WEB_ORIGIN'));
     }
     if (!fileEnv.CHARITYPILOT_CANONICAL_API_ORIGIN) {
       issues.push(
         'CHARITYPILOT_CANONICAL_API_ORIGIN is required when FRONTEND_URL is not a charitypilot.ie hostname',
       );
-    } else if (!isExactHttpsOrigin(fileEnv.CHARITYPILOT_CANONICAL_API_ORIGIN)) {
-      issues.push(
-        'CHARITYPILOT_CANONICAL_API_ORIGIN must be an exact https origin (no path, no trailing slash, no credentials)',
-      );
+    } else if (!isValidCanonicalOrigin(fileEnv.CHARITYPILOT_CANONICAL_API_ORIGIN, allowLoopbackHttp)) {
+      issues.push(shapeMessage('CHARITYPILOT_CANONICAL_API_ORIGIN'));
     }
   }
 
@@ -1297,10 +1334,23 @@ async function executeRollback(deps) {
   // the previous colour up and confirmed healthy FIRST, only then reload
   // Caddy onto it.
   writeDeployStatus(resolvedStateDir, 'rollback-up', `starting ${previousColor} containers`);
-  await run(
-    [...composePrefix(), 'up', '-d', '--wait', `api-${previousColor}`, `web-${previousColor}`],
-    rollbackEnv,
-  );
+  try {
+    await run(
+      [...composePrefix(), 'up', '-d', '--wait', `api-${previousColor}`, `web-${previousColor}`],
+      rollbackEnv,
+    );
+  } catch (error) {
+    // Micro-round fix: this was a bare await with no failure message at
+    // all. Matches the deploy path's own convention (e.g. phase 9/11's
+    // "Traffic was never switched; the old colour remains live.") — Caddy
+    // has not been touched yet at this point, so traffic is still on
+    // whatever colour was live before the rollback started.
+    return result(
+      1,
+      '',
+      `Blue-green rollback failed: starting ${previousColor} containers failed: ${redact(error)}. Traffic was never switched; ${currentColor ?? 'the current colour'} remains live.\n`,
+    );
+  }
 
   writeDeployStatus(resolvedStateDir, 'rollback-switch', `pointing Caddy at ${previousColor}`);
   const previousUpstreams = existsSync(deps.activeUpstreamsPath) ? readFileSync(deps.activeUpstreamsPath, 'utf8') : null;

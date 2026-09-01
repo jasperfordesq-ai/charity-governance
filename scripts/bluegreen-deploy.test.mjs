@@ -972,6 +972,80 @@ test('M1: preflightIssues validates the SHAPE of the canonical-origin overrides,
   }
 });
 
+test('micro-round: canonical-origin overrides may be exact loopback http ONLY when BLUEGREEN_ORIGIN is itself loopback', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = join(tmpdir(), 'bluegreen-preflight-canonical-loopback.env');
+  const baseFileEnv = {
+    DATABASE_URL: 'postgresql://u:p@db:5432/charitypilot',
+    BLUEGREEN_ENV_FILE: envFilePath,
+    FRONTEND_URL: 'https://vm.tailnet.example',
+    READINESS_API_KEY: 'a-real-readiness-key',
+  };
+
+  // Accepted: loopback override, loopback BLUEGREEN_ORIGIN.
+  const acceptedLoopback = preflightIssues({
+    fileEnv: {
+      ...baseFileEnv,
+      BLUEGREEN_ORIGIN: 'http://localhost:18080',
+      CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://localhost:18080',
+      CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://localhost:18080',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(acceptedLoopback.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_WEB_ORIGIN')), false);
+  assert.equal(acceptedLoopback.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_API_ORIGIN')), false);
+
+  // Also accepted for the other two exact-loopback hostnames.
+  for (const loopbackOrigin of ['http://127.0.0.1:18080', 'http://[::1]:18080']) {
+    const accepted = preflightIssues({
+      fileEnv: {
+        ...baseFileEnv,
+        BLUEGREEN_ORIGIN: loopbackOrigin,
+        CHARITYPILOT_CANONICAL_WEB_ORIGIN: loopbackOrigin,
+        CHARITYPILOT_CANONICAL_API_ORIGIN: loopbackOrigin,
+      },
+      resolvedEnvFilePath: envFilePath,
+    });
+    assert.equal(
+      accepted.some((issue) => issue.includes('CANONICAL')),
+      false,
+      `expected ${loopbackOrigin} to be accepted when BLUEGREEN_ORIGIN matches it`,
+    );
+  }
+
+  // Rejected: loopback override, but BLUEGREEN_ORIGIN is https (non-loopback)
+  // — the leniency must not leak in when the deployment itself isn't local.
+  const rejectedLoopback = preflightIssues({
+    fileEnv: {
+      ...baseFileEnv,
+      BLUEGREEN_ORIGIN: 'https://vm.tailnet.example',
+      CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://localhost:18080',
+      CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://localhost:18080',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(
+    rejectedLoopback.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_WEB_ORIGIN must be an exact https origin')),
+    `expected a loopback override to be rejected when BLUEGREEN_ORIGIN is https, got: ${JSON.stringify(rejectedLoopback)}`,
+  );
+  assert.ok(
+    rejectedLoopback.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_API_ORIGIN must be an exact https origin')),
+  );
+
+  // The https path is unchanged: exact https origins still accepted
+  // regardless of BLUEGREEN_ORIGIN's own shape.
+  const httpsUnchanged = preflightIssues({
+    fileEnv: {
+      ...baseFileEnv,
+      BLUEGREEN_ORIGIN: 'https://vm.tailnet.example',
+      CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://vm.tailnet.example',
+      CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(httpsUnchanged.some((issue) => issue.includes('CANONICAL')), false);
+});
+
 test('M2: BLUEGREEN_FRONT_PORT="" falls back to the 8080 default, matching compose\'s own ${BLUEGREEN_FRONT_PORT:-8080}', async () => {
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-m2-empty-front-port-');
@@ -1742,6 +1816,51 @@ test('I2: rollback brings the previous colour up (with --wait) BEFORE reloading 
 
   const upCall = calls[upIndex];
   assert.ok(!upCall.command.includes('scheduler'), 'the up --wait api/web call must not also start the scheduler');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('micro-round: rollback up-failure message says traffic was never switched, naming the current colour', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-micro-rollback-up-failure-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'green',
+    commit: TARGET_COMMIT,
+    previousColor: 'blue',
+    previousCommit: OLD_COMMIT,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('ps') && command.includes('-a')) {
+        return { stdout: 'api-blue   Up\nweb-blue   Up\n' };
+      }
+      if (
+        command.includes('up') &&
+        command.includes('--wait') &&
+        command.includes('api-blue') &&
+        command.includes('web-blue')
+      ) {
+        return new Error('service "api-blue" did not become healthy');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['rollback', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /starting blue containers failed/);
+  assert.match(outcome.stderr, /Traffic was never switched; green remains live\./);
+
+  const reloadAttempted = calls.some((call) => call.command.includes('caddy') && call.command.includes('reload'));
+  assert.equal(reloadAttempted, false, 'Caddy must never be touched when the up --wait step itself fails');
 
   rmSync(stateDir, { recursive: true, force: true });
 });

@@ -20,7 +20,7 @@ Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Web | 112 | 0 | 0 | 6 | 118 |
 | **Total** | **446** | **0** | **0** | **20** | **466** |
 
-**API suite:** 1140 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1142 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
