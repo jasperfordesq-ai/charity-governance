@@ -17,14 +17,14 @@ Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](re
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
 | API | 327 | 0 | 0 | 14 | 341 |
-| Web | 108 | 0 | 0 | 6 | 114 |
-| **Total** | **435** | **0** | **0** | **20** | **455** |
+| Web | 112 | 0 | 0 | 6 | 118 |
+| **Total** | **439** | **0** | **0** | **20** | **459** |
 
-**API suite:** 1113 passing, 0 failing. **Web suite:** 406 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1114 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 435/435 covered guarantees verified against a passing/linked test.
+**Linkage:** 439/439 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -529,7 +529,7 @@ _10 guarantees - covered 10_
 
 ---
 
-## Web surface - the matrix (114 guarantees)
+## Web surface - the matrix (118 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -538,7 +538,7 @@ _10 guarantees - covered 10_
 
 ### platform - proxy / CSP / API client / session refresh
 
-_53 guarantees - covered 53_
+_57 guarantees - covered 57_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -566,8 +566,12 @@ _53 guarantees - covered 53_
 | Auth & session integrity | When a sensitive token was the only query parameter, the leftover "?" marker is removed too. | covered | `removes the query marker when sensitive parameters were the only query parameters`<br/><sub>lib/url-security.test.ts</sub> |
 | Auth & session integrity | The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge. | covered | `server-side protected route refresh sends the deployed web Origin required by the API origin guard`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | An expired/cleared session on a protected route is redirected to login rather than flashing stale data or crashing. | covered | `an expired/cleared session is redirected to login, not left on a protected page` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
-| Auth & session integrity | Adding the NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override did not loosen the default: with the var unset (or empty string, which counts as unset), production validation still requires NEXT_PUBLIC_API_URL to equal the canonical https://api.charitypilot.ie origin byte-for-byte. | covered | `with the canonical-API-origin override unset, the hosted origin is accepted byte-identically`<br/><sub>lib/api-config.test.ts</sub> |
-| Auth & session integrity | A validly-shaped NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override (https, or exact loopback http://) widens production validation to accept a non-hosted API origin (blue-green single-origin topology, a private-VM Tailscale hostname) — but only when NEXT_PUBLIC_API_URL equals that override's origin exactly; a malformed override or a mismatched API URL is still rejected. | covered | `a matching canonical-API-origin override accepts a non-hosted https origin`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | With NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN unset, the hosted origin https://api.charitypilot.ie is still accepted byte-identically in production. | covered | `with the canonical-API-origin override unset, the hosted origin is accepted byte-identically`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | An empty-string NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN counts as unset (P1 convention), so the hosted-only canonical check still applies rather than being bypassed by an empty override. | covered | `an empty-string canonical-API-origin override behaves as unset (P1 convention)`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A validly-shaped https NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override is accepted when NEXT_PUBLIC_API_URL equals it exactly, widening production validation past the hosted-only default. | covered | `a matching canonical-API-origin override accepts a non-hosted https origin`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | An exact-loopback http:// NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override is accepted when NEXT_PUBLIC_API_URL equals it exactly. | covered | `a matching canonical-API-origin override accepts exact loopback http`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | A malformed NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override (carrying a path, a trailing slash, or credentials, or otherwise unparseable) is rejected rather than silently accepted. | covered | `a malformed canonical-API-origin override (path, trailing slash, or credentials) is rejected`<br/><sub>lib/api-config.test.ts</sub> |
+| Auth & session integrity | When a validly-shaped canonical-API-origin override is set, a NEXT_PUBLIC_API_URL that does not equal it exactly is still rejected. | covered | `NEXT_PUBLIC_API_URL that does not equal a set canonical-API-origin override is rejected`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | In local Docker the edge auth check validates against the internal API origin, not the public host. | covered | `local Docker server-side protected route validation uses the internal API origin`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | Edge protected-route validation fails closed (treats the user as unauthenticated) for an unapproved production API origin rather than trusting it. | covered | `server-side protected route validation fails closed for unapproved production API origins`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | The protected-path matcher recognises every dashboard app route that requires an auth cookie. | covered | `matches dashboard application routes that require an auth cookie`<br/><sub>lib/protected-routes.test.ts</sub> |
