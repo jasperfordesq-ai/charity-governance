@@ -913,14 +913,14 @@ async function executeDeploy(deps) {
       deployEnv,
     );
     await run(
-      [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile'],
+      [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile', '--address', 'unix//tmp/caddy-admin.sock'],
       deployEnv,
     );
   } catch (error) {
     if (previousUpstreams !== null) writeFileSync(deps.activeUpstreamsPath, previousUpstreams);
     try {
       await run(
-        [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile'],
+        [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile', '--address', 'unix//tmp/caddy-admin.sock'],
         deployEnv,
       );
     } catch {
@@ -983,7 +983,7 @@ async function executeDeploy(deps) {
     let revertError = '';
     try {
       await run(
-        [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile'],
+        [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile', '--address', 'unix//tmp/caddy-admin.sock'],
         deployEnv,
       );
       const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
@@ -1154,14 +1154,14 @@ async function executeRollback(deps) {
       rollbackEnv,
     );
     await run(
-      [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile'],
+      [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile', '--address', 'unix//tmp/caddy-admin.sock'],
       rollbackEnv,
     );
   } catch (error) {
     if (previousUpstreams !== null) writeFileSync(deps.activeUpstreamsPath, previousUpstreams);
     try {
       await run(
-        [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile'],
+        [...composePrefix(), 'exec', '-T', 'caddy', 'caddy', 'reload', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile', '--address', 'unix//tmp/caddy-admin.sock'],
         rollbackEnv,
       );
     } catch {

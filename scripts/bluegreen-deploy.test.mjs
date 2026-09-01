@@ -1264,3 +1264,32 @@ test('I2 (fix round 3, rollback side): a writeState failure right after rollback
 
   rmSync(stateDir, { recursive: true, force: true });
 });
+
+// -----------------------------------------------------------------------------
+// Fix round 3 (structural): caddy/Caddyfile.bluegreen's admin API moved from
+// `admin off` to a unix socket on the container's own /tmp tmpfs, because
+// every `caddy reload` in this file talks to that admin API to push the new
+// config — `admin off` leaves no listener at all, so the switch/rollback
+// cutover fails deterministically. This pin reads the real source text (not
+// a stubbed command recording) so it fails if a NEW reload site is ever
+// added without the matching --address flag, regardless of which code path
+// exercises it.
+// -----------------------------------------------------------------------------
+
+test('fix round 3: every caddy reload invocation carries the unix-socket admin address', () => {
+  const source = readFileSync(deployScriptPath, 'utf8');
+  const reloadLines = source.split('\n').filter((line) => line.includes("'caddy', 'reload'"));
+
+  assert.ok(
+    reloadLines.length >= 5,
+    `expected at least 5 caddy reload sites (deploy switch, deploy best-effort restore, deploy public-smoke revert, rollback switch, rollback best-effort restore); found ${reloadLines.length}`,
+  );
+
+  for (const line of reloadLines) {
+    assert.match(
+      line,
+      /'--address',\s*'unix\/\/tmp\/caddy-admin\.sock'/,
+      `caddy reload invocation is missing --address unix//tmp/caddy-admin.sock: ${line.trim()}`,
+    );
+  }
+});

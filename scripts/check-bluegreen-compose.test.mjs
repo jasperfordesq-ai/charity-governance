@@ -13,6 +13,7 @@ const compose = readFixture('compose.bluegreen.yml');
 const caddy = readFixture('caddy', 'Caddyfile.bluegreen');
 const activeUpstreamsExample = readFixture('caddy', 'active-upstreams.example.caddy');
 const personalServerCompose = readFixture('compose.personal-server.yml');
+const personalServerCaddy = readFixture('caddy', 'Caddyfile.personal-server');
 const productionCompose = readFixture('compose.production.yml');
 const gitignore = readFixture('.gitignore');
 const DOCKER_COMPOSE_CONFIG_TIMEOUT_MS = 120_000;
@@ -244,9 +245,24 @@ test('Caddy listens on :8080 inside the network, published on the configurable f
   assert.match(caddy, /import \/etc\/caddy\/active-upstreams\.caddy/);
 });
 
-test('Caddyfile.bluegreen matches the personal-server global-options shape', () => {
-  assert.match(caddy, /^\{\s*\n\s+admin off\s*\n\s+auto_https off\s*\n\s+persist_config off\s*\n\}/m);
+test('Caddyfile.bluegreen shares auto_https/persist_config with personal-server but deliberately diverges on admin', () => {
+  // Both still turn off automatic HTTPS and config persistence identically.
+  assert.match(caddy, /^\{\s*\n[\s\S]*?\n\s+auto_https off\s*\n\s+persist_config off\s*\n\}/m);
+  assert.match(personalServerCaddy, /^\{\s*\n\s+admin off\s*\n\s+auto_https off\s*\n\s+persist_config off\s*\n\}/m);
   assert.match(caddy, /encode zstd gzip/);
+
+  // Deliberate divergence (fix round 3): personal-server keeps `admin off`
+  // (it never runs a zero-downtime `caddy reload`), but blue-green's
+  // switch/rollback cutover needs a live admin API to reload into — see
+  // scripts/bluegreen-deploy.mjs. `admin off` here would make every
+  // deploy's reload fail deterministically at the switch phase.
+  assert.doesNotMatch(caddy, /^\s*admin off\s*$/m, 'blue-green must NOT use admin off — reload needs a live admin API');
+  assert.match(caddy, /^\tadmin unix\/\/tmp\/caddy-admin\.sock\s*$/m, 'blue-green admin directive must be exactly the unix-socket form');
+
+  // The admin API must never be reachable over TCP (no port to publish, no
+  // network exposure) — only the container-local unix socket above.
+  assert.doesNotMatch(caddy, /admin\s+(tcp\/|localhost:2019|127\.0\.0\.1:2019|0\.0\.0\.0:2019)/);
+  assert.doesNotMatch(caddy, /:2019\b/);
 });
 
 test('active-upstreams.example.caddy is the tracked example of the generated live file', () => {
