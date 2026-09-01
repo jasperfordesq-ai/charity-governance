@@ -1161,6 +1161,22 @@ async function executeRollback(deps) {
     return result(1, '', 'Blue-green rollback refused: no previous colour is recorded to roll back to.\n');
   }
 
+  // Fix round 5: same fail-fast as executeDeploy's phase-1 preflight, and
+  // for the same reason — rollback also spawns a host wget (post-rollback
+  // smoke) and git/docker throughout, and a missing one should refuse here
+  // rather than surface as an opaque failure deep into the run. Only after
+  // every pure state check above already refused to run any command at
+  // all (mirrors the state-based refusals' own "no docker/git command may
+  // run" invariant).
+  const missingBinaries = await missingHostBinaries(runCommand);
+  if (missingBinaries.length > 0) {
+    return result(
+      1,
+      '',
+      `Blue-green rollback refused: required host binaries not found on PATH: ${missingBinaries.join(', ')}\n`,
+    );
+  }
+
   const { previousColor, previousCommit, activeColor: currentColor, commit: currentCommit } = state;
   const blueTag = previousColor === 'blue' ? previousCommit : currentCommit;
   const greenTag = previousColor === 'green' ? previousCommit : currentCommit;

@@ -843,7 +843,7 @@ test('I3: a post-rollback smoke command failure also leaves state unflipped and 
       if (command.includes('ps') && command.includes('-a')) {
         return { stdout: 'api-blue   Up\n' };
       }
-      if (command[0] === 'wget') {
+      if (command[0] === 'wget' && command[1] !== '--version') {
         return new Error('connection refused');
       }
       return undefined;
@@ -1344,6 +1344,22 @@ test('fix round 4: every host-level (non-containerized) binary spawn is covered 
   assert.ok(found.has('wget'), 'sanity: the detector must actually find wget usage, not silently match nothing');
 });
 
+test('fix round 5: both executeDeploy and executeRollback call missingHostBinaries — not just one entry point', async () => {
+  const source = readFileSync(deployScriptPath, 'utf8');
+
+  const deployStart = source.indexOf('async function executeDeploy(deps) {');
+  const rollbackStart = source.indexOf('async function executeRollback(deps) {');
+  const statusStart = source.indexOf('async function executeStatus(deps) {');
+  assert.ok(deployStart !== -1 && rollbackStart !== -1 && statusStart !== -1, 'expected function boundaries not found');
+  assert.ok(deployStart < rollbackStart && rollbackStart < statusStart, 'unexpected function order');
+
+  const deployBody = source.slice(deployStart, rollbackStart);
+  const rollbackBody = source.slice(rollbackStart, statusStart);
+
+  assert.match(deployBody, /missingHostBinaries\(/, 'executeDeploy must call missingHostBinaries');
+  assert.match(rollbackBody, /missingHostBinaries\(/, 'executeRollback must call missingHostBinaries');
+});
+
 test('fix round 4: missingHostBinaries reports exactly the binaries whose probe fails (stub honours the binary argument)', async () => {
   const deployModule = await loadDeployModule();
   const probed = [];
@@ -1388,6 +1404,49 @@ test('fix round 4: deploy preflight fails fast naming the missing host binary, b
 
   // Fails fast: no real git/docker command (status, fetch, worktree, ...)
   // ever ran — only the three --version probes.
+  const realCalls = calls.filter((call) => !(call.command.length === 2 && call.command[1] === '--version'));
+  assert.deepEqual(realCalls, [], 'no real command may run once a required host binary is reported missing');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('fix round 5: rollback refuses fast naming the missing host binary, before any real git/docker call', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-rollback-missing-binary-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+
+  libModule.writeState(stateDir, {
+    activeColor: 'green',
+    commit: TARGET_COMMIT,
+    previousColor: 'blue',
+    previousCommit: OLD_COMMIT,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      // Only git's probe fails here — proves the stub inspects which
+      // binary was actually asked for, not a blanket pass/fail; docker's
+      // and wget's probes, and any other command, must never run past the
+      // first failing probe's report.
+      if (command[0] === 'git' && command[1] === '--version') {
+        return new Error('spawn git ENOENT');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['rollback', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Blue-green rollback refused: required host binaries not found on PATH: git/);
+
+  // Fails fast: no real command (ps -a, the post-rollback wget smoke, ...)
+  // ever ran — only the --version probes.
   const realCalls = calls.filter((call) => !(call.command.length === 2 && call.command[1] === '--version'));
   assert.deepEqual(realCalls, [], 'no real command may run once a required host binary is reported missing');
 
