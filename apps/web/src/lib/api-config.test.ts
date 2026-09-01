@@ -220,3 +220,135 @@ test('normalizes an explicit isolated loopback API URL in development', () => {
     'http://127.0.0.1:3302',
   );
 });
+
+// NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: the blue-green/private-VM
+// override for validateProductionApiUrl. Mirrors apps/web/Dockerfile's
+// build-time RUN check exactly.
+
+test('with the canonical-API-origin override unset, the hosted origin is accepted byte-identically', () => {
+  assert.equal(
+    getApiBaseUrl({ NODE_ENV: 'production', NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie' }),
+    'https://api.charitypilot.ie',
+  );
+});
+
+test('with the canonical-API-origin override unset, any other origin is rejected with the existing message', () => {
+  assert.throws(
+    () =>
+      getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_API_URL: 'https://vm.tailnet.example',
+      }),
+    /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+  );
+});
+
+test('an empty-string canonical-API-origin override behaves as unset (P1 convention)', () => {
+  assert.equal(
+    getApiBaseUrl({
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: '',
+    }),
+    'https://api.charitypilot.ie',
+  );
+
+  assert.throws(
+    () =>
+      getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_API_URL: 'https://vm.tailnet.example',
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: '',
+      }),
+    /NEXT_PUBLIC_API_URL must use the canonical production API origin https:\/\/api\.charitypilot\.ie/,
+  );
+});
+
+test('a matching canonical-API-origin override accepts a non-hosted https origin', () => {
+  assert.equal(
+    getApiBaseUrl({
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_API_URL: 'https://vm.tailnet.example',
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
+    }),
+    'https://vm.tailnet.example',
+  );
+});
+
+test('a matching canonical-API-origin override accepts exact loopback http', () => {
+  assert.equal(
+    getApiBaseUrl({
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_API_URL: 'http://localhost:18080',
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://localhost:18080',
+    }),
+    'http://localhost:18080',
+  );
+});
+
+test('a non-loopback http canonical-API-origin override is rejected', () => {
+  assert.throws(
+    () =>
+      getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_API_URL: 'http://evil.example',
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://evil.example',
+      }),
+    /NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must use https:\/\/ or exact loopback http:\/\//,
+  );
+});
+
+test('a malformed canonical-API-origin override (path, trailing slash, or credentials) is rejected', () => {
+  for (const NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN of [
+    'https://vm.tailnet.example/api',
+    'https://vm.tailnet.example/',
+    'https://user:pass@vm.tailnet.example',
+    'not a url',
+  ]) {
+    assert.throws(
+      () =>
+        getApiBaseUrl({
+          NODE_ENV: 'production',
+          NEXT_PUBLIC_API_URL: 'https://vm.tailnet.example',
+          NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN,
+        }),
+      /NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must (be a valid origin|be an origin-only URL)/,
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN,
+    );
+  }
+});
+
+test('NEXT_PUBLIC_API_URL that does not equal a set canonical-API-origin override is rejected', () => {
+  assert.throws(
+    () =>
+      getApiBaseUrl({
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_API_URL: 'https://someone-else.example',
+        NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
+      }),
+    /NEXT_PUBLIC_API_URL must equal the configured canonical API origin https:\/\/vm\.tailnet\.example \(set via NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN\)/,
+  );
+});
+
+test('getServerApiBaseUrl honours the same canonical-API-origin override for the internal URL', () => {
+  const env = {
+    NODE_ENV: 'production',
+    NEXT_PUBLIC_API_URL: 'https://vm.tailnet.example',
+    NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
+    CHARITYPILOT_INTERNAL_API_URL: 'https://vm.tailnet.example/',
+  };
+
+  assert.equal(getServerApiBaseUrl(env), 'https://vm.tailnet.example');
+
+  assert.throws(
+    () =>
+      getServerApiBaseUrl({
+        ...env,
+        CHARITYPILOT_INTERNAL_API_URL: 'https://someone-else.example',
+      }),
+    // validateProductionApiUrl's messages are shared verbatim between the
+    // browser (NEXT_PUBLIC_API_URL) and server (CHARITYPILOT_INTERNAL_API_URL)
+    // call sites — this is pre-existing behaviour, unchanged by this override.
+    /NEXT_PUBLIC_API_URL must equal the configured canonical API origin https:\/\/vm\.tailnet\.example \(set via NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN\)/,
+  );
+});

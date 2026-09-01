@@ -11,6 +11,7 @@ export type ApiEnv = {
   NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE?: string;
   NEXT_PUBLIC_API_URL?: string;
   NEXT_PUBLIC_CHARITYPILOT_E2E_MODE?: string;
+  NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN?: string;
   NODE_ENV?: string;
 };
 
@@ -40,7 +41,7 @@ export function getApiBaseUrl(env: ApiEnv = process.env): string {
       } else if (isPersonalServerProduction(env)) {
         validatePersonalServerBrowserApiUrl(normalizedUrl);
       } else {
-        validateProductionApiUrl(normalizedUrl);
+        validateProductionApiUrl(normalizedUrl, env);
       }
     }
 
@@ -109,13 +110,56 @@ function validateIsolatedE2eBrowserApiUrl(value: string): void {
   }
 }
 
-function validateProductionApiUrl(value: string): void {
+// Mirrors apps/web/Dockerfile's build-time RUN check (the already-reviewed
+// semantics) exactly: an empty-or-unset NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN
+// (P1 convention: '' counts as unset, since Docker ARG/ENV pairs can only
+// express "unset" as an empty string) keeps every hosted-SaaS install pinned
+// byte-for-byte to the hardcoded canonical origin below. A validly-shaped
+// override widens the check for a non-hosted target (blue-green single-origin
+// topology, a private-VM Tailscale hostname) whose own NEXT_PUBLIC_API_URL
+// must then equal that override's origin exactly.
+function validateProductionApiUrl(value: string, env: ApiEnv): void {
   let url: URL;
 
   try {
     url = new URL(value);
   } catch {
     throw new Error('NEXT_PUBLIC_API_URL must be a valid URL in production');
+  }
+
+  const canonicalOverride = env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN?.trim();
+
+  if (canonicalOverride) {
+    let overrideUrl: URL;
+
+    try {
+      overrideUrl = new URL(canonicalOverride);
+    } catch {
+      throw new Error('NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must be a valid origin');
+    }
+
+    if (overrideUrl.origin !== canonicalOverride || overrideUrl.username || overrideUrl.password) {
+      throw new Error(
+        'NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must be an origin-only URL (no path, no trailing slash, no credentials)',
+      );
+    }
+
+    const secureOverride = overrideUrl.protocol === 'https:';
+    const exactLoopbackHttpOverride =
+      overrideUrl.protocol === 'http:' && isLoopbackHostname(overrideUrl.hostname);
+    if (!secureOverride && !exactLoopbackHttpOverride) {
+      throw new Error(
+        'NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN must use https:// or exact loopback http://',
+      );
+    }
+
+    if (value !== overrideUrl.origin) {
+      throw new Error(
+        `NEXT_PUBLIC_API_URL must equal the configured canonical API origin ${overrideUrl.origin} (set via NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN)`,
+      );
+    }
+
+    return;
   }
 
   if (url.protocol !== 'https:') {
@@ -151,7 +195,7 @@ function validateServerApiUrl(value: string, env: ApiEnv): void {
       return;
     }
 
-    validateProductionApiUrl(value);
+    validateProductionApiUrl(value, env);
     return;
   }
 

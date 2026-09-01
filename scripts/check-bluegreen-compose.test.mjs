@@ -100,6 +100,26 @@ test('web build args also widen the Dockerfile origin check via the canonical-AP
   }
 });
 
+test('the canonical-API-origin override also reaches the runner as a real runtime env var, not just a build arg', () => {
+  for (const svc of ['web-blue', 'web-green']) {
+    const section = serviceSection(svc);
+    // validateProductionApiUrl (apps/web/src/lib/api-config.ts) is called with
+    // a default parameter of the live process.env at request time, so the
+    // override must be a genuine runtime environment variable in the running
+    // container — a build arg alone never reaches it (build args only affect
+    // the docker build, not the container's runtime environment).
+    const buildArgValue = section.match(
+      /args:[\s\S]*?NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: (\$\{BLUEGREEN_ORIGIN:\?[^}]*\})/,
+    );
+    const envValue = section.match(
+      /environment:[\s\S]*?NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: (\$\{BLUEGREEN_ORIGIN:\?[^}]*\})/,
+    );
+    assert.ok(buildArgValue, `${svc} must set NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN as a build arg`);
+    assert.ok(envValue, `${svc} must set NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN as a runtime env var`);
+    assert.equal(buildArgValue[1], envValue[1]);
+  }
+});
+
 test('no api or web service publishes a host port; Caddy proxies by container DNS name', () => {
   for (const service of ['api-blue', 'api-green', 'web-blue', 'web-green']) {
     assert.doesNotMatch(serviceSection(service), /^\s*ports:/m, `${service} must not publish ports`);

@@ -193,6 +193,11 @@ services:
       HOST: 0.0.0.0
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Runtime twin of the build arg above: apps/web/src/lib/api-config.ts's
+      # validateProductionApiUrl reads this at request time (default param =
+      # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
+      # so it must carry the identical value here, not just at build time.
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
@@ -239,6 +244,11 @@ services:
       HOST: 0.0.0.0
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_API_URL: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Runtime twin of the build arg above: apps/web/src/lib/api-config.ts's
+      # validateProductionApiUrl reads this at request time (default param =
+      # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
+      # so it must carry the identical value here, not just at build time.
+      NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m

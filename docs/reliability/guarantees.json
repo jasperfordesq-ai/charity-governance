@@ -4283,6 +4283,32 @@
     "proposedTitle": ""
   },
   {
+    "id": "web-platform-auth-session-31",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "Adding the NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override did not loosen the default: with the var unset (or empty string, which counts as unset), production validation still requires NEXT_PUBLIC_API_URL to equal the canonical https://api.charitypilot.ie origin byte-for-byte.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "with the canonical-API-origin override unset, the hosted origin is accepted byte-identically",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "web-platform-auth-session-32",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "auth-session",
+    "guarantee": "A validly-shaped NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN override (https, or exact loopback http://) widens production validation to accept a non-hosted API origin (blue-green single-origin topology, a private-VM Tailscale hostname) — but only when NEXT_PUBLIC_API_URL equals that override's origin exactly; a malformed override or a mismatched API URL is still rejected.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "apps/web/src/lib/api-config.test.ts",
+    "testTitle": "a matching canonical-API-origin override accepts a non-hosted https origin",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
     "id": "web-platform-graceful-degradation-1",
     "surface": "web",
     "group": "web-platform",
