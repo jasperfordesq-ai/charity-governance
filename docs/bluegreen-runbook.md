@@ -259,3 +259,7 @@ repo does not wire that cron yet**; P3 (the actual VM cutover project) owns
 provisioning it, alongside disabling the appliance's own backup cron. Until
 then, run `bluegreen:backup` manually, or via whatever scheduler the
 deployment target already uses, pointed at this same command.
+
+<!-- Task 10 acceptance-run marker (2026-09-01): trivial docs touch used as
+     the Step-2 redeploy commit for the local acceptance cycle's blue->green
+     cutover proof. Safe to keep or drop. -->
