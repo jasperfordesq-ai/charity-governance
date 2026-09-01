@@ -16,15 +16,15 @@ Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 327 | 0 | 0 | 14 | 341 |
+| API | 329 | 0 | 0 | 14 | 343 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **439** | **0** | **0** | **20** | **459** |
+| **Total** | **441** | **0** | **0** | **20** | **461** |
 
-**API suite:** 1115 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1124 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 439/439 covered guarantees verified against a passing/linked test.
+**Linkage:** 441/441 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (341 guarantees)
+## API surface - the matrix (343 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -510,6 +510,8 @@ _10 guarantees - covered 10_
 | Authorization boundary | When CHARITYPILOT_TENANCY=single in default mode, the owner console routes are not registered (404). | covered | `single tenancy in DEFAULT mode disables the owner console`<br/><sub>deployment-profile-tenancy.test.ts</sub> |
 | Auth & session integrity | When CHARITYPILOT_TENANCY resolves to multi (including the unset default), production env validation requires OWNER_JWT_SECRET to be present and rejects it when equal to JWT_SECRET. | covered | `multi tenancy still requires OWNER_JWT_SECRET distinct from JWT_SECRET`<br/><sub>deployment-profile-env-validation.test.ts</sub> |
 | Input validation | Production env validation passes with local document storage, manual-link email delivery, and no billing configured, and raises no SUPABASE/RESEND/EMAIL_FROM/STRIPE issue in that configuration. | covered | `self-contained config passes: storage local, email manual-link, billing none`<br/><sub>deployment-profile-env-validation.test.ts</sub> |
+| Input validation | The deadline-reminders job env validator (validateDeadlineRemindersEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM, mirroring validateProductionEnv's identical gate; an explicit provider configuration still requires both. | covered | `validateDeadlineRemindersEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM`<br/><sub>env.test.ts</sub> |
+| Input validation | The auth-delivery job env validator (validateAuthDeliveryEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM, mirroring validateProductionEnv's identical gate; an explicit provider configuration still requires both. | covered | `validateAuthDeliveryEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM`<br/><sub>env.test.ts</sub> |
 | Auth & session integrity | Under manual-link email delivery, tenant provisioning sends no mail and returns the set-password and verify-email links with their tokens in the URL fragment; the raw token in each link hashes to the value actually persisted on the corresponding recovery/verification record. | covered | `manual-link: no emails are sent and both links are returned in the fragment form`<br/><sub>owner-provisioning.test.ts</sub> |
 | State integrity / no data loss | Provisioning a tenant with billing='comped' creates its subscription with status ACTIVE and trialEndsAt null. | covered | `comped billing creates ACTIVE with null trialEndsAt`<br/><sub>owner-provisioning.test.ts</sub> |
 | Authorization boundary | Only the allowlisted appliance-lifecycle source files reference isPersonalServerDeployment(); behavioural code must key on the capability axis in utils/deployment-profile.ts instead. | covered | `only allowlisted appliance-lifecycle files reference isPersonalServerDeployment`<br/><sub>deployment-profile-structure.test.ts</sub> |
